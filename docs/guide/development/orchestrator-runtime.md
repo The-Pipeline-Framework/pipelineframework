@@ -176,6 +176,36 @@ Failure channel split:
 1. Execution-level terminal failures use orchestrator DLQ (`DeadLetterPublisher`).
 2. Step-level recover-and-continue failures use Item Reject Sink (`pipeline.item-reject.*`, `rejectItem` / `rejectStream`).
 
+## Await Boundary Steps
+
+Await steps suspend `QUEUE_ASYNC` execution at an external boundary. TPF persists the interaction, dispatches through the configured adapter, and resumes the owning execution after a correlated completion is admitted.
+
+The built-in `interaction-api` adapter is for human/UI inboxes and mock-provider style flows where another client queries pending interactions and later calls the generated completion API. The built-in `webhook` adapter dispatches an HTTP request to an external system and includes a signed resume token in the envelope.
+
+```yaml
+steps:
+  - name: "Fraud Check"
+    kind: "await"
+    cardinality: "ONE_TO_ONE"
+    input: "com.example.FraudCheckRequest"
+    output: "com.example.FraudCheckDecision"
+    timeout: "PT10M"
+    idempotencyKeyFields: ["orderId"]
+    await:
+      correlation:
+        strategy: "signedResumeToken"
+      transport:
+        type: "webhook"
+        request:
+          url: "https://partner.example/fraud-check"
+        callback:
+          baseUrl: "https://orchestrator.example"
+```
+
+Webhook dispatch sends an envelope containing the interaction id, correlation id, resume token, deadline, request payload, tenant id, step id, output type, and callback metadata when configured. Completion is submitted through the generated REST/gRPC completion APIs; TPF validates the token before accepting the response snapshot.
+
+`pipeline.orchestrator.resume-token-secret` must be stable for the lifetime of outstanding webhook interactions. If `pipeline.orchestrator.resume-token-secret` is missing, webhook dispatch and token validation fail with a clear error rather than allowing insecure or unsigned resumptions.
+
 Execution lifecycle (one transition per worker claim):
 
 ```text

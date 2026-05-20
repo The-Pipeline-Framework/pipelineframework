@@ -120,11 +120,19 @@ class PipelineProtoGeneratorTest {
         assertTrue(orchestratorProto.contains("message GetExecutionStatusResponse"));
         assertTrue(orchestratorProto.contains("message GetExecutionResultRequest"));
         assertTrue(orchestratorProto.contains("message GetExecutionResultResponse"));
+        assertTrue(orchestratorProto.contains("message CompleteAwaitRequest"));
+        assertTrue(orchestratorProto.contains("string resume_token = 7;"),
+            "resume_token tag 7 is a wire-compatibility contract");
+        assertTrue(orchestratorProto.contains("message CompleteAwaitResponse {"));
+        assertTrue(orchestratorProto.contains("message ListPendingAwaitRequest"));
+        assertTrue(orchestratorProto.contains("message ListPendingAwaitResponse {"));
         assertTrue(orchestratorProto.contains("rpc RunAsync (RunAsyncRequest) returns (RunAsyncResponse);"));
         assertTrue(orchestratorProto.contains(
             "rpc GetExecutionStatus (GetExecutionStatusRequest) returns (GetExecutionStatusResponse);"));
         assertTrue(orchestratorProto.contains(
             "rpc GetExecutionResult (GetExecutionResultRequest) returns (GetExecutionResultResponse);"));
+        assertTrue(orchestratorProto.contains("rpc CompleteAwait (CompleteAwaitRequest) returns (CompleteAwaitResponse);"));
+        assertTrue(orchestratorProto.contains("rpc ListPendingAwait (ListPendingAwaitRequest) returns (ListPendingAwaitResponse);"));
         assertTrue(orchestratorProto.contains("rpc Subscribe (google.protobuf.Empty) returns (stream BarOutput);"));
     }
 

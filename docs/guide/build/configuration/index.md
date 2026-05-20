@@ -204,6 +204,7 @@ Prefix: `pipeline.orchestrator`
 | `pipeline.orchestrator.dlq-provider` | string | `log` | Dead-letter publisher provider for terminal execution failures. |
 | `pipeline.orchestrator.dlq-url` | string | none | Dead-letter queue URL when `dlq-provider=sqs`. |
 | `pipeline.orchestrator.queue-url` | string | none | Queue URL for external dispatcher providers. |
+| `pipeline.orchestrator.resume-token-secret` | string | none | HMAC secret used to sign and verify await resume tokens for webhook-based await steps. Required when using the webhook transport adapter for await boundary steps. Use a high-entropy value, preferably at least 32 random bytes encoded as base64 or hex. If this property is missing, the orchestrator fails with a clear error when webhook dispatch attempts to generate a token. See [Await Boundary Steps](../../development/orchestrator-runtime.md#await-boundary-steps). |
 | `pipeline.orchestrator.dynamo.execution-table` | string | `tpf_execution` | DynamoDB table used for execution state rows. |
 | `pipeline.orchestrator.dynamo.execution-key-table` | string | `tpf_execution_key` | DynamoDB table used for submit dedupe keys. |
 | `pipeline.orchestrator.dynamo.await-interaction-table` | string | `tpf_await_interaction` | DynamoDB table used for durable await interaction rows. |
@@ -222,6 +223,7 @@ Background execution notes:
 3. In queue mode, strict startup also requires `pipeline.orchestrator.idempotency-policy` to be explicitly set to a non-default value.
 4. In-memory providers are for local/dev only; use providers backed by external storage/queues for crash recovery.
 5. For dead-letter handling that survives restarts, set both `pipeline.orchestrator.dlq-provider=sqs` and `pipeline.orchestrator.dlq-url`.
+6. For webhook await steps using signed resume tokens, configure a stable `pipeline.orchestrator.resume-token-secret`; rotating it invalidates outstanding resume tokens.
 
 Example crash-recovery provider configuration:
 

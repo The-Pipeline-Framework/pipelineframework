@@ -47,6 +47,8 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
         ClassName pathParam = ClassName.get("jakarta.ws.rs", "PathParam");
         ClassName queryParam = ClassName.get("jakarta.ws.rs", "QueryParam");
         ClassName headerParam = ClassName.get("jakarta.ws.rs", "HeaderParam");
+        ClassName context = ClassName.get("jakarta.ws.rs.core", "Context");
+        ClassName securityContext = ClassName.get("jakarta.ws.rs.core", "SecurityContext");
         ClassName badRequestException = ClassName.get("jakarta.ws.rs", "BadRequestException");
         ClassName consumes = ClassName.get("jakarta.ws.rs", "Consumes");
         ClassName produces = ClassName.get("jakarta.ws.rs", "Produces");
@@ -205,6 +207,7 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
 
         MethodSpec completeAwaitMethod = MethodSpec.methodBuilder("completeAwait")
             .addModifiers(Modifier.PUBLIC)
+            .addJavadoc("Completes an await interaction. When an authenticated REST principal is available, it takes precedence over the client-supplied actor.\n")
             .addAnnotation(post)
             .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/interactions/complete").build())
             .returns(ParameterizedTypeName.get(uni, awaitCompletionResponseDto))
@@ -213,6 +216,9 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
                 .addAnnotation(AnnotationSpec.builder(headerParam)
                     .addMember("value", "$S", "x-tenant-id")
                     .build())
+                .build())
+            .addParameter(ParameterSpec.builder(securityContext, "securityContext")
+                .addAnnotation(context)
                 .build())
             .beginControlFlow("if (tenantId == null || tenantId.isBlank())")
             .addStatement("throw new $T($S)", badRequestException, "tenantId header is required")
@@ -223,7 +229,12 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
             .beginControlFlow("if ((request.interactionId() == null || request.interactionId().isBlank()) && (request.correlationId() == null || request.correlationId().isBlank()))")
             .addStatement("throw new $T($S)", badRequestException, "interactionId or correlationId is required")
             .endControlFlow()
-            .addStatement("return pipelineExecutionService.completeAwaitInteraction(new $T(tenantId, request.interactionId(), request.correlationId(), request.idempotencyKey(), request.responsePayload(), request.actor(), $T.currentTimeMillis())).onItem().transform($T::toCompletionResponse)",
+            .addStatement("$T actor = request.actor()", String.class)
+            .addStatement("$T principal = securityContext == null ? null : securityContext.getUserPrincipal()", ClassName.get("java.security", "Principal"))
+            .beginControlFlow("if (principal != null && principal.getName() != null && !principal.getName().isBlank())")
+            .addStatement("actor = principal.getName()")
+            .endControlFlow()
+            .addStatement("return pipelineExecutionService.completeAwaitInteraction(new $T(tenantId, request.interactionId(), request.correlationId(), request.resumeToken(), request.idempotencyKey(), request.responsePayload(), actor, $T.currentTimeMillis())).onItem().transform($T::toCompletionResponse)",
                 awaitCompletionCommand,
                 System.class,
                 awaitDtoMapper)

@@ -79,7 +79,7 @@ class PipelineYamlConfigLoaderTest {
                     strategy: "interactionId"
                   transport:
                     type: "webhook"
-                    dispatch:
+                    request:
                       url: "https://partner.example/check"
                     completion:
                       path: "/pipeline/await/fraud-check/complete"
@@ -93,8 +93,51 @@ class PipelineYamlConfigLoaderTest {
         assertNotNull(step.awaitConfig());
         assertEquals("interactionId", step.awaitConfig().correlation().strategy());
         assertEquals("webhook", step.awaitConfig().transport().type());
-        assertNotNull(step.awaitConfig().transport().config().get("dispatch"));
+        assertNotNull(step.awaitConfig().transport().config().get("request"));
         assertNotNull(step.awaitConfig().transport().config().get("completion"));
+    }
+
+    @Test
+    void rejectsBlankAwaitCorrelationStrategy() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                platform: "COMPUTE"
+                steps:
+                  - name: "Fraud Check"
+                    kind: "await"
+                    inputTypeName: "com.example.FraudCheckRequest"
+                    outputTypeName: "com.example.FraudCheckDecision"
+                    await:
+                      correlation:
+                        strategy: "  "
+                      transport:
+                        type: "interaction-api"
+                """)));
+
+        assertEquals("await.correlation.strategy is required", exception.getMessage());
+    }
+
+    @Test
+    void rejectsWebhookAwaitTransportWithoutUrl() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                platform: "COMPUTE"
+                steps:
+                  - name: "Fraud Check"
+                    kind: "await"
+                    inputTypeName: "com.example.FraudCheckRequest"
+                    outputTypeName: "com.example.FraudCheckDecision"
+                    await:
+                      transport:
+                        type: "webhook"
+                """)));
+
+        assertEquals("step 'Fraud Check' requires a webhook URL in one of: url, request.url, or dispatch.url",
+            exception.getMessage());
     }
 
     @Test

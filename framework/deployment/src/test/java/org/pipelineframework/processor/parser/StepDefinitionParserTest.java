@@ -122,7 +122,7 @@ class StepDefinitionParserTest {
                     strategy: "interactionId"
                   transport:
                     type: "webhook"
-                    dispatch:
+                    request:
                       url: "https://partner.example/check"
             """, diagnostics);
 
@@ -137,7 +137,7 @@ class StepDefinitionParserTest {
         assertEquals("webhook", ((java.util.Map<?, ?>) step.awaitConfig().get("transport")).get("type"));
         assertEquals("interactionId", ((java.util.Map<?, ?>) step.awaitConfig().get("correlation")).get("strategy"));
         assertEquals("https://partner.example/check",
-            ((java.util.Map<?, ?>) ((java.util.Map<?, ?>) step.awaitConfig().get("transport")).get("dispatch")).get("url"));
+            ((java.util.Map<?, ?>) ((java.util.Map<?, ?>) step.awaitConfig().get("transport")).get("request")).get("url"));
         assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
     }
 
@@ -157,7 +157,7 @@ class StepDefinitionParserTest {
                 timeout: "PT10M"
                 await:
                   transport:
-                    type: "webhook"
+                    type: "interaction-api"
             """, diagnostics);
 
         assertTrue(steps.isEmpty());
@@ -180,7 +180,7 @@ class StepDefinitionParserTest {
                 timeout: "PT10M"
                 await:
                   transport:
-                    type: "webhook"
+                    type: "interaction-api"
             """, diagnostics);
 
         assertTrue(steps.isEmpty());
@@ -202,7 +202,7 @@ class StepDefinitionParserTest {
                 output: "com.example.Output"
                 await:
                   transport:
-                    type: "webhook"
+                    type: "interaction-api"
             """, diagnostics);
 
         assertTrue(steps.isEmpty());
@@ -256,6 +256,55 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void rejectsWebhookAwaitStepWithoutRequestUrl() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Webhook Missing Url"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "signedResumeToken"
+                  transport:
+                    type: "webhook"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("webhook await transport must declare a URL")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsAwaitStepWithNonMapCorrelation() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Bad Correlation"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation: "signedResumeToken"
+                  transport:
+                    type: "interaction-api"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("await.correlation must be a map")),
+            diagnostics.toString());
+    }
+
+    @Test
     void rejectsAwaitStepWithoutInputType() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
@@ -270,6 +319,8 @@ class StepDefinitionParserTest {
                 await:
                   transport:
                     type: "webhook"
+                    request:
+                      url: "https://partner.example/check"
             """, diagnostics);
 
         assertTrue(steps.isEmpty());
@@ -315,7 +366,7 @@ class StepDefinitionParserTest {
                 idempotencyKeyFields: ["orderId", "customerId", "amount"]
                 await:
                   transport:
-                    type: "webhook"
+                    type: "interaction-api"
             """, diagnostics);
 
         assertEquals(1, steps.size());
@@ -341,7 +392,7 @@ class StepDefinitionParserTest {
                 idempotencyKeyFields: []
                 await:
                   transport:
-                    type: "webhook"
+                    type: "interaction-api"
             """, diagnostics);
 
         assertEquals(1, steps.size());
@@ -365,7 +416,7 @@ class StepDefinitionParserTest {
                 timeout: "PT5M"
                 await:
                   transport:
-                    type: "webhook"
+                    type: "interaction-api"
             """, diagnostics);
 
         assertEquals(1, steps.size());

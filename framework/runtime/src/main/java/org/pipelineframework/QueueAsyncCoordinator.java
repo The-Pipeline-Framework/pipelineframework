@@ -316,6 +316,7 @@ class QueueAsyncCoordinator {
         executionInputPolicy.normalizeTenant(command.tenantId()),
         command.interactionId(),
         command.correlationId(),
+        command.resumeToken(),
         command.idempotencyKey(),
         command.responsePayload(),
         command.actor(),

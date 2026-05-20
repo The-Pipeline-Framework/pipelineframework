@@ -43,6 +43,7 @@ class PipelineOrchestratorConfigTest {
         assertTrue(config.strictStartup());
         assertFalse(config.queueUrl().isPresent());
         assertFalse(config.dlqUrl().isPresent());
+        assertFalse(config.resumeTokenSecret().isPresent());
     }
 
     @ParameterizedTest(name = "{index} => {0}={1}")
@@ -162,6 +163,14 @@ class PipelineOrchestratorConfigTest {
                     Optional<String> dlqUrl = config.dlqUrl();
                     assertTrue(dlqUrl.isPresent());
                     assertEquals("https://sqs.us-east-1.amazonaws.com/123456789012/my-dlq", dlqUrl.get());
+                }),
+            Arguments.of(
+                "pipeline.orchestrator.resume-token-secret",
+                "test-secret",
+                (Consumer<PipelineOrchestratorConfig>) config -> {
+                    Optional<String> secret = config.resumeTokenSecret();
+                    assertTrue(secret.isPresent());
+                    assertEquals("test-secret", secret.get());
                 }),
             Arguments.of(
                 "pipeline.orchestrator.strict-startup",

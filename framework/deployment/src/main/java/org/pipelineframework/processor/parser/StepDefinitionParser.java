@@ -501,6 +501,13 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
+        String transportType = stringValue(transportMap.get("type"));
+        if ("webhook".equalsIgnoreCase(transportType) && !hasWebhookUrl(transportMap)) {
+            String message = "Skipping step '" + stepName + "': webhook await transport must declare a URL in one of: url, request.url, or dispatch.url";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
         Object correlationObj = awaitMap.get("correlation");
         if (correlationObj instanceof Map<?, ?> correlationMap) {
             String strategy = stringValue(correlationMap.get("strategy"));
@@ -511,12 +518,24 @@ public class StepDefinitionParser {
                 return null;
             }
         } else if (correlationObj != null) {
-            String message = "Skipping step '" + stepName + "': await.correlation.strategy must be declared";
+            String message = "Skipping step '" + stepName + "': await.correlation must be a map";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
         return (Map<String, Object>) normalizeMap(awaitMap);
+    }
+
+    private boolean hasWebhookUrl(Map<?, ?> transportMap) {
+        if (!isBlank(stringValue(transportMap.get("url")))) {
+            return true;
+        }
+        Object requestObj = transportMap.get("request");
+        if (requestObj instanceof Map<?, ?> requestMap && !isBlank(stringValue(requestMap.get("url")))) {
+            return true;
+        }
+        Object dispatchObj = transportMap.get("dispatch");
+        return dispatchObj instanceof Map<?, ?> dispatchMap && !isBlank(stringValue(dispatchMap.get("url")));
     }
 
     private List<String> parseStringList(Object value, String stepName, String fieldName) {

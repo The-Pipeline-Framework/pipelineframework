@@ -279,7 +279,11 @@ public class PipelineYamlConfigLoader {
             throw new IllegalArgumentException("await.correlation must be a map, but got: " + correlationObj.getClass().getName());
         }
         Map<?, ?> correlationMap = (Map<?, ?>) correlationObj;
-        return new PipelineYamlAwaitCorrelation(readString(correlationMap, "strategy"));
+        String strategy = readString(correlationMap, "strategy");
+        if (strategy == null || strategy.isBlank()) {
+            throw new IllegalArgumentException("await.correlation.strategy is required");
+        }
+        return new PipelineYamlAwaitCorrelation(strategy.trim());
     }
 
     private PipelineYamlAwaitTransport readAwaitTransport(Map<?, ?> awaitMap, String stepName) {
@@ -295,6 +299,10 @@ public class PipelineYamlConfigLoader {
                 continue;
             }
             config.put(key, normalizeConfigValue(entry.getValue()));
+        }
+        if ("webhook".equalsIgnoreCase(type) && !WebhookAwaitConfigUtils.hasWebhookUrl(config)) {
+            throw new IllegalArgumentException(
+                "step '" + stepName + "' requires a webhook URL in one of: url, request.url, or dispatch.url");
         }
         return new PipelineYamlAwaitTransport(type, config);
     }
