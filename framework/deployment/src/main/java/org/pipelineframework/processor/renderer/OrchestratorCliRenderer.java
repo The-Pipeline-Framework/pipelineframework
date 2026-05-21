@@ -198,10 +198,13 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                             System.err.println("--async-timeout-minutes must be greater than zero.");
                             return $T.ExitCode.USAGE;
                         }
-                        var accepted = pipelineExecutionService.executePipelineAsync(inputMulti, null, null, false)
+                        String idempotencyKey = deriveCliIdempotencyKey(actualInputList, actualInput);
+                        var accepted = pipelineExecutionService.executePipelineAsync(inputMulti, null, idempotencyKey, false)
                             .await().indefinitely();
                         $T status = waitForAsyncExecution(accepted.executionId(), $T.ofMinutes(asyncTimeoutMinutes));
                         if (status.status() != $T.SUCCEEDED) {
+                            statusCode = $T.UNKNOWN;
+                            grpcStatus = "2";
                             System.err.println("Pipeline execution failed: " + status.status()
                                 + " " + sanitizeErrorMessage(status.errorMessage()));
                             return $T.ExitCode.SOFTWARE;
@@ -252,6 +255,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 executionStatusDto,
                 duration,
                 executionStatus,
+                grpcStatusCode,
                 commandLine,
                 commandLine,
                 grpcStatusCode,
@@ -273,8 +277,25 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .addCode("""
                 long deadline = System.nanoTime() + timeout.toNanos();
                 while (System.nanoTime() < deadline) {
-                    $T status = pipelineExecutionService.getExecutionStatus(null, executionId)
-                        .await().atMost($T.ofSeconds(10));
+                    $T status;
+                    try {
+                        long remainingNanos = deadline - System.nanoTime();
+                        if (remainingNanos <= 0L) {
+                            break;
+                        }
+                        status = pipelineExecutionService.getExecutionStatus(null, executionId)
+                            .await().atMost($T.ofNanos(Math.min(remainingNanos, $T.ofSeconds(10).toNanos())));
+                    } catch (Exception e) {
+                        System.err.println("Unable to read async pipeline status yet: "
+                            + sanitizeErrorMessage(e.getMessage()));
+                        try {
+                            Thread.sleep(1000L);
+                        } catch (InterruptedException interrupted) {
+                            Thread.currentThread().interrupt();
+                            throw new IllegalStateException("Interrupted waiting for async pipeline execution " + executionId, interrupted);
+                        }
+                        continue;
+                    }
                     if (status.status().terminal()) {
                         return status;
                     }
@@ -288,6 +309,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 throw new IllegalStateException("Timed out waiting for async pipeline execution " + executionId);
                 """,
                 executionStatusDto,
+                duration,
                 duration)
             .build();
 
@@ -332,6 +354,27 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .addStatement("return message.replaceAll(\"[\\\\r\\\\n\\\\t]\", \" \").trim()")
             .build();
 
+        MethodSpec deriveCliIdempotencyKeyMethod = MethodSpec.methodBuilder("deriveCliIdempotencyKey")
+            .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
+            .returns(String.class)
+            .addParameter(String.class, "actualInputList")
+            .addParameter(String.class, "actualInput")
+            .addCode("""
+                String canonicalInput = !isBlank(actualInputList) ? actualInputList.trim() : actualInput.trim();
+                try {
+                    byte[] digest = $T.getInstance("SHA-256")
+                        .digest(canonicalInput.getBytes($T.UTF_8));
+                    return "cli:" + $T.getUrlEncoder().withoutPadding().encodeToString(digest);
+                } catch ($T e) {
+                    throw new IllegalStateException("SHA-256 digest is not available", e);
+                }
+                """,
+                ClassName.get("java.security", "MessageDigest"),
+                ClassName.get("java.nio.charset", "StandardCharsets"),
+                ClassName.get("java.util", "Base64"),
+                ClassName.get("java.security", "NoSuchAlgorithmException"))
+            .build();
+
         String cliName = binding.cliName() == null || binding.cliName().isBlank() ? "orchestrator" : binding.cliName();
         String cliDescription = binding.cliDescription() == null || binding.cliDescription().isBlank()
             ? "Pipeline Orchestrator CLI"
@@ -367,6 +410,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .addMethod(firstNonBlankMethod)
             .addMethod(looksLikeJsonObjectMethod)
             .addMethod(looksLikeJsonArrayMethod)
+            .addMethod(deriveCliIdempotencyKeyMethod)
             .addMethod(sanitizeErrorMessageMethod);
 
         if (mapperField != null) {

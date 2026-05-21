@@ -160,9 +160,12 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
                 }
                 lastEvaluatedKey = response.lastEvaluatedKey();
             } while (lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty());
-            records.sort(java.util.Comparator.comparing(record -> record.barrierItemIndex() == null
-                ? Integer.MAX_VALUE
-                : record.barrierItemIndex()));
+            records.sort(java.util.Comparator
+                .comparingInt((AwaitInteractionRecord record) -> record.barrierItemIndex() == null
+                    ? Integer.MAX_VALUE
+                    : record.barrierItemIndex())
+                .thenComparing(record -> nullToEmpty(record.causationId()))
+                .thenComparing(AwaitInteractionRecord::interactionId));
             return List.copyOf(records);
         });
     }
@@ -808,6 +811,10 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
 
     private static int scanPageLimit(int limit) {
         return (int) Math.min(Math.max((long) limit * 3L, (long) limit), 1_000L);
+    }
+
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     private static AttributeValue avN(long value) {

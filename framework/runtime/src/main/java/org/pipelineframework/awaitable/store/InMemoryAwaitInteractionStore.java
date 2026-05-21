@@ -134,9 +134,12 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
                     .filter(record -> Objects.equals(record.executionId(), executionId))
                     .filter(record -> record.stepIndex() == stepIndex)
                     .filter(record -> Objects.equals(record.barrierId(), barrierId))
-                    .sorted(Comparator.comparing(record -> record.barrierItemIndex() == null
-                        ? Integer.MAX_VALUE
-                        : record.barrierItemIndex()))
+                    .sorted(Comparator
+                        .comparingInt((AwaitInteractionRecord record) -> record.barrierItemIndex() == null
+                            ? Integer.MAX_VALUE
+                            : record.barrierItemIndex())
+                        .thenComparing(record -> nullToEmpty(record.causationId()))
+                        .thenComparing(AwaitInteractionRecord::interactionId))
                     .toList();
             }
         });
@@ -421,5 +424,9 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
         String safeLeft = Objects.requireNonNull(left, leftName + " must not be null");
         String safeRight = Objects.requireNonNull(right, rightName + " must not be null");
         return safeLeft.length() + ":" + safeLeft + ":" + safeRight.length() + ":" + safeRight;
+    }
+
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 }

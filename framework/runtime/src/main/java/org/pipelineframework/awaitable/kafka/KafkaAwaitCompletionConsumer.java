@@ -19,7 +19,7 @@ import org.pipelineframework.config.pipeline.PipelineJson;
  * SmallRye Reactive Messaging consumer that admits Kafka await completions.
  */
 @ApplicationScoped
-@IfBuildProperty(name = "pipeline.await.kafka.reactive-messaging.enabled", stringValue = "true")
+@IfBuildProperty(name = "tpf.await.kafka.reactive-messaging.enabled", stringValue = "true")
 public class KafkaAwaitCompletionConsumer {
 
     public static final String INCOMING_CHANNEL = "tpf-await-kafka-responses";

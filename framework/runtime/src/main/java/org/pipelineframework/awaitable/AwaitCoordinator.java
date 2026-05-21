@@ -89,6 +89,13 @@ public class AwaitCoordinator {
         String assignee,
         String group
     ) {
+        if (itemCount <= 0) {
+            return Uni.createFrom().failure(new IllegalArgumentException("itemCount must be greater than 0"));
+        }
+        if (itemIndex < 0 || itemIndex >= itemCount) {
+            return Uni.createFrom().failure(new IllegalArgumentException(
+                "itemIndex must be in range [0, itemCount), got " + itemIndex + " for itemCount=" + itemCount));
+        }
         long now = System.currentTimeMillis();
         long deadline = now + descriptor.timeout().toMillis();
         long ttl = Instant.ofEpochMilli(deadline).plusSeconds(86_400).getEpochSecond();

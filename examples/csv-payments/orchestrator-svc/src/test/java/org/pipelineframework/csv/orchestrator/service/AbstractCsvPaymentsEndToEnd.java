@@ -83,7 +83,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final String LGTM_IMAGE = "docker.io/grafana/otel-lgtm:0.24.0";
     private static final DockerImageName KAFKA_IMAGE = DockerImageName.parse("apache/kafka-native:3.8.0");
     private static final String KAFKA_NETWORK_ALIAS = "kafka";
-    private static final String KAFKA_NETWORK_BOOTSTRAP = KAFKA_NETWORK_ALIAS + ":9092";
+    private static final String KAFKA_NETWORK_BOOTSTRAP = KAFKA_NETWORK_ALIAS + ":19092";
     private static final String E2E_RESUME_TOKEN_SECRET = "csv-payments-e2e-resume-token-secret";
     private static final Duration LGTM_STARTUP_TIMEOUT = Duration.ofMinutes(3);
     private static final Duration TEMPO_HTTP_REQUEST_TIMEOUT = Duration.ofSeconds(10);
@@ -489,6 +489,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                             .withEnv("PIPELINE_DEFAULTS_RETRY_WAIT_MS", "100")
                             .withEnv("PIPELINE_ORCHESTRATOR_MODE", "QUEUE_ASYNC")
                             .withEnv("PIPELINE_ORCHESTRATOR_RESUME_TOKEN_SECRET", E2E_RESUME_TOKEN_SECRET)
+                            .withEnv("PIPELINE_ORCHESTRATOR_IDEMPOTENCY_POLICY", "CLIENT_KEY_REQUIRED")
                             .withEnv("KAFKA_BOOTSTRAP_SERVERS", KAFKA_NETWORK_BOOTSTRAP)
                             .withLogConsumer(containerLog("pipeline-runtime-svc"))
                             .waitingFor(
@@ -1109,6 +1110,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         pb.environment().put("QUARKUS_JIB_JVM_ADDITIONAL_ARGUMENTS", "--enable-preview");
         pb.environment().put("PIPELINE_ORCHESTRATOR_MODE", "QUEUE_ASYNC");
         pb.environment().put("PIPELINE_ORCHESTRATOR_RESUME_TOKEN_SECRET", E2E_RESUME_TOKEN_SECRET);
+        pb.environment().put("PIPELINE_ORCHESTRATOR_IDEMPOTENCY_POLICY", "CLIENT_KEY_REQUIRED");
         pb.environment().put("KAFKA_BOOTSTRAP_SERVERS", getKafkaContainer().getBootstrapServers());
         configureObservabilityProcessEnv(pb.environment());
 

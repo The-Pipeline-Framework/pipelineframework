@@ -237,6 +237,34 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void rejectsUnknownAwaitDispatchMode() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Bad Await"
+                kind: "await"
+                cardinality: "ONE_TO_ONE"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  dispatch:
+                    mode: "peritem"
+                  correlation:
+                    strategy: "interactionId"
+                  transport:
+                    type: "interaction-api"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("await.dispatch.mode must be one of")),
+            diagnostics.toString());
+    }
+
+    @Test
     void rejectsAwaitStepWithServiceField() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""

@@ -550,6 +550,13 @@ public class StepDefinitionParser {
             mode = stringValue(dispatchMap.get("mode"));
             mode = isBlank(mode) ? "single" : mode.trim();
         }
+        if (!"single".equalsIgnoreCase(mode) && !"per-item".equalsIgnoreCase(mode)) {
+            String message = "Skipping step '" + stepName
+                + "': await.dispatch.mode must be one of [single, per-item], got '" + mode + "'";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
         if (shape == StreamingShape.STREAMING_STREAMING) {
             if (!"per-item".equalsIgnoreCase(mode)) {
                 String message = "Skipping step '" + stepName + "': MANY_TO_MANY await steps require await.dispatch.mode=per-item";

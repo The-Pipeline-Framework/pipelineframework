@@ -471,8 +471,11 @@ class QueueAsyncCoordinator {
             record.stepIndex(),
             record.barrierId())
         .onItem().transformToUni(records -> {
+          List<AwaitInteractionRecord> barrierItems = records.stream()
+              .filter(AwaitInteractionRecord::barrierItem)
+              .toList();
           int expected = record.barrierItemCount() == null ? -1 : record.barrierItemCount();
-          if (expected <= 0 || records.size() < expected) {
+          if (expected <= 0 || barrierItems.size() < expected) {
             if (expected <= 0) {
               LOG.warnf(
                   "Await barrier %s for execution %s has invalid item count %s; completion will not resume yet",
@@ -482,13 +485,12 @@ class QueueAsyncCoordinator {
             }
             return Uni.createFrom().item(result);
           }
-          boolean allCompleted = records.stream()
-              .filter(AwaitInteractionRecord::barrierItem)
+          boolean allCompleted = barrierItems.stream()
               .allMatch(candidate -> candidate.status() == org.pipelineframework.awaitable.AwaitInteractionStatus.COMPLETED);
           if (!allCompleted) {
             return Uni.createFrom().item(result);
           }
-          List<Uni<Object>> conversions = records.stream()
+          List<Uni<Object>> conversions = barrierItems.stream()
               .sorted(java.util.Comparator.comparing(this::barrierItemIndexOrThrow))
               .map(this::coerceAwaitPayloadAsync)
               .toList();
