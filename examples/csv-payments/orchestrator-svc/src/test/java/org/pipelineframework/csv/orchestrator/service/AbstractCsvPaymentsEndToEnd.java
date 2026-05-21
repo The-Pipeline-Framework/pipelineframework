@@ -1108,7 +1108,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         pb.environment().put("QUARKUS_PROFILE", "test");
         pb.environment().put("QUARKUS_JIB_JVM_ADDITIONAL_ARGUMENTS", "--enable-preview");
-        pb.environment().put("PIPELINE_ORCHESTRATOR_MODE", "QUEUE_ASYNC");
+        if (!MONOLITH_LAYOUT) {
+            pb.environment().put("PIPELINE_ORCHESTRATOR_MODE", "QUEUE_ASYNC");
+        }
         pb.environment().put("PIPELINE_ORCHESTRATOR_RESUME_TOKEN_SECRET", E2E_RESUME_TOKEN_SECRET);
         pb.environment().put("PIPELINE_ORCHESTRATOR_IDEMPOTENCY_POLICY", "CLIENT_KEY_REQUIRED");
         pb.environment().put("KAFKA_BOOTSTRAP_SERVERS", getKafkaContainer().getBootstrapServers());
