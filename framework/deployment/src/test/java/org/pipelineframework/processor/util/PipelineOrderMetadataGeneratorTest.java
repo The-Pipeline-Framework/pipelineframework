@@ -59,6 +59,8 @@ class PipelineOrderMetadataGeneratorTest {
                 output: "com.example.FraudCheckDecision"
                 timeout: "PT10M"
                 await:
+                  correlation:
+                    strategy: "signedResumeToken"
                   transport:
                     type: "webhook"
                     request:
@@ -208,6 +210,8 @@ class PipelineOrderMetadataGeneratorTest {
                 output: "com.example.FraudCheckDecision"
                 timeout: "PT5M"
                 await:
+                  correlation:
+                    strategy: "signedResumeToken"
                   transport:
                     type: "webhook"
                     request:
