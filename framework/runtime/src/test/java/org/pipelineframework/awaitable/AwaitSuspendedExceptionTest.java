@@ -1,6 +1,7 @@
 package org.pipelineframework.awaitable;
 
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.step.NonRetryableException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -33,6 +34,14 @@ class AwaitSuspendedExceptionTest {
             "tenant1", "exec-123", "interaction-456", 0);
 
         assertTrue(ex instanceof RuntimeException);
+    }
+
+    @Test
+    void isNonRetryableException() {
+        AwaitSuspendedException ex = new AwaitSuspendedException(
+            "tenant1", "exec-123", "interaction-456", 0);
+
+        assertTrue(ex instanceof NonRetryableException);
     }
 
     @Test

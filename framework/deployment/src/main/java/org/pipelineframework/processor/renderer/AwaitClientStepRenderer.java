@@ -97,7 +97,7 @@ public class AwaitClientStepRenderer {
             .addModifiers(Modifier.PUBLIC)
             .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputType))
             .addParameter(inputType, "input")
-            .addStatement("return descriptorFactory.descriptor($S, $S, $S).onItem().transformToUni(descriptor -> support.awaitOneToOne(descriptor, input))",
+            .addStatement("return support.awaitOneToOne(descriptorFactory.descriptor($S, $S, $S), input)",
                 model.serviceName(),
                 inputType.toString(),
                 outputType.toString())
@@ -107,7 +107,7 @@ public class AwaitClientStepRenderer {
             .addModifiers(Modifier.PUBLIC)
             .returns(ParameterizedTypeName.get(ClassName.get(Multi.class), outputType))
             .addParameter(inputType, "input")
-            .addStatement("return descriptorFactory.descriptor($S, $S, $S).onItem().transformToMulti(descriptor -> support.awaitOneToMany(descriptor, input))",
+            .addStatement("return support.awaitOneToMany(descriptorFactory.descriptor($S, $S, $S), input)",
                 model.serviceName(),
                 inputType.toString(),
                 outputType.toString())
@@ -117,7 +117,7 @@ public class AwaitClientStepRenderer {
             .addModifiers(Modifier.PUBLIC)
             .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputType))
             .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class), inputType), "input")
-            .addStatement("return descriptorFactory.descriptor($S, $S, $S).onItem().transformToUni(descriptor -> support.awaitManyToOne(descriptor, input))",
+            .addStatement("return support.awaitManyToOne(descriptorFactory.descriptor($S, $S, $S), input)",
                 model.serviceName(),
                 inputType.toString(),
                 outputType.toString())
@@ -127,7 +127,7 @@ public class AwaitClientStepRenderer {
             .addModifiers(Modifier.PUBLIC)
             .returns(ParameterizedTypeName.get(ClassName.get(Multi.class), outputType))
             .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class), inputType), "input")
-            .addStatement("return descriptorFactory.descriptor($S, $S, $S).onItem().transformToMulti(descriptor -> support.awaitManyToMany(descriptor, input))",
+            .addStatement("return support.awaitManyToMany(descriptorFactory.descriptor($S, $S, $S), input)",
                 model.serviceName(),
                 inputType.toString(),
                 outputType.toString())

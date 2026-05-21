@@ -409,15 +409,8 @@ class QueueAsyncCoordinator {
       ExecutionRecord<Object, Object> record,
       Function<ExecutionRecord<Object, Object>, Multi<?>> executeStreaming) {
     return executeStreaming.apply(record)
-        .select().first(2)
         .collect().asList()
-        .onItem().transformToUni(items -> {
-          if (items.size() > 1) {
-            return Uni.createFrom().failure(
-                new IllegalStateException("Async queue mode does not support streaming pipeline outputs yet."));
-          }
-          return Uni.createFrom().item((List<?>) List.copyOf(items));
-        });
+        .onItem().transform(items -> (List<?>) List.copyOf(items));
   }
 
   private Object singleResult(List<?> items) {

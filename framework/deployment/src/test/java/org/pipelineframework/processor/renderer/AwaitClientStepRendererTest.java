@@ -53,9 +53,9 @@ class AwaitClientStepRendererTest {
         assertTrue(source.contains("implements StepOneToOne<FraudCheckRequest, FraudCheckDecision>"));
         assertTrue(source.contains("AwaitStepSupport support"));
         assertTrue(source.contains("AwaitStepDescriptorFactory descriptorFactory"));
-        assertTrue(source.contains("descriptorFactory.descriptor(\"FraudCheck\", "
+        assertTrue(source.contains("support.awaitOneToOne(descriptorFactory.descriptor(\"FraudCheck\", "
             + "\"com.example.fraud.FraudCheckRequest\", \"com.example.fraud.FraudCheckDecision\")"
-            + ".onItem().transformToUni(descriptor -> support.awaitOneToOne(descriptor, input))"));
+            + ", input)"));
     }
 
     @Test
@@ -80,9 +80,9 @@ class AwaitClientStepRendererTest {
 
         assertTrue(source.contains("implements StepManyToMany<PaymentRecord, PaymentStatus>"));
         assertTrue(source.contains("public Multi<PaymentStatus> applyTransform(Multi<PaymentRecord> input)"));
-        assertTrue(source.contains("return descriptorFactory.descriptor(\"AwaitPaymentProvider\", "
+        assertTrue(source.contains("return support.awaitManyToMany(descriptorFactory.descriptor(\"AwaitPaymentProvider\", "
             + "\"com.example.payment.PaymentRecord\", \"com.example.payment.PaymentStatus\")"
-            + ".onItem().transformToMulti(descriptor -> support.awaitManyToMany(descriptor, input))"));
+            + ", input)"));
     }
 
     private GenerationContext generationContext() {

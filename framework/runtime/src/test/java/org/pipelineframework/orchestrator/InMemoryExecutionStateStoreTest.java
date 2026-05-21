@@ -105,6 +105,61 @@ class InMemoryExecutionStateStoreTest {
     }
 
     @Test
+    void retryAfterAwaitResumePreservesResumePayload() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult created = store.createOrGetExecution(
+                new ExecutionCreateCommand("tenant-a", "key-await-retry", "payload", now, now / 1000 + 60))
+            .await().indefinitely();
+
+        Optional<ExecutionRecord<Object, Object>> waiting = store.markWaitingExternal(
+                "tenant-a",
+                created.record().executionId(),
+                created.record().version(),
+                "transition-await",
+                "barrier-1",
+                5,
+                now + 1)
+            .await().indefinitely();
+        assertTrue(waiting.isPresent());
+
+        Optional<ExecutionRecord<Object, Object>> queued = store.markAwaitCompleted(
+                "tenant-a",
+                created.record().executionId(),
+                "barrier-1",
+                List.of("status-1", "status-2"),
+                6,
+                now + 2)
+            .await().indefinitely();
+        assertTrue(queued.isPresent());
+
+        Optional<ExecutionRecord<Object, Object>> claimed = store.claimLease(
+                "tenant-a",
+                created.record().executionId(),
+                "worker-1",
+                now + 3,
+                1000)
+            .await().indefinitely();
+        assertTrue(claimed.isPresent());
+
+        Optional<ExecutionRecord<Object, Object>> retried = store.scheduleRetry(
+                "tenant-a",
+                created.record().executionId(),
+                claimed.get().version(),
+                1,
+                now + 1000,
+                "transition-retry",
+                "ERR",
+                "failure",
+                now + 4)
+            .await().indefinitely();
+
+        assertTrue(retried.isPresent());
+        assertEquals("barrier-1", retried.get().awaitInteractionId());
+        assertEquals(List.of("status-1", "status-2"), retried.get().resumePayload());
+    }
+
+    @Test
     void dueSweepReturnsEmptyWhenLimitIsNonPositive() {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();

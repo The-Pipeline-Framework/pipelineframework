@@ -39,6 +39,8 @@ class OrchestratorCliRendererTest {
         assertTrue(source.contains("InputTypeMapper inputTypeMapper"));
         assertTrue(source.contains("InputTypeDto.class"));
         assertTrue(source.contains(".map(inputTypeMapper::toGrpc)"));
+        assertTrue(source.contains("deriveCliIdempotencyKey(actualInputList, actualInput)"));
+        assertTrue(source.contains("executePipelineAsync(inputMulti, null, idempotencyKey, false)"));
     }
 
     @Test

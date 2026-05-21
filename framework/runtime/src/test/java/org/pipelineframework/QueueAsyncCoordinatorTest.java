@@ -36,6 +36,7 @@ import org.pipelineframework.awaitable.AwaitCoordinator;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
+import org.pipelineframework.checkpoint.CheckpointPublicationService;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -70,6 +71,9 @@ class QueueAsyncCoordinatorTest {
     private AwaitCoordinator awaitCoordinator;
 
     @Mock
+    private CheckpointPublicationService checkpointPublicationService;
+
+    @Mock
     private Instance<ExecutionStateStore> executionStateStores;
 
     @Mock
@@ -92,6 +96,7 @@ class QueueAsyncCoordinatorTest {
         coordinator.workDispatcher = workDispatcher;
         coordinator.deadLetterPublisher = deadLetterPublisher;
         coordinator.awaitCoordinator = awaitCoordinator;
+        coordinator.checkpointPublicationService = checkpointPublicationService;
         coordinator.executionStateStores = executionStateStores;
         coordinator.workDispatchers = workDispatchers;
         coordinator.deadLetterPublishers = deadLetterPublishers;
@@ -260,6 +265,59 @@ class QueueAsyncCoordinatorTest {
             org.mockito.ArgumentMatchers.eq("exec-await:0:0"),
             org.mockito.ArgumentMatchers.eq("interaction-1"),
             org.mockito.ArgumentMatchers.eq(0),
+            org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
+    void processExecutionWorkItemPersistsCollectedStreamingOutputs() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.leaseMs()).thenReturn(1000L);
+        ExecutionRecord<Object, Object> claimed = createRecord("tenant-1", "exec-stream", "key-stream");
+        ExecutionRecord<Object, Object> succeeded = new ExecutionRecord<>(
+            "tenant-1",
+            "exec-stream",
+            "key-stream",
+            ExecutionStatus.SUCCEEDED,
+            1L,
+            0,
+            0,
+            null,
+            0L,
+            0L,
+            null,
+            null,
+            null,
+            null,
+            List.of("out-1", "out-2"),
+            null,
+            null,
+            1L,
+            1L,
+            99999999L);
+        when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(checkpointPublicationService.publishIfConfigured(org.mockito.ArgumentMatchers.eq(claimed), org.mockito.ArgumentMatchers.eq("out-1")))
+            .thenReturn(Uni.createFrom().voidItem());
+        when(executionStateStore.markSucceeded(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-stream"),
+                org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq("exec-stream:0:0"),
+                org.mockito.ArgumentMatchers.eq(List.of("out-1", "out-2")),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(succeeded)));
+
+        coordinator.processExecutionWorkItem(
+                new ExecutionWorkItem("tenant-1", "exec-stream"),
+                record -> Multi.createFrom().items("out-1", "out-2"))
+            .await().indefinitely();
+
+        verify(executionStateStore).markSucceeded(
+            org.mockito.ArgumentMatchers.eq("tenant-1"),
+            org.mockito.ArgumentMatchers.eq("exec-stream"),
+            org.mockito.ArgumentMatchers.eq(0L),
+            org.mockito.ArgumentMatchers.eq("exec-stream:0:0"),
+            org.mockito.ArgumentMatchers.eq(List.of("out-1", "out-2")),
             org.mockito.ArgumentMatchers.anyLong());
     }
 

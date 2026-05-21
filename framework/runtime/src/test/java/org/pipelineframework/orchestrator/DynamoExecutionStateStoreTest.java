@@ -269,6 +269,9 @@ class DynamoExecutionStateStoreTest {
         assertEquals(1, result.get().attempt());
         assertEquals("TIMEOUT", result.get().errorCode());
         assertEquals("Request timeout", result.get().errorMessage());
+        verify(client).updateItem(argThat((UpdateItemRequest request) ->
+            !request.updateExpression().contains("#resume")
+                && !request.updateExpression().contains("#awaitInteraction")));
     }
 
     @Test

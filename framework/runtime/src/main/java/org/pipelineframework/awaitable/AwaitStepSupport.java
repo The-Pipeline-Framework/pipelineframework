@@ -34,15 +34,16 @@ public class AwaitStepSupport {
         if (descriptor == null) {
             throw new IllegalArgumentException("descriptor must not be null");
         }
-        if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
-            return Uni.createFrom().failure(new IllegalStateException(
-                "Await steps require pipeline.orchestrator.mode=QUEUE_ASYNC."));
+        AwaitExecutionContext context;
+        try {
+            context = captureExecutionContext();
+        } catch (RuntimeException e) {
+            return Uni.createFrom().failure(e);
         }
-        AwaitExecutionContext context = AwaitExecutionContextHolder.get();
-        if (context == null) {
-            return Uni.createFrom().failure(new IllegalStateException(
-                "Await step executed without queue-async execution context."));
-        }
+        return awaitOneToOne(descriptor, input, context);
+    }
+
+    private <I, O> Uni<O> awaitOneToOne(AwaitStepDescriptor descriptor, I input, AwaitExecutionContext context) {
         int stepIndex = context.currentStepIndex();
         return awaitCoordinator.createOrGet(
                 descriptor,
@@ -74,7 +75,13 @@ public class AwaitStepSupport {
         if (descriptor == null) {
             throw new IllegalArgumentException("descriptor must not be null");
         }
-        return descriptor.onItem().transformToUni(resolved -> awaitOneToOne(resolved, input));
+        AwaitExecutionContext context;
+        try {
+            context = captureExecutionContext();
+        } catch (RuntimeException e) {
+            return Uni.createFrom().failure(e);
+        }
+        return descriptor.onItem().transformToUni(resolved -> awaitOneToOne(resolved, input, context));
     }
 
     /**
@@ -84,8 +91,14 @@ public class AwaitStepSupport {
         if (descriptor == null) {
             throw new IllegalArgumentException("descriptor must not be null");
         }
+        AwaitExecutionContext context;
+        try {
+            context = captureExecutionContext();
+        } catch (RuntimeException e) {
+            return Multi.createFrom().failure(e);
+        }
         return descriptor
-            .onItem().transformToMulti(resolved -> this.<I, O>awaitOneToMany(resolved, input));
+            .onItem().transformToMulti(resolved -> this.<I, O>awaitOneToOne(resolved, input, context).toMulti());
     }
 
     public <I, O> Multi<O> awaitOneToMany(AwaitStepDescriptor descriptor, I input) {
@@ -102,7 +115,13 @@ public class AwaitStepSupport {
         if (input == null) {
             return Uni.createFrom().failure(new IllegalArgumentException("input must not be null"));
         }
-        return descriptor.onItem().transformToUni(resolved -> this.<I, O>awaitManyToOne(resolved, input));
+        AwaitExecutionContext context;
+        try {
+            context = captureExecutionContext();
+        } catch (RuntimeException e) {
+            return Uni.createFrom().failure(e);
+        }
+        return descriptor.onItem().transformToUni(resolved -> this.<I, O>awaitManyToOne(resolved, input, context));
     }
 
     public <I, O> Uni<O> awaitManyToOne(AwaitStepDescriptor descriptor, Multi<I> input) {
@@ -112,8 +131,18 @@ public class AwaitStepSupport {
         if (input == null) {
             return Uni.createFrom().failure(new IllegalArgumentException("input must not be null"));
         }
+        AwaitExecutionContext context;
+        try {
+            context = captureExecutionContext();
+        } catch (RuntimeException e) {
+            return Uni.createFrom().failure(e);
+        }
+        return awaitManyToOne(descriptor, input, context);
+    }
+
+    private <I, O> Uni<O> awaitManyToOne(AwaitStepDescriptor descriptor, Multi<I> input, AwaitExecutionContext context) {
         return input.collect().asList()
-            .onItem().transformToUni(items -> awaitOneToOne(descriptor, List.copyOf(items)));
+            .onItem().transformToUni(items -> awaitOneToOne(descriptor, List.copyOf(items), context));
     }
 
     /**
@@ -126,8 +155,14 @@ public class AwaitStepSupport {
         if (input == null) {
             return Multi.createFrom().failure(new IllegalArgumentException("input must not be null"));
         }
+        AwaitExecutionContext context;
+        try {
+            context = captureExecutionContext();
+        } catch (RuntimeException e) {
+            return Multi.createFrom().failure(e);
+        }
         return descriptor
-            .onItem().transformToMulti(resolved -> this.<I, O>awaitManyToMany(resolved, input));
+            .onItem().transformToMulti(resolved -> this.<I, O>awaitManyToMany(resolved, input, context));
     }
 
     public <I, O> Multi<O> awaitManyToMany(AwaitStepDescriptor descriptor, Multi<I> input) {
@@ -139,7 +174,16 @@ public class AwaitStepSupport {
         }
         AwaitExecutionContext context;
         try {
-            context = validateManyToManyAwait(descriptor);
+            context = captureExecutionContext();
+        } catch (RuntimeException e) {
+            return Multi.createFrom().failure(e);
+        }
+        return awaitManyToMany(descriptor, input, context);
+    }
+
+    private <I, O> Multi<O> awaitManyToMany(AwaitStepDescriptor descriptor, Multi<I> input, AwaitExecutionContext context) {
+        try {
+            validateManyToManyAwait(descriptor);
         } catch (RuntimeException e) {
             return Multi.createFrom().failure(e);
         }
@@ -149,10 +193,7 @@ public class AwaitStepSupport {
                 : this.<I, O>awaitManyToMany(descriptor, context, List.copyOf(items)).toMulti());
     }
 
-    private AwaitExecutionContext validateManyToManyAwait(AwaitStepDescriptor descriptor) {
-        if (!"per-item".equalsIgnoreCase(descriptor.dispatchMode())) {
-            throw new IllegalStateException("MANY_TO_MANY await steps require dispatch.mode=per-item.");
-        }
+    private AwaitExecutionContext captureExecutionContext() {
         if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
             throw new IllegalStateException("Await steps require pipeline.orchestrator.mode=QUEUE_ASYNC.");
         }
@@ -160,7 +201,13 @@ public class AwaitStepSupport {
         if (context == null) {
             throw new IllegalStateException("Await step executed without queue-async execution context.");
         }
-        return context;
+        return new AwaitExecutionContext(context.tenantId(), context.executionId(), context.currentStepIndex());
+    }
+
+    private void validateManyToManyAwait(AwaitStepDescriptor descriptor) {
+        if (!"per-item".equalsIgnoreCase(descriptor.dispatchMode())) {
+            throw new IllegalStateException("MANY_TO_MANY await steps require dispatch.mode=per-item.");
+        }
     }
 
     private <I, O> Uni<O> awaitManyToMany(AwaitStepDescriptor descriptor, AwaitExecutionContext context, List<I> items) {
