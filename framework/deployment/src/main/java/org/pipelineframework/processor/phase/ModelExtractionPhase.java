@@ -227,12 +227,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         StreamingShape streamingShape = stepDef.streamingShapeHint() != null
             ? stepDef.streamingShapeHint()
             : StreamingShape.UNARY_UNARY;
-        if (streamingShape != StreamingShape.UNARY_UNARY) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
-                "Await step '" + stepDef.name() + "' currently supports only ONE_TO_ONE cardinality");
-            return null;
-        }
 
         String serviceName = toYamlServiceName(stepDef.name());
         String servicePackage = deriveYamlServicePackage(stepDef.inputType(), ctxWarningLogger);
@@ -243,7 +237,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
             .inputMapping(new TypeMapping(stepDef.inputType(), null, false, stepDef.inputType()))
             .outputMapping(new TypeMapping(stepDef.outputType(), null, false, stepDef.outputType()))
-            .streamingShape(StreamingShape.UNARY_UNARY)
+            .streamingShape(streamingShape)
             .enabledTargets(java.util.Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)

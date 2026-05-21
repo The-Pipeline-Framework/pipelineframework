@@ -96,6 +96,8 @@ public class AwaitStepDescriptorFactory {
             serviceName,
             inputType,
             outputType,
+            step.cardinality(),
+            step.awaitConfig().dispatch().mode(),
             timeout,
             step.awaitConfig().correlation().strategy(),
             step.awaitConfig().transport().type(),

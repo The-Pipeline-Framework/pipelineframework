@@ -12,7 +12,7 @@ import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
-import org.pipelineframework.awaitable.AwaitCoordinator;
+import org.pipelineframework.PipelineExecutionService;
 import org.pipelineframework.config.pipeline.PipelineJson;
 
 /**
@@ -25,13 +25,13 @@ public class KafkaAwaitCompletionConsumer {
     public static final String INCOMING_CHANNEL = "tpf-await-kafka-responses";
 
     @Inject
-    AwaitCoordinator coordinator;
+    PipelineExecutionService executionService;
 
     public KafkaAwaitCompletionConsumer() {
     }
 
-    KafkaAwaitCompletionConsumer(AwaitCoordinator coordinator) {
-        this.coordinator = coordinator;
+    KafkaAwaitCompletionConsumer(PipelineExecutionService executionService) {
+        this.executionService = executionService;
     }
 
     @Incoming(INCOMING_CHANNEL)
@@ -39,7 +39,7 @@ public class KafkaAwaitCompletionConsumer {
         Objects.requireNonNull(message, "message must not be null");
         return Uni.createFrom().item(() -> parseEnvelope(message.getPayload()))
             .runSubscriptionOn(Infrastructure.getDefaultExecutor())
-            .onItem().transformToUni(envelope -> coordinator.complete(new AwaitCompletionCommand(
+            .onItem().transformToUni(envelope -> executionService.completeAwaitInteraction(new AwaitCompletionCommand(
                 envelope.tenantId(),
                 envelope.interactionId(),
                 envelope.correlationId(),

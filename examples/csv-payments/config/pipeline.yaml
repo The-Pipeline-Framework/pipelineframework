@@ -92,6 +92,12 @@ messages:
       - number: 7
         name: ackPaymentSent
         type: AckPaymentSent
+      - number: 8
+        name: paymentRecordId
+        type: uuid
+      - number: 9
+        name: paymentRecord
+        type: PaymentRecord
   PaymentOutput:
     fields:
       - number: 1
@@ -157,24 +163,29 @@ steps:
     output: org.pipelineframework.csv.common.domain.PaymentRecord
     outputTypeName: PaymentRecord
     outboundMapper: org.pipelineframework.csv.common.mapper.PaymentRecordMapper
-  - name: Process Send Payment Record
-    service: org.pipelineframework.csv.service.ProcessSendPaymentRecordService
-    cardinality: ONE_TO_ONE
+  - name: Await Payment Provider
+    kind: await
+    cardinality: MANY_TO_MANY
     input: org.pipelineframework.csv.common.domain.PaymentRecord
     inputTypeName: PaymentRecord
-    inboundMapper: org.pipelineframework.csv.common.mapper.PaymentRecordMapper
-    output: org.pipelineframework.csv.common.domain.AckPaymentSent
-    outputTypeName: AckPaymentSent
-    outboundMapper: org.pipelineframework.csv.common.mapper.AckPaymentSentMapper
-  - name: Process Ack Payment Sent
-    service: org.pipelineframework.csv.service.ProcessAckPaymentSentService
-    cardinality: ONE_TO_ONE
-    input: org.pipelineframework.csv.common.domain.AckPaymentSent
-    inputTypeName: AckPaymentSent
-    inboundMapper: org.pipelineframework.csv.common.mapper.AckPaymentSentMapper
     output: org.pipelineframework.csv.common.domain.PaymentStatus
     outputTypeName: PaymentStatus
-    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentStatusMapper
+    timeout: PT5M
+    idempotencyKeyFields: ["csvId", "recipient", "amount", "currency"]
+    await:
+      dispatch:
+        mode: per-item
+      correlation:
+        strategy: signedResumeToken
+      transport:
+        type: kafka
+        request:
+          topic: csv-payments.payment.requests
+          key: correlationId
+        response:
+          topic: csv-payments.payment.results
+        consumer:
+          group: csv-payments-orchestrator
   - name: Process Payment Status
     service: org.pipelineframework.csv.service.ProcessPaymentStatusService
     cardinality: ONE_TO_ONE

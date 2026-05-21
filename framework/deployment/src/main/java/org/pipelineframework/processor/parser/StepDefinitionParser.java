@@ -427,14 +427,12 @@ public class StepDefinitionParser {
                 return null;
             }
             StreamingShape shape = parseStreamingShapeHint(stepData, name);
-            if (shape != null && shape != StreamingShape.UNARY_UNARY) {
-                String message = "Skipping step '" + name + "': await steps support only ONE_TO_ONE cardinality in this slice";
-                LOG.warn(message);
-                report(Diagnostic.Kind.ERROR, message);
-                return null;
-            }
             Map<String, Object> awaitConfig = parseAwaitConfig(stepData, name);
             if (awaitConfig == null) {
+                return null;
+            }
+            StreamingShape resolvedShape = shape == null ? StreamingShape.UNARY_UNARY : shape;
+            if (!validateAwaitDispatchMode(name, resolvedShape, awaitConfig)) {
                 return null;
             }
             String timeout = getStringValue(stepData, "timeout");
@@ -462,7 +460,7 @@ public class StepDefinitionParser {
                 MapperFallbackMode.NONE,
                 inputType,
                 outputType,
-                StreamingShape.UNARY_UNARY);
+                resolvedShape);
         }
 
         // Create the execution class name
@@ -534,6 +532,40 @@ public class StepDefinitionParser {
             return null;
         }
         return (Map<String, Object>) normalizeMap(awaitMap);
+    }
+
+    private boolean validateAwaitDispatchMode(
+        String stepName,
+        StreamingShape shape,
+        Map<String, Object> awaitConfig) {
+        String mode = "single";
+        Object dispatchObj = awaitConfig.get("dispatch");
+        if (dispatchObj != null) {
+            if (!(dispatchObj instanceof Map<?, ?> dispatchMap)) {
+                String message = "Skipping step '" + stepName + "': await.dispatch must be a map";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return false;
+            }
+            mode = stringValue(dispatchMap.get("mode"));
+            mode = isBlank(mode) ? "single" : mode.trim();
+        }
+        if (shape == StreamingShape.STREAMING_STREAMING) {
+            if (!"per-item".equalsIgnoreCase(mode)) {
+                String message = "Skipping step '" + stepName + "': MANY_TO_MANY await steps require await.dispatch.mode=per-item";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return false;
+            }
+            return true;
+        }
+        if ("per-item".equalsIgnoreCase(mode)) {
+            String message = "Skipping step '" + stepName + "': await.dispatch.mode=per-item is only supported for MANY_TO_MANY await steps";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        return true;
     }
 
     private boolean hasWebhookUrl(Map<?, ?> transportMap) {

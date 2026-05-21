@@ -60,6 +60,21 @@ public interface AwaitInteractionStore {
     Uni<Optional<AwaitInteractionRecord>> findByCorrelation(String tenantId, String correlationId);
 
     /**
+     * Fetches interactions that belong to one per-item await barrier.
+     *
+     * @param tenantId tenant id
+     * @param executionId owning execution id
+     * @param stepIndex owning await step index
+     * @param barrierId barrier id
+     * @return matching interactions
+     */
+    Uni<List<AwaitInteractionRecord>> findByBarrier(
+        String tenantId,
+        String executionId,
+        int stepIndex,
+        String barrierId);
+
+    /**
      * Claims an interaction for dispatch. Only WAITING interactions may be claimed.
      */
     Uni<Optional<AwaitInteractionRecord>> markDispatching(

@@ -74,6 +74,48 @@ public class AwaitCoordinator {
     }
 
     /**
+     * Creates or returns one item interaction inside a per-item await barrier.
+     */
+    public Uni<AwaitCreateResult> createOrGetBarrierItem(
+        AwaitStepDescriptor descriptor,
+        String tenantId,
+        String executionId,
+        int stepIndex,
+        String causationId,
+        Object requestPayload,
+        String barrierId,
+        int itemIndex,
+        int itemCount,
+        String assignee,
+        String group
+    ) {
+        long now = System.currentTimeMillis();
+        long deadline = now + descriptor.timeout().toMillis();
+        long ttl = Instant.ofEpochMilli(deadline).plusSeconds(86_400).getEpochSecond();
+        String idempotencyKey = deriveIdempotencyKey(descriptor, executionId, requestPayload) + ":item=" + itemIndex;
+        String correlationId = deriveCorrelationId(descriptor, tenantId, executionId, idempotencyKey);
+        return store().createOrGet(new AwaitCreateCommand(
+            tenantId,
+            executionId,
+            descriptor.stepId(),
+            stepIndex,
+            descriptor.outputType(),
+            causationId,
+            idempotencyKey,
+            correlationId,
+            requestPayload,
+            assignee,
+            group,
+            descriptor.transportType(),
+            barrierId,
+            itemIndex,
+            itemCount,
+            now,
+            deadline,
+            ttl));
+    }
+
+    /**
      * Dispatches an existing interaction through its configured transport adapter.
      */
     @SuppressWarnings("unchecked")
@@ -143,6 +185,17 @@ public class AwaitCoordinator {
         String stepId,
         int limit) {
         return store().queryPending(tenantId, assignee, group, stepId, limit);
+    }
+
+    /**
+     * Returns all interactions for a per-item await barrier.
+     */
+    public Uni<List<AwaitInteractionRecord>> findByBarrier(
+        String tenantId,
+        String executionId,
+        int stepIndex,
+        String barrierId) {
+        return store().findByBarrier(tenantId, executionId, stepIndex, barrierId);
     }
 
     /**

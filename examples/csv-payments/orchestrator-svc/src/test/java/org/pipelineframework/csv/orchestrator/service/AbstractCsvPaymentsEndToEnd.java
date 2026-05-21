@@ -58,7 +58,9 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.output.OutputFrame;
 import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.utility.DockerImageName;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -79,6 +81,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final Path REPLAY_CAPTURE_DIR = Paths.get(TEST_E2E_DIR, "replay");
     private static final Path REPLAY_FILE = REPLAY_CAPTURE_DIR.resolve("csv-payments-replay.json");
     private static final String LGTM_IMAGE = "docker.io/grafana/otel-lgtm:0.24.0";
+    private static final DockerImageName KAFKA_IMAGE = DockerImageName.parse("apache/kafka-native:3.8.0");
+    private static final String KAFKA_NETWORK_ALIAS = "kafka";
+    private static final String KAFKA_NETWORK_BOOTSTRAP = KAFKA_NETWORK_ALIAS + ":9092";
+    private static final String E2E_RESUME_TOKEN_SECRET = "csv-payments-e2e-resume-token-secret";
     private static final Duration LGTM_STARTUP_TIMEOUT = Duration.ofMinutes(3);
     private static final Duration TEMPO_HTTP_REQUEST_TIMEOUT = Duration.ofSeconds(10);
     private static final long TEMPO_SEARCH_TIMEOUT_SECONDS = 90L;
@@ -133,6 +139,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     static GenericContainer<?> outputCsvService;
     static GenericContainer<?> pipelineRuntimeService;
     static GenericContainer<?> lgtmStack;
+    static KafkaContainer kafkaContainer;
 
     private static long resolvePipelineWaitTimeoutSeconds() {
         long configured = Long.getLong("csv.e2e.pipeline.wait.seconds", 120L);
@@ -197,20 +204,23 @@ abstract class AbstractCsvPaymentsEndToEnd {
         ensureDevCerts();
 
         if (MONOLITH_LAYOUT) {
-            Startables.deepStart(Stream.of(getPostgresContainer())).join();
+            Startables.deepStart(Stream.of(getPostgresContainer(), getKafkaContainer())).join();
             return;
         }
 
         if (PIPELINE_RUNTIME_LAYOUT) {
-            Startables.deepStart(Stream.of(getPostgresContainer())).join();
-            Startables.deepStart(Stream.of(getPersistenceService(), getPipelineRuntimeService())).join();
+            Startables.deepStart(Stream.of(getPostgresContainer(), getKafkaContainer())).join();
+            Startables.deepStart(Stream.of(
+                    getPersistenceService(),
+                    getPaymentsProcessingService(),
+                    getPipelineRuntimeService())).join();
             return;
         }
 
         if (TEMPO_VERIFICATION_ACTIVE) {
-            Startables.deepStart(Stream.of(getPostgresContainer(), getLgtmStackContainer())).join();
+            Startables.deepStart(Stream.of(getPostgresContainer(), getKafkaContainer(), getLgtmStackContainer())).join();
         } else {
-            Startables.deepStart(Stream.of(getPostgresContainer())).join();
+            Startables.deepStart(Stream.of(getPostgresContainer(), getKafkaContainer())).join();
         }
 
         Stream.Builder<GenericContainer<?>> services = Stream.builder();
@@ -242,6 +252,19 @@ abstract class AbstractCsvPaymentsEndToEnd {
                             .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofSeconds(60)));
         }
         return postgresContainer;
+    }
+
+    private static KafkaContainer getKafkaContainer() {
+        if (kafkaContainer == null) {
+            kafkaContainer =
+                    new KafkaContainer(KAFKA_IMAGE)
+                            .withNetwork(network)
+                            .withNetworkAliases(KAFKA_NETWORK_ALIAS)
+                            .withListener(KAFKA_NETWORK_BOOTSTRAP)
+                            .withLogConsumer(containerLog("kafka"))
+                            .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofSeconds(90)));
+        }
+        return kafkaContainer;
     }
 
     /**
@@ -340,6 +363,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                             .withExposedPorts(8445)
                             .withEnv("QUARKUS_PROFILE", "test")
                             .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
+                            .withEnv("KAFKA_BOOTSTRAP_SERVERS", KAFKA_NETWORK_BOOTSTRAP)
                             .withLogConsumer(containerLog("payments-processing-svc"))
                             .waitingFor(
                                     Wait.forHttps("/q/health/live")
@@ -463,6 +487,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
                             .withEnv("PIPELINE_MAX_CONCURRENCY", "128")
                             .withEnv("PIPELINE_DEFAULTS_RETRY_LIMIT", "3")
                             .withEnv("PIPELINE_DEFAULTS_RETRY_WAIT_MS", "100")
+                            .withEnv("PIPELINE_ORCHESTRATOR_MODE", "QUEUE_ASYNC")
+                            .withEnv("PIPELINE_ORCHESTRATOR_RESUME_TOKEN_SECRET", E2E_RESUME_TOKEN_SECRET)
+                            .withEnv("KAFKA_BOOTSTRAP_SERVERS", KAFKA_NETWORK_BOOTSTRAP)
                             .withLogConsumer(containerLog("pipeline-runtime-svc"))
                             .waitingFor(
                                     Wait.forHttps("/q/health")
@@ -1080,6 +1107,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         pb.environment().put("QUARKUS_PROFILE", "test");
         pb.environment().put("QUARKUS_JIB_JVM_ADDITIONAL_ARGUMENTS", "--enable-preview");
+        pb.environment().put("PIPELINE_ORCHESTRATOR_MODE", "QUEUE_ASYNC");
+        pb.environment().put("PIPELINE_ORCHESTRATOR_RESUME_TOKEN_SECRET", E2E_RESUME_TOKEN_SECRET);
+        pb.environment().put("KAFKA_BOOTSTRAP_SERVERS", getKafkaContainer().getBootstrapServers());
         configureObservabilityProcessEnv(pb.environment());
 
         if (MONOLITH_LAYOUT) {
@@ -1604,6 +1634,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 PIPELINE_WAIT_TIMEOUT_SECONDS,
                 TEST_E2E_DIR);
         logTestE2EDirectorySnapshot();
+        logContainerLogTail("kafka", kafkaContainer, 160);
+        logContainerLogTail("payments-processing-svc", paymentsProcessingService, 200);
         logContainerLogTail("pipeline-runtime-svc", pipelineRuntimeService, 200);
         logContainerLogTail("persistence-svc", persistenceService, 200);
         logContainerLogTail("postgres", postgresContainer, 120);

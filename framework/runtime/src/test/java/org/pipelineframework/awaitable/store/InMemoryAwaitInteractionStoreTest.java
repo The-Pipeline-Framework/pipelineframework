@@ -202,6 +202,25 @@ class InMemoryAwaitInteractionStoreTest {
     }
 
     @Test
+    void findByBarrierReturnsItemsInIndexOrder() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        store.createOrGet(barrierCommand("idem-2", "corr-2", 2)).await().indefinitely();
+        store.createOrGet(barrierCommand("idem-0", "corr-0", 0)).await().indefinitely();
+        store.createOrGet(barrierCommand("idem-1", "corr-1", 1)).await().indefinitely();
+
+        List<AwaitInteractionRecord> records = store.findByBarrier(
+                "tenant",
+                "execution-1",
+                3,
+                "barrier-1")
+            .await().indefinitely();
+
+        assertEquals(3, records.size());
+        assertEquals(List.of(0, 1, 2), records.stream().map(AwaitInteractionRecord::barrierItemIndex).toList());
+        assertTrue(records.stream().allMatch(AwaitInteractionRecord::barrierItem));
+    }
+
+    @Test
     void cancelTransitionsToTerminalState() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         var created = store.createOrGet(createCommand("idem-1", 10_000L, 70_000L)).await().indefinitely();
@@ -448,6 +467,28 @@ class InMemoryAwaitInteractionStoreTest {
             "interaction-api",
             nowEpochMs,
             deadlineEpochMs,
+            Long.MAX_VALUE);
+    }
+
+    private AwaitCreateCommand barrierCommand(String idempotencyKey, String correlationId, int itemIndex) {
+        return new AwaitCreateCommand(
+            "tenant",
+            "execution-1",
+            "await-payment-provider",
+            3,
+            String.class.getName(),
+            "execution-1:3:" + itemIndex,
+            idempotencyKey,
+            correlationId,
+            Map.of("index", itemIndex),
+            null,
+            null,
+            "kafka",
+            "barrier-1",
+            itemIndex,
+            3,
+            10_000L,
+            70_000L,
             Long.MAX_VALUE);
     }
 }

@@ -58,6 +58,33 @@ class AwaitClientStepRendererTest {
             + ".onItem().transformToUni(descriptor -> support.awaitOneToOne(descriptor, input))"));
     }
 
+    @Test
+    void rendersManyToManyAwaitClientStep() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("AwaitPaymentProvider")
+            .generatedName("AwaitPaymentProviderService")
+            .servicePackage("com.example.payment")
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .streamingShape(StreamingShape.STREAMING_STREAMING)
+            .executionMode(ExecutionMode.DEFAULT)
+            .inputMapping(new TypeMapping(ClassName.get("com.example.payment", "PaymentRecord"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("com.example.payment", "PaymentStatus"), null, false))
+            .enabledTargets(Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .build();
+
+        new AwaitClientStepRenderer().render(model, generationContext());
+
+        String source = Files.readString(tempDir.resolve(
+            "com/example/payment/pipeline/AwaitPaymentProviderAwaitClientStep.java"));
+
+        assertTrue(source.contains("implements StepManyToMany<PaymentRecord, PaymentStatus>"));
+        assertTrue(source.contains("public Multi<PaymentStatus> applyTransform(Multi<PaymentRecord> input)"));
+        assertTrue(source.contains("return descriptorFactory.descriptor(\"AwaitPaymentProvider\", "
+            + "\"com.example.payment.PaymentRecord\", \"com.example.payment.PaymentStatus\")"
+            + ".onItem().transformToMulti(descriptor -> support.awaitManyToMany(descriptor, input))"));
+    }
+
     private GenerationContext generationContext() {
         return new GenerationContext(
             mock(ProcessingEnvironment.class),

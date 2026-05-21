@@ -47,6 +47,10 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
         boolean restMode = transportMode == TransportMode.REST;
         boolean localMode = transportMode == TransportMode.LOCAL;
         ClassName pipelineExecutionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
+        ClassName orchestratorConfig = ClassName.get("org.pipelineframework.orchestrator", "PipelineOrchestratorConfig");
+        ClassName orchestratorMode = ClassName.get("org.pipelineframework.orchestrator", "OrchestratorMode");
+        ClassName executionStatus = ClassName.get("org.pipelineframework.orchestrator", "ExecutionStatus");
+        ClassName executionStatusDto = ClassName.get("org.pipelineframework.orchestrator.dto", "ExecutionStatusDto");
         ClassName pipelineInputDeserializer = ClassName.get("org.pipelineframework.util", "PipelineInputDeserializer");
         ClassName quarkusApplication = ClassName.get("io.quarkus.runtime", "QuarkusApplication");
         ClassName commandLine = ClassName.get("picocli", "CommandLine");
@@ -94,7 +98,19 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 .build())
             .build();
 
+        FieldSpec asyncTimeoutMinutesField = FieldSpec.builder(long.class, "asyncTimeoutMinutes", Modifier.PUBLIC)
+            .addAnnotation(AnnotationSpec.builder(option)
+                .addMember("names", "{$S}", "--async-timeout-minutes")
+                .addMember("description", "$S", "Maximum minutes to wait for QUEUE_ASYNC pipeline completion")
+                .addMember("defaultValue", "$S", "30")
+                .build())
+            .build();
+
         FieldSpec pipelineExecutionServiceField = FieldSpec.builder(pipelineExecutionService, "pipelineExecutionService")
+            .addAnnotation(inject)
+            .build();
+
+        FieldSpec orchestratorConfigField = FieldSpec.builder(orchestratorConfig, "orchestratorConfig")
             .addAnnotation(inject)
             .build();
 
@@ -177,9 +193,24 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 $T statusCode = $T.OK;
                 String grpcStatus = "0";
                 try {
-                    pipelineExecutionService.executePipeline(inputMulti)
-                            .collect().asList()
+                    if (orchestratorConfig.mode() == $T.QUEUE_ASYNC) {
+                        if (asyncTimeoutMinutes <= 0) {
+                            System.err.println("--async-timeout-minutes must be greater than zero.");
+                            return $T.ExitCode.USAGE;
+                        }
+                        var accepted = pipelineExecutionService.executePipelineAsync(inputMulti, null, null, false)
                             .await().indefinitely();
+                        $T status = waitForAsyncExecution(accepted.executionId(), $T.ofMinutes(asyncTimeoutMinutes));
+                        if (status.status() != $T.SUCCEEDED) {
+                            System.err.println("Pipeline execution failed: " + status.status()
+                                + " " + sanitizeErrorMessage(status.errorMessage()));
+                            return $T.ExitCode.SOFTWARE;
+                        }
+                    } else {
+                        pipelineExecutionService.executePipeline(inputMulti)
+                                .collect().asList()
+                                .await().indefinitely();
+                    }
 
                     System.out.println("Pipeline execution completed");
                     return $T.ExitCode.OK;
@@ -216,6 +247,12 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 timer,
                 grpcStatusCode,
                 grpcStatusCode,
+                orchestratorMode,
+                commandLine,
+                executionStatusDto,
+                duration,
+                executionStatus,
+                commandLine,
                 commandLine,
                 grpcStatusCode,
                 rpcMetrics,
@@ -226,6 +263,32 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 "grpc.server.requests.received",
                 "grpc.server.processing.duration",
                 telemetryFlush)
+            .build();
+
+        MethodSpec waitForAsyncExecutionMethod = MethodSpec.methodBuilder("waitForAsyncExecution")
+            .addModifiers(Modifier.PRIVATE)
+            .returns(executionStatusDto)
+            .addParameter(String.class, "executionId")
+            .addParameter(duration, "timeout")
+            .addCode("""
+                long deadline = System.nanoTime() + timeout.toNanos();
+                while (System.nanoTime() < deadline) {
+                    $T status = pipelineExecutionService.getExecutionStatus(null, executionId)
+                        .await().atMost($T.ofSeconds(10));
+                    if (status.status().terminal()) {
+                        return status;
+                    }
+                    try {
+                        Thread.sleep(1000L);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("Interrupted waiting for async pipeline execution " + executionId, e);
+                    }
+                }
+                throw new IllegalStateException("Timed out waiting for async pipeline execution " + executionId);
+                """,
+                executionStatusDto,
+                duration)
             .build();
 
         MethodSpec isBlankMethod = MethodSpec.methodBuilder("isBlank")
@@ -291,12 +354,15 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .addAnnotation(dependent)
             .addField(inputField)
             .addField(inputListField)
+            .addField(asyncTimeoutMinutesField)
             .addField(pipelineExecutionServiceField)
+            .addField(orchestratorConfigField)
             .addField(meterRegistryField)
             .addField(inputDeserializerField)
             .addMethod(mainMethod)
             .addMethod(runMethod)
             .addMethod(callMethod)
+            .addMethod(waitForAsyncExecutionMethod)
             .addMethod(isBlankMethod)
             .addMethod(firstNonBlankMethod)
             .addMethod(looksLikeJsonObjectMethod)

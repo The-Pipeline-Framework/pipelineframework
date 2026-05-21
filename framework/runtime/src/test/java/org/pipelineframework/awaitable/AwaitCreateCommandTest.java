@@ -38,6 +38,18 @@ class AwaitCreateCommandTest {
     }
 
     @Test
+    void constructsBarrierItemCommand() {
+        AwaitCreateCommand command = new AwaitCreateCommand(
+            "tenant1", "exec-1", "await-payment-provider", 3, "com.example.PaymentStatus",
+            "cause-1", "idem-1", "corr-1", "payload", null, null,
+            "kafka", "barrier-1", 1, 2, NOW, DEADLINE, Long.MAX_VALUE);
+
+        assertEquals("barrier-1", command.barrierId());
+        assertEquals(1, command.barrierItemIndex());
+        assertEquals(2, command.barrierItemCount());
+    }
+
+    @Test
     void backwardCompatConstructorDefaultsStepIndexAndOutputType() {
         AwaitCreateCommand command = new AwaitCreateCommand(
             "tenant1", "exec-1", "step-review",
@@ -114,6 +126,24 @@ class AwaitCreateCommandTest {
         assertThrows(IllegalArgumentException.class, () ->
             new AwaitCreateCommand("tenant1", "exec-1", "step-1", 0, "Out.class",
                 "cause", "idem", "corr", null, null, null, "webhook", NOW, NOW - 1, Long.MAX_VALUE));
+    }
+
+    @Test
+    void rejectsInvalidBarrierMetadata() {
+        assertThrows(IllegalArgumentException.class, () ->
+            new AwaitCreateCommand("tenant1", "exec-1", "step-1", 0, "Out.class",
+                "cause", "idem", "corr", null, null, null, "webhook",
+                null, 0, 2, NOW, DEADLINE, Long.MAX_VALUE));
+
+        assertThrows(IllegalArgumentException.class, () ->
+            new AwaitCreateCommand("tenant1", "exec-1", "step-1", 0, "Out.class",
+                "cause", "idem", "corr", null, null, null, "webhook",
+                "barrier-1", null, 2, NOW, DEADLINE, Long.MAX_VALUE));
+
+        assertThrows(IllegalArgumentException.class, () ->
+            new AwaitCreateCommand("tenant1", "exec-1", "step-1", 0, "Out.class",
+                "cause", "idem", "corr", null, null, null, "webhook",
+                "barrier-1", 2, 2, NOW, DEADLINE, Long.MAX_VALUE));
     }
 
     @Test

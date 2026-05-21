@@ -4,20 +4,50 @@
 
 ## Overview
 
-The CSV Payments Processing Application is a Quarkus-based microservices system designed to process CSV files containing payment information. It reads payment records from input CSV files, sends them to a mock payment processor, retrieves their final statuses, and generates output CSV files with the processed results.
+The CSV Payments Processing Application is a Quarkus-based microservices system designed to process CSV files containing payment information. It reads payment records from input CSV files, dispatches each payment to a mock external provider through a durable Kafka-backed await boundary, resumes when provider completions arrive, and generates output CSV files with the processed results.
 
-This application demonstrates modern microservices architecture patterns using gRPC for inter-service communication and reactive programming with Mutiny. It simulates the complexities of real-world asynchronous payment processing systems.
+This application demonstrates modern microservices architecture patterns using gRPC for service-to-service steps, Kafka for external provider completion, and TPF queue-async orchestration for durable suspend/resume. It simulates the complexities of real-world asynchronous payment processing systems without making the mock provider part of the pipeline itself.
 
 ## Key Features
 
 - **Microservices Architecture**: Modular design with independently deployable services
-- **Reactive Programming**: Non-blocking operations using Mutiny
+- **Durable Await Boundary**: Payment-provider calls suspend the pipeline and resume from correlated Kafka completions
+- **Reactive Programming**: Non-blocking framework execution using Mutiny
 - **gRPC Communication**: High-performance service-to-service communication
+- **Kafka Request/Completion Flow**: Framework-owned await dispatch envelopes and provider-owned completion envelopes
 - **Virtual Threads**: Optional execution mode for selected steps
 - **Rate Limiting Simulation**: Realistic throttling behavior
 - **Retry Logic**: Automatic retries for transient failures
 - **Parallel Processing**: Concurrent handling of multiple payment records
 - **Comprehensive Logging**: Detailed observability and debugging information
+
+## Await/Kafka Payment Flow
+
+The canonical modular flow is:
+
+1. `Process Csv Payments Input` incrementally reads CSV rows with the blocking iterator pacer.
+2. `Await Payment Provider` creates one durable await interaction per `PaymentRecord` in a `MANY_TO_MANY` per-item barrier.
+3. The Kafka await adapter publishes request envelopes to `csv-payments.payment.requests`.
+4. `payments-processing-svc` acts as the external mock provider, consumes those envelopes, calls `PaymentProviderServiceMock`, and publishes completion envelopes to `csv-payments.payment.results`.
+5. The TPF Kafka completion consumer admits each completion idempotently, resumes the owning queue-async execution when the barrier is complete, and passes ordered `PaymentStatus` items downstream.
+6. `Process Payment Status` rejects provider terminal status `Rejected` into the normal reject path and maps accepted statuses to `PaymentOutput`.
+7. `Process Csv Payments Output File` writes the final output files.
+
+This is durable brokered completion, not polling. Kafka delivery remains at-least-once; TPF handles idempotent completion admission and ordered barrier reconstruction for the resumed pipeline.
+
+The orchestrator must run in queue-async mode and needs a stable resume-token secret:
+
+```properties
+pipeline.orchestrator.mode=QUEUE_ASYNC
+pipeline.orchestrator.resume-token-secret=${PIPELINE_ORCHESTRATOR_RESUME_TOKEN_SECRET}
+```
+
+The modular example uses these Kafka topics by default:
+
+```properties
+csv-payments.payment.requests
+csv-payments.payment.results
+```
 
 ## Running End-to-End Tests
 
@@ -31,7 +61,7 @@ To run the end-to-end integration test that starts all services and processes a 
    ```
 
 This script will:
-1. Start all required microservices
+1. Start Postgres, Kafka, and all required microservices
 2. Wait for all services to become healthy by checking their health endpoints
 3. Copy a sample CSV file to the test directory
 4. Run the orchestrator to process the CSV file
@@ -182,7 +212,10 @@ The gRPC protobufs are generated from `examples/csv-payments/config/pipeline.yam
 graph TD
     A[Input CSV Files] --> B[Orchestrator Service]
     B --> C[Input CSV Processing Service]
-    B --> D[Payments Processing Service]
+    B --> K[Kafka Await Request]
+    K --> D[Payments Processing Service]
+    D --> L[Kafka Await Completion]
+    L --> B
     B --> E[Payment Status Service]
     B --> F[Output CSV Processing Service]
     D --> G[Mock Payment Provider]
@@ -197,6 +230,8 @@ graph TD
     
     subgraph "External Systems"
         A
+        K
+        L
         G
     end
     
