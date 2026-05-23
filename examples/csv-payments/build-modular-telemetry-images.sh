@@ -24,6 +24,8 @@ cleanup() {
   if [[ -n "$backup_file" ]]; then
     cp "$backup_file" "$ACTIVE_MAPPING"
     rm -f "$backup_file"
+  else
+    rm -f "$ACTIVE_MAPPING"
   fi
 }
 trap cleanup EXIT
@@ -34,7 +36,7 @@ cd "$ROOT_DIR"
 
 IMAGE_TAG="${CSV_E2E_TELEMETRY_IMAGE_TAG:-otel}"
 
-exec ./mvnw -f examples/csv-payments/pom.xml -DskipTests clean package \
+./mvnw -f examples/csv-payments/pom.xml -DskipTests clean package \
   -Dtpf.build.transport=GRPC \
   -Dquarkus.container-image.tag="${IMAGE_TAG}" \
   -Dquarkus.otel.enabled=true \

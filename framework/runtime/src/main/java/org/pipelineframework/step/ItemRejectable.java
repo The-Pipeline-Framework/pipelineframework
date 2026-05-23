@@ -132,7 +132,14 @@ public interface ItemRejectable<I, O> {
      * instead of being routed through reject-and-continue handling.
      */
     default boolean shouldPropagateWithoutRecovery(Throwable cause) {
-        return cause instanceof AwaitSuspendedException;
+        Throwable current = cause;
+        while (current != null) {
+            if (current instanceof AwaitSuspendedException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private Optional<ItemRejectRouter> resolveRouter() {

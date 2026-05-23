@@ -904,9 +904,18 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         String executionId = readString(item, EXECUTION_ID);
         String executionKey = readString(item, EXECUTION_KEY);
         String resultShapeValue = readString(item, RESULT_SHAPE);
-        ExecutionResultShape resultShape = resultShapeValue == null || resultShapeValue.isBlank()
-            ? ExecutionResultShape.SINGLE
-            : ExecutionResultShape.valueOf(resultShapeValue);
+        ExecutionResultShape resultShape;
+        if (resultShapeValue == null || resultShapeValue.isBlank()) {
+            resultShape = ExecutionResultShape.SINGLE;
+        } else {
+            try {
+                resultShape = ExecutionResultShape.valueOf(resultShapeValue);
+            } catch (IllegalArgumentException | NullPointerException e) {
+                LOG.warnf("Unknown or corrupted result_shape value '%s' for execution %s; defaulting to SINGLE",
+                    resultShapeValue, readString(item, EXECUTION_ID));
+                resultShape = ExecutionResultShape.SINGLE;
+            }
+        }
         ExecutionStatus status = ExecutionStatus.valueOf(readString(item, STATUS));
         long version = readLong(item, VERSION);
         int currentStepIndex = (int) readLong(item, CURRENT_STEP_INDEX);

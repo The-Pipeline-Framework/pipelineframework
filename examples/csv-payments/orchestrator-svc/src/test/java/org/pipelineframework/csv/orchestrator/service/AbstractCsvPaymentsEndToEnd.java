@@ -1353,6 +1353,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 return;
             }
             throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", e);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", e);
         }

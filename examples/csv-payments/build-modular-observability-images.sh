@@ -34,7 +34,7 @@ cd "$ROOT_DIR"
 
 IMAGE_TAG="${CSV_E2E_OBSERVABILITY_IMAGE_TAG:-observability}"
 
-exec ./mvnw -f examples/csv-payments/pom.xml -DskipTests clean package \
+./mvnw -f examples/csv-payments/pom.xml -DskipTests clean package \
   -Dtpf.build.transport=GRPC \
   -Dquarkus.container-image.tag="${IMAGE_TAG}" \
   -Dquarkus.otel.enabled=true \

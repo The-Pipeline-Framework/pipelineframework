@@ -34,7 +34,7 @@ public class ExecutionResultShapeResolver {
     }
 
     private ExecutionResultShape loadShape() {
-        Path base = Path.of("").toAbsolutePath();
+        Path base = resolveConfigBase();
         Path configPath = new PipelineYamlConfigLocator().locate(base)
             .orElseThrow(() -> new IllegalStateException("No pipeline YAML found for queue-async result-shape resolution"));
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath);
@@ -49,5 +49,25 @@ public class ExecutionResultShapeResolver {
             case ONE_TO_ONE, MANY_TO_ONE -> ExecutionResultShape.SINGLE;
             case ONE_TO_MANY, MANY_TO_MANY -> ExecutionResultShape.MATERIALIZED_MULTI;
         };
+    }
+
+    private static Path resolveConfigBase() {
+        String explicit = firstNonBlank(System.getProperty("pipeline.config"), System.getenv("PIPELINE_CONFIG"));
+        if (explicit != null) {
+            Path candidate = Path.of(explicit);
+            if (candidate.isAbsolute()) {
+                return candidate.getParent() != null ? candidate.getParent() : candidate;
+            }
+        }
+        return Path.of("").toAbsolutePath();
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 }
