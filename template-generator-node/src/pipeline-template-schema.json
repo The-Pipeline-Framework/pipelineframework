@@ -579,7 +579,7 @@
               "additionalProperties": true
             }
           },
-          "required": ["transport"],
+          "required": ["transport", "correlation"],
           "additionalProperties": false
         },
         "execution": {

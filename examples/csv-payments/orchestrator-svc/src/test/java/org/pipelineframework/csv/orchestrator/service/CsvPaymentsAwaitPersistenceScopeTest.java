@@ -27,7 +27,7 @@ class CsvPaymentsAwaitPersistenceScopeTest {
                 pipelineYaml.contains("- ProcessCsvPaymentsInputService"),
                 "Persistence should include the CSV parsing step");
         assertFalse(
-                pipelineYaml.contains("- ProcessAwaitPaymentProviderService"),
+                pipelineYaml.contains("Await Payment Provider"),
                 "Persistence should not target the replayable await boundary");
         assertFalse(
                 pipelineYaml.contains("- ProcessPaymentStatusService"),
