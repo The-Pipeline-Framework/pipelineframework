@@ -28,6 +28,24 @@ Use the Quarkus plugin in IntelliJ IDEA or run with:
 ./mvnw compile quarkus:dev
 ```
 
+{{#if hasAwaitSteps}}
+## Await Steps
+
+This generated application includes await steps. The orchestrator exposes generated await completion and pending-interaction query APIs alongside the configured pipeline transport.
+
+{{#if hasInteractionApiAwaitSteps}}
+### interaction-api await steps
+
+Use the generated await query/completion APIs from a UI, mock provider, or other client that needs to list pending interactions and submit the correlated result later.
+{{/if}}
+
+{{#if hasWebhookAwaitSteps}}
+### webhook await steps
+
+Webhook await dispatch includes a signed resume token in the outbound envelope. Configure a stable high-entropy value for `pipeline.orchestrator.resume-token-secret` before using webhook await flows, and keep it stable for the lifetime of outstanding interactions.
+{{/if}}
+{{/if}}
+
 ## Constructing requests
 
 If your first step uses helper builders, you can construct inputs like this:

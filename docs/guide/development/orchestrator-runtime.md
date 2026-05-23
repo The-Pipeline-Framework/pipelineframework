@@ -180,7 +180,7 @@ Failure channel split:
 
 Await steps suspend `QUEUE_ASYNC` execution at an external boundary. TPF persists the interaction, dispatches through the configured adapter, and resumes the owning execution after a correlated completion is admitted.
 
-Shipped await shapes in this slice are:
+Currently supported await shapes are:
 
 1. `ONE_TO_ONE` for single external interactions.
 2. `MANY_TO_MANY` with `await.dispatch.mode=per-item`, which creates a durable per-item barrier and resumes downstream only after every item completion has been admitted.

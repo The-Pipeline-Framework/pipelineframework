@@ -3,11 +3,21 @@
  */
 
 function buildModularModules(steps, includePersistenceModule, includeCacheInvalidationModule, stepId) {
-    const modules = {};
+    const modules = {
+        'orchestrator-svc': { runtime: 'orchestrator-svc' }
+    };
+    const orchestratorSteps = [];
     for (const step of steps) {
         const moduleName = step.serviceName;
         const resolvedStepId = stepId(step);
-        if (!moduleName || !resolvedStepId) {
+        if (!resolvedStepId) {
+            continue;
+        }
+        if (step.generatesServiceModule === false) {
+            orchestratorSteps.push(resolvedStepId);
+            continue;
+        }
+        if (!moduleName) {
             continue;
         }
         modules[moduleName] = {
@@ -15,7 +25,9 @@ function buildModularModules(steps, includePersistenceModule, includeCacheInvali
             steps: [resolvedStepId]
         };
     }
-    modules['orchestrator-svc'] = { runtime: 'orchestrator-svc' };
+    if (orchestratorSteps.length > 0) {
+        modules['orchestrator-svc'].steps = orchestratorSteps;
+    }
     if (includePersistenceModule) {
         modules['persistence-svc'] = {
             runtime: 'persistence-svc',

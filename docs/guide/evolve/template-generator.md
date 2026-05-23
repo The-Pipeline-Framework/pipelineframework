@@ -100,7 +100,7 @@ You can determine that version with `template-generator --version`, by checking 
 
 The generator copies the authored config into `config/pipeline.yaml` so the build can recreate `.proto` definitions during `generate-sources`.
 
-Await steps are now part of the v2 template schema so CI and automation can validate authored `kind: await` pipeline configs. The current generator still does not scaffold await transport modules or runtime wiring; when an authored config contains await steps, it fails fast with an explicit error instead of silently generating an incompatible project skeleton.
+Await steps are part of the v2 template schema so CI and automation can validate authored `kind: await` pipeline configs. The generator now scaffolds await-aware projects for `interaction-api` and `webhook` transports. It still rejects `kafka` await scaffolding explicitly because the generated project does not yet include the required messaging dependencies and channel configuration.
 
 ## Semantic Types and Derived Bindings
 

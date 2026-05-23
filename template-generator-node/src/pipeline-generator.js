@@ -166,17 +166,19 @@ class PipelineGenerator {
 
     toScaffoldConfig(config) {
         const scaffoldConfig = { ...config };
-        const awaitSteps = Array.isArray(config.steps)
-            ? config.steps.filter((step) => step && step.kind === 'await')
-            : [];
-        if (awaitSteps.length > 0) {
-            const stepNames = awaitSteps.map((step) => step.name).join(', ');
+        const processedSteps = this.processSteps(this.materializeSteps(config));
+        const unsupportedAwaitSteps = processedSteps.filter((step) =>
+            this.isAwaitStep(step) && !this.isSupportedAwaitTransport(step.awaitTransportType)
+        );
+        if (unsupportedAwaitSteps.length > 0) {
+            const stepNames = unsupportedAwaitSteps.map((step) => step.name).join(', ');
             throw new Error(
-                `Await steps are accepted by the template schema, but the generator does not scaffold await transport modules yet. ` +
-                `Remove these steps or author them manually in pipeline.yaml: ${stepNames}`
+                `The runtime supports Kafka await steps, but the generator does not yet scaffold the required messaging ` +
+                `dependencies and channel configuration. Author these steps manually in pipeline.yaml or use ` +
+                `interaction-api/webhook for generated scaffolds: ${stepNames}`
             );
         }
-        scaffoldConfig.steps = this.processSteps(this.materializeSteps(config));
+        scaffoldConfig.steps = processedSteps;
         return scaffoldConfig;
     }
 
@@ -285,6 +287,15 @@ class PipelineGenerator {
             }
             if (typeof normalized.execution.protocol === 'string') {
                 normalized.execution.protocol = normalized.execution.protocol.trim().toUpperCase();
+            }
+        }
+        if (normalized.await && typeof normalized.await === 'object') {
+            normalized.await = { ...normalized.await };
+            if (normalized.await.transport && typeof normalized.await.transport === 'object') {
+                normalized.await.transport = { ...normalized.await.transport };
+                if (typeof normalized.await.transport.type === 'string') {
+                    normalized.await.transport.type = normalized.await.transport.type.trim().toLowerCase();
+                }
             }
         }
         return normalized;
@@ -483,6 +494,12 @@ class PipelineGenerator {
     processSteps(steps) {
         return steps.map((step, i) => {
             const processedStep = { ...step };
+            processedStep.kind = typeof processedStep.kind === 'string'
+                ? processedStep.kind.trim().toLowerCase()
+                : processedStep.kind;
+            processedStep.isAwaitStep = this.isAwaitStep(processedStep);
+            processedStep.awaitTransportType = this.awaitTransportType(processedStep);
+            processedStep.generatesServiceModule = !processedStep.isAwaitStep;
             
             // Add missing properties if not already present
             if (!processedStep.serviceName) {
@@ -536,6 +553,25 @@ class PipelineGenerator {
             
             return processedStep;
         });
+    }
+
+    isAwaitStep(step) {
+        return !!step && typeof step.kind === 'string' && step.kind.trim().toLowerCase() === 'await';
+    }
+
+    awaitTransportType(step) {
+        if (!step || !step.await || typeof step.await !== 'object') {
+            return null;
+        }
+        const transport = step.await.transport;
+        if (!transport || typeof transport !== 'object' || typeof transport.type !== 'string') {
+            return null;
+        }
+        return transport.type.trim().toLowerCase();
+    }
+
+    isSupportedAwaitTransport(type) {
+        return type === 'interaction-api' || type === 'webhook';
     }
 
     /**

@@ -93,6 +93,19 @@ pipeline.cache.provider=redis
 # quarkus.tls.pipeline-client.trust-store.jks.path=${CLIENT_TRUSTSTORE_PATH:../target/dev-certs/orchestrator-svc/client-truststore.jks}
 # quarkus.tls.pipeline-client.trust-store.jks.password=secret
 
+{{#if hasInteractionApiAwaitSteps}}
+# Await interaction-api steps
+# Generated await query/completion APIs can be used by UI or mock-provider clients
+# to list pending interactions and submit the correlated result later.
+{{/if}}
+
+{{#if hasWebhookAwaitSteps}}
+# Await webhook steps
+# Set a stable high-entropy secret before using webhook await flows. The runtime uses
+# this value to sign and verify resume tokens carried by webhook dispatch envelopes.
+# pipeline.orchestrator.resume-token-secret=change-me
+{{/if}}
+
 # Micrometer configuration
 quarkus.micrometer.export.prometheus.enabled=${QUARKUS_MICROMETER_EXPORT_PROMETHEUS_ENABLED:false}
 quarkus.micrometer.export.prometheus.path=/q/metrics
