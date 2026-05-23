@@ -940,11 +940,36 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         fileCallback) {
         const awaitSteps = this.awaitSteps(steps);
         // Create README
+        // Compute await transport types from raw step data
+        const hasInteractionApiAwaitSteps = awaitSteps.some((step) => {
+            if (!step) return false;
+            // Check for transport type in step metadata
+            const transportType = step['transport/type'] || step.awaitTransportType;
+            const serviceModuleName = step.serviceModuleName || step.serviceName || '';
+            const generatesService = step.generatesServiceModule;
+            // Infer interaction-api from explicit markers or service hints
+            if (transportType === 'interaction-api') return true;
+            if (generatesService === 'interaction-api') return true;
+            if (serviceModuleName.includes('interaction')) return true;
+            return false;
+        });
+        const hasWebhookAwaitSteps = awaitSteps.some((step) => {
+            if (!step) return false;
+            // Check for transport type in step metadata
+            const transportType = step['transport/type'] || step.awaitTransportType;
+            const serviceModuleName = step.serviceModuleName || step.serviceName || '';
+            const generatesService = step.generatesServiceModule;
+            // Infer webhook from explicit markers or service hints
+            if (transportType === 'webhook') return true;
+            if (generatesService === 'webhook') return true;
+            if (serviceModuleName.includes('webhook')) return true;
+            return false;
+        });
         const readmeContext = {
             appName,
             hasAwaitSteps: awaitSteps.length > 0,
-            hasInteractionApiAwaitSteps: awaitSteps.some((step) => step.awaitTransportType === 'interaction-api'),
-            hasWebhookAwaitSteps: awaitSteps.some((step) => step.awaitTransportType === 'webhook')
+            hasInteractionApiAwaitSteps,
+            hasWebhookAwaitSteps
         };
         const readmeContent = this.render('readme', readmeContext);
         await fileCallback('README.md', readmeContent);

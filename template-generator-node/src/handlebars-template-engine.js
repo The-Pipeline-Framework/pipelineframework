@@ -1176,8 +1176,41 @@ class HandlebarsTemplateEngine {
         context.includePersistenceModule = includePersistenceModule;
         context.includeCacheInvalidationModule = includeCacheInvalidationModule;
         context.hasAwaitSteps = awaitSteps.length > 0;
-        context.hasInteractionApiAwaitSteps = awaitSteps.some((step) => step.awaitTransportType === 'interaction-api');
-        context.hasWebhookAwaitSteps = awaitSteps.some((step) => step.awaitTransportType === 'webhook');
+        // Compute await transport types from raw step data
+        context.hasInteractionApiAwaitSteps = awaitSteps.some((step) => {
+            if (!step) return false;
+            // Treat step as await if kind is 'await' or awaitTransportType exists
+            const isAwait = step.kind === 'await' || !!step.awaitTransportType;
+            if (!isAwait) return false;
+            // Determine transport type from multiple sources
+            const transportType = step.awaitTransportType || step['transport/type'];
+            const serviceModuleName = step.serviceModuleName || step.serviceName || '';
+            const generatesService = step.generatesServiceModule;
+            const serviceType = step['service/type'];
+            // Infer interaction-api from explicit markers or service hints
+            if (transportType === 'interaction-api') return true;
+            if (generatesService === 'interaction-api') return true;
+            if (serviceType === 'interaction-api') return true;
+            if (serviceModuleName.includes('interaction')) return true;
+            return false;
+        });
+        context.hasWebhookAwaitSteps = awaitSteps.some((step) => {
+            if (!step) return false;
+            // Treat step as await if kind is 'await' or awaitTransportType exists
+            const isAwait = step.kind === 'await' || !!step.awaitTransportType;
+            if (!isAwait) return false;
+            // Determine transport type from multiple sources
+            const transportType = step.awaitTransportType || step['transport/type'];
+            const serviceModuleName = step.serviceModuleName || step.serviceName || '';
+            const generatesService = step.generatesServiceModule;
+            const serviceType = step['service/type'];
+            // Infer webhook from explicit markers or service hints
+            if (transportType === 'webhook') return true;
+            if (generatesService === 'webhook') return true;
+            if (serviceType === 'webhook') return true;
+            if (serviceModuleName.includes('webhook')) return true;
+            return false;
+        });
         context.hasCacheAspect = (aspectDefinitions || []).some(aspect => aspect.name === 'cache');
         if (includePersistenceModule) {
             context.persistencePortOffset = generatedServiceSteps.length + 1;
@@ -1533,6 +1566,41 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         const awaitSteps = this.awaitSteps(steps);
 
         // Create README
+        // Compute await transport types from raw step data
+        const hasInteractionApiAwaitSteps = awaitSteps.some((step) => {
+            if (!step) return false;
+            // Treat step as await if kind is 'await' or awaitTransportType exists
+            const isAwait = step.kind === 'await' || !!step.awaitTransportType;
+            if (!isAwait) return false;
+            // Determine transport type from multiple sources
+            const transportType = step.awaitTransportType || step['transport/type'];
+            const serviceModuleName = step.serviceModuleName || step.serviceName || '';
+            const generatesService = step.generatesServiceModule;
+            const serviceType = step['service/type'];
+            // Infer interaction-api from explicit markers or service hints
+            if (transportType === 'interaction-api') return true;
+            if (generatesService === 'interaction-api') return true;
+            if (serviceType === 'interaction-api') return true;
+            if (serviceModuleName.includes('interaction')) return true;
+            return false;
+        });
+        const hasWebhookAwaitSteps = awaitSteps.some((step) => {
+            if (!step) return false;
+            // Treat step as await if kind is 'await' or awaitTransportType exists
+            const isAwait = step.kind === 'await' || !!step.awaitTransportType;
+            if (!isAwait) return false;
+            // Determine transport type from multiple sources
+            const transportType = step.awaitTransportType || step['transport/type'];
+            const serviceModuleName = step.serviceModuleName || step.serviceName || '';
+            const generatesService = step.generatesServiceModule;
+            const serviceType = step['service/type'];
+            // Infer webhook from explicit markers or service hints
+            if (transportType === 'webhook') return true;
+            if (generatesService === 'webhook') return true;
+            if (serviceType === 'webhook') return true;
+            if (serviceModuleName.includes('webhook')) return true;
+            return false;
+        });
         const readmeContext = {
             appName,
             basePackage,
@@ -1541,8 +1609,8 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
             requestTypeName: firstInputTypeName,
             optionsClass,
             hasAwaitSteps: awaitSteps.length > 0,
-            hasInteractionApiAwaitSteps: awaitSteps.some((step) => step.awaitTransportType === 'interaction-api'),
-            hasWebhookAwaitSteps: awaitSteps.some((step) => step.awaitTransportType === 'webhook')
+            hasInteractionApiAwaitSteps,
+            hasWebhookAwaitSteps
         };
         const readmeContent = this.render('readme', readmeContext);
         const readmePath = path.join(outputPath, 'README.md');
