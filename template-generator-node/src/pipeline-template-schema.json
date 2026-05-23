@@ -435,6 +435,10 @@
         "name": {
           "type": "string"
         },
+        "kind": {
+          "type": "string",
+          "enum": ["await"]
+        },
         "cardinality": {
           "type": "string",
           "enum": ["ONE_TO_ONE", "EXPANSION", "REDUCTION", "SIDE_EFFECT", "MANY_TO_MANY", "ONE_TO_MANY", "MANY_TO_ONE"]
@@ -470,11 +474,135 @@
         "parallel": {
           "type": "boolean"
         },
+        "timeout": {
+          "type": "string",
+          "minLength": 1
+        },
+        "idempotencyKeyFields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "await": {
+          "type": "object",
+          "properties": {
+            "dispatch": {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": ["single", "per-item"]
+                }
+              },
+              "additionalProperties": false
+            },
+            "correlation": {
+              "type": "object",
+              "properties": {
+                "strategy": {
+                  "type": "string",
+                  "enum": ["interactionId", "signedResumeToken"]
+                }
+              },
+              "required": ["strategy"],
+              "additionalProperties": false
+            },
+            "transport": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["interaction-api", "webhook", "kafka"]
+                },
+                "request": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "method": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "topic": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "key": {
+                      "type": "string",
+                      "enum": ["interactionId", "correlationId"]
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "response": {
+                  "type": "object",
+                  "properties": {
+                    "topic": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "consumer": {
+                  "type": "object",
+                  "properties": {
+                    "group": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "headers": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "callback": {
+                  "type": "object",
+                  "properties": {
+                    "baseUrl": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "required": ["type"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["transport", "correlation"],
+          "additionalProperties": false
+        },
         "execution": {
           "$ref": "#/$defs/v2Execution"
         }
       },
       "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "await"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": ["timeout", "await"],
+            "not": {
+              "required": ["execution"]
+            }
+          }
+        },
         {
           "if": {
             "properties": {

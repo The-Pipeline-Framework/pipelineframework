@@ -166,6 +166,96 @@ steps:
     expect(config.steps[0].execution.target.urlConfigKey).toBe('tpf.remote-operators.charge-card.url');
   });
 
+  test('loadConfig accepts await step metadata for v2 configs', () => {
+    const generator = new PipelineGenerator();
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipeline-generator-'));
+    const configPath = path.join(tempDir, 'await-config.yaml');
+    fs.writeFileSync(configPath, `version: 2
+appName: TestApp
+basePackage: com.example.test
+transport: GRPC
+runtimeLayout: MODULAR
+messages:
+  PaymentRecord:
+    fields:
+      - number: 1
+        name: csvId
+        type: string
+  PaymentStatus:
+    fields:
+      - number: 1
+        name: status
+        type: string
+steps:
+  - name: Await Payment Provider
+    kind: await
+    cardinality: MANY_TO_MANY
+    inputTypeName: PaymentRecord
+    outputTypeName: PaymentStatus
+    timeout: PT5M
+    idempotencyKeyFields: [csvId]
+    await:
+      dispatch:
+        mode: per-item
+      correlation:
+        strategy: signedResumeToken
+      transport:
+        type: kafka
+        request:
+          topic: csv-payments.payment.requests
+          key: correlationId
+        response:
+          topic: csv-payments.payment.results
+`);
+
+    const config = generator.loadConfig(configPath);
+    expect(config.steps[0].kind).toBe('await');
+    expect(config.steps[0].await.transport.type).toBe('kafka');
+    expect(config.steps[0].await.dispatch.mode).toBe('per-item');
+  });
+
+  test('toScaffoldConfig fails clearly for await steps', () => {
+    const generator = new PipelineGenerator();
+    const config = {
+      version: 2,
+      appName: 'TestApp',
+      basePackage: 'com.example.test',
+      transport: 'GRPC',
+      runtimeLayout: 'MODULAR',
+      messages: {
+        PaymentRecord: {
+          fields: [{ number: 1, name: 'csvId', type: 'string' }]
+        },
+        PaymentStatus: {
+          fields: [{ number: 1, name: 'status', type: 'string' }]
+        }
+      },
+      steps: [
+        {
+          name: 'Await Payment Provider',
+          kind: 'await',
+          cardinality: 'MANY_TO_MANY',
+          inputTypeName: 'PaymentRecord',
+          outputTypeName: 'PaymentStatus',
+          timeout: 'PT5M',
+          await: {
+            dispatch: { mode: 'per-item' },
+            correlation: { strategy: 'signedResumeToken' },
+            transport: {
+              type: 'kafka',
+              request: { topic: 'csv-payments.payment.requests', key: 'correlationId' },
+              response: { topic: 'csv-payments.payment.results' }
+            }
+          }
+        }
+      ]
+    };
+
+    expect(() => generator.toScaffoldConfig(config)).toThrow(
+      'Await steps are accepted by the template schema'
+    );
+  });
+
   test('loadConfig rejects non-integer version values', () => {
     const generator = new PipelineGenerator();
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipeline-generator-'));
