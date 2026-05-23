@@ -76,7 +76,7 @@ jobs:
         uses: ./.github/actions/setup-testcontainers
 
       - name: Build csv-payments modular observability images
-        run: ./examples/csv-payments/build-modular-observability-images.sh
+        run: bash ./examples/csv-payments/build-modular-observability-images.sh
 
       - name: Run csv-payments Tempo verification E2E
         run: |
