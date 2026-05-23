@@ -603,6 +603,92 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void rejectsAwaitStepWhenOperatorIsAlsoDeclared() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Await With Operator"
+                kind: "await"
+                operator: "com.example.Operator::process"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "interactionId"
+                  transport:
+                    type: "interaction-api"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains("await steps are deferred durable boundaries"), errorSummary);
+        assertTrue(errorSummary.contains("use operators/remote execution for immediate replies"), errorSummary);
+    }
+
+    @Test
+    void rejectsAwaitStepWhenRemoteExecutionIsAlsoDeclared() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Await With Remote Execution"
+                kind: "await"
+                inputTypeName: "Input"
+                outputTypeName: "Output"
+                timeout: "PT10M"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "fraud-check"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  target:
+                    url: "https://operators.example/check"
+                await:
+                  correlation:
+                    strategy: "interactionId"
+                  transport:
+                    type: "interaction-api"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains("await steps are deferred durable boundaries"), errorSummary);
+        assertTrue(errorSummary.contains("kind: await"), errorSummary);
+    }
+
+    @Test
+    void rejectsAwaitStepWhenServiceIsAlsoDeclared() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Await With Service"
+                kind: "await"
+                service: "com.example.Service"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "interactionId"
+                  transport:
+                    type: "interaction-api"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains("await steps are deferred durable boundaries"), errorSummary);
+        assertTrue(errorSummary.contains("correlated later completion"), errorSummary);
+    }
+
+    @Test
     void rejectsUnsupportedKindValue() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""

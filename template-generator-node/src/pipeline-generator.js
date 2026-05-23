@@ -166,6 +166,16 @@ class PipelineGenerator {
 
     toScaffoldConfig(config) {
         const scaffoldConfig = { ...config };
+        const awaitSteps = Array.isArray(config.steps)
+            ? config.steps.filter((step) => step && step.kind === 'await')
+            : [];
+        if (awaitSteps.length > 0) {
+            const stepNames = awaitSteps.map((step) => step.name).join(', ');
+            throw new Error(
+                `Await steps are accepted by the template schema, but the generator does not scaffold await transport modules yet. ` +
+                `Remove these steps or author them manually in pipeline.yaml: ${stepNames}`
+            );
+        }
         scaffoldConfig.steps = this.processSteps(this.materializeSteps(config));
         return scaffoldConfig;
     }
@@ -265,6 +275,9 @@ class PipelineGenerator {
             return step;
         }
         const normalized = { ...step };
+        if (typeof normalized.kind === 'string') {
+            normalized.kind = normalized.kind.trim().toLowerCase();
+        }
         if (normalized.execution && typeof normalized.execution === 'object') {
             normalized.execution = { ...normalized.execution };
             if (typeof normalized.execution.mode === 'string') {

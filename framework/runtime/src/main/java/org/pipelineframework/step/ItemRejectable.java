@@ -25,7 +25,6 @@ import jakarta.enterprise.inject.CreationException;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.spi.CDI;
 import org.jboss.logging.Logger;
-import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.context.TransportDispatchMetadata;
@@ -128,13 +127,13 @@ public interface ItemRejectable<I, O> {
     }
 
     /**
-     * Await suspension is not a business failure and must propagate back to the queue-async coordinator
-     * instead of being routed through reject-and-continue handling.
+     * Runtime control-flow signals are not business failures and must propagate back to the
+     * queue-async coordinator instead of being routed through reject-and-continue handling.
      */
     default boolean shouldPropagateWithoutRecovery(Throwable cause) {
         Throwable current = cause;
         while (current != null) {
-            if (current instanceof AwaitSuspendedException) {
+            if (current instanceof PipelineControlFlowException) {
                 return true;
             }
             current = current.getCause();

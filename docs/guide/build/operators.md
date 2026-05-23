@@ -84,9 +84,23 @@ steps:
 Rules:
 - Remote execution is available only in `version: 2`.
 - Only unary `ONE_TO_ONE` remote execution is supported currently.
+- Remote execution is immediate request/response only. It does not persist durable waiting state or resume later from correlated completion.
 - Exactly one of `execution.target.url` or `execution.target.urlConfigKey` must be set.
 - `execution.target.urlConfigKey` resolves at runtime startup, not at compile time.
 - `pipeline.transport` and the remote operator protocol are orthogonal. TPF can expose the pipeline over REST, gRPC, or local transport while invoking the remote operator over Protobuf-over-HTTP.
+
+## Operator vs Await
+
+Use operators when the external call completes within the current pipeline invocation. Use await steps when the request leaves the current execution turn and the result comes back later.
+
+| External shape | Use |
+| --- | --- |
+| Inline HTTP/gRPC call returning now | Operator / remote execution |
+| Broker request/reply with later correlated message | Await step |
+| Webhook callback later | Await step |
+| UI/human approval | Await step |
+
+If a remote system returns `accepted` now and the final business result arrives later, that is not a remote operator. Model it as `kind: await`.
 
 ## Working Example
 

@@ -209,7 +209,9 @@ public class StepDefinitionParser {
         }
         if (awaitStep && (!isBlank(delegatedClassName) || !isBlank(serviceClassName) || remoteExecution != null)) {
             String message = "Skipping step '" + name
-                + "': await steps cannot declare 'service', 'operator', 'delegate', or remote 'execution'";
+                + "': await steps are deferred durable boundaries and cannot declare 'service', 'operator', 'delegate',"
+                + " or remote 'execution'; use operators/remote execution for immediate replies and 'kind: await'"
+                + " for correlated later completion";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             return null;

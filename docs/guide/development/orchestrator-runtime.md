@@ -180,7 +180,25 @@ Failure channel split:
 
 Await steps suspend `QUEUE_ASYNC` execution at an external boundary. TPF persists the interaction, dispatches through the configured adapter, and resumes the owning execution after a correlated completion is admitted.
 
+Shipped await shapes in this slice are:
+
+1. `ONE_TO_ONE` for single external interactions.
+2. `MANY_TO_MANY` with `await.dispatch.mode=per-item`, which creates a durable per-item barrier and resumes downstream only after every item completion has been admitted.
+
+`MANY_TO_MANY` per-item await is the shape used by `csv-payments`. It is a runtime barrier over unary external interactions, not a claim that every await cardinality is already supported.
+
 The built-in `interaction-api` adapter is for human/UI inboxes and mock-provider style flows where another client queries pending interactions and later calls the generated completion API. The built-in `webhook` adapter dispatches an HTTP request to an external system and includes a signed resume token in the envelope. The built-in `kafka` adapter publishes a request envelope to Kafka and admits response envelopes from a configured response channel.
+
+Await is the only durable suspend/resume primitive in TPF. Use operators or remote execution when the external system replies within the current invocation. Use `kind: await` when the request leaves the current execution turn and the result is admitted later through correlation.
+
+| External shape | Use |
+| --- | --- |
+| Inline HTTP/gRPC call returning now | Operator / remote execution |
+| Broker request/reply with later correlated message | Await step |
+| Webhook callback later | Await step |
+| UI/human approval | Await step |
+
+If a remote system returns `accepted` now and the final business result arrives later, do not model that as a remote operator. That is an await boundary.
 
 ```yaml
 steps:
@@ -231,6 +249,29 @@ steps:
 
 Kafka dispatch sends a framework-owned JSON envelope containing tenant id, execution id, interaction id, correlation id, step id, deadline, input/output types, resume token, request payload, and dispatch metadata. The response envelope is consumed by TPF and completed directly through `AwaitCoordinator`, not by looping back through REST. Use the generated REST/gRPC completion APIs for human/UI or webhook clients that are not broker consumers.
 
+```yaml
+steps:
+  - name: "Await Payment Provider"
+    kind: "await"
+    cardinality: "MANY_TO_MANY"
+    input: "org.pipelineframework.csv.common.domain.PaymentRecord"
+    output: "org.pipelineframework.csv.common.domain.PaymentStatus"
+    timeout: "PT5M"
+    idempotencyKeyFields: ["csvId", "recipient", "amount", "currency"]
+    await:
+      dispatch:
+        mode: "per-item"
+      correlation:
+        strategy: "signedResumeToken"
+      transport:
+        type: "kafka"
+        request:
+          topic: "csv-payments.payment.requests"
+          key: "correlationId"
+        response:
+          topic: "csv-payments.payment.results"
+```
+
 Add the Quarkus Kafka messaging extension to the application that hosts the orchestrator, enable the default Kafka bridge with `pipeline.await.kafka.reactive-messaging.enabled=true`, then configure the SmallRye channels:
 
 ```properties
@@ -262,6 +303,8 @@ Recovery points:
 3. worker death while leased: lease expiry allows takeover.
 
 These guarantees are deterministic for orchestrator state, not for external side effects; downstream step boundaries must accept at-least-once invocation.
+
+That matters for plugin-style side effects after an await boundary. A resumed queue-async execution can replay the remainder of the pipeline after a downstream retry, so once-only side-effect checkpointing is a separate concern from await durability itself.
 
 ## Queue-Async HA Baseline
 

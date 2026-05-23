@@ -100,6 +100,8 @@ You can determine that version with `template-generator --version`, by checking 
 
 The generator copies the authored config into `config/pipeline.yaml` so the build can recreate `.proto` definitions during `generate-sources`.
 
+Await steps are now part of the v2 template schema so CI and automation can validate authored `kind: await` pipeline configs. The current generator still does not scaffold await transport modules or runtime wiring; when an authored config contains await steps, it fails fast with an explicit error instead of silently generating an incompatible project skeleton.
+
 ## Semantic Types and Derived Bindings
 
 In v2, the author normally chooses only the semantic type:

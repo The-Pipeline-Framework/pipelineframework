@@ -1,11 +1,11 @@
 package org.pipelineframework.awaitable;
 
-import org.pipelineframework.step.NonRetryableException;
+import org.pipelineframework.step.PipelineControlFlowException;
 
 /**
  * Internal signal used to suspend queue-async execution at an await step.
  */
-public class AwaitSuspendedException extends NonRetryableException {
+public class AwaitSuspendedException extends PipelineControlFlowException {
     private final String tenantId;
     private final String executionId;
     private final String interactionId;

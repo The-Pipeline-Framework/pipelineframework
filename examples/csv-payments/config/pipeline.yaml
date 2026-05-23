@@ -5,9 +5,14 @@ transport: GRPC
 aspects:
   persistence:
     enabled: true
-    scope: GLOBAL
+    scope: STEPS
     position: AFTER_STEP
     config:
+      # Queue-async resume is at-least-once from the await boundary onward. Keep persistence scoped to
+      # pre-await steps until the runtime has durable once-only checkpointing for post-await side effects.
+      targetSteps:
+        - ProcessFolderService
+        - ProcessCsvPaymentsInputService
       pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
       enabledTargets:
         - GRPC_SERVICE

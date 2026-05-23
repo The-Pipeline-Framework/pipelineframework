@@ -62,6 +62,21 @@ At runtime, the generated adapter:
 - propagates canonical `x-tpf-*` metadata headers,
 - decodes either the output protobuf message or a `google.rpc.Status` failure envelope.
 
+Remote operators are still immediate request/response steps. The remote implementation may use async I/O internally, but the pipeline execution remains on the same invocation lease and expects the reply inline. If the external system returns `accepted` and the final answer arrives later through a broker, webhook, or human task, model that boundary as `kind: await` instead.
+
+## Operator vs Await
+
+Use this rule to pick the step model:
+
+| External shape | Use |
+| --- | --- |
+| Inline HTTP/gRPC call returning now | Operator / remote execution |
+| Broker request/reply with later correlated message | Await step |
+| Webhook callback later | Await step |
+| UI/human approval | Await step |
+
+Anti-pattern: if the remote system acknowledges the request now and produces the real business result later, do not model that as a remote operator. Remote operators are for immediate replies; await steps are for deferred durable completion.
+
 ## Method Contract Checklist
 
 - Format: `fully.qualified.Class::method`.
@@ -93,6 +108,7 @@ When application domain types differ from operator I/O types, mapper coverage is
 
 - Remote operators are v2-only.
 - Only `ONE_TO_ONE` is supported currently.
+- Remote operators are immediate request/response only; they do not persist durable waiting state or resume later from a correlated completion.
 - The generated adapter sends its HTTP `POST` to the fully configured target URL. If you use `execution.target.url`, include the full path to call. If you use `execution.target.urlConfigKey`, the configured value must also be the full target URL, including any path segment.
 - The value of `execution.target.urlConfigKey` is resolved at application startup; if it is missing or blank, the application will fail to start.
 - `execution.timeoutMs`, when set, caps the outbound HTTP call. The runtime also applies the propagated deadline if one is present, using the smaller of the two budgets.
