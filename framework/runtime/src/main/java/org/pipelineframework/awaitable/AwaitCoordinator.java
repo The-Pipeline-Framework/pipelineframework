@@ -50,10 +50,11 @@ public class AwaitCoordinator {
         String assignee,
         String group
     ) {
+        Object normalizedRequestPayload = AwaitPayloadSupport.normalize(requestPayload);
         long now = System.currentTimeMillis();
         long deadline = now + descriptor.timeout().toMillis();
         long ttl = Instant.ofEpochMilli(deadline).plusSeconds(86_400).getEpochSecond();
-        String idempotencyKey = deriveIdempotencyKey(descriptor, executionId, requestPayload);
+        String idempotencyKey = deriveIdempotencyKey(descriptor, executionId, normalizedRequestPayload);
         String correlationId = deriveCorrelationId(descriptor, tenantId, executionId, idempotencyKey);
         return store().createOrGet(new AwaitCreateCommand(
             tenantId,
@@ -64,7 +65,7 @@ public class AwaitCoordinator {
             causationId,
             idempotencyKey,
             correlationId,
-            requestPayload,
+            normalizedRequestPayload,
             assignee,
             group,
             descriptor.transportType(),
@@ -89,6 +90,7 @@ public class AwaitCoordinator {
         String assignee,
         String group
     ) {
+        Object normalizedRequestPayload = AwaitPayloadSupport.normalize(requestPayload);
         if (itemCount <= 0) {
             return Uni.createFrom().failure(new IllegalArgumentException("itemCount must be greater than 0"));
         }
@@ -99,7 +101,7 @@ public class AwaitCoordinator {
         long now = System.currentTimeMillis();
         long deadline = now + descriptor.timeout().toMillis();
         long ttl = Instant.ofEpochMilli(deadline).plusSeconds(86_400).getEpochSecond();
-        String idempotencyKey = deriveIdempotencyKey(descriptor, executionId, requestPayload) + ":item=" + itemIndex;
+        String idempotencyKey = deriveIdempotencyKey(descriptor, executionId, normalizedRequestPayload) + ":item=" + itemIndex;
         String correlationId = deriveCorrelationId(descriptor, tenantId, executionId, idempotencyKey);
         return store().createOrGet(new AwaitCreateCommand(
             tenantId,
@@ -110,7 +112,7 @@ public class AwaitCoordinator {
             causationId,
             idempotencyKey,
             correlationId,
-            requestPayload,
+            normalizedRequestPayload,
             assignee,
             group,
             descriptor.transportType(),
@@ -163,23 +165,24 @@ public class AwaitCoordinator {
      * Accepts a correlated completion.
      */
     public Uni<AwaitCompletionResult> complete(AwaitCompletionCommand command) {
-        if (command.resumeToken() == null) {
-            return store().complete(command);
+        AwaitCompletionCommand normalized = normalizeCompletionCommand(command);
+        if (normalized.resumeToken() == null) {
+            return store().complete(normalized);
         }
-        return resolveForCompletion(command)
+        return resolveForCompletion(normalized)
             .onItem().transformToUni(record -> {
                 if (record.status().terminal() && record.status() != AwaitInteractionStatus.COMPLETED) {
                     return Uni.createFrom().failure(
-                        new IllegalStateException("Await interaction is terminal: " + record.status()));
+                        new AwaitInteractionTerminalException("Await interaction is terminal: " + record.status()));
                 }
                 return Uni.createFrom().item(() -> {
-                        resumeTokenService.validate(command.resumeToken(), record, command.nowEpochMs());
+                        resumeTokenService.validate(normalized.resumeToken(), record, normalized.nowEpochMs());
                         return record;
                     })
                     .runSubscriptionOn(Infrastructure.getDefaultExecutor())
                     .replaceWith(record);
             })
-            .onItem().transformToUni(ignored -> store().complete(command));
+            .onItem().transformToUni(ignored -> store().complete(normalized));
     }
 
     /**
@@ -269,7 +272,19 @@ public class AwaitCoordinator {
             ? store().get(command.tenantId(), command.interactionId())
             : store().findByCorrelation(command.tenantId(), command.correlationId());
         return lookup.onItem().transform(optional -> optional.orElseThrow(
-            () -> new IllegalArgumentException("No await interaction matches completion")));
+            () -> new AwaitInteractionNotFoundException("No await interaction matches completion")));
+    }
+
+    private static AwaitCompletionCommand normalizeCompletionCommand(AwaitCompletionCommand command) {
+        return new AwaitCompletionCommand(
+            command.tenantId(),
+            command.interactionId(),
+            command.correlationId(),
+            command.resumeToken(),
+            command.idempotencyKey(),
+            AwaitPayloadSupport.normalize(command.responsePayload()),
+            command.actor(),
+            command.nowEpochMs());
     }
 
     private String deriveCorrelationId(

@@ -3,6 +3,7 @@ package org.pipelineframework.processor.renderer;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Set;
 import javax.annotation.processing.ProcessingEnvironment;
 
@@ -19,6 +20,7 @@ import org.pipelineframework.processor.ir.TypeMapping;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class AwaitClientStepRendererTest {
 
@@ -45,7 +47,7 @@ class AwaitClientStepRendererTest {
             .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
             .build();
 
-        new AwaitClientStepRenderer().render(model, generationContext());
+        new AwaitClientStepRenderer().render(model, generationContext("LOCAL"));
 
         String source = Files.readString(tempDir.resolve(
             "com/example/fraud/pipeline/FraudCheckAwaitClientStep.java"));
@@ -73,21 +75,26 @@ class AwaitClientStepRendererTest {
             .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
             .build();
 
-        new AwaitClientStepRenderer().render(model, generationContext());
+        new AwaitClientStepRenderer().render(model, generationContext("GRPC"));
 
         String source = Files.readString(tempDir.resolve(
             "com/example/payment/pipeline/AwaitPaymentProviderAwaitClientStep.java"));
 
-        assertTrue(source.contains("implements StepManyToMany<PaymentRecord, PaymentStatus>"));
-        assertTrue(source.contains("public Multi<PaymentStatus> applyTransform(Multi<PaymentRecord> input)"));
+        assertTrue(source.contains("implements StepManyToMany"));
+        assertTrue(source.contains("PipelineTypes.PaymentRecord"));
+        assertTrue(source.contains("PipelineTypes.PaymentStatus"));
+        assertTrue(source.contains("applyTransform("));
         assertTrue(source.contains("return support.awaitManyToMany(descriptorFactory.descriptor(\"AwaitPaymentProvider\", "
-            + "\"com.example.payment.PaymentRecord\", \"com.example.payment.PaymentStatus\")"
+            + "\"com.example.payment.grpc.PipelineTypes.PaymentRecord\", "
+            + "\"com.example.payment.grpc.PipelineTypes.PaymentStatus\")"
             + ", input)"));
     }
 
-    private GenerationContext generationContext() {
+    private GenerationContext generationContext(String transport) {
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.transport", transport));
         return new GenerationContext(
-            mock(ProcessingEnvironment.class),
+            processingEnv,
             tempDir,
             DeploymentRole.ORCHESTRATOR_CLIENT,
             Set.of(),

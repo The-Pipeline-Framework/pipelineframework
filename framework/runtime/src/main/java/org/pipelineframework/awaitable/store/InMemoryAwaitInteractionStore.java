@@ -16,8 +16,10 @@ import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCreateCommand;
 import org.pipelineframework.awaitable.AwaitCreateResult;
+import org.pipelineframework.awaitable.AwaitInteractionNotFoundException;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
+import org.pipelineframework.awaitable.AwaitInteractionTerminalException;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 
 /**
@@ -200,17 +202,17 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
             synchronized (lock) {
                 purgeExpired(command.nowEpochMs());
                 AwaitInteractionRecord current = resolveForCompletion(command)
-                    .orElseThrow(() -> new IllegalArgumentException("No await interaction matches completion"));
+                    .orElseThrow(() -> new AwaitInteractionNotFoundException("No await interaction matches completion"));
                 if (current.status() == AwaitInteractionStatus.COMPLETED) {
                     return new AwaitCompletionResult(current, true);
                 }
                 if (current.status().terminal()) {
-                    throw new IllegalStateException("Await interaction is terminal: " + current.status());
+                    throw new AwaitInteractionTerminalException("Await interaction is terminal: " + current.status());
                 }
                 if (current.deadlineEpochMs() <= command.nowEpochMs()) {
                     AwaitInteractionRecord timedOut = updateStatus(current, AwaitInteractionStatus.TIMED_OUT, command.nowEpochMs(), null, null);
                     interactionsByScopedId.put(scopedInteractionId(timedOut.tenantId(), timedOut.interactionId()), timedOut);
-                    throw new IllegalStateException("Await interaction timed out before completion");
+                    throw new AwaitInteractionTerminalException("Await interaction timed out before completion");
                 }
                 AwaitInteractionRecord completed = new AwaitInteractionRecord(
                     current.tenantId(),

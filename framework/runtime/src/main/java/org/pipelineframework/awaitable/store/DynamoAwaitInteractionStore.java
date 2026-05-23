@@ -20,8 +20,10 @@ import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCreateCommand;
 import org.pipelineframework.awaitable.AwaitCreateResult;
+import org.pipelineframework.awaitable.AwaitInteractionNotFoundException;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
+import org.pipelineframework.awaitable.AwaitInteractionTerminalException;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
@@ -473,12 +475,12 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
 
     private AwaitCompletionResult completeBlocking(AwaitCompletionCommand command) {
         AwaitInteractionRecord current = resolveForCompletion(command)
-            .orElseThrow(() -> new IllegalArgumentException("No await interaction matches completion"));
+            .orElseThrow(() -> new AwaitInteractionNotFoundException("No await interaction matches completion"));
         if (current.status() == AwaitInteractionStatus.COMPLETED) {
             return new AwaitCompletionResult(current, true);
         }
         if (current.status().terminal()) {
-            throw new IllegalStateException("Await interaction is terminal: " + current.status());
+            throw new AwaitInteractionTerminalException("Await interaction is terminal: " + current.status());
         }
         if (current.deadlineEpochMs() <= command.nowEpochMs()) {
             Optional<AwaitInteractionRecord> timedOut = transitionStatus(
@@ -499,7 +501,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
                     return new AwaitCompletionResult(refreshed.get(), true);
                 }
             }
-            throw new IllegalStateException("Await interaction timed out before completion");
+            throw new AwaitInteractionTerminalException("Await interaction timed out before completion");
         }
         AwaitInteractionRecord completed = transitionStatus(
             current.tenantId(),
@@ -779,7 +781,11 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             if (decoded instanceof Map<?, ?> map && map.containsKey(ENCODED_JAVA_CLASS)) {
                 String className = String.valueOf(map.get(ENCODED_JAVA_CLASS));
                 Object payload = map.get(ENCODED_PAYLOAD);
-                return PipelineJson.mapper().convertValue(payload, Class.forName(className));
+                return org.pipelineframework.awaitable.AwaitPayloadSupport.coercePayload(
+                    payload,
+                    org.pipelineframework.awaitable.AwaitPayloadSupport.resolvePayloadClass(
+                        className,
+                        Thread.currentThread().getContextClassLoader()));
             }
             return decoded;
         } catch (Exception e) {

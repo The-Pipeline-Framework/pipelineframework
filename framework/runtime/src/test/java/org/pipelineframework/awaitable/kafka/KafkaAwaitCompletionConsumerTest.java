@@ -21,7 +21,9 @@ import org.pipelineframework.PipelineExecutionService;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
+import org.pipelineframework.awaitable.AwaitInteractionNotFoundException;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
+import org.pipelineframework.awaitable.AwaitInteractionTerminalException;
 import org.pipelineframework.config.pipeline.PipelineJson;
 
 class KafkaAwaitCompletionConsumerTest {
@@ -93,6 +95,56 @@ class KafkaAwaitCompletionConsumerTest {
             .join();
 
         assertNotNull(nacked.get());
+    }
+
+    @Test
+    void deterministicNotFoundFailureAcksMessage() {
+        PipelineExecutionService executionService = mock(PipelineExecutionService.class);
+        when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class)))
+            .thenReturn(Uni.createFrom().failure(new AwaitInteractionNotFoundException("missing")));
+        KafkaAwaitCompletionConsumer consumer = new KafkaAwaitCompletionConsumer(executionService);
+        AtomicReference<Boolean> acked = new AtomicReference<>(false);
+        AtomicReference<Throwable> nacked = new AtomicReference<>();
+
+        consumer.consume(message("""
+            {
+              "tenantId": "tenant-1",
+              "interactionId": "interaction-1",
+              "idempotencyKey": "completion-1",
+              "responsePayload": {"decision": "approved"}
+            }
+            """, acked, nacked))
+            .toCompletableFuture()
+            .orTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+            .join();
+
+        assertEquals(Boolean.TRUE, acked.get());
+        assertEquals(null, nacked.get());
+    }
+
+    @Test
+    void deterministicTerminalFailureAcksMessage() {
+        PipelineExecutionService executionService = mock(PipelineExecutionService.class);
+        when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class)))
+            .thenReturn(Uni.createFrom().failure(new AwaitInteractionTerminalException("terminal")));
+        KafkaAwaitCompletionConsumer consumer = new KafkaAwaitCompletionConsumer(executionService);
+        AtomicReference<Boolean> acked = new AtomicReference<>(false);
+        AtomicReference<Throwable> nacked = new AtomicReference<>();
+
+        consumer.consume(message("""
+            {
+              "tenantId": "tenant-1",
+              "interactionId": "interaction-1",
+              "idempotencyKey": "completion-1",
+              "responsePayload": {"decision": "approved"}
+            }
+            """, acked, nacked))
+            .toCompletableFuture()
+            .orTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+            .join();
+
+        assertEquals(Boolean.TRUE, acked.get());
+        assertEquals(null, nacked.get());
     }
 
     private static Message<String> message(

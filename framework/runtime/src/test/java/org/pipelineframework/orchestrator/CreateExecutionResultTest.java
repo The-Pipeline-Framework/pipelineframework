@@ -48,6 +48,7 @@ class CreateExecutionResultTest {
             tenantId,
             executionId,
             "key-" + executionId,
+            ExecutionResultShape.SINGLE,
             status,
             1L,
             0,

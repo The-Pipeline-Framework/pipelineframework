@@ -15,11 +15,13 @@ public record ExecutionCreateCommand(
     String tenantId,
     String executionKey,
     Object inputPayload,
+    ExecutionResultShape resultShape,
     long nowEpochMs,
     long ttlEpochS
 ) {
     public ExecutionCreateCommand {
         Objects.requireNonNull(tenantId, "ExecutionCreateCommand.tenantId must not be null");
         Objects.requireNonNull(executionKey, "ExecutionCreateCommand.executionKey must not be null");
+        Objects.requireNonNull(resultShape, "ExecutionCreateCommand.resultShape must not be null");
     }
 }

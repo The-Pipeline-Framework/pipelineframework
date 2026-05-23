@@ -77,7 +77,13 @@ class DynamoExecutionStateStoreTest {
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
         long now = System.currentTimeMillis();
         long ttl = now / 1000 + 3600;
-        ExecutionCreateCommand command = new ExecutionCreateCommand("tenant-a", "key-1", "payload", now, ttl);
+        ExecutionCreateCommand command = new ExecutionCreateCommand(
+            "tenant-a",
+            "key-1",
+            "payload",
+            ExecutionResultShape.SINGLE,
+            now,
+            ttl);
 
         when(client.getItem(any(GetItemRequest.class)))
             .thenReturn(GetItemResponse.builder().item(Map.of(

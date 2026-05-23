@@ -25,6 +25,7 @@ import jakarta.enterprise.inject.CreationException;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.spi.CDI;
 import org.jboss.logging.Logger;
+import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.context.TransportDispatchMetadata;
@@ -124,6 +125,14 @@ public interface ItemRejectable<I, O> {
                 transport,
                 context))
             .orElseGet(() -> localFallbackReject(normalizedCause, "STREAM"));
+    }
+
+    /**
+     * Await suspension is not a business failure and must propagate back to the queue-async coordinator
+     * instead of being routed through reject-and-continue handling.
+     */
+    default boolean shouldPropagateWithoutRecovery(Throwable cause) {
+        return cause instanceof AwaitSuspendedException;
     }
 
     private Optional<ItemRejectRouter> resolveRouter() {

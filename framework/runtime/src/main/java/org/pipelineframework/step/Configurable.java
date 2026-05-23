@@ -17,7 +17,12 @@
 package org.pipelineframework.step;
 
 import java.time.Duration;
+import java.util.concurrent.CancellationException;
 
+import io.grpc.Status;
+import io.grpc.StatusException;
+import io.grpc.StatusRuntimeException;
+import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.config.StepConfig;
 
 /**
@@ -83,6 +88,12 @@ default String backpressureStrategy() { return effectiveConfig().backpressureStr
         if (failure == null) {
             return false;
         }
+        if (containsAwaitSuspension(failure)) {
+            return false;
+        }
+        if (containsCancellation(failure)) {
+            return false;
+        }
         if (containsNonRetryable(failure)) {
             return false;
         }
@@ -94,6 +105,21 @@ default String backpressureStrategy() { return effectiveConfig().backpressureStr
 
     private boolean containsNonRetryable(Throwable failure) {
         return containsThrowable(failure, NonRetryableException.class);
+    }
+
+    private boolean containsAwaitSuspension(Throwable failure) {
+        return containsThrowable(failure, AwaitSuspendedException.class);
+    }
+
+    private boolean containsCancellation(Throwable failure) {
+        return containsThrowableWithPredicate(
+            failure,
+            t -> t instanceof CancellationException
+                || (t instanceof StatusRuntimeException statusRuntimeException
+                    && statusRuntimeException.getStatus().getCode() == Status.Code.CANCELLED)
+                || (t instanceof StatusException statusException
+                    && statusException.getStatus().getCode() == Status.Code.CANCELLED)
+        );
     }
 
     private boolean containsNullPointer(Throwable failure) {

@@ -1,8 +1,10 @@
 package org.pipelineframework;
 
+import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import io.smallrye.mutiny.Multi;
@@ -19,6 +21,8 @@ import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.ExecutionInputShape;
 import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRecord;
+import org.pipelineframework.orchestrator.ExecutionResultShape;
+import org.pipelineframework.orchestrator.ExecutionResultShapeResolver;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
@@ -39,6 +43,8 @@ import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.checkpoint.CheckpointPublicationService;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -82,6 +88,9 @@ class QueueAsyncCoordinatorTest {
     @Mock
     private Instance<DeadLetterPublisher> deadLetterPublishers;
 
+    @Mock
+    private ExecutionResultShapeResolver executionResultShapeResolver;
+
     @BeforeEach
     void setUp() {
         inputPolicy = new ExecutionInputPolicy();
@@ -102,6 +111,7 @@ class QueueAsyncCoordinatorTest {
         coordinator.deadLetterPublishers = deadLetterPublishers;
         coordinator.executionInputPolicy = inputPolicy;
         coordinator.executionFailureHandler = failureHandler;
+        coordinator.executionResultShapeResolver = executionResultShapeResolver;
     }
 
     @Test
@@ -146,6 +156,7 @@ class QueueAsyncCoordinatorTest {
             "tenant-1",
             "exec-1",
             "key-1",
+            ExecutionResultShape.SINGLE,
             ExecutionStatus.RUNNING,
             1L,
             0,
@@ -191,6 +202,7 @@ class QueueAsyncCoordinatorTest {
         ExecutionInputSnapshot snapshot = (ExecutionInputSnapshot) persisted;
         assertEquals(ExecutionInputShape.UNI, snapshot.shape());
         assertEquals(java.util.List.of("a", "b"), snapshot.payload());
+        assertEquals(ExecutionResultShape.SINGLE, captor.getValue().resultShape());
     }
 
     @Test
@@ -198,7 +210,7 @@ class QueueAsyncCoordinatorTest {
         configureQueueModeDefaults();
         when(executionStateStore.createOrGetExecution(any()))
             .thenReturn(Uni.createFrom().item(new CreateExecutionResult(
-                createRecord("tenant-1", "exec-multi", "key-multi"),
+                createRecord("tenant-1", "exec-multi", "key-multi", ExecutionResultShape.MATERIALIZED_MULTI),
                 true)));
 
         coordinator.executePipelineAsync(Multi.createFrom().items("x", "y"), "tenant-1", null, false)
@@ -212,6 +224,24 @@ class QueueAsyncCoordinatorTest {
         ExecutionInputSnapshot snapshot = (ExecutionInputSnapshot) persisted;
         assertEquals(ExecutionInputShape.MULTI, snapshot.shape());
         assertEquals(java.util.List.of("x", "y"), snapshot.payload());
+    }
+
+    @Test
+    void executePipelineAsyncPersistsResolvedMaterializedMultiResultShape() {
+        configureQueueModeDefaults();
+        when(executionResultShapeResolver.resolve()).thenReturn(ExecutionResultShape.MATERIALIZED_MULTI);
+        when(executionStateStore.createOrGetExecution(any()))
+            .thenReturn(Uni.createFrom().item(new CreateExecutionResult(
+                createRecord("tenant-1", "exec-resolved", "key-resolved", ExecutionResultShape.MATERIALIZED_MULTI),
+                true)));
+
+        coordinator.executePipelineAsync("input", "tenant-1", null, false)
+            .await().indefinitely();
+
+        ArgumentCaptor<org.pipelineframework.orchestrator.ExecutionCreateCommand> captor =
+            ArgumentCaptor.forClass(org.pipelineframework.orchestrator.ExecutionCreateCommand.class);
+        verify(executionStateStore).createOrGetExecution(captor.capture());
+        assertEquals(ExecutionResultShape.MATERIALIZED_MULTI, captor.getValue().resultShape());
     }
 
     @Test
@@ -269,14 +299,95 @@ class QueueAsyncCoordinatorTest {
     }
 
     @Test
+    void processExecutionWorkItemMarksWaitingExternalWhenAwaitSuspensionIsWrapped() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.leaseMs()).thenReturn(1000L);
+        ExecutionRecord<Object, Object> claimed = createRecord("tenant-1", "exec-await", "key-await");
+        when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(executionStateStore.markWaitingExternal(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-await"),
+                org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq("exec-await:0:0"),
+                org.mockito.ArgumentMatchers.eq("interaction-1"),
+                org.mockito.ArgumentMatchers.eq(0),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+
+        coordinator.processExecutionWorkItem(
+                new ExecutionWorkItem("tenant-1", "exec-await"),
+                record -> Multi.createFrom().failure(new IllegalStateException(
+                    "wrapped await failure",
+                    new AwaitSuspendedException("tenant-1", "exec-await", "interaction-1", 0))))
+            .await().indefinitely();
+
+        verify(executionStateStore).markWaitingExternal(
+            org.mockito.ArgumentMatchers.eq("tenant-1"),
+            org.mockito.ArgumentMatchers.eq("exec-await"),
+            org.mockito.ArgumentMatchers.eq(0L),
+            org.mockito.ArgumentMatchers.eq("exec-await:0:0"),
+            org.mockito.ArgumentMatchers.eq("interaction-1"),
+            org.mockito.ArgumentMatchers.eq(0),
+            org.mockito.ArgumentMatchers.anyLong());
+        verify(workDispatcher, never()).enqueueNow(any());
+    }
+
+    @Test
+    void processExecutionWorkItemFailsWhenWaitingExternalTransitionCannotBePersisted() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.leaseMs()).thenReturn(1000L);
+        ExecutionRecord<Object, Object> claimed = createRecord("tenant-1", "exec-await", "key-await");
+        when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(executionStateStore.markWaitingExternal(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-await"),
+                org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq("exec-await:0:0"),
+                org.mockito.ArgumentMatchers.eq("interaction-1"),
+                org.mockito.ArgumentMatchers.eq(0),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.empty()));
+        when(orchestratorConfig.maxRetries()).thenReturn(0);
+        when(executionStateStore.markTerminalFailure(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-await"),
+                org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq(ExecutionStatus.FAILED),
+                org.mockito.ArgumentMatchers.eq("exec-await:0:0"),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.contains("WAITING_EXTERNAL"),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
+
+        coordinator.processExecutionWorkItem(
+                new ExecutionWorkItem("tenant-1", "exec-await"),
+                record -> Multi.createFrom().failure(new AwaitSuspendedException(
+                    "tenant-1",
+                    "exec-await",
+                    "interaction-1",
+                    0)))
+            .await().indefinitely();
+
+        verify(deadLetterPublisher).publish(any());
+    }
+
+    @Test
     void processExecutionWorkItemPersistsCollectedStreamingOutputs() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         when(orchestratorConfig.leaseMs()).thenReturn(1000L);
-        ExecutionRecord<Object, Object> claimed = createRecord("tenant-1", "exec-stream", "key-stream");
+        ExecutionRecord<Object, Object> claimed = createRecord(
+            "tenant-1",
+            "exec-stream",
+            "key-stream",
+            ExecutionResultShape.MATERIALIZED_MULTI);
         ExecutionRecord<Object, Object> succeeded = new ExecutionRecord<>(
             "tenant-1",
             "exec-stream",
             "key-stream",
+            ExecutionResultShape.MATERIALIZED_MULTI,
             ExecutionStatus.SUCCEEDED,
             1L,
             0,
@@ -322,6 +433,117 @@ class QueueAsyncCoordinatorTest {
     }
 
     @Test
+    void runAsyncExecutionAllowsSingleShapeWithZeroOrOneItems() {
+        ExecutionRecord<Object, Object> single = createRecord("tenant-1", "exec-single", "key-single");
+
+        List<?> none = runAsyncExecution(single, record -> Multi.createFrom().empty());
+        List<?> one = runAsyncExecution(single, record -> Multi.createFrom().item("only"));
+
+        assertTrue(none.isEmpty());
+        assertEquals(List.of("only"), one);
+    }
+
+    @Test
+    void runAsyncExecutionRejectsMultipleItemsForSingleShape() {
+        ExecutionRecord<Object, Object> single = createRecord("tenant-1", "exec-single", "key-single");
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () ->
+            runAsyncExecution(single, record -> Multi.createFrom().items("a", "b")));
+
+        assertTrue(error.getMessage().contains("SINGLE result shape"));
+        assertTrue(error.getMessage().contains("exec-single"));
+    }
+
+    @Test
+    void getExecutionResultReturnsStoredListForMaterializedMulti() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(executionStateStore.getExecution("tenant-1", "exec-multi"))
+            .thenReturn(Uni.createFrom().item(Optional.of(succeededRecord(
+                "tenant-1",
+                "exec-multi",
+                "key-multi",
+                ExecutionResultShape.MATERIALIZED_MULTI,
+                List.of("a", "b")))));
+
+        Object result = coordinator.getExecutionResult("tenant-1", "exec-multi", String.class, true)
+            .await().indefinitely();
+
+        assertEquals(List.of("a", "b"), result);
+    }
+
+    @Test
+    void getExecutionResultRejectsUnaryRetrievalForMaterializedMulti() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(executionStateStore.getExecution("tenant-1", "exec-multi"))
+            .thenReturn(Uni.createFrom().item(Optional.of(succeededRecord(
+                "tenant-1",
+                "exec-multi",
+                "key-multi",
+                ExecutionResultShape.MATERIALIZED_MULTI,
+                List.of("a", "b")))));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () ->
+            coordinator.getExecutionResult("tenant-1", "exec-multi", String.class, false).await().indefinitely());
+
+        assertTrue(error.getMessage().contains("materialized multi result"));
+    }
+
+    @Test
+    void getExecutionResultRejectsCorruptSingleResultList() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(executionStateStore.getExecution("tenant-1", "exec-corrupt"))
+            .thenReturn(Uni.createFrom().item(Optional.of(succeededRecord(
+                "tenant-1",
+                "exec-corrupt",
+                "key-corrupt",
+                ExecutionResultShape.SINGLE,
+                List.of("a", "b")))));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () ->
+            coordinator.getExecutionResult("tenant-1", "exec-corrupt", String.class, false).await().indefinitely());
+
+        assertTrue(error.getMessage().contains("multiple terminal items"));
+    }
+
+    @Test
+    void completeAwaitPreservesDeterministicAdmissionFailures() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(awaitCoordinator.complete(any()))
+            .thenReturn(Uni.createFrom().failure(new org.pipelineframework.awaitable.AwaitInteractionNotFoundException("missing")));
+
+        RuntimeException error = assertThrows(RuntimeException.class, () -> coordinator.completeAwait(new AwaitCompletionCommand(
+            "tenant-1",
+            "interaction-1",
+            null,
+            null,
+            java.util.Map.of("value", "approved"),
+            "user-1",
+            System.currentTimeMillis())).await().indefinitely());
+
+        assertInstanceOf(org.pipelineframework.awaitable.AwaitInteractionNotFoundException.class, error);
+    }
+
+    @Test
+    void completeAwaitWrapsTransientAdmissionFailures() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(awaitCoordinator.complete(any()))
+            .thenReturn(Uni.createFrom().failure(new IllegalStateException("store down")));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> coordinator.completeAwait(new AwaitCompletionCommand(
+            "tenant-1",
+            "interaction-1",
+            null,
+            null,
+            java.util.Map.of("value", "approved"),
+            "user-1",
+            System.currentTimeMillis())).await().indefinitely());
+
+        assertTrue(error.getMessage().contains("Failed completing await interaction"));
+        assertFalse(error.getCause() == null);
+        assertEquals("store down", error.getCause().getMessage());
+    }
+
+    @Test
     void completeAwaitStoresResumePayloadAndEnqueuesExecution() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitInteractionRecord interaction = awaitRecord();
@@ -360,6 +582,66 @@ class QueueAsyncCoordinatorTest {
             org.mockito.ArgumentMatchers.anyLong());
         assertEquals(new Decision("approved"), payloadCaptor.getValue());
         verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-1", "exec-1"));
+    }
+
+    @Test
+    void completeAwaitCoercesCanonicalNestedOutputTypeName() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitInteractionRecord interaction = new AwaitInteractionRecord(
+            "tenant-1",
+            "exec-1",
+            "ProcessApprovalService",
+            2,
+            NestedDecisionEnvelope.Decision.class.getCanonicalName(),
+            "interaction-1",
+            "corr-1",
+            "cause-1",
+            "idem-1",
+            1L,
+            AwaitInteractionStatus.COMPLETED,
+            java.util.Map.of("value", "request"),
+            java.util.Map.of("value", "approved"),
+            "user-1",
+            null,
+            null,
+            "interaction-api",
+            java.util.Map.of(),
+            System.currentTimeMillis() + 1000,
+            1L,
+            2L,
+            99999999L);
+        AwaitCompletionCommand command = new AwaitCompletionCommand(
+            "tenant-1",
+            "interaction-1",
+            null,
+            null,
+            java.util.Map.of("value", "approved"),
+            "user-1",
+            System.currentTimeMillis());
+        when(awaitCoordinator.complete(command))
+            .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(interaction, false)));
+        ExecutionRecord<Object, Object> resumed = createRecord("tenant-1", "exec-1", "key-1");
+        when(executionStateStore.markAwaitCompleted(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-1"),
+                org.mockito.ArgumentMatchers.eq("interaction-1"),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(3),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(resumed)));
+        when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
+
+        coordinator.completeAwait(command).await().indefinitely();
+
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(executionStateStore).markAwaitCompleted(
+            org.mockito.ArgumentMatchers.eq("tenant-1"),
+            org.mockito.ArgumentMatchers.eq("exec-1"),
+            org.mockito.ArgumentMatchers.eq("interaction-1"),
+            payloadCaptor.capture(),
+            org.mockito.ArgumentMatchers.eq(3),
+            org.mockito.ArgumentMatchers.anyLong());
+        assertEquals(new NestedDecisionEnvelope.Decision("approved"), payloadCaptor.getValue());
     }
 
     @Test
@@ -482,6 +764,7 @@ class QueueAsyncCoordinatorTest {
             "tenant-1",
             "exec-1",
             "key-1",
+            ExecutionResultShape.SINGLE,
             ExecutionStatus.WAITING_EXTERNAL,
             7L,
             2,
@@ -535,13 +818,23 @@ class QueueAsyncCoordinatorTest {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         when(orchestratorConfig.executionTtlDays()).thenReturn(7);
         when(orchestratorConfig.idempotencyPolicy()).thenReturn(OrchestratorIdempotencyPolicy.OPTIONAL_CLIENT_KEY);
+        when(executionResultShapeResolver.resolve()).thenReturn(ExecutionResultShape.SINGLE);
     }
 
     private ExecutionRecord<Object, Object> createRecord(String tenantId, String executionId, String executionKey) {
+        return createRecord(tenantId, executionId, executionKey, ExecutionResultShape.SINGLE);
+    }
+
+    private ExecutionRecord<Object, Object> createRecord(
+        String tenantId,
+        String executionId,
+        String executionKey,
+        ExecutionResultShape resultShape) {
         return new ExecutionRecord<>(
             tenantId,
             executionId,
             executionKey,
+            resultShape,
             ExecutionStatus.QUEUED,
             0L,
             0,
@@ -557,6 +850,52 @@ class QueueAsyncCoordinatorTest {
             1L,
             1L,
             99999999L);
+    }
+
+    private ExecutionRecord<Object, Object> succeededRecord(
+        String tenantId,
+        String executionId,
+        String executionKey,
+        ExecutionResultShape resultShape,
+        List<?> resultPayload) {
+        return new ExecutionRecord<>(
+            tenantId,
+            executionId,
+            executionKey,
+            resultShape,
+            ExecutionStatus.SUCCEEDED,
+            1L,
+            0,
+            0,
+            null,
+            0L,
+            0L,
+            null,
+            null,
+            null,
+            null,
+            resultPayload,
+            null,
+            null,
+            1L,
+            1L,
+            99999999L);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<?> runAsyncExecution(
+        ExecutionRecord<Object, Object> record,
+        Function<ExecutionRecord<Object, Object>, Multi<?>> executeStreaming) {
+        try {
+            Method method = QueueAsyncCoordinator.class.getDeclaredMethod(
+                "runAsyncExecution",
+                ExecutionRecord.class,
+                Function.class);
+            method.setAccessible(true);
+            return ((Uni<List<?>>) method.invoke(coordinator, record, executeStreaming)).await().indefinitely();
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("Failed invoking runAsyncExecution", e);
+        }
     }
 
     private AwaitInteractionRecord awaitRecord() {
@@ -618,5 +957,10 @@ class QueueAsyncCoordinatorTest {
     }
 
     private record Decision(String value) {
+    }
+
+    private static final class NestedDecisionEnvelope {
+        public record Decision(String value) {
+        }
     }
 }

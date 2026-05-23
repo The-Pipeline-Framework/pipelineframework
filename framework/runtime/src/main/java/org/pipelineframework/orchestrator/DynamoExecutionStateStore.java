@@ -52,6 +52,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private static final String TENANT_ID = "tenant_id";
     private static final String EXECUTION_ID = "execution_id";
     private static final String EXECUTION_KEY = "execution_key";
+    private static final String RESULT_SHAPE = "result_shape";
     private static final String TENANT_EXECUTION_KEY = "tenant_execution_key";
     private static final String STATUS = "status";
     private static final String VERSION = "version";
@@ -268,6 +269,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             command.tenantId(),
             executionId,
             command.executionKey(),
+            command.resultShape(),
             ExecutionStatus.QUEUED,
             0L,
             0,
@@ -857,6 +859,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         item.put(TENANT_ID, avS(record.tenantId()));
         item.put(EXECUTION_ID, avS(record.executionId()));
         item.put(EXECUTION_KEY, avS(record.executionKey()));
+        item.put(RESULT_SHAPE, avS(record.resultShape().name()));
         item.put(STATUS, avS(record.status().name()));
         item.put(VERSION, avN(record.version()));
         item.put(CURRENT_STEP_INDEX, avN(record.currentStepIndex()));
@@ -900,6 +903,10 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         String tenantId = readString(item, TENANT_ID);
         String executionId = readString(item, EXECUTION_ID);
         String executionKey = readString(item, EXECUTION_KEY);
+        String resultShapeValue = readString(item, RESULT_SHAPE);
+        ExecutionResultShape resultShape = resultShapeValue == null || resultShapeValue.isBlank()
+            ? ExecutionResultShape.SINGLE
+            : ExecutionResultShape.valueOf(resultShapeValue);
         ExecutionStatus status = ExecutionStatus.valueOf(readString(item, STATUS));
         long version = readLong(item, VERSION);
         int currentStepIndex = (int) readLong(item, CURRENT_STEP_INDEX);
@@ -921,6 +928,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             tenantId,
             executionId,
             executionKey,
+            resultShape,
             status,
             version,
             currentStepIndex,

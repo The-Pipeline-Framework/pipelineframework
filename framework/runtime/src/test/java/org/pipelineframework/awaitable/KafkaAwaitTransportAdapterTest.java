@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.protobuf.DescriptorProtos;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitPublishRequest;
@@ -122,6 +123,31 @@ class KafkaAwaitTransportAdapterTest {
                 descriptor,
                 interaction(),
                 Map.of())).await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void dispatchNormalizesProtobufPayloadBeforeSerializingEnvelope() throws Exception {
+        AtomicReference<KafkaAwaitPublishRequest> publishRef = new AtomicReference<>();
+        KafkaAwaitTransportAdapter adapter = adapter(request -> {
+            publishRef.set(request);
+            return Uni.createFrom().voidItem();
+        });
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
+            "request", Map.of("topic", "requests"),
+            "response", Map.of("topic", "responses")));
+        DescriptorProtos.FileDescriptorProto payload = DescriptorProtos.FileDescriptorProto.newBuilder()
+            .setName("checkout.proto")
+            .setPackage("org.pipelineframework.checkout")
+            .build();
+
+        adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
+            descriptor,
+            interaction(),
+            payload)).await().atMost(Duration.ofSeconds(5));
+
+        JsonNode body = PipelineJson.mapper().readTree(publishRef.get().body());
+        assertEquals("checkout.proto", body.get("requestPayload").get("name").asText());
+        assertEquals("org.pipelineframework.checkout", body.get("requestPayload").get("package").asText());
     }
 
     private static KafkaAwaitTransportAdapter adapter(org.pipelineframework.awaitable.kafka.KafkaAwaitPublisher publisher) {

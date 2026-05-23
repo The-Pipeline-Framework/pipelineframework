@@ -12,7 +12,10 @@ import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
+import org.pipelineframework.awaitable.AwaitCompletionAdmissionFailures;
+import org.pipelineframework.awaitable.AwaitCompletionMetrics;
 import org.pipelineframework.PipelineExecutionService;
+import org.jboss.logging.Logger;
 import org.pipelineframework.config.pipeline.PipelineJson;
 
 /**
@@ -23,6 +26,7 @@ import org.pipelineframework.config.pipeline.PipelineJson;
 public class KafkaAwaitCompletionConsumer {
 
     public static final String INCOMING_CHANNEL = "tpf-await-kafka-responses";
+    private static final Logger LOG = Logger.getLogger(KafkaAwaitCompletionConsumer.class);
 
     @Inject
     PipelineExecutionService executionService;
@@ -51,7 +55,15 @@ public class KafkaAwaitCompletionConsumer {
             .replaceWithVoid()
             .subscribeAsCompletionStage()
             .thenCompose(ignored -> message.ack())
-            .exceptionallyCompose(failure -> message.nack(failure));
+            .exceptionallyCompose(failure -> {
+                if (AwaitCompletionAdmissionFailures.isDeterministic(failure)) {
+                    String reason = AwaitCompletionAdmissionFailures.reason(failure);
+                    AwaitCompletionMetrics.recordDroppedCompletion("kafka", reason);
+                    LOG.warnf(failure, "Dropping deterministic Kafka await completion message: reason=%s", reason);
+                    return message.ack();
+                }
+                return message.nack(failure);
+            });
     }
 
     private static KafkaAwaitCompletionEnvelope parseEnvelope(String payload) {

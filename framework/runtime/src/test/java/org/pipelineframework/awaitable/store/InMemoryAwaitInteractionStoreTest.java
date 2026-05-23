@@ -14,7 +14,9 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCreateCommand;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
+import org.pipelineframework.awaitable.AwaitInteractionNotFoundException;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
+import org.pipelineframework.awaitable.AwaitInteractionTerminalException;
 
 class InMemoryAwaitInteractionStoreTest {
 
@@ -120,7 +122,7 @@ class InMemoryAwaitInteractionStoreTest {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         var created = store.createOrGet(createCommand("idem-1", 10_000L, 20_000L)).await().indefinitely();
 
-        assertThrows(IllegalStateException.class, () -> store.complete(new AwaitCompletionCommand(
+        assertThrows(AwaitInteractionTerminalException.class, () -> store.complete(new AwaitCompletionCommand(
             "tenant",
             created.record().interactionId(),
             null,
@@ -399,7 +401,7 @@ class InMemoryAwaitInteractionStoreTest {
     void completionThrowsWhenNoMatchFound() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
 
-        assertThrows(IllegalArgumentException.class, () -> store.complete(new AwaitCompletionCommand(
+        assertThrows(AwaitInteractionNotFoundException.class, () -> store.complete(new AwaitCompletionCommand(
             "tenant", "nonexistent-id", null, "completion-1", null, null, 12_000L))
             .await().indefinitely());
     }
@@ -412,7 +414,7 @@ class InMemoryAwaitInteractionStoreTest {
         store.cancel("tenant", created.record().interactionId(), 0L, "cancelled", 15_000L)
             .await().indefinitely();
 
-        assertThrows(IllegalStateException.class, () -> store.complete(new AwaitCompletionCommand(
+        assertThrows(AwaitInteractionTerminalException.class, () -> store.complete(new AwaitCompletionCommand(
             "tenant", created.record().interactionId(), null, "completion-1", "result", "alice", 16_000L))
             .await().indefinitely());
     }

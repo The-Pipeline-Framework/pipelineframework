@@ -1,5 +1,10 @@
 package org.pipelineframework.awaitable;
 
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
+import io.vertx.core.Vertx;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -69,5 +74,23 @@ class AwaitExecutionContextHolderTest {
         assertNull(capturedInThread[0]);
         // Main thread should still have its context
         assertSame(mainContext, AwaitExecutionContextHolder.get());
+    }
+
+    @Test
+    void usesVertxLocalContextWhenAvailable() throws Exception {
+        Vertx vertx = Vertx.vertx();
+        try {
+            AwaitExecutionContext context = new AwaitExecutionContext("tenant-vertx", "exec-vertx", 2);
+            CompletableFuture<AwaitExecutionContext> future = new CompletableFuture<>();
+            vertx.getOrCreateContext().runOnContext(ignored -> {
+                AwaitExecutionContextHolder.set(context);
+                future.complete(AwaitExecutionContextHolder.get());
+                AwaitExecutionContextHolder.clear();
+            });
+
+            assertSame(context, future.get(5, TimeUnit.SECONDS));
+        } finally {
+            vertx.close().toCompletionStage().toCompletableFuture().get(5, TimeUnit.SECONDS);
+        }
     }
 }

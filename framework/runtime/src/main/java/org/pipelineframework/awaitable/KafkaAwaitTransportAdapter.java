@@ -54,10 +54,11 @@ public class KafkaAwaitTransportAdapter implements AwaitTransportAdapter<Object>
         KafkaConfig config = KafkaConfig.from(descriptor.transportConfig());
         String resumeToken = resumeTokenService.sign(interaction, System.currentTimeMillis());
         Map<String, Object> metadata = dispatchMetadata(config, interaction);
+        Object normalizedPayload = AwaitPayloadSupport.normalize(request.payload());
         KafkaAwaitDispatchEnvelope envelope = KafkaAwaitDispatchEnvelope.from(
             descriptor,
             interaction,
-            request.payload(),
+            normalizedPayload,
             resumeToken,
             metadata);
         return Uni.createFrom().item(() -> serializeEnvelope(envelope))

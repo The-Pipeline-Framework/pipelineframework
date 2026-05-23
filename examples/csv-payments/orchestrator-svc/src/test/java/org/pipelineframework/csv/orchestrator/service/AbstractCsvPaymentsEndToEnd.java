@@ -42,12 +42,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.AdminClientConfig;
+import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.common.errors.TopicExistsException;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -84,6 +90,12 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final DockerImageName KAFKA_IMAGE = DockerImageName.parse("apache/kafka-native:3.8.0");
     private static final String KAFKA_NETWORK_ALIAS = "kafka";
     private static final String KAFKA_NETWORK_BOOTSTRAP = KAFKA_NETWORK_ALIAS + ":19092";
+    private static final String PAYMENT_REQUEST_TOPIC = "csv-payments.payment.requests";
+    private static final String PAYMENT_RESULT_TOPIC = "csv-payments.payment.results";
+    private static final String AWAIT_RESPONSES_GROUP_ENV = "TPF_AWAIT_KAFKA_RESPONSES_GROUP_ID";
+    private static final String AWAIT_RESPONSES_OFFSET_RESET_ENV = "TPF_AWAIT_KAFKA_RESPONSES_OFFSET_RESET";
+    private static final String PROVIDER_REQUESTS_GROUP_ENV = "CSV_PAYMENT_PROVIDER_REQUESTS_GROUP_ID";
+    private static final String PROVIDER_REQUESTS_OFFSET_RESET_ENV = "CSV_PAYMENT_PROVIDER_REQUESTS_OFFSET_RESET";
     private static final String E2E_RESUME_TOKEN_SECRET = "csv-payments-e2e-resume-token-secret";
     private static final Duration LGTM_STARTUP_TIMEOUT = Duration.ofMinutes(3);
     private static final Duration TEMPO_HTTP_REQUEST_TIMEOUT = Duration.ofSeconds(10);
@@ -205,11 +217,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         if (MONOLITH_LAYOUT) {
             Startables.deepStart(Stream.of(getPostgresContainer(), getKafkaContainer())).join();
+            ensureKafkaTopics();
             return;
         }
 
         if (PIPELINE_RUNTIME_LAYOUT) {
             Startables.deepStart(Stream.of(getPostgresContainer(), getKafkaContainer())).join();
+            ensureKafkaTopics();
             Startables.deepStart(Stream.of(
                     getPersistenceService(),
                     getPaymentsProcessingService(),
@@ -222,6 +236,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         } else {
             Startables.deepStart(Stream.of(getPostgresContainer(), getKafkaContainer())).join();
         }
+        ensureKafkaTopics();
 
         Stream.Builder<GenericContainer<?>> services = Stream.builder();
         services.add(getPersistenceService());
@@ -1108,12 +1123,20 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         pb.environment().put("QUARKUS_PROFILE", "test");
         pb.environment().put("QUARKUS_JIB_JVM_ADDITIONAL_ARGUMENTS", "--enable-preview");
-        if (!MONOLITH_LAYOUT) {
-            pb.environment().put("PIPELINE_ORCHESTRATOR_MODE", "QUEUE_ASYNC");
-        }
+        pb.environment().put("PIPELINE_ORCHESTRATOR_MODE", "QUEUE_ASYNC");
         pb.environment().put("PIPELINE_ORCHESTRATOR_RESUME_TOKEN_SECRET", E2E_RESUME_TOKEN_SECRET);
         pb.environment().put("PIPELINE_ORCHESTRATOR_IDEMPOTENCY_POLICY", "CLIENT_KEY_REQUIRED");
         pb.environment().put("KAFKA_BOOTSTRAP_SERVERS", getKafkaContainer().getBootstrapServers());
+        String runId = UUID.randomUUID().toString();
+        pb.environment().put(AWAIT_RESPONSES_GROUP_ENV, "csv-payments-orchestrator-" + runId);
+        // Use earliest with per-run consumer groups so the run cannot miss completions published
+        // before the consumer assignment settles. Stale history from prior runs is tolerated and
+        // deterministically dropped by await completion admission.
+        pb.environment().put(AWAIT_RESPONSES_OFFSET_RESET_ENV, "earliest");
+        if (MONOLITH_LAYOUT) {
+            pb.environment().put(PROVIDER_REQUESTS_GROUP_ENV, "csv-payments-mock-provider-" + runId);
+            pb.environment().put(PROVIDER_REQUESTS_OFFSET_RESET_ENV, "earliest");
+        }
         configureObservabilityProcessEnv(pb.environment());
 
         if (MONOLITH_LAYOUT) {
@@ -1139,7 +1162,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
                             LOG.infof("[orchestrator] %s", line);
                         }
                     } catch (IOException e) {
-                        LOG.warnf(e, "Failed reading orchestrator process output.");
+                        if (!p.isAlive() && isExpectedClosedStream(e)) {
+                            LOG.debug("Orchestrator process output stream closed after process exit.");
+                        } else {
+                            LOG.warnf(e, "Failed reading orchestrator process output.");
+                        }
                     }
                 },
                 "orchestrator-output-drainer");
@@ -1309,6 +1336,31 @@ abstract class AbstractCsvPaymentsEndToEnd {
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT", persistenceHost, persistencePort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT", persistenceHost, persistencePort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", persistenceHost, persistencePort);
+    }
+
+    private static void ensureKafkaTopics() {
+        Map<String, Object> config = Map.of(
+            AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG,
+            getKafkaContainer().getBootstrapServers());
+        try (AdminClient admin = AdminClient.create(config)) {
+            admin.createTopics(List.of(
+                new NewTopic(PAYMENT_REQUEST_TOPIC, 1, (short) 1),
+                new NewTopic(PAYMENT_RESULT_TOPIC, 1, (short) 1)))
+                .all()
+                .get(30, TimeUnit.SECONDS);
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof TopicExistsException) {
+                return;
+            }
+            throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", e);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", e);
+        }
+    }
+
+    private static boolean isExpectedClosedStream(IOException e) {
+        String message = e.getMessage();
+        return message != null && message.contains("Stream closed");
     }
 
     /**

@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
+import java.util.Map;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.AnnotationSpec;
@@ -20,6 +21,7 @@ import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
+import org.pipelineframework.processor.ir.TransportMode;
 import org.pipelineframework.step.StepManyToMany;
 import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.step.StepOneToMany;
@@ -39,8 +41,9 @@ public class AwaitClientStepRenderer {
             ? model.generatedName().substring(0, model.generatedName().length() - "Service".length())
             : model.generatedName();
         String className = baseName + "AwaitClientStep";
-        TypeName inputType = model.inboundDomainType();
-        TypeName outputType = model.outboundDomainType();
+        TransportMode transportMode = resolveTransportMode(ctx);
+        TypeName inputType = clientStepType(model.inboundDomainType(), transportMode);
+        TypeName outputType = clientStepType(model.outboundDomainType(), transportMode);
 
         FieldSpec support = FieldSpec.builder(ClassName.get("org.pipelineframework.awaitable", "AwaitStepSupport"), "support")
             .addAnnotation(ClassName.get("jakarta.inject", "Inject"))
@@ -142,5 +145,35 @@ public class AwaitClientStepRenderer {
             case STREAMING_UNARY -> ParameterizedTypeName.get(ClassName.get(ManyToOne.class), inputType, outputType);
             case STREAMING_STREAMING -> ParameterizedTypeName.get(ClassName.get(StepManyToMany.class), inputType, outputType);
         };
+    }
+
+    private TransportMode resolveTransportMode(GenerationContext ctx) {
+        Map<String, String> options = ctx.processingEnv() == null ? Map.of() : ctx.processingEnv().getOptions();
+        return TransportMode.fromString(options == null ? null : options.get("pipeline.transport"));
+    }
+
+    private TypeName clientStepType(TypeName domainType, TransportMode transportMode) {
+        if (!(domainType instanceof ClassName className)) {
+            return domainType;
+        }
+        return switch (transportMode) {
+            case LOCAL -> className;
+            case REST -> ClassName.get(basePackage(className) + ".common.dto", className.simpleName() + "Dto");
+            case GRPC -> ClassName.get(basePackage(className) + ".grpc", "PipelineTypes", className.simpleName());
+        };
+    }
+
+    private String basePackage(ClassName className) {
+        String packageName = className.packageName();
+        if (packageName.endsWith(".common.domain")) {
+            return packageName.substring(0, packageName.length() - ".common.domain".length());
+        }
+        if (packageName.endsWith(".common.dto")) {
+            return packageName.substring(0, packageName.length() - ".common.dto".length());
+        }
+        if (packageName.endsWith(".service")) {
+            return packageName.substring(0, packageName.length() - ".service".length());
+        }
+        return packageName;
     }
 }

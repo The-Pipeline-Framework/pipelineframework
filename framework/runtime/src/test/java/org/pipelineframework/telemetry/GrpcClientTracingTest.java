@@ -18,6 +18,8 @@ package org.pipelineframework.telemetry;
 
 import java.util.List;
 
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.trace.SpanKind;
@@ -29,9 +31,12 @@ import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.awaitable.AwaitSuspendedException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class GrpcClientTracingTest {
 
@@ -100,5 +105,46 @@ class GrpcClientTracingTest {
             tracerProvider.shutdown();
             GlobalOpenTelemetry.resetForTest();
         }
+    }
+
+    @Test
+    void traceUnaryFromStreamRestoresSourceFailureWhenStubCancels() {
+        AwaitSuspendedException suspended = new AwaitSuspendedException("tenant", "execution", "interaction", 4);
+
+        Throwable failure = assertInstanceOf(
+            AwaitSuspendedException.class,
+            assertThrows(
+                AwaitSuspendedException.class,
+                () -> GrpcClientTracing.traceUnaryFromStream(
+                        "ProcessCsvPaymentsOutputFileService",
+                        "remoteProcess",
+                        Multi.createFrom().failure(suspended),
+                        input -> input
+                            .onFailure().transform(ignored -> new StatusRuntimeException(Status.CANCELLED))
+                            .collect().asList()
+                            .replaceWith("ignored"))
+                    .await().indefinitely()));
+
+        assertEquals(suspended, failure);
+    }
+
+    @Test
+    void traceMultiFromStreamRestoresSourceFailureWhenStubCancels() {
+        AwaitSuspendedException suspended = new AwaitSuspendedException("tenant", "execution", "interaction", 4);
+
+        Throwable failure = assertInstanceOf(
+            AwaitSuspendedException.class,
+            assertThrows(
+                AwaitSuspendedException.class,
+                () -> GrpcClientTracing.traceMultiFromStream(
+                        "ProcessCsvPaymentsOutputFileService",
+                        "remoteProcess",
+                        Multi.createFrom().failure(suspended),
+                        input -> input
+                            .onFailure().transform(ignored -> new StatusRuntimeException(Status.CANCELLED))
+                            .onItem().transform(item -> "ignored"))
+                    .collect().asList().await().indefinitely()));
+
+        assertEquals(suspended, failure);
     }
 }
