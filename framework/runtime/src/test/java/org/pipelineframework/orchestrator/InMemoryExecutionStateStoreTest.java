@@ -13,7 +13,13 @@ class InMemoryExecutionStateStoreTest {
     void createOrGetReturnsDuplicateForSameKey() {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();
-        ExecutionCreateCommand command = new ExecutionCreateCommand("tenant-a", "key-1", "payload", now, now / 1000 + 60);
+        ExecutionCreateCommand command = new ExecutionCreateCommand(
+            "tenant-a",
+            "key-1",
+            "payload",
+            ExecutionResultShape.SINGLE,
+            now,
+            now / 1000 + 60);
 
         CreateExecutionResult first = store.createOrGetExecution(command).await().indefinitely();
         CreateExecutionResult second = store.createOrGetExecution(command).await().indefinitely();
@@ -28,7 +34,7 @@ class InMemoryExecutionStateStoreTest {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();
         CreateExecutionResult created = store.createOrGetExecution(
-            new ExecutionCreateCommand("tenant-a", "key-2", "payload", now, now / 1000 + 60))
+            new ExecutionCreateCommand("tenant-a", "key-2", "payload", ExecutionResultShape.SINGLE, now, now / 1000 + 60))
             .await().indefinitely();
 
         Optional<ExecutionRecord<Object, Object>> claimed = store.claimLease(
@@ -72,7 +78,7 @@ class InMemoryExecutionStateStoreTest {
         long now = System.currentTimeMillis();
 
         CreateExecutionResult created = store.createOrGetExecution(
-                new ExecutionCreateCommand("tenant-a", "key-3", "payload", now, now / 1000 + 60))
+                new ExecutionCreateCommand("tenant-a", "key-3", "payload", ExecutionResultShape.SINGLE, now, now / 1000 + 60))
             .await().indefinitely();
 
         Optional<ExecutionRecord<Object, Object>> claimed = store.claimLease(
@@ -105,10 +111,72 @@ class InMemoryExecutionStateStoreTest {
     }
 
     @Test
+    void retryAfterAwaitResumePreservesResumePayload() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult created = store.createOrGetExecution(
+                new ExecutionCreateCommand(
+                    "tenant-a",
+                    "key-await-retry",
+                    "payload",
+                    ExecutionResultShape.MATERIALIZED_MULTI,
+                    now,
+                    now / 1000 + 60))
+            .await().indefinitely();
+
+        Optional<ExecutionRecord<Object, Object>> waiting = store.markWaitingExternal(
+                "tenant-a",
+                created.record().executionId(),
+                created.record().version(),
+                "transition-await",
+                "barrier-1",
+                5,
+                now + 1)
+            .await().indefinitely();
+        assertTrue(waiting.isPresent());
+
+        Optional<ExecutionRecord<Object, Object>> queued = store.markAwaitCompleted(
+                "tenant-a",
+                created.record().executionId(),
+                "barrier-1",
+                List.of("status-1", "status-2"),
+                6,
+                now + 2)
+            .await().indefinitely();
+        assertTrue(queued.isPresent());
+
+        Optional<ExecutionRecord<Object, Object>> claimed = store.claimLease(
+                "tenant-a",
+                created.record().executionId(),
+                "worker-1",
+                now + 3,
+                1000)
+            .await().indefinitely();
+        assertTrue(claimed.isPresent());
+
+        Optional<ExecutionRecord<Object, Object>> retried = store.scheduleRetry(
+                "tenant-a",
+                created.record().executionId(),
+                claimed.get().version(),
+                1,
+                now + 1000,
+                "transition-retry",
+                "ERR",
+                "failure",
+                now + 4)
+            .await().indefinitely();
+
+        assertTrue(retried.isPresent());
+        assertEquals("barrier-1", retried.get().awaitInteractionId());
+        assertEquals(List.of("status-1", "status-2"), retried.get().resumePayload());
+    }
+
+    @Test
     void dueSweepReturnsEmptyWhenLimitIsNonPositive() {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();
-        store.createOrGetExecution(new ExecutionCreateCommand("tenant-a", "key-limit", "payload", now, now / 1000 + 60))
+        store.createOrGetExecution(
+                new ExecutionCreateCommand("tenant-a", "key-limit", "payload", ExecutionResultShape.SINGLE, now, now / 1000 + 60))
             .await().indefinitely();
 
         assertTrue(store.findDueExecutions(now + 1, 0).await().indefinitely().isEmpty());
@@ -120,11 +188,11 @@ class InMemoryExecutionStateStoreTest {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();
         CreateExecutionResult expired = store.createOrGetExecution(
-                new ExecutionCreateCommand("tenant-a", "key-expired", "payload", now, now / 1000 - 1))
+                new ExecutionCreateCommand("tenant-a", "key-expired", "payload", ExecutionResultShape.SINGLE, now, now / 1000 - 1))
             .await().indefinitely();
 
         CreateExecutionResult recreated = store.createOrGetExecution(
-                new ExecutionCreateCommand("tenant-a", "key-expired", "payload", now + 2000, now / 1000 + 60))
+                new ExecutionCreateCommand("tenant-a", "key-expired", "payload", ExecutionResultShape.SINGLE, now + 2000, now / 1000 + 60))
             .await().indefinitely();
 
         assertFalse(expired.duplicate());
@@ -138,7 +206,7 @@ class InMemoryExecutionStateStoreTest {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();
         CreateExecutionResult expired = store.createOrGetExecution(
-                new ExecutionCreateCommand("tenant-a", "key-expired-evict", "payload", now, now / 1000 - 1))
+                new ExecutionCreateCommand("tenant-a", "key-expired-evict", "payload", ExecutionResultShape.SINGLE, now, now / 1000 - 1))
             .await().indefinitely();
 
         Optional<ExecutionRecord<Object, Object>> fetched = store.getExecution(
@@ -163,10 +231,10 @@ class InMemoryExecutionStateStoreTest {
         long now = System.currentTimeMillis();
 
         CreateExecutionResult first = store.createOrGetExecution(
-                new ExecutionCreateCommand("a|b", "c", "payload", now, now / 1000 + 60))
+                new ExecutionCreateCommand("a|b", "c", "payload", ExecutionResultShape.SINGLE, now, now / 1000 + 60))
             .await().indefinitely();
         CreateExecutionResult second = store.createOrGetExecution(
-                new ExecutionCreateCommand("a", "b|c", "payload", now, now / 1000 + 60))
+                new ExecutionCreateCommand("a", "b|c", "payload", ExecutionResultShape.SINGLE, now, now / 1000 + 60))
             .await().indefinitely();
 
         assertFalse(first.duplicate());
@@ -179,10 +247,10 @@ class InMemoryExecutionStateStoreTest {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();
         CreateExecutionResult first = store.createOrGetExecution(
-                new ExecutionCreateCommand("a|b", "c", "payload", now, now / 1000 + 60))
+                new ExecutionCreateCommand("a|b", "c", "payload", ExecutionResultShape.SINGLE, now, now / 1000 + 60))
             .await().indefinitely();
         CreateExecutionResult second = store.createOrGetExecution(
-                new ExecutionCreateCommand("a", "b|c", "payload", now, now / 1000 + 60))
+                new ExecutionCreateCommand("a", "b|c", "payload", ExecutionResultShape.SINGLE, now, now / 1000 + 60))
             .await().indefinitely();
 
         Optional<ExecutionRecord<Object, Object>> failed = store.markTerminalFailure(

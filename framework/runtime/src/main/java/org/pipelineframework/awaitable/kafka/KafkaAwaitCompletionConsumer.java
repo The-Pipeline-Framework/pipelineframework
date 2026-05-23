@@ -12,26 +12,30 @@ import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
-import org.pipelineframework.awaitable.AwaitCoordinator;
+import org.pipelineframework.awaitable.AwaitCompletionAdmissionFailures;
+import org.pipelineframework.awaitable.AwaitCompletionMetrics;
+import org.pipelineframework.PipelineExecutionService;
+import org.jboss.logging.Logger;
 import org.pipelineframework.config.pipeline.PipelineJson;
 
 /**
  * SmallRye Reactive Messaging consumer that admits Kafka await completions.
  */
 @ApplicationScoped
-@IfBuildProperty(name = "pipeline.await.kafka.reactive-messaging.enabled", stringValue = "true")
+@IfBuildProperty(name = "tpf.await.kafka.reactive-messaging.enabled", stringValue = "true")
 public class KafkaAwaitCompletionConsumer {
 
     public static final String INCOMING_CHANNEL = "tpf-await-kafka-responses";
+    private static final Logger LOG = Logger.getLogger(KafkaAwaitCompletionConsumer.class);
 
     @Inject
-    AwaitCoordinator coordinator;
+    PipelineExecutionService executionService;
 
     public KafkaAwaitCompletionConsumer() {
     }
 
-    KafkaAwaitCompletionConsumer(AwaitCoordinator coordinator) {
-        this.coordinator = coordinator;
+    KafkaAwaitCompletionConsumer(PipelineExecutionService executionService) {
+        this.executionService = executionService;
     }
 
     @Incoming(INCOMING_CHANNEL)
@@ -39,7 +43,7 @@ public class KafkaAwaitCompletionConsumer {
         Objects.requireNonNull(message, "message must not be null");
         return Uni.createFrom().item(() -> parseEnvelope(message.getPayload()))
             .runSubscriptionOn(Infrastructure.getDefaultExecutor())
-            .onItem().transformToUni(envelope -> coordinator.complete(new AwaitCompletionCommand(
+            .onItem().transformToUni(envelope -> executionService.completeAwaitInteraction(new AwaitCompletionCommand(
                 envelope.tenantId(),
                 envelope.interactionId(),
                 envelope.correlationId(),
@@ -51,7 +55,15 @@ public class KafkaAwaitCompletionConsumer {
             .replaceWithVoid()
             .subscribeAsCompletionStage()
             .thenCompose(ignored -> message.ack())
-            .exceptionallyCompose(failure -> message.nack(failure));
+            .exceptionallyCompose(failure -> {
+                if (AwaitCompletionAdmissionFailures.isDeterministic(failure)) {
+                    String reason = AwaitCompletionAdmissionFailures.reason(failure);
+                    AwaitCompletionMetrics.recordDroppedCompletion("kafka", reason);
+                    LOG.warnf(failure, "Dropping deterministic Kafka await completion message: reason=%s", reason);
+                    return message.ack();
+                }
+                return message.nack(failure);
+            });
     }
 
     private static KafkaAwaitCompletionEnvelope parseEnvelope(String payload) {

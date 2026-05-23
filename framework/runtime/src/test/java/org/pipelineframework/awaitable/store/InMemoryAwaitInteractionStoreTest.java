@@ -14,7 +14,9 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCreateCommand;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
+import org.pipelineframework.awaitable.AwaitInteractionNotFoundException;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
+import org.pipelineframework.awaitable.AwaitInteractionTerminalException;
 
 class InMemoryAwaitInteractionStoreTest {
 
@@ -120,7 +122,7 @@ class InMemoryAwaitInteractionStoreTest {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         var created = store.createOrGet(createCommand("idem-1", 10_000L, 20_000L)).await().indefinitely();
 
-        assertThrows(IllegalStateException.class, () -> store.complete(new AwaitCompletionCommand(
+        assertThrows(AwaitInteractionTerminalException.class, () -> store.complete(new AwaitCompletionCommand(
             "tenant",
             created.record().interactionId(),
             null,
@@ -199,6 +201,25 @@ class InMemoryAwaitInteractionStoreTest {
 
         assertTrue(found.isPresent());
         assertEquals(created.record().interactionId(), found.get().interactionId());
+    }
+
+    @Test
+    void findByBarrierReturnsItemsInIndexOrder() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        store.createOrGet(barrierCommand("idem-2", "corr-2", 2)).await().indefinitely();
+        store.createOrGet(barrierCommand("idem-0", "corr-0", 0)).await().indefinitely();
+        store.createOrGet(barrierCommand("idem-1", "corr-1", 1)).await().indefinitely();
+
+        List<AwaitInteractionRecord> records = store.findByBarrier(
+                "tenant",
+                "execution-1",
+                3,
+                "barrier-1")
+            .await().indefinitely();
+
+        assertEquals(3, records.size());
+        assertEquals(List.of(0, 1, 2), records.stream().map(AwaitInteractionRecord::barrierItemIndex).toList());
+        assertTrue(records.stream().allMatch(AwaitInteractionRecord::barrierItem));
     }
 
     @Test
@@ -380,7 +401,7 @@ class InMemoryAwaitInteractionStoreTest {
     void completionThrowsWhenNoMatchFound() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
 
-        assertThrows(IllegalArgumentException.class, () -> store.complete(new AwaitCompletionCommand(
+        assertThrows(AwaitInteractionNotFoundException.class, () -> store.complete(new AwaitCompletionCommand(
             "tenant", "nonexistent-id", null, "completion-1", null, null, 12_000L))
             .await().indefinitely());
     }
@@ -393,7 +414,7 @@ class InMemoryAwaitInteractionStoreTest {
         store.cancel("tenant", created.record().interactionId(), 0L, "cancelled", 15_000L)
             .await().indefinitely();
 
-        assertThrows(IllegalStateException.class, () -> store.complete(new AwaitCompletionCommand(
+        assertThrows(AwaitInteractionTerminalException.class, () -> store.complete(new AwaitCompletionCommand(
             "tenant", created.record().interactionId(), null, "completion-1", "result", "alice", 16_000L))
             .await().indefinitely());
     }
@@ -448,6 +469,28 @@ class InMemoryAwaitInteractionStoreTest {
             "interaction-api",
             nowEpochMs,
             deadlineEpochMs,
+            Long.MAX_VALUE);
+    }
+
+    private AwaitCreateCommand barrierCommand(String idempotencyKey, String correlationId, int itemIndex) {
+        return new AwaitCreateCommand(
+            "tenant",
+            "execution-1",
+            "await-payment-provider",
+            3,
+            String.class.getName(),
+            "execution-1:3:" + itemIndex,
+            idempotencyKey,
+            correlationId,
+            Map.of("index", itemIndex),
+            null,
+            null,
+            "kafka",
+            "barrier-1",
+            itemIndex,
+            3,
+            10_000L,
+            70_000L,
             Long.MAX_VALUE);
     }
 }

@@ -201,7 +201,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
                                     outputGrpcType))
                             .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class),
                                     inputGrpcType), "inputs")
-                            .addStatement("return $T.traceUnary($S, $S, this.grpcClient.remoteProcess(inputs))",
+                            .addStatement("return $T.traceUnaryFromStream($S, $S, inputs, this.grpcClient::remoteProcess)",
                                 grpcClientTracing, rpcServiceName, rpcMethodName)
                             .build();
                     clientStepBuilder.addMethod(applyReduceMethod);
@@ -215,7 +215,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
                                     outputGrpcType))
                             .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class),
                                     inputGrpcType), "inputs")
-                            .addStatement("return $T.traceMulti($S, $S, this.grpcClient.remoteProcess(inputs))",
+                            .addStatement("return $T.traceMultiFromStream($S, $S, inputs, this.grpcClient::remoteProcess)",
                                 grpcClientTracing, rpcServiceName, rpcMethodName)
                             .build();
                     clientStepBuilder.addMethod(applyTransformMethod);

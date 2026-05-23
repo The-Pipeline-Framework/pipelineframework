@@ -16,6 +16,8 @@
 
 package org.pipelineframework.csv.common.mapper;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.Currency;
@@ -72,6 +74,16 @@ public class CommonConverters {
 
   @Named("stringToPath")
   public Path stringToPath(String path) {
-    return path != null ? Path.of(path) : null;
+    if (path == null) {
+      return null;
+    }
+    if (path.startsWith("file:")) {
+      try {
+        return Path.of(new URI(path));
+      } catch (URISyntaxException e) {
+        throw new IllegalArgumentException("Invalid file URI path: " + path, e);
+      }
+    }
+    return Path.of(path);
   }
 }

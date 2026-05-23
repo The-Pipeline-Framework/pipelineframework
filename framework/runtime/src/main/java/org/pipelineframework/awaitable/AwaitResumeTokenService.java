@@ -68,13 +68,13 @@ public class AwaitResumeTokenService {
      */
     public void validate(String token, AwaitInteractionRecord record, long nowEpochMs) {
         if (token == null || token.isBlank()) {
-            throw new IllegalArgumentException("resumeToken must not be blank");
+            throw new AwaitResumeTokenRejectedException("resumeToken must not be blank");
         }
         Objects.requireNonNull(record, "record must not be null");
         long now = nowEpochMs <= 0 ? System.currentTimeMillis() : nowEpochMs;
         String[] parts = token.split("\\.", -1);
         if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
-            throw new IllegalArgumentException("Malformed await resume token");
+            throw new AwaitResumeTokenRejectedException("Malformed await resume token");
         }
         byte[] expectedSignature = signBytes(parts[0].getBytes(StandardCharsets.UTF_8));
         byte[] suppliedSignature;
@@ -83,16 +83,16 @@ public class AwaitResumeTokenService {
             suppliedSignature = BASE64_URL_DECODER.decode(parts[1]);
             payloadBytes = BASE64_URL_DECODER.decode(parts[0]);
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Malformed await resume token", e);
+            throw new AwaitResumeTokenRejectedException("Malformed await resume token", e);
         }
         if (!MessageDigest.isEqual(expectedSignature, suppliedSignature)) {
-            throw new IllegalArgumentException("Invalid await resume token signature");
+            throw new AwaitResumeTokenRejectedException("Invalid await resume token signature");
         }
         Map<?, ?> payload;
         try {
             payload = PipelineJson.mapper().readValue(payloadBytes, Map.class);
         } catch (Exception e) {
-            throw new IllegalArgumentException("Malformed await resume token payload", e);
+            throw new AwaitResumeTokenRejectedException("Malformed await resume token payload", e);
         }
         requireEquals(payload, "tenantId", record.tenantId());
         requireEquals(payload, "interactionId", record.interactionId());
@@ -101,10 +101,10 @@ public class AwaitResumeTokenService {
         requireEquals(payload, "stepId", record.stepId());
         long deadline = readLong(payload, "deadlineEpochMs");
         if (deadline != record.deadlineEpochMs()) {
-            throw new IllegalArgumentException("Await resume token deadline mismatch");
+            throw new AwaitResumeTokenRejectedException("Await resume token deadline mismatch");
         }
         if (now > deadline) {
-            throw new IllegalStateException("Await resume token is expired");
+            throw new AwaitResumeTokenRejectedException("Await resume token is expired");
         }
     }
 
@@ -147,7 +147,7 @@ public class AwaitResumeTokenService {
     private static void requireEquals(Map<?, ?> payload, String key, String expected) {
         Object actual = payload.get(key);
         if (!Objects.equals(expected, actual == null ? null : actual.toString())) {
-            throw new IllegalArgumentException("Await resume token " + key + " mismatch");
+            throw new AwaitResumeTokenRejectedException("Await resume token " + key + " mismatch");
         }
     }
 
@@ -160,9 +160,9 @@ public class AwaitResumeTokenService {
             try {
                 return Long.parseLong(string);
             } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("Await resume token " + key + " is invalid", e);
+                throw new AwaitResumeTokenRejectedException("Await resume token " + key + " is invalid", e);
             }
         }
-        throw new IllegalArgumentException("Await resume token " + key + " is missing");
+        throw new AwaitResumeTokenRejectedException("Await resume token " + key + " is missing");
     }
 }

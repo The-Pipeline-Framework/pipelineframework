@@ -99,6 +99,9 @@ public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, ItemRe
               this.getClass().getSimpleName(),
               retryLimit(),
               failure.toString());
+          if (shouldPropagateWithoutRecovery(failure)) {
+            return Uni.createFrom().failure(failure);
+          }
           if (recoverOnFailure()) {
             return rejectItem(failedItem.get(), failure);
           }

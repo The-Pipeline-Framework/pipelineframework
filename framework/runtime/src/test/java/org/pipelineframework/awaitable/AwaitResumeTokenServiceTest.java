@@ -32,7 +32,7 @@ class AwaitResumeTokenServiceTest {
         AwaitInteractionRecord record = record("tenant-1", "interaction-1", "corr-1", 20_000L);
         String token = service.sign(record, 10_000L);
 
-        assertThrows(IllegalStateException.class, () -> service.validate(token, record, 20_001L));
+        assertThrows(AwaitResumeTokenRejectedException.class, () -> service.validate(token, record, 20_001L));
     }
 
     @Test

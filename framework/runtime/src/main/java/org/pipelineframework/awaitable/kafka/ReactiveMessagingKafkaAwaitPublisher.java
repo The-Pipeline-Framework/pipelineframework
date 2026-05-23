@@ -18,7 +18,7 @@ import org.eclipse.microprofile.reactive.messaging.Message;
  * SmallRye Reactive Messaging backed Kafka publisher for await dispatch.
  */
 @ApplicationScoped
-@IfBuildProperty(name = "pipeline.await.kafka.reactive-messaging.enabled", stringValue = "true")
+@IfBuildProperty(name = "tpf.await.kafka.reactive-messaging.enabled", stringValue = "true")
 public class ReactiveMessagingKafkaAwaitPublisher implements KafkaAwaitPublisher {
 
     public static final String OUTGOING_CHANNEL = "tpf-await-kafka-requests";

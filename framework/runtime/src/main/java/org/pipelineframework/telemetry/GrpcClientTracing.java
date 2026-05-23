@@ -20,6 +20,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import io.grpc.Status;
@@ -102,6 +103,66 @@ public final class GrpcClientTracing {
         });
     }
 
+    /**
+     * Wrap a streaming-input unary gRPC client call and preserve upstream failures that may otherwise be surfaced as
+     * transport-level {@code CANCELLED} errors by the stub.
+     */
+    public static <I, O> Uni<O> traceUnaryFromStream(
+        String service,
+        String method,
+        Multi<I> input,
+        Function<Multi<I>, Uni<O>> invocation
+    ) {
+        if (service == null || method == null) {
+            return invocation.apply(input);
+        }
+        return Uni.createFrom().deferred(() -> {
+            long startNanos = System.nanoTime();
+            Span span = startSpan(service, method);
+            Scope scope = span.makeCurrent();
+            AtomicReference<Throwable> sourceFailure = new AtomicReference<>();
+            Multi<I> tracedInput = input.onFailure().invoke(sourceFailure::set);
+            Uni<O> result = invocation.apply(tracedInput)
+                .onFailure().transform(failure -> restoreSourceFailure(failure, sourceFailure.get()));
+            return result.onTermination().invoke((item, failure, cancelled) -> {
+                recordClientMetrics(service, method, failure, startNanos);
+                endSpan(span, failure);
+                scope.close();
+            });
+        });
+    }
+
+    /**
+     * Wrap a streaming-input streaming-output gRPC client call and preserve upstream failures that may otherwise be
+     * surfaced as transport-level {@code CANCELLED} errors by the stub.
+     */
+    public static <I, O> Multi<O> traceMultiFromStream(
+        String service,
+        String method,
+        Multi<I> input,
+        Function<Multi<I>, Multi<O>> invocation
+    ) {
+        if (service == null || method == null) {
+            return invocation.apply(input);
+        }
+        return Multi.createFrom().deferred(() -> {
+            long startNanos = System.nanoTime();
+            Span span = startSpan(service, method);
+            Scope scope = span.makeCurrent();
+            AtomicReference<Throwable> failureRef = new AtomicReference<>();
+            AtomicReference<Throwable> sourceFailure = new AtomicReference<>();
+            Multi<I> tracedInput = input.onFailure().invoke(sourceFailure::set);
+            Multi<O> result = invocation.apply(tracedInput)
+                .onFailure().transform(failure -> restoreSourceFailure(failure, sourceFailure.get()))
+                .onFailure().invoke(failureRef::set);
+            return result.onTermination().invoke(() -> {
+                recordClientMetrics(service, method, failureRef.get(), startNanos);
+                endSpan(span, failureRef.get());
+                scope.close();
+            });
+        });
+    }
+
     private static Span startSpan(String service, String method) {
         var builder = tracer().spanBuilder(service + "/" + method)
             .setSpanKind(SpanKind.CLIENT)
@@ -139,6 +200,15 @@ public final class GrpcClientTracing {
             statusCode = Status.fromThrowable(failure).getCode();
         }
         RpcMetrics.recordGrpcClient(service, method, statusCode, System.nanoTime() - startNanos);
+    }
+
+    private static Throwable restoreSourceFailure(Throwable transportFailure, Throwable sourceFailure) {
+        if (sourceFailure == null || transportFailure == null) {
+            return transportFailure;
+        }
+        return Status.fromThrowable(transportFailure).getCode() == Status.Code.CANCELLED
+            ? sourceFailure
+            : transportFailure;
     }
 
     private static boolean shouldForceSample(String service) {

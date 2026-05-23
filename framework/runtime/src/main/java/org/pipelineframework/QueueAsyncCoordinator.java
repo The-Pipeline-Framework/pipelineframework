@@ -2,9 +2,13 @@ package org.pipelineframework;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -25,6 +29,8 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.checkpoint.CheckpointPublicationService;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
+import org.pipelineframework.awaitable.AwaitCompletionAdmissionFailures;
+import org.pipelineframework.awaitable.AwaitCompletionTenantMismatchException;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCoordinator;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
@@ -33,6 +39,8 @@ import org.pipelineframework.orchestrator.CreateExecutionResult;
 import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.ExecutionCreateCommand;
 import org.pipelineframework.orchestrator.ExecutionRecord;
+import org.pipelineframework.orchestrator.ExecutionResultShape;
+import org.pipelineframework.orchestrator.ExecutionResultShapeResolver;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
@@ -68,6 +76,9 @@ class QueueAsyncCoordinator {
 
   @Inject
   ExecutionFailureHandler executionFailureHandler;
+
+  @Inject
+  ExecutionResultShapeResolver executionResultShapeResolver;
 
   @Inject
   CheckpointPublicationService checkpointPublicationService;
@@ -177,6 +188,7 @@ class QueueAsyncCoordinator {
               resolvedTenant,
               executionKey,
               snapshot,
+              executionResultShapeResolver.resolve(),
               now,
               ttlEpochS);
           return executionStateStore.createOrGetExecution(command)
@@ -218,18 +230,29 @@ class QueueAsyncCoordinator {
             if (record.resultPayload() == null) {
               return null;
             }
-            if (outputStreaming) {
-              return (T) record.resultPayload();
-            }
             List<?> items = (List<?>) record.resultPayload();
-            if (items.isEmpty()) {
-              return null;
+            if (record.resultShape() == ExecutionResultShape.SINGLE) {
+              if (items.size() > 1) {
+                throw new IllegalStateException(
+                    "Execution " + executionId + " stored multiple terminal items for SINGLE result shape");
+              }
+              if (outputStreaming) {
+                return (T) List.copyOf(items);
+              }
+              if (items.isEmpty()) {
+                return null;
+              }
+              Object first = items.getFirst();
+              if (outputType != null && first != null && !outputType.isInstance(first)) {
+                throw new IllegalStateException("Stored result type mismatch for execution " + executionId);
+              }
+              return (T) first;
             }
-            Object first = items.get(0);
-            if (outputType != null && first != null && !outputType.isInstance(first)) {
-              throw new IllegalStateException("Stored result type mismatch for execution " + executionId);
+            if (!outputStreaming) {
+              throw new IllegalStateException(
+                  "Execution " + executionId + " produced a materialized multi result. Request list retrieval instead.");
             }
-            return (T) first;
+            return (T) List.copyOf(items);
           }
           if (record.status().terminal()) {
             throw new IllegalStateException("Execution finished without a successful result: " + record.status());
@@ -254,6 +277,14 @@ class QueueAsyncCoordinator {
             return Uni.createFrom().voidItem();
           }
           ExecutionRecord<Object, Object> record = claimed.get();
+          LOG.infof(
+              "Claimed async execution %s tenant=%s stepIndex=%d attempt=%d resultShape=%s resumePayloadType=%s",
+              record.executionId(),
+              record.tenantId(),
+              record.currentStepIndex(),
+              record.attempt(),
+              record.resultShape(),
+              record.resumePayload() == null ? "<none>" : record.resumePayload().getClass().getName());
           String transitionKey = transitionKey(record.executionId(), record.currentStepIndex(), record.attempt());
           return runAsyncExecution(record, executeStreaming)
               .onItem().transformToUni(resultPayload -> checkpointPublicationService
@@ -267,8 +298,8 @@ class QueueAsyncCoordinator {
                       resultPayload,
                       System.currentTimeMillis()))
               .onItem().transformToUni(updated -> Uni.createFrom().voidItem())
-              .onFailure(AwaitSuspendedException.class).recoverWithUni(
-                  failure -> markWaitingExternal(record, (AwaitSuspendedException) failure, transitionKey))
+              .onFailure(this::containsAwaitSuspension).recoverWithUni(
+                  failure -> markWaitingExternal(record, extractAwaitSuspension(failure), transitionKey))
               .onFailure().recoverWithUni(
                   failure -> executionFailureHandler.handleExecutionFailure(
                       record,
@@ -322,33 +353,22 @@ class QueueAsyncCoordinator {
         command.actor(),
         command.nowEpochMs());
     return awaitCoordinator.complete(normalized)
-        .onFailure().transform(failure -> new IllegalStateException(
+        .onFailure(failure -> !AwaitCompletionAdmissionFailures.isDeterministic(failure))
+        .transform(failure -> new IllegalStateException(
             "Failed completing await interaction tenant=" + normalized.tenantId()
                 + ", interactionId=" + normalized.interactionId()
                 + ", correlationId=" + normalized.correlationId(),
             failure))
         .onItem().transformToUni(result -> validateAwaitCompletionTenant(result, normalized)
             .onItem().transformToUni(validated -> {
-              if (validated.duplicate()) {
-                return Uni.createFrom().item(validated);
+              if (validated.record().barrierItem()) {
+                return completeAwaitBarrier(validated, normalized.nowEpochMs());
               }
-              return coerceAwaitPayloadAsync(validated.record())
-                  .onItem().transformToUni(resumePayload -> executionStateStore.markAwaitCompleted(
-                      validated.record().tenantId(),
-                      validated.record().executionId(),
-                      validated.record().interactionId(),
-                      resumePayload,
-                      validated.record().stepIndex() + 1,
-                      normalized.nowEpochMs()))
-                  .onItem().transformToUni(updated -> {
-                    if (updated.isPresent()) {
-                      return workDispatcher.enqueueNow(new ExecutionWorkItem(
-                              updated.get().tenantId(),
-                              updated.get().executionId()))
-                          .replaceWith(validated);
-                    }
-                    return Uni.createFrom().item(validated);
-                  });
+              return resumeAwaitExecution(
+                  validated,
+                  validated.record().interactionId(),
+                  coerceAwaitPayloadAsync(validated.record()),
+                  normalized.nowEpochMs());
             }));
   }
 
@@ -378,7 +398,26 @@ class QueueAsyncCoordinator {
             suspended.interactionId(),
             suspended.stepIndex(),
             System.currentTimeMillis())
-        .replaceWithVoid();
+        .onItem().transformToUni(updated -> {
+          if (updated.isPresent()) {
+            LOG.infof(
+                "Execution %s persisted WAITING_EXTERNAL at stepIndex=%d interactionId=%s",
+                record.executionId(),
+                suspended.stepIndex(),
+                suspended.interactionId());
+            return Uni.createFrom().voidItem();
+          }
+          return Uni.createFrom().failure(new IllegalStateException(
+              "Failed to persist WAITING_EXTERNAL state for execution "
+                  + record.executionId()
+                  + " at step "
+                  + suspended.stepIndex()
+                  + " (expectedVersion="
+                  + record.version()
+                  + ", interactionId="
+                  + suspended.interactionId()
+                  + ")"));
+        });
   }
 
   private Uni<Void> sweepTimedOutAwaitInteractions(long now) {
@@ -396,8 +435,9 @@ class QueueAsyncCoordinator {
                     return Uni.createFrom().voidItem();
                   }
                   ExecutionRecord<Object, Object> executionRecord = execution.get();
+                  String awaitedId = record.barrierItem() ? record.barrierId() : record.interactionId();
                   if (executionRecord.status() != ExecutionStatus.WAITING_EXTERNAL
-                      || !record.interactionId().equals(executionRecord.awaitInteractionId())) {
+                      || !awaitedId.equals(executionRecord.awaitInteractionId())) {
                     return Uni.createFrom().voidItem();
                   }
                   return executionStateStore.markTerminalFailure(
@@ -420,14 +460,16 @@ class QueueAsyncCoordinator {
       ExecutionRecord<Object, Object> record,
       Function<ExecutionRecord<Object, Object>, Multi<?>> executeStreaming) {
     return executeStreaming.apply(record)
-        .select().first(2)
         .collect().asList()
-        .onItem().transformToUni(items -> {
-          if (items.size() > 1) {
-            return Uni.createFrom().failure(
-                new IllegalStateException("Async queue mode does not support streaming pipeline outputs yet."));
+        .onItem().transform(items -> {
+          List<?> copied = List.copyOf(items);
+          if (record.resultShape() == ExecutionResultShape.SINGLE && copied.size() > 1) {
+            throw new IllegalStateException(
+                "Async queue execution " + record.executionId()
+                    + " produced " + copied.size()
+                    + " terminal items for SINGLE result shape");
           }
-          return Uni.createFrom().item((List<?>) List.copyOf(items));
+          return copied;
         });
   }
 
@@ -444,17 +486,19 @@ class QueueAsyncCoordinator {
       return payload;
     }
     try {
-      Class<?> outputType = Thread.currentThread().getContextClassLoader().loadClass(record.outputType());
-      if (outputType.isInstance(payload)) {
-        return payload;
-      }
-      if (payload instanceof String json) {
-        String trimmed = json.trim();
-        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-          return PipelineJson.mapper().readValue(trimmed, outputType);
+      Class<?> outputType = org.pipelineframework.awaitable.AwaitPayloadSupport.resolvePayloadClass(
+          record.outputType(),
+          Thread.currentThread().getContextClassLoader());
+      if (payload instanceof Iterable<?> iterable && !outputType.isInstance(payload)) {
+        // Await descriptors carry the element output type, not a collection type. A barrier resumes as List<O>,
+        // so each element is converted independently instead of trying to coerce the whole list to O.
+        List<Object> converted = new ArrayList<>();
+        for (Object item : iterable) {
+          converted.add(org.pipelineframework.awaitable.AwaitPayloadSupport.coercePayload(item, outputType));
         }
+        return List.copyOf(converted);
       }
-      return PipelineJson.mapper().convertValue(payload, outputType);
+      return org.pipelineframework.awaitable.AwaitPayloadSupport.coercePayload(payload, outputType);
     } catch (Exception e) {
       throw new IllegalStateException("Failed converting await response payload to " + record.outputType(), e);
     }
@@ -465,11 +509,91 @@ class QueueAsyncCoordinator {
         .runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
   }
 
+  private Uni<AwaitCompletionResult> completeAwaitBarrier(AwaitCompletionResult result, long nowEpochMs) {
+    AwaitInteractionRecord record = result.record();
+    return awaitCoordinator.findByBarrier(
+            record.tenantId(),
+            record.executionId(),
+            record.stepIndex(),
+            record.barrierId())
+        .onItem().transformToUni(records -> {
+          List<AwaitInteractionRecord> barrierItems = records.stream()
+              .filter(AwaitInteractionRecord::barrierItem)
+              .toList();
+          int expected = record.barrierItemCount() == null ? -1 : record.barrierItemCount();
+          if (expected <= 0 || barrierItems.size() < expected) {
+            if (expected <= 0) {
+              LOG.warnf(
+                  "Await barrier %s for execution %s has invalid item count %s; completion will not resume yet",
+                  record.barrierId(),
+                  record.executionId(),
+                  record.barrierItemCount());
+            }
+            return Uni.createFrom().item(result);
+          }
+          boolean allCompleted = barrierItems.stream()
+              .allMatch(candidate -> candidate.status() == org.pipelineframework.awaitable.AwaitInteractionStatus.COMPLETED);
+          if (!allCompleted) {
+            return Uni.createFrom().item(result);
+          }
+          List<Uni<Object>> conversions = barrierItems.stream()
+              .sorted(java.util.Comparator.comparing(this::barrierItemIndexOrThrow))
+              .map(this::coerceAwaitPayloadAsync)
+              .toList();
+          return Uni.join().all(conversions).andCollectFailures()
+              .onItem().transformToUni(resumePayload -> resumeAwaitExecution(
+                  result,
+                  record.barrierId(),
+                  Uni.createFrom().item((Object) List.copyOf(resumePayload)),
+                  nowEpochMs));
+        });
+  }
+
+  private int barrierItemIndexOrThrow(AwaitInteractionRecord record) {
+    if (record.barrierItemIndex() == null) {
+      throw new IllegalStateException(
+          "Await barrier item is missing barrierItemIndex: interactionId=" + record.interactionId()
+              + ", barrierId=" + record.barrierId());
+    }
+    return record.barrierItemIndex();
+  }
+
+  private Uni<AwaitCompletionResult> resumeAwaitExecution(
+      AwaitCompletionResult result,
+      String awaitInteractionId,
+      Uni<Object> resumePayload,
+      long nowEpochMs) {
+    AwaitInteractionRecord record = result.record();
+    return resumePayload
+        .onItem().transformToUni(payload -> executionStateStore.markAwaitCompleted(
+                record.tenantId(),
+                record.executionId(),
+                awaitInteractionId,
+                payload,
+                record.stepIndex() + 1,
+                nowEpochMs)
+            .onItem().transformToUni(updated -> {
+              if (updated.isPresent()) {
+                LOG.infof(
+                    "Resuming async execution %s from awaitId=%s at nextStepIndex=%d resumePayloadType=%s",
+                    updated.get().executionId(),
+                    awaitInteractionId,
+                    updated.get().currentStepIndex(),
+                    payload == null ? "<none>" : payload.getClass().getName());
+                return workDispatcher.enqueueNow(new ExecutionWorkItem(
+                        updated.get().tenantId(),
+                        updated.get().executionId()))
+                    .replaceWith(result);
+              }
+              return Uni.createFrom().item(result);
+            }));
+  }
+
   private Uni<AwaitCompletionResult> validateAwaitCompletionTenant(
       AwaitCompletionResult result,
       AwaitCompletionCommand command) {
     if (!command.tenantId().equals(result.record().tenantId())) {
-      return Uni.createFrom().failure(new IllegalStateException(
+      return Uni.createFrom().failure(new AwaitCompletionTenantMismatchException(
           "Await completion tenant mismatch: command tenant=" + command.tenantId()
               + ", record tenant=" + result.record().tenantId()));
     }
@@ -534,5 +658,45 @@ class QueueAsyncCoordinator {
 
   private static String transitionKey(String executionId, int stepIndex, int attempt) {
     return executionId + ":" + stepIndex + ":" + attempt;
+  }
+
+  private boolean containsAwaitSuspension(Throwable failure) {
+    return findThrowable(failure, AwaitSuspendedException.class) != null;
+  }
+
+  private AwaitSuspendedException extractAwaitSuspension(Throwable failure) {
+    AwaitSuspendedException suspended = findThrowable(failure, AwaitSuspendedException.class);
+    if (suspended == null) {
+      throw new IllegalStateException("Await suspension failure not found in cause chain", failure);
+    }
+    return suspended;
+  }
+
+  private static <T extends Throwable> T findThrowable(Throwable failure, Class<T> targetType) {
+    if (failure == null || targetType == null) {
+      return null;
+    }
+    ArrayDeque<Throwable> queue = new ArrayDeque<>();
+    Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+    queue.add(failure);
+    while (!queue.isEmpty()) {
+      Throwable current = queue.removeFirst();
+      if (!seen.add(current)) {
+        continue;
+      }
+      if (targetType.isInstance(current)) {
+        return targetType.cast(current);
+      }
+      Throwable cause = current.getCause();
+      if (cause != null && cause != current) {
+        queue.addLast(cause);
+      }
+      for (Throwable suppressed : current.getSuppressed()) {
+        if (suppressed != null && suppressed != current) {
+          queue.addLast(suppressed);
+        }
+      }
+    }
+    return null;
   }
 }

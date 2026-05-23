@@ -19,9 +19,11 @@ package org.pipelineframework.pipeline.step;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.StepManyToOne;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -264,5 +266,25 @@ class StepManyToOneTest {
 
         assertEquals("recovered-stream", result);
         assertTrue(step.rejectCalled());
+    }
+
+    @Test
+    void awaitSuspensionBypassesRejectSink() {
+        AtomicInteger applyCalls = new AtomicInteger();
+        FailingRecoverStep step = new FailingRecoverStep() {
+            @Override
+            public Uni<String> applyReduce(Multi<String> input) {
+                applyCalls.incrementAndGet();
+                return Uni.createFrom().failure(new AwaitSuspendedException("tenant", "execution", "interaction", 1));
+            }
+        };
+
+        AwaitSuspendedException failure = assertThrows(
+                AwaitSuspendedException.class,
+                () -> step.apply(Multi.createFrom().items("a", "b")).await().indefinitely());
+
+        assertEquals("interaction", failure.interactionId());
+        assertEquals(1, applyCalls.get());
+        assertFalse(step.rejectCalled());
     }
 }

@@ -30,10 +30,8 @@ steps:
     module: input-csv-file-processing-svc
   process-csv-payments-input:
     module: input-csv-file-processing-svc
-  process-send-payment-record:
-    module: payments-processing-svc
-  process-ack-payment-sent:
-    module: payments-processing-svc
+  await-payment-provider:
+    module: orchestrator-svc
   process-payment-status:
     module: payment-status-svc
   process-csv-payments-output-file:

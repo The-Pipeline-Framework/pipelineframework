@@ -35,6 +35,8 @@ public class PaymentStatusDto {
   BigDecimal fee;
   UUID ackPaymentSentId;
   AckPaymentSentDto ackPaymentSent;
+  UUID paymentRecordId;
+  PaymentRecordDto paymentRecord;
 
   // Lombok will generate the builder, but Jackson needs to know how to interpret it
   @JsonPOJOBuilder(withPrefix = "")

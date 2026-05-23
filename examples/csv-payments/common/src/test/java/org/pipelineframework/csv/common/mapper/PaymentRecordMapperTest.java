@@ -214,6 +214,29 @@ class PaymentRecordMapperTest {
     }
 
     @Test
+    void testGrpcToDomainWithFileUriPath() {
+        // Given
+        UUID id = UUID.randomUUID();
+
+        PipelineTypes.PaymentRecord grpc =
+                PipelineTypes.PaymentRecord.newBuilder()
+                        .setId(id.toString())
+                        .setCsvId("test-record")
+                        .setRecipient("Test Recipient")
+                        .setAmount("100.50")
+                        .setCurrency("EUR")
+                        .setCsvPaymentsInputFilePath("file:/app/test-e2e/payments_first.csv")
+                        .build();
+
+        // When
+        PaymentRecord domain = mapper.fromGrpcFromDto(grpc);
+
+        // Then
+        assertNotNull(domain);
+        assertEquals(Path.of("/app/test-e2e/payments_first.csv"), domain.getCsvPaymentsInputFilePath());
+    }
+
+    @Test
     void testSerializeDeserialize() throws Exception {
         // Build DTO
         PaymentRecordDto dto =

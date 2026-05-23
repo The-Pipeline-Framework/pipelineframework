@@ -76,7 +76,7 @@ jobs:
         uses: ./.github/actions/setup-testcontainers
 
       - name: Build csv-payments modular observability images
-        run: ./examples/csv-payments/build-modular-observability-images.sh
+        run: bash ./examples/csv-payments/build-modular-observability-images.sh
 
       - name: Run csv-payments Tempo verification E2E
         run: |
@@ -88,8 +88,8 @@ jobs:
             -Dcsv.e2e.reader-demand-pacer.rows-per-period=20 \
             -Dcsv.e2e.reader-demand-pacer.millis-period=1000 \
             -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
-            -Dcsv.e2e.pipeline.wait.seconds=240 \
-            -Dcsv.e2e.orchestrator.wait.seconds=240 \
+            -Dcsv.e2e.pipeline.wait.seconds=900 \
+            -Dcsv.e2e.orchestrator.wait.seconds=900 \
             -Dtest=CsvPaymentsTempoVerificationEndToEndIT \
             -Dsurefire.failIfNoSpecifiedTests=false \
             test

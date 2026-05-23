@@ -18,12 +18,14 @@ class ExecutionCreateCommandTest {
             "tenant1",
             "exec-key-1",
             payload,
+            ExecutionResultShape.SINGLE,
             now,
             ttl);
 
         assertEquals("tenant1", command.tenantId());
         assertEquals("exec-key-1", command.executionKey());
         assertEquals(payload, command.inputPayload());
+        assertEquals(ExecutionResultShape.SINGLE, command.resultShape());
         assertEquals(now, command.nowEpochMs());
         assertEquals(ttl, command.ttlEpochS());
     }
@@ -37,6 +39,7 @@ class ExecutionCreateCommandTest {
             "tenant2",
             "exec-key-2",
             null,
+            ExecutionResultShape.SINGLE,
             now,
             ttl);
 
@@ -54,6 +57,7 @@ class ExecutionCreateCommandTest {
             "tenant3",
             "exec-key-3",
             complexPayload,
+            ExecutionResultShape.MATERIALIZED_MULTI,
             1234567890L,
             7654321L);
 
@@ -73,6 +77,7 @@ class ExecutionCreateCommandTest {
             "tenant4",
             "exec-key-4",
             "payload",
+            ExecutionResultShape.SINGLE,
             now,
             ttl);
 
@@ -88,6 +93,7 @@ class ExecutionCreateCommandTest {
             "tenant5",
             key,
             "payload",
+            ExecutionResultShape.SINGLE,
             System.currentTimeMillis(),
             System.currentTimeMillis() / 1000 + 3600);
 
@@ -103,6 +109,7 @@ class ExecutionCreateCommandTest {
             "tenant6",
             null,
             "payload",
+            ExecutionResultShape.SINGLE,
             now,
             ttl));
     }
@@ -116,8 +123,24 @@ class ExecutionCreateCommandTest {
             null,
             "exec-key-7",
             "payload",
+            ExecutionResultShape.SINGLE,
             now,
             ttl));
         assertEquals("ExecutionCreateCommand.tenantId must not be null", failure.getMessage());
+    }
+
+    @Test
+    void rejectsNullResultShape() {
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+
+        NullPointerException failure = assertThrows(NullPointerException.class, () -> new ExecutionCreateCommand(
+            "tenant8",
+            "exec-key-8",
+            "payload",
+            null,
+            now,
+            ttl));
+        assertEquals("ExecutionCreateCommand.resultShape must not be null", failure.getMessage());
     }
 }

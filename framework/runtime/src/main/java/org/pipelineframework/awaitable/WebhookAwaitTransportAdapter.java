@@ -55,7 +55,11 @@ public class WebhookAwaitTransportAdapter implements AwaitTransportAdapter<Objec
         String url = requiredUrl(descriptor.transportConfig());
         String method = stringValue(descriptor.transportConfig().get("method"), "POST").toUpperCase(Locale.ROOT);
         String token = resumeTokenService.sign(interaction, System.currentTimeMillis());
-        Map<String, Object> envelope = envelope(descriptor, interaction, request.payload(), token);
+        Map<String, Object> envelope = envelope(
+            descriptor,
+            interaction,
+            AwaitPayloadSupport.normalize(request.payload()),
+            token);
         String body;
         URI uri;
         Duration timeout;

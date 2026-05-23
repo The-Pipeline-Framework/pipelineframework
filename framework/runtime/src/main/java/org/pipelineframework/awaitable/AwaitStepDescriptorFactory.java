@@ -60,7 +60,7 @@ public class AwaitStepDescriptorFactory {
     }
 
     private AwaitStepDescriptor loadDescriptor(String serviceName, String inputType, String outputType) {
-        Path base = Path.of("").toAbsolutePath();
+        Path base = resolveConfigBase();
         Path configPath = new PipelineYamlConfigLocator().locate(base)
             .orElseThrow(() -> new IllegalStateException("No pipeline YAML found for await step " + serviceName));
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath);
@@ -96,12 +96,34 @@ public class AwaitStepDescriptorFactory {
             serviceName,
             inputType,
             outputType,
+            step.cardinality(),
+            step.awaitConfig().dispatch().mode(),
             timeout,
             step.awaitConfig().correlation().strategy(),
             step.awaitConfig().transport().type(),
             step.awaitConfig().transport().config(),
             step.idempotencyKeyFields());
         return descriptor;
+    }
+
+    private static Path resolveConfigBase() {
+        String explicit = firstNonBlank(System.getProperty("pipeline.config"), System.getenv("PIPELINE_CONFIG"));
+        if (explicit != null) {
+            Path candidate = Path.of(explicit);
+            if (candidate.isAbsolute()) {
+                return candidate.getParent() != null ? candidate.getParent() : candidate;
+            }
+        }
+        return Path.of("").toAbsolutePath();
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private static String toServiceName(String stepName) {

@@ -3,6 +3,7 @@ package org.pipelineframework.processor.renderer;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Set;
 import javax.annotation.processing.ProcessingEnvironment;
 
@@ -19,6 +20,7 @@ import org.pipelineframework.processor.ir.TypeMapping;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class AwaitClientStepRendererTest {
 
@@ -45,7 +47,7 @@ class AwaitClientStepRendererTest {
             .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
             .build();
 
-        new AwaitClientStepRenderer().render(model, generationContext());
+        new AwaitClientStepRenderer().render(model, generationContext("LOCAL"));
 
         String source = Files.readString(tempDir.resolve(
             "com/example/fraud/pipeline/FraudCheckAwaitClientStep.java"));
@@ -53,14 +55,46 @@ class AwaitClientStepRendererTest {
         assertTrue(source.contains("implements StepOneToOne<FraudCheckRequest, FraudCheckDecision>"));
         assertTrue(source.contains("AwaitStepSupport support"));
         assertTrue(source.contains("AwaitStepDescriptorFactory descriptorFactory"));
-        assertTrue(source.contains("descriptorFactory.descriptor(\"FraudCheck\", "
+        assertTrue(source.contains("support.awaitOneToOne(descriptorFactory.descriptor(\"FraudCheck\", "
             + "\"com.example.fraud.FraudCheckRequest\", \"com.example.fraud.FraudCheckDecision\")"
-            + ".onItem().transformToUni(descriptor -> support.awaitOneToOne(descriptor, input))"));
+            + ", input)"));
     }
 
-    private GenerationContext generationContext() {
+    @Test
+    void rendersManyToManyAwaitClientStep() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("AwaitPaymentProvider")
+            .generatedName("AwaitPaymentProviderService")
+            .servicePackage("com.example.payment")
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .streamingShape(StreamingShape.STREAMING_STREAMING)
+            .executionMode(ExecutionMode.DEFAULT)
+            .inputMapping(new TypeMapping(ClassName.get("com.example.payment", "PaymentRecord"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("com.example.payment", "PaymentStatus"), null, false))
+            .enabledTargets(Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .build();
+
+        new AwaitClientStepRenderer().render(model, generationContext("GRPC"));
+
+        String source = Files.readString(tempDir.resolve(
+            "com/example/payment/pipeline/AwaitPaymentProviderAwaitClientStep.java"));
+
+        assertTrue(source.contains("implements StepManyToMany"));
+        assertTrue(source.contains("PipelineTypes.PaymentRecord"));
+        assertTrue(source.contains("PipelineTypes.PaymentStatus"));
+        assertTrue(source.contains("applyTransform("));
+        assertTrue(source.contains("return support.awaitManyToMany(descriptorFactory.descriptor(\"AwaitPaymentProvider\", "
+            + "\"com.example.payment.grpc.PipelineTypes.PaymentRecord\", "
+            + "\"com.example.payment.grpc.PipelineTypes.PaymentStatus\")"
+            + ", input)"));
+    }
+
+    private GenerationContext generationContext(String transport) {
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.transport", transport));
         return new GenerationContext(
-            mock(ProcessingEnvironment.class),
+            processingEnv,
             tempDir,
             DeploymentRole.ORCHESTRATOR_CLIENT,
             Set.of(),

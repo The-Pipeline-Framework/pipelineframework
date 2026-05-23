@@ -16,8 +16,10 @@ import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCreateCommand;
 import org.pipelineframework.awaitable.AwaitCreateResult;
+import org.pipelineframework.awaitable.AwaitInteractionNotFoundException;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
+import org.pipelineframework.awaitable.AwaitInteractionTerminalException;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 
 /**
@@ -74,6 +76,9 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
                     AwaitInteractionStatus.WAITING,
                     command.requestPayload(),
                     null,
+                    command.barrierId(),
+                    command.barrierItemIndex(),
+                    command.barrierItemCount(),
                     null,
                     command.assignee(),
                     command.group(),
@@ -117,6 +122,32 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
     }
 
     @Override
+    public Uni<List<AwaitInteractionRecord>> findByBarrier(
+        String tenantId,
+        String executionId,
+        int stepIndex,
+        String barrierId) {
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                long now = System.currentTimeMillis();
+                purgeExpired(now);
+                return interactionsByScopedId.values().stream()
+                    .filter(record -> Objects.equals(record.tenantId(), tenantId))
+                    .filter(record -> Objects.equals(record.executionId(), executionId))
+                    .filter(record -> record.stepIndex() == stepIndex)
+                    .filter(record -> Objects.equals(record.barrierId(), barrierId))
+                    .sorted(Comparator
+                        .comparingInt((AwaitInteractionRecord record) -> record.barrierItemIndex() == null
+                            ? Integer.MAX_VALUE
+                            : record.barrierItemIndex())
+                        .thenComparing(record -> nullToEmpty(record.causationId()))
+                        .thenComparing(AwaitInteractionRecord::interactionId))
+                    .toList();
+            }
+        });
+    }
+
+    @Override
     public Uni<Optional<AwaitInteractionRecord>> markDispatching(
         String tenantId,
         String interactionId,
@@ -151,6 +182,9 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
             AwaitInteractionStatus.DISPATCHED,
             current.requestPayload(),
             current.responsePayload(),
+            current.barrierId(),
+            current.barrierItemIndex(),
+            current.barrierItemCount(),
             current.actor(),
             current.assignee(),
             current.group(),
@@ -168,17 +202,17 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
             synchronized (lock) {
                 purgeExpired(command.nowEpochMs());
                 AwaitInteractionRecord current = resolveForCompletion(command)
-                    .orElseThrow(() -> new IllegalArgumentException("No await interaction matches completion"));
+                    .orElseThrow(() -> new AwaitInteractionNotFoundException("No await interaction matches completion"));
                 if (current.status() == AwaitInteractionStatus.COMPLETED) {
                     return new AwaitCompletionResult(current, true);
                 }
                 if (current.status().terminal()) {
-                    throw new IllegalStateException("Await interaction is terminal: " + current.status());
+                    throw new AwaitInteractionTerminalException("Await interaction is terminal: " + current.status());
                 }
                 if (current.deadlineEpochMs() <= command.nowEpochMs()) {
                     AwaitInteractionRecord timedOut = updateStatus(current, AwaitInteractionStatus.TIMED_OUT, command.nowEpochMs(), null, null);
                     interactionsByScopedId.put(scopedInteractionId(timedOut.tenantId(), timedOut.interactionId()), timedOut);
-                    throw new IllegalStateException("Await interaction timed out before completion");
+                    throw new AwaitInteractionTerminalException("Await interaction timed out before completion");
                 }
                 AwaitInteractionRecord completed = new AwaitInteractionRecord(
                     current.tenantId(),
@@ -194,6 +228,9 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
                     AwaitInteractionStatus.COMPLETED,
                     current.requestPayload(),
                     command.responsePayload(),
+                    current.barrierId(),
+                    current.barrierItemIndex(),
+                    current.barrierItemCount(),
                     command.actor(),
                     current.assignee(),
                     current.group(),
@@ -345,6 +382,9 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
             status,
             current.requestPayload(),
             responsePayload == null ? current.responsePayload() : responsePayload,
+            current.barrierId(),
+            current.barrierItemIndex(),
+            current.barrierItemCount(),
             actor == null ? current.actor() : actor,
             current.assignee(),
             current.group(),
@@ -386,5 +426,9 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
         String safeLeft = Objects.requireNonNull(left, leftName + " must not be null");
         String safeRight = Objects.requireNonNull(right, rightName + " must not be null");
         return safeLeft.length() + ":" + safeLeft + ":" + safeRight.length() + ":" + safeRight;
+    }
+
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 }

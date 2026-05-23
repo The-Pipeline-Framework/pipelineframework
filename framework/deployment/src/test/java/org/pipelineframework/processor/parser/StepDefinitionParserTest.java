@@ -33,6 +33,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StepKind;
+import org.pipelineframework.processor.ir.StreamingShape;
 
 class StepDefinitionParserTest {
 
@@ -142,7 +143,43 @@ class StepDefinitionParserTest {
     }
 
     @Test
-    void rejectsAwaitStepWithStreamingCardinality() throws IOException {
+    void parsesManyToManyAwaitStepWithPerItemDispatch() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Await Payment Provider"
+                kind: "await"
+                cardinality: "MANY_TO_MANY"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  dispatch:
+                    mode: "per-item"
+                  correlation:
+                    strategy: "signedResumeToken"
+                  transport:
+                    type: "kafka"
+                    request:
+                      topic: "payment.requests"
+                      key: "correlationId"
+                    response:
+                      topic: "payment.results"
+            """, diagnostics);
+
+        assertEquals(1, steps.size());
+        assertEquals(StreamingShape.STREAMING_STREAMING, steps.getFirst().streamingShapeHint());
+        java.util.Map<?, ?> dispatch = (java.util.Map<?, ?>) steps.getFirst().awaitConfig().get("dispatch");
+        assertEquals("per-item", dispatch.get("mode"));
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsManyToManyAwaitStepWithoutPerItemDispatch() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
             version: 2
@@ -151,17 +188,80 @@ class StepDefinitionParserTest {
             steps:
               - name: "Bad Await"
                 kind: "await"
-                cardinality: "ONE_TO_MANY"
+                cardinality: "MANY_TO_MANY"
                 input: "com.example.Input"
                 output: "com.example.Output"
                 timeout: "PT10M"
                 await:
+                  correlation:
+                    strategy: "signedResumeToken"
+                  transport:
+                    type: "kafka"
+                    request:
+                      topic: "payment.requests"
+                    response:
+                      topic: "payment.results"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("await.dispatch.mode=per-item")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsPerItemDispatchOnUnaryAwaitStep() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Bad Await"
+                kind: "await"
+                cardinality: "ONE_TO_ONE"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  dispatch:
+                    mode: "per-item"
+                  correlation:
+                    strategy: "interactionId"
                   transport:
                     type: "interaction-api"
             """, diagnostics);
 
         assertTrue(steps.isEmpty());
-        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("ONE_TO_ONE")), diagnostics.toString());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("only supported for MANY_TO_MANY")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsUnknownAwaitDispatchMode() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Bad Await"
+                kind: "await"
+                cardinality: "ONE_TO_ONE"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  dispatch:
+                    mode: "peritem"
+                  correlation:
+                    strategy: "interactionId"
+                  transport:
+                    type: "interaction-api"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("await.dispatch.mode must be one of")),
+            diagnostics.toString());
     }
 
     @Test

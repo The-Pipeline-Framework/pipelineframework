@@ -6,18 +6,54 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.annotation.Annotation;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.UnsatisfiedResolutionException;
 import jakarta.enterprise.util.TypeLiteral;
 
+import com.google.protobuf.DescriptorProtos;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 import org.pipelineframework.awaitable.spi.AwaitTransportAdapter;
 import org.pipelineframework.awaitable.store.InMemoryAwaitInteractionStore;
 
 class AwaitCoordinatorCompletionTest {
+
+    @Test
+    void createOrGetNormalizesProtobufRequestPayload() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        DescriptorProtos.FileDescriptorProto payload = DescriptorProtos.FileDescriptorProto.newBuilder()
+            .setName("checkout.proto")
+            .setPackage("org.pipelineframework.checkout")
+            .build();
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "FraudCheck",
+            DescriptorProtos.FileDescriptorProto.class.getName(),
+            "com.example.Decision",
+            java.time.Duration.ofMinutes(10),
+            "interactionId",
+            "interaction-api",
+            Map.of(),
+            List.of("name"));
+
+        AwaitCreateResult result = coordinator.createOrGet(
+            descriptor,
+            "tenant-1",
+            "exec-1",
+            1,
+            "cause-1",
+            payload,
+            null,
+            null).await().indefinitely();
+
+        assertTrue(result.record().requestPayload() instanceof Map<?, ?>);
+        Map<?, ?> requestPayload = (Map<?, ?>) result.record().requestPayload();
+        assertEquals("checkout.proto", requestPayload.get("name"));
+        assertEquals("FraudCheck:name=checkout.proto", result.record().idempotencyKey());
+    }
 
     @Test
     void validatesResumeTokenBeforeCompletion() {
@@ -90,7 +126,7 @@ class AwaitCoordinatorCompletionTest {
         store.cancel("tenant-1", record.interactionId(), record.version(), "cancelled", 12_000L)
             .await().indefinitely();
 
-        assertThrows(IllegalStateException.class, () -> coordinator.complete(new AwaitCompletionCommand(
+        assertThrows(AwaitInteractionTerminalException.class, () -> coordinator.complete(new AwaitCompletionCommand(
             "tenant-1",
             record.interactionId(),
             null,
@@ -108,7 +144,7 @@ class AwaitCoordinatorCompletionTest {
         AwaitInteractionRecord record = store.createOrGet(createCommand(20_000L)).await().indefinitely().record();
         String token = coordinator.resumeTokenService.sign(record, 10_000L);
 
-        assertThrows(IllegalStateException.class, () -> coordinator.complete(new AwaitCompletionCommand(
+        assertThrows(AwaitResumeTokenRejectedException.class, () -> coordinator.complete(new AwaitCompletionCommand(
             "tenant-1",
             record.interactionId(),
             null,
@@ -117,6 +153,28 @@ class AwaitCoordinatorCompletionTest {
             java.util.Map.of("decision", "approved"),
             "alice",
             21_000L)).await().indefinitely());
+    }
+
+    @Test
+    void completeNormalizesProtobufResponsePayload() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AwaitInteractionRecord record = store.createOrGet(createCommand(20_000L)).await().indefinitely().record();
+        DescriptorProtos.FileDescriptorProto payload = DescriptorProtos.FileDescriptorProto.newBuilder()
+            .setName("approval.proto")
+            .build();
+
+        AwaitCompletionResult result = coordinator.complete(new AwaitCompletionCommand(
+            "tenant-1",
+            record.interactionId(),
+            null,
+            "completion-1",
+            payload,
+            "alice",
+            11_000L)).await().indefinitely();
+
+        assertTrue(result.record().responsePayload() instanceof Map<?, ?>);
+        assertEquals("approval.proto", ((Map<?, ?>) result.record().responsePayload()).get("name"));
     }
 
     private static AwaitCoordinator coordinator(InMemoryAwaitInteractionStore store) {

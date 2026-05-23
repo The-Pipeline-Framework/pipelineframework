@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.orchestrator.ExecutionRecord;
+import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
@@ -106,6 +107,7 @@ class CheckpointPublicationServiceTest {
             "tenant-1",
             "exec-1",
             null,
+            ExecutionResultShape.SINGLE,
             ExecutionStatus.SUCCEEDED,
             1L,
             0,

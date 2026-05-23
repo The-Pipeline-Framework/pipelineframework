@@ -54,10 +54,11 @@ public class KafkaAwaitTransportAdapter implements AwaitTransportAdapter<Object>
         KafkaConfig config = KafkaConfig.from(descriptor.transportConfig());
         String resumeToken = resumeTokenService.sign(interaction, System.currentTimeMillis());
         Map<String, Object> metadata = dispatchMetadata(config, interaction);
+        Object normalizedPayload = AwaitPayloadSupport.normalize(request.payload());
         KafkaAwaitDispatchEnvelope envelope = KafkaAwaitDispatchEnvelope.from(
             descriptor,
             interaction,
-            request.payload(),
+            normalizedPayload,
             resumeToken,
             metadata);
         return Uni.createFrom().item(() -> serializeEnvelope(envelope))
@@ -96,7 +97,7 @@ public class KafkaAwaitTransportAdapter implements AwaitTransportAdapter<Object>
     private static IllegalStateException noPublisherFailure() {
         return new IllegalStateException(
             "Kafka await transport requires a KafkaAwaitPublisher provider. "
-                + "Enable pipeline.await.kafka.reactive-messaging.enabled=true and configure the TPF await Kafka channels, "
+                + "Enable tpf.await.kafka.reactive-messaging.enabled=true and configure the TPF await Kafka channels, "
                 + "or provide a CDI KafkaAwaitPublisher bean.");
     }
 

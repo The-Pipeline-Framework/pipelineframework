@@ -107,6 +107,9 @@ public interface StepManyToMany<I, O> extends Configurable, ManyToMany<I, O>, It
             );
         })
         .onFailure().recoverWithMulti(error -> {
+            if (shouldPropagateWithoutRecovery(error)) {
+                return Multi.createFrom().failure(error);
+            }
             if (recoverOnFailure()) {
                 List<I> snapshot;
                 synchronized (sample) {

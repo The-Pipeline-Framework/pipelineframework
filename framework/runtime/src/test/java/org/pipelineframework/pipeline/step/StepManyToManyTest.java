@@ -19,9 +19,18 @@ package org.pipelineframework.pipeline.step;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
 import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.StepManyToMany;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 class StepManyToManyTest {
 
@@ -39,6 +48,40 @@ class StepManyToManyTest {
         @Override
         public void initialiseWithConfig(org.pipelineframework.config.StepConfig config) {
             // Use the config provided
+        }
+    }
+
+    static class FailingRecoverStep implements StepManyToMany<Object, Object> {
+        private final AtomicBoolean rejectCalled = new AtomicBoolean(false);
+
+        @Override
+        public Multi<Object> applyTransform(Multi<Object> input) {
+            return Multi.createFrom().failure(new RuntimeException("boom"));
+        }
+
+        @Override
+        public io.smallrye.mutiny.Uni<Object> rejectStream(
+                List<Object> sampleItems,
+                long totalItemCount,
+                Throwable cause,
+                Integer retriesObserved,
+                Integer retryLimit) {
+            rejectCalled.set(true);
+            return io.smallrye.mutiny.Uni.createFrom().nullItem();
+        }
+
+        @Override
+        public StepConfig effectiveConfig() {
+            return new StepConfig().recoverOnFailure(true).retryLimit(1);
+        }
+
+        @Override
+        public void initialiseWithConfig(org.pipelineframework.config.StepConfig config) {
+            // no-op
+        }
+
+        boolean rejectCalled() {
+            return rejectCalled.get();
         }
     }
 
@@ -70,5 +113,54 @@ class StepManyToManyTest {
         AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(2));
         subscriber.awaitItems(2, Duration.ofSeconds(5));
         subscriber.assertItems("Streamed: item1", "Streamed: item2");
+    }
+
+    @Test
+    void awaitSuspensionBypassesRejectSink() {
+        AtomicInteger applyCalls = new AtomicInteger();
+        FailingRecoverStep step = new FailingRecoverStep() {
+            @Override
+            public Multi<Object> applyTransform(Multi<Object> input) {
+                applyCalls.incrementAndGet();
+                return Multi.createFrom().failure(new AwaitSuspendedException("tenant", "execution", "interaction", 1));
+            }
+        };
+
+        AssertSubscriber<Object> subscriber =
+                step.apply(Multi.createFrom().items("item1", "item2"))
+                        .subscribe().withSubscriber(AssertSubscriber.create());
+
+        Throwable failure = subscriber.awaitFailure(Duration.ofSeconds(5)).getFailure();
+
+        assertInstanceOf(AwaitSuspendedException.class, failure);
+        assertEquals(1, applyCalls.get());
+        assertFalse(step.rejectCalled());
+    }
+
+    @Test
+    void cancellationDoesNotRetry() {
+        AtomicInteger applyCalls = new AtomicInteger();
+        FailingRecoverStep step = new FailingRecoverStep() {
+            @Override
+            public Multi<Object> applyTransform(Multi<Object> input) {
+                applyCalls.incrementAndGet();
+                return Multi.createFrom().failure(new CancellationException("HTTP server call cancelled"));
+            }
+
+            @Override
+            public StepConfig effectiveConfig() {
+                return new StepConfig().recoverOnFailure(false).retryLimit(1);
+            }
+        };
+
+        AssertSubscriber<Object> subscriber =
+                step.apply(Multi.createFrom().items("item1", "item2"))
+                        .subscribe().withSubscriber(AssertSubscriber.create());
+
+        Throwable failure = subscriber.awaitFailure(Duration.ofSeconds(5)).getFailure();
+
+        assertInstanceOf(CancellationException.class, failure);
+        assertEquals(1, applyCalls.get());
+        assertFalse(step.rejectCalled());
     }
 }

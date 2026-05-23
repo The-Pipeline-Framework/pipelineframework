@@ -30,6 +30,7 @@ import org.pipelineframework.csv.common.domain.PaymentStatus;
 import org.pipelineframework.csv.common.mapper.PaymentOutputMapper;
 import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
 import org.pipelineframework.service.ReactiveService;
+import org.pipelineframework.step.NonRetryableException;
 
 @PipelineStep
 @ApplicationScoped
@@ -41,10 +42,20 @@ public class ProcessPaymentStatusService
 
   @Override
   public Uni<PaymentOutput> process(PaymentStatus paymentStatus) {
+      if (isProviderRejected(paymentStatus)) {
+        String message =
+            String.format(
+                "Payment provider returned terminal status '%s' for paymentRecordId=%s",
+                paymentStatus.getStatus(),
+                paymentStatus.getPaymentRecordId());
+        return Uni.createFrom().failure(new NonRetryableException(message));
+      }
       AckPaymentSent ackPaymentSent = paymentStatus.getAckPaymentSent();
-      assert ackPaymentSent != null;
-      PaymentRecord paymentRecord = ackPaymentSent.getPaymentRecord();
-      assert paymentRecord != null;
+      PaymentRecord paymentRecord = ackPaymentSent == null ? paymentStatus.getPaymentRecord() : ackPaymentSent.getPaymentRecord();
+      if (ackPaymentSent == null || paymentRecord == null) {
+        return Uni.createFrom().failure(new IllegalArgumentException(
+            "PaymentStatus must include ackPaymentSent and paymentRecord for CSV output mapping"));
+      }
 
       PaymentOutput output = new PaymentOutput();
       output.setPaymentStatus(paymentStatus);
@@ -65,6 +76,12 @@ public class ProcessPaymentStatusService
                   MDC.put("serviceId", serviceId);
                   LOGGER.infof("Executed command on %s --> %s", paymentStatus, result);
                   MDC.remove("serviceId");
-                });
+            });
+  }
+
+  private static boolean isProviderRejected(PaymentStatus paymentStatus) {
+    return paymentStatus != null
+        && paymentStatus.getStatus() != null
+        && "Rejected".equalsIgnoreCase(paymentStatus.getStatus());
   }
 }

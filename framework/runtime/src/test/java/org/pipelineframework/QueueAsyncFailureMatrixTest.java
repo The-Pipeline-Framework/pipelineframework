@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.pipelineframework.orchestrator.DeadLetterEnvelope;
 import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.ExecutionRecord;
+import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
@@ -187,6 +188,7 @@ class QueueAsyncFailureMatrixTest {
             tenantId,
             executionId,
             executionId + "-key",
+            ExecutionResultShape.SINGLE,
             ExecutionStatus.RUNNING,
             version,
             0,

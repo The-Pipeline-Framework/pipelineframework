@@ -47,6 +47,10 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
         boolean restMode = transportMode == TransportMode.REST;
         boolean localMode = transportMode == TransportMode.LOCAL;
         ClassName pipelineExecutionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
+        ClassName orchestratorConfig = ClassName.get("org.pipelineframework.orchestrator", "PipelineOrchestratorConfig");
+        ClassName orchestratorMode = ClassName.get("org.pipelineframework.orchestrator", "OrchestratorMode");
+        ClassName executionStatus = ClassName.get("org.pipelineframework.orchestrator", "ExecutionStatus");
+        ClassName executionStatusDto = ClassName.get("org.pipelineframework.orchestrator.dto", "ExecutionStatusDto");
         ClassName pipelineInputDeserializer = ClassName.get("org.pipelineframework.util", "PipelineInputDeserializer");
         ClassName quarkusApplication = ClassName.get("io.quarkus.runtime", "QuarkusApplication");
         ClassName commandLine = ClassName.get("picocli", "CommandLine");
@@ -94,7 +98,19 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 .build())
             .build();
 
+        FieldSpec asyncTimeoutMinutesField = FieldSpec.builder(long.class, "asyncTimeoutMinutes", Modifier.PUBLIC)
+            .addAnnotation(AnnotationSpec.builder(option)
+                .addMember("names", "{$S}", "--async-timeout-minutes")
+                .addMember("description", "$S", "Maximum minutes to wait for QUEUE_ASYNC pipeline completion")
+                .addMember("defaultValue", "$S", "30")
+                .build())
+            .build();
+
         FieldSpec pipelineExecutionServiceField = FieldSpec.builder(pipelineExecutionService, "pipelineExecutionService")
+            .addAnnotation(inject)
+            .build();
+
+        FieldSpec orchestratorConfigField = FieldSpec.builder(orchestratorConfig, "orchestratorConfig")
             .addAnnotation(inject)
             .build();
 
@@ -177,9 +193,27 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 $T statusCode = $T.OK;
                 String grpcStatus = "0";
                 try {
-                    pipelineExecutionService.executePipeline(inputMulti)
-                            .collect().asList()
+                    if (orchestratorConfig.mode() == $T.QUEUE_ASYNC) {
+                        if (asyncTimeoutMinutes <= 0) {
+                            System.err.println("--async-timeout-minutes must be greater than zero.");
+                            return $T.ExitCode.USAGE;
+                        }
+                        String idempotencyKey = deriveCliIdempotencyKey(actualInputList, actualInput);
+                        var accepted = pipelineExecutionService.executePipelineAsync(inputMulti, null, idempotencyKey, false)
                             .await().indefinitely();
+                        $T status = waitForAsyncExecution(accepted.executionId(), $T.ofMinutes(asyncTimeoutMinutes));
+                        if (status.status() != $T.SUCCEEDED) {
+                            statusCode = $T.UNKNOWN;
+                            grpcStatus = "2";
+                            System.err.println("Pipeline execution failed: " + status.status()
+                                + " " + sanitizeErrorMessage(status.errorMessage()));
+                            return $T.ExitCode.SOFTWARE;
+                        }
+                    } else {
+                        pipelineExecutionService.executePipeline(inputMulti)
+                                .collect().asList()
+                                .await().indefinitely();
+                    }
 
                     System.out.println("Pipeline execution completed");
                     return $T.ExitCode.OK;
@@ -216,6 +250,13 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 timer,
                 grpcStatusCode,
                 grpcStatusCode,
+                orchestratorMode,
+                commandLine,
+                executionStatusDto,
+                duration,
+                executionStatus,
+                grpcStatusCode,
+                commandLine,
                 commandLine,
                 grpcStatusCode,
                 rpcMetrics,
@@ -226,6 +267,50 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 "grpc.server.requests.received",
                 "grpc.server.processing.duration",
                 telemetryFlush)
+            .build();
+
+        MethodSpec waitForAsyncExecutionMethod = MethodSpec.methodBuilder("waitForAsyncExecution")
+            .addModifiers(Modifier.PRIVATE)
+            .returns(executionStatusDto)
+            .addParameter(String.class, "executionId")
+            .addParameter(duration, "timeout")
+            .addCode("""
+                long deadline = System.nanoTime() + timeout.toNanos();
+                while (System.nanoTime() < deadline) {
+                    $T status;
+                    try {
+                        long remainingNanos = deadline - System.nanoTime();
+                        if (remainingNanos <= 0L) {
+                            break;
+                        }
+                        status = pipelineExecutionService.getExecutionStatus(null, executionId)
+                            .await().atMost($T.ofNanos(Math.min(remainingNanos, $T.ofSeconds(10).toNanos())));
+                    } catch (Exception e) {
+                        System.err.println("Unable to read async pipeline status yet: "
+                            + sanitizeErrorMessage(e.getMessage()));
+                        try {
+                            Thread.sleep(1000L);
+                        } catch (InterruptedException interrupted) {
+                            Thread.currentThread().interrupt();
+                            throw new IllegalStateException("Interrupted waiting for async pipeline execution " + executionId, interrupted);
+                        }
+                        continue;
+                    }
+                    if (status.status().terminal()) {
+                        return status;
+                    }
+                    try {
+                        Thread.sleep(1000L);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("Interrupted waiting for async pipeline execution " + executionId, e);
+                    }
+                }
+                throw new IllegalStateException("Timed out waiting for async pipeline execution " + executionId);
+                """,
+                executionStatusDto,
+                duration,
+                duration)
             .build();
 
         MethodSpec isBlankMethod = MethodSpec.methodBuilder("isBlank")
@@ -269,6 +354,27 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .addStatement("return message.replaceAll(\"[\\\\r\\\\n\\\\t]\", \" \").trim()")
             .build();
 
+        MethodSpec deriveCliIdempotencyKeyMethod = MethodSpec.methodBuilder("deriveCliIdempotencyKey")
+            .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
+            .returns(String.class)
+            .addParameter(String.class, "actualInputList")
+            .addParameter(String.class, "actualInput")
+            .addCode("""
+                String canonicalInput = !isBlank(actualInputList) ? actualInputList.trim() : actualInput.trim();
+                try {
+                    byte[] digest = $T.getInstance("SHA-256")
+                        .digest(canonicalInput.getBytes($T.UTF_8));
+                    return "cli:" + $T.getUrlEncoder().withoutPadding().encodeToString(digest);
+                } catch ($T e) {
+                    throw new IllegalStateException("SHA-256 digest is not available", e);
+                }
+                """,
+                ClassName.get("java.security", "MessageDigest"),
+                ClassName.get("java.nio.charset", "StandardCharsets"),
+                ClassName.get("java.util", "Base64"),
+                ClassName.get("java.security", "NoSuchAlgorithmException"))
+            .build();
+
         String cliName = binding.cliName() == null || binding.cliName().isBlank() ? "orchestrator" : binding.cliName();
         String cliDescription = binding.cliDescription() == null || binding.cliDescription().isBlank()
             ? "Pipeline Orchestrator CLI"
@@ -291,16 +397,20 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .addAnnotation(dependent)
             .addField(inputField)
             .addField(inputListField)
+            .addField(asyncTimeoutMinutesField)
             .addField(pipelineExecutionServiceField)
+            .addField(orchestratorConfigField)
             .addField(meterRegistryField)
             .addField(inputDeserializerField)
             .addMethod(mainMethod)
             .addMethod(runMethod)
             .addMethod(callMethod)
+            .addMethod(waitForAsyncExecutionMethod)
             .addMethod(isBlankMethod)
             .addMethod(firstNonBlankMethod)
             .addMethod(looksLikeJsonObjectMethod)
             .addMethod(looksLikeJsonArrayMethod)
+            .addMethod(deriveCliIdempotencyKeyMethod)
             .addMethod(sanitizeErrorMessageMethod);
 
         if (mapperField != null) {

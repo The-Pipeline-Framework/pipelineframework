@@ -18,8 +18,13 @@ package org.pipelineframework.pipeline.step;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.concurrent.CancellationException;
+
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepOneToOne;
 
@@ -55,5 +60,26 @@ class ConfigurableStepTest {
 
         // Then
         assertNotNull(step);
+    }
+
+    @Test
+    void shouldRetryRejectsAwaitSuspension() {
+        TestStepOneToOne step = new TestStepOneToOne();
+
+        assertFalse(step.shouldRetry(new AwaitSuspendedException("tenant", "execution", "interaction", 1)));
+    }
+
+    @Test
+    void shouldRetryRejectsCancellation() {
+        TestStepOneToOne step = new TestStepOneToOne();
+
+        assertFalse(step.shouldRetry(new CancellationException("HTTP server call cancelled")));
+    }
+
+    @Test
+    void shouldRetryRejectsGrpcCancelled() {
+        TestStepOneToOne step = new TestStepOneToOne();
+
+        assertFalse(step.shouldRetry(new StatusRuntimeException(Status.CANCELLED.withDescription("stream reset"))));
     }
 }

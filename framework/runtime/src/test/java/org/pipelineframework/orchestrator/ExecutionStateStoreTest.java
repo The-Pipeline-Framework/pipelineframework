@@ -140,6 +140,7 @@ class ExecutionStateStoreTest {
             "tenant1",
             "key1",
             new ExecutionInputSnapshot(ExecutionInputShape.UNI, "input"),
+            ExecutionResultShape.SINGLE,
             now,
             now / 1000 + 86400
         );
@@ -201,6 +202,7 @@ class ExecutionStateStoreTest {
                 "tenant1",
                 "exec1",
                 "key1",
+                ExecutionResultShape.SINGLE,
                 ExecutionStatus.QUEUED,
                 0L,
                 0,

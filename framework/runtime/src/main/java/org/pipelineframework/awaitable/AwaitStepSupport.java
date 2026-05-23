@@ -1,8 +1,13 @@
 package org.pipelineframework.awaitable;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
@@ -12,6 +17,8 @@ import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
  */
 @ApplicationScoped
 public class AwaitStepSupport {
+
+    private static final int BARRIER_DISPATCH_BATCH_SIZE = 32;
 
     @Inject
     AwaitCoordinator awaitCoordinator;
@@ -27,15 +34,16 @@ public class AwaitStepSupport {
         if (descriptor == null) {
             throw new IllegalArgumentException("descriptor must not be null");
         }
-        if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
-            return Uni.createFrom().failure(new IllegalStateException(
-                "Await steps require pipeline.orchestrator.mode=QUEUE_ASYNC."));
+        AwaitExecutionContext context;
+        try {
+            context = captureExecutionContext();
+        } catch (RuntimeException e) {
+            return Uni.createFrom().failure(e);
         }
-        AwaitExecutionContext context = AwaitExecutionContextHolder.get();
-        if (context == null) {
-            return Uni.createFrom().failure(new IllegalStateException(
-                "Await step executed without queue-async execution context."));
-        }
+        return awaitOneToOne(descriptor, input, context);
+    }
+
+    private <I, O> Uni<O> awaitOneToOne(AwaitStepDescriptor descriptor, I input, AwaitExecutionContext context) {
         int stepIndex = context.currentStepIndex();
         return awaitCoordinator.createOrGet(
                 descriptor,
@@ -67,6 +75,186 @@ public class AwaitStepSupport {
         if (descriptor == null) {
             throw new IllegalArgumentException("descriptor must not be null");
         }
-        return descriptor.onItem().transformToUni(resolved -> awaitOneToOne(resolved, input));
+        AwaitExecutionContext context;
+        try {
+            context = captureExecutionContext();
+        } catch (RuntimeException e) {
+            return Uni.createFrom().failure(e);
+        }
+        return descriptor.onItem().transformToUni(resolved -> awaitOneToOne(resolved, input, context));
+    }
+
+    /**
+     * Creates/dispatches a single await interaction whose completion payload is replayed as a stream.
+     */
+    public <I, O> Multi<O> awaitOneToMany(Uni<AwaitStepDescriptor> descriptor, I input) {
+        if (descriptor == null) {
+            throw new IllegalArgumentException("descriptor must not be null");
+        }
+        AwaitExecutionContext context;
+        try {
+            context = captureExecutionContext();
+        } catch (RuntimeException e) {
+            return Multi.createFrom().failure(e);
+        }
+        return descriptor
+            .onItem().transformToMulti(resolved -> this.<I, O>awaitOneToOne(resolved, input, context).toMulti());
+    }
+
+    public <I, O> Multi<O> awaitOneToMany(AwaitStepDescriptor descriptor, I input) {
+        return this.<I, O>awaitOneToOne(descriptor, input).toMulti();
+    }
+
+    /**
+     * Materializes the upstream batch and creates/dispatches one await interaction.
+     */
+    public <I, O> Uni<O> awaitManyToOne(Uni<AwaitStepDescriptor> descriptor, Multi<I> input) {
+        if (descriptor == null) {
+            throw new IllegalArgumentException("descriptor must not be null");
+        }
+        if (input == null) {
+            return Uni.createFrom().failure(new IllegalArgumentException("input must not be null"));
+        }
+        AwaitExecutionContext context;
+        try {
+            context = captureExecutionContext();
+        } catch (RuntimeException e) {
+            return Uni.createFrom().failure(e);
+        }
+        return descriptor.onItem().transformToUni(resolved -> this.<I, O>awaitManyToOne(resolved, input, context));
+    }
+
+    public <I, O> Uni<O> awaitManyToOne(AwaitStepDescriptor descriptor, Multi<I> input) {
+        if (descriptor == null) {
+            return Uni.createFrom().failure(new IllegalArgumentException("descriptor must not be null"));
+        }
+        if (input == null) {
+            return Uni.createFrom().failure(new IllegalArgumentException("input must not be null"));
+        }
+        AwaitExecutionContext context;
+        try {
+            context = captureExecutionContext();
+        } catch (RuntimeException e) {
+            return Uni.createFrom().failure(e);
+        }
+        return awaitManyToOne(descriptor, input, context);
+    }
+
+    private <I, O> Uni<O> awaitManyToOne(AwaitStepDescriptor descriptor, Multi<I> input, AwaitExecutionContext context) {
+        return input.collect().asList()
+            .onItem().transformToUni(items -> awaitOneToOne(descriptor, List.copyOf(items), context));
+    }
+
+    /**
+     * Creates one await interaction per upstream item and suspends until the barrier completes.
+     */
+    public <I, O> Multi<O> awaitManyToMany(Uni<AwaitStepDescriptor> descriptor, Multi<I> input) {
+        if (descriptor == null) {
+            return Multi.createFrom().failure(new IllegalArgumentException("descriptor must not be null"));
+        }
+        if (input == null) {
+            return Multi.createFrom().failure(new IllegalArgumentException("input must not be null"));
+        }
+        AwaitExecutionContext context;
+        try {
+            context = captureExecutionContext();
+        } catch (RuntimeException e) {
+            return Multi.createFrom().failure(e);
+        }
+        return descriptor
+            .onItem().transformToMulti(resolved -> this.<I, O>awaitManyToMany(resolved, input, context));
+    }
+
+    public <I, O> Multi<O> awaitManyToMany(AwaitStepDescriptor descriptor, Multi<I> input) {
+        if (descriptor == null) {
+            return Multi.createFrom().failure(new IllegalArgumentException("descriptor must not be null"));
+        }
+        if (input == null) {
+            return Multi.createFrom().failure(new IllegalArgumentException("input must not be null"));
+        }
+        AwaitExecutionContext context;
+        try {
+            context = captureExecutionContext();
+        } catch (RuntimeException e) {
+            return Multi.createFrom().failure(e);
+        }
+        return awaitManyToMany(descriptor, input, context);
+    }
+
+    private <I, O> Multi<O> awaitManyToMany(AwaitStepDescriptor descriptor, Multi<I> input, AwaitExecutionContext context) {
+        try {
+            validateManyToManyAwait(descriptor);
+        } catch (RuntimeException e) {
+            return Multi.createFrom().failure(e);
+        }
+        return input.collect().asList()
+            .onItem().transformToMulti(items -> items.isEmpty()
+                ? Multi.createFrom().<O>empty()
+                : this.<I, O>awaitManyToMany(descriptor, context, List.copyOf(items)).toMulti());
+    }
+
+    private AwaitExecutionContext captureExecutionContext() {
+        if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
+            throw new IllegalStateException("Await steps require pipeline.orchestrator.mode=QUEUE_ASYNC.");
+        }
+        AwaitExecutionContext context = AwaitExecutionContextHolder.get();
+        if (context == null) {
+            throw new IllegalStateException("Await step executed without queue-async execution context.");
+        }
+        return new AwaitExecutionContext(context.tenantId(), context.executionId(), context.currentStepIndex());
+    }
+
+    private void validateManyToManyAwait(AwaitStepDescriptor descriptor) {
+        if (!"per-item".equalsIgnoreCase(descriptor.dispatchMode())) {
+            throw new IllegalStateException("MANY_TO_MANY await steps require dispatch.mode=per-item.");
+        }
+    }
+
+    private <I, O> Uni<O> awaitManyToMany(AwaitStepDescriptor descriptor, AwaitExecutionContext context, List<I> items) {
+        int stepIndex = context.currentStepIndex();
+        String barrierId = UUID.nameUUIDFromBytes((context.tenantId() + ":" + context.executionId() + ":"
+            + descriptor.stepId() + ":" + stepIndex).getBytes(StandardCharsets.UTF_8)).toString();
+        Uni<List<AwaitInteractionRecord>> dispatched = Uni.createFrom().item(List.<AwaitInteractionRecord>of());
+        for (int start = 0; start < items.size(); start += BARRIER_DISPATCH_BATCH_SIZE) {
+            int batchStart = start;
+            int batchEnd = Math.min(items.size(), start + BARRIER_DISPATCH_BATCH_SIZE);
+            dispatched = dispatched.onItem().transformToUni(previous -> {
+                List<Uni<AwaitInteractionRecord>> operations = new ArrayList<>(batchEnd - batchStart);
+                for (int index = batchStart; index < batchEnd; index++) {
+                    I item = items.get(index);
+                    operations.add(awaitCoordinator.createOrGetBarrierItem(
+                            descriptor,
+                            context.tenantId(),
+                            context.executionId(),
+                            stepIndex,
+                            context.executionId() + ":" + stepIndex + ":" + index,
+                            item,
+                            barrierId,
+                            index,
+                            items.size(),
+                            null,
+                            null)
+                        .onItem().transformToUni(created -> {
+                            AwaitInteractionRecord record = created.record();
+                            return record.status() == AwaitInteractionStatus.WAITING
+                                ? awaitCoordinator.dispatch(descriptor, record)
+                                : Uni.createFrom().item(record);
+                        }));
+                }
+                return Uni.join().all(operations).andCollectFailures()
+                    .onItem().transform(batch -> {
+                        List<AwaitInteractionRecord> combined = new ArrayList<>(previous.size() + batch.size());
+                        combined.addAll(previous);
+                        combined.addAll(batch);
+                        return List.copyOf(combined);
+                    });
+            });
+        }
+        return dispatched
+            .onItem().transformToUni(ignored -> Uni.createFrom().failure(new AwaitSuspendedException(
+                context.tenantId(),
+                context.executionId(),
+                barrierId,
+                stepIndex)));
     }
 }

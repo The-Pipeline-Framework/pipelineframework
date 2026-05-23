@@ -109,6 +109,9 @@ public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, Item
             .withJitter(jitter() ? 0.5 : 0.0)
             .atMost(retryLimit())
             .onFailure().recoverWithUni(error -> {
+                if (shouldPropagateWithoutRecovery(error)) {
+                    return Uni.createFrom().failure(error);
+                }
                 if (recoverOnFailure()) {
                     if (LOG.isDebugEnabled()) {
                         LOG.debugf("Reactive Step %s: failed to process stream: %s",

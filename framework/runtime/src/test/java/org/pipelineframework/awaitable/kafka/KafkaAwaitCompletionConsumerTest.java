@@ -17,21 +17,23 @@ import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.pipelineframework.PipelineExecutionService;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
-import org.pipelineframework.awaitable.AwaitCoordinator;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
+import org.pipelineframework.awaitable.AwaitInteractionNotFoundException;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
+import org.pipelineframework.awaitable.AwaitInteractionTerminalException;
 import org.pipelineframework.config.pipeline.PipelineJson;
 
 class KafkaAwaitCompletionConsumerTest {
 
     @Test
     void consumesCompletionEnvelopeThroughCoordinator() throws Exception {
-        AwaitCoordinator coordinator = mock(AwaitCoordinator.class);
-        when(coordinator.complete(any(AwaitCompletionCommand.class)))
+        PipelineExecutionService executionService = mock(PipelineExecutionService.class);
+        when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class)))
             .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(record(), false)));
-        KafkaAwaitCompletionConsumer consumer = new KafkaAwaitCompletionConsumer(coordinator);
+        KafkaAwaitCompletionConsumer consumer = new KafkaAwaitCompletionConsumer(executionService);
         String body = PipelineJson.mapper().writeValueAsString(new KafkaAwaitCompletionEnvelope(
             "tenant-1",
             "interaction-1",
@@ -49,7 +51,7 @@ class KafkaAwaitCompletionConsumerTest {
 
         assertEquals(Boolean.TRUE, acked.get());
         ArgumentCaptor<AwaitCompletionCommand> captor = ArgumentCaptor.forClass(AwaitCompletionCommand.class);
-        verify(coordinator).complete(captor.capture());
+        verify(executionService).completeAwaitInteraction(captor.capture());
         AwaitCompletionCommand command = captor.getValue();
         assertEquals("tenant-1", command.tenantId());
         assertEquals("interaction-1", command.interactionId());
@@ -60,8 +62,8 @@ class KafkaAwaitCompletionConsumerTest {
 
     @Test
     void invalidEnvelopeNacksMessage() {
-        AwaitCoordinator coordinator = mock(AwaitCoordinator.class);
-        KafkaAwaitCompletionConsumer consumer = new KafkaAwaitCompletionConsumer(coordinator);
+        PipelineExecutionService executionService = mock(PipelineExecutionService.class);
+        KafkaAwaitCompletionConsumer consumer = new KafkaAwaitCompletionConsumer(executionService);
         AtomicReference<Throwable> nacked = new AtomicReference<>();
 
         consumer.consume(message("not-json", new AtomicReference<>(), nacked))
@@ -74,10 +76,10 @@ class KafkaAwaitCompletionConsumerTest {
 
     @Test
     void coordinatorFailureNacksMessage() {
-        AwaitCoordinator coordinator = mock(AwaitCoordinator.class);
-        when(coordinator.complete(any(AwaitCompletionCommand.class)))
+        PipelineExecutionService executionService = mock(PipelineExecutionService.class);
+        when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class)))
             .thenReturn(Uni.createFrom().failure(new IllegalStateException("stale")));
-        KafkaAwaitCompletionConsumer consumer = new KafkaAwaitCompletionConsumer(coordinator);
+        KafkaAwaitCompletionConsumer consumer = new KafkaAwaitCompletionConsumer(executionService);
         AtomicReference<Throwable> nacked = new AtomicReference<>();
 
         consumer.consume(message("""
@@ -93,6 +95,56 @@ class KafkaAwaitCompletionConsumerTest {
             .join();
 
         assertNotNull(nacked.get());
+    }
+
+    @Test
+    void deterministicNotFoundFailureAcksMessage() {
+        PipelineExecutionService executionService = mock(PipelineExecutionService.class);
+        when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class)))
+            .thenReturn(Uni.createFrom().failure(new AwaitInteractionNotFoundException("missing")));
+        KafkaAwaitCompletionConsumer consumer = new KafkaAwaitCompletionConsumer(executionService);
+        AtomicReference<Boolean> acked = new AtomicReference<>(false);
+        AtomicReference<Throwable> nacked = new AtomicReference<>();
+
+        consumer.consume(message("""
+            {
+              "tenantId": "tenant-1",
+              "interactionId": "interaction-1",
+              "idempotencyKey": "completion-1",
+              "responsePayload": {"decision": "approved"}
+            }
+            """, acked, nacked))
+            .toCompletableFuture()
+            .orTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+            .join();
+
+        assertEquals(Boolean.TRUE, acked.get());
+        assertEquals(null, nacked.get());
+    }
+
+    @Test
+    void deterministicTerminalFailureAcksMessage() {
+        PipelineExecutionService executionService = mock(PipelineExecutionService.class);
+        when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class)))
+            .thenReturn(Uni.createFrom().failure(new AwaitInteractionTerminalException("terminal")));
+        KafkaAwaitCompletionConsumer consumer = new KafkaAwaitCompletionConsumer(executionService);
+        AtomicReference<Boolean> acked = new AtomicReference<>(false);
+        AtomicReference<Throwable> nacked = new AtomicReference<>();
+
+        consumer.consume(message("""
+            {
+              "tenantId": "tenant-1",
+              "interactionId": "interaction-1",
+              "idempotencyKey": "completion-1",
+              "responsePayload": {"decision": "approved"}
+            }
+            """, acked, nacked))
+            .toCompletableFuture()
+            .orTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+            .join();
+
+        assertEquals(Boolean.TRUE, acked.get());
+        assertEquals(null, nacked.get());
     }
 
     private static Message<String> message(

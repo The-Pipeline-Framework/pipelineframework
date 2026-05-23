@@ -26,7 +26,7 @@ import org.pipelineframework.csv.common.dto.PaymentStatusDto;
 @SuppressWarnings("unused")
 @Mapper(
     componentModel = "jakarta",
-    uses = {CommonConverters.class, AckPaymentSentMapper.class},
+    uses = {CommonConverters.class, AckPaymentSentMapper.class, PaymentRecordMapper.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
 public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper<PaymentStatus, org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus> {
 
@@ -42,6 +42,8 @@ public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper
   @Mapping(target = "fee", qualifiedByName = "bigDecimalToString")
   @Mapping(target = "ackPaymentSentId", qualifiedByName = "uuidToString")
   @Mapping(target = "ackPaymentSent")
+  @Mapping(target = "paymentRecordId", qualifiedByName = "uuidToString")
+  @Mapping(target = "paymentRecord")
   org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus toGrpc(PaymentStatusDto dto);
 
   /**
@@ -54,6 +56,8 @@ public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper
   @Mapping(target = "fee", qualifiedByName = "stringToBigDecimal")
   @Mapping(target = "ackPaymentSentId", qualifiedByName = "stringToUUID")
   @Mapping(target = "ackPaymentSent")
+  @Mapping(target = "paymentRecordId", qualifiedByName = "stringToUUID")
+  @Mapping(target = "paymentRecord")
   PaymentStatusDto fromGrpc(org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus grpcRequest);
 
   @Override
