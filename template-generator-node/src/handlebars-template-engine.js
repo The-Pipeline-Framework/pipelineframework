@@ -439,6 +439,7 @@ class HandlebarsTemplateEngine {
             || this.isAspectEnabled(aspectConfig, 'cache-invalidate')
             || this.isAspectEnabled(aspectConfig, 'cache-invalidate-all');
         const aspectDefinitions = this.getAspectDefinitions(aspectConfig);
+        const generatedServiceSteps = this.generatedServiceSteps(resolvedSteps);
         // For sequential pipeline, update input types of steps after the first one
         // to match the output type of the previous step
         for (let i = 1; i < resolvedSteps.length; i++) {
@@ -458,7 +459,7 @@ class HandlebarsTemplateEngine {
         await this.generateParentPom(
             resolvedAppName,
             resolvedBasePackage,
-            resolvedSteps,
+            generatedServiceSteps,
             includePersistenceModule,
             includeCacheInvalidationModule,
             normalizedRuntimeLayout,
@@ -475,27 +476,27 @@ class HandlebarsTemplateEngine {
         );
 
         // Generate each step service
-        for (let i = 0; i < resolvedSteps.length; i++) {
+        for (let i = 0; i < generatedServiceSteps.length; i++) {
             await this.generateStepService(
                 resolvedAppName,
                 resolvedBasePackage,
-                resolvedSteps[i],
+                generatedServiceSteps[i],
                 options.outputPath,
                 i,
-                resolvedSteps,
+                generatedServiceSteps,
                 transportMode
             );
         }
 
         if (includePersistenceModule) {
-            await this.generatePersistenceModule(resolvedAppName, resolvedBasePackage, resolvedSteps, options.outputPath);
+            await this.generatePersistenceModule(resolvedAppName, resolvedBasePackage, generatedServiceSteps, options.outputPath);
         }
 
         if (includeCacheInvalidationModule) {
             await this.generateCacheInvalidationModule(
                 resolvedAppName,
                 resolvedBasePackage,
-                resolvedSteps,
+                generatedServiceSteps,
                 includePersistenceModule,
                 options.outputPath
             );
@@ -516,13 +517,13 @@ class HandlebarsTemplateEngine {
             await this.generatePipelineRuntimeModule(
                 resolvedAppName,
                 resolvedBasePackage,
-                resolvedSteps,
+                generatedServiceSteps,
                 options.outputPath);
         } else if (normalizedRuntimeLayout === 'monolith') {
             await this.generateMonolithModule(
                 resolvedAppName,
                 resolvedBasePackage,
-                resolvedSteps,
+                generatedServiceSteps,
                 includePersistenceModule,
                 includeCacheInvalidationModule,
                 options.outputPath);
@@ -550,6 +551,7 @@ class HandlebarsTemplateEngine {
             resolvedAppName,
             resolvedBasePackage,
             resolvedSteps,
+            generatedServiceSteps,
             includePersistenceModule,
             includeCacheInvalidationModule,
             options.outputPath);
@@ -1158,6 +1160,8 @@ class HandlebarsTemplateEngine {
         transport,
         orchPath) {
         // Create context for orchestrator properties
+        const generatedServiceSteps = this.generatedServiceSteps(steps);
+        const awaitSteps = this.awaitSteps(steps);
         const context = { appName, basePackage, steps, transport };
         const transportMode = typeof transport === 'string' && transport.trim()
             ? transport.trim().toUpperCase()
@@ -1171,9 +1175,39 @@ class HandlebarsTemplateEngine {
         context.rootProjectName = appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-');
         context.includePersistenceModule = includePersistenceModule;
         context.includeCacheInvalidationModule = includeCacheInvalidationModule;
+        context.hasAwaitSteps = awaitSteps.length > 0;
+        // Compute await transport types from raw step data
+        context.hasInteractionApiAwaitSteps = awaitSteps.some((step) => {
+            if (!step) return false;
+            // Determine transport type from multiple sources
+            const transportType = step.awaitTransportType || step['transport/type'];
+            const serviceModuleName = step.serviceModuleName || step.serviceName || '';
+            const generatesService = step.generatesServiceModule;
+            const serviceType = step['service/type'];
+            // Infer interaction-api from explicit markers or service hints
+            if (transportType === 'interaction-api') return true;
+            if (generatesService === 'interaction-api') return true;
+            if (serviceType === 'interaction-api') return true;
+            if (serviceModuleName.includes('interaction')) return true;
+            return false;
+        });
+        context.hasWebhookAwaitSteps = awaitSteps.some((step) => {
+            if (!step) return false;
+            // Determine transport type from multiple sources
+            const transportType = step.awaitTransportType || step['transport/type'];
+            const serviceModuleName = step.serviceModuleName || step.serviceName || '';
+            const generatesService = step.generatesServiceModule;
+            const serviceType = step['service/type'];
+            // Infer webhook from explicit markers or service hints
+            if (transportType === 'webhook') return true;
+            if (generatesService === 'webhook') return true;
+            if (serviceType === 'webhook') return true;
+            if (serviceModuleName.includes('webhook')) return true;
+            return false;
+        });
         context.hasCacheAspect = (aspectDefinitions || []).some(aspect => aspect.name === 'cache');
         if (includePersistenceModule) {
-            context.persistencePortOffset = steps.length + 1;
+            context.persistencePortOffset = generatedServiceSteps.length + 1;
             const outputTypes = new Set();
             steps.forEach(step => {
                 if (step.outputTypeName) {
@@ -1190,7 +1224,7 @@ class HandlebarsTemplateEngine {
                 .map(aspect => aspect.name);
         }
         if (includeCacheInvalidationModule) {
-            const baseOffset = steps.length + (includePersistenceModule ? 2 : 1);
+            const baseOffset = generatedServiceSteps.length + (includePersistenceModule ? 2 : 1);
             context.cacheInvalidationPortOffset = baseOffset;
             const inputTypes = new Set();
             steps.forEach(step => {
@@ -1222,7 +1256,7 @@ class HandlebarsTemplateEngine {
                 .map(aspect => aspect.name);
         }
         // Process steps to add additional properties for template
-        context.steps = steps.map((step, index) => ({
+        context.steps = generatedServiceSteps.map((step, index) => ({
             ...step,
             portOffset: index + 1,
             serviceNameForPackage: step.serviceName.replace('-svc', '').replace(/-/g, '_'),
@@ -1517,20 +1551,28 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         appName,
         basePackage,
         steps,
+        generatedServiceSteps,
         includePersistenceModule,
         includeCacheInvalidationModule,
         outputPath) {
         const firstInputTypeName = steps && steps.length ? steps[0].inputTypeName : 'Input';
         const optionsClass = `${firstInputTypeName}Options`;
+        const awaitSteps = this.awaitSteps(steps);
 
         // Create README
+        // Compute await transport types from raw step data
+        const hasInteractionApiAwaitSteps = awaitSteps.some((step) => this.hasAwaitTransportType(step, 'interaction-api'));
+        const hasWebhookAwaitSteps = awaitSteps.some((step) => this.hasAwaitTransportType(step, 'webhook'));
         const readmeContext = {
             appName,
             basePackage,
             rootProjectName: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-'),
             optionsImport: `${basePackage}.common.util.${optionsClass}`,
             requestTypeName: firstInputTypeName,
-            optionsClass
+            optionsClass,
+            hasAwaitSteps: awaitSteps.length > 0,
+            hasInteractionApiAwaitSteps,
+            hasWebhookAwaitSteps
         };
         const readmeContent = this.render('readme', readmeContext);
         const readmePath = path.join(outputPath, 'README.md');
@@ -1550,7 +1592,7 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
 
         const certScriptContext = {
             appName,
-            steps,
+            serviceModuleSteps: generatedServiceSteps,
             includePersistenceModule,
             includeCacheInvalidationModule
         };
@@ -1715,6 +1757,41 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
             return '';
         }
         return step.serviceName.replace(/-svc$/, '');
+    }
+
+    isAwaitStep(step) {
+        return !!step && (step.isAwaitStep === true
+            || (typeof step.kind === 'string' && step.kind.trim().toLowerCase() === 'await'));
+    }
+
+    awaitSteps(steps) {
+        return (steps || []).filter((step) => this.isAwaitStep(step));
+    }
+
+    hasAwaitTransportType(step, targetType) {
+        if (!step) return false;
+        // Preserve the existing isAwait condition
+        const isAwait = step.kind === 'await' || !!step.awaitTransportType;
+        if (!isAwait) return false;
+        // Resolve transport and service properties
+        const transportType = step.awaitTransportType || step['transport/type'];
+        const serviceModuleName = step.serviceModuleName || step.serviceName || '';
+        const generatesService = step.generatesServiceModule;
+        const serviceType = step['service/type'];
+        // Check if any of those match targetType
+        if (transportType === targetType) return true;
+        if (generatesService === targetType) return true;
+        if (serviceType === targetType) return true;
+        // For hyphenated types, check if serviceModuleName includes the prefix
+        if (targetType.includes('-')) {
+            const targetPrefix = targetType.split('-')[0];
+            if (serviceModuleName.includes(targetPrefix)) return true;
+        }
+        return false;
+    }
+
+    generatedServiceSteps(steps) {
+        return (steps || []).filter((step) => step && step.generatesServiceModule !== false);
     }
 
     buildRuntimeMapping(layout, steps, includePersistenceModule, includeCacheInvalidationModule) {

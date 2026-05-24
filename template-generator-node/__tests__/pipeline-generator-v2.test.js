@@ -214,7 +214,87 @@ steps:
     expect(config.steps[0].await.dispatch.mode).toBe('per-item');
   });
 
-  test('toScaffoldConfig fails clearly for await steps', () => {
+  test('toScaffoldConfig accepts interaction-api await steps without generating service modules', () => {
+    const generator = new PipelineGenerator();
+    const config = {
+      version: 2,
+      appName: 'TestApp',
+      basePackage: 'com.example.test',
+      transport: 'GRPC',
+      runtimeLayout: 'MODULAR',
+      messages: {
+        PaymentRecord: {
+          fields: [{ number: 1, name: 'csvId', type: 'string' }]
+        },
+        PaymentStatus: {
+          fields: [{ number: 1, name: 'status', type: 'string' }]
+        }
+      },
+      steps: [
+        {
+          name: 'Await Payment Provider',
+          kind: 'await',
+          cardinality: 'ONE_TO_ONE',
+          inputTypeName: 'PaymentRecord',
+          outputTypeName: 'PaymentStatus',
+          timeout: 'PT5M',
+          await: {
+            correlation: { strategy: 'interactionId' },
+            transport: { type: 'interaction-api' }
+          }
+        }
+      ]
+    };
+
+    const scaffold = generator.toScaffoldConfig(config);
+    expect(scaffold.steps[0].isAwaitStep).toBe(true);
+    expect(scaffold.steps[0].awaitTransportType).toBe('interaction-api');
+    expect(scaffold.steps[0].generatesServiceModule).toBe(false);
+    expect(scaffold.steps[0].serviceName).toBe('await-payment-provider-svc');
+  });
+
+  test('toScaffoldConfig accepts webhook await steps without generating service modules', () => {
+    const generator = new PipelineGenerator();
+    const config = {
+      version: 2,
+      appName: 'TestApp',
+      basePackage: 'com.example.test',
+      transport: 'GRPC',
+      runtimeLayout: 'MODULAR',
+      messages: {
+        PaymentRecord: {
+          fields: [{ number: 1, name: 'csvId', type: 'string' }]
+        },
+        PaymentStatus: {
+          fields: [{ number: 1, name: 'status', type: 'string' }]
+        }
+      },
+      steps: [
+        {
+          name: 'Await Payment Provider',
+          kind: 'await',
+          cardinality: 'ONE_TO_ONE',
+          inputTypeName: 'PaymentRecord',
+          outputTypeName: 'PaymentStatus',
+          timeout: 'PT5M',
+          await: {
+            correlation: { strategy: 'signedResumeToken' },
+            transport: {
+              type: 'webhook',
+              request: { url: 'https://partner.example/payments' }
+            }
+          }
+        }
+      ]
+    };
+
+    const scaffold = generator.toScaffoldConfig(config);
+    expect(scaffold.steps[0].isAwaitStep).toBe(true);
+    expect(scaffold.steps[0].awaitTransportType).toBe('webhook');
+    expect(scaffold.steps[0].generatesServiceModule).toBe(false);
+  });
+
+  test('toScaffoldConfig fails clearly for kafka await steps', () => {
     const generator = new PipelineGenerator();
     const config = {
       version: 2,
@@ -252,8 +332,110 @@ steps:
     };
 
     expect(() => generator.toScaffoldConfig(config)).toThrow(
-      'Await steps are accepted by the template schema'
+      'The runtime supports Kafka await steps'
     );
+  });
+
+  test('generateFromConfig scaffolds interaction-api await guidance without creating a step module', async () => {
+    const generator = new PipelineGenerator();
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipeline-generator-'));
+    const configPath = path.join(tempDir, 'interaction-await.yaml');
+    const outputPath = path.join(tempDir, 'generated-app');
+    fs.writeFileSync(configPath, `version: 2
+appName: Await UI App
+basePackage: com.example.awaitui
+transport: GRPC
+runtimeLayout: MODULAR
+messages:
+  ApprovalRequest:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+  ApprovalDecision:
+    fields:
+      - number: 1
+        name: status
+        type: string
+steps:
+  - name: Await Approval
+    kind: await
+    cardinality: ONE_TO_ONE
+    inputTypeName: ApprovalRequest
+    outputTypeName: ApprovalDecision
+    timeout: PT10M
+    await:
+      correlation:
+        strategy: interactionId
+      transport:
+        type: interaction-api
+`);
+
+    await generator.generateFromConfig(configPath, outputPath);
+
+    const readme = fs.readFileSync(path.join(outputPath, 'README.md'), 'utf8');
+    expect(readme).toContain('generated await completion and pending-interaction query APIs');
+    expect(readme).toContain('interaction-api await steps');
+    expect(fs.existsSync(path.join(outputPath, 'await-approval-svc'))).toBe(false);
+  });
+
+  test('generateFromConfig scaffolds webhook await projects without creating a step module', async () => {
+    const generator = new PipelineGenerator();
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipeline-generator-'));
+    const configPath = path.join(tempDir, 'webhook-await.yaml');
+    const outputPath = path.join(tempDir, 'generated-app');
+    fs.writeFileSync(configPath, `version: 2
+appName: Webhook Await App
+basePackage: com.example.awaitwebhook
+transport: GRPC
+runtimeLayout: MODULAR
+messages:
+  FraudCheckRequest:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+  FraudCheckDecision:
+    fields:
+      - number: 1
+        name: status
+        type: string
+steps:
+  - name: Fraud Check
+    kind: await
+    cardinality: ONE_TO_ONE
+    inputTypeName: FraudCheckRequest
+    outputTypeName: FraudCheckDecision
+    timeout: PT10M
+    await:
+      correlation:
+        strategy: signedResumeToken
+      transport:
+        type: webhook
+        request:
+          url: https://partner.example/fraud-check
+`);
+
+    await generator.generateFromConfig(configPath, outputPath);
+
+    const parentPom = fs.readFileSync(path.join(outputPath, 'pom.xml'), 'utf8');
+    const readme = fs.readFileSync(path.join(outputPath, 'README.md'), 'utf8');
+    const orchestratorProps = fs.readFileSync(
+      path.join(outputPath, 'orchestrator-svc', 'src/main/resources', 'application.properties'),
+      'utf8'
+    );
+    const runtimeMapping = YAML.load(
+      fs.readFileSync(path.join(outputPath, 'config', 'runtime-mapping', 'modular-auto.yaml'), 'utf8')
+    );
+
+    expect(parentPom).not.toContain('<module>fraud-check-svc</module>');
+    expect(fs.existsSync(path.join(outputPath, 'fraud-check-svc'))).toBe(false);
+    expect(fs.existsSync(path.join(outputPath, 'config', 'pipeline.yaml'))).toBe(true);
+    expect(readme).toContain('webhook await steps');
+    expect(readme).toContain('pipeline.orchestrator.resume-token-secret');
+    expect(orchestratorProps).toContain('pipeline.orchestrator.resume-token-secret=change-me');
+    expect(runtimeMapping.modules['fraud-check-svc']).toBeUndefined();
+    expect(runtimeMapping.modules['orchestrator-svc'].steps).toContain('fraud-check');
   });
 
   test('loadConfig rejects non-integer version values', () => {

@@ -343,6 +343,7 @@ class BrowserTemplateEngine {
         const includeCacheInvalidationModule = this.isAspectEnabled(aspectConfig, 'cache')
             || this.isAspectEnabled(aspectConfig, 'cache-invalidate')
             || this.isAspectEnabled(aspectConfig, 'cache-invalidate-all');
+        const generatedServiceSteps = this.generatedServiceSteps(stepsValue);
         // For sequential pipeline, update input types of steps after the first one
         // to match the output type of the previous step
         for (let i = 1; i < stepsValue.length; i++) {
@@ -359,7 +360,7 @@ class BrowserTemplateEngine {
         await this.generateParentPom(
             appNameValue,
             basePackageValue,
-            stepsValue,
+            generatedServiceSteps,
             includePersistenceModule,
             includeCacheInvalidationModule,
             normalizedRuntimeLayout,
@@ -369,12 +370,12 @@ class BrowserTemplateEngine {
         await this.generateCommonModule(appNameValue, basePackageValue, stepsValue, transportMode, normalizedOptions.fileCallback);
 
         // Generate each step service
-        for (let i = 0; i < stepsValue.length; i++) {
-            await this.generateStepService(appNameValue, basePackageValue, stepsValue[i], i, stepsValue, transportMode, normalizedOptions.fileCallback);
+        for (let i = 0; i < generatedServiceSteps.length; i++) {
+            await this.generateStepService(appNameValue, basePackageValue, generatedServiceSteps[i], i, generatedServiceSteps, transportMode, normalizedOptions.fileCallback);
         }
 
         if (includePersistenceModule) {
-            await this.generatePersistenceModule(appNameValue, basePackageValue, stepsValue, normalizedOptions.fileCallback);
+            await this.generatePersistenceModule(appNameValue, basePackageValue, generatedServiceSteps, normalizedOptions.fileCallback);
         }
 
         if (includeCacheInvalidationModule) {
@@ -395,14 +396,14 @@ class BrowserTemplateEngine {
             await this.generatePipelineRuntimeModule(
                 appNameValue,
                 basePackageValue,
-                stepsValue,
+                generatedServiceSteps,
                 normalizedOptions.fileCallback
             );
         } else if (normalizedRuntimeLayout === 'monolith') {
             await this.generateMonolithModule(
                 appNameValue,
                 basePackageValue,
-                stepsValue,
+                generatedServiceSteps,
                 includePersistenceModule,
                 includeCacheInvalidationModule,
                 normalizedOptions.fileCallback
@@ -437,6 +438,7 @@ class BrowserTemplateEngine {
         await this.generateOtherFiles(
             appNameValue,
             stepsValue,
+            generatedServiceSteps,
             includePersistenceModule,
             includeCacheInvalidationModule,
             normalizedOptions.fileCallback);
@@ -932,11 +934,43 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
     async generateOtherFiles(
         appName,
         steps,
+        generatedServiceSteps,
         includePersistenceModule,
         includeCacheInvalidationModule,
         fileCallback) {
+        const awaitSteps = this.awaitSteps(steps);
         // Create README
-        const readmeContext = { appName };
+        // Compute await transport types from raw step data
+        const hasInteractionApiAwaitSteps = awaitSteps.some((step) => {
+            if (!step) return false;
+            // Check for transport type in step metadata
+            const transportType = step['transport/type'] || step.awaitTransportType;
+            const serviceModuleName = step.serviceModuleName || step.serviceName || '';
+            const generatesService = step.generatesServiceModule;
+            // Infer interaction-api from explicit markers or service hints
+            if (transportType === 'interaction-api') return true;
+            if (generatesService === 'interaction-api') return true;
+            if (serviceModuleName.includes('interaction')) return true;
+            return false;
+        });
+        const hasWebhookAwaitSteps = awaitSteps.some((step) => {
+            if (!step) return false;
+            // Check for transport type in step metadata
+            const transportType = step['transport/type'] || step.awaitTransportType;
+            const serviceModuleName = step.serviceModuleName || step.serviceName || '';
+            const generatesService = step.generatesServiceModule;
+            // Infer webhook from explicit markers or service hints
+            if (transportType === 'webhook') return true;
+            if (generatesService === 'webhook') return true;
+            if (serviceModuleName.includes('webhook')) return true;
+            return false;
+        });
+        const readmeContext = {
+            appName,
+            hasAwaitSteps: awaitSteps.length > 0,
+            hasInteractionApiAwaitSteps,
+            hasWebhookAwaitSteps
+        };
         const readmeContent = this.render('readme', readmeContext);
         await fileCallback('README.md', readmeContent);
 
@@ -950,7 +984,7 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
 
         const certScriptContext = {
             appName,
-            steps,
+            serviceModuleSteps: generatedServiceSteps,
             includePersistenceModule,
             includeCacheInvalidationModule
         };
@@ -1145,6 +1179,19 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
             return '';
         }
         return step.serviceName.replace(/-svc$/, '');
+    }
+
+    isAwaitStep(step) {
+        return !!step && (step.isAwaitStep === true
+            || (typeof step.kind === 'string' && step.kind.trim().toLowerCase() === 'await'));
+    }
+
+    awaitSteps(steps) {
+        return (steps || []).filter((step) => this.isAwaitStep(step));
+    }
+
+    generatedServiceSteps(steps) {
+        return (steps || []).filter((step) => step && step.generatesServiceModule !== false);
     }
 
     isTransport(value) {
