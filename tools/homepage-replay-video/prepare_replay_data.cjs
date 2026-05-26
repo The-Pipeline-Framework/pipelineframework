@@ -88,8 +88,8 @@ function buildNodes(steps) {
     { id: awaitStep.step, role: "await", tier: "primary", x: 0.05, y: 1.7, z: 1.05, scale: 1.22 },
     { id: status.step, role: "status", tier: "primary", x: 3.3, y: 2.08, z: 0.95, scale: 1.12 },
     { id: output.step, role: "output", tier: "primary", x: 6.25, y: 2.52, z: 0.5, scale: 1.02 },
-    { id: broker.step, role: "broker", tier: "support", x: -1.9, y: -1.05, z: 0.92, scale: 0.84, parentId: awaitStep.step },
-    { id: provider.step, role: "provider", tier: "support", x: 2.35, y: -1.92, z: 0.22, scale: 0.92, parentId: awaitStep.step },
+    { id: broker.step, role: "broker", tier: "support", x: -1.75, y: 4.05, z: 0.92, scale: 0.84, parentId: awaitStep.step },
+    { id: provider.step, role: "provider", tier: "support", x: 2.1, y: 4.45, z: 0.22, scale: 0.92, parentId: awaitStep.step },
     { id: store.step, role: "store", tier: "support", x: 0.65, y: -3.2, z: -1.85, scale: 0.96 }
   ];
 }

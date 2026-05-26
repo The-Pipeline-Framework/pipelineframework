@@ -1037,22 +1037,13 @@ function buildTopology(topology) {
     const sourcePositions = inboundStoreTransitions
       .map((transition) => nodePositions.get(transition.from))
       .filter(Boolean);
-    let averageX;
-    if (sourcePositions.length > 0) {
-      averageX = sourcePositions.reduce((sum, position) => sum + position.x, 0) / sourcePositions.length;
-    } else {
-      const existingPositions = Array.from(nodePositions.values());
-      if (existingPositions.length > 0) {
-        const minX = Math.min(...existingPositions.map((pos) => pos.x));
-        const maxX = Math.max(...existingPositions.map((pos) => pos.x));
-        const centerX = (minX + maxX) / 2;
-        const width = maxX - minX;
-        averageX = centerX + (index - (storeActors.length - 1) / 2) * (width / Math.max(1, storeActors.length - 1));
-      } else {
-        averageX = index * 0.9;
-      }
-    }
-    const x = sourcePositions.length > 0 ? averageX + index * 0.9 : averageX;
+    const averageX = sourcePositions.length > 0
+      ? sourcePositions.reduce((sum, position) => sum + position.x, 0) / sourcePositions.length
+      : topologyCenterX;
+    const spreadOffset = storeActors.length > 1
+      ? ((index / (storeActors.length - 1)) - 0.5) * Math.min(2.4, topologyWidth * 0.38)
+      : 0;
+    const x = averageX + spreadOffset;
     const y = PRIMARY_ROW_Y - BRANCH_ROW_OFFSET_Y - 0.28 - index * 0.3;
     registerNode(step, new THREE.Vector3(x, y, 0));
   });

@@ -258,8 +258,8 @@ function controlPointsForEdge(fromNode, toNode, edge) {
   const midpoint = start.clone().lerp(end, 0.5);
   const liftByKind = {
     primary: 0.38,
-    request: -0.78,
-    completion: -0.05,
+    request: 1.2,
+    completion: 0.92,
     store: -1.05
   };
   midpoint.y += liftByKind[edge.kind] ?? 0.3;
