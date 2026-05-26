@@ -15,33 +15,39 @@ hero:
     - theme: brand
       text: Design with Canvas
       link: https://app.pipelineframework.org
-
-features:
-  - title: Clear Inputs and Outputs
-    details: Each step is one Java function with explicit input and output types, so it is obvious what goes in and what comes out
-    link: /value/developer-experience
-  - title: Define the Flow in YAML
-    details: Describe the flow once, then let TPF generate the Quarkus endpoints, callers, handlers, and runtime files around it
-    link: /guide/build/pipeline-compilation
-  - title: Reuse Existing Java Code
-    details: Turn an existing Java method or remote endpoint into a pipeline function without hiding its inputs and outputs
-    link: /guide/development/operators
-  - title: Reliable Background Work
-    details: Store accepted work, retry failed transitions, recover after crashes, and send terminal failures to a dead-letter channel
-    link: /guide/development/orchestrator-runtime
-  - title: Runtime Efficiency
-    details: Keep many items moving through reactive function chains without one thread per item
-    link: /value/runtime-efficiency
-  - title: Portable Serverless Functions
-    details: Generate serverless function entry points and handlers for AWS Lambda, Azure Functions, and Google Cloud Run functions from the same typed Java flow
-    link: /value/integration-flexibility
-  - title: Container and Kubernetes Ready
-    details: Generate standard Quarkus service runtimes for containers and Kubernetes, then evolve from monolith to split layouts when needed
-    link: /value/deployment-evolution
-  - title: State, Replay, and Queryable Data
-    details: Use persistence for durable business state and caching for fast recomputation, replay, and query-ready outputs
-    link: /value/state-replay-and-queryable-data
 ---
+
+<section class="home-cinematic-feature">
+  <div class="home-cinematic-copy">
+    <p class="home-cinematic-eyebrow">Await, provider, persistence, replay</p>
+    <h2>Keep the business stages simple while TPF runs the async edges and durable state around them</h2>
+    <p>
+      This cinematic is derived from a real CSV Payments replay. It shows the flow crossing an await boundary,
+      handing work to an external provider, resuming the primary path, and writing durable state without pushing
+      that coordination into the business functions themselves.
+    </p>
+    <div class="home-cinematic-links">
+      <a href="/replay-viewer/" class="home-cinematic-link primary">Open Replay Viewer</a>
+      <a href="/guide/operations/observability/replay" class="home-cinematic-link secondary">Replay &amp; Live Topology</a>
+    </div>
+  </div>
+  <div class="home-cinematic-media">
+    <video
+      class="home-cinematic-video"
+      autoplay
+      muted
+      loop
+      playsinline
+      preload="metadata"
+      poster="/home/replay-proof-poster.jpg"
+    >
+      <source src="/home/replay-proof.webm" type="video/webm" />
+      <source src="/home/replay-proof.mp4" type="video/mp4" />
+      Your browser does not support HTML5 video. Open
+      <a href="/home/replay-proof.mp4">the MP4 version</a>.
+    </video>
+  </div>
+</section>
 
 <Callout type="tip" title="Fastest path: design with Canvas">
 Use <a href="https://app.pipelineframework.org" target="_blank" rel="noopener noreferrer">Canvas</a> when you want to sketch the flow visually and download a runnable Quarkus scaffold. The same model can then be refined through YAML, Java functions, existing-method operators, type mappers, and runtime configuration.
@@ -53,6 +59,43 @@ Use <a href="https://app.pipelineframework.org" target="_blank" rel="noopener no
 
 <FeaturedArticles />
 <LatestReleases />
+
+## Why Teams Choose TPF
+
+<div class="home-capability-grid">
+  <a class="home-capability-card" href="/value/developer-experience">
+    <h3>Clear Inputs and Outputs</h3>
+    <p>Each step is one Java function with explicit input and output types, so it is obvious what goes in and what comes out.</p>
+  </a>
+  <a class="home-capability-card" href="/guide/build/pipeline-compilation">
+    <h3>Define the Flow in YAML</h3>
+    <p>Describe the flow once, then let TPF generate the Quarkus endpoints, callers, handlers, and runtime files around it.</p>
+  </a>
+  <a class="home-capability-card" href="/guide/development/operators">
+    <h3>Reuse Existing Java Code</h3>
+    <p>Turn an existing Java method or remote endpoint into a pipeline function without hiding its inputs and outputs.</p>
+  </a>
+  <a class="home-capability-card" href="/guide/development/orchestrator-runtime">
+    <h3>Reliable Background Work</h3>
+    <p>Store accepted work, retry failed transitions, recover after crashes, and send terminal failures to a dead-letter channel.</p>
+  </a>
+  <a class="home-capability-card" href="/value/runtime-efficiency">
+    <h3>Runtime Efficiency</h3>
+    <p>Keep many items moving through reactive function chains without one thread per item.</p>
+  </a>
+  <a class="home-capability-card" href="/value/integration-flexibility">
+    <h3>Portable Serverless Functions</h3>
+    <p>Generate serverless function entry points and handlers for AWS Lambda, Azure Functions, and Google Cloud Run functions from the same typed Java flow.</p>
+  </a>
+  <a class="home-capability-card" href="/value/deployment-evolution">
+    <h3>Container and Kubernetes Ready</h3>
+    <p>Generate standard Quarkus service runtimes for containers and Kubernetes, then evolve from monolith to split layouts when needed.</p>
+  </a>
+  <a class="home-capability-card" href="/value/state-replay-and-queryable-data">
+    <h3>State, Replay, and Queryable Data</h3>
+    <p>Use persistence for durable business state and caching for fast recomputation, replay, and query-ready outputs.</p>
+  </a>
+</div>
 
 ## What TPF Helps You Build
 
