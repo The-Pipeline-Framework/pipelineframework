@@ -69,40 +69,48 @@ function startServer(rootDir) {
 }
 
 async function main() {
+async function main() {
   const args = parseArgs(process.argv);
-  const server = await startServer(args.root);
-  const address = server.address();
-  const relativeDataPath = `/${path.relative(args.root, args.data).split(path.sep).join("/")}`;
-  const sceneUrl = `http://127.0.0.1:${address.port}/tools/homepage-replay-video/render_scene.html?capture=1&data=${encodeURIComponent(relativeDataPath)}`;
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 });
-  await page.goto(sceneUrl, { waitUntil: "networkidle" });
-  await page.waitForFunction(() => window.homepageReplayCinematic?.ready === true, null, { timeout: 30000 });
+  let server;
+  let browser;
+  try {
+    server = await startServer(args.root);
+    const address = server.address();
+    const relativeDataPath = `/${path.relative(args.root, args.data).split(path.sep).join("/")}`;
+    const sceneUrl = `http://127.0.0.1:${address.port}/tools/homepage-replay-video/render_scene.html?capture=1&data=${encodeURIComponent(relativeDataPath)}`;
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 });
+    await page.goto(sceneUrl, { waitUntil: "networkidle" });
+    await page.waitForFunction(() => window.homepageReplayCinematic?.ready === true, null, { timeout: 30000 });
 
-  const { clipDurationSeconds, fps } = await page.evaluate(() => ({
-    clipDurationSeconds: window.homepageReplayCinematic?.cinematicData?.clipDurationSeconds,
-    fps: window.homepageReplayCinematic?.cinematicData?.fps
-  }));
-  if (!clipDurationSeconds || !fps) {
-    throw new Error("Missing cinematic timing metadata for frame capture.");
+    const { clipDurationSeconds, fps } = await page.evaluate(() => ({
+      clipDurationSeconds: window.homepageReplayCinematic?.cinematicData?.clipDurationSeconds,
+      fps: window.homepageReplayCinematic?.cinematicData?.fps
+    }));
+    if (!clipDurationSeconds || !fps) {
+      throw new Error("Missing cinematic timing metadata for frame capture.");
+    }
+    const totalFrames = Math.ceil(clipDurationSeconds * fps);
+    const captureRoot = page.locator("`#captureRoot`");
+    fs.mkdirSync(args.framesDir, { recursive: true });
+
+    await page.evaluate(() => window.homepageReplayCinematic.renderFrame(0.58));
+    await captureRoot.screenshot({ path: args.poster, type: "jpeg", quality: 90 });
+
+    for (let frame = 0; frame < totalFrames; frame += 1) {
+      const progress = totalFrames <= 1 ? 0 : frame / (totalFrames - 1);
+      await page.evaluate((value) => window.homepageReplayCinematic.renderFrame(value), progress);
+      const framePath = path.join(args.framesDir, `frame_${String(frame + 1).padStart(4, "0")}.png`);
+      await captureRoot.screenshot({ path: framePath, type: "png" });
+    }
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+    }
   }
-  const totalFrames = Math.ceil(clipDurationSeconds * fps);
-  const captureRoot = page.locator("#captureRoot");
-  fs.mkdirSync(args.framesDir, { recursive: true });
-  fs.mkdirSync(path.dirname(args.poster), { recursive: true });
-
-  await page.evaluate(() => window.homepageReplayCinematic.renderFrame(0.58));
-  await captureRoot.screenshot({ path: args.poster, type: "jpeg", quality: 90 });
-
-  for (let frame = 0; frame < totalFrames; frame += 1) {
-    const progress = totalFrames <= 1 ? 0 : frame / (totalFrames - 1);
-    await page.evaluate((value) => window.homepageReplayCinematic.renderFrame(value), progress);
-    const framePath = path.join(args.framesDir, `frame_${String(frame + 1).padStart(4, "0")}.png`);
-    await captureRoot.screenshot({ path: framePath, type: "png" });
-  }
-
-  await browser.close();
-  await new Promise((resolve) => server.close(resolve));
 }
 
 main().catch((error) => {
