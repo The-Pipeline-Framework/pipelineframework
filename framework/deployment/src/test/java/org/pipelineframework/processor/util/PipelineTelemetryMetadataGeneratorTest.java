@@ -29,6 +29,7 @@ import org.pipelineframework.processor.ir.*;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -235,6 +236,41 @@ class PipelineTelemetryMetadataGeneratorTest {
         assertEquals("await-completion", completionTransition.get("relationKind").getAsString());
     }
 
+    @Test
+    void failsFastForInvalidYamlCardinality() throws IOException {
+        PipelineCompilationContext ctx = buildContext();
+        writeApplicationProperties("com.example.InputFolder", "com.example.PaymentOutput");
+        writePipelineYaml("""
+            basePackage: com.example.pipeline
+            transport: GRPC
+            steps:
+              - name: Process Folder
+                input: com.example.InputFolder
+                output: com.example.PaymentRecord
+              - name: Await Payment Provider
+                kind: await
+                cardinality: NOT_A_REAL_CARDINALITY
+                input: com.example.PaymentRecord
+                output: com.example.PaymentStatus
+              - name: Process Payment Status
+                input: com.example.PaymentStatus
+                output: com.example.PaymentOutput
+            """);
+        ctx.setStepModels(List.of(
+            step("ProcessFolderService", "com.example.pipeline", type("InputFolder"), type("PaymentRecord"), false),
+            step("ProcessPaymentStatusService", "com.example.pipeline", type("PaymentStatus"), type("PaymentOutput"), false)
+        ));
+
+        IllegalArgumentException error = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv()).writeTelemetryMetadata(ctx)
+        );
+        assertEquals(
+            "Invalid pipeline.yaml cardinality 'NOT_A_REAL_CARDINALITY' for step 'Await Payment Provider'. "
+                + "Allowed values: ONE_TO_ONE, ONE_TO_MANY, EXPANSION, MANY_TO_ONE, COLLAPSE, MANY_TO_MANY.",
+            error.getMessage());
+    }
+
     private PipelineCompilationContext buildContext() {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(tempDir.resolve("class-output")));
@@ -327,8 +363,8 @@ class PipelineTelemetryMetadataGeneratorTest {
         JsonObject found = null;
         for (var element : topology.getAsJsonArray("transitions")) {
             JsonObject transition = element.getAsJsonObject();
-            if (!transition.has("from") || transition.get("from").isJsonNull() ||
-                !transition.has("to") || transition.get("to").isJsonNull()) {
+            if (!transition.has("from") || transition.get("from").isJsonNull()
+                || !transition.has("to") || transition.get("to").isJsonNull()) {
                 continue;
             }
             if (from.equals(transition.get("from").getAsString())

@@ -1023,6 +1023,15 @@ function buildTopology(topology) {
   }
 
   const storeActors = sideEffects.filter((step) => resolveDisplayRole(step) === "store");
+  const topologyPositions = [...nodePositions.values()];
+  const topologyMinX = topologyPositions.length > 0
+    ? Math.min(...topologyPositions.map((position) => position.x))
+    : -1;
+  const topologyMaxX = topologyPositions.length > 0
+    ? Math.max(...topologyPositions.map((position) => position.x))
+    : 1;
+  const topologyCenterX = (topologyMinX + topologyMaxX) / 2;
+  const topologyWidth = Math.max(1.6, topologyMaxX - topologyMinX);
   storeActors.forEach((step, index) => {
     const inboundStoreTransitions = transitions.filter((transition) => transition.to === step.step && transition.relationKind === "store");
     const sourcePositions = inboundStoreTransitions
@@ -1500,7 +1509,10 @@ function fitCameraToTopology(steps) {
     const radius = step.sideEffect ? BRANCH_NODE_RADIUS : BASE_NODE_RADIUS;
     const labelHeight = !step.sideEffect ? BASE_LABEL_HEIGHT : (isNamedSupportActor(step) ? SUPPORT_LABEL_HEIGHT : 0);
     const valueHeight = step.sideEffect ? (step.pluginKind === "reject" ? 0.24 : 0.08) : COUNTER_LABEL_HEIGHT * 0.5;
-    const labelWidth = step.sideEffect ? 0 : (nodeLabelSprites.get(step.step)?.userData?.aspect ?? 1) * BASE_LABEL_HEIGHT * 0.5;
+    const labelAspect = nodeLabelSprites.get(step.step)?.userData?.aspect ?? 1;
+    const labelWidth = !step.sideEffect
+      ? labelAspect * BASE_LABEL_HEIGHT * 0.5
+      : (isNamedSupportActor(step) ? labelAspect * SUPPORT_LABEL_HEIGHT * 0.5 : 0);
     minX = Math.min(minX, position.x - radius - labelWidth);
     maxX = Math.max(maxX, position.x + radius + labelWidth);
     minY = Math.min(minY, position.y - radius - labelHeight - valueHeight - 0.42);
@@ -1960,9 +1972,12 @@ function processEvent(rawEvent) {
   highlightStep(event.to, 0.9, event.startTime);
   if (isAwaitResumableError(rawEvent)) {
     if (isAwaitSuspensionEvent(rawEvent)) {
+      const suspensionTime = Number.isFinite(event.endTime)
+        ? event.endTime
+        : (Number.isFinite(event.startTime) ? event.startTime : 0);
       const awaitStepName = event.step || fallbackAwaitDisplayStep || "AwaitPaymentProvider";
-      highlightStep(awaitStepName, EFFECT_PRESETS.node.defaultHoldSeconds + 0.5, event.endTime);
-      queueBackgroundFlash("#8f7aea", event.endTime, 0.8, 0.24);
+      highlightStep(awaitStepName, EFFECT_PRESETS.node.defaultHoldSeconds + 0.5, suspensionTime);
+      queueBackgroundFlash("#8f7aea", suspensionTime, 0.8, 0.24);
       itemAnchors.set(rawEvent.itemId, awaitStepName);
     }
     return;

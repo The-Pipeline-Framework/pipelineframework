@@ -16,7 +16,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fps", required=True, type=int)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--format", required=True, choices=("webm", "mp4"))
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not args.input_dir.exists() or not args.input_dir.is_dir():
+        parser.error(f"--input-dir does not exist: {args.input_dir}")
+    if args.fps <= 0:
+        parser.error("--fps must be greater than 0")
+    return args
 
 
 def main() -> None:

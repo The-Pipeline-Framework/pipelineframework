@@ -375,18 +375,22 @@ function applyPulseState(timeSeconds) {
 
 function renderFrame(progress) {
   if (!cinematicData) {
-    return;
+    return false;
   }
   const timeSeconds = THREE.MathUtils.clamp(progress, 0, 1) * cinematicData.clipDurationSeconds;
   animateCamera(progress);
   applyNodeDynamics(timeSeconds);
   applyPulseState(timeSeconds);
   renderer.render(scene, camera);
+  return true;
 }
 
 async function loadScene() {
   const response = await fetch(dataPath);
   cinematicData = await response.json();
+  if (!Number.isFinite(cinematicData.clipDurationSeconds) || cinematicData.clipDurationSeconds <= 0) {
+    throw new Error("Invalid clipDurationSeconds in cinematic data");
+  }
   makeBackdrop();
   addLights();
   const nodesById = new Map(cinematicData.nodes.map((node) => [node.id, node]));
@@ -398,10 +402,7 @@ async function loadScene() {
   window.homepageReplayCinematic = {
     ready: true,
     cinematicData,
-    renderFrame: (progress) => {
-      renderFrame(progress);
-      return true;
-    }
+    renderFrame: (progress) => renderFrame(progress)
   };
   if (autoPlay) {
     requestAnimationFrame(loop);
@@ -411,6 +412,9 @@ async function loadScene() {
 function loop(now) {
   const delta = Math.min(0.05, (now - lastAutoFrame) / 1000);
   lastAutoFrame = now;
+  if (!cinematicData || !Number.isFinite(cinematicData.clipDurationSeconds) || cinematicData.clipDurationSeconds <= 0) {
+    return;
+  }
   autoProgress = (autoProgress + delta / cinematicData.clipDurationSeconds) % 1;
   renderFrame(autoProgress);
   requestAnimationFrame(loop);

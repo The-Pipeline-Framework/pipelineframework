@@ -460,6 +460,9 @@ public class PipelineTelemetryMetadataGenerator {
     private String resolvePluginKind(String serviceName, String stepName) {
         String combined = ((serviceName == null ? "" : serviceName) + " " + (stepName == null ? "" : stepName))
             .toLowerCase(Locale.ROOT);
+        if (combined.contains("reject")) {
+            return "reject";
+        }
         if (combined.contains("invalidateall")) {
             return "cache-invalidate-all";
         }
@@ -1084,9 +1087,9 @@ public class PipelineTelemetryMetadataGenerator {
             case "MANY_TO_ONE", "COLLAPSE" -> "many-to-one";
             case "MANY_TO_MANY" -> "many-to-many";
             default -> throw new IllegalArgumentException(
-                "Invalid cardinality value '" + step.cardinality() + "' for step " +
-                (step.step() != null ? "'" + step.step() + "'" : "(unnamed)") +
-                ". Allowed values: ONE_TO_ONE, ONE_TO_MANY, EXPANSION, MANY_TO_ONE, COLLAPSE, MANY_TO_MANY"
+                "Invalid pipeline.yaml cardinality '" + step.cardinality() + "' for step '"
+                    + (step.name() == null ? "<unnamed>" : step.name()) + "'."
+                    + " Allowed values: ONE_TO_ONE, ONE_TO_MANY, EXPANSION, MANY_TO_ONE, COLLAPSE, MANY_TO_MANY."
             );
         };
     }

@@ -89,6 +89,7 @@ async function main() {
   const totalFrames = Math.ceil(clipDurationSeconds * fps);
   const captureRoot = page.locator("#captureRoot");
   fs.mkdirSync(args.framesDir, { recursive: true });
+  fs.mkdirSync(path.dirname(args.poster), { recursive: true });
 
   await page.evaluate(() => window.homepageReplayCinematic.renderFrame(0.58));
   await captureRoot.screenshot({ path: args.poster, type: "jpeg", quality: 90 });
