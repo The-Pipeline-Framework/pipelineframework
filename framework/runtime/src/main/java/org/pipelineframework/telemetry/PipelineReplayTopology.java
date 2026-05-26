@@ -106,6 +106,8 @@ public record PipelineReplayTopology(
      * @param sideEffect whether this step is a synthetic side-effect branch
      * @param parentStep logical parent step when this step branches from a base step
      * @param pluginKind canonical plugin kind when this is a plugin node
+     * @param renderRole viewer-oriented role classification such as primary, await, broker, external-provider, store, or plugin
+     * @param actorKind optional actor subtype for richer rendering, for example kafka or database
      */
     public record Step(
         String runtimeStepClass,
@@ -115,8 +117,22 @@ public record PipelineReplayTopology(
         int index,
         boolean sideEffect,
         String parentStep,
-        String pluginKind
+        String pluginKind,
+        String renderRole,
+        String actorKind
     ) {
+        public Step(
+            String runtimeStepClass,
+            String step,
+            String service,
+            String cardinality,
+            int index,
+            boolean sideEffect,
+            String parentStep,
+            String pluginKind
+        ) {
+            this(runtimeStepClass, step, service, cardinality, index, sideEffect, parentStep, pluginKind, null, null);
+        }
     }
 
     /**
@@ -130,6 +146,7 @@ public record PipelineReplayTopology(
      * @param fromService source service name
      * @param toService target service name
      * @param cardinality source step cardinality
+     * @param relationKind viewer-oriented edge classification such as primary, store, await-request, or await-completion
      */
     public record Transition(
         String id,
@@ -139,7 +156,20 @@ public record PipelineReplayTopology(
         String to,
         String fromService,
         String toService,
-        String cardinality
+        String cardinality,
+        String relationKind
     ) {
+        public Transition(
+            String id,
+            String fromRuntimeStepClass,
+            String toRuntimeStepClass,
+            String from,
+            String to,
+            String fromService,
+            String toService,
+            String cardinality
+        ) {
+            this(id, fromRuntimeStepClass, toRuntimeStepClass, from, to, fromService, toService, cardinality, null);
+        }
     }
 }

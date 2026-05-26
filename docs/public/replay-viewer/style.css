@@ -88,7 +88,6 @@ button:disabled {
     radial-gradient(circle at calc(18% + var(--bg-drift-x)) calc(10% + var(--bg-drift-y)), rgb(var(--bg-accent-rgb) / var(--bg-accent-strength)), transparent 34%),
     radial-gradient(circle at calc(82% - var(--bg-drift-x)) calc(16% - var(--bg-drift-y)), rgb(139 255 165 / calc(var(--bg-accent-strength) * 0.18)), transparent 26%),
     linear-gradient(180deg, #07101f 0%, #0b1120 100%);
-  transition: background 180ms linear;
   padding-top: 6px;
 }
 
@@ -139,7 +138,6 @@ button:disabled {
   background: rgb(7 16 31 / 50%);
   backdrop-filter: blur(8px);
   pointer-events: auto;
-  max-width: min(980px, calc(100% - 36px));
 }
 
 .player-chrome[data-visible="false"] .player-controls {

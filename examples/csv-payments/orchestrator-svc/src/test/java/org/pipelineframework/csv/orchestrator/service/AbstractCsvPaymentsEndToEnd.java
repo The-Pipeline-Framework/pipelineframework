@@ -37,6 +37,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -74,7 +77,11 @@ import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.telemetry.PipelineExecutionEvent;
+import org.pipelineframework.telemetry.PipelineReplayDocument;
 import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineReplayTopology;
 
 abstract class AbstractCsvPaymentsEndToEnd {
 
@@ -84,8 +91,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final Network network = Network.newNetwork();
     private static final String TEST_E2E_DIR = System.getProperty("user.dir") + "/target/test-e2e";
     private static final String TEST_E2E_TARGET_DIR = "/app/test-e2e";
-    private static final Path REPLAY_CAPTURE_DIR = Paths.get(TEST_E2E_DIR, "replay");
-    private static final Path REPLAY_FILE = REPLAY_CAPTURE_DIR.resolve("csv-payments-replay.json");
+    private static final Path REPLAY_ROOT_DIR = Paths.get(TEST_E2E_DIR, "replay");
+    private static final Path REPLAY_CAPTURE_DIR = REPLAY_ROOT_DIR.resolve("csv-payments-runs");
+    private static final Path REPLAY_FILE = REPLAY_ROOT_DIR.resolve("csv-payments-replay.json");
+    private static final String REPLAY_CAPTURE_CONTAINER_DIR = TEST_E2E_TARGET_DIR + "/replay/csv-payments-runs";
     private static final String LGTM_IMAGE = "docker.io/grafana/otel-lgtm:0.24.0";
     private static final DockerImageName KAFKA_IMAGE = DockerImageName.parse("apache/kafka-native:3.8.0");
     private static final String KAFKA_NETWORK_ALIAS = "kafka";
@@ -316,6 +325,12 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                             .forPort(8448)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
+            if (TELEMETRY_CAPTURE_ACTIVE) {
+                persistenceService.withFileSystemBind(
+                        REPLAY_CAPTURE_DIR.toAbsolutePath().toString(),
+                        REPLAY_CAPTURE_CONTAINER_DIR,
+                        BindMode.READ_WRITE);
+            }
             configureObservabilityContainerEnv(persistenceService);
         }
         return persistenceService;
@@ -385,6 +400,12 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                             .forPort(8445)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
+            if (TELEMETRY_CAPTURE_ACTIVE) {
+                paymentsProcessingService.withFileSystemBind(
+                        REPLAY_CAPTURE_DIR.toAbsolutePath().toString(),
+                        REPLAY_CAPTURE_CONTAINER_DIR,
+                        BindMode.READ_WRITE);
+            }
             configureObservabilityContainerEnv(paymentsProcessingService);
         }
         return paymentsProcessingService;
@@ -418,6 +439,12 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                             .forPort(8446)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
+            if (TELEMETRY_CAPTURE_ACTIVE) {
+                paymentStatusService.withFileSystemBind(
+                        REPLAY_CAPTURE_DIR.toAbsolutePath().toString(),
+                        REPLAY_CAPTURE_CONTAINER_DIR,
+                        BindMode.READ_WRITE);
+            }
             configureObservabilityContainerEnv(paymentStatusService);
         }
         return paymentStatusService;
@@ -571,10 +598,12 @@ abstract class AbstractCsvPaymentsEndToEnd {
             }
             return;
         }
-        Files.createDirectories(REPLAY_CAPTURE_DIR);
+        Files.createDirectories(REPLAY_ROOT_DIR);
+        clearReplayCaptureDirectory();
         Files.deleteIfExists(REPLAY_FILE);
         LOG.infof(
-                "CSV payments replay export enabled; writing replay JSON to %s.",
+                "CSV payments replay export enabled; capturing replay fragments under %s and merged replay at %s.",
+                REPLAY_CAPTURE_DIR,
                 REPLAY_FILE);
     }
 
@@ -589,7 +618,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
             configureTempoEnv(env, lgtmCollectorContainerEndpoint());
             return;
         }
-        configureReplayCaptureEnv(env);
+        configureReplayCaptureEnv(env, REPLAY_CAPTURE_CONTAINER_DIR);
     }
 
     private static void configureObservabilityProcessEnv(Map<String, String> env) {
@@ -597,10 +626,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
             configureTempoEnv(env, lgtmCollectorHostEndpoint());
             return;
         }
-        configureReplayCaptureEnv(env);
+        configureReplayCaptureEnv(env, REPLAY_CAPTURE_DIR.toAbsolutePath().toString());
     }
 
-    private static void configureReplayCaptureEnv(Map<String, String> env) {
+    private static void configureReplayCaptureEnv(Map<String, String> env, String replayCapturePath) {
         if (!TELEMETRY_CAPTURE_ACTIVE) {
             return;
         }
@@ -619,7 +648,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         env.put("PIPELINE_TELEMETRY_METRICS_ENABLED", "false");
         env.put("PIPELINE_TELEMETRY_REPLAY_ENABLED", "true");
         env.put("PIPELINE_TELEMETRY_REPLAY_EXPORTER", "file");
-        env.put("PIPELINE_TELEMETRY_REPLAY_FILE_PATH", REPLAY_FILE.toAbsolutePath().toString());
+        env.put("PIPELINE_TELEMETRY_REPLAY_FILE_PATH", replayCapturePath);
         if (!READER_DEMAND_PACER_ROWS_PER_PERIOD.isBlank()) {
             env.put("CSV_PAYMENTS_READER_DEMAND_PACER_ROWS_PER_PERIOD", READER_DEMAND_PACER_ROWS_PER_PERIOD);
         }
@@ -947,6 +976,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         // Clean up any existing test files
         cleanTestOutputDirectory(dir);
+        resetReplayCaptureArtifacts();
         resetDatabasePersistence();
 
         // Create test CSV files as the shell script does
@@ -965,6 +995,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         // Verify database persistence
         verifyDatabasePersistence();
+
+        if (TELEMETRY_CAPTURE_ACTIVE) {
+            PipelineReplayDocument replayDocument = mergeReplayDocuments(REPLAY_CAPTURE_DIR, REPLAY_FILE);
+            assertReplayCoverage(replayDocument);
+        }
     }
 
     @Test
@@ -1029,6 +1064,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         Path dir = Paths.get(TEST_E2E_DIR);
         Files.createDirectories(dir);
         cleanTestOutputDirectory(dir);
+        resetReplayCaptureArtifacts();
         resetDatabasePersistence();
         createTestCsvFiles();
 
@@ -1038,9 +1074,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         waitForPipelineComplete();
 
-        JsonNode replayDocument = OBJECT_MAPPER.readTree(Files.readString(REPLAY_FILE));
-        long rejectEvents = replayDocument.path("events").findValuesAsText("event").stream()
-                .filter("reject"::equals)
+        PipelineReplayDocument replayDocument = mergeReplayDocuments(REPLAY_CAPTURE_DIR, REPLAY_FILE);
+        long rejectEvents = replayDocument.events().stream()
+                .filter(event -> "reject".equals(event.event()))
                 .count();
         assertTrue(rejectEvents > 0, "Expected replay JSON to contain reject events.");
 
@@ -2194,6 +2230,230 @@ abstract class AbstractCsvPaymentsEndToEnd {
         }
 
         LOG.info("All expected records found in database");
+    }
+
+    private static void resetReplayCaptureArtifacts() throws IOException {
+        if (!TELEMETRY_CAPTURE_ACTIVE) {
+            return;
+        }
+        clearReplayCaptureDirectory();
+        Files.deleteIfExists(REPLAY_FILE);
+    }
+
+    private static void clearReplayCaptureDirectory() throws IOException {
+        Files.createDirectories(REPLAY_CAPTURE_DIR);
+        try (var stream = Files.list(REPLAY_CAPTURE_DIR)) {
+            for (Path file : stream.toList()) {
+                Files.deleteIfExists(file);
+            }
+        }
+    }
+
+    private static PipelineReplayDocument mergeReplayDocuments(Path replayDir, Path outputFile) throws Exception {
+        List<Path> replayFiles;
+        try (var files = Files.list(replayDir)) {
+            replayFiles = files
+                    .filter(path -> path.getFileName().toString().endsWith(".json"))
+                    .sorted()
+                    .toList();
+        }
+        assertFalse(replayFiles.isEmpty(), "Expected replay fragments in " + replayDir);
+
+        List<PipelineReplayDocument> documents = new ArrayList<>();
+        for (Path replayFile : replayFiles) {
+            documents.add(PipelineJson.mapper().readValue(replayFile.toFile(), PipelineReplayDocument.class));
+        }
+        documents.sort(Comparator.comparing(PipelineReplayDocument::startedAt));
+
+        PipelineReplayDocument canonical = selectCanonicalReplayDocument(documents);
+        Instant earliestStart = documents.getFirst().startedAt();
+        List<PipelineExecutionEvent> shiftedEvents = new ArrayList<>();
+        boolean completedFragmentPresent = documents.stream().anyMatch(document -> "completed".equals(document.status()));
+        String status = completedFragmentPresent ? "completed" : canonical.status();
+        String failureType = completedFragmentPresent ? null : canonical.failureType();
+        String failureMessage = completedFragmentPresent ? null : canonical.failureMessage();
+        double maxEndSeconds = 0;
+
+        for (PipelineReplayDocument document : documents) {
+            if (!"completed".equals(document.status())
+                    && !(completedFragmentPresent && isAwaitSuspensionFragment(document))
+                    && "completed".equals(status)) {
+                status = document.status();
+                failureType = document.failureType();
+                failureMessage = document.failureMessage();
+            }
+            double offsetSeconds = Duration.between(earliestStart, document.startedAt()).toMillis() / 1000.0;
+            for (PipelineExecutionEvent event : document.events()) {
+                double shiftedStart = offsetSeconds + event.startTime();
+                double shiftedEnd = offsetSeconds + event.endTime();
+                shiftedEvents.add(new PipelineExecutionEvent(
+                        event.traceId(),
+                        event.spanId(),
+                        event.parentSpanId(),
+                        event.itemId(),
+                        event.pipeline(),
+                        event.step(),
+                        event.service(),
+                        event.event(),
+                        shiftedStart,
+                        shiftedEnd,
+                        event.durationMs(),
+                        event.from(),
+                        event.to(),
+                        event.cardinality(),
+                        event.parentItemIds(),
+                        event.sequence(),
+                        event.attempt(),
+                        event.errorType(),
+                        event.errorMessage(),
+                        event.attributes()));
+                maxEndSeconds = Math.max(maxEndSeconds, shiftedEnd);
+            }
+        }
+
+        shiftedEvents.sort((left, right) -> {
+            if (left.startTime() != right.startTime()) {
+                return Double.compare(left.startTime(), right.startTime());
+            }
+            long leftSequence = left.sequence() == null ? 0 : left.sequence();
+            long rightSequence = right.sequence() == null ? 0 : right.sequence();
+            int sequenceComparison = Long.compare(leftSequence, rightSequence);
+            if (sequenceComparison != 0) {
+                return sequenceComparison;
+            }
+            int itemComparison = nullSafe(left.itemId()).compareTo(nullSafe(right.itemId()));
+            if (itemComparison != 0) {
+                return itemComparison;
+            }
+            int eventComparison = nullSafe(left.event()).compareTo(nullSafe(right.event()));
+            if (eventComparison != 0) {
+                return eventComparison;
+            }
+            int traceComparison = nullSafe(left.traceId()).compareTo(nullSafe(right.traceId()));
+            if (traceComparison != 0) {
+                return traceComparison;
+            }
+            int spanComparison = nullSafe(left.spanId()).compareTo(nullSafe(right.spanId()));
+            if (spanComparison != 0) {
+                return spanComparison;
+            }
+            int attemptComparison = Integer.compare(
+                    left.attempt() == null ? 0 : left.attempt(),
+                    right.attempt() == null ? 0 : right.attempt());
+            if (attemptComparison != 0) {
+                return attemptComparison;
+            }
+            return nullSafe(left.step()).compareTo(nullSafe(right.step()));
+        });
+
+        List<PipelineExecutionEvent> renumbered = new ArrayList<>(shiftedEvents.size());
+        for (int index = 0; index < shiftedEvents.size(); index += 1) {
+            PipelineExecutionEvent event = shiftedEvents.get(index);
+            renumbered.add(new PipelineExecutionEvent(
+                    event.traceId(),
+                    event.spanId(),
+                    event.parentSpanId(),
+                    event.itemId(),
+                    event.pipeline(),
+                    event.step(),
+                    event.service(),
+                    event.event(),
+                    event.startTime(),
+                    event.endTime(),
+                    event.durationMs(),
+                    event.from(),
+                    event.to(),
+                    event.cardinality(),
+                    event.parentItemIds(),
+                    (long) index + 1,
+                    event.attempt(),
+                    event.errorType(),
+                    event.errorMessage(),
+                    event.attributes()));
+        }
+
+        PipelineReplayDocument merged = new PipelineReplayDocument(
+                canonical.pipeline(),
+                earliestStart,
+                Math.round(maxEndSeconds * 1000),
+                status,
+                failureType,
+                failureMessage,
+                canonical.runParameters(),
+                canonical.topology(),
+                List.copyOf(renumbered));
+        Files.createDirectories(outputFile.getParent());
+        Files.writeString(
+                outputFile,
+                PipelineJson.mapper().writerWithDefaultPrettyPrinter().writeValueAsString(merged));
+        return merged;
+    }
+
+    private static PipelineReplayDocument selectCanonicalReplayDocument(List<PipelineReplayDocument> documents) {
+        return documents.stream()
+                .max(Comparator.<PipelineReplayDocument>comparingInt(document ->
+                                "completed".equals(document.status()) ? 1 : 0)
+                        .thenComparingInt(document ->
+                                isAwaitSuspensionFragment(document) ? 0 : 1)
+                        .thenComparingInt(document ->
+                                document.topology() == null || document.topology().steps() == null
+                                        ? 0
+                                        : document.topology().steps().size())
+                        .thenComparingInt(document ->
+                                document.topology() == null || document.topology().transitions() == null
+                                        ? 0
+                                        : document.topology().transitions().size())
+                        .thenComparing(PipelineReplayDocument::startedAt))
+                .orElseThrow(() -> new IllegalStateException("No replay documents available to merge."));
+    }
+
+    private void assertReplayCoverage(PipelineReplayDocument replayDocument) {
+        assertEquals("completed", replayDocument.status(), "Expected merged replay to complete successfully.");
+        assertReplayStepEvents(replayDocument, "ProcessFolder");
+        assertReplayStepEvents(replayDocument, "ProcessCsvPaymentsInput");
+        assertReplayStepEvents(replayDocument, "ProcessAwaitPaymentProviderAwaitClientStep");
+        assertReplayStepEvents(replayDocument, "ProcessPaymentStatus");
+        assertReplayStepEvents(replayDocument, "ProcessCsvPaymentsOutputFile");
+        assertReplayStepEvents(replayDocument, "PersistenceCsvPaymentsInputFileSideEffect");
+        assertReplayStepEvents(replayDocument, "PersistencePaymentRecordSideEffect");
+        assertTrue(
+                replayDocument.events().stream().anyMatch(event ->
+                        "ProcessCsvPaymentsInput".equals(event.step())
+                                && "emit".equals(event.event())
+                                && "AwaitPaymentProvider".equals(event.to())),
+                "Expected merged replay to contain input-to-await flow events.");
+        assertTrue(
+                replayDocument.events().stream().anyMatch(event ->
+                        "ProcessPaymentStatus".equals(event.step())
+                                && "AwaitPaymentProvider".equals(event.from())),
+                "Expected merged replay to contain await-resume flow events.");
+
+        PipelineReplayTopology topology = replayDocument.topology();
+        assertTrue(topology.transitions().stream().anyMatch(transition ->
+                        "await-request".equals(transition.relationKind())),
+                "Expected await-request transitions in merged replay topology.");
+        assertTrue(topology.transitions().stream().anyMatch(transition ->
+                        "await-completion".equals(transition.relationKind())),
+                "Expected await-completion transitions in merged replay topology.");
+        assertTrue(topology.transitions().stream().anyMatch(transition ->
+                        "store".equals(transition.relationKind())),
+                "Expected store transitions in merged replay topology.");
+    }
+
+    private static boolean isAwaitSuspensionFragment(PipelineReplayDocument document) {
+        return document != null
+                && "failed".equals(document.status())
+                && "org.pipelineframework.awaitable.AwaitSuspendedException".equals(document.failureType());
+    }
+
+    private void assertReplayStepEvents(PipelineReplayDocument replayDocument, String stepName) {
+        assertTrue(
+                replayDocument.events().stream().anyMatch(event -> stepName.equals(event.step())),
+                "Expected merged replay to contain direct events for " + stepName + ".");
+    }
+
+    private static String nullSafe(String value) {
+        return value == null ? "" : value;
     }
 
     /**

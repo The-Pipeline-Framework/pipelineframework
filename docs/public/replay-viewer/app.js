@@ -37,6 +37,7 @@ const CAMERA_PADDING = 1.2;
 const BASE_NODE_RADIUS = 0.68;
 const BRANCH_NODE_RADIUS = 0.6;
 const BASE_LABEL_HEIGHT = 0.8;
+const SUPPORT_LABEL_HEIGHT = 0.5;
 const LABEL_OFFSET_Y = 1.12;
 const COUNTER_LABEL_HEIGHT = 0.44;
 const PRIMARY_ROW_Y = 2.45;
@@ -133,8 +134,21 @@ const itemAnchors = new Map();
 const highlightExpirations = new Map();
 const stepMetadataByName = new Map();
 const runtimeStepState = new Map();
-const executionsWithEmit = new Set();
-const processedResultKeys = new Set();
+const directEventSteps = new Set();
+const displayStepAliases = new Map();
+const rawStepMetadataByName = new Map();
+const supportFlowSampleCounts = new Map();
+const STEP_LABELS = {
+  PaymentProvider: "Payment Provider",
+  Database: "Database"
+};
+const STEP_ROLE_LABELS = {
+  broker: "Kafka Broker",
+  "external-provider": "Payment Provider",
+  store: "Database"
+};
+let fallbackAwaitDisplayStep = null;
+let activeAnimationPolicy = emptyAnimationPolicy();
 
 let replayDocument = normalizeReplayDocument(validateReplayDocument({ topology: { steps: [], transitions: [] }, events: [], durationMs: 0, pipeline: "loading" }));
 let replayDurationSeconds = 0.1;
@@ -216,6 +230,15 @@ function validateReplayDocument(document) {
   return document;
 }
 
+function emptyAnimationPolicy() {
+  return {
+    awaitRequestByTargetStep: new Map(),
+    awaitCompletionByResumeStep: new Map(),
+    outputResumeByTargetStep: new Map(),
+    storeWriteByRawStep: new Map()
+  };
+}
+
 function normalizeReplayDocument(document) {
   const events = Array.isArray(document.events)
     ? [...document.events].sort((left, right) => {
@@ -231,11 +254,112 @@ function normalizeReplayDocument(document) {
     document.topology,
     events.some((event) => event.event === "reject")
   );
+  const { topology: displayTopology, aliases } = normalizeTopologyForDisplay(topology);
   return {
     ...document,
-    topology,
+    rawTopology: topology,
+    topology: displayTopology,
+    displayAliases: aliases,
+    fallbackAwaitDisplayStep: defaultAwaitStepNameForTopology(displayTopology),
     events
   };
+}
+
+function defaultAwaitStepNameForTopology(topology) {
+  if (!topology?.steps) {
+    return null;
+  }
+  return topology.steps.find((step) => resolveDisplayRole(step) === "await")?.step ?? null;
+}
+
+function normalizeTopologyForDisplay(topology) {
+  if (!topology || !Array.isArray(topology.steps) || !Array.isArray(topology.transitions)) {
+    return { topology, aliases: {} };
+  }
+  const aliases = {};
+  const storeActorsByKind = new Map();
+  const visibleAwaitSteps = topology.steps.filter((step) =>
+    resolveDisplayRole(step) === "await" && !isInternalAwaitClientStep(step.step)
+  );
+  const defaultAwaitStep = visibleAwaitSteps[0]?.step ?? null;
+  for (const step of topology.steps) {
+    if (resolveDisplayRole(step) === "store") {
+      storeActorsByKind.set(step.actorKind ?? "default", step.step);
+    }
+  }
+  const hiddenSteps = new Set();
+  for (const step of topology.steps) {
+    if (resolveDisplayRole(step) === "persistence-plugin") {
+      const storeActor = storeActorsByKind.get(step.actorKind ?? "default");
+      if (storeActor) {
+        aliases[step.step] = storeActor;
+        hiddenSteps.add(step.step);
+      }
+      continue;
+    }
+    if (isInternalAwaitClientStep(step.step) && defaultAwaitStep) {
+      aliases[step.step] = defaultAwaitStep;
+      hiddenSteps.add(step.step);
+    }
+  }
+  const storeStep = topology.steps.find((step) => resolveDisplayRole(step) === "store");
+  if (!storeStep && hiddenSteps.size === 0) {
+    return { topology, aliases };
+  }
+  return {
+    topology: {
+      ...topology,
+      steps: topology.steps.filter((step) => !hiddenSteps.has(step.step)),
+      transitions: topology.transitions.filter((transition) => !hiddenSteps.has(transition.from) && !hiddenSteps.has(transition.to))
+    },
+    aliases
+  };
+}
+
+function isInternalAwaitClientStep(stepName) {
+  return /AwaitClientStep$/.test(stepName ?? "");
+}
+
+function aliasStepNameForDisplay(stepName) {
+  if (!stepName) {
+    return stepName;
+  }
+  if (isInternalAwaitClientStep(stepName) && fallbackAwaitDisplayStep) {
+    return fallbackAwaitDisplayStep;
+  }
+  return displayStepAliases.get(stepName) ?? stepName;
+}
+
+function mapEventForDisplay(event) {
+  if (!event) {
+    return event;
+  }
+  return {
+    ...event,
+    step: aliasStepNameForDisplay(event.step),
+    from: aliasStepNameForDisplay(event.from),
+    to: aliasStepNameForDisplay(event.to)
+  };
+}
+
+function isAwaitResumableError(event) {
+  return event?.event === "error"
+    && event?.errorType === "org.pipelineframework.awaitable.AwaitSuspendedException";
+}
+
+function isAwaitSuspensionEvent(event) {
+  return isInternalAwaitClientStep(event?.step) && isAwaitResumableError(event);
+}
+
+function resolveRawStepDefinition(stepName) {
+  return rawStepMetadataByName.get(stepName) ?? resolveStepDefinition(stepName);
+}
+
+function isPersistenceSideEffectStep(stepOrName) {
+  const step = typeof stepOrName === "string"
+    ? resolveRawStepDefinition(stepOrName)
+    : stepOrName;
+  return step?.sideEffect === true && step?.pluginKind === "persistence";
 }
 
 function playbackTimeForEvent(event) {
@@ -245,6 +369,14 @@ function playbackTimeForEvent(event) {
   return event.event === "success" || event.event === "error"
     ? (event.endTime ?? event.startTime)
     : event.startTime;
+}
+
+function computeReplayDurationSeconds(document) {
+  const declaredDurationSeconds = Math.max(0.1, (document.durationMs || 0) / 1000);
+  const maxEventTimeSeconds = Array.isArray(document.events) && document.events.length > 0
+    ? document.events.reduce((latest, event) => Math.max(latest, playbackTimeForEvent(event)), 0)
+    : 0;
+  return Math.max(declaredDurationSeconds, maxEventTimeSeconds);
 }
 
 function augmentTopologyWithDisplayNodes(topology, includeRejectNodes = true) {
@@ -358,15 +490,53 @@ function resolveStepDefinition(stepName) {
   return stepMetadataByName.get(stepName) ?? null;
 }
 
+function resolveDisplayRole(step) {
+  if (!step) {
+    return "primary";
+  }
+  if (step.renderRole) {
+    return step.renderRole;
+  }
+  if (step.pluginKind === "persistence") {
+    return "persistence-plugin";
+  }
+  return step.sideEffect ? "plugin" : "primary";
+}
+
+function resolveDisplayIconKind(step) {
+  const role = resolveDisplayRole(step);
+  if (step?.pluginKind) {
+    if (step.pluginKind === "persistence" && step.actorKind === "database") {
+      return "store";
+    }
+    return step.pluginKind;
+  }
+  switch (role) {
+    case "store":
+      return "store";
+    case "broker":
+      return "broker";
+    case "external-provider":
+      return "provider";
+    default:
+      return "plugin";
+  }
+}
+
+function isNamedSupportActor(step) {
+  const role = resolveDisplayRole(step);
+  return role === "broker" || role === "external-provider" || role === "store";
+}
+
 function resolveDisplayStepName(event) {
   if (!event || (event.event !== "retry" && event.event !== "error")) {
-    return event?.step ?? null;
+    return aliasStepNameForDisplay(event?.step ?? null);
   }
-  const step = resolveStepDefinition(event.step);
+  const step = resolveStepDefinition(aliasStepNameForDisplay(event.step));
   if (step?.sideEffect && step.parentStep) {
     return step.parentStep;
   }
-  return event.step;
+  return aliasStepNameForDisplay(event.step);
 }
 
 function resolveDisplayTargets(event) {
@@ -375,6 +545,104 @@ function resolveDisplayTargets(event) {
     primaryStep,
     secondaryStep: primaryStep && primaryStep !== event.step ? event.step : null
   };
+}
+
+function indexStepsByRole(topology) {
+  const stepsByRole = new Map();
+  for (const step of topology?.steps ?? []) {
+    const role = resolveDisplayRole(step);
+    if (!stepsByRole.has(role)) {
+      stepsByRole.set(role, []);
+    }
+    stepsByRole.get(role).push(step);
+  }
+  return stepsByRole;
+}
+
+function indexTransitionsByRelation(topology) {
+  const transitionsByRelation = new Map();
+  for (const transition of topology?.transitions ?? []) {
+    const relationKind = transition?.relationKind ?? "primary";
+    if (!transitionsByRelation.has(relationKind)) {
+      transitionsByRelation.set(relationKind, []);
+    }
+    transitionsByRelation.get(relationKind).push(transition);
+  }
+  return transitionsByRelation;
+}
+
+function findTransitionByFrom(transitions, fromStep) {
+  return transitions.find((transition) => transition.from === fromStep) ?? null;
+}
+
+function findTransitionByTo(transitions, toStep) {
+  return transitions.find((transition) => transition.to === toStep) ?? null;
+}
+
+function buildSupportAnimationPolicy(displayTopology, rawTopology = displayTopology) {
+  const policy = emptyAnimationPolicy();
+  const displayTransitions = Array.isArray(displayTopology?.transitions) ? displayTopology.transitions : [];
+  const rawSteps = Array.isArray(rawTopology?.steps) ? rawTopology.steps : [];
+  const stepsByRole = indexStepsByRole(displayTopology);
+  const transitionsByRelation = indexTransitionsByRelation(displayTopology);
+  const awaitRequestTransitions = transitionsByRelation.get("await-request") ?? [];
+  const awaitCompletionTransitions = transitionsByRelation.get("await-completion") ?? [];
+  const primaryTransitions = transitionsByRelation.get("primary") ?? [];
+  const storeTransitions = transitionsByRelation.get("store") ?? [];
+
+  for (const awaitStep of stepsByRole.get("await") ?? []) {
+    const firstRequest = findTransitionByFrom(awaitRequestTransitions, awaitStep.step);
+    const secondRequest = firstRequest ? findTransitionByFrom(awaitRequestTransitions, firstRequest.to) : null;
+    if (firstRequest) {
+      policy.awaitRequestByTargetStep.set(awaitStep.step, {
+        awaitStep: awaitStep.step,
+        requestEdges: [firstRequest, secondRequest].filter(Boolean)
+      });
+    }
+
+    const resumeEdge = findTransitionByFrom(primaryTransitions, awaitStep.step);
+    const downstreamEdge = resumeEdge ? findTransitionByFrom(primaryTransitions, resumeEdge.to) : null;
+    const completionToAwait = findTransitionByTo(awaitCompletionTransitions, awaitStep.step);
+    const completionFromExternal = completionToAwait
+      ? findTransitionByTo(awaitCompletionTransitions, completionToAwait.from)
+      : null;
+    if (resumeEdge) {
+      policy.awaitCompletionByResumeStep.set(resumeEdge.to, {
+        awaitStep: awaitStep.step,
+        completionEdges: [completionFromExternal, completionToAwait].filter(Boolean),
+        resumeEdge
+      });
+      if (downstreamEdge) {
+        policy.outputResumeByTargetStep.set(downstreamEdge.to, downstreamEdge);
+      }
+    }
+  }
+
+  const displayStepsByName = new Map((displayTopology?.steps ?? []).map((step) => [step.step, step]));
+  const rawTransitionsById = new Map((rawTopology?.transitions ?? []).map((transition) => [transition.id, transition]));
+  for (const rawStep of rawSteps) {
+    if (!isPersistenceSideEffectStep(rawStep)) {
+      continue;
+    }
+    const displayTarget = aliasStepNameForDisplay(rawStep.step);
+    const displaySource = aliasStepNameForDisplay(rawStep.parentStep);
+    const displayTargetStep = displayTarget ? displayStepsByName.get(displayTarget) : null;
+    const explicitStoreTransition = rawStep.parentStep
+      ? rawTransitionsById.get(`${rawStep.parentStep}->${displayTarget}`)
+      : null;
+    const storeTransition = explicitStoreTransition
+      ?? storeTransitions.find((transition) => transition.from === displaySource && transition.to === displayTarget)
+      ?? displayTransitions.find((transition) => transition.from === displaySource && transition.to === displayTarget);
+    policy.storeWriteByRawStep.set(rawStep.step, {
+      fromStep: displaySource,
+      toStep: displayTarget,
+      aggregate: displayTarget !== rawStep.step
+        || (displayTargetStep?.cardinality?.toLowerCase()?.includes("many") ?? false)
+        || storeTransition?.cardinality?.toLowerCase()?.includes("many") === true
+    });
+  }
+
+  return policy;
 }
 
 function resolvePluginStepForDisplay(parentStep, pluginKind) {
@@ -448,8 +716,11 @@ function clearScene() {
   retryLoops.splice(0).forEach((effect) => removeAndDispose(effect.mesh));
   backgroundFlashes.splice(0);
   runtimeStepState.clear();
-  executionsWithEmit.clear();
-  processedResultKeys.clear();
+  directEventSteps.clear();
+  displayStepAliases.clear();
+  rawStepMetadataByName.clear();
+  activeAnimationPolicy = emptyAnimationPolicy();
+  fallbackAwaitDisplayStep = null;
   nodeValueUpdateTick += 1;
 }
 
@@ -457,6 +728,7 @@ function clearReplayDynamics() {
   eventIndexByKey.clear();
   itemAnchors.clear();
   highlightExpirations.clear();
+  supportFlowSampleCounts.clear();
   hoveredStepName = null;
   for (const particle of particles.values()) {
     removeAndDispose(particle.mesh);
@@ -467,8 +739,6 @@ function clearReplayDynamics() {
   retryLoops.splice(0).forEach((effect) => removeAndDispose(effect.mesh));
   backgroundFlashes.splice(0);
   runtimeStepState.clear();
-  executionsWithEmit.clear();
-  processedResultKeys.clear();
   nodeValueUpdateTick += 1;
   for (const edge of edgeLines.values()) {
     edge.intensity = 0;
@@ -496,6 +766,10 @@ function setPlayerChromeVisible(visible) {
 
 function scheduleChromeHide(delayMs = CHROME_HIDE_DELAY_MS) {
   cancelChromeHide();
+  if (!prefersTapChrome) {
+    setPlayerChromeVisible(true);
+    return;
+  }
   if (isAnyModalOpen() || isScrubbingTimeline || isLoadingReplay) {
     setPlayerChromeVisible(true);
     return;
@@ -514,6 +788,10 @@ function scheduleChromeHide(delayMs = CHROME_HIDE_DELAY_MS) {
 
 function revealPlayerChrome(sticky = false) {
   setPlayerChromeVisible(true);
+  if (!prefersTapChrome) {
+    cancelChromeHide();
+    return;
+  }
   if (!sticky) {
     scheduleChromeHide();
   } else {
@@ -613,12 +891,29 @@ function reportViewerIssue(message) {
 }
 
 function loadReplay(document, label, sourceKey = activeReplaySourceKey) {
+  clearScene();
   replayDocument = normalizeReplayDocument(validateReplayDocument(document));
-  replayDurationSeconds = Math.max(0.1, (replayDocument.durationMs || 0) / 1000);
+  replayDurationSeconds = computeReplayDurationSeconds(replayDocument);
   currentTimeSeconds = 0;
   isPlaying = false;
   isFinishingEffects = false;
-  clearScene();
+  fallbackAwaitDisplayStep = replayDocument.fallbackAwaitDisplayStep ?? null;
+  for (const [rawStepName, displayStepName] of Object.entries(replayDocument.displayAliases ?? {})) {
+    displayStepAliases.set(rawStepName, displayStepName);
+  }
+  for (const step of replayDocument.rawTopology?.steps ?? replayDocument.topology.steps) {
+    rawStepMetadataByName.set(step.step, step);
+  }
+  activeAnimationPolicy = buildSupportAnimationPolicy(
+    replayDocument.topology,
+    replayDocument.rawTopology ?? replayDocument.topology
+  );
+  for (const event of replayDocument.events) {
+    const displayStepName = aliasStepNameForDisplay(event?.step);
+    if (displayStepName) {
+      directEventSteps.add(displayStepName);
+    }
+  }
   buildTopology(replayDocument.topology);
   activeReplaySourceKey = sourceKey;
   stagedReplaySourceKey = sourceKey;
@@ -699,24 +994,45 @@ function buildTopology(topology) {
     registerNode(step, new THREE.Vector3(x, PRIMARY_ROW_Y, 0));
   });
 
-  const detached = sideEffectsByParent.get("__unattached__") || [];
   for (const step of sideEffects) {
+    const role = resolveDisplayRole(step);
+    if (role === "store") {
+      continue;
+    }
     const parentPosition = step.parentStep ? nodePositions.get(step.parentStep) : null;
     if (!parentPosition) {
       continue;
     }
-    const siblings = sideEffectsByParent.get(step.parentStep) || [];
-    const siblingIndex = siblings.findIndex((candidate) => candidate.step === step.step);
-    const band = Math.floor(siblingIndex / 2);
-    const centeredIndex = siblingIndex - (siblings.length - 1) / 2;
-    const offsetX = centeredIndex * 1.28;
-    const offsetY = BRANCH_ROW_OFFSET_Y + band * 1;
+    let offsetX = 0;
+    let offsetY = BRANCH_ROW_OFFSET_Y;
+    if (role === "broker") {
+      offsetX = -1.02;
+      offsetY = 1.9;
+    } else if (role === "external-provider") {
+      offsetX = 1.12;
+      offsetY = 1.9;
+    } else {
+      const siblings = sideEffectsByParent.get(step.parentStep) || [];
+      const siblingIndex = siblings.findIndex((candidate) => candidate.step === step.step);
+      const band = Math.floor(siblingIndex / 2);
+      const centeredIndex = siblingIndex - (siblings.length - 1) / 2;
+      offsetX = centeredIndex * 1.28;
+      offsetY = BRANCH_ROW_OFFSET_Y + band * 1;
+    }
     registerNode(step, new THREE.Vector3(parentPosition.x + offsetX, parentPosition.y - offsetY, 0));
   }
 
-  detached.forEach((step, index) => {
-    const x = totalWidth / 2 + 3.2;
-    const y = PRIMARY_ROW_Y - BRANCH_ROW_OFFSET_Y - 0.5 - index * 1.1;
+  const storeActors = sideEffects.filter((step) => resolveDisplayRole(step) === "store");
+  storeActors.forEach((step, index) => {
+    const inboundStoreTransitions = transitions.filter((transition) => transition.to === step.step && transition.relationKind === "store");
+    const sourcePositions = inboundStoreTransitions
+      .map((transition) => nodePositions.get(transition.from))
+      .filter(Boolean);
+    const averageX = sourcePositions.length > 0
+      ? sourcePositions.reduce((sum, position) => sum + position.x, 0) / sourcePositions.length
+      : 0;
+    const x = averageX + index * 0.9;
+    const y = PRIMARY_ROW_Y - BRANCH_ROW_OFFSET_Y - 0.28 - index * 0.3;
     registerNode(step, new THREE.Vector3(x, y, 0));
   });
 
@@ -752,10 +1068,11 @@ function buildTopology(topology) {
 
 function registerNode(step, position) {
   const isSideEffect = Boolean(step.sideEffect);
+  const role = resolveDisplayRole(step);
   const geometry = new THREE.SphereGeometry(isSideEffect ? BRANCH_NODE_RADIUS : BASE_NODE_RADIUS, 24, 24);
   const material = new THREE.MeshStandardMaterial({
     color: nodeColorForStep(step),
-    emissive: isSideEffect ? 0x35254a : 0x17355b,
+    emissive: isSideEffect ? 0x1d2742 : 0x17355b,
     emissiveIntensity: 0.34,
     roughness: 0.35,
     metalness: 0.15
@@ -768,11 +1085,16 @@ function registerNode(step, position) {
   scene.add(mesh);
   nodeMeshes.set(step.step, mesh);
   nodePositions.set(step.step, position.clone());
-  if (!isSideEffect) {
+  if (!isSideEffect || isNamedSupportActor(step)) {
     const sprite = buildStepLabelSprite(step.step);
-    sprite.position.copy(position).add(new THREE.Vector3(0, -LABEL_OFFSET_Y, 0));
+    const labelOffset = isSideEffect ? LABEL_OFFSET_Y - 0.08 : LABEL_OFFSET_Y;
+    sprite.scale.multiplyScalar(isSideEffect ? SUPPORT_LABEL_HEIGHT / BASE_LABEL_HEIGHT : 1);
+    sprite.userData.baseHeight = isSideEffect ? SUPPORT_LABEL_HEIGHT : BASE_LABEL_HEIGHT;
+    sprite.position.copy(position).add(new THREE.Vector3(0, -labelOffset, 0));
     scene.add(sprite);
     nodeLabelSprites.set(step.step, sprite);
+  }
+  if (!isSideEffect) {
     const valueSprite = buildTextSprite("0|0", {
       fontSize: 28,
       fontWeight: 700,
@@ -830,7 +1152,8 @@ function buildStepLabelSprite(stepName) {
 }
 
 function buildPluginIconSprite(step) {
-  return buildIconSprite(step.pluginKind, step.pluginKind === "reject" ? 0.54 : 0.72);
+  const iconKind = resolveDisplayIconKind(step);
+  return buildIconSprite(iconKind, iconKind === "reject" ? 0.54 : 0.72);
 }
 
 function buildTextSprite(text, options = {}) {
@@ -921,7 +1244,14 @@ function buildIconSprite(pluginKind, height = 0.28) {
 
   switch (pluginKind) {
     case "persistence":
+    case "store":
       drawDatabaseIcon(context);
+      break;
+    case "broker":
+      drawBrokerIcon(context);
+      break;
+    case "provider":
+      drawProviderIcon(context);
       break;
     case "cache":
       drawCacheIcon(context);
@@ -973,6 +1303,32 @@ function drawDatabaseIcon(context) {
   context.stroke();
   context.beginPath();
   context.ellipse(80, 70, 34, 15, 0, 0, Math.PI);
+  context.stroke();
+}
+
+function drawBrokerIcon(context) {
+  roundRectPath(context, 28, 34, 22, 72, 8);
+  context.stroke();
+  roundRectPath(context, 57, 46, 22, 60, 8);
+  context.stroke();
+  roundRectPath(context, 86, 28, 22, 78, 8);
+  context.stroke();
+}
+
+function drawProviderIcon(context) {
+  roundRectPath(context, 38, 38, 60, 64, 12);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(98, 56);
+  context.lineTo(122, 56);
+  context.moveTo(98, 84);
+  context.lineTo(122, 84);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(58, 58);
+  context.lineTo(78, 58);
+  context.moveTo(58, 80);
+  context.lineTo(78, 80);
   context.stroke();
 }
 
@@ -1066,6 +1422,15 @@ function layoutStepLabel(stepName) {
 }
 
 function normalizeStepLabel(stepName) {
+  const step = resolveStepDefinition(stepName);
+  const roleLabel = STEP_ROLE_LABELS[resolveDisplayRole(step)];
+  if (roleLabel) {
+    return roleLabel;
+  }
+  const explicitLabel = STEP_LABELS[stepName];
+  if (explicitLabel) {
+    return explicitLabel;
+  }
   const withoutPrefix = stepName.replace(/^Process/, "");
   return withoutPrefix
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -1074,10 +1439,20 @@ function normalizeStepLabel(stepName) {
 }
 
 function nodeColorForStep(step) {
+  const role = resolveDisplayRole(step);
   if (!step?.sideEffect) {
+    if (role === "await") {
+      return 0x78c8ff;
+    }
     return 0x5cc8ff;
   }
-  switch (step.pluginKind) {
+  switch (resolveDisplayIconKind(step)) {
+    case "store":
+      return 0x67b2f3;
+    case "broker":
+      return 0x8f7aea;
+    case "provider":
+      return 0xb08cff;
     case "persistence":
       return 0x7ed0ff;
     case "cache":
@@ -1111,7 +1486,7 @@ function fitCameraToTopology(steps) {
       continue;
     }
     const radius = step.sideEffect ? BRANCH_NODE_RADIUS : BASE_NODE_RADIUS;
-    const labelHeight = step.sideEffect ? 0 : BASE_LABEL_HEIGHT;
+    const labelHeight = !step.sideEffect ? BASE_LABEL_HEIGHT : (isNamedSupportActor(step) ? SUPPORT_LABEL_HEIGHT : 0);
     const valueHeight = step.sideEffect ? (step.pluginKind === "reject" ? 0.24 : 0.08) : COUNTER_LABEL_HEIGHT * 0.5;
     const labelWidth = step.sideEffect ? 0 : (nodeLabelSprites.get(step.step)?.userData?.aspect ?? 1) * BASE_LABEL_HEIGHT * 0.5;
     minX = Math.min(minX, position.x - radius - labelWidth);
@@ -1367,79 +1742,218 @@ function stateForStep(stepName) {
   return runtimeStepState.get(stepName);
 }
 
-function executionKey(stepName, spanId) {
-  return `${stepName}:${spanId ?? "no-span"}`;
+function countedItemCount(event) {
+  if (Array.isArray(event?.parentItemIds) && event.parentItemIds.length > 0) {
+    return event.parentItemIds.length;
+  }
+  return event?.itemId ? 1 : 0;
 }
 
-function processedResultKey(event) {
-  if (event.itemId) {
-    return `${event.step}:item:${event.itemId}`;
+function displayStateForStep(stepName) {
+  const directState = stateForStep(stepName);
+  const step = resolveStepDefinition(stepName);
+  if (!step || step.pluginKind === "reject") {
+    return {
+      state: directState,
+      unknown: false
+    };
   }
-  if (event.spanId) {
-    return `${event.step}:span:${event.spanId}`;
-  }
-  return `${event.step}:seq:${event.sequence ?? event.startTime}`;
+  return {
+    state: directState,
+    unknown: !directEventSteps.has(stepName)
+  };
 }
 
 function rejectStepNameFor(stepName) {
   return `Rejects ${stepName}`;
 }
 
-function recordReplayCounters(event) {
+function stepCardinality(stepName) {
+  return resolveStepDefinition(stepName)?.cardinality?.toLowerCase() ?? null;
+}
+
+function recordReplayCounters(rawEvent) {
+  const event = mapEventForDisplay(rawEvent);
   if (!event?.step) {
     return;
   }
   const state = stateForStep(event.step);
-  if (event.event === "start") {
-    state.inflight += 1;
+  const itemCount = countedItemCount(rawEvent);
+  const cardinality = stepCardinality(event.step);
+  if (isAwaitResumableError(rawEvent)) {
+    if (itemCount > 0) {
+      state.inflight = Math.max(0, state.inflight - itemCount);
+      state.processed += itemCount;
+    }
     return;
   }
-  if (event.event === "emit") {
-    executionsWithEmit.add(executionKey(event.step, event.spanId));
-    const key = processedResultKey(event);
-    if (!processedResultKeys.has(key)) {
-      processedResultKeys.add(key);
-      state.processed += 1;
-    }
+  if (event.event === "start") {
+    state.inflight += itemCount;
+    return;
+  }
+  if (event.event === "emit" && cardinality === "one-to-many" && event.from === event.step) {
+    state.processed += itemCount;
     return;
   }
   if (event.event === "cache_hit") {
-    const key = processedResultKey(event);
-    if (!processedResultKeys.has(key)) {
-      processedResultKeys.add(key);
-      state.processed += 1;
-    }
+    state.processed += itemCount;
     return;
   }
   if (event.event === "reject") {
     const rejectStepName = event.to || rejectStepNameFor(event.step);
     const rejectState = stateForStep(rejectStepName);
-    rejectState.rejects += 1;
+    rejectState.rejects += itemCount;
     return;
   }
   if (event.event === "success" || event.event === "error") {
-    state.inflight = Math.max(0, state.inflight - 1);
-    if (event.event === "success" && !executionsWithEmit.has(executionKey(event.step, event.spanId))) {
-      const key = processedResultKey(event);
-      if (!processedResultKeys.has(key)) {
-        processedResultKeys.add(key);
-        state.processed += 1;
-      }
+    state.inflight = Math.max(0, state.inflight - itemCount);
+    if (event.event === "success" && cardinality !== "one-to-many") {
+      state.processed += itemCount;
     }
   }
 }
 
-function processEvent(event) {
-  const key = resolveEventKey(event);
+function spawnSupportTransit(fromStep, toStep, startTime, color, duration = 0.36, size = 0.085) {
+  const source = nodePositions.get(fromStep);
+  const target = nodePositions.get(toStep);
+  if (!source || !target) {
+    return;
+  }
+  boostEdge(fromStep, toStep, 0.82);
+  const geometry = new THREE.SphereGeometry(size, 12, 12);
+  const material = new THREE.MeshStandardMaterial({
+    color,
+    emissive: color,
+    emissiveIntensity: 0.58
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  scene.add(mesh);
+  particles.set(`support:${fromStep}:${toStep}:${startTime}:${Math.random()}`, {
+    mesh,
+    source: source.clone(),
+    target: target.clone(),
+    start: startTime,
+    end: startTime + duration
+  });
+}
+
+function shouldSampleSupportFlow(sampleKey, interval = 18) {
+  const nextCount = (supportFlowSampleCounts.get(sampleKey) ?? 0) + 1;
+  supportFlowSampleCounts.set(sampleKey, nextCount);
+  return nextCount === 1 || nextCount % interval === 0;
+}
+
+function animateAwaitRequest(flow, timeSeconds) {
+  if (!flow?.awaitStep) {
+    return;
+  }
+  highlightStep(flow.awaitStep, 1.1, timeSeconds);
+  const [firstEdge, secondEdge] = flow.requestEdges ?? [];
+  if (firstEdge && nodePositions.has(firstEdge.to)) {
+    highlightStep(firstEdge.to, 0.95, timeSeconds);
+    spawnSupportTransit(firstEdge.from, firstEdge.to, timeSeconds, 0x8f7aea, 0.72, 0.11);
+  }
+  if (secondEdge && nodePositions.has(secondEdge.to)) {
+    highlightStep(secondEdge.to, 0.95, timeSeconds);
+    spawnSupportTransit(secondEdge.from, secondEdge.to, timeSeconds + 0.1, 0xb08cff, 0.84, 0.11);
+  }
+}
+
+function animateAwaitCompletion(flow, timeSeconds) {
+  if (!flow?.awaitStep || !flow?.resumeEdge) {
+    return;
+  }
+  const completionEdges = flow.completionEdges ?? [];
+  if (completionEdges[0] && nodePositions.has(completionEdges[0].from)) {
+    highlightStep(completionEdges[0].from, 0.85, timeSeconds);
+    spawnSupportTransit(completionEdges[0].from, completionEdges[0].to, timeSeconds, 0xb08cff, 0.78, 0.11);
+  }
+  if (completionEdges[1] && nodePositions.has(completionEdges[1].from)) {
+    highlightStep(completionEdges[1].from, 0.92, timeSeconds);
+    spawnSupportTransit(completionEdges[1].from, completionEdges[1].to, timeSeconds + 0.1, 0x8f7aea, 0.86, 0.11);
+  }
+  highlightStep(flow.awaitStep, 1.05, timeSeconds);
+  highlightStep(flow.resumeEdge.to, 1.05, timeSeconds + 0.1);
+  spawnSupportTransit(flow.resumeEdge.from, flow.resumeEdge.to, timeSeconds + 0.22, 0x7ad7ff, 0.96, 0.12);
+}
+
+function animateStoreWrite(flow, timeSeconds) {
+  if (!flow?.fromStep || !flow?.toStep) {
+    return;
+  }
+  highlightStep(flow.toStep, 1.05, timeSeconds);
+  highlightStep(flow.fromStep, 0.9, timeSeconds);
+  const burstCount = flow.aggregate ? 3 : 2;
+  for (let index = 0; index < burstCount; index += 1) {
+    spawnSupportTransit(
+      flow.fromStep,
+      flow.toStep,
+      timeSeconds + index * 0.07,
+      0x79dfff,
+      flow.aggregate ? 1.18 + index * 0.12 : 0.94 + index * 0.1,
+      flow.aggregate ? 0.13 : 0.11
+    );
+  }
+}
+
+function animateOutputResume(edge, timeSeconds, aggregate = false) {
+  if (!edge?.from || !edge?.to) {
+    return;
+  }
+  highlightStep(edge.from, 1.05, timeSeconds);
+  highlightStep(edge.to, 1.15, timeSeconds);
+  const burstCount = aggregate ? 3 : 1;
+  for (let index = 0; index < burstCount; index += 1) {
+    spawnSupportTransit(
+      edge.from,
+      edge.to,
+      timeSeconds + index * 0.08,
+      0x86f0cf,
+      aggregate ? 1.18 + index * 0.1 : 0.72,
+      aggregate ? 0.13 : 0.1
+    );
+  }
+}
+
+function processEvent(rawEvent) {
+  const event = mapEventForDisplay(rawEvent);
+  const key = resolveEventKey(rawEvent);
   if (eventIndexByKey.has(key)) {
     return;
   }
   eventIndexByKey.add(key);
-  recordReplayCounters(event);
+  recordReplayCounters(rawEvent);
+  const awaitRequestFlow = event?.to ? activeAnimationPolicy.awaitRequestByTargetStep.get(event.to) : null;
+  if (rawEvent.event === "emit" && awaitRequestFlow
+      && shouldSampleSupportFlow(`await-request:${awaitRequestFlow.awaitStep}`)) {
+    animateAwaitRequest(awaitRequestFlow, rawEvent.startTime);
+  }
+  const awaitCompletionFlow = event?.step ? activeAnimationPolicy.awaitCompletionByResumeStep.get(event.step) : null;
+  if (rawEvent.event === "start" && awaitCompletionFlow && event.from === awaitCompletionFlow.awaitStep
+      && shouldSampleSupportFlow(`await-completion:${awaitCompletionFlow.awaitStep}`)) {
+    animateAwaitCompletion(awaitCompletionFlow, rawEvent.startTime);
+  }
+  const storeWriteFlow = activeAnimationPolicy.storeWriteByRawStep.get(rawEvent.step);
+  if (rawEvent.event === "success" && storeWriteFlow && isPersistenceSideEffectStep(rawEvent.step)
+      && (!storeWriteFlow.aggregate || shouldSampleSupportFlow(`store:${storeWriteFlow.fromStep}->${storeWriteFlow.toStep}`, 24))) {
+    animateStoreWrite(storeWriteFlow, rawEvent.endTime ?? rawEvent.startTime);
+  }
+  const outputResumeEdge = event?.step ? activeAnimationPolicy.outputResumeByTargetStep.get(event.step) : null;
+  if (rawEvent.event === "start" && outputResumeEdge && event.from === outputResumeEdge.from) {
+    animateOutputResume(outputResumeEdge, rawEvent.startTime, countedItemCount(rawEvent) > 1);
+  }
   const displayTargets = resolveDisplayTargets(event);
   highlightStep(event.step, EFFECT_PRESETS.node.defaultHoldSeconds, event.startTime);
   highlightStep(event.from, 0.9, event.startTime);
   highlightStep(event.to, 0.9, event.startTime);
+  if (isAwaitResumableError(rawEvent)) {
+    if (isAwaitSuspensionEvent(rawEvent)) {
+      highlightStep("AwaitPaymentProvider", EFFECT_PRESETS.node.defaultHoldSeconds + 0.5, event.endTime);
+      queueBackgroundFlash("#8f7aea", event.endTime, 0.8, 0.24);
+      itemAnchors.set(rawEvent.itemId, "AwaitPaymentProvider");
+    }
+    return;
+  }
   if (event.event === "start") {
     spawnPulse(event.step, 0x6ce2ff, EFFECT_PRESETS.pulse.start, event.startTime);
     itemAnchors.set(event.itemId, event.step);
@@ -1614,10 +2128,13 @@ function updateNodes(timeSeconds) {
 
   for (const [stepName, sprite] of nodeValueSprites.entries()) {
     const step = resolveStepDefinition(stepName);
-    const state = stateForStep(stepName);
+    const display = displayStateForStep(stepName);
+    const state = display.state;
     const expectedText = step?.pluginKind === "reject"
       ? `${state.rejects}`
-      : `${state.inflight}|${state.processed}`;
+      : display.unknown
+        ? "—|—"
+        : `${state.inflight}|${state.processed}`;
     if (sprite.userData.text !== expectedText) {
       replaceSpriteText(sprite, expectedText, step?.pluginKind === "reject" ? {
         fontSize: 26,
@@ -1681,7 +2198,7 @@ function hasActiveTransientEffects() {
 function updateUi() {
   const playbackSeconds = Math.min(currentTimeSeconds, replayDurationSeconds);
   const ratio = replayDurationSeconds <= 0 ? 0 : playbackSeconds / replayDurationSeconds;
-  timelineSlider.value = `${Math.round(ratio * 1000)}`;
+  timelineSlider.value = `${Math.round(ratio * 10000)}`;
   playbackText.textContent = `${playbackSeconds.toFixed(2)}s / ${replayDurationSeconds.toFixed(2)}s`;
   playPauseButton.textContent = isPlaying ? "⏸" : "▶";
   stopButton.disabled = isLoadingReplay || (nextEventCursor === 0 && currentTimeSeconds <= 0);
@@ -1823,7 +2340,7 @@ stepButton.addEventListener("click", () => {
 timelineSlider.addEventListener("input", () => {
   revealPlayerChrome(true);
   isScrubbingTimeline = true;
-  const nextTime = (Number(timelineSlider.value) / 1000) * replayDurationSeconds;
+  const nextTime = (Number(timelineSlider.value) / 10000) * replayDurationSeconds;
   isPlaying = false;
   isFinishingEffects = false;
   rebuildPlaybackTo(nextTime);
@@ -1948,9 +2465,6 @@ renderer.domElement.addEventListener("pointermove", (event) => {
 
 renderer.domElement.addEventListener("pointerleave", () => {
   hoveredStepName = null;
-  if (!prefersTapChrome && !isAnyModalOpen()) {
-    scheduleChromeHide(900);
-  }
 });
 
 renderer.domElement.addEventListener("click", () => {
@@ -1971,7 +2485,7 @@ playerChrome.addEventListener("pointermove", () => {
 });
 
 playerChrome.addEventListener("pointerleave", () => {
-  if (!prefersTapChrome && !isAnyModalOpen()) {
+  if (prefersTapChrome && !isAnyModalOpen()) {
     scheduleChromeHide(900);
   }
 });
@@ -1988,7 +2502,12 @@ window.addEventListener("resize", () => {
   fitCameraToTopology(replayDocument.topology.steps);
   updateLabels();
   prefersTapChrome = window.matchMedia("(hover: none), (pointer: coarse)").matches;
-  setPlayerChromeVisible(prefersTapChrome || isAnyModalOpen());
+  setPlayerChromeVisible(true);
+  if (prefersTapChrome && !isAnyModalOpen() && !isLoadingReplay) {
+    scheduleChromeHide();
+  } else {
+    cancelChromeHide();
+  }
 });
 
 for (const modal of [sourceModal, infoModal]) {
