@@ -19,7 +19,8 @@ So the viewer only needs one file at import time.
 ## What it renders
 
 - primary pipeline steps
-- plugin nodes
+- explicit await / broker / external-provider / DB actors when replay topology provides them
+- plugin nodes as a fallback for legacy or generic replay topologies
 - transition edges
 - replay metadata in a strip below the player
 - player chrome over the viewport for transport, scrubber, inline speed radios, and utility icons
@@ -66,6 +67,14 @@ The viewer ships with:
 - `Custom replay`
 
 These are curated viewer datasets. They are not the source of truth for replay semantics.
+
+On the await/Kafka `csv-payments` branch, the built-in CSV dataset is expected to surface:
+
+- the main pipeline chain
+- `Await Payment Provider`
+- the Kafka broker boundary
+- the external mock provider
+- the shared DB actor for persistence activity
 
 ## Source layout
 

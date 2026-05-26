@@ -107,8 +107,10 @@ public class PipelineTelemetryMetadataGenerator {
             return;
         }
         String pipeline = resolvePipelineName(ctx);
+        PipelineYamlConfig pipelineConfig = loadPipelineConfig(ctx);
+        Map<String, PipelineYamlStep> configStepsByToken = indexPipelineSteps(pipelineConfig);
         List<ReplayTopologyStep> steps = new ArrayList<>();
-        List<ReplayTopologyStep> baseSteps = new ArrayList<>();
+        List<ReplayTopologyStep> baseSteps = buildBaseReplaySteps(ctx, orderedBase, configStepsByToken);
         Map<String, String> parentByPluginRuntimeClass = resolveStepParents(ctx, orderedBase);
         Map<String, List<PipelineStepModel>> sideEffectsByParent = new LinkedHashMap<>();
         for (PipelineStepModel model : orderedClientModels) {
@@ -123,23 +125,10 @@ public class PipelineTelemetryMetadataGenerator {
             sideEffectsByParent.computeIfAbsent(parentRuntimeClass, ignored -> new ArrayList<>()).add(model);
         }
 
-        int index = 0;
-        for (PipelineStepModel model : orderedBase) {
-            String service = model.generatedName();
-            String logicalStep = service.endsWith("Service")
-                ? service.substring(0, service.length() - "Service".length())
-                : service;
-            steps.add(new ReplayTopologyStep(
-                resolveClientStepClassName(model, ctx.getTransportMode()),
-                logicalStep,
-                service,
-                cardinality(model.streamingShape()),
-                index++,
-                false,
-                null,
-                null));
-            baseSteps.add(steps.get(steps.size() - 1));
-            String parentRuntimeClass = resolveClientStepClassName(model, ctx.getTransportMode());
+        steps.addAll(baseSteps);
+        int index = baseSteps.size();
+        for (ReplayTopologyStep baseStep : baseSteps) {
+            String parentRuntimeClass = baseStep.runtimeStepClass();
             for (PipelineStepModel sideEffect : sideEffectsByParent.getOrDefault(parentRuntimeClass, List.of())) {
                 String sideEffectService = sideEffect.generatedName();
                 String sideEffectStep = sideEffectService.endsWith("Service")
@@ -152,8 +141,10 @@ public class PipelineTelemetryMetadataGenerator {
                     cardinality(sideEffect.streamingShape()),
                     index++,
                     true,
-                    logicalStep,
-                    resolvePluginKind(sideEffectService, sideEffectStep)));
+                    baseStep.step(),
+                    resolvePluginKind(sideEffectService, sideEffectStep),
+                    resolvePluginRenderRole(resolvePluginKind(sideEffectService, sideEffectStep)),
+                    resolvePluginActorKind(resolvePluginKind(sideEffectService, sideEffectStep))));
             }
         }
         List<ReplayTopologyTransition> transitions = new ArrayList<>();
@@ -168,10 +159,13 @@ public class PipelineTelemetryMetadataGenerator {
                 to.step(),
                 from.service(),
                 to.service(),
-                from.cardinality()));
+                from.cardinality(),
+                "primary"));
         }
+        index = appendAwaitActors(baseSteps, configStepsByToken, steps, transitions, index);
+        index = appendPersistenceStore(baseSteps, steps, transitions, index);
         for (ReplayTopologyStep step : steps) {
-            if (!step.sideEffect() || step.parentStep() == null) {
+            if (!step.sideEffect() || step.parentStep() == null || !shouldAddBranchTransition(step)) {
                 continue;
             }
             ReplayTopologyStep parent = steps.stream()
@@ -189,7 +183,8 @@ public class PipelineTelemetryMetadataGenerator {
                 step.step(),
                 parent.service(),
                 step.service(),
-                step.cardinality()));
+                step.cardinality(),
+                relationKindForBranch(step)));
         }
         ReplayTopologyMetadata metadata = new ReplayTopologyMetadata(pipeline, steps, transitions);
         StringWriter writer = new StringWriter();
@@ -480,6 +475,360 @@ public class PipelineTelemetryMetadataGenerator {
         return null;
     }
 
+    private Map<String, PipelineYamlStep> indexPipelineSteps(PipelineYamlConfig config) {
+        if (config == null || config.steps() == null || config.steps().isEmpty()) {
+            return Map.of();
+        }
+        LinkedHashMap<String, PipelineYamlStep> indexed = new LinkedHashMap<>();
+        for (PipelineYamlStep step : config.steps()) {
+            if (step == null || step.name() == null || step.name().isBlank()) {
+                continue;
+            }
+            indexed.put(toClassToken(step.name()), step);
+        }
+        return Collections.unmodifiableMap(indexed);
+    }
+
+    private PipelineYamlStep resolvePipelineStep(String logicalStep, Map<String, PipelineYamlStep> configStepsByToken) {
+        if (logicalStep == null || logicalStep.isBlank() || configStepsByToken.isEmpty()) {
+            return null;
+        }
+        String token = toClassToken(logicalStep);
+        PipelineYamlStep direct = configStepsByToken.get(token);
+        if (direct != null) {
+            return direct;
+        }
+        PipelineYamlStep best = null;
+        int bestLength = -1;
+        for (Map.Entry<String, PipelineYamlStep> entry : configStepsByToken.entrySet()) {
+            if (entry.getKey().contains(token) || token.contains(entry.getKey())) {
+                if (entry.getKey().length() > bestLength) {
+                    best = entry.getValue();
+                    bestLength = entry.getKey().length();
+                }
+            }
+        }
+        return best;
+    }
+
+    private List<ReplayTopologyStep> buildBaseReplaySteps(
+        PipelineCompilationContext ctx,
+        List<PipelineStepModel> orderedBase,
+        Map<String, PipelineYamlStep> configStepsByToken
+    ) {
+        if (orderedBase == null || orderedBase.isEmpty()) {
+            return List.of();
+        }
+        Map<String, PipelineStepModel> remainingByToken = new LinkedHashMap<>();
+        for (PipelineStepModel model : orderedBase) {
+            if (model == null) {
+                continue;
+            }
+            remainingByToken.put(toClassToken(baseLogicalStepName(model.generatedName())), model);
+        }
+        List<ReplayTopologyStep> baseSteps = new ArrayList<>();
+        int index = 0;
+        for (PipelineYamlStep configStep : configStepsByToken.values()) {
+            if (configStep == null || configStep.name() == null || configStep.name().isBlank()) {
+                continue;
+            }
+            String stepName = toPascalStepName(configStep.name());
+            PipelineStepModel model = remainingByToken.remove(toClassToken(stepName));
+            if (model != null) {
+                baseSteps.add(baseReplayStepFromModel(model, configStep, index++, ctx.getTransportMode()));
+                continue;
+            }
+            baseSteps.add(baseReplayStepFromConfig(stepName, configStep, index++));
+        }
+        for (PipelineStepModel model : remainingByToken.values()) {
+            baseSteps.add(baseReplayStepFromModel(model, null, index++, ctx.getTransportMode()));
+        }
+        return baseSteps;
+    }
+
+    private ReplayTopologyStep baseReplayStepFromModel(
+        PipelineStepModel model,
+        PipelineYamlStep configStep,
+        int index,
+        TransportMode transportMode
+    ) {
+        String service = model.generatedName();
+        String logicalStep = baseLogicalStepName(service);
+        return new ReplayTopologyStep(
+            resolveClientStepClassName(model, transportMode),
+            logicalStep,
+            service,
+            cardinality(model.streamingShape()),
+            index,
+            false,
+            null,
+            null,
+            resolveBaseRenderRole(configStep, logicalStep),
+            resolveBaseActorKind(configStep));
+    }
+
+    private ReplayTopologyStep baseReplayStepFromConfig(String logicalStep, PipelineYamlStep configStep, int index) {
+        String service = logicalStep + "Service";
+        return new ReplayTopologyStep(
+            syntheticRuntimeStepClass("runtime::" + logicalStep, "BaseStep"),
+            logicalStep,
+            service,
+            cardinality(configStep),
+            index,
+            false,
+            null,
+            null,
+            resolveBaseRenderRole(configStep, logicalStep),
+            resolveBaseActorKind(configStep));
+    }
+
+    private String baseLogicalStepName(String service) {
+        return service != null && service.endsWith("Service")
+            ? service.substring(0, service.length() - "Service".length())
+            : service;
+    }
+
+    private String toPascalStepName(String rawName) {
+        if (rawName == null || rawName.isBlank()) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (String part : rawName.split("[^A-Za-z0-9]+")) {
+            if (part == null || part.isBlank()) {
+                continue;
+            }
+            builder.append(Character.toUpperCase(part.charAt(0)));
+            if (part.length() > 1) {
+                builder.append(part.substring(1));
+            }
+        }
+        return builder.toString();
+    }
+
+    private String resolveBaseRenderRole(PipelineYamlStep configStep, String logicalStep) {
+        if (configStep != null && "await".equalsIgnoreCase(configStep.kind())) {
+            return "await";
+        }
+        return logicalStep != null && logicalStep.toLowerCase(Locale.ROOT).contains("await") ? "await" : "primary";
+    }
+
+    private String resolveBaseActorKind(PipelineYamlStep configStep) {
+        if (configStep == null || configStep.awaitConfig() == null || configStep.awaitConfig().transport() == null) {
+            return null;
+        }
+        return configStep.awaitConfig().transport().type();
+    }
+
+    private String resolvePluginRenderRole(String pluginKind) {
+        if ("persistence".equals(pluginKind)) {
+            return "persistence-plugin";
+        }
+        if ("reject".equals(pluginKind)) {
+            return "reject";
+        }
+        return "plugin";
+    }
+
+    private String resolvePluginActorKind(String pluginKind) {
+        if ("persistence".equals(pluginKind)) {
+            return "database";
+        }
+        if ("reject".equals(pluginKind)) {
+            return "reject-queue";
+        }
+        return null;
+    }
+
+    private int appendAwaitActors(
+        List<ReplayTopologyStep> baseSteps,
+        Map<String, PipelineYamlStep> configStepsByToken,
+        List<ReplayTopologyStep> steps,
+        List<ReplayTopologyTransition> transitions,
+        int nextIndex
+    ) {
+        for (ReplayTopologyStep baseStep : baseSteps) {
+            PipelineYamlStep configStep = resolvePipelineStep(baseStep.step(), configStepsByToken);
+            if (configStep == null || !"await".equalsIgnoreCase(configStep.kind()) || configStep.awaitConfig() == null
+                || configStep.awaitConfig().transport() == null) {
+                continue;
+            }
+            String transportType = configStep.awaitConfig().transport().type();
+            if (!"kafka".equalsIgnoreCase(transportType)) {
+                continue;
+            }
+            String brokerStepName = "KafkaBroker";
+            ReplayTopologyStep brokerStep = new ReplayTopologyStep(
+                syntheticRuntimeStepClass(baseStep.runtimeStepClass(), "KafkaBroker"),
+                brokerStepName,
+                "KafkaBroker",
+                "one-to-one",
+                nextIndex++,
+                true,
+                baseStep.step(),
+                null,
+                "broker",
+                "kafka");
+            String providerBaseName = deriveProviderActorName(configStep, baseStep.step());
+            ReplayTopologyStep providerStep = new ReplayTopologyStep(
+                syntheticRuntimeStepClass(baseStep.runtimeStepClass(), providerBaseName),
+                providerBaseName,
+                providerBaseName + "Actor",
+                "one-to-one",
+                nextIndex++,
+                true,
+                baseStep.step(),
+                null,
+                "external-provider",
+                "provider");
+            steps.add(brokerStep);
+            steps.add(providerStep);
+            transitions.add(new ReplayTopologyTransition(
+                baseStep.step() + "->" + brokerStep.step(),
+                baseStep.runtimeStepClass(),
+                brokerStep.runtimeStepClass(),
+                baseStep.step(),
+                brokerStep.step(),
+                baseStep.service(),
+                brokerStep.service(),
+                baseStep.cardinality(),
+                "await-request"));
+            transitions.add(new ReplayTopologyTransition(
+                brokerStep.step() + "->" + providerStep.step(),
+                brokerStep.runtimeStepClass(),
+                providerStep.runtimeStepClass(),
+                brokerStep.step(),
+                providerStep.step(),
+                brokerStep.service(),
+                providerStep.service(),
+                "one-to-one",
+                "await-request"));
+            transitions.add(new ReplayTopologyTransition(
+                providerStep.step() + "->" + brokerStep.step(),
+                providerStep.runtimeStepClass(),
+                brokerStep.runtimeStepClass(),
+                providerStep.step(),
+                brokerStep.step(),
+                providerStep.service(),
+                brokerStep.service(),
+                "one-to-one",
+                "await-completion"));
+            transitions.add(new ReplayTopologyTransition(
+                brokerStep.step() + "->" + baseStep.step(),
+                brokerStep.runtimeStepClass(),
+                baseStep.runtimeStepClass(),
+                brokerStep.step(),
+                baseStep.step(),
+                brokerStep.service(),
+                baseStep.service(),
+                "one-to-one",
+                "await-completion"));
+        }
+        return nextIndex;
+    }
+
+    private int appendPersistenceStore(
+        List<ReplayTopologyStep> baseSteps,
+        List<ReplayTopologyStep> steps,
+        List<ReplayTopologyTransition> transitions,
+        int nextIndex
+    ) {
+        List<String> persistentParents = steps.stream()
+            .filter(ReplayTopologyStep::sideEffect)
+            .filter(step -> "persistence-plugin".equals(step.renderRole()))
+            .map(ReplayTopologyStep::parentStep)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+        if (persistentParents.isEmpty() || baseSteps.isEmpty()) {
+            return nextIndex;
+        }
+        ReplayTopologyStep anchor = baseSteps.getFirst();
+        ReplayTopologyStep storeStep = new ReplayTopologyStep(
+            syntheticRuntimeStepClass(anchor.runtimeStepClass(), "Database"),
+            "Database",
+            "DatabaseStore",
+            "one-to-one",
+            nextIndex++,
+            true,
+            null,
+            null,
+            "store",
+            "database");
+        steps.add(storeStep);
+        Map<String, ReplayTopologyStep> baseByStep = new LinkedHashMap<>();
+        for (ReplayTopologyStep baseStep : baseSteps) {
+            baseByStep.put(baseStep.step(), baseStep);
+        }
+        for (String parentStep : persistentParents) {
+            ReplayTopologyStep baseStep = baseByStep.get(parentStep);
+            if (baseStep == null) {
+                continue;
+            }
+            transitions.add(new ReplayTopologyTransition(
+                baseStep.step() + "->" + storeStep.step(),
+                baseStep.runtimeStepClass(),
+                storeStep.runtimeStepClass(),
+                baseStep.step(),
+                storeStep.step(),
+                baseStep.service(),
+                storeStep.service(),
+                baseStep.cardinality(),
+                "store"));
+        }
+        return nextIndex;
+    }
+
+    private String deriveProviderActorName(PipelineYamlStep configStep, String logicalStep) {
+        String rawName = configStep == null ? logicalStep : configStep.name();
+        if (rawName == null || rawName.isBlank()) {
+            return "ExternalProvider";
+        }
+        String normalized = rawName.replaceFirst("(?i)^await\\s+", "").trim();
+        if (normalized.isBlank()) {
+            normalized = logicalStep;
+        }
+        StringBuilder builder = new StringBuilder();
+        for (String part : normalized.split("[^A-Za-z0-9]+")) {
+            if (part == null || part.isBlank()) {
+                continue;
+            }
+            builder.append(Character.toUpperCase(part.charAt(0)));
+            if (part.length() > 1) {
+                builder.append(part.substring(1));
+            }
+        }
+        return builder.length() == 0 ? "ExternalProvider" : builder.toString();
+    }
+
+    private String syntheticRuntimeStepClass(String baseRuntimeStepClass, String suffix) {
+        String normalizedBase = baseRuntimeStepClass == null || baseRuntimeStepClass.isBlank()
+            ? "org.pipelineframework.synthetic.Replay"
+            : baseRuntimeStepClass;
+        return normalizedBase + "$" + suffix;
+    }
+
+    private String relationKindForBranch(ReplayTopologyStep step) {
+        if (step == null) {
+            return "plugin";
+        }
+        if ("reject".equals(step.renderRole())) {
+            return "reject";
+        }
+        if ("persistence-plugin".equals(step.renderRole())) {
+            return "store";
+        }
+        return "plugin";
+    }
+
+    private boolean shouldAddBranchTransition(ReplayTopologyStep step) {
+        if (step == null) {
+            return false;
+        }
+        return "plugin".equals(step.renderRole())
+            || "reject".equals(step.renderRole())
+            || "persistence-plugin".equals(step.renderRole());
+    }
+
     /**
      * Selects the pipeline step model whose normalized client-step class name best matches the given token.
      *
@@ -719,6 +1068,19 @@ public class PipelineTelemetryMetadataGenerator {
         };
     }
 
+    private String cardinality(PipelineYamlStep step) {
+        if (step == null || step.cardinality() == null || step.cardinality().isBlank()) {
+            return "one-to-one";
+        }
+        return switch (step.cardinality().toUpperCase(Locale.ROOT)) {
+            case "ONE_TO_ONE" -> "one-to-one";
+            case "ONE_TO_MANY", "EXPANSION" -> "one-to-many";
+            case "MANY_TO_ONE", "COLLAPSE" -> "many-to-one";
+            case "MANY_TO_MANY" -> "many-to-many";
+            default -> "one-to-one";
+        };
+    }
+
     private record TelemetryMetadata(
         String itemInputType,
         String itemOutputType,
@@ -746,7 +1108,9 @@ public class PipelineTelemetryMetadataGenerator {
         int index,
         boolean sideEffect,
         String parentStep,
-        String pluginKind) {
+        String pluginKind,
+        String renderRole,
+        String actorKind) {
     }
 
     private record ReplayTopologyTransition(
@@ -757,6 +1121,7 @@ public class PipelineTelemetryMetadataGenerator {
         String to,
         String fromService,
         String toService,
-        String cardinality) {
+        String cardinality,
+        String relationKind) {
     }
 }

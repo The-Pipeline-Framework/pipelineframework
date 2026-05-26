@@ -132,6 +132,7 @@ const eventIndexByKey = new Set();
 const itemAnchors = new Map();
 const highlightExpirations = new Map();
 const stepMetadataByName = new Map();
+const displayAliasByStepName = new Map();
 const runtimeStepState = new Map();
 const executionsWithEmit = new Set();
 const processedResultKeys = new Set();
@@ -227,14 +228,12 @@ function normalizeReplayDocument(document) {
         return (left.sequence ?? 0) - (right.sequence ?? 0);
       })
     : [];
-  const topology = augmentTopologyWithDisplayNodes(
-    document.topology,
-    events.some((event) => event.event === "reject")
-  );
+  const topology = buildDisplayTopology(document.topology, events.some((event) => event.event === "reject"));
+  const remappedEvents = events.map((event) => remapEventForDisplay(event));
   return {
     ...document,
     topology,
-    events
+    events: remappedEvents
   };
 }
 
@@ -247,13 +246,127 @@ function playbackTimeForEvent(event) {
     : event.startTime;
 }
 
-function augmentTopologyWithDisplayNodes(topology, includeRejectNodes = true) {
+function buildDisplayTopology(topology, includeRejectNodes = true) {
   if (!topology || !Array.isArray(topology.steps) || !Array.isArray(topology.transitions)) {
     return topology;
   }
+  const steps = topology.steps.map((step) => normalizeTopologyStep(step));
+  const stepByName = new Map(steps.map((step) => [step.step, step]));
+  const transitions = topology.transitions.map((transition) => normalizeTopologyTransition(transition, stepByName));
+  const collapsed = collapseDisplayTopology(steps, transitions);
+  displayAliasByStepName.clear();
+  collapsed.aliases.forEach((targetStep, sourceStep) => {
+    displayAliasByStepName.set(sourceStep, targetStep);
+  });
+  const displayTopology = {
+    ...topology,
+    steps: collapsed.steps,
+    transitions: collapsed.transitions
+  };
   if (!includeRejectNodes) {
-    return topology;
+    return displayTopology;
   }
+  return augmentTopologyWithDisplayNodes(displayTopology);
+}
+
+function normalizeTopologyStep(step) {
+  const renderRole = step.renderRole || inferRenderRole(step);
+  return {
+    ...step,
+    renderRole,
+    actorKind: step.actorKind || inferActorKind(step, renderRole)
+  };
+}
+
+function inferRenderRole(step) {
+  if (step.sideEffect) {
+    if (step.pluginKind === "reject") {
+      return "reject";
+    }
+    if (step.pluginKind === "persistence") {
+      return "persistence-plugin";
+    }
+    return "plugin";
+  }
+  const combined = `${step.step ?? ""} ${step.service ?? ""}`.toLowerCase();
+  if (combined.includes("await")) {
+    return "await";
+  }
+  return "primary";
+}
+
+function inferActorKind(step, renderRole) {
+  if (renderRole === "persistence-plugin" || renderRole === "store") {
+    return "database";
+  }
+  if (renderRole === "reject") {
+    return "reject-queue";
+  }
+  return null;
+}
+
+function normalizeTopologyTransition(transition, stepByName) {
+  return {
+    ...transition,
+    relationKind: transition.relationKind || inferRelationKind(transition, stepByName)
+  };
+}
+
+function inferRelationKind(transition, stepByName) {
+  const targetRole = stepByName.get(transition.to)?.renderRole;
+  if (targetRole === "reject") {
+    return "reject";
+  }
+  if (targetRole === "persistence-plugin" || targetRole === "store") {
+    return "store";
+  }
+  return "primary";
+}
+
+function collapseDisplayTopology(steps, transitions) {
+  const aliases = new Map();
+  const storeStep = steps.find((step) => step.renderRole === "store");
+  if (!storeStep) {
+    return { steps, transitions, aliases };
+  }
+  const hiddenPersistenceSteps = new Set(
+    steps
+      .filter((step) => step.renderRole === "persistence-plugin")
+      .map((step) => step.step)
+  );
+  hiddenPersistenceSteps.forEach((stepName) => aliases.set(stepName, storeStep.step));
+  return {
+    steps: steps.filter((step) => !hiddenPersistenceSteps.has(step.step)),
+    transitions: dedupeTransitions(
+      transitions.filter((transition) => !hiddenPersistenceSteps.has(transition.from) && !hiddenPersistenceSteps.has(transition.to))
+    ),
+    aliases
+  };
+}
+
+function dedupeTransitions(transitions) {
+  const seen = new Set();
+  return transitions.filter((transition) => {
+    const key = `${transition.from}->${transition.to}:${transition.relationKind ?? "primary"}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function remapEventForDisplay(event) {
+  const alias = (stepName) => displayAliasByStepName.get(stepName) || stepName;
+  return {
+    ...event,
+    step: alias(event.step),
+    from: alias(event.from),
+    to: alias(event.to)
+  };
+}
+
+function augmentTopologyWithDisplayNodes(topology) {
   const steps = [...topology.steps];
   const transitions = [...topology.transitions];
   const stepNames = new Set(steps.map((step) => step.step));
@@ -276,7 +389,9 @@ function augmentTopologyWithDisplayNodes(topology, includeRejectNodes = true) {
         index: step.index,
         sideEffect: true,
         parentStep: step.step,
-        pluginKind: "reject"
+        pluginKind: "reject",
+        renderRole: "reject",
+        actorKind: "reject-queue"
       });
       stepNames.add(rejectStepName);
       runtimeStepClasses.add(rejectRuntimeStepClass);
@@ -291,7 +406,8 @@ function augmentTopologyWithDisplayNodes(topology, includeRejectNodes = true) {
         to: rejectStepName,
         fromService: step.service,
         toService: "RejectQueue",
-        cardinality: step.cardinality
+        cardinality: step.cardinality,
+        relationKind: "reject"
       });
       transitionIds.add(transitionId);
     }
@@ -674,14 +790,64 @@ function readReplayFile(file) {
   });
 }
 
+function isMainlineRole(renderRole) {
+  return renderRole === "primary" || renderRole === "await";
+}
+
+function shouldShowCounters(step) {
+  return isMainlineRole(step.renderRole) || step.renderRole === "reject";
+}
+
+function shouldShowIcon(step) {
+  return (
+    step.renderRole === "broker" ||
+    step.renderRole === "external-provider" ||
+    step.renderRole === "store" ||
+    Boolean(step.sideEffect)
+  );
+}
+
+function nodeRadiusForStep(step) {
+  switch (step.renderRole) {
+    case "await":
+      return 0.82;
+    case "broker":
+      return 0.86;
+    case "external-provider":
+      return 0.9;
+    case "store":
+      return 1.08;
+    case "reject":
+      return 0.64;
+    default:
+      return step.sideEffect ? BRANCH_NODE_RADIUS : BASE_NODE_RADIUS;
+  }
+}
+
+function createNodeGeometry(step) {
+  const radius = nodeRadiusForStep(step);
+  switch (step.renderRole) {
+    case "await":
+      return new THREE.OctahedronGeometry(radius, 0);
+    case "broker":
+      return new THREE.BoxGeometry(radius * 1.6, radius * 0.95, radius * 0.72);
+    case "external-provider":
+      return new THREE.CylinderGeometry(radius * 0.84, radius * 0.84, radius * 0.72, 6);
+    case "store":
+      return new THREE.CylinderGeometry(radius * 0.92, radius * 0.92, radius * 0.96, 24);
+    default:
+      return new THREE.SphereGeometry(radius, 24, 24);
+  }
+}
+
 function buildTopology(topology) {
   const steps = Array.isArray(topology.steps) ? topology.steps : [];
   const transitions = Array.isArray(topology.transitions) ? topology.transitions : [];
   steps.forEach((step) => {
     stepMetadataByName.set(step.step, step);
   });
-  const baseSteps = steps.filter((step) => !step.sideEffect);
-  const sideEffects = steps.filter((step) => step.sideEffect);
+  const baseSteps = steps.filter((step) => isMainlineRole(step.renderRole));
+  const sideEffects = steps.filter((step) => !isMainlineRole(step.renderRole));
   const sideEffectsByParent = new Map();
 
   for (const step of sideEffects) {
@@ -705,18 +871,32 @@ function buildTopology(topology) {
     if (!parentPosition) {
       continue;
     }
-    const siblings = sideEffectsByParent.get(step.parentStep) || [];
-    const siblingIndex = siblings.findIndex((candidate) => candidate.step === step.step);
-    const band = Math.floor(siblingIndex / 2);
-    const centeredIndex = siblingIndex - (siblings.length - 1) / 2;
-    const offsetX = centeredIndex * 1.28;
-    const offsetY = BRANCH_ROW_OFFSET_Y + band * 1;
-    registerNode(step, new THREE.Vector3(parentPosition.x + offsetX, parentPosition.y - offsetY, 0));
+    if (step.renderRole === "broker") {
+      registerNode(step, new THREE.Vector3(parentPosition.x, parentPosition.y + 2.35, 0));
+      continue;
+    }
+    if (step.renderRole === "external-provider") {
+      registerNode(step, new THREE.Vector3(parentPosition.x + 2.65, parentPosition.y + 2.15, 0));
+      continue;
+    }
+    if (step.renderRole === "reject" || step.renderRole === "plugin") {
+      const siblings = (sideEffectsByParent.get(step.parentStep) || []).filter((candidate) =>
+        candidate.renderRole === step.renderRole || candidate.renderRole === "plugin"
+      );
+      const siblingIndex = siblings.findIndex((candidate) => candidate.step === step.step);
+      const band = Math.floor(siblingIndex / 2);
+      const centeredIndex = siblingIndex - (siblings.length - 1) / 2;
+      const offsetX = centeredIndex * 1.28;
+      const offsetY = BRANCH_ROW_OFFSET_Y + band * 1;
+      registerNode(step, new THREE.Vector3(parentPosition.x + offsetX, parentPosition.y - offsetY, 0));
+    }
   }
 
   detached.forEach((step, index) => {
-    const x = totalWidth / 2 + 3.2;
-    const y = PRIMARY_ROW_Y - BRANCH_ROW_OFFSET_Y - 0.5 - index * 1.1;
+    const x = step.renderRole === "store" ? 0.4 : totalWidth / 2 + 3.2;
+    const y = step.renderRole === "store"
+      ? PRIMARY_ROW_Y - BRANCH_ROW_OFFSET_Y - 2.25
+      : PRIMARY_ROW_Y - BRANCH_ROW_OFFSET_Y - 0.5 - index * 1.1;
     registerNode(step, new THREE.Vector3(x, y, 0));
   });
 
@@ -726,24 +906,30 @@ function buildTopology(topology) {
     if (!source || !target) {
       return;
     }
-    const isBranch = steps.find((step) => step.step === transition.to)?.sideEffect === true;
-    const material = isBranch
-      ? new THREE.LineDashedMaterial({ color: 0x8f7aea, transparent: true, opacity: 0.55, dashSize: 0.32, gapSize: 0.18 })
-      : new THREE.LineBasicMaterial({ color: 0x34527f, transparent: true, opacity: 0.8 });
+    const edgePreset = edgeStyleForTransition(transition);
+    const material = edgePreset.dashed
+      ? new THREE.LineDashedMaterial({
+          color: edgePreset.baseColor,
+          transparent: true,
+          opacity: edgePreset.baseOpacity,
+          dashSize: edgePreset.dashSize,
+          gapSize: edgePreset.gapSize
+        })
+      : new THREE.LineBasicMaterial({ color: edgePreset.baseColor, transparent: true, opacity: edgePreset.baseOpacity });
     const geometry = new THREE.BufferGeometry().setFromPoints([source.clone(), target.clone()]);
     const line = new THREE.Line(geometry, material);
-    if (isBranch) {
+    if (edgePreset.dashed) {
       line.computeLineDistances();
     }
     scene.add(line);
     edgeLines.set(edgeKey(transition.from, transition.to), {
       line,
-      baseColor: isBranch ? 0x8f7aea : 0x34527f,
-      accentColor: isBranch ? 0xcf9cff : 0x7ad7ff,
-      baseOpacity: isBranch ? 0.55 : 0.8,
+      baseColor: edgePreset.baseColor,
+      accentColor: edgePreset.accentColor,
+      baseOpacity: edgePreset.baseOpacity,
       intensity: 0,
       shimmerPhase: Math.random() * Math.PI * 2,
-      branch: isBranch
+      branch: edgePreset.dashed
     });
   });
 
@@ -752,27 +938,30 @@ function buildTopology(topology) {
 
 function registerNode(step, position) {
   const isSideEffect = Boolean(step.sideEffect);
-  const geometry = new THREE.SphereGeometry(isSideEffect ? BRANCH_NODE_RADIUS : BASE_NODE_RADIUS, 24, 24);
+  const geometry = createNodeGeometry(step);
   const material = new THREE.MeshStandardMaterial({
     color: nodeColorForStep(step),
-    emissive: isSideEffect ? 0x35254a : 0x17355b,
-    emissiveIntensity: 0.34,
-    roughness: 0.35,
-    metalness: 0.15
+    emissive: emissiveColorForStep(step),
+    emissiveIntensity: step.renderRole === "store" ? 0.46 : 0.34,
+    roughness: step.renderRole === "store" ? 0.22 : 0.35,
+    metalness: step.renderRole === "store" ? 0.42 : 0.15
   });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.copy(position);
   mesh.userData.step = step;
   mesh.userData.phase = step.index * 0.73 + (isSideEffect ? 0.4 : 0);
   mesh.userData.isSideEffect = isSideEffect;
+  if (step.renderRole === "broker") {
+    mesh.rotation.z = Math.PI * 0.08;
+  }
   scene.add(mesh);
   nodeMeshes.set(step.step, mesh);
   nodePositions.set(step.step, position.clone());
-  if (!isSideEffect) {
-    const sprite = buildStepLabelSprite(step.step);
-    sprite.position.copy(position).add(new THREE.Vector3(0, -LABEL_OFFSET_Y, 0));
-    scene.add(sprite);
-    nodeLabelSprites.set(step.step, sprite);
+  const labelSprite = buildStepLabelSprite(step.step, step.renderRole);
+  labelSprite.position.copy(position).add(new THREE.Vector3(0, -labelOffsetForStep(step), 0));
+  scene.add(labelSprite);
+  nodeLabelSprites.set(step.step, labelSprite);
+  if (shouldShowCounters(step) && step.renderRole !== "reject") {
     const valueSprite = buildTextSprite("0|0", {
       fontSize: 28,
       fontWeight: 700,
@@ -786,34 +975,76 @@ function registerNode(step, position) {
     valueSprite.position.copy(position);
     scene.add(valueSprite);
     nodeValueSprites.set(step.step, valueSprite);
-  } else {
+  }
+  if (shouldShowIcon(step)) {
     const iconSprite = buildPluginIconSprite(step);
     iconSprite.position.copy(position);
     scene.add(iconSprite);
     nodeIconSprites.set(step.step, iconSprite);
-    if (step.pluginKind === "reject") {
-      const rejectSprite = buildTextSprite("0", {
-        fontSize: 26,
-        fontWeight: 700,
-        fillStyle: "#f8fbff",
-        paddingX: 7,
-        paddingY: 5,
-        backgroundStyle: "rgba(7, 16, 31, 0.0)",
-        borderStyle: null,
-        height: 0.24
-      });
-      rejectSprite.position.copy(position).add(new THREE.Vector3(0, -0.3, 0));
-      scene.add(rejectSprite);
-      nodeValueSprites.set(step.step, rejectSprite);
-    }
+  }
+  if (step.renderRole === "reject") {
+    const rejectSprite = buildTextSprite("0", {
+      fontSize: 26,
+      fontWeight: 700,
+      fillStyle: "#f8fbff",
+      paddingX: 7,
+      paddingY: 5,
+      backgroundStyle: "rgba(7, 16, 31, 0.0)",
+      borderStyle: null,
+      height: 0.24
+    });
+    rejectSprite.position.copy(position).add(new THREE.Vector3(0, -0.3, 0));
+    scene.add(rejectSprite);
+    nodeValueSprites.set(step.step, rejectSprite);
   }
 }
 
-function buildStepLabelSprite(stepName) {
+function labelOffsetForStep(step) {
+  if (step.renderRole === "store") {
+    return 1.44;
+  }
+  if (step.renderRole === "broker" || step.renderRole === "external-provider") {
+    return 1.2;
+  }
+  return LABEL_OFFSET_Y;
+}
+
+function edgeStyleForTransition(transition) {
+  switch (transition.relationKind) {
+    case "await-request":
+      return { baseColor: 0xffc164, accentColor: 0xffe28f, baseOpacity: 0.68, dashed: true, dashSize: 0.3, gapSize: 0.16 };
+    case "await-completion":
+      return { baseColor: 0x7cf2c0, accentColor: 0xc6ffe9, baseOpacity: 0.72, dashed: true, dashSize: 0.34, gapSize: 0.18 };
+    case "store":
+      return { baseColor: 0x6fd3ff, accentColor: 0xbdeaff, baseOpacity: 0.48, dashed: true, dashSize: 0.22, gapSize: 0.14 };
+    case "reject":
+      return { baseColor: 0xff7c8f, accentColor: 0xffb7c1, baseOpacity: 0.62, dashed: true, dashSize: 0.26, gapSize: 0.16 };
+    default:
+      return { baseColor: 0x34527f, accentColor: 0x7ad7ff, baseOpacity: 0.8, dashed: false };
+  }
+}
+
+function emissiveColorForStep(step) {
+  switch (step.renderRole) {
+    case "await":
+      return 0x4f3820;
+    case "broker":
+      return 0x2b2350;
+    case "external-provider":
+      return 0x0f4b4b;
+    case "store":
+      return 0x123c58;
+    default:
+      return step.sideEffect ? 0x35254a : 0x17355b;
+  }
+}
+
+function buildStepLabelSprite(stepName, renderRole = "primary") {
   const labelLines = layoutStepLabel(stepName);
   const paddingX = 14;
   const paddingY = 10;
   const lineGap = 6;
+  const height = renderRole === "store" ? 0.92 : BASE_LABEL_HEIGHT;
   return buildTextSprite(labelLines.join("\n"), {
     fontSize: 30,
     fontWeight: 600,
@@ -825,12 +1056,12 @@ function buildStepLabelSprite(stepName) {
     borderStyle: null,
     shadowColor: "rgba(7, 16, 31, 0.92)",
     shadowBlur: 10,
-    height: BASE_LABEL_HEIGHT
+    height
   });
 }
 
 function buildPluginIconSprite(step) {
-  return buildIconSprite(step.pluginKind, step.pluginKind === "reject" ? 0.54 : 0.72);
+  return buildIconSprite(step, step.renderRole === "reject" ? 0.54 : step.renderRole === "store" ? 0.88 : 0.72);
 }
 
 function buildTextSprite(text, options = {}) {
@@ -907,7 +1138,7 @@ function replaceSpriteText(sprite, text, options = sprite.userData.options ?? {}
   sprite.userData.options = options;
 }
 
-function buildIconSprite(pluginKind, height = 0.28) {
+function buildIconSprite(step, height = 0.28) {
   const canvas = document.createElement("canvas");
   canvas.width = 160;
   canvas.height = 160;
@@ -919,26 +1150,42 @@ function buildIconSprite(pluginKind, height = 0.28) {
   context.lineCap = "round";
   context.lineJoin = "round";
 
-  switch (pluginKind) {
-    case "persistence":
+  switch (step.renderRole) {
+    case "store":
       drawDatabaseIcon(context);
       break;
-    case "cache":
-      drawCacheIcon(context);
+    case "broker":
+      drawKafkaBrokerIcon(context);
       break;
-    case "cache-invalidate":
-      drawCacheIcon(context);
-      drawInvalidateAccent(context, "!");
-      break;
-    case "cache-invalidate-all":
-      drawCacheIcon(context);
-      drawInvalidateAccent(context, "x");
+    case "external-provider":
+      drawExternalProviderIcon(context);
       break;
     case "reject":
       drawRejectQueueIcon(context);
       break;
     default:
-      drawPluginDefaultIcon(context);
+      switch (step.pluginKind) {
+        case "persistence":
+          drawDatabaseIcon(context);
+          break;
+        case "cache":
+          drawCacheIcon(context);
+          break;
+        case "cache-invalidate":
+          drawCacheIcon(context);
+          drawInvalidateAccent(context, "!");
+          break;
+        case "cache-invalidate-all":
+          drawCacheIcon(context);
+          drawInvalidateAccent(context, "x");
+          break;
+        case "reject":
+          drawRejectQueueIcon(context);
+          break;
+        default:
+          drawPluginDefaultIcon(context);
+          break;
+      }
       break;
   }
 
@@ -973,6 +1220,37 @@ function drawDatabaseIcon(context) {
   context.stroke();
   context.beginPath();
   context.ellipse(80, 70, 34, 15, 0, 0, Math.PI);
+  context.stroke();
+}
+
+function drawKafkaBrokerIcon(context) {
+  roundRectPath(context, 34, 34, 92, 24, 10);
+  context.stroke();
+  roundRectPath(context, 34, 68, 92, 24, 10);
+  context.stroke();
+  roundRectPath(context, 34, 102, 92, 24, 10);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(52, 46);
+  context.lineTo(60, 46);
+  context.moveTo(52, 80);
+  context.lineTo(60, 80);
+  context.moveTo(52, 114);
+  context.lineTo(60, 114);
+  context.stroke();
+}
+
+function drawExternalProviderIcon(context) {
+  roundRectPath(context, 34, 38, 92, 84, 18);
+  context.stroke();
+  context.beginPath();
+  context.arc(80, 68, 16, 0, Math.PI * 2);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(80, 84);
+  context.lineTo(80, 104);
+  context.moveTo(64, 110);
+  context.lineTo(96, 110);
   context.stroke();
 }
 
@@ -1074,22 +1352,35 @@ function normalizeStepLabel(stepName) {
 }
 
 function nodeColorForStep(step) {
-  if (!step?.sideEffect) {
-    return 0x5cc8ff;
-  }
-  switch (step.pluginKind) {
-    case "persistence":
-      return 0x7ed0ff;
-    case "cache":
-      return 0x8bffa5;
-    case "cache-invalidate":
-      return 0xffd166;
-    case "cache-invalidate-all":
-      return 0xff9f68;
+  switch (step?.renderRole) {
+    case "await":
+      return 0xffc164;
+    case "broker":
+      return 0xa792ff;
+    case "external-provider":
+      return 0x59e4d1;
+    case "store":
+      return 0x79caff;
     case "reject":
       return 0xff7c8f;
     default:
-      return 0xcaa6ff;
+      if (!step?.sideEffect) {
+        return 0x5cc8ff;
+      }
+      switch (step.pluginKind) {
+        case "persistence":
+          return 0x7ed0ff;
+        case "cache":
+          return 0x8bffa5;
+        case "cache-invalidate":
+          return 0xffd166;
+        case "cache-invalidate-all":
+          return 0xff9f68;
+        case "reject":
+          return 0xff7c8f;
+        default:
+          return 0xcaa6ff;
+      }
   }
 }
 
@@ -1110,10 +1401,12 @@ function fitCameraToTopology(steps) {
     if (!position) {
       continue;
     }
-    const radius = step.sideEffect ? BRANCH_NODE_RADIUS : BASE_NODE_RADIUS;
-    const labelHeight = step.sideEffect ? 0 : BASE_LABEL_HEIGHT;
-    const valueHeight = step.sideEffect ? (step.pluginKind === "reject" ? 0.24 : 0.08) : COUNTER_LABEL_HEIGHT * 0.5;
-    const labelWidth = step.sideEffect ? 0 : (nodeLabelSprites.get(step.step)?.userData?.aspect ?? 1) * BASE_LABEL_HEIGHT * 0.5;
+    const radius = nodeRadiusForStep(step);
+    const labelHeight = nodeLabelSprites.has(step.step) ? (step.renderRole === "store" ? 0.92 : BASE_LABEL_HEIGHT) : 0;
+    const valueHeight = shouldShowCounters(step)
+      ? (step.renderRole === "reject" ? 0.24 : COUNTER_LABEL_HEIGHT * 0.5)
+      : 0.08;
+    const labelWidth = (nodeLabelSprites.get(step.step)?.userData?.aspect ?? 1) * labelHeight * 0.5;
     minX = Math.min(minX, position.x - radius - labelWidth);
     maxX = Math.max(maxX, position.x + radius + labelWidth);
     minY = Math.min(minY, position.y - radius - labelHeight - valueHeight - 0.42);

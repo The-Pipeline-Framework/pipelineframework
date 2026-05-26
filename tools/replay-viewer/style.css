@@ -502,6 +502,16 @@ button:disabled {
   box-shadow: 0 0 12px rgb(202 166 255 / 40%);
 }
 
+.legend-swatch--await {
+  background: #ffc164;
+  box-shadow: 0 0 12px rgb(255 193 100 / 40%);
+}
+
+.legend-swatch--store {
+  background: #79caff;
+  box-shadow: 0 0 12px rgb(121 202 255 / 40%);
+}
+
 .legend-swatch--cache {
   background: #8bffa5;
   box-shadow: 0 0 12px rgb(139 255 165 / 40%);

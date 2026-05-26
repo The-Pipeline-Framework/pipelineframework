@@ -512,7 +512,8 @@ final class ExecutionReplayTracker {
             .replace("LocalClientStep", "")
             .replace("Service", "");
         String service = step.endsWith("Service") ? step : step + "Service";
-        return new PipelineReplayTopology.Step(runtimeStepClass, step, service, "one-to-one", -1, false, null, null);
+        String renderRole = step.toLowerCase().contains("await") ? "await" : "primary";
+        return new PipelineReplayTopology.Step(runtimeStepClass, step, service, "one-to-one", -1, false, null, null, renderRole, null);
     }
 
     private PipelineReplayTopology.Transition inbound(String runtimeStepClass) {
