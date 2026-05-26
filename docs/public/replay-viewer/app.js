@@ -1028,10 +1028,22 @@ function buildTopology(topology) {
     const sourcePositions = inboundStoreTransitions
       .map((transition) => nodePositions.get(transition.from))
       .filter(Boolean);
-    const averageX = sourcePositions.length > 0
-      ? sourcePositions.reduce((sum, position) => sum + position.x, 0) / sourcePositions.length
-      : 0;
-    const x = averageX + index * 0.9;
+    let averageX;
+    if (sourcePositions.length > 0) {
+      averageX = sourcePositions.reduce((sum, position) => sum + position.x, 0) / sourcePositions.length;
+    } else {
+      const existingPositions = Array.from(nodePositions.values());
+      if (existingPositions.length > 0) {
+        const minX = Math.min(...existingPositions.map((pos) => pos.x));
+        const maxX = Math.max(...existingPositions.map((pos) => pos.x));
+        const centerX = (minX + maxX) / 2;
+        const width = maxX - minX;
+        averageX = centerX + (index - (storeActors.length - 1) / 2) * (width / Math.max(1, storeActors.length - 1));
+      } else {
+        averageX = index * 0.9;
+      }
+    }
+    const x = sourcePositions.length > 0 ? averageX + index * 0.9 : averageX;
     const y = PRIMARY_ROW_Y - BRANCH_ROW_OFFSET_Y - 0.28 - index * 0.3;
     registerNode(step, new THREE.Vector3(x, y, 0));
   });
@@ -1948,9 +1960,10 @@ function processEvent(rawEvent) {
   highlightStep(event.to, 0.9, event.startTime);
   if (isAwaitResumableError(rawEvent)) {
     if (isAwaitSuspensionEvent(rawEvent)) {
-      highlightStep("AwaitPaymentProvider", EFFECT_PRESETS.node.defaultHoldSeconds + 0.5, event.endTime);
+      const awaitStepName = event.step || fallbackAwaitDisplayStep || "AwaitPaymentProvider";
+      highlightStep(awaitStepName, EFFECT_PRESETS.node.defaultHoldSeconds + 0.5, event.endTime);
       queueBackgroundFlash("#8f7aea", event.endTime, 0.8, 0.24);
-      itemAnchors.set(rawEvent.itemId, "AwaitPaymentProvider");
+      itemAnchors.set(rawEvent.itemId, awaitStepName);
     }
     return;
   }

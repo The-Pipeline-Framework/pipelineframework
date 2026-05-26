@@ -1077,12 +1077,17 @@ public class PipelineTelemetryMetadataGenerator {
         if (step == null || step.cardinality() == null || step.cardinality().isBlank()) {
             return "one-to-one";
         }
-        return switch (step.cardinality().toUpperCase(Locale.ROOT)) {
+        String normalized = step.cardinality().toUpperCase(Locale.ROOT);
+        return switch (normalized) {
             case "ONE_TO_ONE" -> "one-to-one";
             case "ONE_TO_MANY", "EXPANSION" -> "one-to-many";
             case "MANY_TO_ONE", "COLLAPSE" -> "many-to-one";
             case "MANY_TO_MANY" -> "many-to-many";
-            default -> "one-to-one";
+            default -> throw new IllegalArgumentException(
+                "Invalid cardinality value '" + step.cardinality() + "' for step " +
+                (step.step() != null ? "'" + step.step() + "'" : "(unnamed)") +
+                ". Allowed values: ONE_TO_ONE, ONE_TO_MANY, EXPANSION, MANY_TO_ONE, COLLAPSE, MANY_TO_MANY"
+            );
         };
     }
 

@@ -1488,7 +1488,14 @@ function fitCameraToTopology(steps) {
     const radius = step.sideEffect ? BRANCH_NODE_RADIUS : BASE_NODE_RADIUS;
     const labelHeight = !step.sideEffect ? BASE_LABEL_HEIGHT : (isNamedSupportActor(step) ? SUPPORT_LABEL_HEIGHT : 0);
     const valueHeight = step.sideEffect ? (step.pluginKind === "reject" ? 0.24 : 0.08) : COUNTER_LABEL_HEIGHT * 0.5;
-    const labelWidth = step.sideEffect ? 0 : (nodeLabelSprites.get(step.step)?.userData?.aspect ?? 1) * BASE_LABEL_HEIGHT * 0.5;
+    let labelWidth;
+    if (step.sideEffect) {
+      labelWidth = isNamedSupportActor(step)
+        ? (nodeLabelSprites.get(step.step)?.userData?.aspect ?? 1) * SUPPORT_LABEL_HEIGHT * 0.5
+        : 0;
+    } else {
+      labelWidth = (nodeLabelSprites.get(step.step)?.userData?.aspect ?? 1) * BASE_LABEL_HEIGHT * 0.5;
+    }
     minX = Math.min(minX, position.x - radius - labelWidth);
     maxX = Math.max(maxX, position.x + radius + labelWidth);
     minY = Math.min(minY, position.y - radius - labelHeight - valueHeight - 0.42);
@@ -1948,9 +1955,10 @@ function processEvent(rawEvent) {
   highlightStep(event.to, 0.9, event.startTime);
   if (isAwaitResumableError(rawEvent)) {
     if (isAwaitSuspensionEvent(rawEvent)) {
-      highlightStep("AwaitPaymentProvider", EFFECT_PRESETS.node.defaultHoldSeconds + 0.5, event.endTime);
+      const awaitStepName = event.step || fallbackAwaitDisplayStep || "AwaitPaymentProvider";
+      highlightStep(awaitStepName, EFFECT_PRESETS.node.defaultHoldSeconds + 0.5, event.endTime);
       queueBackgroundFlash("#8f7aea", event.endTime, 0.8, 0.24);
-      itemAnchors.set(rawEvent.itemId, "AwaitPaymentProvider");
+      itemAnchors.set(rawEvent.itemId, awaitStepName);
     }
     return;
   }

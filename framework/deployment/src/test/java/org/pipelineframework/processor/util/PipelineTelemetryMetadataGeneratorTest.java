@@ -5,8 +5,10 @@ import java.io.OutputStream;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
@@ -272,34 +274,77 @@ class PipelineTelemetryMetadataGeneratorTest {
     }
 
     private JsonObject findStep(JsonObject topology, String stepName) {
+        JsonObject found = null;
         for (var element : topology.getAsJsonArray("steps")) {
             JsonObject step = element.getAsJsonObject();
+            if (!step.has("step") || step.get("step").isJsonNull()) {
+                continue;
+            }
             if (stepName.equals(step.get("step").getAsString())) {
-                return step;
+                if (found != null) {
+                    throw new IllegalArgumentException(
+                        "Ambiguous step lookup: multiple steps with name '" + stepName + "'"
+                    );
+                }
+                found = step;
             }
         }
-        throw new IllegalArgumentException("Missing step: " + stepName);
+        if (found == null) {
+            throw new IllegalArgumentException("Missing step: " + stepName);
+        }
+        return found;
     }
 
     private JsonObject findStepByRole(JsonObject topology, String renderRole) {
+        List<JsonObject> matches = new ArrayList<>();
         for (var element : topology.getAsJsonArray("steps")) {
             JsonObject step = element.getAsJsonObject();
+            if (!step.has("renderRole") || step.get("renderRole").isJsonNull()) {
+                continue;
+            }
             if (renderRole.equals(step.get("renderRole").getAsString())) {
-                return step;
+                matches.add(step);
             }
         }
-        throw new IllegalArgumentException("Missing step with render role: " + renderRole);
+        if (matches.isEmpty()) {
+            throw new IllegalArgumentException("Missing step with render role: " + renderRole);
+        }
+        if (matches.size() > 1) {
+            String stepIds = matches.stream()
+                .map(step -> step.has("step") && !step.get("step").isJsonNull()
+                    ? step.get("step").getAsString()
+                    : "(unnamed)")
+                .collect(Collectors.joining(", "));
+            throw new IllegalArgumentException(
+                "Ambiguous render role lookup: multiple steps with renderRole '" + renderRole +
+                "': " + stepIds
+            );
+        }
+        return matches.get(0);
     }
 
     private JsonObject findTransition(JsonObject topology, String from, String to) {
+        JsonObject found = null;
         for (var element : topology.getAsJsonArray("transitions")) {
             JsonObject transition = element.getAsJsonObject();
+            if (!transition.has("from") || transition.get("from").isJsonNull() ||
+                !transition.has("to") || transition.get("to").isJsonNull()) {
+                continue;
+            }
             if (from.equals(transition.get("from").getAsString())
                 && to.equals(transition.get("to").getAsString())) {
-                return transition;
+                if (found != null) {
+                    throw new IllegalArgumentException(
+                        "Ambiguous transition lookup: multiple transitions from '" + from + "' to '" + to + "'"
+                    );
+                }
+                found = transition;
             }
         }
-        throw new IllegalArgumentException("Missing transition: " + from + "->" + to);
+        if (found == null) {
+            throw new IllegalArgumentException("Missing transition: " + from + "->" + to);
+        }
+        return found;
     }
 
     private PipelineStepModel step(
