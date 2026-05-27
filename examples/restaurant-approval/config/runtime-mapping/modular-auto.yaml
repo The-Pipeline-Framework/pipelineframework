@@ -1,0 +1,24 @@
+layout: modular
+validation: auto
+defaults:
+  runtime: orchestrator-svc
+  module: orchestrator-svc
+  synthetic:
+    module: orchestrator-svc
+modules:
+  orchestrator-svc:
+    runtime: orchestrator-svc
+    steps:
+      - await-restaurant-decision
+  validate-order-request-svc:
+    runtime: validate-order-request-svc
+    steps:
+      - validate-order-request
+  create-pending-approval-svc:
+    runtime: create-pending-approval-svc
+    steps:
+      - create-pending-approval
+  finalize-restaurant-decision-svc:
+    runtime: finalize-restaurant-decision-svc
+    steps:
+      - finalize-restaurant-decision

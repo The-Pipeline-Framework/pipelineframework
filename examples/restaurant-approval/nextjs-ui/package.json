@@ -1,0 +1,17 @@
+{
+  "name": "restaurant-approval-nextjs-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "next": "16.2.6",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  }
+}

@@ -19,6 +19,10 @@ For runtime layout usage and build migration, see:
 - [Maven Migration Playbook](/guide/build/runtime-layouts/maven-migration)
 - [CSV Payments Monolith Walkthrough](/guide/build/runtime-layouts/csv-payments-monolith)
 
+For runnable await examples, see:
+- [`examples/restaurant-approval`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/restaurant-approval) for the canonical `interaction-api` human-await path.
+- [`examples/csv-payments`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/csv-payments) for the canonical Kafka await path.
+
 ## Overview
 
 The Pipeline Framework uses YAML-first compilation to automatically generate the necessary infrastructure for pipeline execution.

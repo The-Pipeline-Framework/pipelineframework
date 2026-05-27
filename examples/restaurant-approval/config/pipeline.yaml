@@ -1,0 +1,169 @@
+version: 2
+appName: Restaurant Approval
+basePackage: org.pipelineframework.restaurantapproval
+transport: REST
+runtimeLayout: monolith
+messages:
+  PlaceRestaurantOrderRequest:
+    fields:
+      - number: 1
+        name: requestId
+        type: uuid
+      - number: 2
+        name: customerName
+        type: string
+      - number: 3
+        name: restaurantName
+        type: string
+      - number: 4
+        name: items
+        type: string
+      - number: 5
+        name: totalAmount
+        type: decimal
+      - number: 6
+        name: currency
+        type: string
+  ValidatedRestaurantOrderRequest:
+    fields:
+      - number: 1
+        name: requestId
+        type: uuid
+      - number: 2
+        name: customerName
+        type: string
+      - number: 3
+        name: restaurantName
+        type: string
+      - number: 4
+        name: items
+        type: string
+      - number: 5
+        name: totalAmount
+        type: decimal
+      - number: 6
+        name: currency
+        type: string
+      - number: 7
+        name: validatedAt
+        type: timestamp
+  PendingRestaurantApproval:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: requestId
+        type: uuid
+      - number: 3
+        name: customerName
+        type: string
+      - number: 4
+        name: restaurantName
+        type: string
+      - number: 5
+        name: items
+        type: string
+      - number: 6
+        name: totalAmount
+        type: decimal
+      - number: 7
+        name: currency
+        type: string
+      - number: 8
+        name: createdAt
+        type: timestamp
+  RestaurantOrderAccepted:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: decidedAt
+        type: timestamp
+      - number: 3
+        name: note
+        type: string
+  RestaurantOrderDeclined:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: decidedAt
+        type: timestamp
+      - number: 3
+        name: note
+        type: string
+      - number: 4
+        name: declineReason
+        type: string
+  TerminalOrderState:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: outcome
+        type: string
+      - number: 3
+        name: resolvedAt
+        type: timestamp
+      - number: 4
+        name: restaurantStatus
+        type: string
+      - number: 5
+        name: summary
+        type: string
+unions:
+  RestaurantDecision:
+    variants:
+      accepted:
+        number: 1
+        type: RestaurantOrderAccepted
+      declined:
+        number: 2
+        type: RestaurantOrderDeclined
+steps:
+  - name: Validate Order Request
+    service: org.pipelineframework.restaurantapproval.validate_order_request.service.ProcessValidateOrderRequestService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.restaurantapproval.common.domain.PlaceRestaurantOrderRequest
+    inputTypeName: PlaceRestaurantOrderRequest
+    inboundMapper: org.pipelineframework.restaurantapproval.common.mapper.PlaceRestaurantOrderRequestMapper
+    output: org.pipelineframework.restaurantapproval.common.domain.ValidatedRestaurantOrderRequest
+    outputTypeName: ValidatedRestaurantOrderRequest
+    outboundMapper: org.pipelineframework.restaurantapproval.common.mapper.ValidatedRestaurantOrderRequestMapper
+  - name: Create Pending Approval
+    service: org.pipelineframework.restaurantapproval.create_pending_approval.service.ProcessCreatePendingApprovalService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.restaurantapproval.common.domain.ValidatedRestaurantOrderRequest
+    inputTypeName: ValidatedRestaurantOrderRequest
+    inboundMapper: org.pipelineframework.restaurantapproval.common.mapper.ValidatedRestaurantOrderRequestMapper
+    output: org.pipelineframework.restaurantapproval.common.domain.PendingRestaurantApproval
+    outputTypeName: PendingRestaurantApproval
+    outboundMapper: org.pipelineframework.restaurantapproval.common.mapper.PendingRestaurantApprovalMapper
+  - name: Await Restaurant Decision
+    kind: await
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.restaurantapproval.common.domain.PendingRestaurantApproval
+    inputTypeName: PendingRestaurantApproval
+    output: org.pipelineframework.restaurantapproval.common.domain.RestaurantDecision
+    outputTypeName: RestaurantDecision
+    timeout: PT30M
+    idempotencyKeyFields:
+      - orderId
+    await:
+      correlation:
+        strategy: interactionId
+      transport:
+        type: interaction-api
+  - name: Finalize Restaurant Decision
+    service: org.pipelineframework.restaurantapproval.finalize_restaurant_decision.service.ProcessFinalizeRestaurantDecisionService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.restaurantapproval.common.domain.RestaurantDecision
+    inputTypeName: RestaurantDecision
+    inboundMapper: org.pipelineframework.restaurantapproval.common.mapper.RestaurantDecisionMapper
+    output: org.pipelineframework.restaurantapproval.common.domain.TerminalOrderState
+    outputTypeName: TerminalOrderState
+    outboundMapper: org.pipelineframework.restaurantapproval.common.mapper.TerminalOrderStateMapper
