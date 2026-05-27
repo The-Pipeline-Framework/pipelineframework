@@ -196,20 +196,8 @@ public class StepDefinitionParser {
             return null;
         }
         if (!isBlank(operatorClassName)) {
-            if (operatorClassName.contains("::")) {
-                String message = "Skipping step '" + name + "': method selectors (::) are not supported in operator/delegate declarations";
-                LOG.warn(message);
-                report(Diagnostic.Kind.ERROR, message);
-                return null;
-            }
             delegatedClassName = normalizeDelegatedExecutionClassName(operatorClassName);
         } else if (!isBlank(delegateClassName)) {
-            if (delegateClassName.contains("::")) {
-                String message = "Skipping step '" + name + "': method selectors (::) are not supported in operator/delegate declarations";
-                LOG.warn(message);
-                report(Diagnostic.Kind.ERROR, message);
-                return null;
-            }
             delegatedClassName = normalizeDelegatedExecutionClassName(delegateClassName);
         }
 
