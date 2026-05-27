@@ -225,12 +225,18 @@ public class AwaitCoordinator {
 
     public Uni<Optional<AwaitInteractionRecord>> markTimedOut(AwaitInteractionRecord record, long nowEpochMs) {
         return interactionStore().markTimedOut(record.tenantId(), record.interactionId(), record.version(), nowEpochMs)
-            .onItem().transformToUni(updated -> unitStore().markTerminal(
-                    record.tenantId(),
-                    record.unitId(),
-                    AwaitUnitStatus.TIMED_OUT,
-                    nowEpochMs)
-                .replaceWith(updated));
+            .onItem().transformToUni(updated -> {
+                if (updated.isEmpty()) {
+                    return Uni.createFrom().item(Optional.empty());
+                }
+                return unitStore().markTerminal(
+                        record.tenantId(),
+                        record.unitId(),
+                        AwaitUnitStatus.TIMED_OUT,
+                        nowEpochMs)
+                    .replaceWith(updated);
+            });
+    }
     }
 
     private Uni<AwaitCreateResult> createInteraction(
