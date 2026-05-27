@@ -222,9 +222,15 @@ public class AwaitStepSupport {
                 if (items.isEmpty()) {
                     return Multi.createFrom().<O>empty();
                 }
-                return awaitOneToOneStream(descriptor, Multi.createFrom().iterable(items), context)
+                return this.<I, Object>awaitManyToOne(
+                        descriptor,
+                        Multi.createFrom().<I>iterable(List.copyOf(items)),
+                        context)
+                    .toMulti()
                     .onItem().transformToMultiAndConcatenate(result ->
-                        result instanceof Iterable ? Multi.createFrom().iterable((Iterable<O>) result) : Multi.createFrom().item(result));
+                        result instanceof Iterable
+                            ? Multi.createFrom().<O>iterable((Iterable<O>) result)
+                            : Multi.createFrom().<O>item((O) result));
             });
     }
 
