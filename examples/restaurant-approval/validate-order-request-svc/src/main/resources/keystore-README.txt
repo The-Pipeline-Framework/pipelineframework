@@ -4,7 +4,7 @@
 #
 # Please generate or obtain a keystore file and place it in this location:
 #
-# /Users/mari/tpf3/tmp-generated-restaurant/validate-order-request-svc/src/main/resources/server-keystore.jks
+# src/main/resources/server-keystore.jks
 #
 # For development purposes, you can create a self-signed certificate using:
 # keytool -genkey -alias server -keyalg RSA -keystore server-keystore.jks -storetype PKCS12

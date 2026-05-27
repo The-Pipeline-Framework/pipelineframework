@@ -1,14 +1,14 @@
 :root {
   --bg: #f6efe4;
-  --paper: rgba(255, 249, 240, 0.92);
+  --paper: rgb(255 249 240 / 0.92);
   --ink: #1f160f;
   --muted: #6c5647;
   --accent: #b54827;
   --accent-dark: #7c2d16;
-  --border: rgba(80, 49, 34, 0.16);
+  --border: rgb(80 49 34 / 0.16);
   --success: #215b3e;
   --danger: #8d2f21;
-  --shadow: 0 24px 60px rgba(82, 49, 32, 0.12);
+  --shadow: 0 24px 60px rgb(82 49 32 / 0.12);
 }
 
 * {
@@ -215,7 +215,7 @@ textarea {
 
 .meta dd {
   margin: 0;
-  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .status {

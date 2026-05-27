@@ -12,7 +12,7 @@ function statusClass(status) {
 }
 
 export default async function ExecutionPage({ params }) {
-  const { executionId } = params;
+  const { executionId } = await params;
   const status = await fetchExecutionStatus(executionId);
   const result = status.status === "SUCCEEDED" ? await fetchExecutionResult(executionId) : null;
 

@@ -53,14 +53,28 @@ public final class RestaurantDecisionJsonDeserializer extends JsonDeserializer<R
     return null;
   }
 
-  private static UUID uuid(JsonNode node, String fieldName) {
+  private static UUID uuid(JsonNode node, String fieldName) throws IOException {
     String value = text(node, fieldName);
-    return value == null || value.isBlank() ? null : UUID.fromString(value);
+    if (value == null || value.isBlank()) {
+      throw new IOException("Required field '" + fieldName + "' is missing or empty");
+    }
+    try {
+      return UUID.fromString(value);
+    } catch (IllegalArgumentException e) {
+      throw new IOException("Invalid UUID format for field '" + fieldName + "': " + value, e);
+    }
   }
 
-  private static Instant instant(JsonNode node, String fieldName) {
+  private static Instant instant(JsonNode node, String fieldName) throws IOException {
     String value = text(node, fieldName);
-    return value == null || value.isBlank() ? null : Instant.parse(value);
+    if (value == null || value.isBlank()) {
+      throw new IOException("Required field '" + fieldName + "' is missing or empty");
+    }
+    try {
+      return Instant.parse(value);
+    } catch (Exception e) {
+      throw new IOException("Invalid Instant format for field '" + fieldName + "': " + value, e);
+    }
   }
 
   private static String text(JsonNode node, String fieldName) {

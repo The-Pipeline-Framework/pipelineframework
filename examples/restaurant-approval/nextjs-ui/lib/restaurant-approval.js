@@ -21,13 +21,14 @@ export function buildDeclinedPayload(orderId, note, declineReason) {
 
 export function normalizePendingInteraction(interaction) {
   const requestPayload = interaction?.requestPayload ?? {};
+  const deadlineEpochMs = Number(interaction?.deadlineEpochMs ?? 0);
   return {
     interactionId: String(interaction?.interactionId ?? ""),
     executionId: String(interaction?.executionId ?? ""),
     stepId: String(interaction?.stepId ?? ""),
     status: String(interaction?.status ?? ""),
     transportType: String(interaction?.transportType ?? ""),
-    deadlineEpochMs: Number(interaction?.deadlineEpochMs ?? 0),
+    deadlineEpochMs: Number.isFinite(deadlineEpochMs) ? deadlineEpochMs : 0,
     orderId: String(requestPayload.orderId ?? ""),
     customerName: String(requestPayload.customerName ?? ""),
     restaurantName: String(requestPayload.restaurantName ?? ""),

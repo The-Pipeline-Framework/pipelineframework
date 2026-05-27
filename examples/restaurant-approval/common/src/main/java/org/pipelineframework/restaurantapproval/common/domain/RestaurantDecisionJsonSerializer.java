@@ -13,33 +13,25 @@ public final class RestaurantDecisionJsonSerializer extends JsonSerializer<Resta
     gen.writeStartObject();
     value.accept(new RestaurantDecisionVisitor<>() {
       @Override
-      public Void accepted(RestaurantOrderAccepted accepted) {
-        try {
-          gen.writeStringField("type", "accepted");
-          gen.writeObjectFieldStart("accepted");
-          gen.writeStringField("orderId", accepted.orderId().toString());
-          gen.writeStringField("decidedAt", accepted.decidedAt().toString());
-          gen.writeStringField("note", accepted.note());
-          gen.writeEndObject();
-        } catch (IOException e) {
-          throw new IllegalStateException(e);
-        }
+      public Void accepted(RestaurantOrderAccepted accepted) throws IOException {
+        gen.writeStringField("type", "accepted");
+        gen.writeObjectFieldStart("accepted");
+        gen.writeStringField("orderId", accepted.orderId().toString());
+        gen.writeStringField("decidedAt", accepted.decidedAt().toString());
+        gen.writeStringField("note", accepted.note());
+        gen.writeEndObject();
         return null;
       }
 
       @Override
-      public Void declined(RestaurantOrderDeclined declined) {
-        try {
-          gen.writeStringField("type", "declined");
-          gen.writeObjectFieldStart("declined");
-          gen.writeStringField("orderId", declined.orderId().toString());
-          gen.writeStringField("decidedAt", declined.decidedAt().toString());
-          gen.writeStringField("note", declined.note());
-          gen.writeStringField("declineReason", declined.declineReason());
-          gen.writeEndObject();
-        } catch (IOException e) {
-          throw new IllegalStateException(e);
-        }
+      public Void declined(RestaurantOrderDeclined declined) throws IOException {
+        gen.writeStringField("type", "declined");
+        gen.writeObjectFieldStart("declined");
+        gen.writeStringField("orderId", declined.orderId().toString());
+        gen.writeStringField("decidedAt", declined.decidedAt().toString());
+        gen.writeStringField("note", declined.note());
+        gen.writeStringField("declineReason", declined.declineReason());
+        gen.writeEndObject();
         return null;
       }
     });

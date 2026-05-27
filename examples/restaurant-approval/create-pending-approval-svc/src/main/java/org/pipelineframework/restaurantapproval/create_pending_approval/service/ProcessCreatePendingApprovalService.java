@@ -9,6 +9,7 @@ import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -36,7 +37,7 @@ public class ProcessCreatePendingApprovalService
       output.requestId = input.requestId;
       output.customerName = input.customerName;
       output.restaurantName = input.restaurantName;
-      output.items = input.items;
+      output.items = input.items != null ? new ArrayList<>(input.items) : null;
       output.totalAmount = input.totalAmount;
       output.currency = input.currency;
       output.createdAt = Instant.now(clock);

@@ -78,6 +78,12 @@ public class CommonConverters {
 
     @Named("stringToList")
     public List<String> stringToList(String string) {
-        return string != null ? java.util.Arrays.asList(string.split(",")) : null;
+        if (string == null) {
+            return null;
+        }
+        if (string.equals("")) {
+            return java.util.Collections.emptyList();
+        }
+        return java.util.Arrays.asList(string.split(","));
     }
 }

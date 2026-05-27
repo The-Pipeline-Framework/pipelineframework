@@ -1,7 +1,9 @@
 package org.pipelineframework.restaurantapproval.common.domain;
 
-public interface RestaurantDecisionVisitor<R> {
-  R accepted(RestaurantOrderAccepted accepted);
+import java.io.IOException;
 
-  R declined(RestaurantOrderDeclined declined);
+public interface RestaurantDecisionVisitor<R> {
+  R accepted(RestaurantOrderAccepted accepted) throws IOException;
+
+  R declined(RestaurantOrderDeclined declined) throws IOException;
 }

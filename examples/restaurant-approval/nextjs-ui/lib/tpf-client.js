@@ -14,16 +14,31 @@ async function tpfFetch(path, init = {}) {
   if (!headers.has("content-type") && init.body) {
     headers.set("content-type", "application/json");
   }
-  const response = await fetch(url, {
-    ...init,
-    headers,
-    cache: "no-store"
-  });
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`TPF request failed (${response.status}) for ${path}: ${detail}`);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const response = await fetch(url, {
+      ...init,
+      headers,
+      cache: "no-store",
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`TPF request failed (${response.status}) for ${path}: ${detail}`);
+    }
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === "AbortError") {
+      throw new Error(`TPF request timeout (10s) for ${path}`);
+    }
+    throw error;
   }
-  return response;
 }
 
 export async function submitOrder(form) {

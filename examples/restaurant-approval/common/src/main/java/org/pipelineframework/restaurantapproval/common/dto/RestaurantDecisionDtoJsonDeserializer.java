@@ -47,9 +47,6 @@ public final class RestaurantDecisionDtoJsonDeserializer extends JsonDeserialize
     if (node.hasNonNull("declineReason")) {
       return "declined";
     }
-    if (node.hasNonNull("orderId") && node.hasNonNull("decidedAt")) {
-      return "accepted";
-    }
     return null;
   }
 
