@@ -183,11 +183,15 @@ Await steps suspend `QUEUE_ASYNC` execution at an external boundary. TPF persist
 Currently supported await shapes are:
 
 1. `ONE_TO_ONE` for single external interactions.
-2. `MANY_TO_MANY` with `await.dispatch.mode=per-item`, which creates a durable per-item barrier and resumes downstream only after every item completion has been admitted.
+2. `ONE_TO_ONE` over a streaming upstream, which creates one durable unary await interaction per input item and resumes the downstream stream in input order after the awaited item set has completed.
+3. `MANY_TO_ONE` and `MANY_TO_MANY` as aggregate interaction units, where the input stream is materialized before dispatch and the completion payload is replayed as one materialized output unit.
+4. `ONE_TO_MANY` as a unary input unit whose completion payload is replayed as one materialized multi-item output unit.
 
-`MANY_TO_MANY` per-item await is the shape used by `csv-payments`. It is a runtime barrier over unary external interactions, not a claim that every await cardinality is already supported.
+`csv-payments` uses authored `ONE_TO_ONE` await over a stream of `PaymentRecord` items. That is a stream of unary await interactions, not a hidden dispatch mode.
 
 The built-in `interaction-api` adapter is for human/UI inboxes and mock-provider style flows where another client queries pending interactions and later calls the generated completion API. The built-in `webhook` adapter dispatches an HTTP request to an external system and includes a signed resume token in the envelope. The built-in `kafka` adapter publishes a request envelope to Kafka and admits response envelopes from a configured response channel.
+
+For a runnable Kafka await example, use `examples/csv-payments`.
 
 Await is the only durable suspend/resume primitive in TPF. Use operators or remote execution when the external system replies within the current invocation. Use `kind: await` when the request leaves the current execution turn and the result is admitted later through correlation.
 
@@ -253,14 +257,12 @@ Kafka dispatch sends a framework-owned JSON envelope containing tenant id, execu
 steps:
   - name: "Await Payment Provider"
     kind: "await"
-    cardinality: "MANY_TO_MANY"
+    cardinality: "ONE_TO_ONE"
     input: "org.pipelineframework.csv.common.domain.PaymentRecord"
     output: "org.pipelineframework.csv.common.domain.PaymentStatus"
     timeout: "PT5M"
     idempotencyKeyFields: ["csvId", "recipient", "amount", "currency"]
     await:
-      dispatch:
-        mode: "per-item"
       correlation:
         strategy: "signedResumeToken"
       transport:

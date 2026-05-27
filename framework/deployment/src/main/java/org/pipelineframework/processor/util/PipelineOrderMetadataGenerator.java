@@ -200,6 +200,11 @@ public class PipelineOrderMetadataGenerator {
             if (model.sideEffect() || model.serviceClassName() == null) {
                 continue;
             }
+            if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
+                ordered.add(model.servicePackage() + ".pipeline."
+                    + stripTrailingService(model.generatedName()) + "AwaitClientStep");
+                continue;
+            }
             ordered.add(model.serviceClassName().canonicalName());
         }
         return new ArrayList<>(ordered);

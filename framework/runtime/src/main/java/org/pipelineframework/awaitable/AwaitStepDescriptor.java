@@ -11,7 +11,6 @@ import java.util.Map;
  * @param inputType input domain type
  * @param outputType output domain type
  * @param cardinality pipeline cardinality shape
- * @param dispatchMode await dispatch mode
  * @param timeout maximum wait duration
  * @param correlationStrategy strategy used to derive adapter-visible correlation ids
  * @param transportType adapter type
@@ -23,7 +22,6 @@ public record AwaitStepDescriptor(
     String inputType,
     String outputType,
     String cardinality,
-    String dispatchMode,
     Duration timeout,
     String correlationStrategy,
     String transportType,
@@ -45,7 +43,6 @@ public record AwaitStepDescriptor(
             inputType,
             outputType,
             "ONE_TO_ONE",
-            "single",
             timeout,
             correlationStrategy,
             transportType,
@@ -64,13 +61,6 @@ public record AwaitStepDescriptor(
             throw new IllegalArgumentException("outputType must not be blank");
         }
         cardinality = cardinality == null || cardinality.isBlank() ? "ONE_TO_ONE" : cardinality.trim();
-        dispatchMode = dispatchMode == null || dispatchMode.isBlank() ? defaultDispatchMode(cardinality) : dispatchMode.trim();
-        if ("MANY_TO_MANY".equalsIgnoreCase(cardinality) && !"per-item".equalsIgnoreCase(dispatchMode)) {
-            throw new IllegalArgumentException("MANY_TO_MANY await steps require dispatchMode=per-item");
-        }
-        if ("per-item".equalsIgnoreCase(dispatchMode) && !"MANY_TO_MANY".equalsIgnoreCase(cardinality)) {
-            throw new IllegalArgumentException("dispatchMode=per-item is only supported for MANY_TO_MANY await steps");
-        }
         if (timeout == null || timeout.isNegative() || timeout.isZero()) {
             throw new IllegalArgumentException("timeout must be positive");
         }
@@ -82,9 +72,5 @@ public record AwaitStepDescriptor(
             : correlationStrategy;
         transportConfig = transportConfig == null ? Map.of() : Map.copyOf(transportConfig);
         idempotencyKeyFields = idempotencyKeyFields == null ? List.of() : List.copyOf(idempotencyKeyFields);
-    }
-
-    private static String defaultDispatchMode(String cardinality) {
-        return "MANY_TO_MANY".equalsIgnoreCase(cardinality) ? "per-item" : "single";
     }
 }

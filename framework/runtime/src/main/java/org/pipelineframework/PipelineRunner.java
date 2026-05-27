@@ -132,9 +132,9 @@ public class PipelineRunner implements AutoCloseable {
                 logger.warn("Warning: Found null step in configuration, skipping...");
                 continue;
             }
-            if (awaitContext != null) {
-                awaitContext.currentStepIndex(index);
-            }
+            AwaitExecutionContext awaitContextSnapshot = awaitContext == null
+                ? null
+                : new AwaitExecutionContext(awaitContext.tenantId(), awaitContext.executionId(), index);
 
             if (step instanceof Configurable configurable) {
                 configurable.initialiseWithConfig(configFactory.buildConfig(step.getClass(), pipelineConfig));
@@ -154,7 +154,8 @@ public class PipelineRunner implements AutoCloseable {
                 telemetry,
                 telemetryContext,
                 cacheReadSupport,
-                contextSnapshot);
+                contextSnapshot,
+                awaitContextSnapshot);
         }
 
         return telemetry.instrumentRunCompletion(current, telemetryContext);

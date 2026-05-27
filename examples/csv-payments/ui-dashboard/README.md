@@ -7,7 +7,7 @@ A React-based dashboard for visualizing the CSV Payments Processing pipeline in 
 - Drag & drop file upload with upload speed gauge
 - Real-time processing metrics for each pipeline step:
   - Input CSV File Processing Service (Records/second)
-  - Payments Processing Service (AckPaymentSent/second)
+  - Payments Processing Service (PaymentStatus/second)
   - Payment Status Service (PaymentStatus/second)
   - Output CSV File Processing Service (PaymentOutput/second)
 - Visual pipeline representation

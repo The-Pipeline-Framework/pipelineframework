@@ -39,6 +39,7 @@ import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
+import org.pipelineframework.awaitable.AwaitCoordinator;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
@@ -77,6 +78,9 @@ public class PipelineExecutionService {
 
   @Inject
   QueueAsyncCoordinator queueAsyncCoordinator;
+
+  @Inject
+  AwaitCoordinator awaitCoordinator;
 
   private final java.util.concurrent.atomic.AtomicReference<StartupHealthState> startupHealthState =
       new java.util.concurrent.atomic.AtomicReference<>(StartupHealthState.PENDING);
@@ -311,41 +315,43 @@ public class PipelineExecutionService {
 
   private Multi<?> executePipelineStreamingFromRecord(ExecutionRecord<Object, Object> record) {
     return Multi.createFrom().deferred(() -> {
-      Object sourcePayload = record.currentStepIndex() > 0
-          ? record.resumePayload()
-          : record.inputPayload();
-      Object reactiveInput = executionInputPolicy.toReplayInput(sourcePayload);
-      AwaitExecutionContext previous = AwaitExecutionContextHolder.get();
-      AwaitExecutionContextHolder.set(new AwaitExecutionContext(
-          record.tenantId(),
-          record.executionId(),
-          record.currentStepIndex()));
-      try {
-        RuntimeException healthFailure = healthCheckFailure();
-        if (healthFailure != null) {
+      Uni<Object> sourcePayload = record.currentStepIndex() > 0
+          ? awaitCoordinator.loadResumePayload(record.tenantId(), record.awaitUnitId())
+          : Uni.createFrom().item(record.inputPayload());
+      return sourcePayload.onItem().transformToMulti(payload -> {
+        Object reactiveInput = executionInputPolicy.toReplayInput(payload);
+        AwaitExecutionContext previous = AwaitExecutionContextHolder.get();
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext(
+            record.tenantId(),
+            record.executionId(),
+            record.currentStepIndex()));
+        try {
+          RuntimeException healthFailure = healthCheckFailure();
+          if (healthFailure != null) {
+            restoreAwaitContext(previous);
+            return Multi.createFrom().failure(healthFailure);
+          }
+          RuntimeException inputFailure = validateInputShape(reactiveInput);
+          if (inputFailure != null) {
+            restoreAwaitContext(previous);
+            return Multi.createFrom().failure(inputFailure);
+          }
+          Object result = executePipelineStreamingInternalFromStep(reactiveInput, record.currentStepIndex());
+          Multi<?> stream;
+          if (result instanceof Multi<?> multi) {
+            stream = multi;
+          } else if (result instanceof Uni<?> uni) {
+            stream = uni.toMulti();
+          } else {
+            restoreAwaitContext(previous);
+            return Multi.createFrom().failure(new IllegalStateException("Pipeline runner returned unsupported result"));
+          }
+          return stream.onTermination().invoke((failure, cancelled) -> restoreAwaitContext(previous));
+        } catch (Throwable failure) {
           restoreAwaitContext(previous);
-          return Multi.createFrom().failure(healthFailure);
+          return Multi.createFrom().failure(failure);
         }
-        RuntimeException inputFailure = validateInputShape(reactiveInput);
-        if (inputFailure != null) {
-          restoreAwaitContext(previous);
-          return Multi.createFrom().failure(inputFailure);
-        }
-        Object result = executePipelineStreamingInternalFromStep(reactiveInput, record.currentStepIndex());
-        Multi<?> stream;
-        if (result instanceof Multi<?> multi) {
-          stream = multi;
-        } else if (result instanceof Uni<?> uni) {
-          stream = uni.toMulti();
-        } else {
-          restoreAwaitContext(previous);
-          return Multi.createFrom().failure(new IllegalStateException("Pipeline runner returned unsupported result"));
-        }
-        return stream.onTermination().invoke((failure, cancelled) -> restoreAwaitContext(previous));
-      } catch (Throwable failure) {
-        restoreAwaitContext(previous);
-        return Multi.createFrom().failure(failure);
-      }
+      });
     });
   }
 

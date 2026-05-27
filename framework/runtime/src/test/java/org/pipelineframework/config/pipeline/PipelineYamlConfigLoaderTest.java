@@ -98,6 +98,36 @@ class PipelineYamlConfigLoaderTest {
     }
 
     @Test
+    void rejectsAwaitDispatchConfigurationAtRuntime() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                platform: "COMPUTE"
+                steps:
+                  - name: "Await Batch"
+                    kind: "await"
+                    cardinality: "MANY_TO_MANY"
+                    inputTypeName: "com.example.BatchRequest"
+                    outputTypeName: "com.example.BatchDecision"
+                    timeout: "PT10M"
+                    await:
+                      dispatch:
+                        mode: "per-item"
+                      correlation:
+                        strategy: "signedResumeToken"
+                      transport:
+                        type: "kafka"
+                        request:
+                          topic: "batch.requests"
+                        response:
+                          topic: "batch.responses"
+                """)));
+
+        assertEquals("step 'Await Batch' await.dispatch is not supported", exception.getMessage());
+    }
+
+    @Test
     void rejectsBlankAwaitCorrelationStrategy() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
             new PipelineYamlConfigLoader().load(new StringReader("""

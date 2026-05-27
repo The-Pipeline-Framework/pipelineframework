@@ -196,9 +196,9 @@ public class StepDefinitionParser {
             return null;
         }
         if (!isBlank(operatorClassName)) {
-            delegatedClassName = operatorClassName;
+            delegatedClassName = normalizeDelegatedExecutionClassName(operatorClassName);
         } else if (!isBlank(delegateClassName)) {
-            delegatedClassName = delegateClassName;
+            delegatedClassName = normalizeDelegatedExecutionClassName(delegateClassName);
         }
 
         if (!isBlank(delegatedClassName) && !isBlank(serviceClassName)) {
@@ -434,9 +434,6 @@ public class StepDefinitionParser {
                 return null;
             }
             StreamingShape resolvedShape = shape == null ? StreamingShape.UNARY_UNARY : shape;
-            if (!validateAwaitDispatchMode(name, resolvedShape, awaitConfig)) {
-                return null;
-            }
             String timeout = getStringValue(stepData, "timeout");
             if (isBlank(timeout)) {
                 String message = "Skipping step '" + name + "': await steps must declare timeout";
@@ -494,6 +491,18 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
+        if (awaitMap.containsKey("dispatch")) {
+            String message = "Skipping step '" + stepName + "': await.dispatch is not supported";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        if (awaitMap.containsKey("scope")) {
+            String message = "Skipping step '" + stepName + "': await.scope is not supported";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
         Object transportObj = awaitMap.get("transport");
         if (!(transportObj instanceof Map<?, ?> transportMap) || isBlank(stringValue(transportMap.get("type")))) {
             String message = "Skipping step '" + stepName + "': await.transport.type must be declared";
@@ -534,47 +543,6 @@ public class StepDefinitionParser {
             return null;
         }
         return (Map<String, Object>) normalizeMap(awaitMap);
-    }
-
-    private boolean validateAwaitDispatchMode(
-        String stepName,
-        StreamingShape shape,
-        Map<String, Object> awaitConfig) {
-        String mode = "single";
-        Object dispatchObj = awaitConfig.get("dispatch");
-        if (dispatchObj != null) {
-            if (!(dispatchObj instanceof Map<?, ?> dispatchMap)) {
-                String message = "Skipping step '" + stepName + "': await.dispatch must be a map";
-                LOG.warn(message);
-                report(Diagnostic.Kind.ERROR, message);
-                return false;
-            }
-            mode = stringValue(dispatchMap.get("mode"));
-            mode = isBlank(mode) ? "single" : mode.trim();
-        }
-        if (!"single".equalsIgnoreCase(mode) && !"per-item".equalsIgnoreCase(mode)) {
-            String message = "Skipping step '" + stepName
-                + "': await.dispatch.mode must be one of [single, per-item], got '" + mode + "'";
-            LOG.warn(message);
-            report(Diagnostic.Kind.ERROR, message);
-            return false;
-        }
-        if (shape == StreamingShape.STREAMING_STREAMING) {
-            if (!"per-item".equalsIgnoreCase(mode)) {
-                String message = "Skipping step '" + stepName + "': MANY_TO_MANY await steps require await.dispatch.mode=per-item";
-                LOG.warn(message);
-                report(Diagnostic.Kind.ERROR, message);
-                return false;
-            }
-            return true;
-        }
-        if ("per-item".equalsIgnoreCase(mode)) {
-            String message = "Skipping step '" + stepName + "': await.dispatch.mode=per-item is only supported for MANY_TO_MANY await steps";
-            LOG.warn(message);
-            report(Diagnostic.Kind.ERROR, message);
-            return false;
-        }
-        return true;
     }
 
     private boolean hasWebhookUrl(Map<?, ?> transportMap) {
@@ -887,6 +855,17 @@ public class StepDefinitionParser {
      */
     private void report(Diagnostic.Kind kind, String message) {
         diagnosticReporter.accept(kind, message);
+    }
+
+    private String normalizeDelegatedExecutionClassName(String delegatedValue) {
+        if (isBlank(delegatedValue)) {
+            return delegatedValue;
+        }
+        int separator = delegatedValue.indexOf("::");
+        if (separator <= 0) {
+            return delegatedValue;
+        }
+        return delegatedValue.substring(0, separator).trim();
     }
 
     /**

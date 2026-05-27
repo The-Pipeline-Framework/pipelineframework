@@ -97,10 +97,8 @@ class PipelineTelemetryMetadataGeneratorTest {
                 csvType("CsvFolder"), csvType("CsvPaymentsInputFile")),
             csvStep("ProcessCsvPaymentsInputService", "org.pipelineframework.csv.process_csv_payments_input.service",
                 csvType("CsvPaymentsInputFile"), csvType("PaymentRecord")),
-            csvStep("ProcessSendPaymentRecordService", "org.pipelineframework.csv.process_send_payment_record.service",
-                csvType("PaymentRecord"), csvType("AckPaymentSent")),
-            csvStep("ProcessAckPaymentSentService", "org.pipelineframework.csv.process_ack_payment_sent.service",
-                csvType("AckPaymentSent"), csvType("PaymentStatus")),
+            csvStep("AwaitPaymentProvider", "org.pipelineframework.csv.await_payment_provider.service",
+                csvType("PaymentRecord"), csvType("PaymentStatus")),
             csvStep("ProcessPaymentStatusService", "org.pipelineframework.csv.process_payment_status.service",
                 csvType("PaymentStatus"), csvType("PaymentOutput")),
             csvStep("ProcessCsvPaymentsOutputFileService",
@@ -113,7 +111,7 @@ class PipelineTelemetryMetadataGeneratorTest {
 
         JsonObject metadata = readTelemetryJson();
         assertEquals(
-            "org.pipelineframework.csv.process_send_payment_record.service.pipeline.ProcessSendPaymentRecordGrpcClientStep",
+            "org.pipelineframework.csv.await_payment_provider.service.pipeline.AwaitPaymentProviderGrpcClientStep",
             metadata.get("consumerStep").getAsString());
         assertEquals(
             "org.pipelineframework.csv.process_payment_status.service.pipeline.ProcessPaymentStatusGrpcClientStep",

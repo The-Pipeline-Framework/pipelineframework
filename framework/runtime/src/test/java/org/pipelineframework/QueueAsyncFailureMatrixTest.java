@@ -201,6 +201,7 @@ class QueueAsyncFailureMatrixTest {
             null,
             null,
             null,
+            null,
             System.currentTimeMillis(),
             System.currentTimeMillis(),
             System.currentTimeMillis() / 1000 + 3600);

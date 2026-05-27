@@ -105,11 +105,10 @@ class ProcessCsvPaymentsOutputFileServiceTest {
         paymentRecord.setAmount(new BigDecimal("100.00"));
         paymentRecord.setCurrency(Currency.getInstance("USD"));
 
-        AckPaymentSent ackPaymentSent = new AckPaymentSent();
-        ackPaymentSent.setPaymentRecord(paymentRecord);
-        ackPaymentSent.setConversationId(UUID.randomUUID());
         PaymentStatus paymentStatus = new PaymentStatus();
-        paymentStatus.setAckPaymentSent(ackPaymentSent);
+        paymentStatus.setPaymentRecord(paymentRecord);
+        paymentStatus.setConversationId(UUID.randomUUID());
+        paymentStatus.setStatusCode(1000L);
         paymentStatus.setStatus("nada");
         paymentStatus.setMessage("Success");
         PaymentOutput paymentOutput1 =
@@ -209,11 +208,10 @@ class ProcessCsvPaymentsOutputFileServiceTest {
         paymentRecord1.setAmount(new BigDecimal("100.00"));
         paymentRecord1.setCurrency(Currency.getInstance("USD"));
 
-        AckPaymentSent ackPaymentSent1 = new AckPaymentSent();
-        ackPaymentSent1.setPaymentRecord(paymentRecord1);
-        ackPaymentSent1.setConversationId(UUID.randomUUID());
         PaymentStatus paymentStatus1 = new PaymentStatus();
-        paymentStatus1.setAckPaymentSent(ackPaymentSent1);
+        paymentStatus1.setPaymentRecord(paymentRecord1);
+        paymentStatus1.setConversationId(UUID.randomUUID());
+        paymentStatus1.setStatusCode(1000L);
         paymentStatus1.setStatus("nada");
         paymentStatus1.setMessage("Success");
         PaymentOutput paymentOutput1 =
@@ -234,11 +232,10 @@ class ProcessCsvPaymentsOutputFileServiceTest {
         paymentRecord2.setAmount(new BigDecimal("450.01"));
         paymentRecord2.setCurrency(Currency.getInstance("GBP"));
 
-        AckPaymentSent ackPaymentSent2 = new AckPaymentSent();
-        ackPaymentSent2.setPaymentRecord(paymentRecord2);
-        ackPaymentSent2.setConversationId(UUID.randomUUID());
         PaymentStatus paymentStatus2 = new PaymentStatus();
-        paymentStatus2.setAckPaymentSent(ackPaymentSent2);
+        paymentStatus2.setPaymentRecord(paymentRecord2);
+        paymentStatus2.setConversationId(UUID.randomUUID());
+        paymentStatus2.setStatusCode(1000L);
         paymentStatus2.setStatus("nada");
         paymentStatus2.setMessage("Success");
         PaymentOutput paymentOutput2 =

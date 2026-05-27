@@ -87,7 +87,6 @@ public class ProcessCsvPaymentsOutputFileService
                   Map<Path, List<PaymentOutput>> groupedOutputs =
                           paymentOutputs.stream()
                                   .collect(Collectors.groupingBy(po -> po.getPaymentStatus()
-                                          .getAckPaymentSent()
                                           .getPaymentRecord()
                                           .getCsvPaymentsInputFilePath()
                                           .toAbsolutePath()
@@ -166,9 +165,7 @@ public class ProcessCsvPaymentsOutputFileService
     assert paymentOutput != null;
     PaymentStatus paymentStatus = paymentOutput.getPaymentStatus();
     assert paymentStatus != null;
-    AckPaymentSent ackPaymentSent = paymentStatus.getAckPaymentSent();
-    assert ackPaymentSent != null;
-    PaymentRecord paymentRecord = ackPaymentSent.getPaymentRecord();
+    PaymentRecord paymentRecord = paymentStatus.getPaymentRecord();
     assert paymentRecord != null;
     Path csvPaymentsInputFilePath = paymentRecord.getCsvPaymentsInputFilePath();
 

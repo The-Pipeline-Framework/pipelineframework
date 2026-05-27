@@ -41,8 +41,8 @@ public class PaymentStatus extends BaseEntity implements Serializable {
   @NonNull private String message;
   @NonNull private BigDecimal fee;
 
-  @Transient private AckPaymentSent ackPaymentSent;
-  @NonNull private UUID ackPaymentSentId;
+  @NonNull private UUID conversationId;
+  @NonNull private Long statusCode;
 
   @Transient private PaymentRecord paymentRecord;
   @NonNull private UUID paymentRecordId;

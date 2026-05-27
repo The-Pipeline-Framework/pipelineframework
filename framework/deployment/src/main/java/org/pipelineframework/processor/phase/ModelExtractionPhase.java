@@ -228,15 +228,21 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ? stepDef.streamingShapeHint()
             : StreamingShape.UNARY_UNARY;
 
+        String templateBasePackage = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            ? config.basePackage()
+            : null;
+        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage, ctx);
+        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage, ctx);
+
         String serviceName = toYamlServiceName(stepDef.name());
-        String servicePackage = deriveYamlServicePackage(stepDef.inputType(), ctxWarningLogger);
+        String servicePackage = deriveYamlServicePackage(inputType, ctxWarningLogger);
         return new PipelineStepModel.Builder()
             .serviceName(serviceName)
             .generatedName(serviceName)
             .servicePackage(servicePackage)
             .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
-            .inputMapping(new TypeMapping(stepDef.inputType(), null, false, stepDef.inputType()))
-            .outputMapping(new TypeMapping(stepDef.outputType(), null, false, stepDef.outputType()))
+            .inputMapping(new TypeMapping(inputType, null, false, inputType))
+            .outputMapping(new TypeMapping(outputType, null, false, outputType))
             .streamingShape(streamingShape)
             .enabledTargets(java.util.Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
             .executionMode(ExecutionMode.DEFAULT)
@@ -489,6 +495,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (basePackageHint != null && !basePackageHint.isBlank()) {
             resolvedType = ClassName.bestGuess(basePackageHint + ".common.domain." + className.simpleName());
         } else {
+            if (executionClass == null) {
+                return declaredType;
+            }
             String executionPkg = executionClass.packageName();
             if (executionPkg == null || executionPkg.isBlank()) {
                 return declaredType;
@@ -1329,8 +1338,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     private List<PipelineStepModel> deduplicateByServiceName(List<PipelineStepModel> stepModels) {
         Map<String, PipelineStepModel> uniqueByServiceName = new LinkedHashMap<>();
         for (PipelineStepModel model : stepModels) {
+            String key = model.serviceName() + "::" + String.valueOf(model.deploymentRole());
             // Keep first occurrence so concrete @PipelineStep models take precedence over template fallbacks.
-            uniqueByServiceName.putIfAbsent(model.serviceName(), model);
+            uniqueByServiceName.putIfAbsent(key, model);
         }
         return new ArrayList<>(uniqueByServiceName.values());
     }

@@ -75,6 +75,12 @@ class ModelContextRoleEnricher {
         List<PipelineStepModel> clientModels = expanded.stream()
             .map(model -> withDeploymentRole(model, DeploymentRole.ORCHESTRATOR_CLIENT))
             .toList();
+        List<PipelineStepModel> serverModels = isMonolithLayout(ctx)
+            ? expanded.stream()
+                .filter(this::isMonolithServerCandidate)
+                .map(this::ensureServerRole)
+                .toList()
+            : List.of();
         if (!colocatedPlugins) {
             return clientModels;
         }
@@ -82,10 +88,11 @@ class ModelContextRoleEnricher {
             .filter(PipelineStepModel::sideEffect)
             .map(model -> withDeploymentRole(model, DeploymentRole.PLUGIN_SERVER))
             .toList();
-        if (pluginModels.isEmpty()) {
+        if (pluginModels.isEmpty() && serverModels.isEmpty()) {
             return clientModels;
         }
-        List<PipelineStepModel> combined = new ArrayList<>(pluginModels.size() + clientModels.size());
+        List<PipelineStepModel> combined = new ArrayList<>(serverModels.size() + pluginModels.size() + clientModels.size());
+        combined.addAll(serverModels);
         combined.addAll(pluginModels);
         combined.addAll(clientModels);
         return combined;
@@ -150,10 +157,22 @@ class ModelContextRoleEnricher {
     }
 
     private boolean isServerCandidate(PipelineStepModel model) {
+        if (isAwaitDescriptorStep(model)) {
+            return false;
+        }
         DeploymentRole role = model.deploymentRole();
         // A null role means deployment enrichment has not assigned the step yet, so it is still
         // eligible for server-side generation unless it later becomes an orchestrator or plugin client.
         return role == null || (role != DeploymentRole.ORCHESTRATOR_CLIENT && role != DeploymentRole.PLUGIN_CLIENT);
+    }
+
+    private boolean isMonolithServerCandidate(PipelineStepModel model) {
+        return !model.sideEffect() && isServerCandidate(model);
+    }
+
+    private boolean isAwaitDescriptorStep(PipelineStepModel model) {
+        return model.serviceClassName() != null
+            && PipelineTargetResolutionPhase.AWAIT_STEP_DESCRIPTOR_CLASS.equals(model.serviceClassName().canonicalName());
     }
 
     private boolean hasPluginImplementation(PipelineAspectModel aspect) {

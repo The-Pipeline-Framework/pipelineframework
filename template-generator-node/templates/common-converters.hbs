@@ -1,6 +1,9 @@
 package {{basePackage}}.common.mapper;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Currency;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.List;
@@ -16,6 +19,36 @@ public class CommonConverters {
     @Named("stringToCurrency")
     public Currency stringToCurrency(String code) {
         return code != null ? Currency.getInstance(code) : null;
+    }
+
+    @Named("uuidToString")
+    public String uuidToString(UUID id) {
+        return id != null ? id.toString() : null;
+    }
+
+    @Named("stringToUUID")
+    public UUID stringToUUID(String value) {
+        return value != null && !value.isBlank() ? UUID.fromString(value) : null;
+    }
+
+    @Named("bigDecimalToString")
+    public String bigDecimalToString(BigDecimal value) {
+        return value != null ? value.toPlainString() : null;
+    }
+
+    @Named("stringToBigDecimal")
+    public BigDecimal stringToBigDecimal(String value) {
+        return value != null && !value.isBlank() ? new BigDecimal(value) : null;
+    }
+
+    @Named("instantToString")
+    public String instantToString(Instant value) {
+        return value != null ? value.toString() : null;
+    }
+
+    @Named("stringToInstant")
+    public Instant stringToInstant(String value) {
+        return value != null && !value.isBlank() ? Instant.parse(value) : null;
     }
 
     @Named("atomicIntegerToString")

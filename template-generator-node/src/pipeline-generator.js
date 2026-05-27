@@ -507,17 +507,22 @@ class PipelineGenerator {
             }
             
             if (!processedStep.serviceNameCamel) {
-                // Extract entity name from step name (e.g., "Process Customer" -> "Customer", "Validate Order" -> "Order")
-                let entityName = step.name
-                    .replace('Process ', '')
-                    .replace('Validate ', '')
-                    .replace('Enrich ', '')
-                    .trim();
-                entityName = entityName.replace(/[^a-zA-Z0-9]/g, ' ').trim();
-                
-                // Convert to camelCase
-                const camelCaseName = this.toCamelCase(entityName);
-                processedStep.serviceNameCamel = camelCaseName.charAt(0).toUpperCase() + camelCaseName.slice(1);
+                const explicitServiceName = this.explicitServiceBaseName(processedStep.service);
+                if (explicitServiceName) {
+                    processedStep.serviceNameCamel = explicitServiceName;
+                } else {
+                    // Extract entity name from step name (e.g., "Process Customer" -> "Customer", "Validate Order" -> "Order")
+                    let entityName = step.name
+                        .replace('Process ', '')
+                        .replace('Validate ', '')
+                        .replace('Enrich ', '')
+                        .trim();
+                    entityName = entityName.replace(/[^a-zA-Z0-9]/g, ' ').trim();
+
+                    // Convert to camelCase
+                    const camelCaseName = this.toCamelCase(entityName);
+                    processedStep.serviceNameCamel = camelCaseName.charAt(0).toUpperCase() + camelCaseName.slice(1);
+                }
             }
             
             if (!processedStep.serviceNameTitleCase) {
@@ -572,6 +577,19 @@ class PipelineGenerator {
 
     isSupportedAwaitTransport(type) {
         return type === 'interaction-api' || type === 'webhook';
+    }
+
+    explicitServiceBaseName(serviceClassName) {
+        if (typeof serviceClassName !== 'string' || serviceClassName.trim() === '') {
+            return '';
+        }
+        const simpleName = serviceClassName.trim().split('.').pop();
+        if (!simpleName) {
+            return '';
+        }
+        return simpleName
+            .replace(/^Process/, '')
+            .replace(/Service$/, '');
     }
 
     /**

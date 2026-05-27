@@ -382,7 +382,26 @@ class HandlebarsTemplateEngine {
     constructor(templatesPath = './templates') {
         this.templatesPath = templatesPath;
         this.compiledTemplates = new Map();
+        this.frameworkVersion = this.resolveFrameworkVersion();
         this.loadTemplates();
+    }
+
+    resolveFrameworkVersion() {
+        const override = process.env.TPF_FRAMEWORK_VERSION;
+        if (typeof override === 'string' && override.trim() !== '') {
+            return override.trim();
+        }
+        const repoPom = path.resolve(__dirname, '../../pom.xml');
+        try {
+            const pom = fs.readFileSync(repoPom, 'utf8');
+            const match = pom.match(/<version>([^<]+)<\/version>/);
+            if (match && typeof match[1] === 'string' && match[1].trim() !== '') {
+                return match[1].trim();
+            }
+        } catch (_error) {
+            // Fall through to the baked-in default used by published generator packages.
+        }
+        return '26.5.2-SNAPSHOT';
     }
 
     loadTemplates() {
@@ -410,7 +429,7 @@ class HandlebarsTemplateEngine {
         if (!template) {
             throw new Error(`Template ${templateName} not found`);
         }
-        return template(context);
+        return template({ frameworkVersion: this.frameworkVersion, ...context });
     }
 
     async generateApplication(appName, basePackage, steps, aspects, transport, runtimeLayout, outputPath) {
@@ -675,6 +694,7 @@ class HandlebarsTemplateEngine {
         await fs.ensureDir(path.join(commonPath, 'src/main/java', this.toPath(basePackage + '.common.dto')));
         await fs.ensureDir(path.join(commonPath, 'src/main/java', this.toPath(basePackage + '.common.mapper')));
         await fs.ensureDir(path.join(commonPath, 'src/main/resources'));
+        await fs.ensureDir(path.join(commonPath, 'src/main/resources', 'META-INF'));
         const transportMode = typeof transport === 'string' && transport.trim()
             ? transport.trim().toUpperCase()
             : 'GRPC';
@@ -701,6 +721,9 @@ class HandlebarsTemplateEngine {
 
         // Generate application.properties
         await this.generateCommonApplicationProperties(commonPath, transportMode);
+
+        // Make generated common-module beans discoverable in monolith and modular layouts.
+        await this.generateCommonBeansXml(commonPath);
     }
 
     async generatePipelineRuntimeModule(appName, basePackage, steps, outputPath) {
@@ -727,7 +750,8 @@ class HandlebarsTemplateEngine {
         const appProps = this.render('application-properties', {
             serviceName: 'pipeline-runtime-svc',
             rootProjectName: context.rootProjectName,
-            portOffset: 1
+            portOffset: 1,
+            hasAwaitSteps: (steps || []).some(step => step?.isAwaitStep || step?.kind === 'await')
         });
         await fs.writeFile(path.join(modulePath, 'src/main/resources', 'application.properties'), appProps);
         await this.generateModuleDevProperties(modulePath);
@@ -788,7 +812,8 @@ class HandlebarsTemplateEngine {
         const appProps = this.render('application-properties', {
             serviceName: 'monolith-svc',
             rootProjectName: context.rootProjectName,
-            portOffset: 0
+            portOffset: 0,
+            hasAwaitSteps: (steps || []).some(step => step?.isAwaitStep || step?.kind === 'await')
         });
         await fs.writeFile(path.join(modulePath, 'src/main/resources', 'application.properties'), appProps);
         await this.generateModuleDevProperties(modulePath);
@@ -1003,7 +1028,7 @@ class HandlebarsTemplateEngine {
             className,
             domainClass: className.replace('Dto', ''),
             dtoClass: className + 'Dto',
-            grpcClass: basePackage + '.grpc.' + this.formatForProtoClassName(step.serviceName)
+            grpcClass: basePackage + '.grpc.PipelineTypes'
         };
 
         const rendered = this.render('mapper', context);
@@ -1027,6 +1052,12 @@ class HandlebarsTemplateEngine {
         const rendered = this.render('common-application-properties', context);
         const appPropsPath = path.join(commonPath, 'src/main/resources', 'application.properties');
         await fs.writeFile(appPropsPath, rendered);
+    }
+
+    async generateCommonBeansXml(commonPath) {
+        const rendered = this.render('beans-xml', {}).trimEnd();
+        const beansXmlPath = path.join(commonPath, 'src/main/resources', 'META-INF', 'beans.xml');
+        await fs.writeFile(beansXmlPath, rendered);
     }
 
     async generateUtilityScripts(outputPath) {
@@ -1813,6 +1844,8 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         runtimeLayout,
         outputPath
     ) {
+        const configDir = path.join(outputPath, 'config');
+        await fs.ensureDir(configDir);
         const runtimeMappingDir = path.join(outputPath, 'config', 'runtime-mapping');
         await fs.ensureDir(runtimeMappingDir);
         const layouts = ['modular', 'pipeline-runtime', 'monolith'];
@@ -1836,6 +1869,7 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
             includePersistenceModule,
             includeCacheInvalidationModule
         );
+        await fs.writeFile(path.join(configDir, 'pipeline.runtime.yaml'), YAML.dump(active, { lineWidth: -1 }));
         await fs.writeFile(path.join(runtimeMappingDir, 'pipeline-runtime-active.yaml'), YAML.dump(active, { lineWidth: -1 }));
     }
 }

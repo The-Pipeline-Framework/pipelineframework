@@ -488,16 +488,6 @@
         "await": {
           "type": "object",
           "properties": {
-            "dispatch": {
-              "type": "object",
-              "properties": {
-                "mode": {
-                  "type": "string",
-                  "enum": ["single", "per-item"]
-                }
-              },
-              "additionalProperties": false
-            },
             "correlation": {
               "type": "object",
               "properties": {
@@ -636,6 +626,10 @@
           "type": "string",
           "description": "Name of the step (e.g., Process Customer)"
         },
+        "cardinality": {
+          "type": "string",
+          "enum": ["ONE_TO_ONE", "EXPANSION", "REDUCTION", "SIDE_EFFECT", "MANY_TO_MANY", "ONE_TO_MANY", "MANY_TO_ONE"]
+        },
         "service": {
           "type": "string",
           "description": "Fully qualified class name of the internal service annotated with @PipelineStep",
@@ -654,10 +648,41 @@
           "description": "Fully qualified class name of the input type",
           "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
         },
+        "inputTypeName": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "inputFields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/v2FieldDefinition"
+          }
+        },
         "output": {
           "type": "string",
           "description": "Fully qualified class name of the output type",
           "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+        },
+        "outputTypeName": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "outputFields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/v2FieldDefinition"
+          }
+        },
+        "batchSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "batchTimeoutMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "parallel": {
+          "type": "boolean"
         },
         "inboundMapper": {
           "type": "string",
@@ -706,6 +731,22 @@
           },
           "then": {
             "required": ["input"]
+          }
+        },
+        {
+          "if": {
+            "required": ["inputTypeName"]
+          },
+          "then": {
+            "required": ["outputTypeName"]
+          }
+        },
+        {
+          "if": {
+            "required": ["outputTypeName"]
+          },
+          "then": {
+            "required": ["inputTypeName"]
           }
         },
         {

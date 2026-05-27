@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Map;
 import javax.lang.model.element.Modifier;
 
@@ -15,6 +16,8 @@ import com.squareup.javapoet.TypeSpec;
 import io.quarkus.arc.Unremovable;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import org.pipelineframework.config.pipeline.PipelineYamlConfig;
+import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.processor.PipelineStepProcessor;
@@ -41,9 +44,10 @@ public class AwaitClientStepRenderer {
             ? model.generatedName().substring(0, model.generatedName().length() - "Service".length())
             : model.generatedName();
         String className = baseName + "AwaitClientStep";
-        TransportMode transportMode = resolveTransportMode(ctx);
-        TypeName inputType = clientStepType(model.inboundDomainType(), transportMode);
-        TypeName outputType = clientStepType(model.outboundDomainType(), transportMode);
+        PipelineConfigHints configHints = resolveConfigHints(ctx);
+        TransportMode transportMode = configHints.transportMode();
+        TypeName inputType = clientStepType(model.inboundDomainType(), transportMode, configHints.basePackage());
+        TypeName outputType = clientStepType(model.outboundDomainType(), transportMode, configHints.basePackage());
 
         FieldSpec support = FieldSpec.builder(ClassName.get("org.pipelineframework.awaitable", "AwaitStepSupport"), "support")
             .addAnnotation(ClassName.get("jakarta.inject", "Inject"))
@@ -87,6 +91,24 @@ public class AwaitClientStepRenderer {
             .addMethod(cacheKeyTargetType)
             .addMethod(apply)
             .build();
+        if (model.streamingShape() == StreamingShape.UNARY_UNARY) {
+            type = type.toBuilder()
+                .addSuperinterface(ParameterizedTypeName.get(
+                    ClassName.get("org.pipelineframework.awaitable", "AwaitStreamOneToOneStep"),
+                    inputType,
+                    outputType))
+                .addMethod(MethodSpec.methodBuilder("applyAwaitPerItem")
+                    .addAnnotation(Override.class)
+                    .addModifiers(Modifier.PUBLIC)
+                    .returns(ParameterizedTypeName.get(ClassName.get(Multi.class), outputType))
+                    .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class), inputType), "input")
+                    .addStatement("return support.awaitOneToOneStream(descriptorFactory.descriptor($S, $S, $S), input)",
+                        model.serviceName(),
+                        inputType.toString(),
+                        outputType.toString())
+                    .build())
+                .build();
+        }
 
         JavaFile.builder(model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX, type)
             .build()
@@ -147,24 +169,67 @@ public class AwaitClientStepRenderer {
         };
     }
 
-    private TransportMode resolveTransportMode(GenerationContext ctx) {
+    private PipelineConfigHints resolveConfigHints(GenerationContext ctx) {
+        if (ctx.transportMode() != null || (ctx.pipelineBasePackage() != null && !ctx.pipelineBasePackage().isBlank())) {
+            return new PipelineConfigHints(
+                ctx.transportMode() == null ? TransportMode.GRPC : ctx.transportMode(),
+                ctx.pipelineBasePackage());
+        }
         Map<String, String> options = ctx.processingEnv() == null ? Map.of() : ctx.processingEnv().getOptions();
-        return TransportMode.fromString(options == null ? null : options.get("pipeline.transport"));
+        TransportMode configuredTransport = TransportMode.fromStringOptional(
+            options == null ? null : options.get("pipeline.transport")).orElse(null);
+        String basePackage = null;
+        if (options != null) {
+            String configPath = options.get("pipeline.config");
+            if (configPath != null && !configPath.isBlank()) {
+                PipelineYamlConfig config = loadPipelineConfig(ctx, configPath);
+                if (config != null) {
+                    if (configuredTransport == null) {
+                        configuredTransport = TransportMode.fromString(config.transport());
+                    }
+                    basePackage = config.basePackage();
+                }
+            }
+        }
+        if (configuredTransport == null) {
+            configuredTransport = TransportMode.GRPC;
+        }
+        return new PipelineConfigHints(configuredTransport, basePackage);
     }
 
-    private TypeName clientStepType(TypeName domainType, TransportMode transportMode) {
+    private PipelineYamlConfig loadPipelineConfig(GenerationContext ctx, String configPath) {
+        try {
+            return new PipelineYamlConfigLoader(ctx.processingEnv().getOptions()::get, System::getenv)
+                .load(Path.of(configPath));
+        } catch (RuntimeException ex) {
+            if (ctx.processingEnv() != null && ctx.processingEnv().getMessager() != null) {
+                ctx.processingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.WARNING,
+                    "Failed to load pipeline config '" + configPath + "' while rendering await client step: " + ex.getMessage());
+            }
+            return null;
+        }
+    }
+
+    private TypeName clientStepType(TypeName domainType, TransportMode transportMode, String pipelineBasePackage) {
         if (!(domainType instanceof ClassName className)) {
             return domainType;
         }
+        String basePackage = basePackage(className, pipelineBasePackage);
         return switch (transportMode) {
             case LOCAL -> className;
-            case REST -> ClassName.get(basePackage(className) + ".common.dto", className.simpleName() + "Dto");
-            case GRPC -> ClassName.get(basePackage(className) + ".grpc", "PipelineTypes", className.simpleName());
+            case REST -> ClassName.get(basePackage + ".common.dto", className.simpleName() + "Dto");
+            case GRPC -> ClassName.get(basePackage + ".grpc", "PipelineTypes", className.simpleName());
         };
     }
 
-    private String basePackage(ClassName className) {
+    private String basePackage(ClassName className, String pipelineBasePackage) {
         String packageName = className.packageName();
+        if (packageName == null || packageName.isBlank()) {
+            return pipelineBasePackage == null || pipelineBasePackage.isBlank()
+                ? packageName
+                : pipelineBasePackage;
+        }
         if (packageName.endsWith(".common.domain")) {
             return packageName.substring(0, packageName.length() - ".common.domain".length());
         }
@@ -175,5 +240,8 @@ public class AwaitClientStepRenderer {
             return packageName.substring(0, packageName.length() - ".service".length());
         }
         return packageName;
+    }
+
+    private record PipelineConfigHints(TransportMode transportMode, String basePackage) {
     }
 }

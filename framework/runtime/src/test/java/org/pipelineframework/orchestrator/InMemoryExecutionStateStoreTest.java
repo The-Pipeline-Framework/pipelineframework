@@ -111,7 +111,7 @@ class InMemoryExecutionStateStoreTest {
     }
 
     @Test
-    void retryAfterAwaitResumePreservesResumePayload() {
+    void retryAfterAwaitResumePreservesAwaitUnitId() {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();
         CreateExecutionResult created = store.createOrGetExecution(
@@ -129,7 +129,7 @@ class InMemoryExecutionStateStoreTest {
                 created.record().executionId(),
                 created.record().version(),
                 "transition-await",
-                "barrier-1",
+                "unit-1",
                 5,
                 now + 1)
             .await().indefinitely();
@@ -138,8 +138,7 @@ class InMemoryExecutionStateStoreTest {
         Optional<ExecutionRecord<Object, Object>> queued = store.markAwaitCompleted(
                 "tenant-a",
                 created.record().executionId(),
-                "barrier-1",
-                List.of("status-1", "status-2"),
+                "unit-1",
                 6,
                 now + 2)
             .await().indefinitely();
@@ -167,8 +166,7 @@ class InMemoryExecutionStateStoreTest {
             .await().indefinitely();
 
         assertTrue(retried.isPresent());
-        assertEquals("barrier-1", retried.get().awaitInteractionId());
-        assertEquals(List.of("status-1", "status-2"), retried.get().resumePayload());
+        assertEquals("unit-1", retried.get().awaitUnitId());
     }
 
     @Test

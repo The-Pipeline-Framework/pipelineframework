@@ -23,12 +23,9 @@ import lombok.Getter;
 import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 import org.pipelineframework.annotation.PipelineStep;
-import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentOutput;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
-import org.pipelineframework.csv.common.mapper.PaymentOutputMapper;
-import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
 import org.pipelineframework.service.ReactiveService;
 import org.pipelineframework.step.NonRetryableException;
 
@@ -50,11 +47,10 @@ public class ProcessPaymentStatusService
                 paymentStatus.getPaymentRecordId());
         return Uni.createFrom().failure(new NonRetryableException(message));
       }
-      AckPaymentSent ackPaymentSent = paymentStatus.getAckPaymentSent();
-      PaymentRecord paymentRecord = ackPaymentSent == null ? paymentStatus.getPaymentRecord() : ackPaymentSent.getPaymentRecord();
-      if (ackPaymentSent == null || paymentRecord == null) {
+      PaymentRecord paymentRecord = paymentStatus.getPaymentRecord();
+      if (paymentRecord == null) {
         return Uni.createFrom().failure(new IllegalArgumentException(
-            "PaymentStatus must include ackPaymentSent and paymentRecord for CSV output mapping"));
+            "PaymentStatus must include paymentRecord for CSV output mapping"));
       }
 
       PaymentOutput output = new PaymentOutput();
@@ -63,8 +59,8 @@ public class ProcessPaymentStatusService
       output.setRecipient(paymentRecord.getRecipient());
       output.setAmount(paymentRecord.getAmount());
       output.setCurrency(paymentRecord.getCurrency());
-      output.setConversationId(ackPaymentSent.getConversationId());
-      output.setStatus(ackPaymentSent.getStatus());
+      output.setConversationId(paymentStatus.getConversationId());
+      output.setStatus(paymentStatus.getStatusCode());
       output.setMessage(paymentStatus.getMessage());
       output.setFee(paymentStatus.getFee());
 

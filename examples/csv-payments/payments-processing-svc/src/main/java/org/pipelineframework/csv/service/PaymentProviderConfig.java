@@ -33,27 +33,11 @@ public interface PaymentProviderConfig {
   @WithDefault("5000")
   long timeoutMillis();
 
-  /**
-   * Simulated wait for the polling of the 3rd party service
-   */
-  @WithDefault("500")
-  double waitMilliseconds();
-
-  /**
-   * Deterministic fraction of send-payment requests that should simulate a timeout.
-   */
+  /** Deterministic fraction of provider requests that should simulate a timeout. */
   @WithDefault("0.0")
-  double sendTimeoutProbability();
+  double providerTimeoutProbability();
 
-  /**
-   * Deterministic fraction of poll requests that should simulate a timeout.
-   */
+  /** Deterministic fraction of provider requests that should return a business rejection. */
   @WithDefault("0.0")
-  double pollTimeoutProbability();
-
-  /**
-   * Deterministic fraction of poll requests that should return a business rejection.
-   */
-  @WithDefault("0.0")
-  double pollRejectProbability();
+  double providerRejectProbability();
 }

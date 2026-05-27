@@ -24,7 +24,6 @@ import java.util.Currency;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentOutput;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
@@ -41,18 +40,14 @@ class ProcessPaymentStatusServiceTest {
         .setRecipient("alice")
         .setAmount(new BigDecimal("12.34"))
         .setCurrency(Currency.getInstance("EUR"));
-    AckPaymentSent ack = new AckPaymentSent(UUID.randomUUID())
-        .setStatus(202L)
-        .setMessage("accepted")
-        .setPaymentRecord(record)
-        .setPaymentRecordId(record.getId());
+    UUID conversationId = UUID.randomUUID();
     PaymentStatus status = new PaymentStatus()
         .setReference("provider-ref")
         .setStatus("Completed")
         .setMessage("settled")
         .setFee(new BigDecimal("0.12"))
-        .setAckPaymentSent(ack)
-        .setAckPaymentSentId(ack.getId())
+        .setConversationId(conversationId)
+        .setStatusCode(202L)
         .setPaymentRecord(record)
         .setPaymentRecordId(record.getId());
 
@@ -62,7 +57,7 @@ class ProcessPaymentStatusServiceTest {
     assertEquals("alice", output.getRecipient());
     assertEquals(new BigDecimal("12.34"), output.getAmount());
     assertEquals(Currency.getInstance("EUR"), output.getCurrency());
-    assertEquals(ack.getConversationId(), output.getConversationId());
+    assertEquals(conversationId, output.getConversationId());
     assertEquals(202L, output.getStatus());
     assertEquals("settled", output.getMessage());
     assertEquals(new BigDecimal("0.12"), output.getFee());
@@ -75,7 +70,8 @@ class ProcessPaymentStatusServiceTest {
         .setStatus("Rejected")
         .setMessage("declined")
         .setFee(BigDecimal.ZERO)
-        .setAckPaymentSentId(UUID.randomUUID())
+        .setConversationId(UUID.randomUUID())
+        .setStatusCode(400L)
         .setPaymentRecordId(UUID.randomUUID());
 
     assertThrows(NonRetryableException.class, () -> service.process(status).await().indefinitely());

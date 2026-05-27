@@ -265,21 +265,15 @@ public class PipelineYamlConfigLoader {
         if (!(awaitObj instanceof Map<?, ?> awaitMap)) {
             throw new IllegalArgumentException("step '" + stepName + "' await must be defined as a map");
         }
-        PipelineYamlAwaitDispatch dispatch = readAwaitDispatch(awaitMap);
+        if (awaitMap.containsKey("dispatch")) {
+            throw new IllegalArgumentException("step '" + stepName + "' await.dispatch is not supported");
+        }
+        if (awaitMap.containsKey("scope")) {
+            throw new IllegalArgumentException("step '" + stepName + "' await.scope is not supported");
+        }
         PipelineYamlAwaitCorrelation correlation = readAwaitCorrelation(awaitMap);
         PipelineYamlAwaitTransport transport = readAwaitTransport(awaitMap, stepName);
-        return new PipelineYamlAwaitConfig(dispatch, correlation, transport);
-    }
-
-    private PipelineYamlAwaitDispatch readAwaitDispatch(Map<?, ?> awaitMap) {
-        Object dispatchObj = awaitMap.get("dispatch");
-        if (dispatchObj == null) {
-            return new PipelineYamlAwaitDispatch(null);
-        }
-        if (!(dispatchObj instanceof Map<?, ?> dispatchMap)) {
-            throw new IllegalArgumentException("await.dispatch must be a map, but got: " + dispatchObj.getClass().getName());
-        }
-        return new PipelineYamlAwaitDispatch(readString(dispatchMap, "mode"));
+        return new PipelineYamlAwaitConfig(correlation, transport);
     }
 
     private PipelineYamlAwaitCorrelation readAwaitCorrelation(Map<?, ?> awaitMap) {

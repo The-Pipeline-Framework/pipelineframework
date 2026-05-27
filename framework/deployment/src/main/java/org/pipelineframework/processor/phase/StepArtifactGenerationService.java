@@ -6,6 +6,7 @@ import java.util.Set;
 
 import com.google.protobuf.DescriptorProtos;
 import com.squareup.javapoet.ClassName;
+import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.DeploymentRole;
@@ -105,7 +106,9 @@ class StepArtifactGenerationService {
                         clientRole,
                         enabledAspects,
                         cacheKeyGenerator,
-                        descriptorSet));
+                        descriptorSet,
+                        ctx.getTransportMode(),
+                        ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config ? config.basePackage() : null));
                     roleMetadataGenerator.recordClassWithRole(awaitClientClassName, clientRole.name());
                 }
                 case GRPC_SERVICE -> {
@@ -118,7 +121,7 @@ class StepArtifactGenerationService {
                             ? DeploymentRole.ORCHESTRATOR_CLIENT
                             : DeploymentRole.PLUGIN_SERVER;
                         if (ctx.isTransportModeLocal()) {
-                            String sideEffectBeanKey = model.servicePackage() + PIPELINE_DOT + model.serviceName();
+                            String sideEffectBeanKey = sideEffectBeanKey(model, sideEffectOutputRole);
                             if (generatedSideEffectBeans.add(sideEffectBeanKey)) {
                                 sideEffectBeanService.generateSideEffectBean(
                                     ctx,
@@ -156,6 +159,24 @@ class StepArtifactGenerationService {
                         descriptorSet));
                     roleMetadataGenerator.recordClassWithRole(grpcClassName, grpcRole.name());
                 }
+                case GRPC_SERVICE_SIDE_EFFECT_ONLY -> {
+                    if (!model.sideEffect()) {
+                        break;
+                    }
+                    DeploymentRole sideEffectRole = DeploymentRole.ORCHESTRATOR_CLIENT;
+                    String sideEffectBeanKey = sideEffectBeanKey(model, sideEffectRole);
+                    if (generatedSideEffectBeans.add(sideEffectBeanKey)) {
+                        sideEffectBeanService.generateSideEffectBean(
+                            ctx,
+                            model,
+                            sideEffectRole,
+                            sideEffectRole,
+                            grpcBinding);
+                    }
+                    roleMetadataGenerator.recordClassWithRole(
+                        model.servicePackage() + PIPELINE_DOT + model.serviceName(),
+                        sideEffectRole.name());
+                }
                 case CLIENT_STEP -> {
                     if (model.deploymentRole() == DeploymentRole.PLUGIN_SERVER && ctx.isPluginHost()) {
                         break;
@@ -186,12 +207,14 @@ class StepArtifactGenerationService {
                         break;
                     }
                     if (model.sideEffect()) {
-                        String sideEffectBeanKey = model.servicePackage() + PIPELINE_DOT + model.serviceName();
+                        DeploymentRole sideEffectRole = ctx.isTransportModeLocal()
+                            ? DeploymentRole.ORCHESTRATOR_CLIENT
+                            : resolveClientRole(model.deploymentRole());
+                        if (sideEffectRole == null) {
+                            sideEffectRole = DeploymentRole.ORCHESTRATOR_CLIENT;
+                        }
+                        String sideEffectBeanKey = sideEffectBeanKey(model, sideEffectRole);
                         if (generatedSideEffectBeans.add(sideEffectBeanKey)) {
-                            DeploymentRole sideEffectRole = resolveClientRole(model.deploymentRole());
-                            if (sideEffectRole == null) {
-                                sideEffectRole = DeploymentRole.ORCHESTRATOR_CLIENT;
-                            }
                             sideEffectBeanService.generateSideEffectBean(
                                 ctx,
                                 model,
@@ -208,7 +231,9 @@ class StepArtifactGenerationService {
                     }
                     String localClientClassName = model.servicePackage() + PIPELINE_DOT
                         + ResourceNameUtils.normalizeBaseName(model.generatedName()) + "LocalClientStep";
-                    DeploymentRole localClientRole = resolveClientRole(model.deploymentRole());
+                    DeploymentRole localClientRole = ctx.isTransportModeLocal() && model.sideEffect()
+                        ? DeploymentRole.ORCHESTRATOR_CLIENT
+                        : resolveClientRole(model.deploymentRole());
                     localClientRenderer.render(localBinding, new GenerationContext(
                         ctx.getProcessingEnv(),
                         pathResolver.resolveRoleOutputDir(ctx, localClientRole),
@@ -374,5 +399,9 @@ class StepArtifactGenerationService {
         }
         DeploymentRole mapped = generationPolicy.resolveClientRole(serverRole);
         return mapped != null ? mapped : DeploymentRole.ORCHESTRATOR_CLIENT;
+    }
+
+    private String sideEffectBeanKey(PipelineStepModel model, DeploymentRole outputRole) {
+        return outputRole.name() + ":" + model.servicePackage() + PIPELINE_DOT + model.serviceName();
     }
 }

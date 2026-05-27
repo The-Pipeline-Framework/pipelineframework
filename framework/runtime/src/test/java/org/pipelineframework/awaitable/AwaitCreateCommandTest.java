@@ -18,7 +18,7 @@ class AwaitCreateCommandTest {
         AwaitCreateCommand command = new AwaitCreateCommand(
             "tenant1", "exec-1", "step-review", 2, "com.example.Output",
             "cause-1", "idem-1", "corr-1", "payload", "alice", "finance",
-            "webhook", NOW, DEADLINE, Long.MAX_VALUE);
+            "webhook", "unit-1", null, NOW, DEADLINE, Long.MAX_VALUE);
 
         assertEquals("tenant1", command.tenantId());
         assertEquals("exec-1", command.executionId());
@@ -38,112 +38,113 @@ class AwaitCreateCommandTest {
     }
 
     @Test
-    void constructsBarrierItemCommand() {
+    void constructsItemCommand() {
         AwaitCreateCommand command = new AwaitCreateCommand(
             "tenant1", "exec-1", "await-payment-provider", 3, "com.example.PaymentStatus",
             "cause-1", "idem-1", "corr-1", "payload", null, null,
-            "kafka", "barrier-1", 1, 2, NOW, DEADLINE, Long.MAX_VALUE);
+            "kafka", "unit-1", 1, NOW, DEADLINE, Long.MAX_VALUE);
 
-        assertEquals("barrier-1", command.barrierId());
-        assertEquals(1, command.barrierItemIndex());
-        assertEquals(2, command.barrierItemCount());
-    }
-
-    @Test
-    void backwardCompatConstructorDefaultsStepIndexAndOutputType() {
-        AwaitCreateCommand command = new AwaitCreateCommand(
-            "tenant1", "exec-1", "step-review",
-            "cause-1", "idem-1", "corr-1", "payload", "alice", "finance",
-            "webhook", NOW, DEADLINE, Long.MAX_VALUE);
-
-        assertEquals(0, command.stepIndex());
-        assertEquals(Object.class.getName(), command.outputType());
-        assertEquals("step-review", command.stepId());
+        assertEquals("unit-1", command.unitId());
+        assertEquals(1, command.itemIndex());
     }
 
     @Test
     void rejectsBlankTenantId() {
         assertThrows(IllegalArgumentException.class, () ->
             new AwaitCreateCommand("", "exec-1", "step-1", 0, "Out.class",
-                "cause", "idem", "corr", null, null, null, "webhook", NOW, DEADLINE, Long.MAX_VALUE));
+                "cause", "idem", "corr", null, null, null, "webhook", "unit-1", null, NOW, DEADLINE, Long.MAX_VALUE));
     }
 
     @Test
     void rejectsNullTenantId() {
         assertThrows(IllegalArgumentException.class, () ->
             new AwaitCreateCommand(null, "exec-1", "step-1", 0, "Out.class",
-                "cause", "idem", "corr", null, null, null, "webhook", NOW, DEADLINE, Long.MAX_VALUE));
+                "cause", "idem", "corr", null, null, null, "webhook", "unit-1", null, NOW, DEADLINE, Long.MAX_VALUE));
     }
 
     @Test
     void rejectsBlankExecutionId() {
         assertThrows(IllegalArgumentException.class, () ->
             new AwaitCreateCommand("tenant1", "", "step-1", 0, "Out.class",
-                "cause", "idem", "corr", null, null, null, "webhook", NOW, DEADLINE, Long.MAX_VALUE));
+                "cause", "idem", "corr", null, null, null, "webhook", "unit-1", null, NOW, DEADLINE, Long.MAX_VALUE));
     }
 
     @Test
     void rejectsBlankStepId() {
         assertThrows(IllegalArgumentException.class, () ->
             new AwaitCreateCommand("tenant1", "exec-1", " ", 0, "Out.class",
-                "cause", "idem", "corr", null, null, null, "webhook", NOW, DEADLINE, Long.MAX_VALUE));
+                "cause", "idem", "corr", null, null, null, "webhook", "unit-1", null, NOW, DEADLINE, Long.MAX_VALUE));
     }
 
     @Test
     void rejectsBlankOutputType() {
         assertThrows(IllegalArgumentException.class, () ->
             new AwaitCreateCommand("tenant1", "exec-1", "step-1", 0, "",
-                "cause", "idem", "corr", null, null, null, "webhook", NOW, DEADLINE, Long.MAX_VALUE));
+                "cause", "idem", "corr", null, null, null, "webhook", "unit-1", null, NOW, DEADLINE, Long.MAX_VALUE));
     }
 
     @Test
     void rejectsBlankIdempotencyKey() {
         assertThrows(IllegalArgumentException.class, () ->
             new AwaitCreateCommand("tenant1", "exec-1", "step-1", 0, "Out.class",
-                "cause", "", "corr", null, null, null, "webhook", NOW, DEADLINE, Long.MAX_VALUE));
+                "cause", "", "corr", null, null, null, "webhook", "unit-1", null, NOW, DEADLINE, Long.MAX_VALUE));
     }
 
     @Test
     void rejectsBlankCorrelationId() {
         assertThrows(IllegalArgumentException.class, () ->
             new AwaitCreateCommand("tenant1", "exec-1", "step-1", 0, "Out.class",
-                "cause", "idem", "  ", null, null, null, "webhook", NOW, DEADLINE, Long.MAX_VALUE));
+                "cause", "idem", "  ", null, null, null, "webhook", "unit-1", null, NOW, DEADLINE, Long.MAX_VALUE));
     }
 
     @Test
     void rejectsBlankTransportType() {
         assertThrows(IllegalArgumentException.class, () ->
             new AwaitCreateCommand("tenant1", "exec-1", "step-1", 0, "Out.class",
-                "cause", "idem", "corr", null, null, null, "", NOW, DEADLINE, Long.MAX_VALUE));
+                "cause", "idem", "corr", null, null, null, "", "unit-1", null, NOW, DEADLINE, Long.MAX_VALUE));
+
+    }
+
+    @Test
+    void rejectsBlankUnitId() {
+        assertThrows(IllegalArgumentException.class, () ->
+            new AwaitCreateCommand("tenant1", "exec-1", "step-1", 0, "Out.class",
+                "cause", "idem", "corr", null, null, null, "webhook", " ", null, NOW, DEADLINE, Long.MAX_VALUE));
     }
 
     @Test
     void rejectsDeadlineNotAfterNow() {
         assertThrows(IllegalArgumentException.class, () ->
             new AwaitCreateCommand("tenant1", "exec-1", "step-1", 0, "Out.class",
-                "cause", "idem", "corr", null, null, null, "webhook", NOW, NOW, Long.MAX_VALUE));
+                "cause", "idem", "corr", null, null, null, "webhook", "unit-1", null, NOW, NOW, Long.MAX_VALUE));
 
         assertThrows(IllegalArgumentException.class, () ->
             new AwaitCreateCommand("tenant1", "exec-1", "step-1", 0, "Out.class",
-                "cause", "idem", "corr", null, null, null, "webhook", NOW, NOW - 1, Long.MAX_VALUE));
+                "cause", "idem", "corr", null, null, null, "webhook", "unit-1", null, NOW, NOW - 1, Long.MAX_VALUE));
     }
 
     @Test
-    void rejectsInvalidBarrierMetadata() {
+    void rejectsInvalidItemMetadata() {
         assertThrows(IllegalArgumentException.class, () ->
             new AwaitCreateCommand("tenant1", "exec-1", "step-1", 0, "Out.class",
                 "cause", "idem", "corr", null, null, null, "webhook",
-                null, 0, 2, NOW, DEADLINE, Long.MAX_VALUE));
+                null, 0, NOW, DEADLINE, Long.MAX_VALUE));
 
         assertThrows(IllegalArgumentException.class, () ->
             new AwaitCreateCommand("tenant1", "exec-1", "step-1", 0, "Out.class",
                 "cause", "idem", "corr", null, null, null, "webhook",
-                "barrier-1", null, 2, NOW, DEADLINE, Long.MAX_VALUE));
+                "unit-1", -1, NOW, DEADLINE, Long.MAX_VALUE));
+    }
 
-        assertThrows(IllegalArgumentException.class, () ->
-            new AwaitCreateCommand("tenant1", "exec-1", "step-1", 0, "Out.class",
-                "cause", "idem", "corr", null, null, null, "webhook",
-                "barrier-1", 2, 2, NOW, DEADLINE, Long.MAX_VALUE));
+    @Test
+    void acceptsItemWithoutAggregateMetadata() {
+        AwaitCreateCommand command = new AwaitCreateCommand(
+            "tenant1", "exec-1", "step-1", 0, "Out.class",
+            "cause", "idem", "corr", null, null, null, "webhook",
+            "unit-1", 2, NOW, DEADLINE, Long.MAX_VALUE);
+
+        assertEquals("unit-1", command.unitId());
+        assertEquals(2, command.itemIndex());
     }
 
     @Test
@@ -154,14 +155,14 @@ class AwaitCreateCommandTest {
 
         assertThrows(IllegalArgumentException.class, () ->
             new AwaitCreateCommand("tenant1", "exec-1", "step-1", 0, "Out.class",
-                "cause", "idem", "corr", null, null, null, "webhook", NOW, deadlineEpochMs, ttlBeforeDeadline));
+                "cause", "idem", "corr", null, null, null, "webhook", "unit-1", null, NOW, deadlineEpochMs, ttlBeforeDeadline));
     }
 
     @Test
     void autoSetsTtlWhenZero() {
         AwaitCreateCommand command = new AwaitCreateCommand(
             "tenant1", "exec-1", "step-1", 0, "Out.class",
-            "cause", "idem", "corr", null, null, null, "webhook", NOW, DEADLINE, 0L);
+            "cause", "idem", "corr", null, null, null, "webhook", "unit-1", null, NOW, DEADLINE, 0L);
 
         long expectedTtl = Instant.ofEpochMilli(DEADLINE).plusSeconds(86_400).getEpochSecond();
         assertEquals(expectedTtl, command.ttlEpochS());
@@ -173,7 +174,7 @@ class AwaitCreateCommandTest {
         long futureDeadline = before + 60_000L;
         AwaitCreateCommand command = new AwaitCreateCommand(
             "tenant1", "exec-1", "step-1", 0, "Out.class",
-            "cause", "idem", "corr", null, null, null, "webhook", 0L, futureDeadline, Long.MAX_VALUE);
+            "cause", "idem", "corr", null, null, null, "webhook", "unit-1", null, 0L, futureDeadline, Long.MAX_VALUE);
         long after = System.currentTimeMillis();
 
         assertTrue(command.nowEpochMs() >= before);
@@ -182,7 +183,7 @@ class AwaitCreateCommandTest {
         before = System.currentTimeMillis();
         AwaitCreateCommand negativeNowCommand = new AwaitCreateCommand(
             "tenant1", "exec-1", "step-1", 0, "Out.class",
-            "cause", "idem", "corr", null, null, null, "webhook", -1L, futureDeadline, Long.MAX_VALUE);
+            "cause", "idem", "corr", null, null, null, "webhook", "unit-1", null, -1L, futureDeadline, Long.MAX_VALUE);
         after = System.currentTimeMillis();
 
         assertTrue(negativeNowCommand.nowEpochMs() >= before);

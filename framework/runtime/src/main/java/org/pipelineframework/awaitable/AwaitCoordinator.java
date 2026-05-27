@@ -3,6 +3,8 @@ package org.pipelineframework.awaitable;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
@@ -13,17 +15,21 @@ import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 import org.pipelineframework.awaitable.spi.AwaitTransportAdapter;
+import org.pipelineframework.awaitable.spi.AwaitUnitStore;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 
 /**
- * Coordinates await interaction persistence, dispatch, completion admission, and query paths.
+ * Coordinates await unit persistence, interaction dispatch, completion admission, and replay payload loading.
  */
 @ApplicationScoped
 public class AwaitCoordinator {
 
     @Inject
-    Instance<AwaitInteractionStore> stores;
+    Instance<AwaitInteractionStore> interactionStores;
+
+    @Inject
+    Instance<AwaitUnitStore> unitStores;
 
     @Inject
     Instance<AwaitTransportAdapter<?>> adapters;
@@ -34,12 +40,10 @@ public class AwaitCoordinator {
     @Inject
     AwaitResumeTokenService resumeTokenService;
 
-    private volatile AwaitInteractionStore resolvedStore;
+    private volatile AwaitInteractionStore resolvedInteractionStore;
+    private volatile AwaitUnitStore resolvedUnitStore;
     private final Map<String, AwaitTransportAdapter<?>> resolvedAdapters = new ConcurrentHashMap<>();
 
-    /**
-     * Creates or returns an active interaction for an await step.
-     */
     public Uni<AwaitCreateResult> createOrGet(
         AwaitStepDescriptor descriptor,
         String tenantId,
@@ -50,88 +54,61 @@ public class AwaitCoordinator {
         String assignee,
         String group
     ) {
-        Object normalizedRequestPayload = AwaitPayloadSupport.normalize(requestPayload);
-        long now = System.currentTimeMillis();
-        long deadline = now + descriptor.timeout().toMillis();
-        long ttl = Instant.ofEpochMilli(deadline).plusSeconds(86_400).getEpochSecond();
-        String idempotencyKey = deriveIdempotencyKey(descriptor, executionId, normalizedRequestPayload);
-        String correlationId = deriveCorrelationId(descriptor, tenantId, executionId, idempotencyKey);
-        return store().createOrGet(new AwaitCreateCommand(
-            tenantId,
-            executionId,
-            descriptor.stepId(),
-            stepIndex,
-            descriptor.outputType(),
-            causationId,
-            idempotencyKey,
-            correlationId,
-            normalizedRequestPayload,
-            assignee,
-            group,
-            descriptor.transportType(),
-            now,
-            deadline,
-            ttl));
+        String unitId = deriveUnitId(tenantId, executionId, descriptor.stepId(), stepIndex);
+        return createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex)
+            .onItem().transformToUni(unit -> createInteraction(
+                descriptor,
+                unit.unitId(),
+                tenantId,
+                executionId,
+                stepIndex,
+                causationId,
+                requestPayload,
+                null,
+                assignee,
+                group)
+                .onItem().transformToUni(created -> unitStore().attachPrimaryInteraction(
+                        tenantId,
+                        unit.unitId(),
+                        created.record().interactionId(),
+                        System.currentTimeMillis())
+                    .replaceWith(created)));
     }
 
-    /**
-     * Creates or returns one item interaction inside a per-item await barrier.
-     */
-    public Uni<AwaitCreateResult> createOrGetBarrierItem(
+    public Uni<AwaitCreateResult> createOrGetItem(
         AwaitStepDescriptor descriptor,
         String tenantId,
         String executionId,
         int stepIndex,
         String causationId,
         Object requestPayload,
-        String barrierId,
+        String unitId,
         int itemIndex,
-        int itemCount,
         String assignee,
         String group
     ) {
-        Object normalizedRequestPayload = AwaitPayloadSupport.normalize(requestPayload);
-        if (itemCount <= 0) {
-            return Uni.createFrom().failure(new IllegalArgumentException("itemCount must be greater than 0"));
+        if (itemIndex < 0) {
+            return Uni.createFrom().failure(new IllegalArgumentException("itemIndex must be non-negative"));
         }
-        if (itemIndex < 0 || itemIndex >= itemCount) {
-            return Uni.createFrom().failure(new IllegalArgumentException(
-                "itemIndex must be in range [0, itemCount), got " + itemIndex + " for itemCount=" + itemCount));
-        }
-        long now = System.currentTimeMillis();
-        long deadline = now + descriptor.timeout().toMillis();
-        long ttl = Instant.ofEpochMilli(deadline).plusSeconds(86_400).getEpochSecond();
-        String idempotencyKey = deriveIdempotencyKey(descriptor, executionId, normalizedRequestPayload) + ":item=" + itemIndex;
-        String correlationId = deriveCorrelationId(descriptor, tenantId, executionId, idempotencyKey);
-        return store().createOrGet(new AwaitCreateCommand(
-            tenantId,
-            executionId,
-            descriptor.stepId(),
-            stepIndex,
-            descriptor.outputType(),
-            causationId,
-            idempotencyKey,
-            correlationId,
-            normalizedRequestPayload,
-            assignee,
-            group,
-            descriptor.transportType(),
-            barrierId,
-            itemIndex,
-            itemCount,
-            now,
-            deadline,
-            ttl));
+        return createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex)
+            .onItem().transformToUni(ignored -> createInteraction(
+                descriptor,
+                unitId,
+                tenantId,
+                executionId,
+                stepIndex,
+                causationId,
+                requestPayload,
+                itemIndex,
+                assignee,
+                group));
     }
 
-    /**
-     * Dispatches an existing interaction through its configured transport adapter.
-     */
     @SuppressWarnings("unchecked")
     public Uni<AwaitInteractionRecord> dispatch(AwaitStepDescriptor descriptor, AwaitInteractionRecord interaction) {
         AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(descriptor.transportType());
         long nowEpochMs = System.currentTimeMillis();
-        return store().markDispatching(
+        return interactionStore().markDispatching(
                 interaction.tenantId(),
                 interaction.interactionId(),
                 interaction.version(),
@@ -143,14 +120,14 @@ public class AwaitCoordinator {
                     descriptor,
                     claimedInteraction,
                     claimedInteraction.requestPayload()))
-                .onFailure().call(failure -> store().fail(
+                .onFailure().call(failure -> interactionStore().fail(
                     claimedInteraction.tenantId(),
                     claimedInteraction.interactionId(),
                     claimedInteraction.version(),
                     failure.getMessage(),
                     System.currentTimeMillis())
                     .replaceWith(failure))
-                .onItem().transformToUni(result -> store().markDispatched(
+                .onItem().transformToUni(result -> interactionStore().markDispatched(
                     claimedInteraction.tenantId(),
                     claimedInteraction.interactionId(),
                     claimedInteraction.version(),
@@ -161,13 +138,10 @@ public class AwaitCoordinator {
                         + claimedInteraction.interactionId()))));
     }
 
-    /**
-     * Accepts a correlated completion.
-     */
     public Uni<AwaitCompletionResult> complete(AwaitCompletionCommand command) {
         AwaitCompletionCommand normalized = normalizeCompletionCommand(command);
         if (normalized.resumeToken() == null) {
-            return store().complete(normalized);
+            return interactionStore().complete(normalized);
         }
         return resolveForCompletion(normalized)
             .onItem().transformToUni(record -> {
@@ -182,55 +156,151 @@ public class AwaitCoordinator {
                     .runSubscriptionOn(Infrastructure.getDefaultExecutor())
                     .replaceWith(record);
             })
-            .onItem().transformToUni(ignored -> store().complete(normalized));
+            .onItem().transformToUni(ignored -> interactionStore().complete(normalized));
     }
 
-    /**
-     * Queries pending interactions.
-     */
+    public Uni<AwaitUnitRecord> recordCompletion(AwaitInteractionRecord record, long nowEpochMs) {
+        if (record.status() == AwaitInteractionStatus.TIMED_OUT) {
+            return unitStore().markTerminal(record.tenantId(), record.unitId(), AwaitUnitStatus.TIMED_OUT, nowEpochMs)
+                .onItem().transform(optional -> optional.orElseThrow(
+                    () -> new IllegalStateException("Await unit not found for timed-out interaction " + record.unitId())));
+        }
+        if (record.status() == AwaitInteractionStatus.FAILED) {
+            return unitStore().markTerminal(record.tenantId(), record.unitId(), AwaitUnitStatus.FAILED, nowEpochMs)
+                .onItem().transform(optional -> optional.orElseThrow(
+                    () -> new IllegalStateException("Await unit not found for failed interaction " + record.unitId())));
+        }
+        Uni<Optional<AwaitUnitRecord>> updated = record.itemInteraction()
+            ? unitStore().recordItemCompleted(record.tenantId(), record.unitId(), nowEpochMs)
+            : unitStore().markCompleted(record.tenantId(), record.unitId(), nowEpochMs);
+        return updated.onItem().transform(optional -> optional.orElseThrow(
+            () -> new IllegalStateException("Await unit not found while recording completion: " + record.unitId())));
+    }
+
+    public Uni<AwaitUnitRecord> markDispatchComplete(String tenantId, String unitId, int expectedItemCount, long nowEpochMs) {
+        return unitStore().markDispatchComplete(tenantId, unitId, expectedItemCount, nowEpochMs)
+            .onItem().transform(optional -> optional.orElseThrow(
+                () -> new IllegalStateException("Await unit not found while completing dispatch: " + unitId)));
+    }
+
+    public Uni<AwaitUnitRecord> getUnit(String tenantId, String unitId) {
+        return unitStore().get(tenantId, unitId)
+            .onItem().transform(optional -> optional.orElseThrow(
+                () -> new AwaitInteractionNotFoundException("No await unit matches id " + unitId)));
+    }
+
+    public Uni<Object> loadResumePayload(String tenantId, String unitId) {
+        return getUnit(tenantId, unitId).onItem().transformToUni(unit -> {
+            if (unit.primaryInteractionId() != null) {
+                return interactionStore().get(tenantId, unit.primaryInteractionId())
+                    .onItem().transform(optional -> optional.orElseThrow(
+                        () -> new IllegalStateException("Await interaction not found for primary interaction id "
+                            + unit.primaryInteractionId())))
+                    .onItem().transform(this::coerceResumePayload);
+            }
+            return interactionStore().findByUnit(tenantId, unitId)
+                .onItem().transform(records -> List.copyOf(records.stream()
+                    .sorted(java.util.Comparator.comparing(record -> record.itemIndex() == null ? Integer.MAX_VALUE : record.itemIndex()))
+                    .map(this::coerceResumePayload)
+                    .toList()));
+        });
+    }
+
     public Uni<List<AwaitInteractionRecord>> queryPending(
         String tenantId,
         String assignee,
         String group,
         String stepId,
         int limit) {
-        return store().queryPending(tenantId, assignee, group, stepId, limit);
+        return interactionStore().queryPending(tenantId, assignee, group, stepId, limit);
     }
 
-    /**
-     * Returns all interactions for a per-item await barrier.
-     */
-    public Uni<List<AwaitInteractionRecord>> findByBarrier(
+    public Uni<List<AwaitInteractionRecord>> findByUnit(String tenantId, String unitId) {
+        return interactionStore().findByUnit(tenantId, unitId);
+    }
+
+    public Uni<List<AwaitInteractionRecord>> findTimedOut(long nowEpochMs, int limit) {
+        return interactionStore().findTimedOut(nowEpochMs, limit);
+    }
+
+    public Uni<Optional<AwaitInteractionRecord>> markTimedOut(AwaitInteractionRecord record, long nowEpochMs) {
+        return interactionStore().markTimedOut(record.tenantId(), record.interactionId(), record.version(), nowEpochMs)
+            .onItem().transformToUni(updated -> unitStore().markTerminal(
+                    record.tenantId(),
+                    record.unitId(),
+                    AwaitUnitStatus.TIMED_OUT,
+                    nowEpochMs)
+                .replaceWith(updated));
+    }
+
+    private Uni<AwaitCreateResult> createInteraction(
+        AwaitStepDescriptor descriptor,
+        String unitId,
         String tenantId,
         String executionId,
         int stepIndex,
-        String barrierId) {
-        return store().findByBarrier(tenantId, executionId, stepIndex, barrierId);
+        String causationId,
+        Object requestPayload,
+        Integer itemIndex,
+        String assignee,
+        String group
+    ) {
+        Object normalizedRequestPayload = AwaitPayloadSupport.normalize(requestPayload);
+        long now = System.currentTimeMillis();
+        long deadline = now + descriptor.timeout().toMillis();
+        long ttl = Instant.ofEpochMilli(deadline).plusSeconds(86_400).getEpochSecond();
+        String idempotencyKey = deriveIdempotencyKey(descriptor, executionId, normalizedRequestPayload)
+            + (itemIndex == null ? "" : ":item=" + itemIndex);
+        String correlationId = deriveCorrelationId(descriptor, tenantId, executionId, idempotencyKey);
+        return interactionStore().createOrGet(new AwaitCreateCommand(
+            tenantId,
+            executionId,
+            descriptor.stepId(),
+            stepIndex,
+            descriptor.outputType(),
+            causationId,
+            idempotencyKey,
+            correlationId,
+            normalizedRequestPayload,
+            assignee,
+            group,
+            descriptor.transportType(),
+            unitId,
+            itemIndex,
+            now,
+            deadline,
+            ttl));
     }
 
-    /**
-     * Finds interactions past their deadline.
-     */
-    public Uni<List<AwaitInteractionRecord>> findTimedOut(long nowEpochMs, int limit) {
-        return store().findTimedOut(nowEpochMs, limit);
+    private Uni<AwaitUnitRecord> createOrGetUnit(
+        AwaitStepDescriptor descriptor,
+        String tenantId,
+        String unitId,
+        String executionId,
+        int stepIndex
+    ) {
+        long now = System.currentTimeMillis();
+        long ttl = Instant.ofEpochMilli(now + descriptor.timeout().toMillis()).plusSeconds(86_400).getEpochSecond();
+        return unitStore().createOrGet(new AwaitUnitCreateCommand(
+            tenantId,
+            unitId,
+            executionId,
+            descriptor.stepId(),
+            stepIndex,
+            descriptor.cardinality(),
+            now,
+            ttl));
     }
 
-    /**
-     * Marks an interaction as timed out.
-     */
-    public Uni<java.util.Optional<AwaitInteractionRecord>> markTimedOut(AwaitInteractionRecord record, long nowEpochMs) {
-        return store().markTimedOut(record.tenantId(), record.interactionId(), record.version(), nowEpochMs);
-    }
-
-    private AwaitInteractionStore store() {
-        AwaitInteractionStore cached = resolvedStore;
+    private AwaitInteractionStore interactionStore() {
+        AwaitInteractionStore cached = resolvedInteractionStore;
         if (cached != null) {
             return cached;
         }
         String provider = orchestratorConfig == null ? null : orchestratorConfig.stateProvider();
         synchronized (this) {
-            if (resolvedStore == null) {
-                resolvedStore = stores.stream()
+            if (resolvedInteractionStore == null) {
+                resolvedInteractionStore = interactionStores.stream()
                     .filter(candidate -> provider == null || provider.isBlank() || provider.equalsIgnoreCase(candidate.providerName()))
                     .sorted((left, right) -> {
                         int priorityComparison = Integer.compare(right.priority(), left.priority());
@@ -243,7 +313,32 @@ public class AwaitCoordinator {
                     .orElseThrow(() -> new IllegalStateException("No AwaitInteractionStore provider is available"
                         + (provider == null || provider.isBlank() ? "" : " for provider " + provider)));
             }
-            return resolvedStore;
+            return resolvedInteractionStore;
+        }
+    }
+
+    private AwaitUnitStore unitStore() {
+        AwaitUnitStore cached = resolvedUnitStore;
+        if (cached != null) {
+            return cached;
+        }
+        String provider = orchestratorConfig == null ? null : orchestratorConfig.stateProvider();
+        synchronized (this) {
+            if (resolvedUnitStore == null) {
+                resolvedUnitStore = unitStores.stream()
+                    .filter(candidate -> provider == null || provider.isBlank() || provider.equalsIgnoreCase(candidate.providerName()))
+                    .sorted((left, right) -> {
+                        int priorityComparison = Integer.compare(right.priority(), left.priority());
+                        if (priorityComparison != 0) {
+                            return priorityComparison;
+                        }
+                        return left.providerName().compareToIgnoreCase(right.providerName());
+                    })
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("No AwaitUnitStore provider is available"
+                        + (provider == null || provider.isBlank() ? "" : " for provider " + provider)));
+            }
+            return resolvedUnitStore;
         }
     }
 
@@ -268,9 +363,9 @@ public class AwaitCoordinator {
     }
 
     private Uni<AwaitInteractionRecord> resolveForCompletion(AwaitCompletionCommand command) {
-        Uni<java.util.Optional<AwaitInteractionRecord>> lookup = command.interactionId() != null
-            ? store().get(command.tenantId(), command.interactionId())
-            : store().findByCorrelation(command.tenantId(), command.correlationId());
+        Uni<Optional<AwaitInteractionRecord>> lookup = command.interactionId() != null
+            ? interactionStore().get(command.tenantId(), command.interactionId())
+            : interactionStore().findByCorrelation(command.tenantId(), command.correlationId());
         return lookup.onItem().transform(optional -> optional.orElseThrow(
             () -> new AwaitInteractionNotFoundException("No await interaction matches completion")));
     }
@@ -285,6 +380,20 @@ public class AwaitCoordinator {
             AwaitPayloadSupport.normalize(command.responsePayload()),
             command.actor(),
             command.nowEpochMs());
+    }
+
+    private Object coerceResumePayload(AwaitInteractionRecord record) {
+        try {
+            Class<?> outputType = AwaitPayloadSupport.resolvePayloadClass(
+                record.outputType(),
+                Thread.currentThread().getContextClassLoader());
+            return AwaitPayloadSupport.coercePayload(record.responsePayload(), outputType);
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException(
+                "Failed resolving await output type " + record.outputType()
+                    + " for interaction " + record.interactionId(),
+                e);
+        }
     }
 
     private String deriveCorrelationId(
@@ -313,5 +422,10 @@ public class AwaitCoordinator {
             builder.append(value == null || value.isNull() ? "<null>" : value.asText());
         }
         return builder.toString();
+    }
+
+    private static String deriveUnitId(String tenantId, String executionId, String stepId, int stepIndex) {
+        String basis = tenantId + ":" + executionId + ":" + stepId + ":" + stepIndex;
+        return UUID.nameUUIDFromBytes(basis.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
     }
 }

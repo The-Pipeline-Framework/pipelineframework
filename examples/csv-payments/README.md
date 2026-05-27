@@ -26,14 +26,14 @@ This application demonstrates modern microservices architecture patterns using g
 The canonical modular flow is:
 
 1. `Process Csv Payments Input` incrementally reads CSV rows with the blocking iterator pacer.
-2. `Await Payment Provider` creates one durable await interaction per `PaymentRecord` in a `MANY_TO_MANY` per-item barrier.
+2. `Await Payment Provider` is an authored `ONE_TO_ONE` await step that creates one durable await interaction per `PaymentRecord` as rows arrive.
 3. The Kafka await adapter publishes request envelopes to `csv-payments.payment.requests`.
 4. `payments-processing-svc` acts as the external mock provider, consumes those envelopes, calls `PaymentProviderServiceMock`, and publishes completion envelopes to `csv-payments.payment.results`.
-5. The TPF Kafka completion consumer admits each completion idempotently, resumes the owning queue-async execution when the barrier is complete, and passes ordered `PaymentStatus` items downstream.
+5. The TPF Kafka completion consumer admits each completion idempotently, resumes the owning queue-async execution when the await unit is complete, and passes ordered `PaymentStatus` items downstream.
 6. `Process Payment Status` rejects provider terminal status `Rejected` into the normal reject path and maps accepted statuses to `PaymentOutput`.
 7. `Process Csv Payments Output File` writes the final output files.
 
-This is durable brokered completion, not polling. Kafka delivery remains at-least-once; TPF handles idempotent completion admission and ordered barrier reconstruction for the resumed pipeline.
+This is durable brokered completion, not polling. Kafka delivery remains at-least-once; TPF handles idempotent completion admission and ordered await-unit reconstruction for the resumed pipeline.
 
 The CSV example keeps the persistence aspect scoped to pre-await steps only. That is intentional: queue-async resume is at-least-once from the await boundary onward, and this example avoids teaching `persistence.duplicate-key=upsert` as the main answer to replayable post-await side effects. Once-only checkpointing for post-await side effects is a separate runtime concern.
 
@@ -319,13 +319,10 @@ sequenceDiagram
     Orchestrator->>InputService: Process CSV files
     InputService-->>Orchestrator: Stream payment records
     loop For each payment record
-        Orchestrator->>PaymentsService: Send payment
+        Orchestrator->>PaymentsService: Await payment provider
         PaymentsService->>PaymentProvider: Mock API call
-        PaymentProvider-->>PaymentsService: AckPaymentSent
-        PaymentsService-->>Orchestrator: AckPaymentSent
-        Orchestrator->>PaymentsService: Get payment status
-        PaymentsService->>PaymentProvider: Status request
         PaymentProvider-->>PaymentsService: PaymentStatus
+        PaymentsService-->>Orchestrator: PaymentStatus
         PaymentsService->>StatusService: Process status
         StatusService-->>Orchestrator: PaymentOutput
     end
@@ -340,17 +337,15 @@ sequenceDiagram
 
 2. **Payment Record Extraction**: Each input file is processed, extracting individual payment records as a stream.
 
-3. **Payment Sending**: Payment records are sent to the Payments Processing Service, which interacts with a mock payment provider.
+3. **Awaited Provider Processing**: Each payment record is dispatched to the Kafka-backed mock provider through a `ONE_TO_ONE` await step.
 
-4. **Acknowledgment Handling**: The application receives and processes immediate partial responses (AckPaymentSent) from the payment provider.
+4. **Provider Completion**: The provider returns one `PaymentStatus` completion per payment record.
 
-5. **Status Polling**: For each acknowledgment, the application polls the payment provider for the final payment status.
+5. **Status Processing**: Final payment statuses are processed by the Payment Status Service to generate standardized output records.
 
-6. **Status Processing**: Final payment statuses are processed by the Payment Status Service to generate standardized output records.
+6. **Output Generation**: The Output CSV File Processing Service generates CSV payment output files based on the processed payment records.
 
-7. **Output Generation**: The Output CSV File Processing Service generates CSV payment output files based on the processed payment records.
-
-8. **Completion**: The Orchestrator Service coordinates the entire workflow and provides console output for debugging purposes.
+7. **Completion**: The Orchestrator Service coordinates the entire workflow and provides console output for debugging purposes.
 
 ## Technology Stack
 
@@ -380,9 +375,8 @@ The csv-payments example includes a deterministic mock payment provider. In addi
 existing rate-limit timeout behavior, you can now force specific outcomes in modular E2E runs
 by setting Quarkus config properties:
 
-- `csv-payments.payment-provider.send-timeout-probability`
-- `csv-payments.payment-provider.poll-timeout-probability`
-- `csv-payments.payment-provider.poll-reject-probability`
+- `csv-payments.payment-provider.provider-timeout-probability`
+- `csv-payments.payment-provider.provider-reject-probability`
 
 Each value is a probability between `0.0` and `1.0`. The mock applies the decision
 deterministically from stable payment-record identifiers, so the same replay input
@@ -393,16 +387,15 @@ Example:
 ```bash
 ./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
   -Dcsv.e2e.telemetry.enabled=true \
-  -Dcsv-payments.payment-provider.send-timeout-probability=0.03 \
-  -Dcsv-payments.payment-provider.poll-timeout-probability=0.05 \
-  -Dcsv-payments.payment-provider.poll-reject-probability=0.08 \
+  -Dcsv-payments.payment-provider.provider-timeout-probability=0.05 \
+  -Dcsv-payments.payment-provider.provider-reject-probability=0.08 \
   -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
   -Dsurefire.failIfNoSpecifiedTests=false \
   test
 ```
 
-`poll-reject-probability` returns a business-level `PaymentStatus.status=Rejected`, and the
-`ProcessAckPaymentSentService` step maps that terminal outcome into the framework item-reject
+`provider-reject-probability` returns a business-level `PaymentStatus.status=Rejected`, and the
+`ProcessPaymentStatusService` step maps that terminal outcome into the framework item-reject
 channel via `NonRetryableException`. Technical timeouts still surface as exceptions and therefore
 participate in the normal retry path. Malformed CSV handling is separate: today malformed input
 fails at file scope rather than as a per-record reject.

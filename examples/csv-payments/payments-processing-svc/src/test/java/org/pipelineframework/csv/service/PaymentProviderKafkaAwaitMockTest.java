@@ -24,15 +24,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.smallrye.mutiny.Uni;
+import io.smallrye.reactive.messaging.MutinyEmitter;
 import java.math.BigDecimal;
-import java.util.concurrent.CompletableFuture;
 import java.util.Currency;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-
-import io.smallrye.mutiny.Uni;
-import io.smallrye.reactive.messaging.MutinyEmitter;
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,10 +41,8 @@ import org.mockito.MockitoAnnotations;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitCompletionEnvelope;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitDispatchEnvelope;
 import org.pipelineframework.config.pipeline.PipelineJson;
-import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
-import org.pipelineframework.csv.common.domain.SendPaymentRequest;
 
 class PaymentProviderKafkaAwaitMockTest {
 
@@ -67,50 +64,19 @@ class PaymentProviderKafkaAwaitMockTest {
 
   @Test
   void consumesDispatchEnvelopeAndPublishesCompletionEnvelope() throws Exception {
-    PaymentRecord paymentRecord = new PaymentRecord()
-        .setCsvId("csv-1")
-        .setRecipient("alice")
-        .setAmount(new BigDecimal("12.34"))
-        .setCurrency(Currency.getInstance("EUR"));
-    AckPaymentSent ack = new AckPaymentSent(UUID.randomUUID())
-        .setPaymentRecord(paymentRecord)
-        .setPaymentRecordId(paymentRecord.getId())
-        .setStatus(202L)
-        .setMessage("accepted");
-    PaymentStatus status = new PaymentStatus()
-        .setReference("provider-ref")
-        .setStatus("Completed")
-        .setMessage("settled")
-        .setFee(new BigDecimal("0.12"))
-        .setAckPaymentSent(ack)
-        .setAckPaymentSentId(ack.getId())
-        .setPaymentRecord(paymentRecord)
-        .setPaymentRecordId(paymentRecord.getId());
-    when(paymentProvider.sendPayment(any(SendPaymentRequest.class))).thenReturn(ack);
-    when(paymentProvider.getPaymentStatus(ack)).thenReturn(status);
+    PaymentRecord paymentRecord = validPaymentRecord();
+    PaymentStatus status = validPaymentStatus(paymentRecord);
+    when(paymentProvider.processPayment(any(PaymentRecord.class))).thenReturn(status);
     when(results.send(anyString())).thenReturn(Uni.createFrom().voidItem());
 
-    KafkaAwaitDispatchEnvelope dispatch = new KafkaAwaitDispatchEnvelope(
-        "tenant-1",
-        "exec-1",
-        "interaction-1",
-        "corr-1",
-        "AwaitPaymentProvider",
-        System.currentTimeMillis() + 60_000L,
-        PaymentRecord.class.getName(),
-        PaymentStatus.class.getName(),
-        "resume-token",
-        paymentRecord,
-        Map.of("topic", "csv-payments.payment.requests"));
-
-    mockProvider.consume(Message.of(PipelineJson.mapper().writeValueAsString(dispatch)))
+    mockProvider.consume(Message.of(dispatchJson(paymentRecord)))
         .toCompletableFuture()
         .get(5, TimeUnit.SECONDS);
 
-    ArgumentCaptor<SendPaymentRequest> requestCaptor = ArgumentCaptor.forClass(SendPaymentRequest.class);
-    verify(paymentProvider).sendPayment(requestCaptor.capture());
+    ArgumentCaptor<PaymentRecord> requestCaptor = ArgumentCaptor.forClass(PaymentRecord.class);
+    verify(paymentProvider).processPayment(requestCaptor.capture());
     assertEquals(paymentRecord.getAmount(), requestCaptor.getValue().getAmount());
-    assertEquals(paymentRecord.getRecipient(), requestCaptor.getValue().getReference());
+    assertEquals(paymentRecord.getRecipient(), requestCaptor.getValue().getRecipient());
     assertEquals(paymentRecord.getCurrency(), requestCaptor.getValue().getCurrency());
 
     ArgumentCaptor<String> completionCaptor = ArgumentCaptor.forClass(String.class);
@@ -137,7 +103,7 @@ class PaymentProviderKafkaAwaitMockTest {
   @Test
   void providerFailureFailsWithoutPublishingCompletion() throws Exception {
     PaymentRecord paymentRecord = validPaymentRecord();
-    when(paymentProvider.sendPayment(any(SendPaymentRequest.class))).thenThrow(new IllegalStateException("provider down"));
+    when(paymentProvider.processPayment(any(PaymentRecord.class))).thenThrow(new IllegalStateException("provider down"));
 
     assertThrows(Exception.class, () -> mockProvider.consume(failingMessage(dispatchJson(paymentRecord)))
         .toCompletableFuture()
@@ -149,20 +115,7 @@ class PaymentProviderKafkaAwaitMockTest {
   @Test
   void sendFailureFailsConsume() throws Exception {
     PaymentRecord paymentRecord = validPaymentRecord();
-    AckPaymentSent ack = new AckPaymentSent(UUID.randomUUID())
-        .setPaymentRecord(paymentRecord)
-        .setPaymentRecordId(paymentRecord.getId());
-    PaymentStatus status = new PaymentStatus()
-        .setReference("provider-ref")
-        .setStatus("Completed")
-        .setMessage("settled")
-        .setFee(new BigDecimal("0.12"))
-        .setAckPaymentSent(ack)
-        .setAckPaymentSentId(ack.getId())
-        .setPaymentRecord(paymentRecord)
-        .setPaymentRecordId(paymentRecord.getId());
-    when(paymentProvider.sendPayment(any(SendPaymentRequest.class))).thenReturn(ack);
-    when(paymentProvider.getPaymentStatus(ack)).thenReturn(status);
+    when(paymentProvider.processPayment(any(PaymentRecord.class))).thenReturn(validPaymentStatus(paymentRecord));
     when(results.send(anyString())).thenReturn(Uni.createFrom().failure(new IllegalStateException("broker down")));
 
     assertThrows(Exception.class, () -> mockProvider.consume(failingMessage(dispatchJson(paymentRecord)))
@@ -181,16 +134,30 @@ class PaymentProviderKafkaAwaitMockTest {
         .toCompletableFuture()
         .get(5, TimeUnit.SECONDS));
 
-    verify(paymentProvider, never()).sendPayment(any(SendPaymentRequest.class));
+    verify(paymentProvider, never()).processPayment(any(PaymentRecord.class));
     verify(results, never()).send(anyString());
   }
 
   private static PaymentRecord validPaymentRecord() {
-    return new PaymentRecord()
+    PaymentRecord paymentRecord = new PaymentRecord()
         .setCsvId("csv-1")
         .setRecipient("alice")
         .setAmount(new BigDecimal("12.34"))
         .setCurrency(Currency.getInstance("EUR"));
+    paymentRecord.setId(UUID.randomUUID());
+    return paymentRecord;
+  }
+
+  private static PaymentStatus validPaymentStatus(PaymentRecord paymentRecord) {
+    return new PaymentStatus()
+        .setReference("provider-ref")
+        .setStatus("Completed")
+        .setMessage("settled")
+        .setFee(new BigDecimal("0.12"))
+        .setConversationId(UUID.randomUUID())
+        .setStatusCode(1000L)
+        .setPaymentRecord(paymentRecord)
+        .setPaymentRecordId(paymentRecord.getId());
   }
 
   private static String dispatchJson(PaymentRecord paymentRecord) throws Exception {

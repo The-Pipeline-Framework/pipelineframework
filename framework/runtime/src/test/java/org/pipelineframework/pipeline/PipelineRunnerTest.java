@@ -24,13 +24,19 @@ import jakarta.inject.Inject;
 
 import io.quarkus.test.junit.QuarkusTest;
 import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.PipelineRunner;
+import org.pipelineframework.awaitable.AwaitExecutionContext;
+import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.StepConfig;
+import org.pipelineframework.step.ConfigurableStep;
+import org.pipelineframework.step.StepOneToOne;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -46,6 +52,11 @@ class PipelineRunnerTest {
     @BeforeEach
     void setSequentialPolicy() {
         pipelineConfig.parallelism(ParallelismPolicy.SEQUENTIAL);
+    }
+
+    @AfterEach
+    void clearAwaitContext() {
+        AwaitExecutionContextHolder.clear();
     }
 
     @Test
@@ -148,6 +159,23 @@ class PipelineRunnerTest {
 
         // Assert ignoring order
         assertEquals(expectedItems, new HashSet<>(actualItems));
+    }
+
+    @Test
+    void runBindsAwaitContextPerStepInsteadOfLeakingFinalLoopIndex() {
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant-1", "exec-1", 0));
+
+        @SuppressWarnings("unchecked")
+        Multi<Object> result = (Multi<Object>) runner.run(
+            Multi.createFrom().item("input"),
+            List.of(
+                new PrefixingStep("first"),
+                new AwaitIndexCapturingStep(),
+                new PrefixingStep("last")));
+
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(1));
+        subscriber.awaitItems(1, Duration.ofSeconds(5)).assertCompleted();
+        subscriber.assertItems("last:await-step-index=1,first:input");
     }
 
     @Test
@@ -269,6 +297,28 @@ class PipelineRunnerTest {
         // Verify the configuration was applied
         assertEquals(5, step.retryLimit());
         assertEquals(Duration.ofMillis(100), step.retryWait());
+    }
+
+    static final class PrefixingStep extends ConfigurableStep implements StepOneToOne<String, String> {
+        private final String prefix;
+
+        PrefixingStep(String prefix) {
+            this.prefix = prefix;
+        }
+
+        @Override
+        public Uni<String> applyOneToOne(String in) {
+            return Uni.createFrom().item(prefix + ":" + in);
+        }
+    }
+
+    static final class AwaitIndexCapturingStep extends ConfigurableStep implements StepOneToOne<String, String> {
+        @Override
+        public Uni<String> applyOneToOne(String in) {
+            AwaitExecutionContext context = AwaitExecutionContextHolder.get();
+            int index = context == null ? -1 : context.currentStepIndex();
+            return Uni.createFrom().item("await-step-index=" + index + "," + in);
+        }
     }
 
 }

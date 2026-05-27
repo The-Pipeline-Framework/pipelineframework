@@ -222,6 +222,15 @@ public interface PipelineOrchestratorConfig {
         String awaitInteractionKeyTable();
 
         /**
+         * Await unit table name.
+         *
+         * @return await unit table name
+         */
+        @WithName("await-unit-table")
+        @WithDefault("tpf_await_unit")
+        String awaitUnitTable();
+
+        /**
          * Optional region override.
          *
          * @return region when configured

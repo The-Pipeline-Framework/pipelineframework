@@ -18,7 +18,6 @@ Shared entity classes that represent the core business concepts:
 - `CsvPaymentsInputFile`: Wrapper for input CSV files
 - `CsvPaymentsOutputFile`: Wrapper for output CSV files
 - `CsvFolder`: Represents a folder containing CSV files
-- `AckPaymentSent`: Acknowledgment for sent payments
 
 ### Data Transfer Objects (DTOs)
 
@@ -27,7 +26,6 @@ Lightweight data containers for transferring data between services:
 - `PaymentRecordDto`
 - `PaymentStatusDto`
 - `PaymentOutputDto`
-- `AckPaymentSentDto`
 
 ### Mappers
 
@@ -38,8 +36,6 @@ MapStruct-based mappers for converting between domain models, DTOs, and gRPC mes
 - `PaymentOutputMapper`
 - `CsvPaymentsInputFileMapper`
 - `CsvPaymentsOutputFileMapper`
-- `AckPaymentSentMapper`
-- `SendPaymentRequestMapper`
 
 ### Service Interfaces
 
