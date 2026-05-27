@@ -209,8 +209,8 @@ public class AwaitCoordinator {
                         .map(entry -> {
                             var group = entry.getValue();
                             return group.stream()
-                                .max(java.util.Comparator.comparing(AwaitInteractionRecord::createdAt)
-                                    .thenComparing(AwaitInteractionRecord::attempt))
+                                .max(java.util.Comparator.comparing(AwaitInteractionRecord::createdAtEpochMs)
+                                    .thenComparing(AwaitInteractionRecord::version))
                                 .orElseThrow();
                         })
                         .map(this::coerceResumePayload)
