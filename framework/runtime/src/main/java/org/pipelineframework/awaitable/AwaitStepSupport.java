@@ -216,6 +216,7 @@ public class AwaitStepSupport {
         return awaitManyToMany(descriptor, input, context);
     }
 
+    @SuppressWarnings("unchecked")
     private <I, O> Multi<O> awaitManyToMany(AwaitStepDescriptor descriptor, Multi<I> input, AwaitExecutionContext context) {
         return input.collect().asList()
             .onItem().transformToMulti(items -> {

@@ -100,7 +100,17 @@ const mainSidebar = [
             {text: 'Mappers and DTOs', link: '/guide/development/mappers-and-dtos'},
             {text: 'Handling File Operations', link: '/guide/development/handling-file-operations'},
             {text: 'Testing with Testcontainers', link: '/guide/development/testing'},
-            {text: 'Orchestrator Runtime', link: '/guide/development/orchestrator-runtime'},
+            {
+                text: 'Orchestrator Runtime',
+                link: '/guide/development/orchestrator-runtime/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/guide/development/orchestrator-runtime/'},
+                    {text: 'Queue-Async Runtime', link: '/guide/development/orchestrator-runtime/queue-async'},
+                    {text: 'Checkpoint Handoff', link: '/guide/development/orchestrator-runtime/checkpoint-handoff'},
+                    {text: 'Await Boundaries', link: '/guide/development/orchestrator-runtime/await'}
+                ]
+            },
             {text: 'TPFGo Example', link: '/guide/development/tpfgo-example'},
             {text: 'AWS Lambda Platform', link: '/guide/development/aws-lambda'},
             {text: 'Azure Functions Platform', link: '/guide/development/azure-functions'},
@@ -113,7 +123,7 @@ const mainSidebar = [
         text: 'Operate',
         collapsed: true,
         items: [
-            {text: 'Orchestrator Runtime Modes', link: '/guide/development/orchestrator-runtime'},
+            {text: 'Orchestrator Runtime Modes', link: '/guide/development/orchestrator-runtime/'},
             {text: 'Error Handling & DLQ', link: '/guide/operations/error-handling'},
             {text: 'Queue-Async Crash Semantics', link: '/guide/operations/error-handling#queue-async-crash-matrix'},
             {text: 'In-flight Probe', link: '/guide/operations/in-flight-probe'},
@@ -166,6 +176,17 @@ const mainSidebar = [
         items: [
             {text: 'Architecture', link: '/guide/evolve/architecture'},
             {text: 'Orchestrator Control Plane', link: '/guide/evolve/architecture#orchestrator-control-plane-current'},
+            {
+                text: 'Await Unit Runtime',
+                link: '/guide/evolve/await-unit-runtime/',
+                collapsed: true,
+                items: [
+                    {text: 'Model', link: '/guide/evolve/await-unit-runtime/'},
+                    {text: 'Sequences', link: '/guide/evolve/await-unit-runtime/sequences'},
+                    {text: 'Patterns', link: '/guide/evolve/await-unit-runtime/patterns'},
+                    {text: 'Operations And Debt', link: '/guide/evolve/await-unit-runtime/operations-and-debt'}
+                ]
+            },
             {
                 text: 'Annotation Processor Guide',
                 link: '/guide/evolve/annotation-processor/',

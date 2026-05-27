@@ -28,7 +28,7 @@ features:
     link: /guide/development/operators
   - title: Reliable Background Work
     details: Store accepted work, retry failed transitions, recover after crashes, and send terminal failures to a dead-letter channel
-    link: /guide/development/orchestrator-runtime
+    link: /guide/development/orchestrator-runtime/
   - title: Runtime Efficiency
     details: Keep many items moving through reactive function chains without one thread per item
     link: /value/runtime-efficiency
@@ -93,7 +93,7 @@ Generated code keeps business logic independent of whether a caller uses REST, g
 
 The generated runtime starts the flow, invokes each step, records execution state when configured, retries failed transitions, and exposes status/result endpoints for background work. For crash-surviving background execution, TPF can store accepted work outside the current JVM, recover it after restart, and send terminal execution failures to a **DLQ**, a dead-letter channel for investigation or replay.
 
-The exact config value for this mode is `QUEUE_ASYNC`; start with the [Orchestrator Runtime](/guide/development/orchestrator-runtime) guide before using it in production.
+The exact config value for this mode is `QUEUE_ASYNC`; start with the [Orchestrator Runtime](/guide/development/orchestrator-runtime/) guide before using it in production.
 
 Persistence and caching matter here more than the word "plugin" suggests. Persistence stores business outputs developers can query later from APIs, reports, or UIs. Caching protects expensive steps, speeds recomputation, and supports replay or rewind scenarios when downstream logic changes. Together they reduce the need to invent separate state stores, replay workflows, or read-model plumbing.
 
@@ -152,6 +152,6 @@ If you already have proven Java libraries or remote endpoints, operators let you
 - [Azure Functions Platform](/guide/development/azure-functions) for Azure development-time guidance.
 - [Google Cloud Run Functions Platform](/guide/development/google-cloud-run-functions) for the Google function-platform path.
 - [Multi-Cloud Function Providers](/guide/build/runtime-layouts/function-providers) for provider-specific function deployment targets.
-- [Orchestrator Runtime](/guide/development/orchestrator-runtime) for synchronous execution, background execution, crash recovery, and DLQ behaviour.
+- [Orchestrator Runtime](/guide/development/orchestrator-runtime/) for synchronous execution, background execution, crash recovery, and DLQ behaviour.
 - [Using Plugins](/guide/development/using-plugins) for persistence, cache, telemetry, and logging extensions.
 - [TPFGo Example](/guide/development/tpfgo-example) for checkpoint handoff between pipelines.
