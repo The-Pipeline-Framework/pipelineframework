@@ -130,19 +130,15 @@ steps:
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.restaurantapproval.common.domain.PlaceRestaurantOrderRequest
     inputTypeName: PlaceRestaurantOrderRequest
-    inboundMapper: org.pipelineframework.restaurantapproval.common.mapper.PlaceRestaurantOrderRequestMapper
     output: org.pipelineframework.restaurantapproval.common.domain.ValidatedRestaurantOrderRequest
     outputTypeName: ValidatedRestaurantOrderRequest
-    outboundMapper: org.pipelineframework.restaurantapproval.common.mapper.ValidatedRestaurantOrderRequestMapper
   - name: Create Pending Approval
     service: org.pipelineframework.restaurantapproval.create_pending_approval.service.ProcessCreatePendingApprovalService
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.restaurantapproval.common.domain.ValidatedRestaurantOrderRequest
     inputTypeName: ValidatedRestaurantOrderRequest
-    inboundMapper: org.pipelineframework.restaurantapproval.common.mapper.ValidatedRestaurantOrderRequestMapper
     output: org.pipelineframework.restaurantapproval.common.domain.PendingRestaurantApproval
     outputTypeName: PendingRestaurantApproval
-    outboundMapper: org.pipelineframework.restaurantapproval.common.mapper.PendingRestaurantApprovalMapper
   - name: Await Restaurant Decision
     kind: await
     cardinality: ONE_TO_ONE
@@ -163,7 +159,5 @@ steps:
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.restaurantapproval.common.domain.RestaurantDecision
     inputTypeName: RestaurantDecision
-    inboundMapper: org.pipelineframework.restaurantapproval.common.mapper.RestaurantDecisionMapper
     output: org.pipelineframework.restaurantapproval.common.domain.TerminalOrderState
     outputTypeName: TerminalOrderState
-    outboundMapper: org.pipelineframework.restaurantapproval.common.mapper.TerminalOrderStateMapper

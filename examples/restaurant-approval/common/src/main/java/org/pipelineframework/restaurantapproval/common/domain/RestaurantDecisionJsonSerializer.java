@@ -11,30 +11,22 @@ public final class RestaurantDecisionJsonSerializer extends JsonSerializer<Resta
   public void serialize(RestaurantDecision value, JsonGenerator gen, SerializerProvider serializers)
       throws IOException {
     gen.writeStartObject();
-    value.accept(new RestaurantDecisionVisitor<>() {
-      @Override
-      public Void accepted(RestaurantOrderAccepted accepted) throws IOException {
-        gen.writeStringField("type", "accepted");
-        gen.writeObjectFieldStart("accepted");
-        gen.writeStringField("orderId", accepted.orderId().toString());
-        gen.writeStringField("decidedAt", accepted.decidedAt().toString());
-        gen.writeStringField("note", accepted.note());
-        gen.writeEndObject();
-        return null;
-      }
-
-      @Override
-      public Void declined(RestaurantOrderDeclined declined) throws IOException {
-        gen.writeStringField("type", "declined");
-        gen.writeObjectFieldStart("declined");
-        gen.writeStringField("orderId", declined.orderId().toString());
-        gen.writeStringField("decidedAt", declined.decidedAt().toString());
-        gen.writeStringField("note", declined.note());
-        gen.writeStringField("declineReason", declined.declineReason());
-        gen.writeEndObject();
-        return null;
-      }
-    });
+    if (value instanceof RestaurantOrderAccepted accepted) {
+      gen.writeStringField("type", "accepted");
+      gen.writeObjectFieldStart("accepted");
+      gen.writeStringField("orderId", accepted.orderId().toString());
+      gen.writeStringField("decidedAt", accepted.decidedAt().toString());
+      gen.writeStringField("note", accepted.note());
+      gen.writeEndObject();
+    } else if (value instanceof RestaurantOrderDeclined declined) {
+      gen.writeStringField("type", "declined");
+      gen.writeObjectFieldStart("declined");
+      gen.writeStringField("orderId", declined.orderId().toString());
+      gen.writeStringField("decidedAt", declined.decidedAt().toString());
+      gen.writeStringField("note", declined.note());
+      gen.writeStringField("declineReason", declined.declineReason());
+      gen.writeEndObject();
+    }
     gen.writeEndObject();
   }
 }
