@@ -21,7 +21,9 @@ For runtime layout usage and build migration, see:
 
 For runnable await examples, see:
 - [`examples/restaurant-approval`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/restaurant-approval) for the canonical `interaction-api` human-await path.
-- [`examples/csv-payments`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/csv-payments) for the canonical Kafka await path.
+- [`examples/csv-payments`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/csv-payments) for the canonical Kafka unary-await-over-stream path.
+
+For await suspend/resume internals, see [Await Unit Runtime](/guide/evolve/await-unit-runtime/).
 
 ## Overview
 

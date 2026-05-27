@@ -139,6 +139,12 @@ Step-level reject signal:
 
 - `tpf.step.reject.total` (counter): rejected step items published to item reject sinks.
 
+Await signal:
+
+- `tpf.await.completion.dropped.total` (counter): completions that cannot be admitted because the target interaction is already terminal, stale, or otherwise not admissible.
+
+Await execution logs include the parked await unit when a `QUEUE_ASYNC` execution waits or resumes. First-class await unit lifecycle views in replay and observability are tracked in [#313](https://github.com/The-Pipeline-Framework/pipelineframework/issues/313).
+
 Backlog signal note:
 
 1. TPF emits `tpf.step.reject.total` for reject throughput.

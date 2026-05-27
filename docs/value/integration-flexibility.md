@@ -61,6 +61,6 @@ Keep the current platform limits explicit:
 - [Google Cloud Run Functions Platform](/guide/development/google-cloud-run-functions)
 - [Runtime Layouts](/guide/build/runtime-layouts/)
 - [Multi-Cloud Function Providers](/guide/build/runtime-layouts/function-providers)
-- [Orchestrator Runtime](/guide/development/orchestrator-runtime)
+- [Orchestrator Runtime](/guide/development/orchestrator-runtime/)
 
 </div>

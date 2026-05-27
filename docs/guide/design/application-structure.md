@@ -69,4 +69,4 @@ graph TB
 
 - [Common Module Structure](/guide/design/common-module-structure)
 - [Configuration Reference](/guide/build/configuration/)
-- [Orchestrator Runtime](/guide/development/orchestrator-runtime)
+- [Orchestrator Runtime](/guide/development/orchestrator-runtime/)
