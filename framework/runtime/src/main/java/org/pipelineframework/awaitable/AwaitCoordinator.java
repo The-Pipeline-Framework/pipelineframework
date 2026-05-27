@@ -237,7 +237,6 @@ public class AwaitCoordinator {
                     .replaceWith(updated);
             });
     }
-    }
 
     private Uni<AwaitCreateResult> createInteraction(
         AwaitStepDescriptor descriptor,

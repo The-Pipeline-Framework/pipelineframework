@@ -157,30 +157,35 @@ public class DynamoAwaitUnitStore implements AwaitUnitStore {
     @Override
     public Uni<Optional<AwaitUnitRecord>> recordItemCompleted(String tenantId, String unitId, long nowEpochMs) {
         return blocking(() -> {
-            Optional<AwaitUnitRecord> current = getBlocking(tenantId, unitId, nowEpochMs);
-            if (current.isEmpty() || current.get().status().terminal()) {
-                return current;
-            }
-            int completed = current.get().completedItemCount() + 1;
-            AwaitUnitStatus status = current.get().dispatchComplete()
-                && current.get().expectedItemCount() != null
-                && completed >= current.get().expectedItemCount()
-                ? AwaitUnitStatus.COMPLETED
-                : current.get().status();
             Map<String, String> names = Map.of(
                 "#completed", COMPLETED_ITEM_COUNT,
-                "#status", STATUS,
                 "#updated", UPDATED_AT_EPOCH_MS,
                 "#version", VERSION);
             Map<String, AttributeValue> values = Map.of(
-                ":completed", avN(completed),
-                ":status", avS(status.name()),
                 ":updated", avN(nowEpochMs),
                 ":one", avN(1));
-            return updateBlocking(tenantId, unitId,
-                "SET #completed = :completed, #status = :status, #updated = :updated, #version = #version + :one",
+            Optional<AwaitUnitRecord> incremented = updateBlocking(tenantId, unitId,
+                "SET #updated = :updated ADD #completed :one, #version :one",
                 names,
-                values);
+                values,
+                existingNonTerminalCondition());
+            if (incremented.isEmpty()) {
+                return getBlocking(tenantId, unitId, nowEpochMs);
+            }
+            AwaitUnitRecord updated = incremented.get();
+            if (!updated.dispatchComplete()
+                || updated.expectedItemCount() == null
+                || updated.completedItemCount() < updated.expectedItemCount()) {
+                return incremented;
+            }
+            Optional<AwaitUnitRecord> completed = updateBlocking(tenantId, unitId,
+                "SET #status = :status, #updated = :updated ADD #version :one",
+                Map.of("#status", STATUS, "#completed", COMPLETED_ITEM_COUNT, "#expected", EXPECTED_ITEM_COUNT,
+                    "#updated", UPDATED_AT_EPOCH_MS, "#version", VERSION),
+                Map.of(":status", avS(AwaitUnitStatus.COMPLETED.name()), ":updated", avN(nowEpochMs),
+                    ":one", avN(1)),
+                existingNonTerminalCondition() + " AND #completed >= #expected");
+            return completed.isPresent() ? completed : getBlocking(tenantId, unitId, nowEpochMs);
         });
     }
 
@@ -244,14 +249,25 @@ public class DynamoAwaitUnitStore implements AwaitUnitStore {
         String updateExpression,
         Map<String, String> names,
         Map<String, AttributeValue> values) {
+        return updateBlocking(tenantId, unitId, updateExpression, names, values,
+            "attribute_exists(#tenant) AND attribute_exists(#unit)");
+    }
+
+    private Optional<AwaitUnitRecord> updateBlocking(
+        String tenantId,
+        String unitId,
+        String updateExpression,
+        Map<String, String> names,
+        Map<String, AttributeValue> values,
+        String conditionExpression) {
         try {
             var response = dynamoClient().updateItem(UpdateItemRequest.builder()
                 .tableName(unitTable())
                 .key(Map.of(TENANT_ID, avS(tenantId), UNIT_ID, avS(unitId)))
                 .updateExpression(updateExpression)
-                .conditionExpression("attribute_exists(#tenant) AND attribute_exists(#unit)")
-                .expressionAttributeNames(mergeNames(names))
-                .expressionAttributeValues(values)
+                .conditionExpression(conditionExpression)
+                .expressionAttributeNames(mergeNames(names, conditionExpression))
+                .expressionAttributeValues(mergeTerminalValues(values, conditionExpression))
                 .returnValues(ReturnValue.ALL_NEW)
                 .build());
             return Optional.of(toRecord(response.attributes()));
@@ -319,11 +335,37 @@ public class DynamoAwaitUnitStore implements AwaitUnitStore {
             readLong(item, TTL_EPOCH_S));
     }
 
-    private Map<String, String> mergeNames(Map<String, String> names) {
+    private Map<String, String> mergeNames(Map<String, String> names, String conditionExpression) {
         java.util.LinkedHashMap<String, String> merged = new java.util.LinkedHashMap<>(names);
         merged.put("#tenant", TENANT_ID);
         merged.put("#unit", UNIT_ID);
+        if (conditionExpression.contains("#status")) {
+            merged.putIfAbsent("#status", STATUS);
+        }
         return merged;
+    }
+
+    private Map<String, AttributeValue> mergeTerminalValues(
+        Map<String, AttributeValue> values,
+        String conditionExpression) {
+        java.util.LinkedHashMap<String, AttributeValue> merged = new java.util.LinkedHashMap<>(values);
+        if (conditionExpression.contains(":completedStatus")) {
+            merged.putIfAbsent(":completedStatus", avS(AwaitUnitStatus.COMPLETED.name()));
+            merged.putIfAbsent(":failedStatus", avS(AwaitUnitStatus.FAILED.name()));
+            merged.putIfAbsent(":timedOutStatus", avS(AwaitUnitStatus.TIMED_OUT.name()));
+            merged.putIfAbsent(":cancelledStatus", avS(AwaitUnitStatus.CANCELLED.name()));
+            merged.putIfAbsent(":expiredStatus", avS(AwaitUnitStatus.EXPIRED.name()));
+        }
+        return merged;
+    }
+
+    private String existingNonTerminalCondition() {
+        return "attribute_exists(#tenant) AND attribute_exists(#unit)"
+            + " AND #status <> :completedStatus"
+            + " AND #status <> :failedStatus"
+            + " AND #status <> :timedOutStatus"
+            + " AND #status <> :cancelledStatus"
+            + " AND #status <> :expiredStatus";
     }
 
     private String unitTable() {
