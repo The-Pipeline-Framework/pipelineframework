@@ -72,7 +72,8 @@ public class LocalClientStepTargetGenerator implements TargetGenerator {
         }
 
         if (model.sideEffect()) {
-            String key = role.name() + ":" + model.servicePackage() + ".pipeline." + model.serviceName();
+            String syntheticFqcn = model.servicePackage() + ".pipeline." + model.serviceName();
+            String key = role.name() + ":" + syntheticFqcn;
             if (request.grpcBinding() != null && request.generatedSideEffectBeans().add(key)) {
                 sideEffectBeanService.generateSideEffectBean(
                     ctx,

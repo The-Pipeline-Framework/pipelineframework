@@ -12,7 +12,7 @@ import org.mapstruct.factory.Mappers;
     componentModel = "jakarta",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface {{className}}Mapper extends org.pipelineframework.mapper.Mapper<{{domainClass}}, {{dtoClass}}> {
+public interface {{className}}Mapper extends org.pipelineframework.mapper.Mapper<{{domainClass}}, {{grpcClass}}.{{className}}> {
 
   {{className}}Mapper INSTANCE = Mappers.getMapper( {{className}}Mapper.class );
 
@@ -27,13 +27,13 @@ public interface {{className}}Mapper extends org.pipelineframework.mapper.Mapper
   {{dtoClass}} fromGrpc({{grpcClass}}.{{className}} grpc);
 
   @Override
-  default {{domainClass}} fromExternal({{dtoClass}} external) {
-    return fromDto(external);
+  default {{domainClass}} fromExternal({{grpcClass}}.{{className}} external) {
+    return fromDto(fromGrpc(external));
   }
 
   @Override
-  default {{dtoClass}} toExternal({{domainClass}} domain) {
-    return toDto(domain);
+  default {{grpcClass}}.{{className}} toExternal({{domainClass}} domain) {
+    return toGrpc(toDto(domain));
   }
 
   @Deprecated(since = "26.5.2", forRemoval = true)

@@ -295,7 +295,7 @@ steps:
 appName: Restaurant Approval
 basePackage: org.pipelineframework.restaurantapproval
 transport: REST
-runtimeLayout: MONOLITH
+runtimeLayout: MODULAR
 messages:
   PlaceRestaurantOrderRequest:
     fields:

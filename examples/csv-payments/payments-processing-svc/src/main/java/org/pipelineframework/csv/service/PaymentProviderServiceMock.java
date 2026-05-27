@@ -59,8 +59,8 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
 
   @Override
   public PaymentStatus processPayment(@NonNull PaymentRecord paymentRecord) {
-    LOG.debugf("processPayment called with paymentRecord: amount=%s, currency=%s, recipient=%s, paymentRecordId=%s",
-        paymentRecord.getAmount(), paymentRecord.getCurrency(), paymentRecord.getRecipient(), paymentRecord.getId());
+    LOG.debugf("processPayment called with paymentRecordId=%s, csvId=%s",
+        paymentRecord.getId(), paymentRecord.getCsvId());
         
     LOG.debugf("Attempting to acquire rate limiter permit with timeout: %sms", timeoutMillis);
     boolean acquired = (this.timeoutMillis != -1L && rateLimiter.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS));

@@ -588,7 +588,7 @@ class PipelineGenerator {
             return '';
         }
         return simpleName
-            .replace(/^Process/, '')
+            .replace(/^Process(?=[A-Z]|$)/, '')
             .replace(/Service$/, '');
     }
 

@@ -170,10 +170,8 @@ public class AwaitClientStepRenderer {
     }
 
     private PipelineConfigHints resolveConfigHints(GenerationContext ctx) {
-        if (ctx.transportMode() != null || (ctx.pipelineBasePackage() != null && !ctx.pipelineBasePackage().isBlank())) {
-            return new PipelineConfigHints(
-                ctx.transportMode() == null ? TransportMode.GRPC : ctx.transportMode(),
-                ctx.pipelineBasePackage());
+        if (ctx.transportMode() != null && ctx.pipelineBasePackage() != null && !ctx.pipelineBasePackage().isBlank()) {
+            return new PipelineConfigHints(ctx.transportMode(), ctx.pipelineBasePackage());
         }
         Map<String, String> options = ctx.processingEnv() == null ? Map.of() : ctx.processingEnv().getOptions();
         TransportMode configuredTransport = TransportMode.fromStringOptional(
@@ -207,7 +205,7 @@ public class AwaitClientStepRenderer {
                     javax.tools.Diagnostic.Kind.WARNING,
                     "Failed to load pipeline config '" + configPath + "' while rendering await client step: " + ex.getMessage());
             }
-            return null;
+            throw new IllegalStateException("Failed to load pipeline config at '" + configPath + "'", ex);
         }
     }
 

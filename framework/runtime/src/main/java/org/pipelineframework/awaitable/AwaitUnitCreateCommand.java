@@ -32,6 +32,13 @@ public record AwaitUnitCreateCommand(
         if (cardinality == null || cardinality.isBlank()) {
             throw new IllegalArgumentException("cardinality must not be blank");
         }
+        String normalizedCardinality = cardinality.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!normalizedCardinality.equals("ONE_TO_ONE")
+            && !normalizedCardinality.equals("ONE_TO_MANY")
+            && !normalizedCardinality.equals("MANY_TO_ONE")
+            && !normalizedCardinality.equals("MANY_TO_MANY")) {
+            throw new IllegalArgumentException("cardinality must be one of: ONE_TO_ONE, ONE_TO_MANY, MANY_TO_ONE, MANY_TO_MANY");
+        }
         if (nowEpochMs <= 0) {
             nowEpochMs = System.currentTimeMillis();
         }

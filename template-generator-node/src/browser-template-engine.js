@@ -291,7 +291,7 @@ class BrowserTemplateEngine {
         if (!template) {
             throw new Error(`Template ${templateName} not found`);
         }
-        return template({ frameworkVersion: this.frameworkVersion, ...context });
+        return template({ ...context, frameworkVersion: this.frameworkVersion });
     }
 
     async generateApplication(appName, basePackage, steps, aspects, transport, runtimeLayout, fileCallback) {
@@ -517,7 +517,7 @@ class BrowserTemplateEngine {
             serviceName: 'pipeline-runtime-svc',
             rootProjectName,
             portOffset: 1,
-            hasAwaitSteps: (steps || []).some(step => step?.isAwaitStep || step?.kind === 'await')
+            hasAwaitSteps: (steps || []).some(step => step?.isAwaitStep || step?.kind?.toLowerCase() === 'await')
         });
         await fileCallback('pipeline-runtime-svc/src/main/resources/application.properties', appPropsContent);
         const appDevProps = this.render('module-application-dev-properties', {});
@@ -577,7 +577,7 @@ class BrowserTemplateEngine {
             serviceName: 'monolith-svc',
             rootProjectName,
             portOffset: 0,
-            hasAwaitSteps: (steps || []).some(step => step?.isAwaitStep || step?.kind === 'await')
+            hasAwaitSteps: (steps || []).some(step => step?.isAwaitStep || step?.kind?.toLowerCase() === 'await')
         });
         await fileCallback('monolith-svc/src/main/resources/application.properties', appPropsContent);
         const appDevProps = this.render('module-application-dev-properties', {});

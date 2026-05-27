@@ -563,8 +563,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
                     "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
             .updateExpression(
                 "SET #status = :queued, #version = #version + :one, #step = :step, #nextDue = :now, " +
-                    "#awaitUnit = :awaitUnit, #leaseExpires = :zero, #updated = :now " +
-                    "REMOVE #result, #errorCode, #errorMessage, #leaseOwner")
+                    "#leaseExpires = :zero, #updated = :now " +
+                    "REMOVE #result, #errorCode, #errorMessage, #leaseOwner, #awaitUnit")
             .expressionAttributeNames(names)
             .expressionAttributeValues(values)
             .returnValues(ReturnValue.ALL_NEW)

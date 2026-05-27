@@ -218,9 +218,16 @@ public class AwaitStepSupport {
 
     private <I, O> Multi<O> awaitManyToMany(AwaitStepDescriptor descriptor, Multi<I> input, AwaitExecutionContext context) {
         return input.collect().asList()
-            .onItem().transformToMulti(items -> items.isEmpty()
-                ? Multi.createFrom().<O>empty()
-                : this.<I, O>awaitManyToOne(descriptor, Multi.createFrom().iterable(List.copyOf(items)), context).toMulti());
+            .onItem().transformToMulti(items -> {
+                if (items.isEmpty()) {
+                    return Multi.createFrom().<O>empty();
+                }
+                return Multi.createFrom().iterable(items)
+                    .onItem().transformToUniAndConcatenate(item ->
+                        this.<I, O>awaitOneToOne(descriptor, item, context))
+                    .onItem().transformToMultiAndConcatenate(result ->
+                        result instanceof Iterable ? Multi.createFrom().iterable((Iterable<O>) result) : Multi.createFrom().item(result));
+            });
     }
 
     private AwaitExecutionContext captureExecutionContext() {

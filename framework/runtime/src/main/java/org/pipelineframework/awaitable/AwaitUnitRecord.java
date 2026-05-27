@@ -48,5 +48,8 @@ public record AwaitUnitRecord(
         if (completedItemCount < 0) {
             throw new IllegalArgumentException("completedItemCount must not be negative");
         }
+        if (expectedItemCount != null && completedItemCount > expectedItemCount) {
+            throw new IllegalArgumentException("completedItemCount must not exceed expectedItemCount");
+        }
     }
 }

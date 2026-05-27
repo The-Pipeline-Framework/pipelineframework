@@ -88,11 +88,13 @@ public class DynamoAwaitUnitStore implements AwaitUnitStore {
                 command.nowEpochMs(),
                 command.ttlEpochS());
             try {
+                long nowEpochS = System.currentTimeMillis() / 1000;
                 dynamoClient().putItem(PutItemRequest.builder()
                     .tableName(unitTable())
                     .item(toItem(created))
-                    .conditionExpression("attribute_not_exists(#tenant) AND attribute_not_exists(#unit)")
-                    .expressionAttributeNames(Map.of("#tenant", TENANT_ID, "#unit", UNIT_ID))
+                    .conditionExpression("(attribute_not_exists(#tenant) AND attribute_not_exists(#unit)) OR #ttl < :now")
+                    .expressionAttributeNames(Map.of("#tenant", TENANT_ID, "#unit", UNIT_ID, "#ttl", TTL_EPOCH_S))
+                    .expressionAttributeValues(Map.of(":now", AttributeValue.builder().n(String.valueOf(nowEpochS)).build()))
                     .build());
                 return created;
             } catch (ConditionalCheckFailedException ignored) {

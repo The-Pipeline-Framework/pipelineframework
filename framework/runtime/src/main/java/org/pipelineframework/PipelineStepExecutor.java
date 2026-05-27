@@ -391,9 +391,13 @@ class PipelineStepExecutor {
         AwaitExecutionContext previousAwait = AwaitExecutionContextHolder.get();
         if (context != null) {
             PipelineContextHolder.set(context);
+        } else {
+            PipelineContextHolder.clear();
         }
         if (awaitContext != null) {
             AwaitExecutionContextHolder.set(awaitContext);
+        } else {
+            AwaitExecutionContextHolder.clear();
         }
         return new ExecutionContextScope(previousPipeline, previousAwait);
     }

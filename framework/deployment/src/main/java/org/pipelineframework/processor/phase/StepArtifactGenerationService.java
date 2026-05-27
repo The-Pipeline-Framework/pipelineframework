@@ -173,8 +173,9 @@ class StepArtifactGenerationService {
                             sideEffectRole,
                             grpcBinding);
                     }
+                    String syntheticFqcn = model.servicePackage() + PIPELINE_DOT + model.serviceName();
                     roleMetadataGenerator.recordClassWithRole(
-                        model.servicePackage() + PIPELINE_DOT + model.serviceName(),
+                        syntheticFqcn,
                         sideEffectRole.name());
                 }
                 case CLIENT_STEP -> {

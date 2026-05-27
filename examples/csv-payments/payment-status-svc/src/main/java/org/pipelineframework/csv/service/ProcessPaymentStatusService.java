@@ -49,7 +49,7 @@ public class ProcessPaymentStatusService
       }
       PaymentRecord paymentRecord = paymentStatus.getPaymentRecord();
       if (paymentRecord == null) {
-        return Uni.createFrom().failure(new IllegalArgumentException(
+        return Uni.createFrom().failure(new NonRetryableException(
             "PaymentStatus must include paymentRecord for CSV output mapping"));
       }
 

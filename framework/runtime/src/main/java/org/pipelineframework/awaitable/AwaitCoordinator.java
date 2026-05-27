@@ -199,10 +199,23 @@ public class AwaitCoordinator {
                     .onItem().transform(this::coerceResumePayload);
             }
             return interactionStore().findByUnit(tenantId, unitId)
-                .onItem().transform(records -> List.copyOf(records.stream()
-                    .sorted(java.util.Comparator.comparing(record -> record.itemIndex() == null ? Integer.MAX_VALUE : record.itemIndex()))
-                    .map(this::coerceResumePayload)
-                    .toList()));
+                .onItem().transform(records -> {
+                    var completedByItem = records.stream()
+                        .filter(record -> record.status() == AwaitInteractionStatus.COMPLETED)
+                        .collect(java.util.stream.Collectors.groupingBy(
+                            record -> record.itemIndex() == null ? Integer.valueOf(-1) : record.itemIndex()));
+                    return completedByItem.entrySet().stream()
+                        .sorted(java.util.Map.Entry.comparingByKey())
+                        .map(entry -> {
+                            var group = entry.getValue();
+                            return group.stream()
+                                .max(java.util.Comparator.comparing(AwaitInteractionRecord::createdAt)
+                                    .thenComparing(AwaitInteractionRecord::attempt))
+                                .orElseThrow();
+                        })
+                        .map(this::coerceResumePayload)
+                        .toList();
+                });
         });
     }
 
