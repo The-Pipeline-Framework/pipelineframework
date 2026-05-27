@@ -179,6 +179,7 @@ Canvas is the preferred onboarding path, but TPF also supports template- and YAM
 ## Reference Examples
 
 - [`examples/csv-payments`](examples/csv-payments/) shows the topology and runtime-layout story across modular, pipeline-runtime, and monolith builds.
+- [`examples/restaurant-approval`](examples/restaurant-approval/) is the canonical `interaction-api` human-await example, pairing a generator-backed monolith runtime with a small Next.js approval inbox.
 - [`examples/search`](examples/search/) is the richer reference application for crawl/parse/tokenize/index flows, cache/persistence interplay, function-platform verification, and integration hardening.
 - [`examples/checkout`](examples/checkout/) contains the TPFGo reference flow for checkpoint-boundary handoff and multi-pipeline orchestration.
 

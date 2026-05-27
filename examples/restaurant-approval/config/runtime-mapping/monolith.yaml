@@ -1,0 +1,17 @@
+layout: monolith
+validation: auto
+defaults:
+  runtime: monolith-svc
+  module: monolith-svc
+  synthetic:
+    module: monolith-svc
+modules:
+  monolith-svc:
+    runtime: monolith-svc
+    steps:
+      - validate-order-request
+      - create-pending-approval
+      - await-restaurant-decision
+      - finalize-restaurant-decision
+  orchestrator-svc:
+    runtime: monolith-svc
