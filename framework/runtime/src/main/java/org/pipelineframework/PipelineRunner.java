@@ -92,7 +92,11 @@ public class PipelineRunner implements AutoCloseable {
      * @throws IllegalArgumentException if {@code input} is not a Uni or a Multi
      */
     public Object run(Object input, List<Object> steps) {
-        return runFromStep(input, steps, 0);
+        return runWithContext(input, steps).result();
+    }
+
+    public ExecutionResult runWithContext(Object input, List<Object> steps) {
+        return runFromStepWithContext(input, steps, 0);
     }
 
     /**
@@ -104,6 +108,10 @@ public class PipelineRunner implements AutoCloseable {
      * @return final reactive result
      */
     public Object runFromStep(Object input, List<Object> steps, int startStepIndex) {
+        return runFromStepWithContext(input, steps, startStepIndex).result();
+    }
+
+    public ExecutionResult runFromStepWithContext(Object input, List<Object> steps, int startStepIndex) {
         Objects.requireNonNull(steps, "Steps list must not be null");
         if (!(input instanceof Uni<?> || input instanceof Multi<?>)) {
             throw new IllegalArgumentException(MessageFormat.format(
@@ -158,7 +166,10 @@ public class PipelineRunner implements AutoCloseable {
                 awaitContextSnapshot);
         }
 
-        return telemetry.instrumentRunCompletion(current, telemetryContext);
+        return new ExecutionResult(telemetry.instrumentRunCompletion(current, telemetryContext), telemetryContext);
+    }
+
+    public record ExecutionResult(Object result, PipelineTelemetry.RunContext telemetryContext) {
     }
 
     /**
