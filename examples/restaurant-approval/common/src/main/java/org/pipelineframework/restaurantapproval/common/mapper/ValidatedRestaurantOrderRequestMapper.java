@@ -1,6 +1,8 @@
 package org.pipelineframework.restaurantapproval.common.mapper;
 
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.restaurantapproval.common.domain.ValidatedRestaurantOrderRequest;
@@ -21,8 +23,10 @@ public interface ValidatedRestaurantOrderRequestMapper
 
   ValidatedRestaurantOrderRequest fromDto(ValidatedRestaurantOrderRequestDto dto);
 
+  @BeanMapping(unmappedTargetPolicy = ReportingPolicy.IGNORE)
   PipelineTypes.ValidatedRestaurantOrderRequest toGrpc(ValidatedRestaurantOrderRequestDto dto);
 
+  @Mapping(target = "id", ignore = true)
   ValidatedRestaurantOrderRequestDto fromGrpc(PipelineTypes.ValidatedRestaurantOrderRequest grpc);
 
   @Override

@@ -1,6 +1,8 @@
 package org.pipelineframework.restaurantapproval.common.mapper;
 
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.restaurantapproval.common.domain.PendingRestaurantApproval;
@@ -21,8 +23,10 @@ public interface PendingRestaurantApprovalMapper
 
   PendingRestaurantApproval fromDto(PendingRestaurantApprovalDto dto);
 
+  @BeanMapping(unmappedTargetPolicy = ReportingPolicy.IGNORE)
   PipelineTypes.PendingRestaurantApproval toGrpc(PendingRestaurantApprovalDto dto);
 
+  @Mapping(target = "id", ignore = true)
   PendingRestaurantApprovalDto fromGrpc(PipelineTypes.PendingRestaurantApproval grpc);
 
   @Override

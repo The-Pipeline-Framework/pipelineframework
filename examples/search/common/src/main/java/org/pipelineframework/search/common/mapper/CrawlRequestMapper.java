@@ -1,5 +1,6 @@
 package org.pipelineframework.search.common.mapper;
 
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
@@ -21,6 +22,7 @@ public interface CrawlRequestMapper extends org.pipelineframework.mapper.Mapper<
   CrawlRequest fromDto(CrawlRequestDto dto);
 
   // DTO ↔ gRPC
+  @BeanMapping(unmappedTargetPolicy = ReportingPolicy.IGNORE)
   org.pipelineframework.search.grpc.PipelineTypes.CrawlRequest toGrpc(CrawlRequestDto dto);
 
   CrawlRequestDto fromGrpc(org.pipelineframework.search.grpc.PipelineTypes.CrawlRequest grpc);

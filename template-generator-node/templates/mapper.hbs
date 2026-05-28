@@ -3,6 +3,7 @@ package {{basePackage}}.common.mapper;
 import {{basePackage}}.common.domain.{{domainClass}};
 import {{basePackage}}.common.dto.{{dtoClass}};
 import {{grpcClass}};
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
@@ -22,6 +23,7 @@ public interface {{className}}Mapper extends org.pipelineframework.mapper.Mapper
   {{domainClass}} fromDto({{dtoClass}} dto);
 
   // DTO ↔ gRPC
+  @BeanMapping(unmappedTargetPolicy = ReportingPolicy.IGNORE)
   {{grpcClass}}.{{className}} toGrpc({{dtoClass}} dto);
 
   {{dtoClass}} fromGrpc({{grpcClass}}.{{className}} grpc);
