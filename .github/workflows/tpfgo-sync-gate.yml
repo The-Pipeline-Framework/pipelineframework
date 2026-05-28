@@ -149,4 +149,13 @@ jobs:
       - name: Build docs
         run: |
           npm --prefix docs ci
+          npm --prefix docs exec -- playwright install chromium --with-deps
+          npm --prefix docs run build:homepage-video
+          git diff --exit-code -- \
+            docs/public/home/replay-proof-manifest.json \
+            tools/homepage-replay-video/data/csv-payments-cinematic.json
+          git checkout -- \
+            docs/public/home/replay-proof.webm \
+            docs/public/home/replay-proof.mp4 \
+            docs/public/home/replay-proof-poster.jpg
           npm --prefix docs run build

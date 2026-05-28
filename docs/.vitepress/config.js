@@ -103,7 +103,7 @@ const mainSidebar = [
             {
                 text: 'Orchestrator Runtime',
                 link: '/guide/development/orchestrator-runtime/',
-                collapsed: true,
+                collapsed: false,
                 items: [
                     {text: 'Overview', link: '/guide/development/orchestrator-runtime/'},
                     {text: 'Queue-Async Runtime', link: '/guide/development/orchestrator-runtime/queue-async'},
@@ -179,7 +179,7 @@ const mainSidebar = [
             {
                 text: 'Await Unit Runtime',
                 link: '/guide/evolve/await-unit-runtime/',
-                collapsed: true,
+                collapsed: false,
                 items: [
                     {text: 'Model', link: '/guide/evolve/await-unit-runtime/'},
                     {text: 'Sequences', link: '/guide/evolve/await-unit-runtime/sequences'},

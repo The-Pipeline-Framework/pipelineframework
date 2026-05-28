@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TPF Homepage Replay Cinematic</title>
+    <style>
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #040814;
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+      }
+
+      #captureRoot {
+        width: 1600px;
+        height: 900px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 18% 18%, rgba(72, 144, 255, 0.18), transparent 34%),
+          radial-gradient(circle at 78% 20%, rgba(120, 240, 200, 0.1), transparent 28%),
+          linear-gradient(180deg, #040814 0%, #071020 100%);
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="captureRoot"></div>
+    <script type="module" src="./render_scene.js"></script>
+  </body>
+</html>
