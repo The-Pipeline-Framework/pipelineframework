@@ -1,6 +1,7 @@
 name: CI — Native Builds (Main)
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -24,9 +25,25 @@ env:
 
 jobs:
   csv-native-builds:
-    name: CSV Native Builds
+    name: CSV Native Build (${{ matrix.service }})
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.head_commit.message, 'maven-release-plugin') }}
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, 'maven-release-plugin') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: orchestrator-svc
+            artifact: native-orchestrator-svc
+          - service: persistence-svc
+            artifact: native-persistence-svc
+          - service: input-csv-file-processing-svc
+            artifact: native-input-csv-file-processing-svc
+          - service: payment-status-svc
+            artifact: native-payment-status-svc
+          - service: payments-processing-svc
+            artifact: native-payments-processing-svc
+          - service: output-csv-file-processing-svc
+            artifact: native-output-csv-file-processing-svc
 
     steps:
       - name: Checkout
@@ -42,75 +59,36 @@ jobs:
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
 
-      - name: Full native build
+      - name: Bootstrap framework prerequisites
+        run: |
+          ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
+
+      - name: CSV native build
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
-          ./mvnw "${maven_args[@]}" -DskipTests -Dquarkus.container-image.build=false -Dquarkus.native.enabled=true -Pnative package
+          ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.xml \
+            -pl "${{ matrix.service }}" \
+            -am \
+            -DskipTests \
+            -Dquarkus.container-image.build=false \
+            -Dquarkus.native.enabled=true \
+            -Pnative \
+            clean package
 
-      - name: Upload native orchestrator artifact
+      - name: Upload native artifact
         uses: actions/upload-artifact@v4
         with:
-          name: native-orchestrator-svc
+          name: ${{ matrix.artifact }}
           path: |
-            examples/csv-payments/orchestrator-svc/target/*-runner
-            examples/csv-payments/orchestrator-svc/target/*-runner.*
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload native persistence artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-persistence-svc
-          path: |
-            examples/csv-payments/persistence-svc/target/*-runner
-            examples/csv-payments/persistence-svc/target/*-runner.*
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload native input-csv artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-input-csv-file-processing-svc
-          path: |
-            examples/csv-payments/input-csv-file-processing-svc/target/*-runner
-            examples/csv-payments/input-csv-file-processing-svc/target/*-runner.*
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload native payment-status artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-payment-status-svc
-          path: |
-            examples/csv-payments/payment-status-svc/target/*-runner
-            examples/csv-payments/payment-status-svc/target/*-runner.*
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload native payments-processing artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-payments-processing-svc
-          path: |
-            examples/csv-payments/payments-processing-svc/target/*-runner
-            examples/csv-payments/payments-processing-svc/target/*-runner.*
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload native output-csv artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-output-csv-file-processing-svc
-          path: |
-            examples/csv-payments/output-csv-file-processing-svc/target/*-runner
-            examples/csv-payments/output-csv-file-processing-svc/target/*-runner.*
+            examples/csv-payments/${{ matrix.service }}/target/*-runner
+            examples/csv-payments/${{ matrix.service }}/target/*-runner.*
           retention-days: 7
           if-no-files-found: error
 
   search-lambda-native-smoke:
     name: Search Lambda Native Smoke
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.head_commit.message, 'maven-release-plugin') }}
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, 'maven-release-plugin') }}
 
     steps:
       - name: Checkout
