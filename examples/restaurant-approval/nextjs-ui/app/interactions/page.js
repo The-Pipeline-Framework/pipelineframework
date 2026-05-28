@@ -3,7 +3,7 @@ import { approveRestaurantOrder, declineRestaurantOrder } from "../actions.js";
 import { fetchPendingInteractions } from "../../lib/tpf-client.js";
 
 function formatDeadline(epochMs) {
-  if (!epochMs) {
+  if (epochMs === null || epochMs === undefined) {
     return "n/a";
   }
   return new Date(epochMs).toLocaleString();

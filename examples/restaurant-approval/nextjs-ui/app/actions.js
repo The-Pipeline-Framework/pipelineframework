@@ -26,7 +26,7 @@ export async function submitRestaurantOrder(formData) {
     totalAmount,
     currency
   });
-  redirect(`/executions/${accepted.executionId}`);
+  redirect(`/executions/${encodeURIComponent(accepted.executionId)}`);
 }
 
 export async function approveRestaurantOrder(formData) {
@@ -45,7 +45,7 @@ export async function approveRestaurantOrder(formData) {
     note
   });
   revalidatePath("/interactions");
-  redirect(`/executions/${executionId}`);
+  redirect(`/executions/${encodeURIComponent(executionId)}`);
 }
 
 export async function declineRestaurantOrder(formData) {
@@ -66,5 +66,5 @@ export async function declineRestaurantOrder(formData) {
     declineReason
   });
   revalidatePath("/interactions");
-  redirect(`/executions/${executionId}`);
+  redirect(`/executions/${encodeURIComponent(executionId)}`);
 }

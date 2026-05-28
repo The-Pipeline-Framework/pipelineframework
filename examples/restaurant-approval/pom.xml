@@ -204,7 +204,7 @@
                                 <resource>
                                     <directory>${project.parent.basedir}/target/dev-certs/${project.artifactId}</directory>
                                     <includes>
-                                        <include>server-keystore.jks</include>
+                                        <include>server-keystore.p12</include>
                                         <include>client-truststore.jks</include>
                                     </includes>
                                     <filtering>false</filtering>

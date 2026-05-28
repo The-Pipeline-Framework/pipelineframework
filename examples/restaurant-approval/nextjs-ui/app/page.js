@@ -51,8 +51,11 @@ export default function HomePage() {
                 <input
                   id="totalAmount"
                   name="totalAmount"
+                  type="number"
                   defaultValue="27.50"
                   inputMode="decimal"
+                  step="0.01"
+                  min="0"
                   required
                 />
               </div>

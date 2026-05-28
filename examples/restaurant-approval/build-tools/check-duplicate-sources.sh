@@ -9,8 +9,8 @@ fi
 target_dir="$1"
 shift
 
-tmp_file="${target_dir}/source-files.txt"
 mkdir -p "$target_dir"
+tmp_file="$(mktemp "${target_dir}/source-files.XXXXXX")"
 trap 'rm -f "$tmp_file"' EXIT
 
 {

@@ -26,6 +26,8 @@ public final class RestaurantDecisionJsonSerializer extends JsonSerializer<Resta
       gen.writeStringField("note", declined.note());
       gen.writeStringField("declineReason", declined.declineReason());
       gen.writeEndObject();
+    } else {
+      throw new IOException("Unsupported RestaurantDecision subtype: " + value.getClass().getName());
     }
     gen.writeEndObject();
   }

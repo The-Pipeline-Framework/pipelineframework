@@ -10,7 +10,7 @@ It shows a compact human decision flow:
 4. resume from a later human decision
 5. finalize a terminal order state
 
-The backend is generator-backed. The UI is a small hand-written Next.js app that talks only to the generated TPF REST APIs.
+The backend is generator-backed. The UI is a small handwritten Next.js app that talks only to the generated TPF REST APIs.
 
 ## What This Example Proves
 

@@ -18,7 +18,7 @@ public class CommonConverters {
 
     @Named("stringToCurrency")
     public Currency stringToCurrency(String code) {
-        return code != null ? Currency.getInstance(code) : null;
+        return code != null && !code.isBlank() ? Currency.getInstance(code) : null;
     }
 
     @Named("uuidToString")
@@ -58,7 +58,7 @@ public class CommonConverters {
 
     @Named("stringToAtomicInteger")
     public AtomicInteger stringToAtomicInteger(String string) {
-        return string != null ? new AtomicInteger(Integer.parseInt(string)) : null;
+        return string != null && !string.isBlank() ? new AtomicInteger(Integer.parseInt(string)) : null;
     }
 
     @Named("atomicLongToString")
@@ -68,7 +68,7 @@ public class CommonConverters {
 
     @Named("stringToAtomicLong")
     public AtomicLong stringToAtomicLong(String string) {
-        return string != null ? new AtomicLong(Long.parseLong(string)) : null;
+        return string != null && !string.isBlank() ? new AtomicLong(Long.parseLong(string)) : null;
     }
 
     @Named("listToString")
