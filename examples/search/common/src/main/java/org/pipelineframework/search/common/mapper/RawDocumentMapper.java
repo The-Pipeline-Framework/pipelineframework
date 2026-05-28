@@ -1,5 +1,6 @@
 package org.pipelineframework.search.common.mapper;
 
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
@@ -21,6 +22,7 @@ public interface RawDocumentMapper extends org.pipelineframework.mapper.Mapper<R
   RawDocument fromDto(RawDocumentDto dto);
 
   // DTO ↔ gRPC
+  @BeanMapping(unmappedTargetPolicy = ReportingPolicy.IGNORE)
   org.pipelineframework.search.grpc.PipelineTypes.RawDocument toGrpc(RawDocumentDto dto);
 
   RawDocumentDto fromGrpc(org.pipelineframework.search.grpc.PipelineTypes.RawDocument grpc);

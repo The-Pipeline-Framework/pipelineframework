@@ -1,5 +1,6 @@
 package org.pipelineframework.search.common.mapper;
 
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
@@ -21,6 +22,7 @@ public interface ParsedDocumentMapper extends org.pipelineframework.mapper.Mappe
   ParsedDocument fromDto(ParsedDocumentDto dto);
 
   // DTO ↔ gRPC
+  @BeanMapping(unmappedTargetPolicy = ReportingPolicy.IGNORE)
   org.pipelineframework.search.grpc.PipelineTypes.ParsedDocument toGrpc(ParsedDocumentDto dto);
 
   ParsedDocumentDto fromGrpc(org.pipelineframework.search.grpc.PipelineTypes.ParsedDocument grpc);
