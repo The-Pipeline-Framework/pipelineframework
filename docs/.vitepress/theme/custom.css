@@ -224,6 +224,21 @@ kbd {
   position: relative;
 }
 
+.VPHome .home-cinematic-video-link {
+  display: block;
+  border-radius: 18px;
+  color: inherit;
+}
+
+.VPHome .home-cinematic-video-link:hover {
+  text-decoration: none;
+}
+
+.VPHome .home-cinematic-video-link:focus-visible {
+  outline: 3px solid var(--vp-c-brand-light);
+  outline-offset: 4px;
+}
+
 .VPHome .home-cinematic-video {
   display: block;
   width: 100%;

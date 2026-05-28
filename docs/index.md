@@ -18,18 +18,20 @@ hero:
 ---
 
 <figure class="home-cinematic-spotlight">
-  <video
-    class="home-cinematic-video"
-    autoplay
-    muted
-    loop
-    playsinline
-    preload="metadata"
-    poster="/home/replay-proof-poster.jpg"
-  >
-    <source src="/home/replay-proof.webm" type="video/webm" />
-    <source src="/home/replay-proof.mp4" type="video/mp4" />
-  </video>
+  <a class="home-cinematic-video-link" href="/replay-viewer/" aria-label="Open the replay viewer">
+    <video
+      class="home-cinematic-video"
+      autoplay
+      muted
+      loop
+      playsinline
+      preload="metadata"
+      poster="/home/replay-proof-poster.jpg"
+    >
+      <source src="/home/replay-proof.webm" type="video/webm" />
+      <source src="/home/replay-proof.mp4" type="video/mp4" />
+    </video>
+  </a>
   <figcaption>Async pipeline motion: an await step hands work through Kafka to an external provider while TPF persists payment records automatically.</figcaption>
 </figure>
 
@@ -65,7 +67,7 @@ Use <a href="https://app.pipelineframework.org" target="_blank" rel="noopener no
   </a>
   <a class="home-capability-card" href="/value/runtime-efficiency">
     <h3>Runtime Efficiency</h3>
-    <p>Keep many items moving through reactive function chains without one thread per item.</p>
+    <p>Keep many items moving through reactive function chains, including await steps that pause for external work without tying up a thread.</p>
   </a>
   <a class="home-capability-card" href="/value/integration-flexibility">
     <h3>Portable Serverless Functions</h3>
