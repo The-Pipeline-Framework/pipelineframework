@@ -299,13 +299,14 @@ public class PipelineExecutionService {
         return Multi.createFrom().failure(inputFailure);
       }
 
-      Object result = pipelineRunner.run(input, steps);
+      PipelineRunner.ExecutionResult executionResult = pipelineRunner.runWithContext(input, steps);
+      Object result = executionResult.result();
       if (result == null) {
         return Multi.createFrom().failure(new IllegalStateException("PipelineRunner returned null"));
       } else if (result instanceof Multi<?> multi) {
-        return executionHooks.attachMultiHooks(multi, watch);
+        return executionHooks.attachMultiHooks(multi, watch, executionResult.telemetryContext());
       } else if (result instanceof Uni<?> uni) {
-        return executionHooks.attachMultiHooks(uni.toMulti(), watch);
+        return executionHooks.attachMultiHooks(uni.toMulti(), watch, executionResult.telemetryContext());
       } else {
         return Multi.createFrom().failure(new IllegalStateException(
             MessageFormat.format("PipelineRunner returned unexpected type: {0}", result.getClass().getName())));
@@ -361,12 +362,13 @@ public class PipelineExecutionService {
     if (steps == null) {
       return Multi.createFrom().failure(new IllegalStateException("Pipeline steps could not be loaded."));
     }
-    Object result = pipelineRunner.runFromStep(input, steps, startStepIndex);
+    PipelineRunner.ExecutionResult executionResult = pipelineRunner.runFromStepWithContext(input, steps, startStepIndex);
+    Object result = executionResult.result();
     if (result instanceof Multi<?> multi) {
-      return executionHooks.attachMultiHooks(multi, watch);
+      return executionHooks.attachMultiHooks(multi, watch, executionResult.telemetryContext());
     }
     if (result instanceof Uni<?> uni) {
-      return executionHooks.attachMultiHooks(uni.toMulti(), watch);
+      return executionHooks.attachMultiHooks(uni.toMulti(), watch, executionResult.telemetryContext());
     }
     String resultType = result == null ? "null" : result.getClass().getName();
     Multi<?> failed = Multi.createFrom().failure(new IllegalStateException(
@@ -374,7 +376,7 @@ public class PipelineExecutionService {
             "PipelineRunner returned unexpected type from step index {0}: {1}",
             startStepIndex,
             resultType)));
-    return executionHooks.attachMultiHooks(failed, watch);
+    return executionHooks.attachMultiHooks(failed, watch, executionResult.telemetryContext());
   }
 
   private void restoreAwaitContext(AwaitExecutionContext previous) {
@@ -401,10 +403,11 @@ public class PipelineExecutionService {
         return Uni.createFrom().failure(inputFailure);
       }
 
-      Object result = pipelineRunner.run(input, steps);
+      PipelineRunner.ExecutionResult executionResult = pipelineRunner.runWithContext(input, steps);
+      Object result = executionResult.result();
       return switch (result) {
         case null -> Uni.createFrom().failure(new IllegalStateException("PipelineRunner returned null"));
-        case Uni<?> uni -> executionHooks.attachUniHooks(uni, watch);
+        case Uni<?> uni -> executionHooks.attachUniHooks(uni, watch, executionResult.telemetryContext());
         case Multi<?> ignored -> Uni.createFrom().failure(new IllegalStateException(
             "PipelineRunner returned stream output where unary output was expected"));
         default -> Uni.createFrom().failure(new IllegalStateException(

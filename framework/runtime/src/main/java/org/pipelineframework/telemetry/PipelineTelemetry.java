@@ -25,6 +25,7 @@ import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -571,13 +572,24 @@ public class PipelineTelemetry {
         return current;
     }
 
+    public void abortRun(RunContext runContext, Throwable failure) {
+        if (runContext == null || !runContext.enabled()) {
+            return;
+        }
+        endRun(runContext, abortFailure(failure));
+    }
+
     public void abortActiveRun(Throwable failure) {
-        Throwable effectiveFailure = failure == null ? new IllegalStateException("Pipeline aborted.") : failure;
+        Throwable effectiveFailure = abortFailure(failure);
         for (RunContext runContext : List.copyOf(activeRunContexts.values())) {
             if (runContext != null && runContext.enabled()) {
                 endRun(runContext, effectiveFailure);
             }
         }
+    }
+
+    private Throwable abortFailure(Throwable failure) {
+        return failure == null ? new IllegalStateException("Pipeline aborted.") : failure;
     }
 
     /**
@@ -1014,14 +1026,22 @@ public class PipelineTelemetry {
         return retryAmplificationSampleInterval;
     }
 
-    public java.util.Optional<RetryAmplificationGuard.Trigger> retryAmplificationTrigger() {
+    public Optional<RetryAmplificationGuard.Trigger> retryAmplificationTrigger() {
         for (RetryAmplificationMonitor monitor : activeRetryAmplificationMonitors.values()) {
-            java.util.Optional<RetryAmplificationGuard.Trigger> triggered = monitor.triggered();
+            Optional<RetryAmplificationGuard.Trigger> triggered = monitor.triggered();
             if (triggered.isPresent()) {
                 return triggered;
             }
         }
-        return java.util.Optional.empty();
+        return Optional.empty();
+    }
+
+    public Optional<RetryAmplificationGuard.Trigger> retryAmplificationTrigger(RunContext runContext) {
+        if (runContext == null || !runContext.enabled()) {
+            return retryAmplificationTrigger();
+        }
+        RetryAmplificationMonitor monitor = activeRetryAmplificationMonitors.get(runContext.runId());
+        return monitor == null ? Optional.empty() : monitor.triggered();
     }
 
     private void recordRetryInternal(Class<?> stepClass, Throwable failure) {
@@ -1180,8 +1200,8 @@ public class PipelineTelemetry {
             }
         }
 
-        java.util.Optional<RetryAmplificationGuard.Trigger> triggered() {
-            return java.util.Optional.ofNullable(trigger.get());
+        Optional<RetryAmplificationGuard.Trigger> triggered() {
+            return Optional.ofNullable(trigger.get());
         }
 
         private void sample() {
@@ -1210,7 +1230,7 @@ public class PipelineTelemetry {
                 trimSamples(samples);
                 snapshot = new ArrayDeque<>(samples);
             }
-            java.util.Optional<RetryAmplificationGuard.Trigger> candidate = retryAmplificationGuard
+            Optional<RetryAmplificationGuard.Trigger> candidate = retryAmplificationGuard
                 .evaluate("global", snapshot, retryAmplificationWindow, inflightSlopeThreshold,
                     retryAmplificationSustainSamples);
             if (candidate.isPresent()) {
