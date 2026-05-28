@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.pipelineframework</groupId>
         <artifactId>pipeline-framework-root</artifactId>
-        <version>26.2.2</version>
+        <version>{{frameworkVersion}}</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
@@ -66,8 +66,11 @@
         <mapstruct.version>1.5.5.Final</mapstruct.version>
         <surefireArgLine />
         <pipeline.generatedSourcesArg />
+        <pipeline.moduleArg>-Apipeline.module=${project.artifactId}</pipeline.moduleArg>
         <protobuf.descriptor.fileArg />
         <pipeline.parallelism>PARALLEL</pipeline.parallelism>
+        <tpf.build.transport>{{transport}}</tpf.build.transport>
+        <tpf.build.platform>COMPUTE</tpf.build.platform>
         <!-- Default: don't build containers unless specifically enabled -->
         <quarkus.container-image.build>false</quarkus.container-image.build>
         <quarkus.container-image.registry>localhost</quarkus.container-image.registry>
@@ -311,7 +314,10 @@
                             <configuration>
                                 <compilerArgs>
                                     <arg>${pipeline.generatedSourcesArg}</arg>
+                                    <arg>${pipeline.moduleArg}</arg>
                                     <arg>${protobuf.descriptor.fileArg}</arg>
+                                    <arg>-Apipeline.transport=${tpf.build.transport}</arg>
+                                    <arg>-Apipeline.platform=${tpf.build.platform}</arg>
                                 </compilerArgs>
                             </configuration>
                         </execution>

@@ -1,0 +1,97 @@
+name: CI — Restaurant Approval Monolith
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "framework/**"
+      - "examples/restaurant-approval/**"
+      - "docs/**"
+      - "scripts/ci/**"
+      - "pom.xml"
+      - "mvnw"
+      - ".mvn/**"
+      - ".github/workflows/restaurant-approval-monolith.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  MAVEN_OPTS: -Xmx2g -Xms512m
+  MAVEN_ARGS_BUILD: -B -T 1C -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
+
+jobs:
+  restaurant-approval-monolith:
+    name: Restaurant Approval Monolith + Next.js
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: examples/restaurant-approval/nextjs-ui/package-lock.json
+
+      - name: Configure Maven
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+
+      - name: Build framework and foundational plugins
+        run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
+
+      - name: Run restaurant-approval monolith await test
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f examples/restaurant-approval/pom.xml \
+            -pl monolith-svc \
+            -am \
+            -Dtest=RestaurantApprovalAwaitMonolithTest \
+            -Dsurefire.failIfNoSpecifiedTests=false \
+            test
+
+      - name: Run Next.js UI tests
+        run: |
+          npm --prefix examples/restaurant-approval/nextjs-ui ci
+          npm --prefix examples/restaurant-approval/nextjs-ui test
+
+      - name: Build Next.js UI
+        run: npm --prefix examples/restaurant-approval/nextjs-ui run build
+
+      - name: Build docs
+        run: |
+          npm --prefix docs ci
+          npm --prefix docs run build
+
+      - name: Dump reports on failure
+        if: failure()
+        run: |
+          find examples/restaurant-approval -path "*/target/surefire-reports/*.txt" -print -exec tail -n 200 {} \;
+
+      - name: Upload reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restaurant-approval-reports
+          path: |
+            examples/restaurant-approval/**/target/surefire-reports/*.txt
+            examples/restaurant-approval/**/target/surefire-reports/*.xml
+          retention-days: 7
+          if-no-files-found: warn

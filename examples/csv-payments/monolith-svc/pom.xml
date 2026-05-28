@@ -103,6 +103,16 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>default-compile</id>
+                        <configuration>
+                            <excludes>
+                                <exclude>org/pipelineframework/csv/service/pipeline/**/*.java</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -190,6 +200,10 @@
                 <artifactId>build-helper-maven-plugin</artifactId>
                 <version>3.6.0</version>
                 <executions>
+                    <execution>
+                        <id>add-pipeline-generated-sources</id>
+                        <phase>none</phase>
+                    </execution>
                     <execution>
                         <id>add-monolith-sources</id>
                         <phase>generate-sources</phase>

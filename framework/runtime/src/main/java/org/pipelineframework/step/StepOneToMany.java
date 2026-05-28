@@ -84,15 +84,15 @@ public interface StepOneToMany<I, O> extends OneToMany<I, O>, Configurable, Item
             .withJitter(jitter() ? 0.5 : 0.0)
             .atMost(retryLimit())
             .onFailure().recoverWithMulti(t -> {
+                if (shouldPropagateWithoutRecovery(t)) {
+                    return Multi.createFrom().failure(t);
+                }
                 LOG.infof(
                     "Step %s completed all retries (%s attempts) with failure: %s",
                     this.getClass().getSimpleName(),
                     retryLimit(),
                     t.getMessage()
                 );
-                if (shouldPropagateWithoutRecovery(t)) {
-                    return Multi.createFrom().failure(t);
-                }
                 if (recoverOnFailure()) {
                     List<I> sample = item == null ? List.of() : List.of(item);
                     return rejectStream(sample, item == null ? 0L : 1L, t)

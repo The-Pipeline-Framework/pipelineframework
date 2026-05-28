@@ -11,27 +11,27 @@ class AwaitSuspendedExceptionTest {
     @Test
     void constructsWithAllFields() {
         AwaitSuspendedException ex = new AwaitSuspendedException(
-            "tenant1", "exec-123", "interaction-456", 3);
+            "tenant1", "exec-123", "unit-456", 3);
 
         assertEquals("tenant1", ex.tenantId());
         assertEquals("exec-123", ex.executionId());
-        assertEquals("interaction-456", ex.interactionId());
+        assertEquals("unit-456", ex.unitId());
         assertEquals(3, ex.stepIndex());
     }
 
     @Test
-    void messageContainsInteractionId() {
+    void messageContainsUnitId() {
         AwaitSuspendedException ex = new AwaitSuspendedException(
-            "tenant1", "exec-123", "interaction-abc", 0);
+            "tenant1", "exec-123", "unit-abc", 0);
 
-        assertTrue(ex.getMessage().contains("interaction-abc"),
-            "Expected message to contain interaction id but was: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("unit-abc"),
+            "Expected message to contain unit id but was: " + ex.getMessage());
     }
 
     @Test
     void isRuntimeException() {
         AwaitSuspendedException ex = new AwaitSuspendedException(
-            "tenant1", "exec-123", "interaction-456", 0);
+            "tenant1", "exec-123", "unit-456", 0);
 
         assertTrue(ex instanceof RuntimeException);
     }
@@ -39,7 +39,7 @@ class AwaitSuspendedExceptionTest {
     @Test
     void isNonRetryableException() {
         AwaitSuspendedException ex = new AwaitSuspendedException(
-            "tenant1", "exec-123", "interaction-456", 0);
+            "tenant1", "exec-123", "unit-456", 0);
 
         assertTrue(ex instanceof NonRetryableException);
     }
@@ -47,7 +47,7 @@ class AwaitSuspendedExceptionTest {
     @Test
     void stepIndexZeroIsValid() {
         AwaitSuspendedException ex = new AwaitSuspendedException(
-            "tenant1", "exec-123", "interaction-456", 0);
+            "tenant1", "exec-123", "unit-456", 0);
 
         assertEquals(0, ex.stepIndex());
     }
@@ -59,8 +59,8 @@ class AwaitSuspendedExceptionTest {
 
         assertEquals("t1", ex1.tenantId());
         assertEquals("t2", ex2.tenantId());
-        assertEquals("i1", ex1.interactionId());
-        assertEquals("i2", ex2.interactionId());
+        assertEquals("i1", ex1.unitId());
+        assertEquals("i2", ex2.unitId());
         assertEquals(1, ex1.stepIndex());
         assertEquals(2, ex2.stepIndex());
     }

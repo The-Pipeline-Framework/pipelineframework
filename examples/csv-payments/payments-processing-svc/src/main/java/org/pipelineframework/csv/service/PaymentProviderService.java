@@ -16,12 +16,9 @@
 
 package org.pipelineframework.csv.service;
 
-import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
-import org.pipelineframework.csv.common.domain.SendPaymentRequest;
+import org.pipelineframework.csv.common.domain.PaymentRecord;
 
 public interface PaymentProviderService {
-  AckPaymentSent sendPayment(SendPaymentRequest requestMap);
-
-  PaymentStatus getPaymentStatus(AckPaymentSent ackPaymentSent);
+  PaymentStatus processPayment(PaymentRecord paymentRecord);
 }

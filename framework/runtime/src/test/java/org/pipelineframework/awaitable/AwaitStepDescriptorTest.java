@@ -34,17 +34,15 @@ class AwaitStepDescriptorTest {
         assertEquals("https://example.com", descriptor.transportConfig().get("url"));
         assertEquals(List.of("orderId", "customerId"), descriptor.idempotencyKeyFields());
         assertEquals("ONE_TO_ONE", descriptor.cardinality());
-        assertEquals("single", descriptor.dispatchMode());
     }
 
     @Test
-    void acceptsManyToManyPerItemDispatch() {
+    void acceptsCardinalitySpecificConstructorWithoutDispatchMode() {
         AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             "await-payment-provider",
             "com.example.PaymentRecord",
             "com.example.PaymentStatus",
             "MANY_TO_MANY",
-            "per-item",
             Duration.ofMinutes(5),
             "signedResumeToken",
             "kafka",
@@ -52,24 +50,6 @@ class AwaitStepDescriptorTest {
             List.of("csvId"));
 
         assertEquals("MANY_TO_MANY", descriptor.cardinality());
-        assertEquals("per-item", descriptor.dispatchMode());
-    }
-
-    @Test
-    void defaultsManyToManyDispatchToPerItem() {
-        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
-            "await-payment-provider",
-            "com.example.PaymentRecord",
-            "com.example.PaymentStatus",
-            "MANY_TO_MANY",
-            null,
-            Duration.ofMinutes(5),
-            "signedResumeToken",
-            "kafka",
-            Map.of(),
-            List.of());
-
-        assertEquals("per-item", descriptor.dispatchMode());
     }
 
     @Test
@@ -199,33 +179,4 @@ class AwaitStepDescriptorTest {
             Duration.ofMinutes(5), "interactionId", null, null, null));
     }
 
-    @Test
-    void rejectsManyToManyWithoutPerItemDispatch() {
-        assertThrows(IllegalArgumentException.class, () -> new AwaitStepDescriptor(
-            "step-id",
-            "com.example.Input",
-            "com.example.Output",
-            "MANY_TO_MANY",
-            "single",
-            Duration.ofMinutes(5),
-            "interactionId",
-            "kafka",
-            null,
-            null));
-    }
-
-    @Test
-    void rejectsPerItemDispatchForUnaryAwait() {
-        assertThrows(IllegalArgumentException.class, () -> new AwaitStepDescriptor(
-            "step-id",
-            "com.example.Input",
-            "com.example.Output",
-            "ONE_TO_ONE",
-            "per-item",
-            Duration.ofMinutes(5),
-            "interactionId",
-            "kafka",
-            null,
-            null));
-    }
 }

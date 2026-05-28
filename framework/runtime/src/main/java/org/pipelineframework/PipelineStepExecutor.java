@@ -30,6 +30,9 @@ import org.pipelineframework.cache.CachePolicyEnforcer;
 import org.pipelineframework.cache.CachePolicyViolation;
 import org.pipelineframework.cache.CacheReadBypass;
 import org.pipelineframework.cache.CacheStatus;
+import org.pipelineframework.awaitable.AwaitExecutionContext;
+import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.awaitable.AwaitStreamOneToOneStep;
 import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
@@ -53,33 +56,43 @@ class PipelineStepExecutor {
         PipelineTelemetry telemetry,
         PipelineTelemetry.RunContext telemetryContext,
         PipelineCacheReadSupport cacheReadSupport,
-        PipelineContext contextSnapshot) {
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot) {
+        if (step instanceof AwaitStreamOneToOneStep<?, ?> awaitStep && current instanceof Multi<?>) {
+            return applyAwaitStreamOneToOneUnchecked(
+                awaitStep,
+                current,
+                telemetry,
+                telemetryContext,
+                contextSnapshot,
+                awaitContextSnapshot);
+        }
         if (step instanceof StepOneToOne<?, ?> stepOneToOne) {
             boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
                 stepOneToOne,
                 parallelismPolicy,
                 PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_ONE);
             return applyOneToOneUnchecked(stepOneToOne, current, parallel, maxConcurrency, telemetry, telemetryContext, cacheReadSupport,
-                contextSnapshot);
+                contextSnapshot, awaitContextSnapshot);
         } else if (step instanceof StepOneToOneCompletableFuture<?, ?> stepFuture) {
             boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
                 stepFuture,
                 parallelismPolicy,
                 PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_ONE_FUTURE);
             return applyOneToOneFutureUnchecked(stepFuture, current, parallel, maxConcurrency, telemetry, telemetryContext,
-                contextSnapshot);
+                contextSnapshot, awaitContextSnapshot);
         } else if (step instanceof StepOneToMany<?, ?> stepOneToMany) {
             boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
                 stepOneToMany,
                 parallelismPolicy,
                 PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_MANY);
             return applyOneToManyUnchecked(stepOneToMany, current, parallel, maxConcurrency, telemetry, telemetryContext,
-                contextSnapshot);
+                contextSnapshot, awaitContextSnapshot);
         } else if (step instanceof ManyToOne<?, ?> manyToOne) {
-            return applyManyToOneUnchecked(manyToOne, current, telemetry, telemetryContext, contextSnapshot);
+            return applyManyToOneUnchecked(manyToOne, current, telemetry, telemetryContext, contextSnapshot, awaitContextSnapshot);
         } else if (step instanceof StepManyToMany<?, ?> manyToMany) {
             return applyManyToManyUnchecked(manyToMany, current, telemetry, telemetryContext,
-                contextSnapshot);
+                contextSnapshot, awaitContextSnapshot);
         } else {
             String stepType = step == null ? "null" : step.getClass().getName();
             throw new IllegalArgumentException("Step not recognised: " + stepType);
@@ -109,6 +122,29 @@ class PipelineStepExecutor {
         PipelineTelemetry.RunContext telemetryContext,
         PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot) {
+        return applyOneToOneUnchecked(
+            step,
+            current,
+            parallel,
+            maxConcurrency,
+            telemetry,
+            telemetryContext,
+            cacheReadSupport,
+            contextSnapshot,
+            null);
+    }
+
+    @SuppressWarnings({"unchecked"})
+    static <I, O> Object applyOneToOneUnchecked(
+        StepOneToOne<I, O> step,
+        Object current,
+        boolean parallel,
+        int maxConcurrency,
+        PipelineTelemetry telemetry,
+        PipelineTelemetry.RunContext telemetryContext,
+        PipelineCacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot) {
         if (current instanceof Uni<?>) {
             Uni<I> input = (Uni<I>) current;
             if (telemetry != null) {
@@ -120,7 +156,14 @@ class PipelineStepExecutor {
                     var replayScope = telemetry == null
                         ? null
                         : telemetry.beginReplayStep(step.getClass(), telemetryContext, false, item);
-                    Uni<O> scoped = applyOneToOneWithCache(step, item, cacheReadSupport, contextSnapshot, telemetry, replayScope)
+                    Uni<O> scoped = applyOneToOneWithCache(
+                        step,
+                        item,
+                        cacheReadSupport,
+                        contextSnapshot,
+                        awaitContextSnapshot,
+                        telemetry,
+                        replayScope)
                         .onItem().transformToUni(enforced -> applyCachePolicy(step, enforced, contextSnapshot))
                         .onItem().invoke(output -> {
                             if (telemetry != null) {
@@ -150,7 +193,14 @@ class PipelineStepExecutor {
                     var replayScope = telemetry == null
                         ? null
                         : telemetry.beginReplayStep(step.getClass(), telemetryContext, true, item);
-                        Uni<O> result = applyOneToOneWithCache(step, item, cacheReadSupport, contextSnapshot, telemetry, replayScope)
+                        Uni<O> result = applyOneToOneWithCache(
+                            step,
+                            item,
+                            cacheReadSupport,
+                            contextSnapshot,
+                            awaitContextSnapshot,
+                            telemetry,
+                            replayScope)
                             .onItem().transformToUni(enforced ->
                                 applyCachePolicy(step, enforced, contextSnapshot))
                             .onItem().invoke(output -> {
@@ -173,7 +223,14 @@ class PipelineStepExecutor {
                     var replayScope = telemetry == null
                         ? null
                         : telemetry.beginReplayStep(step.getClass(), telemetryContext, true, item);
-                    Uni<O> result = applyOneToOneWithCache(step, item, cacheReadSupport, contextSnapshot, telemetry, replayScope)
+                    Uni<O> result = applyOneToOneWithCache(
+                        step,
+                        item,
+                        cacheReadSupport,
+                        contextSnapshot,
+                        awaitContextSnapshot,
+                        telemetry,
+                        replayScope)
                         .onItem().transformToUni(enforced ->
                             applyCachePolicy(step, enforced, contextSnapshot))
                         .onItem().invoke(output -> {
@@ -194,6 +251,28 @@ class PipelineStepExecutor {
             current == null ? "null" : current.getClass().getName()));
     }
 
+    @SuppressWarnings("unchecked")
+    private static <I, O> Multi<O> applyAwaitStreamOneToOneUnchecked(
+        AwaitStreamOneToOneStep<I, O> step,
+        Object current,
+        PipelineTelemetry telemetry,
+        PipelineTelemetry.RunContext telemetryContext,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot) {
+        Multi<I> input = (Multi<I>) current;
+        if (telemetry != null) {
+            input = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, input);
+        }
+        Multi<I> finalInput = input;
+        Multi<O> result = withStepExecutionMulti(
+            contextSnapshot,
+            awaitContextSnapshot,
+            () -> step.applyAwaitPerItem(finalInput));
+        return telemetry == null
+            ? result
+            : telemetry.instrumentItemProduced(step.getClass(), telemetryContext, result);
+    }
+
     private static <O> Uni<O> applyCachePolicy(
         StepOneToOne<?, O> step,
         O item,
@@ -210,23 +289,24 @@ class PipelineStepExecutor {
         I item,
         PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot,
         PipelineTelemetry telemetry,
         Object replayScope) {
         if (cacheReadSupport == null) {
-            return withPipelineContext(contextSnapshot, () -> {
+            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
                 return step.apply(Uni.createFrom().item(item));
             });
         }
         if (step instanceof CacheReadBypass) {
-            return withPipelineContext(contextSnapshot, () -> {
+            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
                 return step.apply(Uni.createFrom().item(item));
             });
         }
         CachePolicy policy = cacheReadSupport.resolvePolicy(contextSnapshot);
         if (!cacheReadSupport.shouldRead(policy)) {
-            return withPipelineContext(contextSnapshot, () -> {
+            return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
                 PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
                 return step.apply(Uni.createFrom().item(item));
             });
@@ -253,7 +333,7 @@ class PipelineStepExecutor {
                     if (policy == CachePolicy.REQUIRE_CACHE) {
                         return Uni.createFrom().failure(failure);
                     }
-                    return withPipelineContext(contextSnapshot, () -> {
+                    return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
                         PipelineCacheStatusHolder.set(CacheStatus.MISS);
                         return step.apply(Uni.createFrom().item(item));
                     });
@@ -279,7 +359,7 @@ class PipelineStepExecutor {
                     return Uni.createFrom().failure(new CachePolicyViolation(
                         "Cache policy REQUIRE_CACHE failed for key: " + key));
                 }
-                return withPipelineContext(contextSnapshot, () -> {
+                return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> {
                     PipelineCacheStatusHolder.set(CacheStatus.MISS);
                     return step.apply(Uni.createFrom().item(item));
                 });
@@ -303,6 +383,83 @@ class PipelineStepExecutor {
         }
     }
 
+    private static ExecutionContextScope installExecutionContexts(
+        PipelineContext context,
+        AwaitExecutionContext awaitContext
+    ) {
+        PipelineContext previousPipeline = PipelineContextHolder.get();
+        AwaitExecutionContext previousAwait = AwaitExecutionContextHolder.get();
+        if (context != null) {
+            PipelineContextHolder.set(context);
+        } else {
+            PipelineContextHolder.clear();
+        }
+        if (awaitContext != null) {
+            AwaitExecutionContextHolder.set(awaitContext);
+        } else {
+            AwaitExecutionContextHolder.clear();
+        }
+        return new ExecutionContextScope(previousPipeline, previousAwait);
+    }
+
+    static <T> Uni<T> withStepExecutionUni(
+        PipelineContext context,
+        AwaitExecutionContext awaitContext,
+        Supplier<Uni<T>> supplier
+    ) {
+        return Uni.createFrom().deferred(() -> {
+            ExecutionContextScope scope = installExecutionContexts(context, awaitContext);
+            try {
+                return supplier.get()
+                    .onTermination().invoke(scope::close);
+            } catch (Throwable failure) {
+                scope.close();
+                return Uni.createFrom().failure(failure);
+            }
+        });
+    }
+
+    static <T> Multi<T> withStepExecutionMulti(
+        PipelineContext context,
+        AwaitExecutionContext awaitContext,
+        Supplier<Multi<T>> supplier
+    ) {
+        return Multi.createFrom().deferred(() -> {
+            ExecutionContextScope scope = installExecutionContexts(context, awaitContext);
+            try {
+                return supplier.get()
+                    .onTermination().invoke((failure, cancelled) -> scope.close());
+            } catch (Throwable failure) {
+                scope.close();
+                return Multi.createFrom().failure(failure);
+            }
+        });
+    }
+
+    private static final class ExecutionContextScope implements AutoCloseable {
+        private final PipelineContext previousPipeline;
+        private final AwaitExecutionContext previousAwait;
+
+        private ExecutionContextScope(PipelineContext previousPipeline, AwaitExecutionContext previousAwait) {
+            this.previousPipeline = previousPipeline;
+            this.previousAwait = previousAwait;
+        }
+
+        @Override
+        public void close() {
+            if (previousAwait != null) {
+                AwaitExecutionContextHolder.set(previousAwait);
+            } else {
+                AwaitExecutionContextHolder.clear();
+            }
+            if (previousPipeline != null) {
+                PipelineContextHolder.set(previousPipeline);
+            } else {
+                PipelineContextHolder.clear();
+            }
+        }
+    }
+
     @SuppressWarnings("unchecked")
     static <I, O> Object applyOneToOneFutureUnchecked(
         StepOneToOneCompletableFuture<I, O> step,
@@ -312,6 +469,27 @@ class PipelineStepExecutor {
         PipelineTelemetry telemetry,
         PipelineTelemetry.RunContext telemetryContext,
         PipelineContext contextSnapshot) {
+        return applyOneToOneFutureUnchecked(
+            step,
+            current,
+            parallel,
+            maxConcurrency,
+            telemetry,
+            telemetryContext,
+            contextSnapshot,
+            null);
+    }
+
+    @SuppressWarnings("unchecked")
+    static <I, O> Object applyOneToOneFutureUnchecked(
+        StepOneToOneCompletableFuture<I, O> step,
+        Object current,
+        boolean parallel,
+        int maxConcurrency,
+        PipelineTelemetry telemetry,
+        PipelineTelemetry.RunContext telemetryContext,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot) {
         if (current instanceof Uni<?>) {
             Uni<I> input = (Uni<I>) current;
             if (telemetry != null) {
@@ -325,7 +503,7 @@ class PipelineStepExecutor {
                 finalInput = finalInput.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item));
             }
             Uni<I> replayInput = finalInput;
-            Uni<O> result = withPipelineContext(contextSnapshot, () -> step.apply(replayInput))
+            Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> step.apply(replayInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
                         telemetry.recordReplayOutput(replayScope, output);
@@ -348,7 +526,8 @@ class PipelineStepExecutor {
                         var replayScope = telemetry == null
                             ? null
                             : telemetry.beginReplayStep(step.getClass(), telemetryContext, true, item);
-                        Uni<O> result = withPipelineContext(contextSnapshot, () -> step.apply(Uni.createFrom().item(item)))
+                        Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot,
+                            () -> step.apply(Uni.createFrom().item(item)))
                             .onItem().invoke(output -> {
                                 if (telemetry != null) {
                                     telemetry.recordReplayOutput(replayScope, output);
@@ -368,7 +547,8 @@ class PipelineStepExecutor {
                     var replayScope = telemetry == null
                         ? null
                         : telemetry.beginReplayStep(step.getClass(), telemetryContext, true, item);
-                    Uni<O> result = withPipelineContext(contextSnapshot, () -> step.apply(Uni.createFrom().item(item)))
+                    Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot,
+                        () -> step.apply(Uni.createFrom().item(item)))
                         .onItem().invoke(output -> {
                             if (telemetry != null) {
                                 telemetry.recordReplayOutput(replayScope, output);
@@ -396,6 +576,27 @@ class PipelineStepExecutor {
         PipelineTelemetry telemetry,
         PipelineTelemetry.RunContext telemetryContext,
         PipelineContext contextSnapshot) {
+        return applyOneToManyUnchecked(
+            step,
+            current,
+            parallel,
+            maxConcurrency,
+            telemetry,
+            telemetryContext,
+            contextSnapshot,
+            null);
+    }
+
+    @SuppressWarnings({"unchecked"})
+    static <I, O> Object applyOneToManyUnchecked(
+        StepOneToMany<I, O> step,
+        Object current,
+        boolean parallel,
+        int maxConcurrency,
+        PipelineTelemetry telemetry,
+        PipelineTelemetry.RunContext telemetryContext,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot) {
         if (current instanceof Uni<?>) {
             Uni<I> input = (Uni<I>) current;
             if (telemetry != null) {
@@ -409,7 +610,7 @@ class PipelineStepExecutor {
                 finalInput = finalInput.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item));
             }
             Uni<I> replayInput = finalInput;
-            Multi<O> result = withPipelineContext(contextSnapshot, () -> step.apply(replayInput))
+            Multi<O> result = withStepExecutionMulti(contextSnapshot, awaitContextSnapshot, () -> step.apply(replayInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
                         telemetry.recordReplayOutput(replayScope, output);
@@ -433,7 +634,8 @@ class PipelineStepExecutor {
                         var replayScope = telemetry == null
                             ? null
                             : telemetry.beginReplayStep(step.getClass(), telemetryContext, true, item);
-                        Multi<O> result = withPipelineContext(contextSnapshot, () -> step.apply(Uni.createFrom().item(item)))
+                        Multi<O> result = withStepExecutionMulti(contextSnapshot, awaitContextSnapshot,
+                            () -> step.apply(Uni.createFrom().item(item)))
                             .onItem().invoke(output -> {
                                 if (telemetry != null) {
                                     telemetry.recordReplayOutput(replayScope, output);
@@ -454,7 +656,8 @@ class PipelineStepExecutor {
                     var replayScope = telemetry == null
                         ? null
                         : telemetry.beginReplayStep(step.getClass(), telemetryContext, true, item);
-                    Multi<O> result = withPipelineContext(contextSnapshot, () -> step.apply(Uni.createFrom().item(item)))
+                    Multi<O> result = withStepExecutionMulti(contextSnapshot, awaitContextSnapshot,
+                        () -> step.apply(Uni.createFrom().item(item)))
                         .onItem().invoke(output -> {
                             if (telemetry != null) {
                                 telemetry.recordReplayOutput(replayScope, output);
@@ -480,6 +683,17 @@ class PipelineStepExecutor {
         PipelineTelemetry telemetry,
         PipelineTelemetry.RunContext telemetryContext,
         PipelineContext contextSnapshot) {
+        return applyManyToOneUnchecked(step, current, telemetry, telemetryContext, contextSnapshot, null);
+    }
+
+    @SuppressWarnings("unchecked")
+    static <I, O> Object applyManyToOneUnchecked(
+        ManyToOne<I, O> step,
+        Object current,
+        PipelineTelemetry telemetry,
+        PipelineTelemetry.RunContext telemetryContext,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot) {
         if (current instanceof Multi<?>) {
             Multi<I> input = (Multi<I>) current;
             if (telemetry != null) {
@@ -491,7 +705,7 @@ class PipelineStepExecutor {
             Multi<I> finalInput = telemetry == null
                 ? input
                 : input.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item));
-            Uni<O> result = withPipelineContext(contextSnapshot, () -> step.apply(finalInput))
+            Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> step.apply(finalInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
                         telemetry.recordReplayOutput(replayScope, output);
@@ -513,7 +727,7 @@ class PipelineStepExecutor {
             Multi<I> finalInput = telemetry == null
                 ? input.toMulti()
                 : input.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item)).toMulti();
-            Uni<O> result = withPipelineContext(contextSnapshot, () -> step.apply(finalInput))
+            Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> step.apply(finalInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
                         telemetry.recordReplayOutput(replayScope, output);
@@ -538,6 +752,17 @@ class PipelineStepExecutor {
         PipelineTelemetry telemetry,
         PipelineTelemetry.RunContext telemetryContext,
         PipelineContext contextSnapshot) {
+        return applyManyToManyUnchecked(step, current, telemetry, telemetryContext, contextSnapshot, null);
+    }
+
+    @SuppressWarnings("unchecked")
+    static <I, O> Object applyManyToManyUnchecked(
+        StepManyToMany<I, O> step,
+        Object current,
+        PipelineTelemetry telemetry,
+        PipelineTelemetry.RunContext telemetryContext,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot) {
         if (current instanceof Uni<?>) {
             Uni<I> input = (Uni<I>) current;
             if (telemetry != null) {
@@ -549,7 +774,7 @@ class PipelineStepExecutor {
             Multi<I> finalInput = telemetry == null
                 ? input.toMulti()
                 : input.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item)).toMulti();
-            Multi<O> result = withPipelineContext(contextSnapshot, () -> step.apply(finalInput))
+            Multi<O> result = withStepExecutionMulti(contextSnapshot, awaitContextSnapshot, () -> step.apply(finalInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
                         telemetry.recordReplayOutput(replayScope, output);
@@ -572,7 +797,7 @@ class PipelineStepExecutor {
             Multi<I> finalInput = telemetry == null
                 ? typedInput
                 : typedInput.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item));
-            Multi<O> result = withPipelineContext(contextSnapshot, () -> step.apply(finalInput))
+            Multi<O> result = withStepExecutionMulti(contextSnapshot, awaitContextSnapshot, () -> step.apply(finalInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
                         telemetry.recordReplayOutput(replayScope, output);

@@ -1,5 +1,6 @@
 package org.pipelineframework;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.apache.commons.lang3.time.StopWatch;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -38,5 +40,27 @@ class ExecutionHooksTest {
     void attachMultiHooksReturnsWrappedMultiWhenGuardDisabled() {
         Multi<String> wrapped = hooks.attachMultiHooks(Multi.createFrom().items("a", "b"), new StopWatch());
         assertNotNull(wrapped);
+    }
+
+    @Test
+    void attachUniHooksPropagatesAwaitSuspensionAsControlFlow() {
+        AwaitSuspendedException failure = org.junit.jupiter.api.Assertions.assertThrows(
+            AwaitSuspendedException.class,
+            () -> hooks.attachUniHooks(
+                Uni.createFrom().failure(new AwaitSuspendedException("tenant", "execution", "interaction", 1)),
+                new StopWatch()).await().indefinitely());
+
+        assertInstanceOf(AwaitSuspendedException.class, failure);
+    }
+
+    @Test
+    void attachMultiHooksPropagatesAwaitSuspensionAsControlFlow() {
+        AwaitSuspendedException failure = org.junit.jupiter.api.Assertions.assertThrows(
+            AwaitSuspendedException.class,
+            () -> hooks.attachMultiHooks(
+                Multi.createFrom().failure(new AwaitSuspendedException("tenant", "execution", "interaction", 1)),
+                new StopWatch()).collect().asList().await().indefinitely());
+
+        assertInstanceOf(AwaitSuspendedException.class, failure);
     }
 }

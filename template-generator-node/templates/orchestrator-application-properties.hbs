@@ -55,6 +55,14 @@ pipeline.defaults.retry-wait-ms=500
 pipeline.defaults.recover-on-failure=false
 pipeline.defaults.max-backoff=30000
 pipeline.defaults.jitter=false
+{{#if hasAwaitSteps}}
+pipeline.orchestrator.mode=QUEUE_ASYNC
+pipeline.orchestrator.state-provider=memory
+pipeline.orchestrator.dispatcher-provider=event
+pipeline.orchestrator.dlq-provider=log
+pipeline.orchestrator.idempotency-policy=CLIENT_KEY_REQUIRED
+pipeline.orchestrator.strict-startup=true
+{{/if}}
 {{#if hasCacheAspect}}
 pipeline.cache.policy=prefer-cache
 

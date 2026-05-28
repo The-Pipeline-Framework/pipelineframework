@@ -283,7 +283,7 @@ class StepManyToOneTest {
                 AwaitSuspendedException.class,
                 () -> step.apply(Multi.createFrom().items("a", "b")).await().indefinitely());
 
-        assertEquals("interaction", failure.interactionId());
+        assertEquals("interaction", failure.unitId());
         assertEquals(1, applyCalls.get());
         assertFalse(step.rejectCalled());
     }

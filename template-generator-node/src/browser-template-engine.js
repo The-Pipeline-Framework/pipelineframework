@@ -212,6 +212,7 @@ class BrowserTemplateEngine {
     constructor(templates) {
         this.templates = templates || {};
         this.compiledTemplates = new Map();
+        this.frameworkVersion = '26.5.2-SNAPSHOT';
         this.validateTemplateHelpers();
         this.loadTemplates();
     }
@@ -290,7 +291,7 @@ class BrowserTemplateEngine {
         if (!template) {
             throw new Error(`Template ${templateName} not found`);
         }
-        return template(context);
+        return template({ ...context, frameworkVersion: this.frameworkVersion });
     }
 
     async generateApplication(appName, basePackage, steps, aspects, transport, runtimeLayout, fileCallback) {
@@ -489,6 +490,10 @@ class BrowserTemplateEngine {
 
         // Generate common converters
         await this.generateCommonConverters(basePackage, fileCallback);
+
+        // Make generated common-module beans discoverable in generated apps.
+        const beansXml = this.render('beans-xml', {}).trimEnd();
+        await fileCallback('common/src/main/resources/META-INF/beans.xml', beansXml);
     }
 
     async generatePipelineRuntimeModule(appName, basePackage, steps, fileCallback) {
@@ -511,7 +516,8 @@ class BrowserTemplateEngine {
         const appPropsContent = this.render('application-properties', {
             serviceName: 'pipeline-runtime-svc',
             rootProjectName,
-            portOffset: 1
+            portOffset: 1,
+            hasAwaitSteps: (steps || []).some(step => step?.isAwaitStep || step?.kind?.toLowerCase() === 'await')
         });
         await fileCallback('pipeline-runtime-svc/src/main/resources/application.properties', appPropsContent);
         const appDevProps = this.render('module-application-dev-properties', {});
@@ -570,7 +576,8 @@ class BrowserTemplateEngine {
         const appPropsContent = this.render('application-properties', {
             serviceName: 'monolith-svc',
             rootProjectName,
-            portOffset: 0
+            portOffset: 0,
+            hasAwaitSteps: (steps || []).some(step => step?.isAwaitStep || step?.kind?.toLowerCase() === 'await')
         });
         await fileCallback('monolith-svc/src/main/resources/application.properties', appPropsContent);
         const appDevProps = this.render('module-application-dev-properties', {});
@@ -752,7 +759,7 @@ class BrowserTemplateEngine {
             className,
             domainClass: className.replace('Dto', ''),
             dtoClass: className + 'Dto',
-            grpcClass: basePackage + '.grpc.' + this.formatForProtoClassName(step.serviceName)
+            grpcClass: basePackage + '.grpc.PipelineTypes'
         };
 
         const rendered = this.render('mapper', context);

@@ -131,7 +131,7 @@ class StepOneToOneTest {
                 AwaitSuspendedException.class,
                 () -> step.apply(Uni.createFrom().item("x")).await().indefinitely());
 
-        assertEquals("interaction", failure.interactionId());
+        assertEquals("interaction", failure.unitId());
         assertEquals(1, applyCalls.get());
         assertFalse(step.rejectCalled());
     }

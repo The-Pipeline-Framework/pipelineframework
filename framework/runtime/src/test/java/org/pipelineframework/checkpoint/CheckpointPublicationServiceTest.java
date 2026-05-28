@@ -120,6 +120,7 @@ class CheckpointPublicationServiceTest {
             null,
             null,
             null,
+            null,
             1L,
             1L,
             1L);

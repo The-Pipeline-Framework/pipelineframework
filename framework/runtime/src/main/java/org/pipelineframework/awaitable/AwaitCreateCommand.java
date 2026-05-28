@@ -18,9 +18,8 @@ public record AwaitCreateCommand(
     String assignee,
     String group,
     String transportType,
-    String barrierId,
-    Integer barrierItemIndex,
-    Integer barrierItemCount,
+    String unitId,
+    Integer itemIndex,
     long nowEpochMs,
     long deadlineEpochMs,
     long ttlEpochS
@@ -55,47 +54,7 @@ public record AwaitCreateCommand(
             assignee,
             group,
             transportType,
-            null,
-            null,
-            null,
-            nowEpochMs,
-            deadlineEpochMs,
-            ttlEpochS);
-    }
-
-    /**
-     * Backward-compatible constructor for tests/callers created before step index and output type were persisted.
-     */
-    public AwaitCreateCommand(
-        String tenantId,
-        String executionId,
-        String stepId,
-        String causationId,
-        String idempotencyKey,
-        String correlationId,
-        Object requestPayload,
-        String assignee,
-        String group,
-        String transportType,
-        long nowEpochMs,
-        long deadlineEpochMs,
-        long ttlEpochS
-    ) {
-        this(
-            tenantId,
-            executionId,
-            stepId,
-            0,
-            Object.class.getName(),
             causationId,
-            idempotencyKey,
-            correlationId,
-            requestPayload,
-            assignee,
-            group,
-            transportType,
-            null,
-            null,
             null,
             nowEpochMs,
             deadlineEpochMs,
@@ -127,22 +86,11 @@ public record AwaitCreateCommand(
         if (transportType == null || transportType.isBlank()) {
             throw new IllegalArgumentException("transportType must not be blank");
         }
-        if (barrierId != null && barrierId.isBlank()) {
-            throw new IllegalArgumentException("barrierId must not be blank when set");
+        if (unitId == null || unitId.isBlank()) {
+            throw new IllegalArgumentException("unitId must not be blank");
         }
-        if (barrierId == null && (barrierItemIndex != null || barrierItemCount != null)) {
-            throw new IllegalArgumentException("barrier item metadata requires barrierId");
-        }
-        if (barrierId != null) {
-            if (barrierItemIndex == null || barrierItemIndex < 0) {
-                throw new IllegalArgumentException("barrierItemIndex must be non-negative when barrierId is set");
-            }
-            if (barrierItemCount == null || barrierItemCount <= 0) {
-                throw new IllegalArgumentException("barrierItemCount must be positive when barrierId is set");
-            }
-            if (barrierItemIndex >= barrierItemCount) {
-                throw new IllegalArgumentException("barrierItemIndex must be less than barrierItemCount");
-            }
+        if (itemIndex != null && itemIndex < 0) {
+            throw new IllegalArgumentException("itemIndex must be non-negative when set");
         }
         if (nowEpochMs <= 0) {
             nowEpochMs = System.currentTimeMillis();

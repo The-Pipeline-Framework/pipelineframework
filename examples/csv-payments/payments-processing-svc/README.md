@@ -4,41 +4,30 @@
 
 ## Overview
 
-The Payments Processing Service is a Quarkus-based microservice responsible for processing individual payment records in the CSV payment processing system. It interacts with a mock payment provider to simulate sending payments and retrieving their status. The service handles the complexities of asynchronous payment processing, including initial acknowledgments and final status retrieval.
+The Payments Processing Service is a Quarkus-based mock provider for the CSV payment processing system. It consumes one awaited `PaymentRecord` request and returns one `PaymentStatus` completion through the Kafka await transport.
 
 This service is part of the [CSV Payments POC](../README.md) project, which processes CSV files containing payment information through a series of microservices.
 
 ## Key Responsibilities
 
-- Send payment records to a mock payment provider
-- Receive initial acknowledgments for sent payments
-- Poll for final payment statuses from the payment provider
-- Transform payment responses into standardized formats
+- Process one payment record at a time through the mock provider
+- Publish direct `PaymentStatus` await completions
 - Handle rate limiting and timeout scenarios
-- Provide gRPC interfaces for all payment processing operations
+- Provide the Kafka-backed external boundary used by the await step
 
 ## Architecture
 
 ```mermaid
 graph LR
-    A[Payment Records] --> B[Send Payment Service]
-    B --> C[Ack Payment Sent]
-    C --> D[Process Ack Payment Service]
-    D --> E[Poll Payment Status Service]
-    E --> F[Payment Status]
+    A[Kafka Await Dispatch: PaymentRecord] --> B[Mock Payment Provider]
+    B --> C[Kafka Await Completion: PaymentStatus]
     
     subgraph "Payments Processing Service"
         B
-        D
-        E
     end
     
-    subgraph "External Services"
+    subgraph "Await Boundary"
         A
-        F
-    end
-    
-    subgraph "Data Flow"
         C
     end
 ```
@@ -57,91 +46,19 @@ graph LR
 The service processes several key domain objects:
 
 - `PaymentRecord`: Individual payment entry from input CSV files
-- `AckPaymentSent`: Initial acknowledgment from the payment provider
-- `PaymentStatus`: Final status of a processed payment
+- `PaymentStatus`: Direct provider result for a processed payment
 
 ## Service Interfaces
 
-The service exposes three gRPC services defined in the proto files, each with equivalent REST endpoints:
+The service implements the example-local provider contract used by the Kafka await mock:
 
-### SendPaymentRecordService
+### PaymentProviderService
 
-```proto
-rpc remoteProcess(PaymentRecord) returns (AckPaymentSent);
+```java
+PaymentStatus processPayment(PaymentRecord paymentRecord);
 ```
 
-Sends a payment record to the payment provider and returns an initial acknowledgment.
-
-REST Endpoint:
-```
-POST /api/v1/send-payment
-Content-Type: application/json
-
-{
-  "id": "UUID",
-  "csvId": "string",
-  "recipient": "string",
-  "amount": "BigDecimal",
-  "currency": "Currency",
-  "csvPaymentsInputFilePath": "Path"
-}
-```
-
-Returns an AckPaymentSentDto object in JSON format.
-
-### ProcessAckPaymentSentService
-
-```proto
-rpc remoteProcess(AckPaymentSent) returns (PaymentStatus);
-```
-
-Processes an acknowledgment and retrieves the final payment status.
-
-REST Endpoint:
-```
-POST /api/v1/process-ack-payment
-Content-Type: application/json
-
-{
-  "id": "UUID",
-  "conversationId": "UUID",
-  "paymentRecordId": "UUID",
-  "paymentRecord": {
-    // PaymentRecord object
-  },
-  "message": "string",
-  "status": "Long"
-}
-```
-
-Returns a PaymentStatusDto object in JSON format.
-
-### PollAckPaymentSentService
-
-```proto
-rpc remoteProcess(AckPaymentSent) returns (PaymentStatus);
-```
-
-Polls the payment provider for the final status of a payment.
-
-REST Endpoint:
-```
-POST /api/v1/poll-ack-payment
-Content-Type: application/json
-
-{
-  "id": "UUID",
-  "conversationId": "UUID",
-  "paymentRecordId": "UUID",
-  "paymentRecord": {
-    // PaymentRecord object
-  },
-  "message": "string",
-  "status": "Long"
-}
-```
-
-Returns a PaymentStatusDto object in JSON format.
+`PaymentProviderKafkaAwaitMock` adapts Kafka await dispatch envelopes to this contract and publishes Kafka await completion envelopes.
 
 ## Performance Features
 
@@ -196,17 +113,17 @@ The service uses the following configuration properties:
 
 - `csv-payments.payment-provider.permits-per-second`: Rate limiting configuration (default: 1000.0)
 - `csv-payments.payment-provider.timeout-millis`: Timeout for acquiring permits (default: 2000)
-- `csv-payments.payment-provider.wait-milliseconds`: Simulated wait time for polling (default: 1000)
+- `csv-payments.payment-provider.provider-timeout-probability`: Deterministic fraction of provider calls that time out
+- `csv-payments.payment-provider.provider-reject-probability`: Deterministic fraction of provider calls that return `PaymentStatus.status=Rejected`
 
 ## Integration with Other Services
 
 This service is typically invoked by the Orchestrator Service as part of the payment processing workflow:
 
 1. Orchestrator receives payment records from the Input CSV File Processing Service
-2. Orchestrator calls SendPaymentRecordService to send each payment
-3. Orchestrator receives AckPaymentSent responses
-4. Orchestrator calls ProcessAckPaymentSentService to get final statuses
-5. Orchestrator forwards payment statuses to the Payment Status Service
+2. The await step publishes one Kafka dispatch per payment record
+3. The mock provider processes each record and publishes one `PaymentStatus` completion
+4. The orchestrator resumes the stream and forwards payment statuses to the Payment Status Service
 
 ## Related Services
 

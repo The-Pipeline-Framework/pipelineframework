@@ -107,43 +107,43 @@ class RestResourceRendererTest {
 
     @Test
     void derivesResourcefulPathFromOutputTypeForUnaryUnary() throws IOException {
-        PipelineStepModel model = baseModelBuilder("ProcessAckPaymentSentService", StreamingShape.UNARY_UNARY)
+        PipelineStepModel model = baseModelBuilder("ProcessInvoiceApprovalService", StreamingShape.UNARY_UNARY)
             .inputMapping(new TypeMapping(
-                ClassName.get("org.pipelineframework.csv.common.domain", "AckPaymentSent"),
-                ClassName.get("org.pipelineframework.csv.common.mapper", "AckPaymentSentMapper"),
+                ClassName.get("org.pipelineframework.example.common.domain", "InvoiceApproval"),
+                ClassName.get("org.pipelineframework.example.common.mapper", "InvoiceApprovalMapper"),
                 true))
             .outputMapping(new TypeMapping(
-                ClassName.get("org.pipelineframework.csv.common.domain", "PaymentStatus"),
-                ClassName.get("org.pipelineframework.csv.common.mapper", "PaymentStatusMapper"),
+                ClassName.get("org.pipelineframework.example.common.domain", "InvoiceSettlement"),
+                ClassName.get("org.pipelineframework.example.common.mapper", "InvoiceSettlementMapper"),
                 true))
             .build();
 
         String source = renderAndReadSource(
             new RestBinding(model, null),
-            "org/pipelineframework/csv/service/pipeline/ProcessAckPaymentSentResource.java");
-        assertTrue(source.contains("@Path(\"/api/v1/payment-status\")"));
+            "org/pipelineframework/csv/service/pipeline/ProcessInvoiceApprovalResource.java");
+        assertTrue(source.contains("@Path(\"/api/v1/invoice-settlement\")"));
         assertTrue(source.contains("@Path(\"/\")"));
     }
 
     @Test
     void derivesResourcefulPathFromInputTypeForUnaryStreaming() throws IOException {
-        PipelineStepModel model = baseModelBuilder("ProcessAckPaymentSentService", StreamingShape.UNARY_STREAMING)
+        PipelineStepModel model = baseModelBuilder("ProcessInvoiceApprovalService", StreamingShape.UNARY_STREAMING)
             .inputMapping(new TypeMapping(
-                ClassName.get("org.pipelineframework.csv.common.domain", "AckPaymentSent"),
-                ClassName.get("org.pipelineframework.csv.common.mapper", "AckPaymentSentMapper"),
+                ClassName.get("org.pipelineframework.example.common.domain", "InvoiceApproval"),
+                ClassName.get("org.pipelineframework.example.common.mapper", "InvoiceApprovalMapper"),
                 true))
             .outputMapping(new TypeMapping(
-                ClassName.get("org.pipelineframework.csv.common.domain", "PaymentStatus"),
-                ClassName.get("org.pipelineframework.csv.common.mapper", "PaymentStatusMapper"),
+                ClassName.get("org.pipelineframework.example.common.domain", "InvoiceSettlement"),
+                ClassName.get("org.pipelineframework.example.common.mapper", "InvoiceSettlementMapper"),
                 true))
             .build();
 
         String source = renderAndReadSource(
             new RestBinding(model, null),
-            "org/pipelineframework/csv/service/pipeline/ProcessAckPaymentSentResource.java");
+            "org/pipelineframework/csv/service/pipeline/ProcessInvoiceApprovalResource.java");
         assertTrue(
-            source.contains("@Path(\"/api/v1/ack-payment-sent\")"),
-            "expected class-level @Path for ack-payment-sent not found");
+            source.contains("@Path(\"/api/v1/invoice-approval\")"),
+            "expected class-level @Path for invoice-approval not found");
         assertTrue(
             source.contains("@Path(\"/\")"),
             "expected method-level @Path for resourceful operation not found");
@@ -152,8 +152,8 @@ class RestResourceRendererTest {
     @Test
     void derivesPluginSegmentForSideEffectPaths() throws IOException {
         PipelineStepModel model = new PipelineStepModel.Builder()
-            .serviceName("ObservePersistenceAckPaymentSentSideEffectService")
-            .generatedName("PersistenceAckPaymentSentSideEffect")
+            .serviceName("ObservePersistenceInvoiceApprovalSideEffectService")
+            .generatedName("PersistenceInvoiceApprovalSideEffect")
             .servicePackage("org.pipelineframework.csv.service")
             .serviceClassName(ClassName.get(
                 "org.pipelineframework.plugin.persistence",
@@ -162,19 +162,19 @@ class RestResourceRendererTest {
             .executionMode(ExecutionMode.DEFAULT)
             .sideEffect(true)
             .inputMapping(new TypeMapping(
-                ClassName.get("org.pipelineframework.csv.common.domain", "AckPaymentSent"),
-                ClassName.get("org.pipelineframework.csv.common.mapper", "AckPaymentSentMapper"),
+                ClassName.get("org.pipelineframework.example.common.domain", "InvoiceApproval"),
+                ClassName.get("org.pipelineframework.example.common.mapper", "InvoiceApprovalMapper"),
                 true))
             .outputMapping(new TypeMapping(
-                ClassName.get("org.pipelineframework.csv.common.domain", "AckPaymentSent"),
-                ClassName.get("org.pipelineframework.csv.common.mapper", "AckPaymentSentMapper"),
+                ClassName.get("org.pipelineframework.example.common.domain", "InvoiceApproval"),
+                ClassName.get("org.pipelineframework.example.common.mapper", "InvoiceApprovalMapper"),
                 true))
             .build();
 
         String source = renderAndReadSource(
             new RestBinding(model, null),
-            "org/pipelineframework/csv/service/pipeline/PersistenceAckPaymentSentSideEffectResource.java");
-        assertTrue(source.contains("@Path(\"/api/v1/ack-payment-sent/persistence\")"));
+            "org/pipelineframework/csv/service/pipeline/PersistenceInvoiceApprovalSideEffectResource.java");
+        assertTrue(source.contains("@Path(\"/api/v1/invoice-approval/persistence\")"));
     }
 
     private PipelineStepModel.Builder baseModelBuilder(String serviceName, StreamingShape shape) {

@@ -64,14 +64,22 @@ public class LocalClientStepTargetGenerator implements TargetGenerator {
             return;
         }
 
-        if (model.sideEffect() && model.deploymentRole() == DeploymentRole.PLUGIN_SERVER) {
-            String key = model.servicePackage() + ".pipeline." + model.serviceName();
+        DeploymentRole role = ctx.isTransportModeLocal() && model.sideEffect()
+            ? DeploymentRole.ORCHESTRATOR_CLIENT
+            : policy.resolveClientRole(model.deploymentRole());
+        if (role == null) {
+            role = DeploymentRole.ORCHESTRATOR_CLIENT;
+        }
+
+        if (model.sideEffect()) {
+            String syntheticFqcn = model.servicePackage() + ".pipeline." + model.serviceName();
+            String key = role.name() + ":" + syntheticFqcn;
             if (request.grpcBinding() != null && request.generatedSideEffectBeans().add(key)) {
                 sideEffectBeanService.generateSideEffectBean(
                     ctx,
                     model,
-                    DeploymentRole.PLUGIN_CLIENT,
-                    DeploymentRole.PLUGIN_CLIENT,
+                    role,
+                    role,
                     request.grpcBinding());
             }
         }
@@ -84,7 +92,6 @@ public class LocalClientStepTargetGenerator implements TargetGenerator {
             return;
         }
 
-        DeploymentRole role = policy.resolveClientRole(model.deploymentRole());
         renderer.render(request.localBinding(), new GenerationContext(
             ctx.getProcessingEnv(),
             pathResolver.resolveRoleOutputDir(ctx, role),

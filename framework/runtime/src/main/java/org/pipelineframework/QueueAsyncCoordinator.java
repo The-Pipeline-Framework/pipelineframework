@@ -278,13 +278,13 @@ class QueueAsyncCoordinator {
           }
           ExecutionRecord<Object, Object> record = claimed.get();
           LOG.infof(
-              "Claimed async execution %s tenant=%s stepIndex=%d attempt=%d resultShape=%s resumePayloadType=%s",
+              "Claimed async execution %s tenant=%s stepIndex=%d attempt=%d resultShape=%s awaitUnitId=%s",
               record.executionId(),
               record.tenantId(),
               record.currentStepIndex(),
               record.attempt(),
               record.resultShape(),
-              record.resumePayload() == null ? "<none>" : record.resumePayload().getClass().getName());
+              record.awaitUnitId() == null ? "<none>" : record.awaitUnitId());
           String transitionKey = transitionKey(record.executionId(), record.currentStepIndex(), record.attempt());
           return runAsyncExecution(record, executeStreaming)
               .onItem().transformToUni(resultPayload -> checkpointPublicationService
@@ -361,14 +361,10 @@ class QueueAsyncCoordinator {
             failure))
         .onItem().transformToUni(result -> validateAwaitCompletionTenant(result, normalized)
             .onItem().transformToUni(validated -> {
-              if (validated.record().barrierItem()) {
-                return completeAwaitBarrier(validated, normalized.nowEpochMs());
-              }
-              return resumeAwaitExecution(
-                  validated,
-                  validated.record().interactionId(),
-                  coerceAwaitPayloadAsync(validated.record()),
-                  normalized.nowEpochMs());
+              return awaitCoordinator.recordCompletion(validated.record(), normalized.nowEpochMs())
+                  .onItem().transformToUni(unit -> unit.status() == org.pipelineframework.awaitable.AwaitUnitStatus.COMPLETED
+                      ? resumeAwaitExecution(validated, unit.unitId(), normalized.nowEpochMs())
+                      : Uni.createFrom().item(validated));
             }));
   }
 
@@ -395,16 +391,16 @@ class QueueAsyncCoordinator {
             record.executionId(),
             record.version(),
             transitionKey,
-            suspended.interactionId(),
+            suspended.unitId(),
             suspended.stepIndex(),
             System.currentTimeMillis())
         .onItem().transformToUni(updated -> {
           if (updated.isPresent()) {
             LOG.infof(
-                "Execution %s persisted WAITING_EXTERNAL at stepIndex=%d interactionId=%s",
+                "Execution %s persisted WAITING_EXTERNAL at stepIndex=%d awaitUnitId=%s",
                 record.executionId(),
                 suspended.stepIndex(),
-                suspended.interactionId());
+                suspended.unitId());
             return Uni.createFrom().voidItem();
           }
           return Uni.createFrom().failure(new IllegalStateException(
@@ -414,8 +410,8 @@ class QueueAsyncCoordinator {
                   + suspended.stepIndex()
                   + " (expectedVersion="
                   + record.version()
-                  + ", interactionId="
-                  + suspended.interactionId()
+                  + ", awaitUnitId="
+                  + suspended.unitId()
                   + ")"));
         });
   }
@@ -435,9 +431,8 @@ class QueueAsyncCoordinator {
                     return Uni.createFrom().voidItem();
                   }
                   ExecutionRecord<Object, Object> executionRecord = execution.get();
-                  String awaitedId = record.barrierItem() ? record.barrierId() : record.interactionId();
                   if (executionRecord.status() != ExecutionStatus.WAITING_EXTERNAL
-                      || !awaitedId.equals(executionRecord.awaitInteractionId())) {
+                      || !record.unitId().equals(executionRecord.awaitUnitId())) {
                     return Uni.createFrom().voidItem();
                   }
                   return executionStateStore.markTerminalFailure(
@@ -480,113 +475,31 @@ class QueueAsyncCoordinator {
     return items.getFirst();
   }
 
-  private Object coerceAwaitPayload(AwaitInteractionRecord record) {
-    Object payload = record.responsePayload();
-    if (payload == null || record.outputType() == null || record.outputType().isBlank()) {
-      return payload;
-    }
-    try {
-      Class<?> outputType = org.pipelineframework.awaitable.AwaitPayloadSupport.resolvePayloadClass(
-          record.outputType(),
-          Thread.currentThread().getContextClassLoader());
-      if (payload instanceof Iterable<?> iterable && !outputType.isInstance(payload)) {
-        // Await descriptors carry the element output type, not a collection type. A barrier resumes as List<O>,
-        // so each element is converted independently instead of trying to coerce the whole list to O.
-        List<Object> converted = new ArrayList<>();
-        for (Object item : iterable) {
-          converted.add(org.pipelineframework.awaitable.AwaitPayloadSupport.coercePayload(item, outputType));
-        }
-        return List.copyOf(converted);
-      }
-      return org.pipelineframework.awaitable.AwaitPayloadSupport.coercePayload(payload, outputType);
-    } catch (Exception e) {
-      throw new IllegalStateException("Failed converting await response payload to " + record.outputType(), e);
-    }
-  }
-
-  private Uni<Object> coerceAwaitPayloadAsync(AwaitInteractionRecord record) {
-    return Uni.createFrom().item(() -> coerceAwaitPayload(record))
-        .runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
-  }
-
-  private Uni<AwaitCompletionResult> completeAwaitBarrier(AwaitCompletionResult result, long nowEpochMs) {
-    AwaitInteractionRecord record = result.record();
-    return awaitCoordinator.findByBarrier(
-            record.tenantId(),
-            record.executionId(),
-            record.stepIndex(),
-            record.barrierId())
-        .onItem().transformToUni(records -> {
-          List<AwaitInteractionRecord> barrierItems = records.stream()
-              .filter(AwaitInteractionRecord::barrierItem)
-              .toList();
-          int expected = record.barrierItemCount() == null ? -1 : record.barrierItemCount();
-          if (expected <= 0 || barrierItems.size() < expected) {
-            if (expected <= 0) {
-              LOG.warnf(
-                  "Await barrier %s for execution %s has invalid item count %s; completion will not resume yet",
-                  record.barrierId(),
-                  record.executionId(),
-                  record.barrierItemCount());
-            }
-            return Uni.createFrom().item(result);
-          }
-          boolean allCompleted = barrierItems.stream()
-              .allMatch(candidate -> candidate.status() == org.pipelineframework.awaitable.AwaitInteractionStatus.COMPLETED);
-          if (!allCompleted) {
-            return Uni.createFrom().item(result);
-          }
-          List<Uni<Object>> conversions = barrierItems.stream()
-              .sorted(java.util.Comparator.comparing(this::barrierItemIndexOrThrow))
-              .map(this::coerceAwaitPayloadAsync)
-              .toList();
-          return Uni.join().all(conversions).andCollectFailures()
-              .onItem().transformToUni(resumePayload -> resumeAwaitExecution(
-                  result,
-                  record.barrierId(),
-                  Uni.createFrom().item((Object) List.copyOf(resumePayload)),
-                  nowEpochMs));
-        });
-  }
-
-  private int barrierItemIndexOrThrow(AwaitInteractionRecord record) {
-    if (record.barrierItemIndex() == null) {
-      throw new IllegalStateException(
-          "Await barrier item is missing barrierItemIndex: interactionId=" + record.interactionId()
-              + ", barrierId=" + record.barrierId());
-    }
-    return record.barrierItemIndex();
-  }
-
   private Uni<AwaitCompletionResult> resumeAwaitExecution(
       AwaitCompletionResult result,
-      String awaitInteractionId,
-      Uni<Object> resumePayload,
+      String awaitUnitId,
       long nowEpochMs) {
     AwaitInteractionRecord record = result.record();
-    return resumePayload
-        .onItem().transformToUni(payload -> executionStateStore.markAwaitCompleted(
-                record.tenantId(),
-                record.executionId(),
-                awaitInteractionId,
-                payload,
-                record.stepIndex() + 1,
-                nowEpochMs)
-            .onItem().transformToUni(updated -> {
-              if (updated.isPresent()) {
-                LOG.infof(
-                    "Resuming async execution %s from awaitId=%s at nextStepIndex=%d resumePayloadType=%s",
-                    updated.get().executionId(),
-                    awaitInteractionId,
-                    updated.get().currentStepIndex(),
-                    payload == null ? "<none>" : payload.getClass().getName());
-                return workDispatcher.enqueueNow(new ExecutionWorkItem(
-                        updated.get().tenantId(),
-                        updated.get().executionId()))
-                    .replaceWith(result);
-              }
-              return Uni.createFrom().item(result);
-            }));
+    return executionStateStore.markAwaitCompleted(
+            record.tenantId(),
+            record.executionId(),
+            awaitUnitId,
+            record.stepIndex() + 1,
+            nowEpochMs)
+        .onItem().transformToUni(updated -> {
+          if (updated.isPresent()) {
+            LOG.infof(
+                "Resuming async execution %s from awaitUnitId=%s at nextStepIndex=%d",
+                updated.get().executionId(),
+                awaitUnitId,
+                updated.get().currentStepIndex());
+            return workDispatcher.enqueueNow(new ExecutionWorkItem(
+                    updated.get().tenantId(),
+                    updated.get().executionId()))
+                .replaceWith(result);
+          }
+          return Uni.createFrom().item(result);
+        });
   }
 
   private Uni<AwaitCompletionResult> validateAwaitCompletionTenant(
