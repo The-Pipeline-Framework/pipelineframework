@@ -156,6 +156,7 @@ const mainSidebar = [
         items: [
             {text: 'Writing a Plugin', link: '/guide/plugins/writing-a-plugin'},
             {text: 'Persistence Plugin', link: '/guide/plugins/persistence'},
+            {text: 'Field Materialization', link: '/guide/plugins/materialization'},
             {
                 text: 'Caching',
                 collapsed: true,

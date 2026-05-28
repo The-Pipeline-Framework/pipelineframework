@@ -316,6 +316,10 @@ public class PipelineProtoGenerator {
             .append(".grpc\";\n\n");
         builder.append("option java_outer_classname = \"PipelineTypes\";\n\n");
         boolean first = true;
+        if (usesPayloadReference(safeMessages)) {
+            renderPayloadReferenceMessage(builder);
+            first = false;
+        }
         List<String> messageNames = new ArrayList<>(safeMessages.keySet());
         Collections.sort(messageNames);
         for (String messageName : messageNames) {
@@ -337,6 +341,34 @@ public class PipelineProtoGenerator {
             first = false;
         }
         return builder.toString();
+    }
+
+    private boolean usesPayloadReference(Map<String, PipelineTemplateMessage> messages) {
+        for (PipelineTemplateMessage message : messages.values()) {
+            if (message == null || message.fields() == null) {
+                continue;
+            }
+            for (PipelineTemplateField field : message.fields()) {
+                if (field != null && "payload_ref".equals(field.canonicalType())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private void renderPayloadReferenceMessage(StringBuilder builder) {
+        builder.append("message PayloadReference {\n");
+        builder.append("  string provider = 1;\n");
+        builder.append("  string container = 2;\n");
+        builder.append("  string key = 3;\n");
+        builder.append("  string content_type = 4;\n");
+        builder.append("  string codec = 5;\n");
+        builder.append("  string checksum = 6;\n");
+        builder.append("  int64 size_bytes = 7;\n");
+        builder.append("  string version = 8;\n");
+        builder.append("  map<string, string> metadata = 9;\n");
+        builder.append("}\n");
     }
 
     /**
@@ -529,7 +561,7 @@ public class PipelineProtoGenerator {
      * @return `true` if the field supports the `optional` label (it is neither a map nor a message reference), `false` otherwise
      */
     private boolean supportsOptionalLabel(PipelineTemplateField field) {
-        return !field.isMap() && !field.isMessageReference();
+        return !field.isMap() && !field.isMessageReference() && !"payload_ref".equals(field.canonicalType());
     }
 
     /**

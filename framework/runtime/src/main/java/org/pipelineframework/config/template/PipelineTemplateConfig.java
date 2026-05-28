@@ -37,6 +37,7 @@ import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
  * @param aspects aspect configurations keyed by aspect name
  * @param input reliable pipeline input boundary
  * @param output reliable pipeline output boundary
+ * @param materialization field representation aspect policies
  */
 public record PipelineTemplateConfig(
     int version,
@@ -49,7 +50,8 @@ public record PipelineTemplateConfig(
     List<PipelineTemplateStep> steps,
     Map<String, PipelineTemplateAspect> aspects,
     PipelineInputBoundaryConfig input,
-    PipelineOutputBoundaryConfig output
+    PipelineOutputBoundaryConfig output,
+    PipelineTemplateMaterialization materialization
 ) {
     public PipelineTemplateConfig {
         if (version <= 0) {
@@ -69,6 +71,7 @@ public record PipelineTemplateConfig(
         // Preserve null step placeholders so downstream phases/tests can explicitly skip them.
         steps = steps == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(steps));
         aspects = aspects == null ? Map.of() : Map.copyOf(aspects);
+        materialization = materialization == null ? new PipelineTemplateMaterialization(List.of()) : materialization;
     }
 
     /**
@@ -124,7 +127,7 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), Map.of(), steps, aspects, null, null);
+        this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), Map.of(), steps, aspects, null, null, null);
     }
 
     /**
@@ -145,7 +148,7 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(1, appName, basePackage, transport, platform, Map.of(), Map.of(), steps, aspects, null, null);
+        this(1, appName, basePackage, transport, platform, Map.of(), Map.of(), steps, aspects, null, null, null);
     }
 
     public PipelineTemplateConfig(
@@ -160,6 +163,6 @@ public record PipelineTemplateConfig(
         PipelineInputBoundaryConfig input,
         PipelineOutputBoundaryConfig output
     ) {
-        this(version, appName, basePackage, transport, platform, messages, Map.of(), steps, aspects, input, output);
+        this(version, appName, basePackage, transport, platform, messages, Map.of(), steps, aspects, input, output, null);
     }
 }

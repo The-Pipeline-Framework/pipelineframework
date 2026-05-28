@@ -37,6 +37,7 @@ import java.util.Objects;
  * @param deprecatedSince version metadata for field deprecation
  * @param comment optional field comment
  * @param overrides optional override metadata
+ * @param referenceable optional field materialization metadata
  */
 public record PipelineTemplateField(
     Integer number,
@@ -54,7 +55,8 @@ public record PipelineTemplateField(
     String since,
     String deprecatedSince,
     String comment,
-    PipelineTemplateFieldOverrides overrides
+    PipelineTemplateFieldOverrides overrides,
+    PipelineTemplateFieldReference referenceable
 ) {
     public PipelineTemplateField {
         name = normalize(name);
@@ -78,7 +80,7 @@ public record PipelineTemplateField(
      * @param protoType authored/legacy protobuf field type
      */
     public PipelineTemplateField(String name, String type, String protoType) {
-        this(null, name, type, null, null, null, protoType, null, null, false, false, false, null, null, null, null);
+        this(null, name, type, null, null, null, protoType, null, null, false, false, false, null, null, null, null, null);
     }
 
     /**
@@ -143,7 +145,8 @@ public record PipelineTemplateField(
             since,
             deprecatedSince,
             comment,
-            overrides);
+            overrides,
+            referenceable);
     }
 
     /**
@@ -170,6 +173,7 @@ public record PipelineTemplateField(
             since,
             deprecatedSince,
             comment,
-            overrides);
+            overrides,
+            referenceable);
     }
 }
