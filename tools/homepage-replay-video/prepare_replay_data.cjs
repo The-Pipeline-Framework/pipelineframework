@@ -13,6 +13,7 @@ const SEGMENTS = {
   continuation: [8.55, 10.85],
   store: [0.95, 6.55]
 };
+const PRIMARY_ROLES = ["primary-a", "primary-b", "primary-c", "primary-d", "primary-e"];
 
 function parseArgs(argv) {
   const args = {};
@@ -31,6 +32,19 @@ function parseArgs(argv) {
     throw new Error("Usage: prepare_replay_data.cjs --input <replay.json> --output <cinematic.json>");
   }
   return args;
+}
+
+function displayRole(step) {
+  if (step?.renderRole) {
+    return step.renderRole;
+  }
+  if (step?.sideEffect === true && step?.pluginKind === "persistence") {
+    return "persistence-plugin";
+  }
+  if (typeof step?.step === "string" && step.step.toLowerCase().includes("await")) {
+    return "await";
+  }
+  return "primary";
 }
 
 function sampleEvenly(items, count) {
@@ -64,60 +78,165 @@ function spreadAcrossSegment(items, segmentStart, segmentEnd) {
   }));
 }
 
-function findStep(steps, predicate, label) {
-  const step = steps.find(predicate);
-  if (!step) {
-    throw new Error(`Missing required step for homepage cinematic: ${label}`);
+function orderedMainlineSteps(steps, transitions) {
+  const mainlineSteps = steps
+    .filter((step) => step && step.sideEffect !== true)
+    .sort((left, right) => (left.index ?? Number.MAX_SAFE_INTEGER) - (right.index ?? Number.MAX_SAFE_INTEGER));
+  const mainlineIds = new Set(mainlineSteps.map((step) => step.step));
+  const mainlineTransitions = transitions.filter((transition) => mainlineIds.has(transition.from) && mainlineIds.has(transition.to));
+  const targets = new Set(mainlineTransitions.map((transition) => transition.to));
+  const starts = mainlineSteps.filter((step) => !targets.has(step.step));
+  const start = starts[0] ?? mainlineSteps[0];
+  if (!start) {
+    return [];
   }
-  return step;
-}
-
-function buildNodes(steps) {
-  const folder = findStep(steps, (step) => step.step === "ProcessFolder", "ProcessFolder");
-  const input = findStep(steps, (step) => step.step === "ProcessCsvPaymentsInput", "ProcessCsvPaymentsInput");
-  const awaitStep = findStep(steps, (step) => step.renderRole === "await", "await");
-  const status = findStep(steps, (step) => step.step === "ProcessPaymentStatus", "ProcessPaymentStatus");
-  const output = findStep(steps, (step) => step.step === "ProcessCsvPaymentsOutputFile", "ProcessCsvPaymentsOutputFile");
-  const broker = findStep(steps, (step) => step.renderRole === "broker", "broker");
-  const provider = findStep(steps, (step) => step.renderRole === "external-provider", "external-provider");
-  const store = findStep(steps, (step) => step.renderRole === "store", "store");
-
-  return [
-    { id: folder.step, role: "folder", tier: "primary", x: -6.0, y: 2.55, z: 0.45, scale: 1.06 },
-    { id: input.step, role: "input", tier: "primary", x: -3.15, y: 2.05, z: 0.8, scale: 1.1 },
-    { id: awaitStep.step, role: "await", tier: "primary", x: 0.05, y: 1.7, z: 1.05, scale: 1.22 },
-    { id: status.step, role: "status", tier: "primary", x: 3.3, y: 2.08, z: 0.95, scale: 1.12 },
-    { id: output.step, role: "output", tier: "primary", x: 6.25, y: 2.52, z: 0.5, scale: 1.02 },
-    { id: broker.step, role: "broker", tier: "support", x: -1.75, y: 4.05, z: 0.92, scale: 0.84, parentId: awaitStep.step },
-    { id: provider.step, role: "provider", tier: "support", x: 2.1, y: 4.45, z: 0.22, scale: 0.92, parentId: awaitStep.step },
-    { id: store.step, role: "store", tier: "support", x: 0.65, y: -3.2, z: -1.85, scale: 0.96 }
-  ];
-}
-
-function buildEdges(transitions, nodes) {
-  const nodeIds = new Set(nodes.map((node) => node.id));
-  const keepKinds = new Set(["primary", "await-request", "await-completion", "store"]);
-  const edges = transitions
-    .filter((transition) => keepKinds.has(transition.relationKind || "primary"))
-    .map((transition) => ({
-      id: transition.id || `${transition.from}->${transition.to}`,
-      from: transition.from,
-      to: transition.to,
-      kind: transition.relationKind || "primary",
-      cardinality: transition.cardinality || "one-to-one"
-    }))
-    .filter((edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to));
-  const edgeIds = new Set(edges.map((edge) => edge.id));
-  [
-    { from: "ProcessPaymentStatus", to: "Database", kind: "store", cardinality: "one-to-one" },
-    { from: "ProcessCsvPaymentsOutputFile", to: "Database", kind: "store", cardinality: "one-to-one" }
-  ].forEach((edge) => {
-    const id = `${edge.from}->${edge.to}`;
-    if (nodeIds.has(edge.from) && nodeIds.has(edge.to) && !edgeIds.has(id)) {
-      edges.push({ id, ...edge });
-      edgeIds.add(id);
+  const byFrom = new Map();
+  for (const transition of mainlineTransitions) {
+    if (!byFrom.has(transition.from)) {
+      byFrom.set(transition.from, transition);
     }
+  }
+  const byId = new Map(mainlineSteps.map((step) => [step.step, step]));
+  const ordered = [];
+  const visited = new Set();
+  let cursor = start.step;
+  while (cursor && byId.has(cursor) && !visited.has(cursor)) {
+    visited.add(cursor);
+    ordered.push(byId.get(cursor));
+    cursor = byFrom.get(cursor)?.to;
+  }
+  for (const step of mainlineSteps) {
+    if (!visited.has(step.step)) {
+      ordered.push(step);
+    }
+  }
+  return ordered;
+}
+
+function deriveProviderId(awaitStep) {
+  const raw = awaitStep?.step ?? "ExternalProvider";
+  const derived = raw.replace(/^Await/, "");
+  return derived && derived !== raw ? derived : "ExternalProvider";
+}
+
+function buildNodeSet(steps, transitions) {
+  const mainline = orderedMainlineSteps(steps, transitions);
+  const awaitStep = mainline.find((step) => displayRole(step) === "await");
+  const explicitBroker = steps.find((step) => displayRole(step) === "broker");
+  const explicitProvider = steps.find((step) => displayRole(step) === "external-provider");
+  const explicitStore = steps.find((step) => displayRole(step) === "store");
+  const persistenceSteps = steps.filter((step) => displayRole(step) === "persistence-plugin");
+  const nodes = [];
+  const primaryCount = mainline.length;
+  const minX = -6.1;
+  const maxX = 6.1;
+  const xSpan = primaryCount <= 1 ? 0 : maxX - minX;
+  let primaryRoleIndex = 0;
+
+  mainline.forEach((step, index) => {
+    const awaitRole = displayRole(step) === "await";
+    const centerOffset = primaryCount <= 1 ? 0.5 : index / (primaryCount - 1);
+    const edgeLift = Math.abs(centerOffset - 0.5) * 1.08;
+    const role = awaitRole ? "await" : PRIMARY_ROLES[Math.min(primaryRoleIndex++, PRIMARY_ROLES.length - 1)];
+    nodes.push({
+      id: step.step,
+      sourceId: step.step,
+      role,
+      tier: "primary",
+      x: Number((minX + xSpan * centerOffset).toFixed(3)),
+      y: Number((1.55 + edgeLift).toFixed(3)),
+      z: Number((0.55 + (awaitRole ? 0.6 : 0.25 * (1 - edgeLift))).toFixed(3)),
+      scale: awaitRole ? 1.22 : 1.08
+    });
   });
+
+  if (awaitStep) {
+    const awaitNode = nodes.find((node) => node.id === awaitStep.step);
+    const brokerId = explicitBroker?.step ?? "KafkaBroker";
+    const providerId = explicitProvider?.step ?? deriveProviderId(awaitStep);
+    nodes.push({
+      id: brokerId,
+      sourceId: explicitBroker?.step,
+      role: "broker",
+      tier: "support",
+      x: Number(((awaitNode?.x ?? 0) - 1.9).toFixed(3)),
+      y: 4.18,
+      z: 0.92,
+      scale: 0.84,
+      parentId: awaitStep.step
+    });
+    nodes.push({
+      id: providerId,
+      sourceId: explicitProvider?.step,
+      role: "provider",
+      tier: "support",
+      x: Number(((awaitNode?.x ?? 0) + 2.05).toFixed(3)),
+      y: 4.52,
+      z: 0.22,
+      scale: 0.92,
+      parentId: awaitStep.step
+    });
+  }
+
+  if (explicitStore || persistenceSteps.length > 0) {
+    nodes.push({
+      id: explicitStore?.step ?? "Database",
+      sourceId: explicitStore?.step,
+      role: "store",
+      tier: "support",
+      x: 0.65,
+      y: -2.52,
+      z: -1.85,
+      scale: 0.86
+    });
+  }
+  return { nodes, mainline, awaitStep, persistenceSteps };
+}
+
+function edgeId(from, to, kind) {
+  return `${from}->${to}:${kind}`;
+}
+
+function buildEdges(transitions, nodes, mainline, awaitStep, persistenceSteps) {
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const storeNode = nodes.find((node) => node.role === "store");
+  const brokerNode = nodes.find((node) => node.role === "broker");
+  const providerNode = nodes.find((node) => node.role === "provider");
+  const edges = [];
+  const seen = new Set();
+  const addEdge = (from, to, kind, cardinality = "one-to-one") => {
+    if (!from || !to || !nodeIds.has(from) || !nodeIds.has(to)) {
+      return;
+    }
+    const id = edgeId(from, to, kind);
+    if (!seen.has(id)) {
+      seen.add(id);
+      edges.push({ id, from, to, kind, cardinality });
+    }
+  };
+
+  for (let index = 0; index < mainline.length - 1; index += 1) {
+    const from = mainline[index].step;
+    const to = mainline[index + 1].step;
+    const transition = transitions.find((candidate) => candidate.from === from && candidate.to === to);
+    addEdge(from, to, "primary", transition?.cardinality ?? "one-to-one");
+  }
+  if (awaitStep && brokerNode && providerNode) {
+    addEdge(awaitStep.step, brokerNode.id, "request");
+    addEdge(brokerNode.id, providerNode.id, "request");
+    addEdge(providerNode.id, brokerNode.id, "completion");
+    addEdge(brokerNode.id, awaitStep.step, "completion");
+  }
+  if (storeNode) {
+    const sideEffectParents = new Set(
+      persistenceSteps
+        .map((step) => step.parentStep ?? transitions.find((transition) => transition.to === step.step)?.from)
+        .filter(Boolean)
+    );
+    for (const parent of sideEffectParents) {
+      addEdge(parent, storeNode.id, "store");
+    }
+  }
   return edges;
 }
 
@@ -134,10 +253,13 @@ function eventMatches(event, fromStep, toStep, eventName) {
   return true;
 }
 
-function pulseBundle(edgeId, kind, items, segmentStart, segmentEnd, duration, size, color) {
+function pulseBundle(edge, kind, items, segmentStart, segmentEnd, duration, size, color) {
+  if (!edge) {
+    return [];
+  }
   return spreadAcrossSegment(items, segmentStart, segmentEnd).map((item, index) => ({
-    id: `${edgeId}:${kind}:${index + 1}`,
-    edgeId,
+    id: `${edge.id}:${kind}:${index + 1}`,
+    edgeId: edge.id,
     kind,
     start: item.start,
     duration,
@@ -146,61 +268,83 @@ function pulseBundle(edgeId, kind, items, segmentStart, segmentEnd, duration, si
   }));
 }
 
-function buildPulses(replay, edges) {
+function findEdge(edges, from, to, kind) {
+  return edges.find((edge) => edge.from === from && edge.to === to && edge.kind === kind);
+}
+
+function buildPulses(replay, edges, mainline, awaitStep, persistenceSteps) {
   const events = Array.isArray(replay.events) ? replay.events : [];
   const pulses = [];
+  const mainlineEdges = [];
+  for (let index = 0; index < mainline.length - 1; index += 1) {
+    const from = mainline[index].step;
+    const to = mainline[index + 1].step;
+    mainlineEdges.push({ from, to, edge: findEdge(edges, from, to, "primary") });
+  }
 
-  const folderToInputEmits = sampleEvenly(
-    events.filter((event) => eventMatches(event, "ProcessFolder", "ProcessCsvPaymentsInput", "emit")),
-    3
-  );
-  const inputToAwaitEmits = sampleEvenly(
-    events.filter((event) => eventMatches(event, "ProcessCsvPaymentsInput", "AwaitPaymentProvider", "emit")),
-    14
-  );
-  const awaitResumeStarts = sampleEvenly(
-    events.filter((event) => event.event === "start" && event.step === "ProcessPaymentStatus" && event.from === "AwaitPaymentProvider"),
-    10
-  );
-  const outputStarts = sampleEvenly(
-    events.filter((event) => event.event === "start" && event.step === "ProcessCsvPaymentsOutputFile" && event.from === "ProcessPaymentStatus"),
-    5
-  );
-  const storeFolderWrites = sampleEvenly(
-    events.filter((event) => event.event === "success" && event.step === "PersistenceCsvPaymentsInputFileSideEffect"),
-    2
-  );
-  const storeInputWrites = sampleEvenly(
-    events.filter((event) => event.event === "success" && event.step === "PersistencePaymentRecordSideEffect"),
-    12
-  );
-  const storeStatusWrites = sampleEvenly(awaitResumeStarts, 7);
-  const storeOutputWrites = sampleEvenly(outputStarts, 4);
+  mainlineEdges.forEach((entry, index) => {
+    const matches = events.filter((event) =>
+      eventMatches(event, entry.from, entry.to, "emit")
+        || (event.event === "start" && event.step === entry.to && event.from === entry.from)
+    );
+    const segment = index === 0
+      ? SEGMENTS.ingress
+      : entry.from === awaitStep?.step
+        ? SEGMENTS.completion
+        : index === mainlineEdges.length - 1
+          ? SEGMENTS.continuation
+          : SEGMENTS.request;
+    pulses.push(...pulseBundle(entry.edge, "primary", sampleEvenly(matches, index === 0 ? 3 : 12), ...segment, 0.86, 0.13, "#8eeeff"));
+  });
 
-  const ensureEdgeId = (from, to) => edges.find((edge) => edge.from === from && edge.to === to)?.id ?? `${from}->${to}`;
+  if (awaitStep) {
+    const awaitIndex = mainline.findIndex((step) => step.step === awaitStep.step);
+    const previous = mainline[awaitIndex - 1]?.step;
+    const next = mainline[awaitIndex + 1]?.step;
+    const requestItems = sampleEvenly(
+      events.filter((event) => eventMatches(event, previous, awaitStep.step, "emit")
+        || (event.event === "start" && event.step === awaitStep.step && event.from === previous)),
+      14
+    );
+    const completionItems = sampleEvenly(
+      events.filter((event) => event.event === "start" && event.step === next && event.from === awaitStep.step),
+      10
+    );
+    const broker = edges.find((edge) => edge.from === awaitStep.step && edge.kind === "request")?.to;
+    const provider = edges.find((edge) => edge.from === broker && edge.kind === "request")?.to;
+    pulses.push(...pulseBundle(findEdge(edges, awaitStep.step, broker, "request"), "request", requestItems, SEGMENTS.request[0] + 0.08, SEGMENTS.request[1] - 0.22, 0.92, 0.12, "#8fa9ff"));
+    pulses.push(...pulseBundle(findEdge(edges, broker, provider, "request"), "request", requestItems, SEGMENTS.request[0] + 0.22, SEGMENTS.request[1], 0.96, 0.118, "#c1b4ff"));
+    pulses.push(...pulseBundle(findEdge(edges, provider, broker, "completion"), "completion", completionItems, SEGMENTS.completion[0], SEGMENTS.completion[1] - 0.22, 0.96, 0.118, "#c1b4ff"));
+    pulses.push(...pulseBundle(findEdge(edges, broker, awaitStep.step, "completion"), "completion", completionItems, SEGMENTS.completion[0] + 0.16, SEGMENTS.completion[1], 0.92, 0.12, "#8fa9ff"));
+  }
 
-  pulses.push(...pulseBundle(ensureEdgeId("ProcessFolder", "ProcessCsvPaymentsInput"), "primary", folderToInputEmits, ...SEGMENTS.ingress, 0.78, 0.14, "#7de3ff"));
-  pulses.push(...pulseBundle(ensureEdgeId("ProcessCsvPaymentsInput", "AwaitPaymentProvider"), "primary", inputToAwaitEmits, ...SEGMENTS.request, 0.86, 0.13, "#96f5ff"));
-  pulses.push(...pulseBundle(ensureEdgeId("AwaitPaymentProvider", "KafkaBroker"), "request", inputToAwaitEmits, SEGMENTS.request[0] + 0.08, SEGMENTS.request[1] - 0.22, 0.92, 0.12, "#8fa9ff"));
-  pulses.push(...pulseBundle(ensureEdgeId("KafkaBroker", "PaymentProvider"), "request", inputToAwaitEmits, SEGMENTS.request[0] + 0.22, SEGMENTS.request[1], 0.96, 0.118, "#c1b4ff"));
-  pulses.push(...pulseBundle(ensureEdgeId("PaymentProvider", "KafkaBroker"), "completion", awaitResumeStarts, SEGMENTS.completion[0], SEGMENTS.completion[1] - 0.22, 0.96, 0.118, "#c1b4ff"));
-  pulses.push(...pulseBundle(ensureEdgeId("KafkaBroker", "AwaitPaymentProvider"), "completion", awaitResumeStarts, SEGMENTS.completion[0] + 0.16, SEGMENTS.completion[1], 0.92, 0.12, "#8fa9ff"));
-  pulses.push(...pulseBundle(ensureEdgeId("AwaitPaymentProvider", "ProcessPaymentStatus"), "primary", awaitResumeStarts, SEGMENTS.completion[0] + 0.28, SEGMENTS.completion[1], 1.02, 0.13, "#85f1d2"));
-  pulses.push(...pulseBundle(ensureEdgeId("ProcessPaymentStatus", "ProcessCsvPaymentsOutputFile"), "primary", outputStarts, ...SEGMENTS.continuation, 0.9, 0.12, "#7fe5c4"));
-  pulses.push(...pulseBundle(ensureEdgeId("ProcessFolder", "Database"), "store", storeFolderWrites, SEGMENTS.store[0], SEGMENTS.store[0] + 0.9, 1.1, 0.12, "#6fd9ff"));
-  pulses.push(...pulseBundle(ensureEdgeId("ProcessCsvPaymentsInput", "Database"), "store", storeInputWrites, SEGMENTS.store[0] + 0.65, SEGMENTS.store[1], 1.18, 0.12, "#6fd9ff"));
-  pulses.push(...pulseBundle(ensureEdgeId("ProcessPaymentStatus", "Database"), "store", storeStatusWrites, SEGMENTS.completion[0] + 0.18, SEGMENTS.continuation[0] + 0.15, 1.02, 0.115, "#6fd9ff"));
-  pulses.push(...pulseBundle(ensureEdgeId("ProcessCsvPaymentsOutputFile", "Database"), "store", storeOutputWrites, SEGMENTS.continuation[0] + 0.2, SEGMENTS.continuation[1], 0.96, 0.11, "#6fd9ff"));
-
+  const sideEffectByParent = new Map();
+  for (const step of persistenceSteps) {
+    const parent = step.parentStep ?? replay.topology?.transitions?.find((transition) => transition.to === step.step)?.from;
+    if (parent) {
+      if (!sideEffectByParent.has(parent)) {
+        sideEffectByParent.set(parent, []);
+      }
+      sideEffectByParent.get(parent).push(step.step);
+    }
+  }
+  for (const edge of edges.filter((candidate) => candidate.kind === "store")) {
+    const sideEffects = sideEffectByParent.get(edge.from) ?? [];
+    const writes = events.filter((event) => event.event === "success" && sideEffects.includes(event.step));
+    const mainlineIndex = mainline.findIndex((step) => step.step === edge.from);
+    const segmentStart = mainlineIndex <= 1 ? SEGMENTS.store[0] + Math.max(0, mainlineIndex) * 0.65 : SEGMENTS.completion[0] + 0.18;
+    const segmentEnd = mainlineIndex >= mainline.length - 1 ? SEGMENTS.continuation[1] : Math.min(SEGMENTS.store[1], segmentStart + 2.8);
+    pulses.push(...pulseBundle(edge, "store", sampleEvenly(writes, mainlineIndex <= 0 ? 2 : 8), segmentStart, segmentEnd, 1.08, 0.115, "#6fd9ff"));
+  }
   return pulses.sort((left, right) => left.start - right.start);
 }
 
-function buildHighlights() {
+function buildHighlights(nodes) {
   return [
-    { targetId: "AwaitPaymentProvider", kind: "suspend", start: SEGMENTS.suspend[0], end: SEGMENTS.suspend[1], intensity: 1.25, color: "#95b8ff" },
-    { targetId: "Database", kind: "store", start: SEGMENTS.store[0], end: SEGMENTS.store[1], intensity: 0.85, color: "#76d8ff" },
-    { targetId: "PaymentProvider", kind: "completion", start: SEGMENTS.completion[0], end: SEGMENTS.completion[1] - 0.1, intensity: 0.95, color: "#d2c3ff" }
-  ];
+    { targetId: nodes.find((node) => node.role === "await")?.id, kind: "suspend", start: SEGMENTS.suspend[0], end: SEGMENTS.suspend[1], intensity: 1.25, color: "#95b8ff" },
+    { targetId: nodes.find((node) => node.role === "store")?.id, kind: "store", start: SEGMENTS.store[0], end: SEGMENTS.store[1], intensity: 0.85, color: "#76d8ff" },
+    { targetId: nodes.find((node) => node.role === "provider")?.id, kind: "completion", start: SEGMENTS.completion[0], end: SEGMENTS.completion[1] - 0.1, intensity: 0.95, color: "#d2c3ff" }
+  ].filter((highlight) => highlight.targetId);
 }
 
 function main() {
@@ -208,8 +352,8 @@ function main() {
   const replay = JSON.parse(fs.readFileSync(input, "utf8"));
   const steps = Array.isArray(replay.topology?.steps) ? replay.topology.steps : [];
   const transitions = Array.isArray(replay.topology?.transitions) ? replay.topology.transitions : [];
-  const nodes = buildNodes(steps);
-  const edges = buildEdges(transitions, nodes);
+  const { nodes, mainline, awaitStep, persistenceSteps } = buildNodeSet(steps, transitions);
+  const edges = buildEdges(transitions, nodes, mainline, awaitStep, persistenceSteps);
   const cinematic = {
     sourceReplay: path.relative(process.cwd(), input),
     pipeline: replay.pipeline,
@@ -220,8 +364,8 @@ function main() {
     phases: SEGMENTS,
     nodes,
     edges,
-    pulses: buildPulses(replay, edges),
-    highlights: buildHighlights()
+    pulses: buildPulses(replay, edges, mainline, awaitStep, persistenceSteps),
+    highlights: buildHighlights(nodes)
   };
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, JSON.stringify(cinematic, null, 2) + "\n");

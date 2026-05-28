@@ -29,11 +29,12 @@ let lastAutoFrame = performance.now();
 let autoProgress = 0;
 
 const palette = {
-  folder: { base: 0x4a82ff, glow: 0x8ac5ff },
-  input: { base: 0x39bdf6, glow: 0x94f4ff },
+  "primary-a": { base: 0x4a82ff, glow: 0x8ac5ff },
+  "primary-b": { base: 0x39bdf6, glow: 0x94f4ff },
+  "primary-c": { base: 0x52d6aa, glow: 0x96ffd8 },
+  "primary-d": { base: 0x69d8ff, glow: 0xa7f4ff },
+  "primary-e": { base: 0x5ca7f5, glow: 0xa4d6ff },
   await: { base: 0x7ca8ff, glow: 0xbdd0ff },
-  status: { base: 0x52d6aa, glow: 0x96ffd8 },
-  output: { base: 0x69d8ff, glow: 0xa7f4ff },
   broker: { base: 0x8f78ff, glow: 0xbba7ff },
   provider: { base: 0xc299ff, glow: 0xe0c6ff },
   store: { base: 0x49c0ff, glow: 0x92ebff }
@@ -154,11 +155,11 @@ function createPrimaryNode(role, scale) {
   halo.position.set(0, 0, -0.1);
   group.add(halo);
 
-  if (role === "folder") {
+  if (role === "primary-a") {
     const tab = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.34, 0.22), makeLayeredMaterial(colors.glow, colors.glow));
     tab.position.set(-0.36, 0.27, 0.13);
     group.add(tab);
-  } else if (role === "input") {
+  } else if (role === "primary-b") {
     [-0.42, -0.12, 0.18].forEach((offset, index) => {
       const bar = new THREE.Mesh(
         new THREE.BoxGeometry(0.12, 0.46 + index * 0.1, 0.1),
@@ -175,7 +176,7 @@ function createPrimaryNode(role, scale) {
     ring.rotation.x = Math.PI / 2;
     ring.position.set(0, 0, 0.16);
     group.add(ring);
-  } else if (role === "status") {
+  } else if (role === "primary-c") {
     const disc = new THREE.Mesh(
       new THREE.CylinderGeometry(0.5, 0.5, 0.1, 40),
       makeLayeredMaterial(colors.glow, colors.glow)
@@ -190,13 +191,21 @@ function createPrimaryNode(role, scale) {
     ring.rotation.x = Math.PI / 2;
     ring.position.set(0, 0, 0.24);
     group.add(ring);
-  } else if (role === "output") {
+  } else if (role === "primary-d") {
     const slit = new THREE.Mesh(
       new THREE.PlaneGeometry(0.84, 0.1),
       new THREE.MeshBasicMaterial({ color: colors.glow, transparent: true, opacity: 0.88 })
     );
     slit.position.set(0, 0.04, 0.19);
     group.add(slit);
+  } else if (role === "primary-e") {
+    const notch = new THREE.Mesh(
+      new THREE.TorusGeometry(0.34, 0.045, 12, 36),
+      makeLayeredMaterial(colors.glow, colors.glow)
+    );
+    notch.rotation.x = Math.PI / 2;
+    notch.position.set(0, 0.02, 0.19);
+    group.add(notch);
   }
 
   group.scale.setScalar(scale);
@@ -224,17 +233,17 @@ function createSupportNode(role, scale) {
   } else if (role === "store") {
     [-0.38, 0, 0.38].forEach((offset, index) => {
       const disk = new THREE.Mesh(
-        new THREE.CylinderGeometry(1.08 - index * 0.06, 1.08 - index * 0.06, 0.34, 48),
+        new THREE.CylinderGeometry(0.94 - index * 0.05, 0.94 - index * 0.05, 0.3, 48),
         makeLayeredMaterial(colors.base, colors.glow)
       );
       disk.position.y = offset;
       group.add(disk);
     });
-    const halo = makeGlowSprite(colors.glow, 4.2);
+    const halo = makeGlowSprite(colors.glow, 3.55);
     halo.position.set(0, 0.15, -0.55);
     group.add(halo);
   }
-  const aura = makeGlowSprite(colors.glow, role === "store" ? 4.8 : 2.2);
+  const aura = makeGlowSprite(colors.glow, role === "store" ? 3.85 : 2.2);
   aura.position.set(0, 0, role === "store" ? -0.7 : -0.1);
   group.add(aura);
   group.scale.setScalar(scale);
@@ -333,7 +342,7 @@ function animateCamera(progress) {
   const y = 1.92 + Math.sin(progress * Math.PI) * 0.22;
   const z = 16.5 - Math.sin(progress * Math.PI) * 0.72;
   camera.position.set(x, y, z);
-  camera.lookAt(x * 0.08, 1.46, -1.28);
+  camera.lookAt(x * 0.08, 1.72, -1.28);
 }
 
 function applyNodeDynamics(timeSeconds) {
