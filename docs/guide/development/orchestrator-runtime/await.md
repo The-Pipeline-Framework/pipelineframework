@@ -137,7 +137,7 @@ Add the Quarkus Kafka messaging extension to the application that hosts the orch
 mp.messaging.outgoing.tpf-await-kafka-requests.connector=smallrye-kafka
 mp.messaging.outgoing.tpf-await-kafka-requests.value.serializer=org.apache.kafka.common.serialization.StringSerializer
 mp.messaging.incoming.tpf-await-kafka-responses.connector=smallrye-kafka
-mp.messaging.incoming.tpf-await-kafka-responses.topic=fraud-check.decisions
+mp.messaging.incoming.tpf-await-kafka-responses.topic=csv-payments.payment.results
 mp.messaging.incoming.tpf-await-kafka-responses.value.deserializer=org.apache.kafka.common.serialization.StringDeserializer
 ```
 
