@@ -665,20 +665,12 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "CSV_PAYMENTS_PAYMENT_PROVIDER_TIMEOUT_MILLIS");
         putOptionalEnvOverride(
                 env,
-                "csv-payments.payment-provider.wait-milliseconds",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_WAIT_MILLISECONDS");
+                "csv-payments.payment-provider.provider-timeout-probability",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_PROVIDER_TIMEOUT_PROBABILITY");
         putOptionalEnvOverride(
                 env,
-                "csv-payments.payment-provider.send-timeout-probability",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_SEND_TIMEOUT_PROBABILITY");
-        putOptionalEnvOverride(
-                env,
-                "csv-payments.payment-provider.poll-timeout-probability",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_POLL_TIMEOUT_PROBABILITY");
-        putOptionalEnvOverride(
-                env,
-                "csv-payments.payment-provider.poll-reject-probability",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_POLL_REJECT_PROBABILITY");
+                "csv-payments.payment-provider.provider-reject-probability",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_PROVIDER_REJECT_PROBABILITY");
     }
 
     private static void configureTempoEnv(Map<String, String> env, String otlpEndpoint) {
@@ -714,10 +706,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 env,
                 "csv-payments.payment-provider.timeout-millis",
                 "CSV_PAYMENTS_PAYMENT_PROVIDER_TIMEOUT_MILLIS");
-        putOptionalEnvOverride(
-                env,
-                "csv-payments.payment-provider.wait-milliseconds",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_WAIT_MILLISECONDS");
     }
 
     private static String lgtmCollectorContainerEndpoint() {
@@ -1057,8 +1045,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 TELEMETRY_HAPPY_PATH_ONLY,
                 "Telemetry capture mode runs only the happy-path E2E by default.");
         assumeTrue(
-                configuredPollRejectProbability() > 0.0d,
-                "Provider-reject scenario requires csv-payments.payment-provider.poll-reject-probability > 0.");
+                configuredProviderRejectProbability() > 0.0d,
+                "Provider-reject scenario requires csv-payments.payment-provider.provider-reject-probability > 0.");
         LOG.info("Running provider-reject end-to-end test");
 
         Path dir = Paths.get(TEST_E2E_DIR);
@@ -1684,7 +1672,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         if (!runProviderRejectScenario()) {
             return inputRecords;
         }
-        double rejectProbability = configuredPollRejectProbability();
+        double rejectProbability = configuredProviderRejectProbability();
         if (rejectProbability <= 0.0d) {
             return inputRecords;
         }
@@ -1715,7 +1703,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         if (probability >= 1.0d) {
             return true;
         }
-        long normalized = Integer.toUnsignedLong(java.util.Objects.hash(simulationKey, "poll-reject"));
+        long normalized = Integer.toUnsignedLong(java.util.Objects.hash(simulationKey, "provider-reject"));
         long threshold = Math.round(probability * 10_000d);
         return normalized % 10_000L < threshold;
     }
@@ -1947,9 +1935,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         }
     }
 
-    private static double configuredPollRejectProbability() {
+    private static double configuredProviderRejectProbability() {
         try {
-            return Double.parseDouble(System.getProperty("csv-payments.payment-provider.poll-reject-probability", "0"));
+            return Double.parseDouble(System.getProperty("csv-payments.payment-provider.provider-reject-probability", "0"));
         } catch (NumberFormatException ignored) {
             return 0.0d;
         }

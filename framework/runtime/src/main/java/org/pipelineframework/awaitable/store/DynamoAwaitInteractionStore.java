@@ -63,9 +63,8 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     private static final String STATUS = "status";
     private static final String REQUEST_PAYLOAD_JSON = "request_payload_json";
     private static final String RESPONSE_PAYLOAD_JSON = "response_payload_json";
-    private static final String BARRIER_ID = "barrier_id";
-    private static final String BARRIER_ITEM_INDEX = "barrier_item_index";
-    private static final String BARRIER_ITEM_COUNT = "barrier_item_count";
+    private static final String UNIT_ID = "unit_id";
+    private static final String ITEM_INDEX = "item_index";
     private static final String ACTOR = "actor";
     private static final String ASSIGNEE = "assignee";
     private static final String GROUP = "group_name";
@@ -123,31 +122,25 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     }
 
     @Override
-    public Uni<List<AwaitInteractionRecord>> findByBarrier(
+    public Uni<List<AwaitInteractionRecord>> findByUnit(
         String tenantId,
-        String executionId,
-        int stepIndex,
-        String barrierId) {
+        String unitId) {
         return blocking(() -> {
             Map<String, String> names = Map.of(
                 "#tenant", TENANT_ID,
-                "#execution", EXECUTION_ID,
-                "#stepIndex", STEP_INDEX,
-                "#barrier", BARRIER_ID,
+                "#unit", UNIT_ID,
                 "#ttl", TTL_EPOCH_S);
             Map<String, AttributeValue> values = Map.of(
                 ":tenant", avS(tenantId),
-                ":execution", avS(executionId),
-                ":stepIndex", avN(stepIndex),
-                ":barrier", avS(barrierId),
+                ":unit", avS(unitId),
                 ":nowSec", avN(Instant.now().getEpochSecond()));
             List<AwaitInteractionRecord> records = new ArrayList<>();
             Map<String, AttributeValue> lastEvaluatedKey = null;
             do {
                 ScanRequest.Builder request = ScanRequest.builder()
                     .tableName(interactionTable())
-                    .filterExpression("#tenant = :tenant AND #execution = :execution AND #stepIndex = :stepIndex "
-                        + "AND #barrier = :barrier AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
+                    .filterExpression("#tenant = :tenant AND #unit = :unit "
+                        + "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
                     .expressionAttributeNames(names)
                     .expressionAttributeValues(values)
                     .limit(scanPageLimit(100));
@@ -163,9 +156,9 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
                 lastEvaluatedKey = response.lastEvaluatedKey();
             } while (lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty());
             records.sort(java.util.Comparator
-                .comparingInt((AwaitInteractionRecord record) -> record.barrierItemIndex() == null
+                .comparingInt((AwaitInteractionRecord record) -> record.itemIndex() == null
                     ? Integer.MAX_VALUE
-                    : record.barrierItemIndex())
+                    : record.itemIndex())
                 .thenComparing(record -> nullToEmpty(record.causationId()))
                 .thenComparing(AwaitInteractionRecord::interactionId));
             return List.copyOf(records);
@@ -427,9 +420,8 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             AwaitInteractionStatus.WAITING,
             command.requestPayload(),
             null,
-            command.barrierId(),
-            command.barrierItemIndex(),
-            command.barrierItemCount(),
+            command.unitId(),
+            command.itemIndex(),
             null,
             command.assignee(),
             command.group(),
@@ -682,12 +674,9 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         item.put(TTL_EPOCH_S, avN(record.ttlEpochS()));
         putIfPresent(item, CAUSATION_ID, record.causationId());
         putIfPresent(item, RESPONSE_PAYLOAD_JSON, toJson(record.responsePayload()));
-        putIfPresent(item, BARRIER_ID, record.barrierId());
-        if (record.barrierItemIndex() != null) {
-            item.put(BARRIER_ITEM_INDEX, avN(record.barrierItemIndex()));
-        }
-        if (record.barrierItemCount() != null) {
-            item.put(BARRIER_ITEM_COUNT, avN(record.barrierItemCount()));
+        putIfPresent(item, UNIT_ID, record.unitId());
+        if (record.itemIndex() != null) {
+            item.put(ITEM_INDEX, avN(record.itemIndex()));
         }
         putIfPresent(item, ACTOR, record.actor());
         putIfPresent(item, ASSIGNEE, record.assignee());
@@ -711,9 +700,8 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             AwaitInteractionStatus.valueOf(readString(item, STATUS)),
             fromJson(readString(item, REQUEST_PAYLOAD_JSON)),
             fromJson(readString(item, RESPONSE_PAYLOAD_JSON)),
-            readString(item, BARRIER_ID),
-            readInteger(item, BARRIER_ITEM_INDEX),
-            readInteger(item, BARRIER_ITEM_COUNT),
+            readString(item, UNIT_ID),
+            readInteger(item, ITEM_INDEX),
             readString(item, ACTOR),
             readString(item, ASSIGNEE),
             readString(item, GROUP),

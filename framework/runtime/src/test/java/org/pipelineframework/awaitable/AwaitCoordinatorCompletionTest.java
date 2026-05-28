@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 import org.pipelineframework.awaitable.spi.AwaitTransportAdapter;
 import org.pipelineframework.awaitable.store.InMemoryAwaitInteractionStore;
+import org.pipelineframework.awaitable.store.InMemoryAwaitUnitStore;
 
 class AwaitCoordinatorCompletionTest {
 
@@ -177,9 +178,49 @@ class AwaitCoordinatorCompletionTest {
         assertEquals("approval.proto", ((Map<?, ?>) result.record().responsePayload()).get("name"));
     }
 
+    @Test
+    void loadResumePayloadCoercesStoredSnapshotToDeclaredOutputType() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "DescriptorApproval",
+            DescriptorProtos.FileDescriptorProto.class.getName(),
+            DescriptorProtos.FileDescriptorProto.class.getName(),
+            java.time.Duration.ofMinutes(10),
+            "interactionId",
+            "interaction-api",
+            Map.of(),
+            List.of());
+
+        AwaitCreateResult created = coordinator.createOrGet(
+            descriptor,
+            "tenant-1",
+            "exec-1",
+            1,
+            "cause-1",
+            DescriptorProtos.FileDescriptorProto.newBuilder().setName("request.proto").build(),
+            null,
+            null).await().indefinitely();
+        AwaitCompletionResult completed = coordinator.complete(new AwaitCompletionCommand(
+            "tenant-1",
+            created.record().interactionId(),
+            null,
+            "completion-1",
+            DescriptorProtos.FileDescriptorProto.newBuilder().setName("approval.proto").build(),
+            "alice",
+            11_000L)).await().indefinitely();
+        coordinator.recordCompletion(completed.record(), 11_000L).await().indefinitely();
+
+        Object payload = coordinator.loadResumePayload("tenant-1", created.record().unitId()).await().indefinitely();
+
+        assertTrue(payload instanceof DescriptorProtos.FileDescriptorProto);
+        assertEquals("approval.proto", ((DescriptorProtos.FileDescriptorProto) payload).getName());
+    }
+
     private static AwaitCoordinator coordinator(InMemoryAwaitInteractionStore store) {
         AwaitCoordinator coordinator = new AwaitCoordinator();
-        coordinator.stores = new SimpleInstance<>(List.<AwaitInteractionStore>of(store));
+        coordinator.interactionStores = new SimpleInstance<>(List.<AwaitInteractionStore>of(store));
+        coordinator.unitStores = new SimpleInstance<>(List.of(new InMemoryAwaitUnitStore()));
         coordinator.adapters = new SimpleInstance<>(List.<AwaitTransportAdapter<?>>of());
         coordinator.resumeTokenService = new AwaitResumeTokenService("secret-value-for-tests");
         return coordinator;

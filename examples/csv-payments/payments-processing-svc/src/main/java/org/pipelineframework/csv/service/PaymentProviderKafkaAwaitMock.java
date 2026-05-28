@@ -31,10 +31,8 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitCompletionEnvelope;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitDispatchEnvelope;
 import org.pipelineframework.config.pipeline.PipelineJson;
-import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
-import org.pipelineframework.csv.common.domain.SendPaymentRequest;
 
 /**
  * External mock provider for the CSV await/Kafka example.
@@ -72,14 +70,7 @@ public class PaymentProviderKafkaAwaitMock {
   private KafkaAwaitCompletionEnvelope handle(KafkaAwaitDispatchEnvelope dispatch) {
     PaymentRecord paymentRecord = PipelineJson.mapper().convertValue(dispatch.requestPayload(), PaymentRecord.class);
     validatePaymentRecord(paymentRecord);
-    SendPaymentRequest request = new SendPaymentRequest()
-        .setAmount(paymentRecord.getAmount())
-        .setReference(paymentRecord.getRecipient())
-        .setCurrency(paymentRecord.getCurrency())
-        .setPaymentRecord(paymentRecord)
-        .setPaymentRecordId(paymentRecord.getId());
-    AckPaymentSent ack = paymentProvider.sendPayment(request);
-    PaymentStatus status = paymentProvider.getPaymentStatus(ack);
+    PaymentStatus status = paymentProvider.processPayment(paymentRecord);
     return new KafkaAwaitCompletionEnvelope(
         dispatch.tenantId(),
         dispatch.interactionId(),

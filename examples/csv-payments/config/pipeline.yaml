@@ -54,26 +54,6 @@ messages:
       - number: 6
         name: csvPaymentsInputFilePath
         type: path
-  AckPaymentSent:
-    fields:
-      - number: 1
-        name: id
-        type: uuid
-      - number: 2
-        name: conversationId
-        type: uuid
-      - number: 3
-        name: status
-        type: int64
-      - number: 4
-        name: message
-        type: string
-      - number: 5
-        name: paymentRecordId
-        type: uuid
-      - number: 6
-        name: paymentRecord
-        type: PaymentRecord
   PaymentStatus:
     fields:
       - number: 1
@@ -92,11 +72,11 @@ messages:
         name: fee
         type: decimal
       - number: 6
-        name: ackPaymentSentId
+        name: conversationId
         type: uuid
       - number: 7
-        name: ackPaymentSent
-        type: AckPaymentSent
+        name: statusCode
+        type: int64
       - number: 8
         name: paymentRecordId
         type: uuid
@@ -170,7 +150,7 @@ steps:
     outboundMapper: org.pipelineframework.csv.common.mapper.PaymentRecordMapper
   - name: Await Payment Provider
     kind: await
-    cardinality: MANY_TO_MANY
+    cardinality: ONE_TO_ONE
     input: org.pipelineframework.csv.common.domain.PaymentRecord
     inputTypeName: PaymentRecord
     output: org.pipelineframework.csv.common.domain.PaymentStatus
@@ -178,8 +158,6 @@ steps:
     timeout: PT5M
     idempotencyKeyFields: ["csvId", "recipient", "amount", "currency"]
     await:
-      dispatch:
-        mode: per-item
       correlation:
         strategy: signedResumeToken
       transport:

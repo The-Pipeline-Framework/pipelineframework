@@ -70,7 +70,6 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     null,
                     null,
                     null,
-                    null,
                     command.nowEpochMs(),
                     command.nowEpochMs(),
                     command.ttlEpochS());
@@ -126,8 +125,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.nextDueEpochMs(),
                     current.lastTransitionKey(),
                     current.inputPayload(),
-                    current.awaitInteractionId(),
-                    current.resumePayload(),
+                    current.awaitUnitId(),
                     current.resultPayload(),
                     current.errorCode(),
                     current.errorMessage(),
@@ -170,7 +168,6 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     transitionKey,
                     current.inputPayload(),
                     null,
-                    null,
                     resultPayload,
                     null,
                     null,
@@ -189,7 +186,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         String executionId,
         long expectedVersion,
         String transitionKey,
-        String awaitInteractionId,
+        String awaitUnitId,
         int awaitStepIndex,
         long nowEpochMs) {
         return Uni.createFrom().item(() -> {
@@ -213,8 +210,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     Long.MAX_VALUE,
                     transitionKey,
                     current.inputPayload(),
-                    awaitInteractionId,
-                    null,
+                    awaitUnitId,
                     null,
                     null,
                     null,
@@ -231,8 +227,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     public Uni<Optional<ExecutionRecord<Object, Object>>> markAwaitCompleted(
         String tenantId,
         String executionId,
-        String awaitInteractionId,
-        Object resumePayload,
+        String awaitUnitId,
         int nextStepIndex,
         long nowEpochMs) {
         return Uni.createFrom().item(() -> {
@@ -242,7 +237,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                 if (current == null || current.status() != ExecutionStatus.WAITING_EXTERNAL) {
                     return Optional.empty();
                 }
-                if (current.awaitInteractionId() != null && !current.awaitInteractionId().equals(awaitInteractionId)) {
+                if (current.awaitUnitId() != null && !current.awaitUnitId().equals(awaitUnitId)) {
                     return Optional.empty();
                 }
                 ExecutionRecord<Object, Object> updated = new ExecutionRecord<>(
@@ -259,8 +254,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     nowEpochMs,
                     current.lastTransitionKey(),
                     current.inputPayload(),
-                    awaitInteractionId,
-                    resumePayload,
+                    awaitUnitId,
                     null,
                     null,
                     null,
@@ -305,8 +299,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     nextDueEpochMs,
                     transitionKey,
                     current.inputPayload(),
-                    current.awaitInteractionId(),
-                    current.resumePayload(),
+                    current.awaitUnitId(),
                     null,
                     errorCode,
                     truncate(errorMessage),
@@ -353,8 +346,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     nowEpochMs,
                     transitionKey,
                     current.inputPayload(),
-                    current.awaitInteractionId(),
-                    null,
+                    current.awaitUnitId(),
                     null,
                     errorCode,
                     truncate(errorMessage),

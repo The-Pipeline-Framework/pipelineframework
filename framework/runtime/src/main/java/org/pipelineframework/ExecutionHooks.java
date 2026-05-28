@@ -22,6 +22,7 @@ import io.smallrye.mutiny.subscription.Cancellable;
 import io.smallrye.mutiny.subscription.MultiSubscriber;
 import org.apache.commons.lang3.time.StopWatch;
 import org.jboss.logging.Logger;
+import org.pipelineframework.step.PipelineControlFlowException;
 import org.pipelineframework.telemetry.ApmCompatibilityMetrics;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 import org.pipelineframework.telemetry.RetryAmplificationGuard;
@@ -79,6 +80,11 @@ class ExecutionHooks {
         .onFailure().invoke(failure -> {
           watch.stop();
           long durationNanos = System.nanoTime() - startTime[0];
+          if (isControlFlow(failure)) {
+            RpcMetrics.recordGrpcServer(ORCHESTRATOR_SERVICE, ORCHESTRATOR_METHOD, Status.OK, durationNanos);
+            LOG.infof("PIPELINE WAITING_EXTERNAL after %s seconds", watch.getTime(TimeUnit.SECONDS));
+            return;
+          }
           RpcMetrics.recordGrpcServer(ORCHESTRATOR_SERVICE, ORCHESTRATOR_METHOD, Status.fromThrowable(failure),
               durationNanos);
           ApmCompatibilityMetrics.recordOrchestratorFailure(durationNanos / 1_000_000d);
@@ -102,6 +108,9 @@ class ExecutionHooks {
             RpcMetrics.recordGrpcServer(ORCHESTRATOR_SERVICE, ORCHESTRATOR_METHOD, Status.OK, durationNanos);
             ApmCompatibilityMetrics.recordOrchestratorSuccess(durationNanos / 1_000_000d);
             LOG.infof("✅ PIPELINE FINISHED processing in %s seconds", watch.getTime(TimeUnit.SECONDS));
+          } else if (isControlFlow(failure)) {
+            RpcMetrics.recordGrpcServer(ORCHESTRATOR_SERVICE, ORCHESTRATOR_METHOD, Status.OK, durationNanos);
+            LOG.infof("PIPELINE WAITING_EXTERNAL after %s seconds", watch.getTime(TimeUnit.SECONDS));
           } else {
             RpcMetrics.recordGrpcServer(ORCHESTRATOR_SERVICE, ORCHESTRATOR_METHOD, Status.fromThrowable(failure),
                 durationNanos);
@@ -191,6 +200,17 @@ class ExecutionHooks {
         trigger.window(),
         trigger.sustainSamples(),
         action);
+  }
+
+  private boolean isControlFlow(Throwable failure) {
+    Throwable current = failure;
+    while (current != null) {
+      if (current instanceof PipelineControlFlowException) {
+        return true;
+      }
+      current = current.getCause();
+    }
+    return false;
   }
 
   private final class RetryAmplificationGuardMulti<T> extends AbstractMultiOperator<T, T> {

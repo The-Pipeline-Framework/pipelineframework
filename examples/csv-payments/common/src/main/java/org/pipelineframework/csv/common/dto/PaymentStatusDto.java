@@ -33,8 +33,8 @@ public class PaymentStatusDto {
   String status;
   String message;
   BigDecimal fee;
-  UUID ackPaymentSentId;
-  AckPaymentSentDto ackPaymentSent;
+  UUID conversationId;
+  Long statusCode;
   UUID paymentRecordId;
   PaymentRecordDto paymentRecord;
 

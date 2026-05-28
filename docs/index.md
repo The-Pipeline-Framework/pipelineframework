@@ -17,37 +17,21 @@ hero:
       link: https://app.pipelineframework.org
 ---
 
-<section class="home-cinematic-feature">
-  <div class="home-cinematic-copy">
-    <p class="home-cinematic-eyebrow">Await, provider, persistence, replay</p>
-    <h2>Keep the business stages simple while TPF runs the async edges and durable state around them</h2>
-    <p>
-      This cinematic is derived from a real CSV Payments replay. It shows the flow crossing an await boundary,
-      handing work to an external provider, resuming the primary path, and writing durable state without pushing
-      that coordination into the business functions themselves.
-    </p>
-    <div class="home-cinematic-links">
-      <a href="/replay-viewer/" class="home-cinematic-link primary">Open Replay Viewer</a>
-      <a href="/guide/operations/observability/replay" class="home-cinematic-link secondary">Replay &amp; Live Topology</a>
-    </div>
-  </div>
-  <div class="home-cinematic-media">
-    <video
-      class="home-cinematic-video"
-      autoplay
-      muted
-      loop
-      playsinline
-      preload="metadata"
-      poster="/home/replay-proof-poster.jpg"
-    >
-      <source src="/home/replay-proof.webm" type="video/webm" />
-      <source src="/home/replay-proof.mp4" type="video/mp4" />
-      Your browser does not support HTML5 video. Open
-      <a href="/home/replay-proof.mp4">the MP4 version</a>.
-    </video>
-  </div>
-</section>
+<figure class="home-cinematic-spotlight">
+  <video
+    class="home-cinematic-video"
+    autoplay
+    muted
+    loop
+    playsinline
+    preload="metadata"
+    poster="/home/replay-proof-poster.jpg"
+  >
+    <source src="/home/replay-proof.webm" type="video/webm" />
+    <source src="/home/replay-proof.mp4" type="video/mp4" />
+  </video>
+  <figcaption>Async pipeline motion: an await step hands work through Kafka to an external provider while TPF persists payment records automatically.</figcaption>
+</figure>
 
 <Callout type="tip" title="Fastest path: design with Canvas">
 Use <a href="https://app.pipelineframework.org" target="_blank" rel="noopener noreferrer">Canvas</a> when you want to sketch the flow visually and download a runnable Quarkus scaffold. The same model can then be refined through YAML, Java functions, existing-method operators, type mappers, and runtime configuration.
@@ -75,7 +59,7 @@ Use <a href="https://app.pipelineframework.org" target="_blank" rel="noopener no
     <h3>Reuse Existing Java Code</h3>
     <p>Turn an existing Java method or remote endpoint into a pipeline function without hiding its inputs and outputs.</p>
   </a>
-  <a class="home-capability-card" href="/guide/development/orchestrator-runtime">
+  <a class="home-capability-card" href="/guide/development/orchestrator-runtime/">
     <h3>Reliable Background Work</h3>
     <p>Store accepted work, retry failed transitions, recover after crashes, and send terminal failures to a dead-letter channel.</p>
   </a>
@@ -136,7 +120,7 @@ Generated code keeps business logic independent of whether a caller uses REST, g
 
 The generated runtime starts the flow, invokes each step, records execution state when configured, retries failed transitions, and exposes status/result endpoints for background work. For crash-surviving background execution, TPF can store accepted work outside the current JVM, recover it after restart, and send terminal execution failures to a **DLQ**, a dead-letter channel for investigation or replay.
 
-The exact config value for this mode is `QUEUE_ASYNC`; start with the [Orchestrator Runtime](/guide/development/orchestrator-runtime) guide before using it in production.
+The exact config value for this mode is `QUEUE_ASYNC`; start with the [Orchestrator Runtime](/guide/development/orchestrator-runtime/) guide before using it in production.
 
 Persistence and caching matter here more than the word "plugin" suggests. Persistence stores business outputs developers can query later from APIs, reports, or UIs. Caching protects expensive steps, speeds recomputation, and supports replay or rewind scenarios when downstream logic changes. Together they reduce the need to invent separate state stores, replay workflows, or read-model plumbing.
 
@@ -195,6 +179,6 @@ If you already have proven Java libraries or remote endpoints, operators let you
 - [Azure Functions Platform](/guide/development/azure-functions) for Azure development-time guidance.
 - [Google Cloud Run Functions Platform](/guide/development/google-cloud-run-functions) for the Google function-platform path.
 - [Multi-Cloud Function Providers](/guide/build/runtime-layouts/function-providers) for provider-specific function deployment targets.
-- [Orchestrator Runtime](/guide/development/orchestrator-runtime) for synchronous execution, background execution, crash recovery, and DLQ behaviour.
+- [Orchestrator Runtime](/guide/development/orchestrator-runtime/) for synchronous execution, background execution, crash recovery, and DLQ behaviour.
 - [Using Plugins](/guide/development/using-plugins) for persistence, cache, telemetry, and logging extensions.
 - [TPFGo Example](/guide/development/tpfgo-example) for checkpoint handoff between pipelines.

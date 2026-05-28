@@ -140,19 +140,10 @@ class InMemoryAwaitInteractionStoreTest {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         store.createOrGet(createCommand("idem-1", 10_000L, 70_000L)).await().indefinitely();
         store.createOrGet(new AwaitCreateCommand(
-            "tenant",
-            "execution-2",
-            "review",
-            "execution-2",
-            "idem-2",
-            "corr-2",
-            Map.of("orderId", "o-2"),
-            "bob",
-            "finance",
-            "interaction-api",
-            10_000L,
-            70_000L,
-            Long.MAX_VALUE)).await().indefinitely();
+            "tenant", "execution-2", "review", 0, String.class.getName(),
+            "cause-2", "idem-2", "corr-2", Map.of("orderId", "o-2"),
+            "bob", "finance", "interaction-api", "unit-2", null,
+            10_000L, 70_000L, Long.MAX_VALUE)).await().indefinitely();
 
         var alice = store.queryPending("tenant", "alice", null, null, 10).await().indefinitely();
         var finance = store.queryPending("tenant", null, "finance", null, 10).await().indefinitely();
@@ -204,22 +195,20 @@ class InMemoryAwaitInteractionStoreTest {
     }
 
     @Test
-    void findByBarrierReturnsItemsInIndexOrder() {
+    void findByUnitReturnsItemsInIndexOrder() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
-        store.createOrGet(barrierCommand("idem-2", "corr-2", 2)).await().indefinitely();
-        store.createOrGet(barrierCommand("idem-0", "corr-0", 0)).await().indefinitely();
-        store.createOrGet(barrierCommand("idem-1", "corr-1", 1)).await().indefinitely();
+        store.createOrGet(itemCommand("idem-2", "corr-2", 2)).await().indefinitely();
+        store.createOrGet(itemCommand("idem-0", "corr-0", 0)).await().indefinitely();
+        store.createOrGet(itemCommand("idem-1", "corr-1", 1)).await().indefinitely();
 
-        List<AwaitInteractionRecord> records = store.findByBarrier(
+        List<AwaitInteractionRecord> records = store.findByUnit(
                 "tenant",
-                "execution-1",
-                3,
-                "barrier-1")
+                "unit-1")
             .await().indefinitely();
 
         assertEquals(3, records.size());
-        assertEquals(List.of(0, 1, 2), records.stream().map(AwaitInteractionRecord::barrierItemIndex).toList());
-        assertTrue(records.stream().allMatch(AwaitInteractionRecord::barrierItem));
+        assertEquals(List.of(0, 1, 2), records.stream().map(AwaitInteractionRecord::itemIndex).toList());
+        assertTrue(records.stream().allMatch(AwaitInteractionRecord::itemInteraction));
     }
 
     @Test
@@ -294,10 +283,9 @@ class InMemoryAwaitInteractionStoreTest {
         store.createOrGet(createCommand("idem-1", 10_000L, 20_000L)).await().indefinitely();
         // Create one that won't expire
         store.createOrGet(new AwaitCreateCommand(
-            "tenant", "execution-2", "review",
-            "execution-2", "idem-2", "corr-2",
-            Map.of(), null, null, "interaction-api",
-            10_000L, 80_000L, Long.MAX_VALUE)).await().indefinitely();
+            "tenant", "execution-2", "review", 0, String.class.getName(),
+            "cause-2", "idem-2", "corr-2", Map.of(), null, null, "interaction-api",
+            "unit-2", null, 10_000L, 80_000L, Long.MAX_VALUE)).await().indefinitely();
 
         var timedOut = store.findTimedOut(21_000L, 10).await().indefinitely();
 
@@ -311,10 +299,9 @@ class InMemoryAwaitInteractionStoreTest {
         // Create multiple expired interactions
         for (int i = 0; i < 5; i++) {
             store.createOrGet(new AwaitCreateCommand(
-                "tenant", "execution-" + i, "review",
-                "exec-" + i, "idem-" + i, "corr-" + i,
-                Map.of(), null, null, "interaction-api",
-                10_000L, 20_000L, Long.MAX_VALUE)).await().indefinitely();
+                "tenant", "execution-" + i, "review", 0, String.class.getName(),
+                "cause-" + i, "idem-" + i, "corr-" + i, Map.of(), null, null, "interaction-api",
+                "unit-" + i, null, 10_000L, 20_000L, Long.MAX_VALUE)).await().indefinitely();
         }
 
         var timedOut = store.findTimedOut(21_000L, 3).await().indefinitely();
@@ -327,10 +314,9 @@ class InMemoryAwaitInteractionStoreTest {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         store.createOrGet(createCommand("idem-1", 10_000L, 70_000L)).await().indefinitely();
         store.createOrGet(new AwaitCreateCommand(
-            "tenant", "execution-2", "fraud-check",
-            "execution-2", "idem-2", "corr-2",
-            Map.of(), "alice", "finance", "interaction-api",
-            10_000L, 70_000L, Long.MAX_VALUE)).await().indefinitely();
+            "tenant", "execution-2", "fraud-check", 0, String.class.getName(),
+            "cause-2", "idem-2", "corr-2", Map.of(), "alice", "finance", "interaction-api",
+            "unit-2", null, 10_000L, 70_000L, Long.MAX_VALUE)).await().indefinitely();
 
         var reviewSteps = store.queryPending("tenant", null, null, "review", 10).await().indefinitely();
         var fraudSteps = store.queryPending("tenant", null, null, "fraud-check", 10).await().indefinitely();
@@ -460,19 +446,23 @@ class InMemoryAwaitInteractionStoreTest {
             "tenant",
             "execution-1",
             "review",
-            "execution-1",
+            0,
+            String.class.getName(),
+            "cause-1",
             idempotencyKey,
             "corr-1",
             Map.of("orderId", "o-1"),
             "alice",
             "finance",
             "interaction-api",
+            "unit-1",
+            null,
             nowEpochMs,
             deadlineEpochMs,
             Long.MAX_VALUE);
     }
 
-    private AwaitCreateCommand barrierCommand(String idempotencyKey, String correlationId, int itemIndex) {
+    private AwaitCreateCommand itemCommand(String idempotencyKey, String correlationId, int itemIndex) {
         return new AwaitCreateCommand(
             "tenant",
             "execution-1",
@@ -486,9 +476,8 @@ class InMemoryAwaitInteractionStoreTest {
             null,
             null,
             "kafka",
-            "barrier-1",
+            "unit-1",
             itemIndex,
-            3,
             10_000L,
             70_000L,
             Long.MAX_VALUE);

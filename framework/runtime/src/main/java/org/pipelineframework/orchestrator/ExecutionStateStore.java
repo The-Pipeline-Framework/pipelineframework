@@ -103,7 +103,7 @@ public interface ExecutionStateStore {
      * @param executionId execution identifier
      * @param expectedVersion current execution record version for optimistic concurrency
      * @param transitionKey idempotency key for the suspend transition
-     * @param awaitInteractionId external await interaction id used to correlate and deduplicate completions
+     * @param awaitUnitId durable await unit id that owns the suspended boundary
      * @param awaitStepIndex index of the await step that suspended execution
      * @param nowEpochMs transition timestamp
      * @return updated waiting execution when the transition wins optimistic concurrency, otherwise empty
@@ -113,7 +113,7 @@ public interface ExecutionStateStore {
         String executionId,
         long expectedVersion,
         String transitionKey,
-        String awaitInteractionId,
+        String awaitUnitId,
         int awaitStepIndex,
         long nowEpochMs) {
         return Uni.createFrom().failure(new UnsupportedOperationException("markWaitingExternal is not implemented"));
@@ -123,14 +123,13 @@ public interface ExecutionStateStore {
      * Stores a completed await payload and makes the execution due for continuation.
      *
      * <p>This method matches by {@link ExecutionStatus#WAITING_EXTERNAL} plus
-     * {@code awaitInteractionId}, not by expected version. Completion admission is idempotent and can race
+     * {@code awaitUnitId}, not by expected version. Completion admission is idempotent and can race
      * with duplicate external callbacks, so stores should return empty when the execution is no longer
-     * waiting for that interaction.</p>
+     * waiting for that await unit.</p>
      *
      * @param tenantId tenant identifier
      * @param executionId execution identifier
-     * @param awaitInteractionId external await interaction id used to match the waiting execution
-     * @param resumePayload payload used as input for the step after the await boundary
+     * @param awaitUnitId durable await unit id used to match the waiting execution
      * @param nextStepIndex next pipeline step index to execute
      * @param nowEpochMs transition timestamp
      * @return updated queued execution when completion is accepted, otherwise empty
@@ -138,8 +137,7 @@ public interface ExecutionStateStore {
     default Uni<Optional<ExecutionRecord<Object, Object>>> markAwaitCompleted(
         String tenantId,
         String executionId,
-        String awaitInteractionId,
-        Object resumePayload,
+        String awaitUnitId,
         int nextStepIndex,
         long nowEpochMs) {
         return Uni.createFrom().failure(new UnsupportedOperationException("markAwaitCompleted is not implemented"));

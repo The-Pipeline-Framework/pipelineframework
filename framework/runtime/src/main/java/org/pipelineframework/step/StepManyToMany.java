@@ -98,18 +98,16 @@ public interface StepManyToMany<I, O> extends Configurable, ManyToMany<I, O>, It
         .withBackOff(retryWait(), maxBackoff())
         .withJitter(jitter() ? 0.5 : 0.0)
         .atMost(retryLimit())
-        .onFailure().invoke(t -> {
-            LOG.infof(
-                "Step %s completed all retries (%s attempts) with failure: %s",
-                this.getClass().getSimpleName(),
-                retryLimit(),
-                t.getMessage()
-            );
-        })
         .onFailure().recoverWithMulti(error -> {
             if (shouldPropagateWithoutRecovery(error)) {
                 return Multi.createFrom().failure(error);
             }
+            LOG.infof(
+                "Step %s completed all retries (%s attempts) with failure: %s",
+                this.getClass().getSimpleName(),
+                retryLimit(),
+                error.getMessage()
+            );
             if (recoverOnFailure()) {
                 List<I> snapshot;
                 synchronized (sample) {

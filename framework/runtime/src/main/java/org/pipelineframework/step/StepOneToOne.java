@@ -94,14 +94,14 @@ public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, ItemRe
         })
         // Step 4: Unified error handling after retries exhausted
         .onFailure().recoverWithUni(failure -> {
+          if (shouldPropagateWithoutRecovery(failure)) {
+            return Uni.createFrom().failure(failure);
+          }
           LOG.infof(
               "Step %s failed after %s retries: %s",
               this.getClass().getSimpleName(),
               retryLimit(),
               failure.toString());
-          if (shouldPropagateWithoutRecovery(failure)) {
-            return Uni.createFrom().failure(failure);
-          }
           if (recoverOnFailure()) {
             return rejectItem(failedItem.get(), failure);
           }

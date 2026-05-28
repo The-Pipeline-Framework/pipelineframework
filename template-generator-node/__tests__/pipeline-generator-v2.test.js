@@ -189,14 +189,12 @@ messages:
 steps:
   - name: Await Payment Provider
     kind: await
-    cardinality: MANY_TO_MANY
+    cardinality: ONE_TO_ONE
     inputTypeName: PaymentRecord
     outputTypeName: PaymentStatus
     timeout: PT5M
     idempotencyKeyFields: [csvId]
     await:
-      dispatch:
-        mode: per-item
       correlation:
         strategy: signedResumeToken
       transport:
@@ -211,7 +209,6 @@ steps:
     const config = generator.loadConfig(configPath);
     expect(config.steps[0].kind).toBe('await');
     expect(config.steps[0].await.transport.type).toBe('kafka');
-    expect(config.steps[0].await.dispatch.mode).toBe('per-item');
   });
 
   test('toScaffoldConfig accepts interaction-api await steps without generating service modules', () => {
@@ -251,6 +248,118 @@ steps:
     expect(scaffold.steps[0].awaitTransportType).toBe('interaction-api');
     expect(scaffold.steps[0].generatesServiceModule).toBe(false);
     expect(scaffold.steps[0].serviceName).toBe('await-payment-provider-svc');
+  });
+
+  test('loadConfig accepts v2 internal service steps with top-level message names', () => {
+    const generator = new PipelineGenerator();
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipeline-generator-'));
+    const configPath = path.join(tempDir, 'internal-v2-config.yaml');
+    fs.writeFileSync(configPath, `version: 2
+appName: TestApp
+basePackage: com.example.test
+transport: REST
+runtimeLayout: MONOLITH
+messages:
+  PlaceOrder:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+  PendingApproval:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+steps:
+  - name: Create Pending Approval
+    service: com.example.test.create_pending_approval.service.ProcessCreatePendingApprovalService
+    cardinality: ONE_TO_ONE
+    inputTypeName: PlaceOrder
+    outputTypeName: PendingApproval
+`);
+
+    const config = generator.loadConfig(configPath);
+    expect(config.steps[0].service).toBe(
+      'com.example.test.create_pending_approval.service.ProcessCreatePendingApprovalService'
+    );
+    expect(config.steps[0].inputTypeName).toBe('PlaceOrder');
+    expect(config.steps[0].outputTypeName).toBe('PendingApproval');
+  });
+
+  test('generateFromConfig scaffolds mixed v2 internal-service and await projects', async () => {
+    const generator = new PipelineGenerator();
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipeline-generator-'));
+    const configPath = path.join(tempDir, 'mixed-interaction-await.yaml');
+    const outputPath = path.join(tempDir, 'generated-app');
+    fs.writeFileSync(configPath, `version: 2
+appName: Restaurant Approval
+basePackage: org.pipelineframework.restaurantapproval
+transport: REST
+runtimeLayout: MODULAR
+messages:
+  PlaceRestaurantOrderRequest:
+    fields:
+      - number: 1
+        name: requestId
+        type: uuid
+  PendingRestaurantApproval:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+  RestaurantDecision:
+    fields:
+      - number: 1
+        name: status
+        type: string
+  TerminalOrderState:
+    fields:
+      - number: 1
+        name: outcome
+        type: string
+steps:
+  - name: Validate Order Request
+    service: org.pipelineframework.restaurantapproval.validate_order_request.service.ProcessValidateOrderRequestService
+    cardinality: ONE_TO_ONE
+    inputTypeName: PlaceRestaurantOrderRequest
+    outputTypeName: PendingRestaurantApproval
+  - name: Await Restaurant Decision
+    kind: await
+    cardinality: ONE_TO_ONE
+    inputTypeName: PendingRestaurantApproval
+    outputTypeName: RestaurantDecision
+    timeout: PT30M
+    await:
+      correlation:
+        strategy: interactionId
+      transport:
+        type: interaction-api
+  - name: Finalize Restaurant Decision
+    service: org.pipelineframework.restaurantapproval.finalize_restaurant_decision.service.ProcessFinalizeRestaurantDecisionService
+    cardinality: ONE_TO_ONE
+    inputTypeName: RestaurantDecision
+    outputTypeName: TerminalOrderState
+`);
+
+    await generator.generateFromConfig(configPath, outputPath);
+
+    expect(fs.existsSync(path.join(outputPath, 'validate-order-request-svc'))).toBe(true);
+    expect(fs.existsSync(path.join(outputPath, 'finalize-restaurant-decision-svc'))).toBe(true);
+    expect(fs.existsSync(path.join(outputPath, 'await-restaurant-decision-svc'))).toBe(false);
+    expect(fs.existsSync(path.join(outputPath, 'config', 'pipeline.yaml'))).toBe(true);
+    expect(fs.existsSync(path.join(outputPath, 'common', 'src/main/java',
+      'org/pipelineframework/restaurantapproval/common/domain/PlaceRestaurantOrderRequest.java'))).toBe(true);
+    expect(fs.existsSync(path.join(
+      outputPath,
+      'validate-order-request-svc',
+      'src/main/java/org/pipelineframework/restaurantapproval/validate_order_request/service/ProcessValidateOrderRequestService.java'
+    ))).toBe(true);
+    const orchestratorProps = fs.readFileSync(
+      path.join(outputPath, 'orchestrator-svc', 'src/main/resources', 'application.properties'),
+      'utf8'
+    );
+    expect(orchestratorProps).toContain('pipeline.orchestrator.mode=QUEUE_ASYNC');
+    expect(orchestratorProps).toContain('pipeline.orchestrator.state-provider=memory');
   });
 
   test('toScaffoldConfig accepts webhook await steps without generating service modules', () => {
@@ -314,12 +423,11 @@ steps:
         {
           name: 'Await Payment Provider',
           kind: 'await',
-          cardinality: 'MANY_TO_MANY',
+          cardinality: 'ONE_TO_ONE',
           inputTypeName: 'PaymentRecord',
           outputTypeName: 'PaymentStatus',
           timeout: 'PT5M',
           await: {
-            dispatch: { mode: 'per-item' },
             correlation: { strategy: 'signedResumeToken' },
             transport: {
               type: 'kafka',

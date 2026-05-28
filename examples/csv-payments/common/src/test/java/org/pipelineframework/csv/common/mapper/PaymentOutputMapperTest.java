@@ -35,10 +35,22 @@ class PaymentOutputMapperTest {
     private PaymentOutputMapper mapper;
     private CommonConverters commonConverters;
     private PaymentStatusMapper paymentStatusMapper;
+    private PaymentRecordMapper paymentRecordMapper;
 
     @BeforeEach
     void setUp() {
         commonConverters = new CommonConverters();
+
+        PaymentRecordMapperImpl paymentRecordMapperImpl = new PaymentRecordMapperImpl();
+        try {
+            java.lang.reflect.Field commonConvertersField =
+                    PaymentRecordMapperImpl.class.getDeclaredField("commonConverters");
+            commonConvertersField.setAccessible(true);
+            commonConvertersField.set(paymentRecordMapperImpl, commonConverters);
+            paymentRecordMapper = paymentRecordMapperImpl;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to set PaymentRecordMapper dependencies", e);
+        }
 
         // Create PaymentStatusMapperImpl and set its dependencies
         PaymentStatusMapperImpl paymentStatusMapperImpl = new PaymentStatusMapperImpl();
@@ -48,10 +60,10 @@ class PaymentOutputMapperTest {
             commonConvertersField.setAccessible(true);
             commonConvertersField.set(paymentStatusMapperImpl, commonConverters);
 
-            java.lang.reflect.Field ackPaymentSentMapperField =
-                    PaymentStatusMapperImpl.class.getDeclaredField("ackPaymentSentMapper");
-            ackPaymentSentMapperField.setAccessible(true);
-            ackPaymentSentMapperField.set(paymentStatusMapperImpl, new AckPaymentSentMapperImpl());
+            java.lang.reflect.Field paymentRecordMapperField =
+                    PaymentStatusMapperImpl.class.getDeclaredField("paymentRecordMapper");
+            paymentRecordMapperField.setAccessible(true);
+            paymentRecordMapperField.set(paymentStatusMapperImpl, paymentRecordMapper);
 
             paymentStatusMapper = paymentStatusMapperImpl;
         } catch (Exception e) {
@@ -85,7 +97,9 @@ class PaymentOutputMapperTest {
         paymentStatus.setStatus("SUCCESS");
         paymentStatus.setMessage("Payment processed successfully");
         paymentStatus.setFee(new BigDecimal("1.50"));
-        paymentStatus.setAckPaymentSentId(UUID.randomUUID());
+        paymentStatus.setConversationId(UUID.randomUUID());
+        paymentStatus.setStatusCode(1000L);
+        paymentStatus.setPaymentRecordId(UUID.randomUUID());
         return paymentStatus;
     }
 

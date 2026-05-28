@@ -17,6 +17,7 @@
 package org.pipelineframework.processor.phase;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -75,6 +76,10 @@ class ModelExtractionPhaseTest {
         lenient().when(elementUtils.getTypeElement("org.pipelineframework.search.common.domain.CrawlRequest"))
             .thenReturn(mock(TypeElement.class));
         lenient().when(elementUtils.getTypeElement("org.pipelineframework.search.common.domain.RawDocument"))
+            .thenReturn(mock(TypeElement.class));
+        lenient().when(elementUtils.getTypeElement("org.pipelineframework.restaurantapproval.common.domain.PendingRestaurantApproval"))
+            .thenReturn(mock(TypeElement.class));
+        lenient().when(elementUtils.getTypeElement("org.pipelineframework.restaurantapproval.common.domain.RestaurantDecision"))
             .thenReturn(mock(TypeElement.class));
     }
 
@@ -294,14 +299,14 @@ class ModelExtractionPhaseTest {
         context.setPluginHost(false);
 
         StepDefinition stepDefinition = new StepDefinition(
-            "Process Ack Payment Sent",
+            "Process Invoice Approval",
             StepKind.INTERNAL,
-            ClassName.get("org.pipelineframework.csv.service", "ProcessAckPaymentSentService"),
+            ClassName.get("org.pipelineframework.example.service", "ProcessInvoiceApprovalService"),
             null,
             null, // no explicit mapper
             MapperFallbackMode.NONE,
-            ClassName.get("org.pipelineframework.csv.common.domain", "AckPaymentSent"),
-            ClassName.get("org.pipelineframework.csv.common.domain", "PaymentStatus"),
+            ClassName.get("org.pipelineframework.example.common.domain", "InvoiceApproval"),
+            ClassName.get("org.pipelineframework.example.common.domain", "InvoiceSettlement"),
             StreamingShape.UNARY_UNARY
         );
 
@@ -373,5 +378,98 @@ class ModelExtractionPhaseTest {
             model.outputMapping().mapperType());
         assertTrue(model.inputMapping().hasMapper());
         assertTrue(model.outputMapping().hasMapper());
+    }
+
+    @Test
+    void executeNormalizesShortAwaitTypesUsingTemplateBasePackage() throws Exception {
+        ModelContextRoleEnricher passthroughEnricher = new ModelContextRoleEnricher() {
+            @Override
+            List<PipelineStepModel> enrich(PipelineCompilationContext ctx, List<PipelineStepModel> baseModels) {
+                return baseModels;
+            }
+        };
+        ModelExtractionPhase phase = new ModelExtractionPhase(passthroughEnricher);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        context.setPipelineTemplateConfig(new org.pipelineframework.config.template.PipelineTemplateConfig(
+            "restaurant-approval",
+            "org.pipelineframework.restaurantapproval",
+            "REST",
+            List.of(),
+            java.util.Map.of()));
+        context.setStepDefinitions(List.of(new StepDefinition(
+            "Await Restaurant Decision",
+            StepKind.AWAIT,
+            null,
+            null,
+            Map.of(
+                "transport", Map.of("type", "interaction-api"),
+                "correlation", Map.of("strategy", "interactionId")),
+            "PT30M",
+            List.of("orderId"),
+            null,
+            null,
+            null,
+            MapperFallbackMode.NONE,
+            ClassName.get("", "PendingRestaurantApproval"),
+            ClassName.get("", "RestaurantDecision"),
+            StreamingShape.UNARY_UNARY
+        )));
+
+        phase.execute(context);
+
+        assertEquals(1, context.getStepModels().size());
+        PipelineStepModel model = context.getStepModels().getFirst();
+        assertEquals(
+            ClassName.get("org.pipelineframework.restaurantapproval.common.domain", "PendingRestaurantApproval"),
+            model.inboundDomainType());
+        assertEquals(
+            ClassName.get("org.pipelineframework.restaurantapproval.common.domain", "RestaurantDecision"),
+            model.outboundDomainType());
+        assertEquals("org.pipelineframework.restaurantapproval.service", model.servicePackage());
+    }
+
+    @Test
+    void executePreservesDistinctDeploymentRolesForSameServiceName() throws Exception {
+        ModelContextRoleEnricher roleDuplicatingEnricher = new ModelContextRoleEnricher() {
+            @Override
+            List<PipelineStepModel> enrich(PipelineCompilationContext ctx, List<PipelineStepModel> baseModels) {
+                PipelineStepModel base = baseModels.getFirst();
+                return List.of(
+                    base.toBuilder().deploymentRole(DeploymentRole.PIPELINE_SERVER).build(),
+                    base.toBuilder().deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT).build());
+            }
+        };
+        ModelExtractionPhase phase = new ModelExtractionPhase(roleDuplicatingEnricher);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        context.setPipelineTemplateConfig(new org.pipelineframework.config.template.PipelineTemplateConfig(
+            "restaurant-approval",
+            "org.pipelineframework.restaurantapproval",
+            "REST",
+            List.of(),
+            java.util.Map.of()));
+        context.setStepDefinitions(List.of(new StepDefinition(
+            "Await Restaurant Decision",
+            StepKind.AWAIT,
+            null,
+            null,
+            Map.of(
+                "transport", Map.of("type", "interaction-api"),
+                "correlation", Map.of("strategy", "interactionId")),
+            "PT30M",
+            List.of("orderId"),
+            null,
+            null,
+            null,
+            MapperFallbackMode.NONE,
+            ClassName.get("", "PendingRestaurantApproval"),
+            ClassName.get("", "RestaurantDecision"),
+            StreamingShape.UNARY_UNARY
+        )));
+
+        phase.execute(context);
+
+        assertEquals(2, context.getStepModels().size());
+        assertEquals(DeploymentRole.PIPELINE_SERVER, context.getStepModels().get(0).deploymentRole());
+        assertEquals(DeploymentRole.ORCHESTRATOR_CLIENT, context.getStepModels().get(1).deploymentRole());
     }
 }

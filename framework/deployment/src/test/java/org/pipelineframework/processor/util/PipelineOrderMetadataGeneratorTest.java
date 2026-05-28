@@ -109,6 +109,69 @@ class PipelineOrderMetadataGeneratorTest {
     }
 
     @Test
+    void writesAwaitClientStepToLocalExecutionOrderMetadata() throws IOException {
+        Path classOutput = tempDir.resolve("class-output-local-await");
+        Path moduleDir = tempDir.resolve("module-local-await");
+        Files.createDirectories(moduleDir);
+        Files.writeString(moduleDir.resolve("pipeline.yaml"), """
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            transport: "GRPC"
+            steps:
+              - name: "Fraud Check"
+                kind: "await"
+                input: "com.example.FraudCheckRequest"
+                output: "com.example.FraudCheckDecision"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "signedResumeToken"
+                  transport:
+                    type: "webhook"
+                    request:
+                      url: "https://partner.example/fraud-check"
+            """);
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(java.util.Map.of());
+        when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
+        RoundEnvironment roundEnv = mock(RoundEnvironment.class);
+
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        ctx.setTransportMode(TransportMode.GRPC);
+        ctx.setOrchestratorGenerated(false);
+        ctx.setModuleDir(moduleDir);
+
+        PipelineStepModel awaitModel = new PipelineStepModel.Builder()
+            .serviceName("FraudCheck")
+            .generatedName("FraudCheckService")
+            .servicePackage("com.example.fraud")
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .inputMapping(new TypeMapping(ClassName.get("com.example.fraud", "FraudCheckRequest"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("com.example.fraud", "FraudCheckDecision"), null, false))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .build();
+
+        ctx.setStepModels(List.of(awaitModel));
+
+        new PipelineOrderMetadataGenerator(processingEnv).writeOrderMetadata(ctx);
+
+        Path orderFile = classOutput.resolve("META-INF/pipeline/order.json");
+        assertTrue(Files.exists(orderFile), "order.json should be written");
+
+        JsonObject metadata = new Gson().fromJson(Files.readString(orderFile), JsonObject.class);
+        JsonArray order = metadata.getAsJsonArray("order");
+        assertEquals(1, order.size(), "Expected only the generated await client step in local order");
+
+        String firstStep = order.get(0).getAsString();
+        assertEquals("com.example.fraud.pipeline.FraudCheckAwaitClientStep", firstStep);
+    }
+
+    @Test
     void normalStepUsesTransportSpecificSuffix() throws IOException {
         Path classOutput = tempDir.resolve("class-output2");
         Path moduleDir = tempDir.resolve("module2");

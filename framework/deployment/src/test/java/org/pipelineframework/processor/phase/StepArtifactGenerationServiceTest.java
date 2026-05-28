@@ -1,9 +1,11 @@
 package org.pipelineframework.processor.phase;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.util.Set;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
+import javax.lang.model.util.Elements;
 
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
@@ -11,6 +13,7 @@ import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -55,6 +58,12 @@ class StepArtifactGenerationServiceTest {
 
     @Mock
     private Messager messager;
+
+    @Mock
+    private Elements elements;
+
+    @TempDir
+    Path tempDir;
 
     private StepArtifactGenerationService service;
 
@@ -148,6 +157,34 @@ class StepArtifactGenerationServiceTest {
         assertTrue(serviceDescriptor instanceof Descriptors.ServiceDescriptor);
         assertEquals("ChargeCard", ((Descriptors.ServiceDescriptor) serviceDescriptor).getName());
         assertEquals(DeploymentRole.PIPELINE_SERVER, contextCaptor.getValue().role());
+    }
+
+    @Test
+    void localSideEffectOnlyTargetGeneratesObservedBean() throws Exception {
+        when(processingEnv.getElementUtils()).thenReturn(elements);
+
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, null);
+        ctx.setGeneratedSourcesRoot(tempDir.resolve("generated-sources"));
+
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("ObservePersistenceInvoiceApprovalSideEffectService")
+            .generatedName("PersistenceInvoiceApprovalSideEffect")
+            .servicePackage("com.example.invoice")
+            .serviceClassName(ClassName.get("org.pipelineframework.plugin.persistence", "PersistenceService"))
+            .inputMapping(new TypeMapping(ClassName.get("com.example.invoice.domain", "InvoiceApproval"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("com.example.invoice.domain", "InvoiceApproval"), null, false))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(Set.of(GenerationTarget.GRPC_SERVICE_SIDE_EFFECT_ONLY))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+            .sideEffect(true)
+            .build();
+
+        invokeGenerateArtifacts(ctx, model);
+
+        Path generatedBean = tempDir.resolve(
+            "generated-sources/orchestrator-client/com/example/invoice/pipeline/ObservePersistenceInvoiceApprovalSideEffectService.java");
+        assertTrue(Files.exists(generatedBean));
     }
 
     private void invokeGenerateArtifacts(PipelineCompilationContext ctx, PipelineStepModel model) throws Exception {

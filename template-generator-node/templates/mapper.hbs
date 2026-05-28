@@ -12,21 +12,37 @@ import org.mapstruct.factory.Mappers;
     componentModel = "jakarta",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface {{className}}Mapper extends org.pipelineframework.mapper.Mapper<{{grpcClass}}.{{className}}, {{dtoClass}}, {{domainClass}}> {
+public interface {{className}}Mapper extends org.pipelineframework.mapper.Mapper<{{domainClass}}, {{grpcClass}}.{{className}}> {
 
   {{className}}Mapper INSTANCE = Mappers.getMapper( {{className}}Mapper.class );
 
   // Domain ↔ DTO
-  @Override
   {{dtoClass}} toDto({{domainClass}} entity);
 
-  @Override
   {{domainClass}} fromDto({{dtoClass}} dto);
 
   // DTO ↔ gRPC
-  @Override
   {{grpcClass}}.{{className}} toGrpc({{dtoClass}} dto);
 
-  @Override
   {{dtoClass}} fromGrpc({{grpcClass}}.{{className}} grpc);
+
+  @Override
+  default {{domainClass}} fromExternal({{grpcClass}}.{{className}} external) {
+    return fromDto(fromGrpc(external));
+  }
+
+  @Override
+  default {{grpcClass}}.{{className}} toExternal({{domainClass}} domain) {
+    return toGrpc(toDto(domain));
+  }
+
+  @Deprecated(since = "26.5.2", forRemoval = true)
+  default {{grpcClass}}.{{className}} toDtoToGrpc({{domainClass}} domain) {
+    return toGrpc(toDto(domain));
+  }
+
+  @Deprecated(since = "26.5.2", forRemoval = true)
+  default {{domainClass}} fromGrpcFromDto({{grpcClass}}.{{className}} grpc) {
+    return fromDto(fromGrpc(grpc));
+  }
 }

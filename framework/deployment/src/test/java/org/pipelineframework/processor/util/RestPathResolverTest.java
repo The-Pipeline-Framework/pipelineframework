@@ -19,55 +19,55 @@ class RestPathResolverTest {
     @Test
     void resourcefulStrategyUsesOutputTypeForUnaryUnary() {
         PipelineStepModel model = step(
-            "ProcessAckPaymentSentService",
-            "ProcessAckPaymentSentService",
+            "ProcessInvoiceApprovalService",
+            "ProcessInvoiceApprovalService",
             StreamingShape.UNARY_UNARY,
             false,
-            "AckPaymentSent",
-            "PaymentStatus");
+            "InvoiceApproval",
+            "InvoiceSettlement");
 
-        assertEquals("/api/v1/payment-status", RestPathResolver.resolveResourcePath(model, null));
+        assertEquals("/api/v1/invoice-settlement", RestPathResolver.resolveResourcePath(model, null));
         assertEquals("/", RestPathResolver.resolveOperationPath(null));
     }
 
     @Test
     void resourcefulStrategyUsesInputTypeForUnaryStreaming() {
         PipelineStepModel model = step(
-            "ProcessAckPaymentSentService",
-            "ProcessAckPaymentSentService",
+            "ProcessInvoiceApprovalService",
+            "ProcessInvoiceApprovalService",
             StreamingShape.UNARY_STREAMING,
             false,
-            "AckPaymentSent",
-            "PaymentStatus");
+            "InvoiceApproval",
+            "InvoiceSettlement");
 
-        assertEquals("/api/v1/ack-payment-sent", RestPathResolver.resolveResourcePath(model, null));
+        assertEquals("/api/v1/invoice-approval", RestPathResolver.resolveResourcePath(model, null));
     }
 
     @Test
     void resourcefulStrategyAddsPluginSegmentForSideEffects() {
         PipelineStepModel model = step(
-            "ObservePersistenceAckPaymentSentSideEffectService",
-            "PersistenceAckPaymentSentSideEffect",
+            "ObservePersistenceInvoiceApprovalSideEffectService",
+            "PersistenceInvoiceApprovalSideEffect",
             StreamingShape.UNARY_UNARY,
             true,
-            "AckPaymentSent",
-            "AckPaymentSent");
+            "InvoiceApproval",
+            "InvoiceApproval");
 
-        assertEquals("/api/v1/ack-payment-sent/persistence", RestPathResolver.resolveResourcePath(model, null));
+        assertEquals("/api/v1/invoice-approval/persistence", RestPathResolver.resolveResourcePath(model, null));
     }
 
     @Test
     @SetSystemProperty(key = RestPathResolver.REST_NAMING_STRATEGY_OPTION, value = "LEGACY")
     void legacyStrategyPreservesProcessNamingConvention() {
         PipelineStepModel model = step(
-            "ProcessAckPaymentSentService",
-            "ProcessAckPaymentSentReactiveService",
+            "ProcessInvoiceApprovalService",
+            "ProcessInvoiceApprovalReactiveService",
             StreamingShape.UNARY_UNARY,
             false,
-            "AckPaymentSent",
-            "PaymentStatus");
+            "InvoiceApproval",
+            "InvoiceSettlement");
 
-        assertEquals("/api/v1/process-ack-payment-sent", RestPathResolver.resolveResourcePath(model, null));
+        assertEquals("/api/v1/process-invoice-approval", RestPathResolver.resolveResourcePath(model, null));
         assertEquals("/process", RestPathResolver.resolveOperationPath(null));
     }
 
