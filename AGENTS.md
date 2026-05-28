@@ -95,7 +95,7 @@ Targeted unit-test coverage helper:
 Node/docs surfaces:
 
 - AI SDK compile/test surface: `./mvnw -f ai-sdk/pom.xml test`
-- Template generator tests live in the separate `The-Pipeline-Framework/tpf-mcp-bridge` repository.
+- Template generator tests live in the separate `The-Pipeline-Framework/tpf-mcp-bridge` repository. The generator-facing schema is exported from `framework/deployment` as `META-INF/pipeline/pipeline-template-schema.json` and consumed by that repo.
 - Web UI type/build checks: `npm --prefix web-ui run check`, `npm --prefix web-ui run build`
 - Docs build: `npm --prefix docs run build`
 

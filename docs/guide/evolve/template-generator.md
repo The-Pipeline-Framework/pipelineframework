@@ -18,10 +18,13 @@ The template generator creates a complete Maven multi-module pipeline project fr
 
 The generator source now lives in the separate [`tpf-mcp-bridge`](https://github.com/The-Pipeline-Framework/tpf-mcp-bridge) repository. The source in this repository no longer carries a local `template-generator-node` checkout.
 
+The generator-facing schema authority remains in this repository: `framework/deployment` packages `META-INF/pipeline/pipeline-template-schema.json` in the deployment artifact. The bridge repo vendors that generated schema for package/runtime use and refreshes it from a built framework artifact.
+
 ## Schema Reference
 
-Use the source JSON schema for automation:
+Use the exported JSON schema for automation:
 
+- `framework/deployment/target/classes/META-INF/pipeline/pipeline-template-schema.json`
 - <https://github.com/The-Pipeline-Framework/tpf-mcp-bridge/blob/main/template-generator-node/src/pipeline-template-schema.json>
 
 ## v2 Template Shape
