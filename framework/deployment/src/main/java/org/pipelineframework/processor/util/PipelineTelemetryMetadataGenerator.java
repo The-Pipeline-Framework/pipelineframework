@@ -561,7 +561,7 @@ public class PipelineTelemetryMetadataGenerator {
             resolveClientStepClassName(model, transportMode),
             logicalStep,
             service,
-            cardinality(model.streamingShape()),
+            cardinality(model, configStep),
             index,
             false,
             null,
@@ -1074,6 +1074,13 @@ public class PipelineTelemetryMetadataGenerator {
             case STREAMING_UNARY -> "many-to-one";
             case STREAMING_STREAMING -> "many-to-many";
         };
+    }
+
+    private String cardinality(PipelineStepModel model, PipelineYamlStep step) {
+        if (step != null && step.cardinality() != null && !step.cardinality().isBlank()) {
+            return cardinality(step);
+        }
+        return cardinality(model.streamingShape());
     }
 
     private String cardinality(PipelineYamlStep step) {

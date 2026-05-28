@@ -69,7 +69,6 @@ function startServer(rootDir) {
 }
 
 async function main() {
-async function main() {
   const args = parseArgs(process.argv);
   let server;
   let browser;
@@ -91,8 +90,9 @@ async function main() {
       throw new Error("Missing cinematic timing metadata for frame capture.");
     }
     const totalFrames = Math.ceil(clipDurationSeconds * fps);
-    const captureRoot = page.locator("`#captureRoot`");
+    const captureRoot = page.locator("#captureRoot");
     fs.mkdirSync(args.framesDir, { recursive: true });
+    fs.mkdirSync(path.dirname(args.poster), { recursive: true });
 
     await page.evaluate(() => window.homepageReplayCinematic.renderFrame(0.58));
     await captureRoot.screenshot({ path: args.poster, type: "jpeg", quality: 90 });

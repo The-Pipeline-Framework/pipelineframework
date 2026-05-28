@@ -188,8 +188,6 @@ class PipelineTelemetryMetadataGeneratorTest {
                 output: com.example.PaymentStatus
                 timeout: PT5M
                 await:
-                  dispatch:
-                    mode: per-item
                   correlation:
                     strategy: signedResumeToken
                   transport:
@@ -243,11 +241,12 @@ class PipelineTelemetryMetadataGeneratorTest {
             transport: GRPC
             steps:
               - name: Process Folder
+                cardinality: NOT_A_REAL_CARDINALITY
                 input: com.example.InputFolder
                 output: com.example.PaymentRecord
               - name: Await Payment Provider
                 kind: await
-                cardinality: NOT_A_REAL_CARDINALITY
+                cardinality: MANY_TO_MANY
                 input: com.example.PaymentRecord
                 output: com.example.PaymentStatus
               - name: Process Payment Status
@@ -264,7 +263,7 @@ class PipelineTelemetryMetadataGeneratorTest {
             () -> new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv()).writeTelemetryMetadata(ctx)
         );
         assertEquals(
-            "Invalid pipeline.yaml cardinality 'NOT_A_REAL_CARDINALITY' for step 'Await Payment Provider'. "
+            "Invalid pipeline.yaml cardinality 'NOT_A_REAL_CARDINALITY' for step 'Process Folder'. "
                 + "Allowed values: ONE_TO_ONE, ONE_TO_MANY, EXPANSION, MANY_TO_ONE, COLLAPSE, MANY_TO_MANY.",
             error.getMessage());
     }
