@@ -33,6 +33,7 @@ import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.data.SpanData;
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
+import io.opentelemetry.api.trace.StatusCode;
 import io.smallrye.mutiny.Multi;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -73,6 +74,35 @@ class PipelineTelemetryTest {
         tracerProvider.shutdown();
         meterProvider.shutdown();
         GlobalOpenTelemetry.resetForTest();
+    }
+
+    @Test
+    void abortRunOnlyEndsTargetRun() {
+        PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
+        PipelineTelemetry.RunContext target =
+            telemetry.startRun(Multi.createFrom().item(1), 1, ParallelismPolicy.AUTO, 4);
+        PipelineTelemetry.RunContext sibling =
+            telemetry.startRun(Multi.createFrom().item(2), 1, ParallelismPolicy.AUTO, 4);
+
+        telemetry.abortRun(target, new IllegalStateException("retry amplification"));
+
+        assertTrue(target.endSignalled().get(), "Expected target run to be ended by abort");
+        assertFalse(sibling.endSignalled().get(), "Expected sibling run to remain active");
+
+        Multi<Integer> completed =
+            (Multi<Integer>) telemetry.instrumentRunCompletion(Multi.createFrom().item(2), sibling);
+        completed.collect().asList().await().indefinitely();
+
+        List<SpanData> runSpans = exporter.getFinishedSpanItems().stream()
+            .filter(span -> "tpf.pipeline.run".equals(span.getName()))
+            .toList();
+        assertEquals(2, runSpans.size());
+        assertEquals(1, runSpans.stream()
+            .filter(span -> span.getStatus().getStatusCode() == StatusCode.ERROR)
+            .count());
+        assertEquals(1, runSpans.stream()
+            .filter(span -> span.getStatus().getStatusCode() == StatusCode.UNSET)
+            .count());
     }
 
     @Test
