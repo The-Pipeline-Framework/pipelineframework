@@ -123,7 +123,10 @@ function buildNodeSet(steps, transitions) {
   const mainline = orderedMainlineSteps(steps, transitions);
   const awaitStep = mainline.find((step) => displayRole(step) === "await");
   const explicitBroker = steps.find((step) => displayRole(step) === "broker");
-  const explicitProvider = steps.find((step) => displayRole(step) === "external-provider");
+  const explicitProvider = steps.find((step) => {
+    const role = displayRole(step);
+    return role === "provider" || role === "external-provider";
+  });
   const explicitStore = steps.find((step) => displayRole(step) === "store");
   const persistenceSteps = steps.filter((step) => displayRole(step) === "persistence-plugin");
   const nodes = [];
@@ -219,7 +222,10 @@ function buildEdges(transitions, nodes, mainline, awaitStep, persistenceSteps) {
     const from = mainline[index].step;
     const to = mainline[index + 1].step;
     const transition = transitions.find((candidate) => candidate.from === from && candidate.to === to);
-    addEdge(from, to, "primary", transition?.cardinality ?? "one-to-one");
+    if (!transition) {
+      continue;
+    }
+    addEdge(from, to, "primary", transition.cardinality ?? "one-to-one");
   }
   if (awaitStep && brokerNode && providerNode) {
     addEdge(awaitStep.step, brokerNode.id, "request");
