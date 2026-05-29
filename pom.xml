@@ -121,11 +121,6 @@
                         <target>21</target>
                         <release>21</release>
                         <enablePreview>true</enablePreview>
-                        <compilerArgs>
-                            <arg>-Apipeline.parallelism=${tpf.build.parallelism}</arg>
-                            <arg>-Apipeline.transport=${tpf.build.transport}</arg>
-                            <arg>-Apipeline.platform=${tpf.build.platform}</arg>
-                        </compilerArgs>
                         <annotationProcessorPaths>
                             <!-- lombok must come first -->
                             <path>
