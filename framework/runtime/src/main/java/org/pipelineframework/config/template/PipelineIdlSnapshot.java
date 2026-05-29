@@ -151,7 +151,8 @@ public record PipelineIdlSnapshot(
                 field.optional(),
                 field.repeated(),
                 field.deprecated(),
-                field.protoType()));
+                field.protoType(),
+                field.referenceable() == null ? null : field.referenceable().refField()));
         }
         MessageSnapshot candidate = new MessageSnapshot(messageName, snapshotFields, List.of(), List.of());
         MessageSnapshot existing = messages.get(messageName);
@@ -200,7 +201,8 @@ public record PipelineIdlSnapshot(
                 field.optional(),
                 field.repeated(),
                 field.deprecated(),
-                field.protoType()));
+                field.protoType(),
+                field.referenceable() == null ? null : field.referenceable().refField()));
         }
         return new MessageSnapshot(
             message.name(),
@@ -240,7 +242,8 @@ public record PipelineIdlSnapshot(
         boolean optional,
         boolean repeated,
         boolean deprecated,
-        String protoType
+        String protoType,
+        String referenceField
     ) {
     }
 

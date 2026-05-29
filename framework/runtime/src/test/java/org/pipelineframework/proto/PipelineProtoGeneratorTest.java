@@ -801,4 +801,47 @@ class PipelineProtoGeneratorTest {
             () -> new PipelineProtoGenerator().generate(tempDir, configPath, outputDir));
         assertTrue(ex.getMessage().contains("Invalid IDL compatibility baseline path"));
     }
+
+    @Test
+    void generatesPayloadReferenceTypeForPayloadRefFields() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Materialized Search"
+            basePackage: "com.example.search"
+            transport: "GRPC"
+            messages:
+              ParsedDocument:
+                fields:
+                  - number: 1
+                    name: "docId"
+                    type: "string"
+                  - number: 2
+                    name: "text"
+                    type: "string"
+                    optional: true
+                    referenceable:
+                      refField: "textRef"
+                  - number: 3
+                    name: "textRef"
+                    type: "payload_ref"
+                    optional: true
+            steps:
+              - name: "Pass Document"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ParsedDocument"
+                outputTypeName: "ParsedDocument"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-payload-ref.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-payload-ref-out");
+
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+
+        String typesContent = Files.readString(outputDir.resolve("pipeline-types.proto"));
+        assertTrue(typesContent.contains("message PayloadReference {"));
+        assertTrue(typesContent.contains("string provider = 1;"));
+        assertTrue(typesContent.contains("map<string, string> metadata = 9;"));
+        assertTrue(typesContent.contains("PayloadReference textRef = 3;"));
+        assertFalse(typesContent.contains("optional PayloadReference textRef = 3;"));
+    }
 }

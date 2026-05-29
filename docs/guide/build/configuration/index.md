@@ -163,6 +163,26 @@ Prefix: `pipeline.cache`
 | `pipeline.cache.caffeine.expire-after-access` | duration | none              | Expire entries after access for the Caffeine provider.                                                                   |
 | `pipeline.cache.redis.prefix`                 | string   | `pipeline-cache:` | Key prefix for Redis cache entries.                                                                                      |
 
+### Repository Materialization Configuration
+
+Prefix: `pipeline.repository`
+
+Repository materialization stores selected large fields out of line and keeps an inline `payload_ref` sibling field in the message. It is configured by materialization policy in the pipeline YAML; runtime properties select and tune the storage backend without changing business steps or runtime mappings.
+
+| Property                                      | Type    | Default                 | Description                                                                          |
+|-----------------------------------------------|---------|-------------------------|--------------------------------------------------------------------------------------|
+| `pipeline.repository.provider`                | string  | none                    | Repository provider name (`filesystem` or `s3`).                                     |
+| `pipeline.repository.provider.class`          | string  | none                    | Fully-qualified repository provider class name to lock selection at runtime.         |
+| `pipeline.repository.verify-checksum`         | boolean | `true`                  | Verify stored payload checksums on load.                                             |
+| `pipeline.repository.filesystem.root`         | string  | `target/tpf-repository` | Filesystem repository root for local development and deterministic tests.            |
+| `pipeline.repository.s3.bucket`               | string  | none                    | S3 bucket used by the S3 repository provider.                                        |
+| `pipeline.repository.s3.prefix`               | string  | empty                   | Optional key prefix for S3 objects.                                                  |
+| `pipeline.repository.s3.region`               | string  | none                    | AWS region for explicitly constructed S3 clients.                                    |
+| `pipeline.repository.s3.endpoint-override`    | string  | none                    | S3-compatible endpoint override, useful for LocalStack/MinIO.                        |
+| `pipeline.repository.s3.path-style`           | boolean | `false`                 | Enable path-style addressing for S3-compatible stores that require it.               |
+
+See [Field Materialization](/guide/plugins/materialization) for the YAML surface.
+
 ### Persistence Configuration
 
 Prefix: `pipeline.persistence`

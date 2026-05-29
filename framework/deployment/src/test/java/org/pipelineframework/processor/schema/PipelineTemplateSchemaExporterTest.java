@@ -58,12 +58,45 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("delegatedOrInternalStep"));
         assertTrue(definitions.has("v2Execution"));
         assertTrue(definitions.has("awaitTemplateStep"));
+        assertTrue(definitions.has("materialization"));
+        assertTrue(definitions.has("materializationAspect"));
 
         JsonObject properties = schema.getAsJsonObject("properties");
         assertTrue(properties.has("messages"));
         assertTrue(properties.has("unions"));
         assertTrue(properties.has("input"));
         assertTrue(properties.has("output"));
+        assertTrue(properties.has("materialization"));
+    }
+
+    @Test
+    void materializationSchemaIncludesReferenceablePayloadRefSurface() {
+        JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
+
+        JsonObject fieldDefinition = definitions.getAsJsonObject("v2FieldDefinition");
+        JsonObject fieldProperties = fieldDefinition.getAsJsonObject("properties");
+        assertTrue(fieldProperties.has("referenceable"));
+
+        JsonArray typeEnums = fieldProperties
+            .getAsJsonObject("type")
+            .getAsJsonArray("anyOf")
+            .get(0)
+            .getAsJsonObject()
+            .getAsJsonArray("enum");
+        assertContains(typeEnums, "payload_ref");
+
+        JsonObject referenceable = fieldProperties.getAsJsonObject("referenceable");
+        assertContains(referenceable.getAsJsonArray("required"), "refField");
+
+        JsonObject materializationAspect = definitions.getAsJsonObject("materializationAspect");
+        JsonObject materializationProperties = materializationAspect.getAsJsonObject("properties");
+        assertTrue(materializationProperties.has("action"));
+        assertTrue(materializationProperties.has("message"));
+        assertTrue(materializationProperties.has("fields"));
+        assertTrue(materializationProperties.has("targetSteps"));
+        assertContains(materializationAspect.getAsJsonArray("required"), "action");
+        assertContains(materializationAspect.getAsJsonArray("required"), "message");
+        assertContains(materializationAspect.getAsJsonArray("required"), "fields");
     }
 
     @Test

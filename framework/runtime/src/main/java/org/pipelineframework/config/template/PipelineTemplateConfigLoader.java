@@ -36,6 +36,9 @@ import org.pipelineframework.config.boundary.PipelineCheckpointConfig;
 import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
 import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
 import org.pipelineframework.config.boundary.PipelineSubscriptionConfig;
+import org.pipelineframework.materialization.MaterializationAction;
+import org.pipelineframework.materialization.MaterializationPosition;
+import org.pipelineframework.materialization.MaterializationScope;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -101,6 +104,7 @@ public class PipelineTemplateConfigLoader {
             : new LinkedHashMap<>();
         List<PipelineTemplateStep> steps = readSteps(rootMap, version);
         Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
+        PipelineTemplateMaterialization materialization = readMaterialization(rootMap);
         rejectLegacyConnectors(rootMap);
         PipelineInputBoundaryConfig input = readInputBoundary(rootMap);
         PipelineOutputBoundaryConfig output = readOutputBoundary(rootMap);
@@ -109,6 +113,7 @@ public class PipelineTemplateConfigLoader {
             collectInlineMessages(rawMessages, steps);
             Map<String, PipelineTemplateMessage> normalizedMessages = normalizeMessages(rawMessages);
             Map<String, PipelineTemplateUnion> normalizedUnions = normalizeUnions(rawUnions, normalizedMessages);
+            validateMaterialization(materialization, normalizedMessages, steps);
             steps = resolveV2Steps(steps, normalizedMessages, normalizedUnions);
             return new PipelineTemplateConfig(
                 version,
@@ -121,7 +126,8 @@ public class PipelineTemplateConfigLoader {
                 steps,
                 aspects,
                 input,
-                output);
+                output,
+                materialization);
         }
 
         return new PipelineTemplateConfig(
@@ -135,7 +141,8 @@ public class PipelineTemplateConfigLoader {
             steps,
             aspects,
             input,
-            output);
+            output,
+            materialization);
     }
 
     /**
@@ -248,6 +255,9 @@ public class PipelineTemplateConfigLoader {
             }
             if (PipelineTemplateTypeMappings.isBuiltinType(name)) {
                 throw new IllegalStateException("Message name '" + name + "' conflicts with a built-in semantic type");
+            }
+            if ("PayloadReference".equals(name)) {
+                throw new IllegalStateException("Message name 'PayloadReference' is reserved for payload_ref fields");
             }
             if (!(entry.getValue() instanceof Map<?, ?> messageMap)) {
                 LOG.warning("Skipping malformed message entry: key=" + name
@@ -363,6 +373,9 @@ public class PipelineTemplateConfigLoader {
         if (PipelineTemplateTypeMappings.isBuiltinType(typeName)) {
             throw new IllegalStateException("Message name '" + typeName + "' conflicts with a built-in semantic type");
         }
+        if ("PayloadReference".equals(typeName)) {
+            throw new IllegalStateException("Message name 'PayloadReference' is reserved for payload_ref fields");
+        }
         PipelineTemplateMessage existing = messages.get(typeName);
         if (existing == null) {
             messages.put(typeName, new PipelineTemplateMessage(typeName, inlineFields, new PipelineTemplateReserved(List.of(), List.of())));
@@ -395,9 +408,24 @@ public class PipelineTemplateConfigLoader {
             }
             PipelineTemplateReserved reserved = rawMessage.reserved();
             validateReserved(name, normalizedFields, reserved);
+            validateReferenceableMetadata(name, normalizedFields);
             normalized.put(name, new PipelineTemplateMessage(name, normalizedFields, reserved));
         }
         return normalized;
+    }
+
+    private void validateReferenceableMetadata(String messageName, List<PipelineTemplateField> fields) {
+        Map<String, PipelineTemplateField> fieldsByName = new LinkedHashMap<>();
+        for (PipelineTemplateField field : fields) {
+            fieldsByName.put(field.name(), field);
+        }
+        for (PipelineTemplateField field : fields) {
+            PipelineTemplateFieldReference reference = field.referenceable();
+            if (reference == null) {
+                continue;
+            }
+            validateReferenceableField("field metadata", messageName, field, fieldsByName);
+        }
     }
 
     private Map<String, PipelineTemplateUnion> normalizeUnions(
@@ -730,6 +758,7 @@ public class PipelineTemplateConfigLoader {
         String deprecatedSince = readString(fieldMap, "deprecatedSince");
         String comment = readString(fieldMap, "comment");
         PipelineTemplateFieldOverrides overrides = readOverrides(fieldMap.get("overrides"));
+        PipelineTemplateFieldReference referenceable = readReferenceable(fieldMap.get("referenceable"), name);
         return new PipelineTemplateField(
             number,
             name,
@@ -746,7 +775,28 @@ public class PipelineTemplateConfigLoader {
             since,
             deprecatedSince,
             comment,
-            overrides);
+            overrides,
+            referenceable);
+    }
+
+    private PipelineTemplateFieldReference readReferenceable(Object referenceableObj, String fieldName) {
+        if (referenceableObj == null) {
+            return null;
+        }
+        if (referenceableObj instanceof Boolean enabled) {
+            if (!enabled) {
+                return null;
+            }
+            throw new IllegalStateException("Field '" + fieldName + "' referenceable must declare refField");
+        }
+        if (!(referenceableObj instanceof Map<?, ?> referenceableMap)) {
+            throw new IllegalStateException("Field '" + fieldName + "' referenceable must be a YAML map");
+        }
+        String refField = readString(referenceableMap, "refField");
+        if (refField == null) {
+            throw new IllegalStateException("Field '" + fieldName + "' referenceable.refField must not be blank");
+        }
+        return new PipelineTemplateFieldReference(refField);
     }
 
     /**
@@ -910,6 +960,162 @@ public class PipelineTemplateConfigLoader {
             aspects.put(name, new PipelineTemplateAspect(enabled, scope, position, order, config));
         }
         return aspects;
+    }
+
+    private PipelineTemplateMaterialization readMaterialization(Map<?, ?> rootMap) {
+        Object materializationObj = rootMap.get("materialization");
+        if (materializationObj == null) {
+            return new PipelineTemplateMaterialization(List.of());
+        }
+        if (!(materializationObj instanceof Map<?, ?> materializationMap)) {
+            throw new IllegalArgumentException("materialization must be defined as a YAML map");
+        }
+        Object aspectsObj = materializationMap.get("aspects");
+        if (aspectsObj == null) {
+            return new PipelineTemplateMaterialization(List.of());
+        }
+        if (!(aspectsObj instanceof Iterable<?> aspectItems)) {
+            throw new IllegalArgumentException("materialization.aspects must be declared as a YAML list");
+        }
+        List<PipelineTemplateMaterializationAspect> aspects = new ArrayList<>();
+        for (Object aspectObj : aspectItems) {
+            if (!(aspectObj instanceof Map<?, ?> aspectMap)) {
+                throw new IllegalArgumentException("materialization aspect must be declared as a YAML map");
+            }
+            String position = readString(aspectMap, "position");
+            String scope = readString(aspectMap, "scope");
+            String action = readString(aspectMap, "action");
+            aspects.add(new PipelineTemplateMaterializationAspect(
+                readRequiredString(aspectMap, "name", "materialization.aspect"),
+                readBoolean(aspectMap, "enabled", true),
+                MaterializationScope.from(scope == null ? "GLOBAL" : scope),
+                MaterializationPosition.from(position == null ? "AFTER_STEP" : position),
+                readInt(aspectMap, "order", 0),
+                MaterializationAction.from(action),
+                readRequiredString(aspectMap, "message", "materialization.aspect"),
+                readMaterializationStringList(aspectMap, "fields"),
+                readMaterializationStringList(aspectMap, "targetSteps")));
+        }
+        return new PipelineTemplateMaterialization(aspects);
+    }
+
+    private List<String> readMaterializationStringList(Map<?, ?> map, String key) {
+        Object value = map.get(key);
+        if (value == null) {
+            return List.of();
+        }
+        if (!(value instanceof Iterable<?> values)) {
+            throw new IllegalArgumentException("materialization.aspect." + key + " must be declared as a YAML list");
+        }
+        List<String> items = new ArrayList<>();
+        for (Object element : values) {
+            String text = stringify(element);
+            if (text == null) {
+                throw new IllegalArgumentException("materialization.aspect." + key + " must not contain blank entries");
+            }
+            items.add(text);
+        }
+        return items;
+    }
+
+    private void validateMaterialization(
+        PipelineTemplateMaterialization materialization,
+        Map<String, PipelineTemplateMessage> messages,
+        List<PipelineTemplateStep> steps
+    ) {
+        if (materialization == null || materialization.aspects().isEmpty()) {
+            return;
+        }
+        Set<String> stepNames = new LinkedHashSet<>();
+        for (PipelineTemplateStep step : steps) {
+            if (step != null && step.name() != null) {
+                stepNames.add(step.name());
+            }
+        }
+        for (PipelineTemplateMaterializationAspect aspect : materialization.aspects()) {
+            validateMaterializationAspect(aspect, messages, stepNames);
+        }
+    }
+
+    private void validateMaterializationAspect(
+        PipelineTemplateMaterializationAspect aspect,
+        Map<String, PipelineTemplateMessage> messages,
+        Set<String> stepNames
+    ) {
+        if (aspect.name() == null) {
+            throw new IllegalStateException("materialization aspect name must not be blank");
+        }
+        PipelineTemplateMessage message = messages.get(aspect.message());
+        if (message == null) {
+            throw new IllegalStateException(
+                "Materialization aspect '" + aspect.name() + "' references unknown message '" + aspect.message() + "'");
+        }
+        if (aspect.fields().isEmpty()) {
+            throw new IllegalStateException("Materialization aspect '" + aspect.name() + "' must declare at least one field");
+        }
+        if (aspect.scope() == MaterializationScope.STEPS && aspect.targetSteps().isEmpty()) {
+            throw new IllegalStateException(
+                "Materialization aspect '" + aspect.name() + "' with scope STEPS must declare targetSteps");
+        }
+        for (String targetStep : aspect.targetSteps()) {
+            if (!stepNames.contains(targetStep)) {
+                throw new IllegalStateException(
+                    "Materialization aspect '" + aspect.name() + "' targets unknown step '" + targetStep + "'");
+            }
+        }
+        Map<String, PipelineTemplateField> fieldsByName = new LinkedHashMap<>();
+        for (PipelineTemplateField field : message.fields()) {
+            fieldsByName.put(field.name(), field);
+        }
+        for (String fieldName : aspect.fields()) {
+            PipelineTemplateField field = fieldsByName.get(fieldName);
+            if (field == null) {
+                throw new IllegalStateException(
+                    "Materialization aspect '" + aspect.name() + "' references unknown field '" + fieldName
+                        + "' on message '" + message.name() + "'");
+            }
+            validateReferenceableField(aspect.name(), message.name(), field, fieldsByName);
+        }
+    }
+
+    private void validateReferenceableField(
+        String aspectName,
+        String messageName,
+        PipelineTemplateField field,
+        Map<String, PipelineTemplateField> fieldsByName
+    ) {
+        PipelineTemplateFieldReference reference = field.referenceable();
+        if (reference == null || reference.refField() == null) {
+            throw new IllegalStateException(
+                "Materialization aspect '" + aspectName + "' field '" + field.name()
+                    + "' on message '" + messageName + "' is not referenceable");
+        }
+        if (field.repeated() || field.isMap()) {
+            throw new IllegalStateException(
+                "Materialization aspect '" + aspectName + "' field '" + field.name()
+                    + "' on message '" + messageName + "' cannot be repeated or map in v1");
+        }
+        if (!"string".equals(field.canonicalType()) && !"bytes".equals(field.canonicalType())) {
+            throw new IllegalStateException(
+                "Materialization aspect '" + aspectName + "' field '" + field.name()
+                    + "' on message '" + messageName + "' must be string or bytes in v1");
+        }
+        PipelineTemplateField refField = fieldsByName.get(reference.refField());
+        if (refField == null) {
+            throw new IllegalStateException(
+                "Referenceable field '" + field.name() + "' on message '" + messageName
+                    + "' points to missing refField '" + reference.refField() + "'");
+        }
+        if (!"payload_ref".equals(refField.canonicalType())) {
+            throw new IllegalStateException(
+                "Referenceable field '" + field.name() + "' on message '" + messageName
+                    + "' must point to a payload_ref field, got '" + refField.type() + "'");
+        }
+        if (!refField.optional()) {
+            throw new IllegalStateException(
+                "Referenceable field '" + field.name() + "' on message '" + messageName
+                    + "' must point to an optional payload_ref field");
+        }
     }
 
     private PipelineInputBoundaryConfig readInputBoundary(Map<?, ?> rootMap) {

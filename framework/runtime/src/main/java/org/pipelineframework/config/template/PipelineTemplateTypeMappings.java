@@ -43,6 +43,7 @@ final class PipelineTemplateTypeMappings {
         "currency",
         "uri",
         "path",
+        "payload_ref",
         "map");
 
     private static final Map<String, String> JAVA_TYPES = Map.ofEntries(
@@ -61,7 +62,8 @@ final class PipelineTemplateTypeMappings {
         Map.entry("bytes", "byte[]"),
         Map.entry("currency", "Currency"),
         Map.entry("uri", "URI"),
-        Map.entry("path", "Path"));
+        Map.entry("path", "Path"),
+        Map.entry("payload_ref", "org.pipelineframework.repository.PayloadReference"));
 
     private static final Map<String, String> PROTO_TYPES = Map.ofEntries(
         Map.entry("string", "string"),
@@ -79,7 +81,8 @@ final class PipelineTemplateTypeMappings {
         Map.entry("bytes", "bytes"),
         Map.entry("currency", "string"),
         Map.entry("uri", "string"),
-        Map.entry("path", "string"));
+        Map.entry("path", "string"),
+        Map.entry("payload_ref", "PayloadReference"));
     private static final Set<String> MAP_KEY_CANONICAL_TYPES = Set.of("string", "bool", "int32", "int64");
 
     /**
@@ -284,7 +287,8 @@ final class PipelineTemplateTypeMappings {
             field.since(),
             field.deprecatedSince(),
             field.comment(),
-            field.overrides());
+            field.overrides(),
+            field.referenceable());
     }
 
     /**
@@ -332,6 +336,7 @@ final class PipelineTemplateTypeMappings {
                 null,
                 null,
                 null,
+                null,
                 null);
         }
         if (isLegacyMapType(declaredType)) {
@@ -353,6 +358,7 @@ final class PipelineTemplateTypeMappings {
                 false,
                 false,
                 false,
+                null,
                 null,
                 null,
                 null,
@@ -380,6 +386,7 @@ final class PipelineTemplateTypeMappings {
             false,
             false,
             false,
+            null,
             null,
             null,
             null,

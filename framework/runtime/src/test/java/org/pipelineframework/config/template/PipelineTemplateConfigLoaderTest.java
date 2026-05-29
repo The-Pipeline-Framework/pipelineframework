@@ -13,6 +13,9 @@ import java.util.Map;
 import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.pipelineframework.materialization.MaterializationAction;
+import org.pipelineframework.materialization.MaterializationPosition;
+import org.pipelineframework.materialization.MaterializationScope;
 
 class PipelineTemplateConfigLoaderTest {
 
@@ -419,5 +422,218 @@ class PipelineTemplateConfigLoaderTest {
         PipelineTemplateConfig config = loader.load(configPath);
         assertEquals(PipelinePlatform.FUNCTION, config.platform());
         assertEquals("REST", config.transport());
+    }
+
+    @Test
+    void loadsReferenceableFieldAndMaterializationPolicy() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Materialized Search"
+            basePackage: "com.example.search"
+            transport: "GRPC"
+            messages:
+              ParsedDocument:
+                fields:
+                  - number: 1
+                    name: "docId"
+                    type: "string"
+                  - number: 2
+                    name: "text"
+                    type: "string"
+                    optional: true
+                    referenceable:
+                      refField: "textRef"
+                  - number: 3
+                    name: "textRef"
+                    type: "payload_ref"
+                    optional: true
+              SemanticChunk:
+                fields:
+                  - number: 1
+                    name: "docId"
+                    type: "string"
+                  - number: 2
+                    name: "text"
+                    type: "string"
+            steps:
+              - name: "Chunk Document"
+                cardinality: "ONE_TO_MANY"
+                inputTypeName: "ParsedDocument"
+                outputTypeName: "SemanticChunk"
+            materialization:
+              aspects:
+                - name: "chunker-needs-text"
+                  enabled: true
+                  scope: "STEPS"
+                  position: "BEFORE_STEP"
+                  targetSteps: ["Chunk Document"]
+                  action: "dereference"
+                  message: "ParsedDocument"
+                  fields: ["text"]
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-materialization.yaml");
+        Files.writeString(configPath, yaml);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        PipelineTemplateField text = config.messages().get("ParsedDocument").fields().stream()
+            .filter(field -> "text".equals(field.name()))
+            .findFirst()
+            .orElseThrow();
+        assertEquals("textRef", text.referenceable().refField());
+        PipelineTemplateField textRef = config.messages().get("ParsedDocument").fields().stream()
+            .filter(field -> "textRef".equals(field.name()))
+            .findFirst()
+            .orElseThrow();
+        assertEquals("payload_ref", textRef.canonicalType());
+
+        PipelineTemplateMaterializationAspect aspect = config.materialization().aspects().getFirst();
+        assertEquals("chunker-needs-text", aspect.name());
+        assertEquals(MaterializationScope.STEPS, aspect.scope());
+        assertEquals(MaterializationPosition.BEFORE_STEP, aspect.position());
+        assertEquals(MaterializationAction.DEREFERENCE, aspect.action());
+        assertEquals(List.of("Chunk Document"), aspect.targetSteps());
+        assertEquals(List.of("text"), aspect.fields());
+    }
+
+    @Test
+    void rejectsReferenceableFieldWithoutPayloadReferenceSibling() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Bad Materialization"
+            basePackage: "com.example.search"
+            transport: "GRPC"
+            messages:
+              ParsedDocument:
+                fields:
+                  - number: 1
+                    name: "text"
+                    type: "string"
+                    referenceable:
+                      refField: "textRef"
+                  - number: 2
+                    name: "textRef"
+                    type: "string"
+                    optional: true
+            steps: []
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-bad-referenceable.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException exception = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("payload_ref"));
+    }
+
+    @Test
+    void rejectsMaterializationPolicyForUnknownStep() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Bad Policy"
+            basePackage: "com.example.search"
+            transport: "GRPC"
+            messages:
+              ParsedDocument:
+                fields:
+                  - number: 1
+                    name: "text"
+                    type: "string"
+                    referenceable:
+                      refField: "textRef"
+                  - number: 2
+                    name: "textRef"
+                    type: "payload_ref"
+                    optional: true
+            steps: []
+            materialization:
+              aspects:
+                - name: "bad-target"
+                  scope: "STEPS"
+                  position: "AFTER_STEP"
+                  targetSteps: ["Parse Document"]
+                  action: "reference"
+                  message: "ParsedDocument"
+                  fields: ["text"]
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-bad-policy-step.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException exception = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("targets unknown step 'Parse Document'"));
+    }
+
+    @Test
+    void rejectsInlinePayloadReferenceMessageName() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Bad Inline Message"
+            basePackage: "com.example.search"
+            transport: "GRPC"
+            steps:
+              - name: "Inline Payload Reference"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "PayloadReference"
+                inputFields:
+                  - number: 1
+                    name: "key"
+                    type: "string"
+                outputTypeName: "PayloadReference"
+                outputFields:
+                  - number: 1
+                    name: "key"
+                    type: "string"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-bad-inline-payload-reference.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException exception = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("PayloadReference"));
+        assertTrue(exception.getMessage().contains("reserved for payload_ref fields"));
+    }
+
+    @Test
+    void rejectsBlankMaterializationFieldEntries() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Bad Policy"
+            basePackage: "com.example.search"
+            transport: "GRPC"
+            messages:
+              ParsedDocument:
+                fields:
+                  - number: 1
+                    name: "text"
+                    type: "string"
+                    referenceable:
+                      refField: "textRef"
+                  - number: 2
+                    name: "textRef"
+                    type: "payload_ref"
+                    optional: true
+            steps: []
+            materialization:
+              aspects:
+                - name: "bad-fields"
+                  action: "reference"
+                  message: "ParsedDocument"
+                  fields: ["text", " "]
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-bad-blank-materialization-field.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("fields"));
+        assertTrue(exception.getMessage().contains("blank entries"));
     }
 }

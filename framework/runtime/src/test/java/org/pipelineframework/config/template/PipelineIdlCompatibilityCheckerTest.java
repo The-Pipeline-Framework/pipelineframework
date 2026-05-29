@@ -348,6 +348,7 @@ class PipelineIdlCompatibilityCheckerTest {
             optional,
             repeated,
             deprecated,
-            protoType);
+            protoType,
+            null);
     }
 }

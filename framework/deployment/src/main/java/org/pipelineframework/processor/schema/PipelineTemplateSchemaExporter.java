@@ -194,6 +194,7 @@ public final class PipelineTemplateSchemaExporter {
                 "currency",
                 "uri",
                 "path",
+                "payload_ref",
                 "map"
               ]
             },
@@ -259,6 +260,20 @@ public final class PipelineTemplateSchemaExporter {
         },
         "overrides": {
           "$ref": "#/$defs/v2FieldOverrides"
+        },
+        "referenceable": {
+          "type": "object",
+          "description": "Allows this scalar field to be represented out-of-line using a sibling payload_ref field.",
+          "properties": {
+            "refField": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "refField"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -533,6 +548,88 @@ public final class PipelineTemplateSchemaExporter {
           }
         }
       ],
+      "additionalProperties": false
+    },
+    "materializationAspect": {
+      "type": "object",
+      "description": "Framework-owned representation aspect for field-level reference/dereference materialization.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "GLOBAL",
+            "STEPS"
+          ],
+          "default": "GLOBAL"
+        },
+        "position": {
+          "type": "string",
+          "enum": [
+            "BEFORE_STEP",
+            "AFTER_STEP"
+          ],
+          "default": "AFTER_STEP"
+        },
+        "order": {
+          "type": "integer",
+          "default": 0
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "reference",
+            "dereference",
+            "REFERENCE",
+            "DEREFERENCE"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "targetSteps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "name",
+        "action",
+        "message",
+        "fields"
+      ],
+      "additionalProperties": false
+    },
+    "materialization": {
+      "type": "object",
+      "description": "Representation-aspect policies for transparent field materialization.",
+      "properties": {
+        "aspects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/materializationAspect"
+          }
+        }
+      },
       "additionalProperties": false
     },
     "legacyTemplateStep": {
@@ -1238,6 +1335,9 @@ public final class PipelineTemplateSchemaExporter {
         ],
         "additionalProperties": false
       }
+    },
+    "materialization": {
+      "$ref": "#/$defs/materialization"
     },
     "input": {
       "$ref": "#/$defs/pipelineInputBoundary"
