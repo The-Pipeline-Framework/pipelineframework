@@ -161,6 +161,12 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <executions>
                     <execution>
+                        <id>default-compile</id>
+                        <configuration>
+                            <compilerArgs combine.self="override" />
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>compile-orchestrator-client</id>
                         <configuration>
                             <skipMain>true</skipMain>
