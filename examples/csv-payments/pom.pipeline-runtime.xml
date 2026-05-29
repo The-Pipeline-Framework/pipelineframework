@@ -18,6 +18,7 @@
 
     <modules>
         <module>common</module>
+        <module>payments-processing-svc</module>
         <module>pipeline-runtime-svc</module>
         <module>persistence-svc</module>
         <module>orchestrator-svc</module>

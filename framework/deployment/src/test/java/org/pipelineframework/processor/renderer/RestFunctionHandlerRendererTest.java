@@ -150,7 +150,7 @@ class RestFunctionHandlerRendererTest {
         assertTrue(source.contains("Optional.ofNullable(context != null ? context.getFunctionName() : null).orElse(\"missing-function\")"));
         assertTrue(source.contains("Optional.ofNullable(context != null ? context.getLogStreamName() : null).orElse(\"missing-execution\")"));
         assertTrue(source.contains("FunctionTransportContext.ATTR_RETRY_ATTEMPT, System.getProperty(\"tpf.transport.retry-attempt\", \"0\")"));
-        assertTrue(source.contains("FunctionTransportContext.ATTR_DISPATCH_TS_EPOCH_MS, Long.toString(System.currentTimeMillis())"));
+        assertTrue(source.contains("FunctionTransportContext.ATTR_DISPATCH_TS_EPOCH_MS, Long.toString(System.currentTimeMillis())))"));
     }
 
     private PipelineStepModel unaryModel() {

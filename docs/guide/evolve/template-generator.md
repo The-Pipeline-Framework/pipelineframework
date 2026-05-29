@@ -16,13 +16,16 @@ The template generator creates a complete Maven multi-module pipeline project fr
 - the orchestrator module
 - runtime config and test scaffolding
 
-The `sample-config` command emits **IDL v2** sample configs by default, while user-provided configs passed through `--config` are treated as v1 when `version` is not explicitly set.
+The generator source now lives in the separate [`tpf-mcp-bridge`](https://github.com/The-Pipeline-Framework/tpf-mcp-bridge) repository. The source in this repository no longer carries a local `template-generator-node` checkout.
+
+The generator-facing schema authority remains in this repository: `framework/deployment` packages `META-INF/pipeline/pipeline-template-schema.json` in the deployment artifact. The bridge repo vendors that generated schema for package/runtime use and refreshes it from a built framework artifact.
 
 ## Schema Reference
 
-Use the source JSON schema for automation:
+Use the exported JSON schema for automation:
 
-- <https://github.com/The-Pipeline-Framework/pipelineframework/blob/main/template-generator-node/src/pipeline-template-schema.json>
+- `framework/deployment/target/classes/META-INF/pipeline/pipeline-template-schema.json`
+- <https://github.com/The-Pipeline-Framework/tpf-mcp-bridge/blob/main/template-generator-node/src/pipeline-template-schema.json>
 
 ## v2 Template Shape
 
@@ -77,15 +80,14 @@ steps:
 
 ## Generating a Sample Config
 
-Run this command from the project root to generate a sample config:
+Use the generator snapshot in the `tpf-mcp-bridge` repository when you need a sample config or direct generator development:
 
 ```bash
-node template-generator-node/bin/generate.js sample-config
+git clone https://github.com/The-Pipeline-Framework/tpf-mcp-bridge.git
+cd tpf-mcp-bridge
 ```
 
-This produces a v2 sample config with top-level `messages`.
-
-Use the Node.js `sample-config` command when you want a lightweight v2 config scaffold. Use the Java JAR when you need the full runnable Maven and Java project structure.
+For normal application scaffolding, prefer the MCP bridge workflow and its `generate_scaffold` tool. The bridge owns the vendored generator snapshot used for scaffold creation.
 
 ## Generating an Application
 

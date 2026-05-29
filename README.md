@@ -190,7 +190,7 @@ Canvas is the preferred onboarding path, but TPF also supports template- and YAM
 - [`plugins`](plugins/) contains foundational cross-cutting capabilities such as persistence and cache.
 - [`docs`](docs/) contains the VitePress documentation site.
 - [`web-ui`](web-ui/) contains the Canvas/web UI.
-- [`template-generator-node`](template-generator-node/) contains template-generation and schema support.
+- [`tpf-mcp-bridge`](https://github.com/The-Pipeline-Framework/tpf-mcp-bridge) contains the MCP bridge and template-generation snapshot. `framework/deployment` remains the schema authority and exports `META-INF/pipeline/pipeline-template-schema.json` for that generator.
 - [`ai-sdk`](ai-sdk/) contains the standalone Java SDK used for AI/delegation and transport exercises.
 
 ## Build and Validation

@@ -1,6 +1,8 @@
 package org.pipelineframework.restaurantapproval.common.mapper;
 
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.restaurantapproval.common.domain.TerminalOrderState;
@@ -21,8 +23,10 @@ public interface TerminalOrderStateMapper
 
   TerminalOrderState fromDto(TerminalOrderStateDto dto);
 
+  @BeanMapping(unmappedTargetPolicy = ReportingPolicy.IGNORE)
   PipelineTypes.TerminalOrderState toGrpc(TerminalOrderStateDto dto);
 
+  @Mapping(target = "id", ignore = true)
   TerminalOrderStateDto fromGrpc(PipelineTypes.TerminalOrderState grpc);
 
   @Override

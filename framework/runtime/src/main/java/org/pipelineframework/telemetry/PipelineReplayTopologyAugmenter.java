@@ -66,7 +66,9 @@ final class PipelineReplayTopologyAugmenter {
                     nextIndex++,
                     sideEffect,
                     sideEffect ? event.from() : null,
-                    inferPluginKind(event, sideEffect));
+                    inferPluginKind(event, sideEffect),
+                    inferRenderRole(sideEffect, event),
+                    inferActorKind(sideEffect, event));
                 mergedSteps.add(step);
                 stepsByName.put(step.step(), step);
             }
@@ -105,6 +107,36 @@ final class PipelineReplayTopologyAugmenter {
         return null;
     }
 
+    private static String inferRenderRole(boolean sideEffect, PipelineExecutionEvent event) {
+        if (!sideEffect) {
+            return event != null && event.step() != null && event.step().toLowerCase().contains("await")
+                ? "await"
+                : "primary";
+        }
+        String pluginKind = inferPluginKind(event, true);
+        if ("reject".equals(pluginKind)) {
+            return "reject";
+        }
+        if ("persistence".equals(pluginKind)) {
+            return "persistence-plugin";
+        }
+        return "plugin";
+    }
+
+    private static String inferActorKind(boolean sideEffect, PipelineExecutionEvent event) {
+        if (!sideEffect) {
+            return null;
+        }
+        String pluginKind = inferPluginKind(event, true);
+        if ("persistence".equals(pluginKind)) {
+            return "database";
+        }
+        if ("reject".equals(pluginKind)) {
+            return "reject-queue";
+        }
+        return null;
+    }
+
     private static void ensureTransition(
         List<PipelineReplayTopology.Transition> transitions,
         Map<String, PipelineReplayTopology.Step> stepsByName,
@@ -129,6 +161,18 @@ final class PipelineReplayTopologyAugmenter {
             to,
             fromStep == null ? from + "Service" : fromStep.service(),
             toStep == null ? to + "Service" : toStep.service(),
-            cardinality == null ? "one-to-one" : cardinality));
+            cardinality == null ? "one-to-one" : cardinality,
+            inferRelationKind(toStep)));
+    }
+
+    private static String inferRelationKind(PipelineReplayTopology.Step toStep) {
+        String toRole = toStep == null ? null : toStep.renderRole();
+        if ("reject".equals(toRole)) {
+            return "reject";
+        }
+        if ("persistence-plugin".equals(toRole) || "store".equals(toRole)) {
+            return "store";
+        }
+        return "primary";
     }
 }

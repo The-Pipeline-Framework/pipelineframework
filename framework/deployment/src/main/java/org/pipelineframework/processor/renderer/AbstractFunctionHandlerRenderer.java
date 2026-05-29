@@ -476,7 +476,7 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
             "tpf.transport.retry-attempt",
             "0");
         builder.add(
-            "$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis()))",
+            "$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis())))",
             FUNCTION_TRANSPORT_CONTEXT,
             ClassName.get(Long.class),
             ClassName.get(System.class));

@@ -24,6 +24,7 @@ import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -512,7 +513,8 @@ final class ExecutionReplayTracker {
             .replace("LocalClientStep", "")
             .replace("Service", "");
         String service = step.endsWith("Service") ? step : step + "Service";
-        return new PipelineReplayTopology.Step(runtimeStepClass, step, service, "one-to-one", -1, false, null, null);
+        String renderRole = step.toLowerCase(Locale.ROOT).contains("await") ? "await" : "primary";
+        return new PipelineReplayTopology.Step(runtimeStepClass, step, service, "one-to-one", -1, false, null, null, renderRole, null);
     }
 
     private PipelineReplayTopology.Transition inbound(String runtimeStepClass) {

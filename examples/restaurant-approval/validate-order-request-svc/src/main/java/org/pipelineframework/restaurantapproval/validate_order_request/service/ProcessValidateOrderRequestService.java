@@ -3,7 +3,6 @@ package org.pipelineframework.restaurantapproval.validate_order_request.service;
 import org.pipelineframework.restaurantapproval.common.domain.PlaceRestaurantOrderRequest;
 import org.pipelineframework.restaurantapproval.common.domain.ValidatedRestaurantOrderRequest;
 import org.pipelineframework.annotation.PipelineStep;
-import org.pipelineframework.rest.RestReactiveServiceAdapter;
 import org.pipelineframework.service.ReactiveService;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -11,15 +10,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
 
-@PipelineStep(
-    inputType = org.pipelineframework.restaurantapproval.common.domain.PlaceRestaurantOrderRequest.class,
-    outputType = org.pipelineframework.restaurantapproval.common.domain.ValidatedRestaurantOrderRequest.class,
-    stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = org.pipelineframework.rest.RestReactiveServiceAdapter.class,
-    inboundMapper = org.pipelineframework.restaurantapproval.common.mapper.PlaceRestaurantOrderRequestMapper.class,
-    outboundMapper = org.pipelineframework.restaurantapproval.common.mapper.ValidatedRestaurantOrderRequestMapper.class,
-    runOnVirtualThreads = false
-)
+@PipelineStep
 @ApplicationScoped
 public class ProcessValidateOrderRequestService
     implements ReactiveService<PlaceRestaurantOrderRequest, ValidatedRestaurantOrderRequest> {

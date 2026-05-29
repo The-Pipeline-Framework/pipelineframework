@@ -103,7 +103,7 @@ const mainSidebar = [
             {
                 text: 'Orchestrator Runtime',
                 link: '/guide/development/orchestrator-runtime/',
-                collapsed: true,
+                collapsed: false,
                 items: [
                     {text: 'Overview', link: '/guide/development/orchestrator-runtime/'},
                     {text: 'Queue-Async Runtime', link: '/guide/development/orchestrator-runtime/queue-async'},
@@ -180,7 +180,7 @@ const mainSidebar = [
             {
                 text: 'Await Unit Runtime',
                 link: '/guide/evolve/await-unit-runtime/',
-                collapsed: true,
+                collapsed: false,
                 items: [
                     {text: 'Model', link: '/guide/evolve/await-unit-runtime/'},
                     {text: 'Sequences', link: '/guide/evolve/await-unit-runtime/sequences'},
@@ -383,6 +383,38 @@ export default withMermaid(
       server: {
         fs: {
           allow: ['../..']
+        }
+      },
+      build: {
+        // The docs intentionally ship local search and Mermaid support. Keep
+        // those large features isolated in named chunks, then set the warning
+        // limit to the largest expected feature chunk so routine docs builds
+        // stay quiet without hiding accidental growth in page bundles.
+        chunkSizeWarningLimit: 1800,
+        rollupOptions: {
+          output: {
+            manualChunks(id) {
+              if (!id.includes('node_modules')) {
+                return undefined
+              }
+              if (
+                id.includes('/mermaid/') ||
+                id.includes('/vitepress-plugin-mermaid/') ||
+                id.includes('/@mermaid-js/')
+              ) {
+                return 'mermaid'
+              }
+              if (
+                id.includes('/d3-') ||
+                id.includes('/dagre-d3-es/') ||
+                id.includes('/cytoscape/') ||
+                id.includes('/cytoscape-cose-bilkent/')
+              ) {
+                return 'diagram-layout'
+              }
+              return undefined
+            }
+          }
         }
       }
     },

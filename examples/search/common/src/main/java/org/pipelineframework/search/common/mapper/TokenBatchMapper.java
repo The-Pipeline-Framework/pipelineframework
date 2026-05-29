@@ -1,5 +1,6 @@
 package org.pipelineframework.search.common.mapper;
 
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.BeforeMapping;
 import org.mapstruct.ReportingPolicy;
@@ -22,6 +23,7 @@ public interface TokenBatchMapper extends org.pipelineframework.mapper.Mapper<To
   TokenBatch fromDto(TokenBatchDto dto);
 
   // DTO ↔ gRPC
+  @BeanMapping(unmappedTargetPolicy = ReportingPolicy.IGNORE)
   org.pipelineframework.search.grpc.PipelineTypes.TokenBatch toGrpc(TokenBatchDto dto);
 
   TokenBatchDto fromGrpc(org.pipelineframework.search.grpc.PipelineTypes.TokenBatch grpc);

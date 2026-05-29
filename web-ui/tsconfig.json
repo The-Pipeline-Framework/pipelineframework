@@ -10,8 +10,5 @@
     "sourceMap": true,
     "strict": true,
     "moduleResolution": "bundler"
-  },
-  "exclude": [
-    "update-templates.js"
-  ]
+  }
 }
