@@ -18,7 +18,7 @@ Supporting repo surfaces:
 
 - `examples`: reference applications, topology smoke paths, and end-to-end compatibility surfaces
 - `ai-sdk`: standalone Java SDK used for delegation/operator stress testing and mapper/transport exercises
-- `template-generator-node`: Node-based template generator and schema/templates
+- `tpf-mcp-bridge` (separate repo): MCP bridge and template generator snapshot
 - `web-ui`: SvelteKit Canvas/web UI
 - `docs`: VitePress documentation site
 
@@ -95,7 +95,7 @@ Targeted unit-test coverage helper:
 Node/docs surfaces:
 
 - AI SDK compile/test surface: `./mvnw -f ai-sdk/pom.xml test`
-- Template generator tests: `npm --prefix template-generator-node test`
+- Template generator tests live in the separate `The-Pipeline-Framework/tpf-mcp-bridge` repository. The generator-facing schema is exported from `framework/deployment` as `META-INF/pipeline/pipeline-template-schema.json` and consumed by that repo.
 - Web UI type/build checks: `npm --prefix web-ui run check`, `npm --prefix web-ui run build`
 - Docs build: `npm --prefix docs run build`
 
@@ -195,7 +195,7 @@ Prefer the split annotation-processor guide under `docs/guide/evolve/annotation-
   - `evolve`: internals, design notes, and backlog-oriented material
 - Keep risk registers, update reports, and future-work tracking out of user-facing docs unless they are actionable operator runbooks; place backlog/planning artifacts under `docs/guide/evolve/` or external issue trackers.
 - When changing operator or mapper semantics, update code + tests + docs together in the same change set.
-- When changing runtime-layout, generator, or Canvas/web UI semantics, update `template-generator-node`, `web-ui`, affected docs, and tests together when applicable.
+- When changing runtime-layout, generator, or Canvas/web UI semantics, update `web-ui`, affected docs, tests, and the separate `The-Pipeline-Framework/tpf-mcp-bridge` repository when applicable.
 
 ## PR Slicing Criteria
 

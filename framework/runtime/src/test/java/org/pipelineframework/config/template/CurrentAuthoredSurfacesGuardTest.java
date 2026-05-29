@@ -27,12 +27,10 @@ class CurrentAuthoredSurfacesGuardTest {
 
         Path docsGuide = requireDirectory(repoRoot.resolve("docs/guide"));
         Path examples = requireDirectory(repoRoot.resolve("examples"));
-        Path templateGenerator = requireDirectory(repoRoot.resolve("template-generator-node"));
         Path uiExportSurface = requireFile(repoRoot.resolve("web-ui/src/routes/+page.svelte"));
 
         scanMarkdown(docsGuide, violations);
         scanYaml(examples, violations);
-        scanYaml(templateGenerator, violations);
         scanUiExportSurface(uiExportSurface, violations);
 
         // Scan all example directories for internal step classes

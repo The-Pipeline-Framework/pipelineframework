@@ -1,7 +1,8 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pipelineframework.org/schemas/pipeline-template-config.schema.json",
   "title": "Pipeline Template Configuration",
-  "description": "Configuration schema for the Pipeline Template Generator",
+  "description": "Generator-facing pipeline template configuration schema exported by framework/deployment.",
   "type": "object",
   "$defs": {
     "operatorReference": {
@@ -20,7 +21,32 @@
           "description": "Java type of the field",
           "anyOf": [
             {
-              "enum": ["String", "Integer", "Long", "Double", "Float", "Boolean", "UUID", "BigDecimal", "Currency", "Path", "LocalDateTime", "LocalDate", "OffsetDateTime", "ZonedDateTime", "Instant", "Duration", "Period", "URI", "URL", "File", "BigInteger", "AtomicInteger", "AtomicLong", "List<String>"]
+              "enum": [
+                "String",
+                "Integer",
+                "Long",
+                "Double",
+                "Float",
+                "Boolean",
+                "UUID",
+                "BigDecimal",
+                "Currency",
+                "Path",
+                "LocalDateTime",
+                "LocalDate",
+                "OffsetDateTime",
+                "ZonedDateTime",
+                "Instant",
+                "Duration",
+                "Period",
+                "URI",
+                "URL",
+                "File",
+                "BigInteger",
+                "AtomicInteger",
+                "AtomicLong",
+                "List<String>"
+              ]
             },
             {
               "type": "string",
@@ -37,7 +63,23 @@
           "description": "Protobuf type of the field",
           "anyOf": [
             {
-              "enum": ["string", "int32", "int64", "double", "bool", "bytes", "float", "uint32", "uint64", "sint32", "sint64", "fixed32", "fixed64", "sfixed32", "sfixed64"]
+              "enum": [
+                "string",
+                "int32",
+                "int64",
+                "double",
+                "bool",
+                "bytes",
+                "float",
+                "uint32",
+                "uint64",
+                "sint32",
+                "sint64",
+                "fixed32",
+                "fixed64",
+                "sfixed32",
+                "sfixed64"
+              ]
             },
             {
               "type": "string",
@@ -50,7 +92,11 @@
           ]
         }
       },
-      "required": ["name", "type", "protoType"],
+      "required": [
+        "name",
+        "type",
+        "protoType"
+      ],
       "additionalProperties": false
     },
     "v2ProtoOverride": {
@@ -58,10 +104,20 @@
       "properties": {
         "encoding": {
           "type": "string",
-          "enum": ["string", "bool", "int32", "int64", "float", "double", "bytes"]
+          "enum": [
+            "string",
+            "bool",
+            "int32",
+            "int64",
+            "float",
+            "double",
+            "bytes"
+          ]
         }
       },
-      "required": ["encoding"],
+      "required": [
+        "encoding"
+      ],
       "additionalProperties": false
     },
     "v2FieldOverrides": {
@@ -87,7 +143,25 @@
           "type": "string",
           "anyOf": [
             {
-              "enum": ["string", "bool", "int32", "int64", "float32", "float64", "decimal", "uuid", "timestamp", "datetime", "date", "duration", "bytes", "currency", "uri", "path", "map"]
+              "enum": [
+                "string",
+                "bool",
+                "int32",
+                "int64",
+                "float32",
+                "float64",
+                "decimal",
+                "uuid",
+                "timestamp",
+                "datetime",
+                "date",
+                "duration",
+                "bytes",
+                "currency",
+                "uri",
+                "path",
+                "map"
+              ]
             },
             {
               "pattern": "^[A-Z][A-Za-z0-9_]*$"
@@ -96,13 +170,35 @@
         },
         "keyType": {
           "type": "string",
-          "enum": ["string", "bool", "int32", "int64"]
+          "enum": [
+            "string",
+            "bool",
+            "int32",
+            "int64"
+          ]
         },
         "valueType": {
           "type": "string",
           "anyOf": [
             {
-              "enum": ["string", "bool", "int32", "int64", "float32", "float64", "decimal", "uuid", "timestamp", "datetime", "date", "duration", "bytes", "currency", "uri", "path"]
+              "enum": [
+                "string",
+                "bool",
+                "int32",
+                "int64",
+                "float32",
+                "float64",
+                "decimal",
+                "uuid",
+                "timestamp",
+                "datetime",
+                "date",
+                "duration",
+                "bytes",
+                "currency",
+                "uri",
+                "path"
+              ]
             },
             {
               "pattern": "^[A-Z][A-Za-z0-9_]*$"
@@ -131,7 +227,11 @@
           "$ref": "#/$defs/v2FieldOverrides"
         }
       },
-      "required": ["number", "name", "type"],
+      "required": [
+        "number",
+        "name",
+        "type"
+      ],
       "allOf": [
         {
           "if": {
@@ -140,19 +240,28 @@
                 "const": "map"
               }
             },
-            "required": ["type"]
+            "required": [
+              "type"
+            ]
           },
           "then": {
-            "required": ["keyType", "valueType"]
+            "required": [
+              "keyType",
+              "valueType"
+            ]
           },
           "else": {
             "not": {
               "anyOf": [
                 {
-                  "required": ["keyType"]
+                  "required": [
+                    "keyType"
+                  ]
                 },
                 {
-                  "required": ["valueType"]
+                  "required": [
+                    "valueType"
+                  ]
                 }
               ]
             }
@@ -168,7 +277,10 @@
                 "const": true
               }
             },
-            "required": ["optional", "repeated"]
+            "required": [
+              "optional",
+              "repeated"
+            ]
           }
         }
       ],
@@ -207,40 +319,9 @@
           "$ref": "#/$defs/v2Reserved"
         }
       },
-      "required": ["fields"],
-      "additionalProperties": false
-    },
-    "v2UnionVariant": {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "pattern": "^[A-Z][A-Za-z0-9_]*$"
-        },
-        "number": {
-          "type": "integer",
-          "minimum": 1
-        }
-      },
-      "required": ["type", "number"],
-      "additionalProperties": false
-    },
-    "v2UnionDefinition": {
-      "type": "object",
-      "properties": {
-        "variants": {
-          "type": "object",
-          "minProperties": 1,
-          "propertyNames": {
-            "type": "string",
-            "pattern": "^[a-z][A-Za-z0-9_]*$"
-          },
-          "additionalProperties": {
-            "$ref": "#/$defs/v2UnionVariant"
-          }
-        }
-      },
-      "required": ["variants"],
+      "required": [
+        "fields"
+      ],
       "additionalProperties": false
     },
     "v2RemoteTarget": {
@@ -257,10 +338,14 @@
       },
       "oneOf": [
         {
-          "required": ["url"]
+          "required": [
+            "url"
+          ]
         },
         {
-          "required": ["urlConfigKey"]
+          "required": [
+            "urlConfigKey"
+          ]
         }
       ],
       "additionalProperties": false
@@ -280,7 +365,9 @@
           }
         }
       },
-      "required": ["publication"],
+      "required": [
+        "publication"
+      ],
       "additionalProperties": false
     },
     "pipelineOutputBoundary": {
@@ -304,7 +391,9 @@
           "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
         }
       },
-      "required": ["publication"],
+      "required": [
+        "publication"
+      ],
       "additionalProperties": false
     },
     "pipelineInputBoundary": {
@@ -318,11 +407,16 @@
     },
     "v2Execution": {
       "type": "object",
-      "required": ["mode"],
+      "required": [
+        "mode"
+      ],
       "properties": {
         "mode": {
           "type": "string",
-          "enum": ["LOCAL", "REMOTE"]
+          "enum": [
+            "LOCAL",
+            "REMOTE"
+          ]
         },
         "operatorId": {
           "type": "string",
@@ -330,7 +424,9 @@
         },
         "protocol": {
           "type": "string",
-          "enum": ["PROTOBUF_HTTP_V1"]
+          "enum": [
+            "PROTOBUF_HTTP_V1"
+          ]
         },
         "timeoutMs": {
           "type": "integer",
@@ -345,38 +441,58 @@
           "if": {
             "properties": {
               "mode": {
-                "enum": ["REMOTE"]
+                "enum": [
+                  "REMOTE"
+                ]
               }
             },
-            "required": ["mode"]
+            "required": [
+              "mode"
+            ]
           },
           "then": {
-            "required": ["operatorId", "protocol", "target"]
+            "required": [
+              "operatorId",
+              "protocol",
+              "target"
+            ]
           }
         },
         {
           "if": {
             "properties": {
               "mode": {
-                "enum": ["LOCAL"]
+                "enum": [
+                  "LOCAL"
+                ]
               }
             },
-            "required": ["mode"]
+            "required": [
+              "mode"
+            ]
           },
           "then": {
             "not": {
               "anyOf": [
                 {
-                  "required": ["operatorId"]
+                  "required": [
+                    "operatorId"
+                  ]
                 },
                 {
-                  "required": ["protocol"]
+                  "required": [
+                    "protocol"
+                  ]
                 },
                 {
-                  "required": ["target"]
+                  "required": [
+                    "target"
+                  ]
                 },
                 {
-                  "required": ["timeoutMs"]
+                  "required": [
+                    "timeoutMs"
+                  ]
                 }
               ]
             }
@@ -394,7 +510,16 @@
         },
         "cardinality": {
           "type": "string",
-          "enum": ["ONE_TO_ONE", "EXPANSION", "REDUCTION", "SIDE_EFFECT", "MANY_TO_MANY", "ONE_TO_MANY", "MANY_TO_ONE"]
+          "enum": [
+            "ONE_TO_ONE",
+            "EXPANSION",
+            "REDUCTION",
+            "COLLAPSE",
+            "SIDE_EFFECT",
+            "MANY_TO_MANY",
+            "ONE_TO_MANY",
+            "MANY_TO_ONE"
+          ]
         },
         "inputTypeName": {
           "type": "string"
@@ -426,7 +551,14 @@
           "type": "boolean"
         }
       },
-      "required": ["name", "cardinality", "inputTypeName", "inputFields", "outputTypeName", "outputFields"]
+      "required": [
+        "name",
+        "cardinality",
+        "inputTypeName",
+        "inputFields",
+        "outputTypeName",
+        "outputFields"
+      ]
     },
     "v2TemplateStep": {
       "type": "object",
@@ -435,13 +567,18 @@
         "name": {
           "type": "string"
         },
-        "kind": {
-          "type": "string",
-          "enum": ["await"]
-        },
         "cardinality": {
           "type": "string",
-          "enum": ["ONE_TO_ONE", "EXPANSION", "REDUCTION", "SIDE_EFFECT", "MANY_TO_MANY", "ONE_TO_MANY", "MANY_TO_ONE"]
+          "enum": [
+            "ONE_TO_ONE",
+            "EXPANSION",
+            "REDUCTION",
+            "COLLAPSE",
+            "SIDE_EFFECT",
+            "MANY_TO_MANY",
+            "ONE_TO_MANY",
+            "MANY_TO_ONE"
+          ]
         },
         "inputTypeName": {
           "type": "string",
@@ -474,125 +611,38 @@
         "parallel": {
           "type": "boolean"
         },
-        "timeout": {
+        "execution": {
+          "$ref": "#/$defs/v2Execution"
+        },
+        "id": {
           "type": "string",
           "minLength": 1
         },
-        "idempotencyKeyFields": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
+        "kind": {
+          "type": "string",
+          "enum": [
+            "internal",
+            "delegated",
+            "remote"
+          ]
         },
-        "await": {
-          "type": "object",
-          "properties": {
-            "correlation": {
-              "type": "object",
-              "properties": {
-                "strategy": {
-                  "type": "string",
-                  "enum": ["interactionId", "signedResumeToken"]
-                }
-              },
-              "required": ["strategy"],
-              "additionalProperties": false
-            },
-            "transport": {
-              "type": "object",
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "enum": ["interaction-api", "webhook", "kafka"]
-                },
-                "request": {
-                  "type": "object",
-                  "properties": {
-                    "url": {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    "method": {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    "topic": {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    "key": {
-                      "type": "string",
-                      "enum": ["interactionId", "correlationId"]
-                    }
-                  },
-                  "additionalProperties": true
-                },
-                "response": {
-                  "type": "object",
-                  "properties": {
-                    "topic": {
-                      "type": "string",
-                      "minLength": 1
-                    }
-                  },
-                  "additionalProperties": true
-                },
-                "consumer": {
-                  "type": "object",
-                  "properties": {
-                    "group": {
-                      "type": "string",
-                      "minLength": 1
-                    }
-                  },
-                  "additionalProperties": true
-                },
-                "headers": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
-                  }
-                },
-                "callback": {
-                  "type": "object",
-                  "properties": {
-                    "baseUrl": {
-                      "type": "string",
-                      "minLength": 1
-                    }
-                  },
-                  "additionalProperties": true
-                }
-              },
-              "required": ["type"],
-              "additionalProperties": true
-            }
-          },
-          "required": ["transport", "correlation"],
-          "additionalProperties": false
+        "flowRole": {
+          "type": "string",
+          "minLength": 1
         },
-        "execution": {
-          "$ref": "#/$defs/v2Execution"
+        "flowBoundaryRationale": {
+          "type": "string"
+        },
+        "inboundMapper": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+        },
+        "outboundMapper": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
         }
       },
       "allOf": [
-        {
-          "if": {
-            "properties": {
-              "kind": {
-                "const": "await"
-              }
-            },
-            "required": ["kind"]
-          },
-          "then": {
-            "required": ["timeout", "await"],
-            "not": {
-              "required": ["execution"]
-            }
-          }
-        },
         {
           "if": {
             "properties": {
@@ -600,24 +650,37 @@
                 "type": "object",
                 "properties": {
                   "mode": {
-                    "enum": ["REMOTE"]
+                    "enum": [
+                      "REMOTE"
+                    ]
                   }
                 },
-                "required": ["mode"]
+                "required": [
+                  "mode"
+                ]
               }
             },
-            "required": ["execution"]
+            "required": [
+              "execution"
+            ]
           },
           "then": {
             "properties": {
               "cardinality": {
-                "enum": ["ONE_TO_ONE"]
+                "enum": [
+                  "ONE_TO_ONE"
+                ]
               }
             }
           }
         }
       ],
-      "required": ["name", "cardinality", "inputTypeName", "outputTypeName"]
+      "required": [
+        "name",
+        "cardinality",
+        "inputTypeName",
+        "outputTypeName"
+      ]
     },
     "delegatedOrInternalStep": {
       "type": "object",
@@ -625,10 +688,6 @@
         "name": {
           "type": "string",
           "description": "Name of the step (e.g., Process Customer)"
-        },
-        "cardinality": {
-          "type": "string",
-          "enum": ["ONE_TO_ONE", "EXPANSION", "REDUCTION", "SIDE_EFFECT", "MANY_TO_MANY", "ONE_TO_MANY", "MANY_TO_ONE"]
         },
         "service": {
           "type": "string",
@@ -648,48 +707,9 @@
           "description": "Fully qualified class name of the input type",
           "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
         },
-        "inputTypeName": {
-          "type": "string",
-          "pattern": "^[A-Z][A-Za-z0-9_]*$"
-        },
-        "inputFields": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/v2FieldDefinition"
-          }
-        },
         "output": {
           "type": "string",
           "description": "Fully qualified class name of the output type",
-          "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
-        },
-        "outputTypeName": {
-          "type": "string",
-          "pattern": "^[A-Z][A-Za-z0-9_]*$"
-        },
-        "outputFields": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/v2FieldDefinition"
-          }
-        },
-        "batchSize": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "batchTimeoutMs": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "parallel": {
-          "type": "boolean"
-        },
-        "inboundMapper": {
-          "type": "string",
-          "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
-        },
-        "outboundMapper": {
-          "type": "string",
           "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
         },
         "operatorMapper": {
@@ -702,101 +722,311 @@
         },
         "mapperFallback": {
           "type": "string",
-          "enum": ["NONE", "JACKSON", "none", "jackson"]
+          "enum": [
+            "NONE",
+            "JACKSON",
+            "none",
+            "jackson"
+          ]
         }
       },
       "oneOf": [
         {
-          "required": ["name", "service"]
+          "required": [
+            "name",
+            "service"
+          ]
         },
         {
-          "required": ["name", "operator"]
+          "required": [
+            "name",
+            "operator"
+          ]
         },
         {
-          "required": ["name", "delegate"]
+          "required": [
+            "name",
+            "delegate"
+          ]
         }
       ],
       "allOf": [
         {
           "if": {
-            "required": ["input"]
+            "required": [
+              "input"
+            ]
           },
           "then": {
-            "required": ["output"]
+            "required": [
+              "output"
+            ]
           }
         },
         {
           "if": {
-            "required": ["output"]
+            "required": [
+              "output"
+            ]
           },
           "then": {
-            "required": ["input"]
-          }
-        },
-        {
-          "if": {
-            "required": ["inputTypeName"]
-          },
-          "then": {
-            "required": ["outputTypeName"]
-          }
-        },
-        {
-          "if": {
-            "required": ["outputTypeName"]
-          },
-          "then": {
-            "required": ["inputTypeName"]
+            "required": [
+              "input"
+            ]
           }
         },
         {
           "not": {
-            "required": ["operatorMapper", "externalMapper"]
-          }
-        },
-        {
-          "if": {
-            "required": ["service"]
-          },
-          "then": {
-            "not": {
-              "anyOf": [
-                {
-                  "required": ["operatorMapper"]
-                },
-                {
-                  "required": ["externalMapper"]
-                }
-              ]
-            }
-          }
-        },
-        {
-          "if": {
-            "anyOf": [
-              {
-                "required": ["operator"]
-              },
-              {
-                "required": ["delegate"]
-              }
+            "required": [
+              "operatorMapper",
+              "externalMapper"
             ]
-          },
-          "then": {
-            "not": {
-              "anyOf": [
-                {
-                  "required": ["inboundMapper"]
-                },
-                {
-                  "required": ["outboundMapper"]
-                }
-              ]
-            }
           }
         }
       ],
       "additionalProperties": false
+    },
+    "v2UnionVariant": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "type": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][A-Za-z0-9_]*$"
+        }
+      },
+      "required": [
+        "number",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "v2UnionDefinition": {
+      "type": "object",
+      "properties": {
+        "variants": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/v2UnionVariant"
+          },
+          "minProperties": 1
+        }
+      },
+      "required": [
+        "variants"
+      ],
+      "additionalProperties": false
+    },
+    "awaitCorrelation": {
+      "type": "object",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "strategy"
+      ],
+      "additionalProperties": true
+    },
+    "awaitTransport": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "request": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "callback": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "response": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "consumer": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "dispatch": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": true
+    },
+    "awaitConfig": {
+      "type": "object",
+      "properties": {
+        "correlation": {
+          "$ref": "#/$defs/awaitCorrelation"
+        },
+        "transport": {
+          "$ref": "#/$defs/awaitTransport"
+        },
+        "dispatch": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "correlation",
+        "transport"
+      ],
+      "additionalProperties": true
+    },
+    "awaitTemplateStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "await"
+        },
+        "cardinality": {
+          "type": "string",
+          "enum": [
+            "ONE_TO_ONE",
+            "EXPANSION",
+            "REDUCTION",
+            "COLLAPSE",
+            "SIDE_EFFECT",
+            "MANY_TO_MANY",
+            "ONE_TO_MANY",
+            "MANY_TO_ONE"
+          ]
+        },
+        "inputTypeName": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "inputFields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/v2FieldDefinition"
+          }
+        },
+        "inboundMapper": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+        },
+        "outputTypeName": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "outputFields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/v2FieldDefinition"
+          }
+        },
+        "outboundMapper": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+        },
+        "input": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+        },
+        "output": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+        },
+        "timeout": {
+          "type": "string",
+          "minLength": 1
+        },
+        "idempotencyKeyFields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "await": {
+          "$ref": "#/$defs/awaitConfig"
+        },
+        "batchSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "batchTimeoutMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "parallel": {
+          "type": "boolean"
+        },
+        "flowRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "flowBoundaryRationale": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "anyOf": [
+            {
+              "required": [
+                "inputTypeName",
+                "outputTypeName"
+              ]
+            },
+            {
+              "required": [
+                "input",
+                "output"
+              ]
+            }
+          ]
+        }
+      ],
+      "required": [
+        "name",
+        "kind",
+        "cardinality",
+        "timeout",
+        "await"
+      ]
     }
   },
   "allOf": [
@@ -807,7 +1037,9 @@
             "const": 2
           }
         },
-        "required": ["version"]
+        "required": [
+          "version"
+        ]
       },
       "then": {
         "properties": {
@@ -815,6 +1047,9 @@
             "type": "array",
             "items": {
               "oneOf": [
+                {
+                  "$ref": "#/$defs/awaitTemplateStep"
+                },
                 {
                   "$ref": "#/$defs/v2TemplateStep"
                 },
@@ -828,13 +1063,8 @@
       },
       "else": {
         "not": {
-          "anyOf": [
-            {
-              "required": ["messages"]
-            },
-            {
-              "required": ["unions"]
-            }
+          "required": [
+            "messages"
           ]
         },
         "properties": {
@@ -858,7 +1088,10 @@
   "properties": {
     "version": {
       "type": "integer",
-      "enum": [1, 2],
+      "enum": [
+        1,
+        2
+      ],
       "default": 1
     },
     "appName": {
@@ -873,13 +1106,39 @@
     "transport": {
       "type": "string",
       "description": "Global transport for generated adapters",
-      "enum": ["GRPC", "REST", "LOCAL"],
+      "enum": [
+        "GRPC",
+        "REST",
+        "LOCAL"
+      ],
       "default": "GRPC"
+    },
+    "platform": {
+      "type": "string",
+      "description": "Target deployment platform for generated build wiring",
+      "enum": [
+        "COMPUTE",
+        "FUNCTION",
+        "STANDARD",
+        "LAMBDA",
+        "compute",
+        "function",
+        "standard",
+        "lambda"
+      ],
+      "default": "COMPUTE"
     },
     "runtimeLayout": {
       "type": "string",
       "description": "Target runtime layout intent for generated runtime-mapping files",
-      "enum": ["MODULAR", "PIPELINE_RUNTIME", "MONOLITH", "modular", "pipeline-runtime", "monolith"],
+      "enum": [
+        "MODULAR",
+        "PIPELINE_RUNTIME",
+        "MONOLITH",
+        "modular",
+        "pipeline-runtime",
+        "monolith"
+      ],
       "default": "MODULAR"
     },
     "messages": {
@@ -890,16 +1149,6 @@
       },
       "additionalProperties": {
         "$ref": "#/$defs/v2MessageDefinition"
-      }
-    },
-    "unions": {
-      "type": "object",
-      "propertyNames": {
-        "type": "string",
-        "pattern": "^[A-Z][A-Za-z0-9_]*$"
-      },
-      "additionalProperties": {
-        "$ref": "#/$defs/v2UnionDefinition"
       }
     },
     "steps": {
@@ -924,12 +1173,18 @@
           "scope": {
             "type": "string",
             "description": "Scope of the aspect application",
-            "enum": ["GLOBAL", "STEPS"]
+            "enum": [
+              "GLOBAL",
+              "STEPS"
+            ]
           },
           "position": {
             "type": "string",
             "description": "Position relative to the step",
-            "enum": ["BEFORE_STEP", "AFTER_STEP"]
+            "enum": [
+              "BEFORE_STEP",
+              "AFTER_STEP"
+            ]
           },
           "order": {
             "type": "integer",
@@ -942,7 +1197,11 @@
             "additionalProperties": true
           }
         },
-        "required": ["enabled", "scope", "position"],
+        "required": [
+          "enabled",
+          "scope",
+          "position"
+        ],
         "additionalProperties": false
       }
     },
@@ -951,7 +1210,21 @@
     },
     "output": {
       "$ref": "#/$defs/pipelineOutputBoundary"
+    },
+    "unions": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Za-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/v2UnionDefinition"
+      }
     }
   },
-  "required": ["appName", "basePackage", "steps"]
+  "required": [
+    "appName",
+    "basePackage",
+    "steps"
+  ]
 }
