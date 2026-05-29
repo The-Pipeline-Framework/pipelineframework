@@ -373,6 +373,9 @@ public class PipelineTemplateConfigLoader {
         if (PipelineTemplateTypeMappings.isBuiltinType(typeName)) {
             throw new IllegalStateException("Message name '" + typeName + "' conflicts with a built-in semantic type");
         }
+        if ("PayloadReference".equals(typeName)) {
+            throw new IllegalStateException("Message name 'PayloadReference' is reserved for payload_ref fields");
+        }
         PipelineTemplateMessage existing = messages.get(typeName);
         if (existing == null) {
             messages.put(typeName, new PipelineTemplateMessage(typeName, inlineFields, new PipelineTemplateReserved(List.of(), List.of())));
@@ -990,10 +993,29 @@ public class PipelineTemplateConfigLoader {
                 readInt(aspectMap, "order", 0),
                 MaterializationAction.from(action),
                 readRequiredString(aspectMap, "message", "materialization.aspect"),
-                readStringList(aspectMap, "fields"),
-                readStringList(aspectMap, "targetSteps")));
+                readMaterializationStringList(aspectMap, "fields"),
+                readMaterializationStringList(aspectMap, "targetSteps")));
         }
         return new PipelineTemplateMaterialization(aspects);
+    }
+
+    private List<String> readMaterializationStringList(Map<?, ?> map, String key) {
+        Object value = map.get(key);
+        if (value == null) {
+            return List.of();
+        }
+        if (!(value instanceof Iterable<?> values)) {
+            throw new IllegalArgumentException("materialization.aspect." + key + " must be declared as a YAML list");
+        }
+        List<String> items = new ArrayList<>();
+        for (Object element : values) {
+            String text = stringify(element);
+            if (text == null) {
+                throw new IllegalArgumentException("materialization.aspect." + key + " must not contain blank entries");
+            }
+            items.add(text);
+        }
+        return items;
     }
 
     private void validateMaterialization(

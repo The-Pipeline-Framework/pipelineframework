@@ -17,6 +17,7 @@
 package org.pipelineframework.plugin.repository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -83,7 +84,42 @@ class MaterializationServiceTest {
         assertEquals(0, repositoryManager.payloads.size());
     }
 
+    @Test
+    void referencesAndDereferencesByteFields() {
+        TestRepositoryManager repositoryManager = new TestRepositoryManager();
+        MaterializationService service = new MaterializationService();
+        service.repositoryManager = repositoryManager;
+        byte[] payload = "binary payload".getBytes(StandardCharsets.UTF_8);
+        ParsedBinaryDocument document = new ParsedBinaryDocument("doc-1", payload, null);
+
+        ParsedBinaryDocument referenced = service.referenceFields(
+                document,
+                ParsedBinaryDocument.class,
+                Map.of("data", "dataRef"),
+                1,
+                "documents",
+                "v1")
+            .await().indefinitely();
+
+        assertNull(referenced.data());
+        assertNotNull(referenced.dataRef());
+        assertEquals("documents", referenced.dataRef().container());
+        assertEquals("data", referenced.dataRef().metadata().get("field"));
+
+        ParsedBinaryDocument hydrated = service.dereferenceFields(
+                referenced,
+                ParsedBinaryDocument.class,
+                Map.of("data", "dataRef"))
+            .await().indefinitely();
+
+        assertArrayEquals(payload, hydrated.data());
+        assertEquals(referenced.dataRef(), hydrated.dataRef());
+    }
+
     private record ParsedDocument(String docId, String text, PayloadReference textRef) {
+    }
+
+    private record ParsedBinaryDocument(String docId, byte[] data, PayloadReference dataRef) {
     }
 
     private static final class TestRepositoryManager extends RepositoryManager {
@@ -110,8 +146,8 @@ class MaterializationServiceTest {
             return Uni.createFrom().item(new RepositoryReadResult(
                 reference,
                 payloads.get(reference),
-                "text/plain; charset=utf-8",
-                "string",
+                reference.contentType(),
+                reference.codec(),
                 reference.checksum()));
         }
     }

@@ -566,4 +566,74 @@ class PipelineTemplateConfigLoaderTest {
 
         assertTrue(exception.getMessage().contains("targets unknown step 'Parse Document'"));
     }
+
+    @Test
+    void rejectsInlinePayloadReferenceMessageName() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Bad Inline Message"
+            basePackage: "com.example.search"
+            transport: "GRPC"
+            steps:
+              - name: "Inline Payload Reference"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "PayloadReference"
+                inputFields:
+                  - number: 1
+                    name: "key"
+                    type: "string"
+                outputTypeName: "PayloadReference"
+                outputFields:
+                  - number: 1
+                    name: "key"
+                    type: "string"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-bad-inline-payload-reference.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException exception = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("PayloadReference"));
+        assertTrue(exception.getMessage().contains("reserved for payload_ref fields"));
+    }
+
+    @Test
+    void rejectsBlankMaterializationFieldEntries() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Bad Policy"
+            basePackage: "com.example.search"
+            transport: "GRPC"
+            messages:
+              ParsedDocument:
+                fields:
+                  - number: 1
+                    name: "text"
+                    type: "string"
+                    referenceable:
+                      refField: "textRef"
+                  - number: 2
+                    name: "textRef"
+                    type: "payload_ref"
+                    optional: true
+            steps: []
+            materialization:
+              aspects:
+                - name: "bad-fields"
+                  action: "reference"
+                  message: "ParsedDocument"
+                  fields: ["text", " "]
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-bad-blank-materialization-field.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("fields"));
+        assertTrue(exception.getMessage().contains("blank entries"));
+    }
 }

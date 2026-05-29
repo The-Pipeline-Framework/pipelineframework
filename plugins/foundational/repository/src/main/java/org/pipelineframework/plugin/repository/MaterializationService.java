@@ -129,7 +129,11 @@ public class MaterializationService {
         if ("bytes".equals(codec)) {
             return result.payload();
         }
-        return new String(result.payload(), java.nio.charset.StandardCharsets.UTF_8);
+        if ("string".equals(codec)) {
+            return new String(result.payload(), java.nio.charset.StandardCharsets.UTF_8);
+        }
+        throw new IllegalArgumentException("Unsupported materialized payload codec '" + codec
+            + "' for reference " + result.reference());
     }
 
     private EncodedField encode(Object value, String fieldName) {

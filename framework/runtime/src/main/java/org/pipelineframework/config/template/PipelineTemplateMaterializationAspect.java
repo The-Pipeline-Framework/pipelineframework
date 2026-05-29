@@ -38,17 +38,25 @@ public record PipelineTemplateMaterializationAspect(
     public PipelineTemplateMaterializationAspect {
         name = normalize(name);
         message = normalize(message);
-        fields = fields == null ? List.of() : fields.stream()
-            .map(PipelineTemplateMaterializationAspect::normalize)
-            .filter(value -> value != null)
-            .toList();
-        targetSteps = targetSteps == null ? List.of() : targetSteps.stream()
-            .map(PipelineTemplateMaterializationAspect::normalize)
-            .filter(value -> value != null)
-            .toList();
+        fields = normalizeList("fields", fields);
+        targetSteps = normalizeList("targetSteps", targetSteps);
     }
 
     private static String normalize(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private static List<String> normalizeList(String name, List<String> values) {
+        if (values == null) {
+            return List.of();
+        }
+        return values.stream()
+            .map(value -> {
+                if (value == null || value.isBlank()) {
+                    throw new IllegalArgumentException("materialization aspect " + name + " must not contain blank entries");
+                }
+                return value.trim();
+            })
+            .toList();
     }
 }

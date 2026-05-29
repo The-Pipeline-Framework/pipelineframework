@@ -17,6 +17,7 @@
 package org.pipelineframework.plugin.repository.provider;
 
 import java.io.IOException;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -24,11 +25,13 @@ import jakarta.enterprise.context.ApplicationScoped;
 import io.quarkus.arc.Unremovable;
 import io.quarkus.arc.properties.IfBuildProperty;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.pipelineframework.annotation.ParallelismHint;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.repository.PayloadReference;
+import org.pipelineframework.repository.PayloadNotFoundException;
 import org.pipelineframework.repository.RepositoryChecksums;
 import org.pipelineframework.repository.RepositoryProvider;
 import org.pipelineframework.repository.RepositoryReadResult;
@@ -71,7 +74,7 @@ public class FilesystemRepositoryProvider implements RepositoryProvider {
                 request.payload().length,
                 request.version(),
                 request.metadata());
-        });
+        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
     }
 
     @Override
@@ -81,6 +84,8 @@ public class FilesystemRepositoryProvider implements RepositoryProvider {
             byte[] bytes;
             try {
                 bytes = Files.readAllBytes(path);
+            } catch (NoSuchFileException e) {
+                throw new PayloadNotFoundException(reference, e);
             } catch (IOException e) {
                 throw new IllegalStateException("Failed reading repository payload " + path, e);
             }
@@ -91,12 +96,13 @@ public class FilesystemRepositoryProvider implements RepositoryProvider {
                 }
             }
             return new RepositoryReadResult(reference, bytes, reference.contentType(), reference.codec(), reference.checksum());
-        });
+        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
     }
 
     @Override
     public Uni<Boolean> exists(PayloadReference reference) {
-        return Uni.createFrom().item(() -> Files.exists(pathFor(reference.container(), reference.key())));
+        return Uni.createFrom().item(() -> Files.exists(pathFor(reference.container(), reference.key())))
+            .runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
     }
 
     @Override
@@ -107,7 +113,7 @@ public class FilesystemRepositoryProvider implements RepositoryProvider {
             } catch (IOException e) {
                 throw new IllegalStateException("Failed deleting repository payload " + reference.key(), e);
             }
-        });
+        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
     }
 
     private Path pathFor(String container, String key) {

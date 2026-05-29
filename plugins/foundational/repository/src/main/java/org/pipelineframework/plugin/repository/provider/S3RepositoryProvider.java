@@ -25,11 +25,13 @@ import jakarta.inject.Inject;
 import io.quarkus.arc.Unremovable;
 import io.quarkus.arc.properties.IfBuildProperty;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.pipelineframework.annotation.ParallelismHint;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.repository.PayloadReference;
+import org.pipelineframework.repository.PayloadNotFoundException;
 import org.pipelineframework.repository.RepositoryChecksums;
 import org.pipelineframework.repository.RepositoryProvider;
 import org.pipelineframework.repository.RepositoryReadResult;
@@ -98,8 +100,9 @@ public class S3RepositoryProvider implements RepositoryProvider {
     public Uni<PayloadReference> store(RepositoryWriteRequest request) {
         return Uni.createFrom().item(() -> {
             String key = s3Key(request.key());
+            String targetBucket = request.container() == null || request.container().isBlank() ? bucket : request.container();
             PutObjectRequest put = PutObjectRequest.builder()
-                .bucket(bucket)
+                .bucket(targetBucket)
                 .key(key)
                 .contentType(request.contentType())
                 .metadata(request.metadata())
@@ -107,7 +110,7 @@ public class S3RepositoryProvider implements RepositoryProvider {
             client.putObject(put, RequestBody.fromBytes(request.payload()));
             return new PayloadReference(
                 providerName(),
-                bucket,
+                targetBucket,
                 key,
                 request.contentType(),
                 request.codec(),
@@ -115,15 +118,25 @@ public class S3RepositoryProvider implements RepositoryProvider {
                 request.payload().length,
                 request.version(),
                 request.metadata());
-        });
+        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
     }
 
     @Override
     public Uni<RepositoryReadResult> load(PayloadReference reference) {
         return Uni.createFrom().item(() -> {
-            ResponseBytes<GetObjectResponse> response = client.getObjectAsBytes(builder -> builder
-                .bucket(resolveBucket(reference))
-                .key(reference.key()));
+            ResponseBytes<GetObjectResponse> response;
+            try {
+                response = client.getObjectAsBytes(builder -> builder
+                    .bucket(resolveBucket(reference))
+                    .key(reference.key()));
+            } catch (NoSuchKeyException e) {
+                throw new PayloadNotFoundException(reference, e);
+            } catch (S3Exception e) {
+                if (e.statusCode() == 404) {
+                    throw new PayloadNotFoundException(reference, e);
+                }
+                throw e;
+            }
             byte[] bytes = response.asByteArray();
             if (verifyChecksum && reference.checksum() != null) {
                 String actual = RepositoryChecksums.sha256Hex(bytes);
@@ -132,7 +145,7 @@ public class S3RepositoryProvider implements RepositoryProvider {
                 }
             }
             return new RepositoryReadResult(reference, bytes, reference.contentType(), reference.codec(), reference.checksum());
-        });
+        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
     }
 
     @Override
@@ -152,7 +165,7 @@ public class S3RepositoryProvider implements RepositoryProvider {
                 }
                 throw e;
             }
-        });
+        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
     }
 
     private String resolveBucket(PayloadReference reference) {

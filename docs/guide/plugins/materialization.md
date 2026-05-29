@@ -61,6 +61,16 @@ materialization:
 
 Add the repository provider dependency where materialization runs, then select a provider with runtime configuration.
 
+```xml
+<dependency>
+    <groupId>org.pipelineframework</groupId>
+    <artifactId>repository-plugin</artifactId>
+    <version>${pipelineframework.version}</version>
+</dependency>
+```
+
+For Gradle builds, add the equivalent `org.pipelineframework:repository-plugin:${pipelineframeworkVersion}` dependency.
+
 ```properties
 pipeline.repository.provider=filesystem
 pipeline.repository.filesystem.root=target/tpf-repository

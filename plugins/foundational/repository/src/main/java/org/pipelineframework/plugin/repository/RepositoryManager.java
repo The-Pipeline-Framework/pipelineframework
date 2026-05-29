@@ -80,15 +80,6 @@ public class RepositoryManager {
         if (providers == null || providers.isEmpty()) {
             throw new IllegalStateException("No repository providers available");
         }
-        if (providerClassName.isPresent() && !providerClassName.get().isBlank()) {
-            String configured = providerClassName.get().trim();
-            return providers.stream()
-                .filter(provider -> providerClass(provider).getName().equals(configured)
-                    || providerClass(provider).getSimpleName().equals(configured))
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException(
-                    "No repository provider matches pipeline.repository.provider.class=" + configured));
-        }
         String desiredProvider = reference != null && reference.provider() != null
             ? reference.provider()
             : providerName.orElse(null);
@@ -99,6 +90,15 @@ public class RepositoryManager {
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException(
                     "No repository provider matches provider=" + configured));
+        }
+        if (providerClassName.isPresent() && !providerClassName.get().isBlank()) {
+            String configured = providerClassName.get().trim();
+            return providers.stream()
+                .filter(provider -> providerClass(provider).getName().equals(configured)
+                    || providerClass(provider).getSimpleName().equals(configured))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                    "No repository provider matches pipeline.repository.provider.class=" + configured));
         }
         if (providers.size() == 1) {
             return providers.get(0);

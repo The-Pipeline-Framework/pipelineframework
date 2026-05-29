@@ -33,7 +33,7 @@ public interface RepositoryProvider {
     default Uni<Boolean> exists(PayloadReference reference) {
         return load(reference)
             .onItem().transform(ignored -> true)
-            .onFailure().recoverWithItem(false);
+            .onFailure(PayloadNotFoundException.class).recoverWithItem(false);
     }
 
     default Uni<Boolean> delete(PayloadReference reference) {
