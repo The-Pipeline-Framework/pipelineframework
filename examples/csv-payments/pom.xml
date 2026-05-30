@@ -315,7 +315,7 @@
                             <id>compile-orchestrator-client</id>
                             <phase>process-classes</phase>
                             <goals>
-                                <goal>compile</goal>
+                                <goal>testCompile</goal>
                             </goals>
                             <configuration>
                                 <proc>none</proc>
@@ -330,7 +330,7 @@
                             <id>compile-pipeline-server</id>
                             <phase>process-classes</phase>
                             <goals>
-                                <goal>compile</goal>
+                                <goal>testCompile</goal>
                             </goals>
                             <configuration>
                                 <proc>none</proc>
@@ -345,7 +345,7 @@
                             <id>compile-plugin-client</id>
                             <phase>process-classes</phase>
                             <goals>
-                                <goal>compile</goal>
+                                <goal>testCompile</goal>
                             </goals>
                             <configuration>
                                 <proc>none</proc>
@@ -360,7 +360,7 @@
                             <id>compile-plugin-server</id>
                             <phase>process-classes</phase>
                             <goals>
-                                <goal>compile</goal>
+                                <goal>testCompile</goal>
                             </goals>
                             <configuration>
                                 <proc>none</proc>
@@ -375,7 +375,7 @@
                             <id>compile-rest-server</id>
                             <phase>process-classes</phase>
                             <goals>
-                                <goal>compile</goal>
+                                <goal>testCompile</goal>
                             </goals>
                             <configuration>
                                 <proc>none</proc>
