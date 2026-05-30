@@ -60,7 +60,7 @@ class CsvPaymentsOutputFileMapperTest {
         domain.setCsvFolderPath(Path.of("/test/output"));
 
         // When
-        PipelineTypes.CsvPaymentsOutputFile grpc = mapper.toDtoToGrpc(domain);
+        PipelineTypes.CsvPaymentsOutputFile grpc = mapper.toExternal(domain);
 
         // Then
         assertNotNull(grpc);
@@ -82,7 +82,7 @@ class CsvPaymentsOutputFileMapperTest {
                         .build();
 
         // When
-        CsvPaymentsOutputFile domain = mapper.fromGrpcFromDto(grpc);
+        CsvPaymentsOutputFile domain = mapper.fromExternal(grpc);
 
         // Then
         assertNotNull(domain);

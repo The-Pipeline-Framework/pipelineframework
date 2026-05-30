@@ -145,7 +145,7 @@ class PaymentStatusMapperTest {
         .setPaymentRecordId(paymentRecordId.toString())
         .build();
 
-    PaymentStatus domain = mapper.fromGrpcFromDto(grpc);
+    PaymentStatus domain = mapper.fromExternal(grpc);
 
     assertNotNull(domain);
     assertEquals(id, domain.getId());

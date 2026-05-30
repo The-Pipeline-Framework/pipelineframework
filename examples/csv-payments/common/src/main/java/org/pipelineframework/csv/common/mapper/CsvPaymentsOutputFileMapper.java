@@ -16,6 +16,7 @@
 
 package org.pipelineframework.csv.common.mapper;
 
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
@@ -33,8 +34,14 @@ public interface CsvPaymentsOutputFileMapper extends org.pipelineframework.mappe
 
   CsvPaymentsOutputFileDto toDto(CsvPaymentsOutputFile domain);
 
+  @Mapping(target = "csvFile", ignore = true)
+  @Mapping(target = "csvFolder", ignore = true)
+  @Mapping(target = "paymentOutputs", ignore = true)
+  @Mapping(target = "sbc", ignore = true)
+  @Mapping(target = "writer", ignore = true)
   CsvPaymentsOutputFile fromDto(CsvPaymentsOutputFileDto dto);
 
+  @BeanMapping(unmappedTargetPolicy = ReportingPolicy.IGNORE)
   @Mapping(target = "id", qualifiedByName = "uuidToString")
   @Mapping(target = "filepath", qualifiedByName = "pathToString")
   @Mapping(target = "csvFolderPath", qualifiedByName = "pathToString")
