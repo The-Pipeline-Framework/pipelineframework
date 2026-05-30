@@ -20,6 +20,8 @@ import java.util.List;
 
 /**
  * Pipeline-level representation aspect policies.
+ *
+ * @param aspects materialization aspects configured for the pipeline template
  */
 public record PipelineTemplateMaterialization(List<PipelineTemplateMaterializationAspect> aspects) {
     public PipelineTemplateMaterialization {

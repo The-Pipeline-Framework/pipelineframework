@@ -2,6 +2,15 @@ package org.pipelineframework.awaitable;
 
 /**
  * Command representing a correlated external completion.
+ *
+ * @param tenantId tenant that owns the interaction
+ * @param interactionId interaction identifier to complete
+ * @param correlationId external correlation identifier to complete
+ * @param resumeToken signed resume token for webhook-style completion
+ * @param idempotencyKey stable completion idempotency key
+ * @param responsePayload completion payload
+ * @param actor actor submitting the completion
+ * @param nowEpochMs command time in epoch milliseconds
  */
 public record AwaitCompletionCommand(
     String tenantId,

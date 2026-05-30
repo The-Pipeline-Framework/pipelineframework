@@ -57,6 +57,10 @@ public interface AwaitTransportAdapter<I> {
 
     /**
      * Cancel request passed to adapters.
+     *
+     * @param descriptor authored await step descriptor
+     * @param interaction interaction to cancel
+     * @param reason cancellation reason
      */
     record AwaitCancelRequest(AwaitStepDescriptor descriptor, AwaitInteractionRecord interaction, String reason) {
     }
