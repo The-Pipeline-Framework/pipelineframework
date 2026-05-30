@@ -44,6 +44,7 @@ public class DynamoAwaitUnitStore implements AwaitUnitStore {
     private static final String PRIMARY_INTERACTION_ID = "primary_interaction_id";
     private static final String EXPECTED_ITEM_COUNT = "expected_item_count";
     private static final String COMPLETED_ITEM_COUNT = "completed_item_count";
+    private static final String COMPLETED_ITEM_KEYS = "completed_item_keys";
     private static final String DISPATCH_COMPLETE = "dispatch_complete";
     private static final String CREATED_AT_EPOCH_MS = "created_at_epoch_ms";
     private static final String UPDATED_AT_EPOCH_MS = "updated_at_epoch_ms";
@@ -146,55 +147,42 @@ public class DynamoAwaitUnitStore implements AwaitUnitStore {
                 values,
                 existingNonTerminalCondition());
             if (dispatchMarked.isEmpty()) {
-                return getBlocking(tenantId, unitId, nowEpochMs);
+                return completeIfReady(getBlocking(tenantId, unitId, nowEpochMs), tenantId, unitId, nowEpochMs);
             }
-            AwaitUnitRecord updated = dispatchMarked.get();
-            if (updated.completedItemCount() < expectedItemCount) {
-                return dispatchMarked;
-            }
-            Optional<AwaitUnitRecord> completed = updateBlocking(tenantId, unitId,
-                "SET #status = :status, #updated = :updated ADD #version :one",
-                Map.of("#status", STATUS, "#completed", COMPLETED_ITEM_COUNT, "#expected", EXPECTED_ITEM_COUNT,
-                    "#updated", UPDATED_AT_EPOCH_MS, "#version", VERSION),
-                Map.of(":status", avS(AwaitUnitStatus.COMPLETED.name()), ":updated", avN(nowEpochMs),
-                    ":one", avN(1)),
-                existingNonTerminalCondition() + " AND #completed >= #expected");
-            return completed.isPresent() ? completed : getBlocking(tenantId, unitId, nowEpochMs);
+            return completeIfReady(dispatchMarked, tenantId, unitId, nowEpochMs);
         });
     }
 
     @Override
-    public Uni<Optional<AwaitUnitRecord>> recordItemCompleted(String tenantId, String unitId, long nowEpochMs) {
+    public Uni<Optional<AwaitUnitRecord>> recordItemCompleted(
+        String tenantId,
+        String unitId,
+        String itemCompletionKey,
+        long nowEpochMs) {
+        if (itemCompletionKey == null || itemCompletionKey.isBlank()) {
+            return Uni.createFrom().failure(new IllegalArgumentException("itemCompletionKey must not be blank"));
+        }
         return blocking(() -> {
             Map<String, String> names = Map.of(
                 "#completed", COMPLETED_ITEM_COUNT,
+                "#completedKeys", COMPLETED_ITEM_KEYS,
                 "#updated", UPDATED_AT_EPOCH_MS,
                 "#version", VERSION);
             Map<String, AttributeValue> values = Map.of(
                 ":updated", avN(nowEpochMs),
-                ":one", avN(1));
+                ":one", avN(1),
+                ":itemKey", avS(itemCompletionKey),
+                ":itemKeys", AttributeValue.builder().ss(itemCompletionKey).build());
             Optional<AwaitUnitRecord> incremented = updateBlocking(tenantId, unitId,
-                "SET #updated = :updated ADD #completed :one, #version :one",
+                "SET #updated = :updated ADD #completed :one, #version :one, #completedKeys :itemKeys",
                 names,
                 values,
-                existingNonTerminalCondition());
+                existingNonTerminalCondition()
+                    + " AND (attribute_not_exists(#completedKeys) OR NOT contains(#completedKeys, :itemKey))");
             if (incremented.isEmpty()) {
-                return getBlocking(tenantId, unitId, nowEpochMs);
+                return completeIfReady(getBlocking(tenantId, unitId, nowEpochMs), tenantId, unitId, nowEpochMs);
             }
-            AwaitUnitRecord updated = incremented.get();
-            if (!updated.dispatchComplete()
-                || updated.expectedItemCount() == null
-                || updated.completedItemCount() < updated.expectedItemCount()) {
-                return incremented;
-            }
-            Optional<AwaitUnitRecord> completed = updateBlocking(tenantId, unitId,
-                "SET #status = :status, #updated = :updated ADD #version :one",
-                Map.of("#status", STATUS, "#completed", COMPLETED_ITEM_COUNT, "#expected", EXPECTED_ITEM_COUNT,
-                    "#updated", UPDATED_AT_EPOCH_MS, "#version", VERSION),
-                Map.of(":status", avS(AwaitUnitStatus.COMPLETED.name()), ":updated", avN(nowEpochMs),
-                    ":one", avN(1)),
-                existingNonTerminalCondition() + " AND #completed >= #expected");
-            return completed.isPresent() ? completed : getBlocking(tenantId, unitId, nowEpochMs);
+            return completeIfReady(incremented, tenantId, unitId, nowEpochMs);
         });
     }
 
@@ -299,6 +287,31 @@ public class DynamoAwaitUnitStore implements AwaitUnitStore {
             return Optional.empty();
         }
         return Optional.of(record);
+    }
+
+    private Optional<AwaitUnitRecord> completeIfReady(
+        Optional<AwaitUnitRecord> current,
+        String tenantId,
+        String unitId,
+        long nowEpochMs) {
+        if (current.isEmpty()) {
+            return Optional.empty();
+        }
+        AwaitUnitRecord record = current.get();
+        if (record.status().terminal()
+            || !record.dispatchComplete()
+            || record.expectedItemCount() == null
+            || record.completedItemCount() < record.expectedItemCount()) {
+            return current;
+        }
+        Optional<AwaitUnitRecord> completed = updateBlocking(tenantId, unitId,
+            "SET #status = :status, #updated = :updated ADD #version :one",
+            Map.of("#status", STATUS, "#completed", COMPLETED_ITEM_COUNT, "#expected", EXPECTED_ITEM_COUNT,
+                "#updated", UPDATED_AT_EPOCH_MS, "#version", VERSION),
+            Map.of(":status", avS(AwaitUnitStatus.COMPLETED.name()), ":updated", avN(nowEpochMs),
+                ":one", avN(1)),
+            existingNonTerminalCondition() + " AND #completed >= #expected");
+        return completed.isPresent() ? completed : getBlocking(tenantId, unitId, nowEpochMs);
     }
 
     private Map<String, AttributeValue> toItem(AwaitUnitRecord record) {

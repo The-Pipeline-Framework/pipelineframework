@@ -2,8 +2,10 @@ package org.pipelineframework.awaitable.store;
 
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import io.smallrye.mutiny.Uni;
@@ -20,6 +22,7 @@ public class InMemoryAwaitUnitStore implements AwaitUnitStore {
 
     private final Object lock = new Object();
     private final Map<String, AwaitUnitRecord> unitsByScopedId = new HashMap<>();
+    private final Map<String, Set<String>> completedItemsByScopedId = new HashMap<>();
 
     @Override
     public String providerName() {
@@ -127,28 +130,49 @@ public class InMemoryAwaitUnitStore implements AwaitUnitStore {
     }
 
     @Override
-    public Uni<Optional<AwaitUnitRecord>> recordItemCompleted(String tenantId, String unitId, long nowEpochMs) {
-        return update(tenantId, unitId, nowEpochMs, current -> {
-            int completed = current.completedItemCount() + 1;
-            boolean terminal = current.dispatchComplete()
-                && current.expectedItemCount() != null
-                && completed >= current.expectedItemCount();
-            return new AwaitUnitRecord(
-                current.tenantId(),
-                current.unitId(),
-                current.executionId(),
-                current.stepId(),
-                current.stepIndex(),
-                current.cardinality(),
-                current.version() + 1,
-                terminal ? AwaitUnitStatus.COMPLETED : current.status(),
-                current.primaryInteractionId(),
-                current.expectedItemCount(),
-                completed,
-                current.dispatchComplete(),
-                current.createdAtEpochMs(),
-                nowEpochMs,
-                current.ttlEpochS());
+    public Uni<Optional<AwaitUnitRecord>> recordItemCompleted(
+        String tenantId,
+        String unitId,
+        String itemCompletionKey,
+        long nowEpochMs) {
+        if (itemCompletionKey == null || itemCompletionKey.isBlank()) {
+            return Uni.createFrom().failure(new IllegalArgumentException("itemCompletionKey must not be blank"));
+        }
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                purgeExpired(nowEpochMs);
+                String scopedId = scopedUnitId(tenantId, unitId);
+                AwaitUnitRecord current = unitsByScopedId.get(scopedId);
+                if (current == null || current.status().terminal()) {
+                    return Optional.ofNullable(current);
+                }
+                Set<String> completedItems = completedItemsByScopedId.computeIfAbsent(scopedId, ignored -> new HashSet<>());
+                if (!completedItems.add(itemCompletionKey)) {
+                    return Optional.of(current);
+                }
+                int completed = current.completedItemCount() + 1;
+                boolean terminal = current.dispatchComplete()
+                    && current.expectedItemCount() != null
+                    && completed >= current.expectedItemCount();
+                AwaitUnitRecord updated = new AwaitUnitRecord(
+                    current.tenantId(),
+                    current.unitId(),
+                    current.executionId(),
+                    current.stepId(),
+                    current.stepIndex(),
+                    current.cardinality(),
+                    current.version() + 1,
+                    terminal ? AwaitUnitStatus.COMPLETED : current.status(),
+                    current.primaryInteractionId(),
+                    current.expectedItemCount(),
+                    completed,
+                    current.dispatchComplete(),
+                    current.createdAtEpochMs(),
+                    nowEpochMs,
+                    current.ttlEpochS());
+                unitsByScopedId.put(scopedId, updated);
+                return Optional.of(updated);
+            }
         });
     }
 
@@ -220,7 +244,11 @@ public class InMemoryAwaitUnitStore implements AwaitUnitStore {
         long nowEpochS = Instant.ofEpochMilli(nowEpochMs).getEpochSecond();
         unitsByScopedId.entrySet().removeIf(entry -> {
             AwaitUnitRecord record = entry.getValue();
-            return record.ttlEpochS() > 0 && record.ttlEpochS() <= nowEpochS;
+            boolean expired = record.ttlEpochS() > 0 && record.ttlEpochS() <= nowEpochS;
+            if (expired) {
+                completedItemsByScopedId.remove(entry.getKey());
+            }
+            return expired;
         });
     }
 

@@ -1,6 +1,7 @@
 package org.pipelineframework.awaitable;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -116,6 +117,43 @@ class AwaitCoordinatorCompletionTest {
         AwaitCompletionResult duplicate = coordinator.complete(command).await().indefinitely();
 
         assertTrue(duplicate.duplicate());
+    }
+
+    @Test
+    void duplicateItemCompletionDoesNotOverCountAwaitUnit() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AwaitCreateResult created = coordinator.createOrGetItem(
+            descriptor("AwaitPaymentProvider"),
+            "tenant-1",
+            "exec-1",
+            1,
+            "record-1",
+            java.util.Map.of("paymentRecordId", "record-1"),
+            "unit-1",
+            0,
+            null,
+            null).await().indefinitely();
+        AwaitCompletionCommand command = new AwaitCompletionCommand(
+            "tenant-1",
+            created.record().interactionId(),
+            null,
+            "completion-1",
+            java.util.Map.of("status", "APPROVED"),
+            "provider",
+            11_000L);
+
+        AwaitCompletionResult first = coordinator.complete(command).await().indefinitely();
+        coordinator.recordCompletion(first.record(), 11_000L).await().indefinitely();
+        AwaitCompletionResult duplicate = coordinator.complete(command).await().indefinitely();
+        AwaitUnitRecord afterDuplicate = coordinator.recordCompletion(duplicate.record(), 12_000L).await().indefinitely();
+        AwaitUnitRecord completed = coordinator.markDispatchComplete("tenant-1", "unit-1", 1, 13_000L).await().indefinitely();
+
+        assertFalse(first.duplicate());
+        assertTrue(duplicate.duplicate());
+        assertEquals(1, afterDuplicate.completedItemCount());
+        assertEquals(1, completed.completedItemCount());
+        assertEquals(AwaitUnitStatus.COMPLETED, completed.status());
     }
 
     @Test
@@ -247,6 +285,18 @@ class AwaitCoordinatorCompletionTest {
             10_000L,
             deadlineEpochMs,
             9_999_999_999L);
+    }
+
+    private static AwaitStepDescriptor descriptor(String stepId) {
+        return new AwaitStepDescriptor(
+            stepId,
+            java.util.Map.class.getName(),
+            java.util.Map.class.getName(),
+            java.time.Duration.ofMinutes(10),
+            "interactionId",
+            "interaction-api",
+            Map.of(),
+            List.of("paymentRecordId"));
     }
 
     private static final class SimpleInstance<T> implements Instance<T> {
