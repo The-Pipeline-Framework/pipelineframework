@@ -171,7 +171,7 @@ class PaymentRecordMapperTest {
         PaymentRecord domain = createTestPaymentRecord();
 
         // When
-        PipelineTypes.PaymentRecord grpc = mapper.toDtoToGrpc(domain);
+        PipelineTypes.PaymentRecord grpc = mapper.toExternal(domain);
 
         // Then
         assertNotNull(grpc);
@@ -201,7 +201,7 @@ class PaymentRecordMapperTest {
                         .build();
 
         // When
-        PaymentRecord domain = mapper.fromGrpcFromDto(grpc);
+        PaymentRecord domain = mapper.fromExternal(grpc);
 
         // Then
         assertNotNull(domain);
@@ -229,7 +229,7 @@ class PaymentRecordMapperTest {
                         .build();
 
         // When
-        PaymentRecord domain = mapper.fromGrpcFromDto(grpc);
+        PaymentRecord domain = mapper.fromExternal(grpc);
 
         // Then
         assertNotNull(domain);

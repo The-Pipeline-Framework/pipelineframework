@@ -16,6 +16,7 @@
 
 package org.pipelineframework.csv.common.mapper;
 
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
@@ -32,11 +33,13 @@ public interface CsvFolderMapper extends org.pipelineframework.mapper.Mapper<Csv
 
     CsvFolderDto toDto(CsvFolder domain);
 
+    @Mapping(target = "id", ignore = true)
     CsvFolder fromDto(CsvFolderDto dto);
 
     @Mapping(target = "path", qualifiedByName = "stringToPath")
     CsvFolderDto fromGrpc(PipelineTypes.CsvFolder grpc);
 
+    @BeanMapping(unmappedTargetPolicy = ReportingPolicy.IGNORE)
     @Mapping(target = "path", qualifiedByName = "pathToString")
     PipelineTypes.CsvFolder toGrpc(CsvFolderDto dto);
 

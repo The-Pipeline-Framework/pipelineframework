@@ -251,7 +251,7 @@ class PaymentOutputMapperTest {
     //   domain.setFee(new BigDecimal("1.50"));
 
     //   // When
-    //   PipelineTypes.PaymentOutput grpc = mapper.toDtoToGrpc(domain);
+    //   PipelineTypes.PaymentOutput grpc = mapper.toExternal(domain);
 
     //   // Then
     //   assertNotNull(grpc);
@@ -286,7 +286,7 @@ class PaymentOutputMapperTest {
                         .build();
 
         // When
-        PaymentOutput domain = mapper.fromGrpcFromDto(grpc);
+        PaymentOutput domain = mapper.fromExternal(grpc);
 
         // Then
         assertNotNull(domain);

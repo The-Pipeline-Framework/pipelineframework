@@ -16,6 +16,7 @@
 
 package org.pipelineframework.csv.common.mapper;
 
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
@@ -35,9 +36,11 @@ public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper
   // Domain ↔ DTO
   PaymentStatusDto toDto(PaymentStatus entity);
 
+  @Mapping(target = "customerReference", ignore = true)
   PaymentStatus fromDto(PaymentStatusDto dto);
 
   // DTO ↔ gRPC
+  @BeanMapping(unmappedTargetPolicy = ReportingPolicy.IGNORE)
   @Mapping(target = "id", qualifiedByName = "uuidToString")
   @Mapping(target = "fee", qualifiedByName = "bigDecimalToString")
   @Mapping(target = "conversationId", qualifiedByName = "uuidToString")
