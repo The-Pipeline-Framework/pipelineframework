@@ -186,10 +186,14 @@ public class AwaitCoordinator {
                     () -> new IllegalStateException("Await unit not found for failed interaction " + record.unitId())));
         }
         Uni<Optional<AwaitUnitRecord>> updated = record.itemInteraction()
-            ? unitStore().recordItemCompleted(record.tenantId(), record.unitId(), record.interactionId(), nowEpochMs)
+            ? unitStore().recordItemCompleted(record.tenantId(), record.unitId(), itemCompletionKey(record), nowEpochMs)
             : unitStore().markCompleted(record.tenantId(), record.unitId(), nowEpochMs);
         return updated.onItem().transform(optional -> optional.orElseThrow(
             () -> new IllegalStateException("Await unit not found while recording completion: " + record.unitId())));
+    }
+
+    private static String itemCompletionKey(AwaitInteractionRecord record) {
+        return record.itemIndex() == null ? record.interactionId() : "item:" + record.itemIndex();
     }
 
     public Uni<AwaitUnitRecord> markDispatchComplete(String tenantId, String unitId, int expectedItemCount, long nowEpochMs) {

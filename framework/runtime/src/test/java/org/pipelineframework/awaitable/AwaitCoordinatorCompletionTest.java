@@ -158,6 +158,62 @@ class AwaitCoordinatorCompletionTest {
     }
 
     @Test
+    void retryItemInteractionWithSameIndexDoesNotOverCountAwaitUnit() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AwaitCreateResult first = coordinator.createOrGetItem(
+            descriptor("AwaitPaymentProvider"),
+            "tenant-1",
+            "exec-1",
+            1,
+            "record-1",
+            java.util.Map.of("paymentRecordId", "record-1"),
+            "unit-1",
+            0,
+            null,
+            null).await().indefinitely();
+        AwaitCreateResult retried = coordinator.createOrGetItem(
+            descriptor("AwaitPaymentProvider"),
+            "tenant-1",
+            "exec-1",
+            1,
+            "record-1-retry",
+            java.util.Map.of("paymentRecordId", "record-1-retry"),
+            "unit-1",
+            0,
+            null,
+            null).await().indefinitely();
+
+        AwaitCompletionResult firstCompleted = coordinator.complete(new AwaitCompletionCommand(
+            "tenant-1",
+            first.record().interactionId(),
+            null,
+            "completion-1",
+            java.util.Map.of("status", "APPROVED"),
+            "provider",
+            11_000L)).await().indefinitely();
+        AwaitCompletionResult retryCompleted = coordinator.complete(new AwaitCompletionCommand(
+            "tenant-1",
+            retried.record().interactionId(),
+            null,
+            "completion-2",
+            java.util.Map.of("status", "APPROVED"),
+            "provider",
+            12_000L)).await().indefinitely();
+
+        AwaitUnitRecord afterFirst = coordinator.recordCompletion(firstCompleted.record(), 11_000L).await().indefinitely();
+        AwaitUnitRecord afterRetry = coordinator.recordCompletion(retryCompleted.record(), 12_000L).await().indefinitely();
+        AwaitUnitRecord completed = coordinator.markDispatchComplete("tenant-1", "unit-1", 1, 13_000L).await().indefinitely();
+
+        assertFalse(firstCompleted.duplicate());
+        assertFalse(retryCompleted.duplicate());
+        assertEquals(1, afterFirst.completedItemCount());
+        assertEquals(1, afterRetry.completedItemCount());
+        assertEquals(1, completed.completedItemCount());
+        assertEquals(AwaitUnitStatus.COMPLETED, completed.status());
+    }
+
+    @Test
     void staleTerminalInteractionIsRejectedBeforeTokenCompletion() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
