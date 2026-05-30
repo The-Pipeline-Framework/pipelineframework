@@ -2,6 +2,22 @@ package org.pipelineframework.awaitable;
 
 /**
  * Durable orchestration record for one authored await unit.
+ *
+ * @param tenantId tenant that owns the execution
+ * @param unitId durable await unit identifier
+ * @param executionId owning queue-async execution identifier
+ * @param stepId authored await step identifier
+ * @param stepIndex authored await step index
+ * @param cardinality authored await cardinality
+ * @param version optimistic concurrency version
+ * @param status current await unit status
+ * @param primaryInteractionId primary externally visible interaction identifier
+ * @param expectedItemCount expected item count for multi-item units, when known
+ * @param completedItemCount admitted completed item count
+ * @param dispatchComplete whether dispatch has finished for the unit
+ * @param createdAtEpochMs creation time in epoch milliseconds
+ * @param updatedAtEpochMs last update time in epoch milliseconds
+ * @param ttlEpochS expiry time in epoch seconds
  */
 public record AwaitUnitRecord(
     String tenantId,

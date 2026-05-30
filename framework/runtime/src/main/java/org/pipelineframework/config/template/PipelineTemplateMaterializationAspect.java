@@ -23,6 +23,16 @@ import org.pipelineframework.materialization.MaterializationScope;
 
 /**
  * Aspect-like policy for transparent field materialization.
+ *
+ * @param name stable materialization aspect name
+ * @param enabled whether the aspect participates in materialization
+ * @param scope materialization scope
+ * @param position relative insertion position
+ * @param order ordering hint within the same position
+ * @param action materialization action to apply
+ * @param message message contract affected by the action
+ * @param fields message fields affected by the action
+ * @param targetSteps step identifiers targeted by the action
  */
 public record PipelineTemplateMaterializationAspect(
     String name,

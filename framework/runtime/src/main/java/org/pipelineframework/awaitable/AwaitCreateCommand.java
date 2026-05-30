@@ -4,6 +4,24 @@ import java.time.Instant;
 
 /**
  * Command used to create or deduplicate an await interaction.
+ *
+ * @param tenantId tenant that owns the execution
+ * @param executionId owning queue-async execution identifier
+ * @param stepId authored await step identifier
+ * @param stepIndex authored await step index
+ * @param outputType expected completion payload type
+ * @param causationId stable causation identifier for deduplication
+ * @param idempotencyKey stable interaction idempotency key
+ * @param correlationId external correlation identifier
+ * @param requestPayload payload dispatched to the external actor
+ * @param assignee optional human assignee
+ * @param group optional human group
+ * @param transportType await transport type
+ * @param unitId durable await unit identifier
+ * @param itemIndex zero-based item index for per-item await interactions
+ * @param nowEpochMs command time in epoch milliseconds
+ * @param deadlineEpochMs completion deadline in epoch milliseconds
+ * @param ttlEpochS expiry time in epoch seconds
  */
 public record AwaitCreateCommand(
     String tenantId,

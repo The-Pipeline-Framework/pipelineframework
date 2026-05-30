@@ -20,6 +20,15 @@ import java.util.Map;
 
 /**
  * Encoded payload write request for a repository provider.
+ *
+ * @param container repository container or bucket name
+ * @param key normalized repository object key
+ * @param payload encoded payload bytes
+ * @param contentType payload content type, when known
+ * @param codec payload codec name, when encoded
+ * @param checksum payload checksum, when available
+ * @param version provider-specific object version, when available
+ * @param metadata provider-specific metadata copied onto the write
  */
 public record RepositoryWriteRequest(
     String container,
