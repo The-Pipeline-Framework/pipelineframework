@@ -296,6 +296,15 @@
                             <jar>${project.build.directory}/${project.build.finalName}.jar</jar>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>make-index-orchestrator-client</id>
+                        <phase>none</phase>
+                    </execution>
+                    <!-- Disable inherited role-specific Jandex executions; common module does not generate role classes -->
+                    <execution>
+                        <id>make-index-plugin-client</id>
+                        <phase>none</phase>
+                    </execution>
                 </executions>
             </plugin>
         </plugins>
