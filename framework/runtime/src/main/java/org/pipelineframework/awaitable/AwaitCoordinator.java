@@ -171,7 +171,7 @@ public class AwaitCoordinator {
                     () -> new IllegalStateException("Await unit not found for failed interaction " + record.unitId())));
         }
         Uni<Optional<AwaitUnitRecord>> updated = record.itemInteraction()
-            ? unitStore().recordItemCompleted(record.tenantId(), record.unitId(), nowEpochMs)
+            ? unitStore().recordItemCompleted(record.tenantId(), record.unitId(), record.interactionId(), nowEpochMs)
             : unitStore().markCompleted(record.tenantId(), record.unitId(), nowEpochMs);
         return updated.onItem().transform(optional -> optional.orElseThrow(
             () -> new IllegalStateException("Await unit not found while recording completion: " + record.unitId())));

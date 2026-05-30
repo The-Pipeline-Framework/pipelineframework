@@ -39,6 +39,7 @@ public interface AwaitUnitStore {
     Uni<Optional<AwaitUnitRecord>> recordItemCompleted(
         String tenantId,
         String unitId,
+        String itemCompletionKey,
         long nowEpochMs);
 
     Uni<Optional<AwaitUnitRecord>> markCompleted(
