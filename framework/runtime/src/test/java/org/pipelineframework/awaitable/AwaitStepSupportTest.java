@@ -271,6 +271,33 @@ class AwaitStepSupportTest {
             any(), any(), any(), anyInt(), any(), any(), any(), anyInt(), any(), any());
     }
 
+    @Test
+    void awaitManyToOneRejectsOversizedMaterializedInput() {
+        AwaitStepSupport support = support();
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.awaitAggregateMaxInputItems()).thenReturn(1);
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 6));
+        AwaitStepDescriptor testDescriptor = new AwaitStepDescriptor(
+            "batch-review",
+            String.class.getName(),
+            String.class.getName(),
+            "MANY_TO_ONE",
+            Duration.ofMinutes(5),
+            "signedResumeToken",
+            "kafka",
+            Map.of(),
+            List.of());
+
+        IllegalStateException error = assertThrows(
+            IllegalStateException.class,
+            () -> support.awaitManyToOne(testDescriptor, Multi.createFrom().items("first", "second"))
+                .await().indefinitely());
+
+        assertTrue(error.getMessage().contains("pipeline.orchestrator.await-aggregate-max-input-items=1"));
+        org.mockito.Mockito.verify(awaitCoordinator, never()).createOrGet(
+            any(), any(), any(), anyInt(), any(), any(), any(), any());
+    }
+
     private AwaitStepSupport support() {
         AwaitStepSupport support = new AwaitStepSupport();
         support.orchestratorConfig = orchestratorConfig;

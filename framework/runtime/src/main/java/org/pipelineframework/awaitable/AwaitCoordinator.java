@@ -1,6 +1,7 @@
 package org.pipelineframework.awaitable;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -140,11 +141,14 @@ public class AwaitCoordinator {
 
     public Uni<AwaitCompletionResult> complete(AwaitCompletionCommand command) {
         AwaitCompletionCommand normalized = normalizeCompletionCommand(command);
-        if (normalized.resumeToken() == null) {
-            return interactionStore().complete(normalized);
-        }
         return resolveForCompletion(normalized)
+            .onItem().transformToUni(record -> enforceCompletionPayloadLimitIfUnitPresent(
+                record,
+                normalized.responsePayload()))
             .onItem().transformToUni(record -> {
+                if (normalized.resumeToken() == null) {
+                    return Uni.createFrom().item(record);
+                }
                 if (record.status().terminal() && record.status() != AwaitInteractionStatus.COMPLETED) {
                     return Uni.createFrom().failure(
                         new AwaitInteractionTerminalException("Await interaction is terminal: " + record.status()));
@@ -157,6 +161,17 @@ public class AwaitCoordinator {
                     .replaceWith(record);
             })
             .onItem().transformToUni(ignored -> interactionStore().complete(normalized));
+    }
+
+    private Uni<AwaitInteractionRecord> enforceCompletionPayloadLimitIfUnitPresent(
+        AwaitInteractionRecord record,
+        Object responsePayload
+    ) {
+        return unitStore().get(record.tenantId(), record.unitId())
+            .onItem().transform(optional -> {
+                optional.ifPresent(unit -> enforceAggregateOutputLimit(unit, responsePayload));
+                return record;
+            });
     }
 
     public Uni<AwaitUnitRecord> recordCompletion(AwaitInteractionRecord record, long nowEpochMs) {
@@ -196,7 +211,7 @@ public class AwaitCoordinator {
                     .onItem().transform(optional -> optional.orElseThrow(
                         () -> new IllegalStateException("Await interaction not found for primary interaction id "
                             + unit.primaryInteractionId())))
-                    .onItem().transform(this::coerceResumePayload);
+                    .onItem().transform(record -> enforceAggregateOutputLimit(unit, coerceResumePayload(record)));
             }
             return interactionStore().findByUnit(tenantId, unitId)
                 .onItem().transform(records -> {
@@ -412,6 +427,51 @@ public class AwaitCoordinator {
                     + " for interaction " + record.interactionId(),
                 e);
         }
+    }
+
+    private Object enforceAggregateOutputLimit(AwaitUnitRecord unit, Object payload) {
+        if (!materializedOutputCardinality(unit.cardinality())) {
+            return payload;
+        }
+        int configuredLimit = orchestratorConfig == null ? 0 : orchestratorConfig.awaitAggregateMaxOutputItems();
+        if (configuredLimit <= 0 || payload == null) {
+            return payload;
+        }
+        if (payload instanceof Iterable<?> iterable) {
+            List<Object> materialized = new ArrayList<>();
+            for (Object item : iterable) {
+                if (materialized.size() == configuredLimit) {
+                    throw aggregateOutputLimitFailure(unit, configuredLimit + 1, configuredLimit);
+                }
+                materialized.add(item);
+            }
+            return List.copyOf(materialized);
+        }
+        if (payload.getClass().isArray()) {
+            int length = java.lang.reflect.Array.getLength(payload);
+            if (length > configuredLimit) {
+                throw aggregateOutputLimitFailure(unit, length, configuredLimit);
+            }
+            return payload;
+        }
+        return payload;
+    }
+
+    private static boolean materializedOutputCardinality(String cardinality) {
+        return "ONE_TO_MANY".equalsIgnoreCase(cardinality) || "MANY_TO_MANY".equalsIgnoreCase(cardinality);
+    }
+
+    private static IllegalStateException aggregateOutputLimitFailure(
+        AwaitUnitRecord unit,
+        int observedCount,
+        int configuredLimit
+    ) {
+        return new IllegalStateException(
+            "Await unit " + unit.unitId()
+                + " materialized at least " + observedCount + " output items for "
+                + unit.cardinality()
+                + ", exceeding pipeline.orchestrator.await-aggregate-max-output-items="
+                + configuredLimit + ".");
     }
 
     private String deriveCorrelationId(

@@ -176,7 +176,15 @@ public class AwaitStepSupport {
 
     private <I, O> Uni<O> awaitManyToOne(AwaitStepDescriptor descriptor, Multi<I> input, AwaitExecutionContext context) {
         return input.collect().asList()
-            .onItem().transformToUni(items -> awaitOneToOne(descriptor, List.copyOf(items), context));
+            .onItem().transformToUni(items -> {
+                List<I> materialized = List.copyOf(items);
+                enforceAggregateItemLimit(
+                    "input",
+                    descriptor,
+                    materialized.size(),
+                    orchestratorConfig.awaitAggregateMaxInputItems());
+                return awaitOneToOne(descriptor, materialized, context);
+            });
     }
 
     /**
@@ -223,7 +231,13 @@ public class AwaitStepSupport {
                 if (items.isEmpty()) {
                     return Multi.createFrom().<O>empty();
                 }
-                return this.<List<I>, Object>awaitOneToOne(descriptor, List.copyOf(items), context)
+                List<I> materialized = List.copyOf(items);
+                enforceAggregateItemLimit(
+                    "input",
+                    descriptor,
+                    materialized.size(),
+                    orchestratorConfig.awaitAggregateMaxInputItems());
+                return this.<List<I>, Object>awaitOneToOne(descriptor, materialized, context)
                     .toMulti()
                     .onItem().transformToMultiAndConcatenate(result ->
                         result instanceof Iterable
@@ -310,5 +324,22 @@ public class AwaitStepSupport {
         } else {
             AwaitExecutionContextHolder.set(previous);
         }
+    }
+
+    private static void enforceAggregateItemLimit(
+        String materializedSide,
+        AwaitStepDescriptor descriptor,
+        int itemCount,
+        int configuredLimit
+    ) {
+        if (configuredLimit <= 0 || itemCount <= configuredLimit) {
+            return;
+        }
+        throw new IllegalStateException(
+            "Await step " + descriptor.stepId()
+                + " materialized " + itemCount + " " + materializedSide
+                + " items for " + descriptor.cardinality()
+                + ", exceeding pipeline.orchestrator.await-aggregate-max-" + materializedSide
+                + "-items=" + configuredLimit + ".");
     }
 }

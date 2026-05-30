@@ -20,6 +20,7 @@ import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 import org.pipelineframework.awaitable.spi.AwaitTransportAdapter;
 import org.pipelineframework.awaitable.store.InMemoryAwaitInteractionStore;
 import org.pipelineframework.awaitable.store.InMemoryAwaitUnitStore;
+import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 
 class AwaitCoordinatorCompletionTest {
 
@@ -255,12 +256,59 @@ class AwaitCoordinatorCompletionTest {
         assertEquals("approval.proto", ((DescriptorProtos.FileDescriptorProto) payload).getName());
     }
 
+    @Test
+    void completeRejectsOversizedMaterializedOutputUnit() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        PipelineOrchestratorConfig config = org.mockito.Mockito.mock(PipelineOrchestratorConfig.class);
+        org.mockito.Mockito.when(config.awaitAggregateMaxOutputItems()).thenReturn(1);
+        AwaitCoordinator coordinator = coordinator(store, config);
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "BatchApproval",
+            List.class.getName(),
+            List.class.getName(),
+            "MANY_TO_MANY",
+            java.time.Duration.ofMinutes(10),
+            "interactionId",
+            "interaction-api",
+            Map.of(),
+            List.of());
+
+        AwaitCreateResult created = coordinator.createOrGet(
+            descriptor,
+            "tenant-1",
+            "exec-1",
+            1,
+            "cause-1",
+            List.of("input-a", "input-b"),
+            null,
+            null).await().indefinitely();
+        AwaitCompletionCommand completion = new AwaitCompletionCommand(
+            "tenant-1",
+            created.record().interactionId(),
+            null,
+            "completion-1",
+            List.of("output-a", "output-b"),
+            "alice",
+            11_000L);
+
+        IllegalStateException error = assertThrows(
+            IllegalStateException.class,
+            () -> coordinator.complete(completion).await().indefinitely());
+
+        assertTrue(error.getMessage().contains("pipeline.orchestrator.await-aggregate-max-output-items=1"));
+    }
+
     private static AwaitCoordinator coordinator(InMemoryAwaitInteractionStore store) {
+        return coordinator(store, null);
+    }
+
+    private static AwaitCoordinator coordinator(InMemoryAwaitInteractionStore store, PipelineOrchestratorConfig config) {
         AwaitCoordinator coordinator = new AwaitCoordinator();
         coordinator.interactionStores = new SimpleInstance<>(List.<AwaitInteractionStore>of(store));
         coordinator.unitStores = new SimpleInstance<>(List.of(new InMemoryAwaitUnitStore()));
         coordinator.adapters = new SimpleInstance<>(List.<AwaitTransportAdapter<?>>of());
         coordinator.resumeTokenService = new AwaitResumeTokenService("secret-value-for-tests");
+        coordinator.orchestratorConfig = config;
         return coordinator;
     }
 
