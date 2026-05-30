@@ -2,6 +2,15 @@ package org.pipelineframework.awaitable;
 
 /**
  * Command used to create or deduplicate an await unit.
+ *
+ * @param tenantId tenant that owns the execution
+ * @param unitId durable await unit identifier
+ * @param executionId owning queue-async execution identifier
+ * @param stepId authored await step identifier
+ * @param stepIndex authored await step index
+ * @param cardinality authored await cardinality
+ * @param nowEpochMs command time in epoch milliseconds
+ * @param ttlEpochS expiry time in epoch seconds
  */
 public record AwaitUnitCreateCommand(
     String tenantId,

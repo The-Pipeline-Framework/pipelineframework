@@ -18,6 +18,12 @@ package org.pipelineframework.repository;
 
 /**
  * Encoded payload read result from a repository provider.
+ *
+ * @param reference durable payload reference that was read
+ * @param payload encoded payload bytes
+ * @param contentType payload content type, when known
+ * @param codec payload codec name, when encoded
+ * @param checksum payload checksum, when available
  */
 public record RepositoryReadResult(
     PayloadReference reference,
