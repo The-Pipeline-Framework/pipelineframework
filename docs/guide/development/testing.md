@@ -8,9 +8,9 @@ This guide covers how to test TPF applications with a focus on unit tests and in
 - Use Testcontainers only when you need real dependencies (Postgres, Redis, external services).
 - Separate framework development tests from application tests.
 
-## Unit Tests (No Containers)
+## `@QuarkusTest` Tests (No Containers)
 
-For unit tests, keep the step logic isolated and mock dependencies where possible.
+Use `@QuarkusTest` when you need CDI/configuration lifecycle without external containers. For pure unit tests, keep the step logic isolated and mock dependencies with plain JUnit.
 
 ```java
 @QuarkusTest

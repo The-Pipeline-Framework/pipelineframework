@@ -1,6 +1,6 @@
 # Orchestrator Runtime
 
-The orchestrator runtime is the generated part of a TPF application that starts the pipeline, calls each step in order, tracks execution state when configured, and exposes generated REST, gRPC, or function-style entry points.
+The orchestrator runtime is the generated part of a TPF application that starts the pipeline, calls each step in order, tracks execution state when configured, and exposes generated REST, gRPC, LOCAL, or FUNCTION-platform entry points.
 
 ## Guide Pages
 
@@ -28,7 +28,7 @@ Use [Queue-Async Runtime](/guide/development/orchestrator-runtime/queue-async) b
 
 ## Generated Transport Entry Points
 
-Generated orchestrator entry points use the selected transport:
+Generated orchestrator entry points use the selected transport. Transport modes are `REST`, `gRPC`, and `LOCAL`; platform modes are `COMPUTE` and `FUNCTION`.
 
 1. REST:
    - `POST /pipeline/run`
@@ -44,7 +44,11 @@ Generated orchestrator entry points use the selected transport:
    - `GetExecutionResult`
    - `Ingest`
    - `Subscribe`
-3. Function/Lambda:
+3. LOCAL:
+   - in-process client calls for same-JVM deployments
+
+In `FUNCTION` platform mode, TPF also generates provider handler artifacts. These are not a transport mode:
+
    - `PipelineRunFunctionHandler`
    - `PipelineRunAsyncFunctionHandler`
    - `PipelineExecutionStatusFunctionHandler`

@@ -6,7 +6,7 @@ TPF generates the baseline runtime and adapters, but you still have clear places
 
 ### Orchestrator runtime
 
-The orchestrator is generated, but you can extend or replace parts of it when you need stricter control over execution flow.
+The orchestrator is generated, but you can extend or replace parts of it when you need stricter control over execution flow. See [Orchestrator runtime extension](/guide/development/extension/orchestrator-runtime) for the deeper guide.
 
 Common cases:
 
@@ -19,7 +19,7 @@ You can also bypass `OrchestratorApplication` and drive the pipeline through cus
 ### Reactive services
 
 Reactive step services expose a `process()` contract.
-You can wrap that behavior without changing pipeline contracts.
+You can wrap that behavior without changing pipeline contracts. See [Reactive services extension](/guide/development/extension/reactive-services) for the detailed contract.
 
 Common cases:
 
@@ -31,7 +31,7 @@ Common cases:
 ### Client steps
 
 Generated client steps are used by the orchestrator to invoke backend services.
-They are a good place for call-specific concerns.
+They are a good place for call-specific concerns. See [Client steps extension](/guide/development/extension/client-steps) for generated client-step customization.
 
 Common cases:
 
@@ -42,6 +42,7 @@ Common cases:
 ### REST resources
 
 Generated REST resources are regular classes and can be extended safely.
+See [REST resources extension](/guide/development/extension/rest-resources) for endpoint-level customization.
 
 Common cases:
 
@@ -55,3 +56,9 @@ Common cases:
 - Keep custom logic close to the relevant boundary (orchestrator, service, client step, resource).
 - Prefer wrapper/decoration patterns over invasive edits to generated code.
 
+## Related docs
+
+1. [Orchestrator runtime extension](/guide/development/extension/orchestrator-runtime)
+2. [Reactive services extension](/guide/development/extension/reactive-services)
+3. [Client steps extension](/guide/development/extension/client-steps)
+4. [REST resources extension](/guide/development/extension/rest-resources)
