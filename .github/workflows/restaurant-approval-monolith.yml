@@ -7,7 +7,6 @@ on:
     paths:
       - "framework/**"
       - "examples/restaurant-approval/**"
-      - "docs/**"
       - "scripts/ci/**"
       - "pom.xml"
       - "mvnw"

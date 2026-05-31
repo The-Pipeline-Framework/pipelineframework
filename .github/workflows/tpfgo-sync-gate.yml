@@ -7,7 +7,6 @@ on:
     paths:
       - "framework/**"
       - "examples/checkout/**"
-      - "docs/**"
       - "scripts/ci/**"
       - ".github/workflows/tpfgo-sync-gate.yml"
   workflow_dispatch:
