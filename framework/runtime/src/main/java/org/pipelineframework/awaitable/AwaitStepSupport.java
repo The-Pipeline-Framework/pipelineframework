@@ -1,5 +1,6 @@
 package org.pipelineframework.awaitable;
 
+import java.lang.reflect.Array;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
@@ -302,10 +303,20 @@ public class AwaitStepSupport {
                     .onItem().transformToMulti(unit -> unit.status() == AwaitUnitStatus.COMPLETED
                         ? awaitCoordinator.loadResumePayload(context.tenantId(), unitId)
                             .toMulti()
-                            .onItem().transformToMultiAndConcatenate(payload ->
-                                payload instanceof Iterable
-                                    ? Multi.createFrom().<O>iterable((Iterable<O>) payload)
-                                    : Multi.createFrom().<O>item((O) payload))
+                            .onItem().transformToMultiAndConcatenate(payload -> {
+                                if (payload instanceof Iterable) {
+                                    return Multi.createFrom().<O>iterable((Iterable<O>) payload);
+                                } else if (payload != null && payload.getClass().isArray()) {
+                                    int length = Array.getLength(payload);
+                                    O[] items = (O[]) new Object[length];
+                                    for (int i = 0; i < length; i++) {
+                                        items[i] = (O) Array.get(payload, i);
+                                    }
+                                    return Multi.createFrom().<O>items(items);
+                                } else {
+                                    return Multi.createFrom().<O>item((O) payload);
+                                }
+                            })
                         : Uni.createFrom().<O>failure(new AwaitSuspendedException(
                             context.tenantId(),
                             context.executionId(),
