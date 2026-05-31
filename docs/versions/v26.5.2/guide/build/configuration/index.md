@@ -191,7 +191,7 @@ Prefix: `pipeline.persistence`
 | Property                              | Type   | Default | Description                                                                   |
 |---------------------------------------|--------|---------|-------------------------------------------------------------------------------|
 | `pipeline.persistence.duplicate-key`  | string | `fail`  | Duplicate key policy for persistence (`fail`, `ignore`, `upsert`).            |
-| `persistence.provider.class` | string | none    | Fully-qualified persistence provider class name to lock selection at runtime. |
+| `persistence.provider.class` | string | none    | Fully-qualified persistence provider class name to lock selection at runtime. This key intentionally stays outside the `pipeline.persistence` prefix for provider SPI compatibility. |
 
 ### Pipeline Execution
 

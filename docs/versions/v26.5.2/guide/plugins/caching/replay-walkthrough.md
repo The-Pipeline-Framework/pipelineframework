@@ -134,7 +134,7 @@ curl -k -X POST https://localhost:8443/pipeline/run \
   -d '{"docId":"00000000-0000-0000-0000-000000000001","sourceUrl":"https://example.com"}'
 ```
 
-This intentionally misses old cache entries and recomputes the pipeline.
+This will miss old cache entries and recompute the pipeline when replay-aware invalidation or equivalent external replay logic is configured.
 
 ## Replay flow diagram
 

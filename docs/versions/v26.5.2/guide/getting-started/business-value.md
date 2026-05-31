@@ -13,9 +13,9 @@ onMounted(() => {
   if (typeof window !== 'undefined') {
     redirectTimer = window.setTimeout(() => {
       try {
-        window.location.replace(withBase('/value/business-value'))
+        window.location.replace(withBase('/versions/v26.5.2/value/business-value'))
       } catch (error) {
-        console.error('Redirect to /value/business-value failed', error)
+        console.error('Redirect to /versions/v26.5.2/value/business-value failed', error)
       }
     }, 1500)
   }
@@ -32,4 +32,4 @@ onUnmounted(() => {
 
 <p aria-live="polite">Redirecting to the Business Value page…</p>
 
-Business Value moved to [Value > Business Value](/value/business-value).
+Business Value moved to [Value > Business Value](/versions/v26.5.2/value/business-value).

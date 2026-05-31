@@ -15,7 +15,7 @@ The parent POM defines common properties and manages dependencies. The pipeline 
     <packaging>pom</packaging>
 
     <properties>
-        <tpf.version>26.4.5-SNAPSHOT</tpf.version>
+        <tpf.version>26.5.2</tpf.version>
     </properties>
 
     <modules>

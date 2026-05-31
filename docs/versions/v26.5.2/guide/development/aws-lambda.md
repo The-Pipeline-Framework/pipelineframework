@@ -18,7 +18,7 @@ Supported FUNCTION step shapes today:
 
 | Step shape | Status in FUNCTION mode | Notes |
 |------------|-------------------------|-------|
-| `UNARY_UNARY` | Supported | Canonical handler path in B. |
+| `UNARY_UNARY` | Supported | Canonical handler path in bridge-backed FUNCTION mode. |
 | `UNARY_STREAMING` | Supported | Adapter/bridge generated (`invokeOneToMany`). |
 | `STREAMING_UNARY` | Supported | Adapter/bridge generated (`invokeManyToOne`). |
 | `STREAMING_STREAMING` | Supported | Adapter/bridge generated (`invokeManyToMany`). |

@@ -46,7 +46,7 @@ export function compareVersionsDesc(left, right) {
 }
 
 const root = process.cwd()
-const sourceDirs = ['guide']
+const sourceDirs = ['guide', 'value']
 const isDirectExecution =
   process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 const args = process.argv.slice(2)
@@ -142,6 +142,20 @@ This page is maintainer process guidance rather than versioned user documentatio
 `
   }
 
+  if (relativePath === path.join('guide', 'getting-started', 'business-value.md')) {
+    return content
+      .replace("withBase('/value/business-value')", `withBase('/versions/${normalizedVersion}/value/business-value')`)
+      .replace('Redirect to /value/business-value failed', `Redirect to /versions/${normalizedVersion}/value/business-value failed`)
+      .replace('](/value/business-value)', `](/versions/${normalizedVersion}/value/business-value)`)
+  }
+
+  if (relativePath === 'index.md') {
+    return content.replace(
+      /^(\s*link:\s*)\/guide\//gm,
+      `$1/versions/${normalizedVersion}/guide/`
+    )
+  }
+
   return content
 }
 
@@ -155,14 +169,20 @@ async function rewriteInternalLinks(filePath) {
     {from: '](/index)', to: `](${versionPrefix}/index)`},
     {from: '](/guide)', to: `](${versionPrefix}/guide)`},
     {from: '](/guide/', to: `](${versionPrefix}/guide/`},
+    {from: '](/value)', to: `](${versionPrefix}/value)`},
+    {from: '](/value/', to: `](${versionPrefix}/value/`},
     {from: 'href="/"', to: `href="${versionPrefix}/"`},
     {from: 'href="/index"', to: `href="${versionPrefix}/index"`},
     {from: 'href="/guide"', to: `href="${versionPrefix}/guide"`},
     {from: 'href="/guide/', to: `href="${versionPrefix}/guide/`},
+    {from: 'href="/value"', to: `href="${versionPrefix}/value"`},
+    {from: 'href="/value/', to: `href="${versionPrefix}/value/`},
     {from: "href='/'", to: `href='${versionPrefix}/'`},
     {from: "href='/index'", to: `href='${versionPrefix}/index'`},
     {from: "href='/guide'", to: `href='${versionPrefix}/guide'`},
-    {from: "href='/guide/", to: `href='${versionPrefix}/guide/`}
+    {from: "href='/guide/", to: `href='${versionPrefix}/guide/`},
+    {from: "href='/value'", to: `href='${versionPrefix}/value'`},
+    {from: "href='/value/", to: `href='${versionPrefix}/value/`}
   ]
 
   for (const {from, to} of replacements) {

@@ -10,7 +10,7 @@ Caching in TPF is provided by cache plugins that run as side-effect steps. Enabl
 
 Invalidation steps only run when `x-pipeline-replay: true` is present, so normal production runs are unaffected.
 
-Caching works especially well alongside persistence: persistence keeps the durable business record, while cache keeps reusable derived outputs close at hand. See [State, Replay, and Queryable Data](/value/state-replay-and-queryable-data) and [Cache vs Persistence](/versions/v26.5.2/guide/plugins/caching/cache-vs-persistence) for that bigger picture.
+Caching works especially well alongside persistence: persistence keeps the durable business record, while cache keeps reusable derived outputs close at hand. See [State, Replay, and Queryable Data](/versions/v26.5.2/value/state-replay-and-queryable-data) and [Cache vs Persistence](/versions/v26.5.2/guide/plugins/caching/cache-vs-persistence) for that bigger picture.
 
 ## Architecture and execution flow
 

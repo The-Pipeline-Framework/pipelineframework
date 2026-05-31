@@ -14,7 +14,7 @@ This is one of the most important state capabilities in The Pipeline Framework (
 - Returns the original element unchanged
 - Selects the appropriate persistence provider at runtime
 
-If you are looking for the broader value story behind persistence plus caching, start with [State, Replay, and Queryable Data](/value/state-replay-and-queryable-data) and [Cache vs Persistence](/versions/v26.5.2/guide/plugins/caching/cache-vs-persistence).
+If you are looking for the broader value story behind persistence plus caching, start with [State, Replay, and Queryable Data](/versions/v26.5.2/value/state-replay-and-queryable-data) and [Cache vs Persistence](/versions/v26.5.2/guide/plugins/caching/cache-vs-persistence).
 
 ## Module layout
 

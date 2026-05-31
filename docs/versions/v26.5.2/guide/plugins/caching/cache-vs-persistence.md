@@ -10,7 +10,7 @@ Persistence and caching solve different parts of the same application problem.
 - Cache keeps expensive derived outputs close at hand so replay, recomputation, and fast reuse stay cheap.
 - Together they give TPF a practical state-and-replay story without forcing teams to build separate storage and replay plumbing first.
 
-If you want the value-led overview before the mechanics, start with [State, Replay, and Queryable Data](/value/state-replay-and-queryable-data).
+If you want the value-led overview before the mechanics, start with [State, Replay, and Queryable Data](/versions/v26.5.2/value/state-replay-and-queryable-data).
 
 | Capability             | Cache plugin             | Persistence plugin          |
 |------------------------|--------------------------|-----------------------------|

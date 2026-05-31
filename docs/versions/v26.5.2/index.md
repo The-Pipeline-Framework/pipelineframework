@@ -11,7 +11,7 @@ hero:
   actions:
     - theme: alt
       text: Quick Start
-      link: /guide/getting-started/
+      link: /versions/v26.5.2/guide/getting-started/
     - theme: brand
       text: Design with Canvas
       link: https://app.pipelineframework.org
@@ -50,7 +50,7 @@ Use <a href="https://app.pipelineframework.org" target="_blank" rel="noopener no
 ## Why Teams Choose TPF
 
 <div class="home-capability-grid">
-  <a class="home-capability-card" href="/value/developer-experience">
+  <a class="home-capability-card" href="/versions/v26.5.2/value/developer-experience">
     <h3>Clear Inputs and Outputs</h3>
     <p>Each step is one Java function with explicit input and output types, so it is obvious what goes in and what comes out.</p>
   </a>
@@ -66,19 +66,19 @@ Use <a href="https://app.pipelineframework.org" target="_blank" rel="noopener no
     <h3>Reliable Background Work</h3>
     <p>Store accepted work, retry failed transitions, recover after crashes, and send terminal failures to a dead-letter channel.</p>
   </a>
-  <a class="home-capability-card" href="/value/runtime-efficiency">
+  <a class="home-capability-card" href="/versions/v26.5.2/value/runtime-efficiency">
     <h3>Runtime Efficiency</h3>
     <p>Keep many items moving through reactive function chains, including await steps that pause for external work without tying up a thread.</p>
   </a>
-  <a class="home-capability-card" href="/value/integration-flexibility">
+  <a class="home-capability-card" href="/versions/v26.5.2/value/integration-flexibility">
     <h3>Portable Serverless Functions</h3>
     <p>Generate serverless function entry points and handlers for AWS Lambda, Azure Functions, and Google Cloud Run functions from the same typed Java flow.</p>
   </a>
-  <a class="home-capability-card" href="/value/deployment-evolution">
+  <a class="home-capability-card" href="/versions/v26.5.2/value/deployment-evolution">
     <h3>Container and Kubernetes Ready</h3>
     <p>Generate standard Quarkus service runtimes for containers and Kubernetes, then evolve from monolith to split layouts when needed.</p>
   </a>
-  <a class="home-capability-card" href="/value/state-replay-and-queryable-data">
+  <a class="home-capability-card" href="/versions/v26.5.2/value/state-replay-and-queryable-data">
     <h3>State, Replay, and Queryable Data</h3>
     <p>Use persistence for durable business state and caching for fast recomputation, replay, and query-ready outputs.</p>
   </a>
@@ -117,7 +117,7 @@ Start with [pipeline compilation](/versions/v26.5.2/guide/build/pipeline-compila
 
 TPF creates the REST resources, gRPC services, local clients, function-style handlers, and runtime files that would otherwise become handwritten service glue. An **adapter** is the generated code around your business function: it lets another component call the function through the selected transport.
 
-Generated code keeps business logic independent of whether a caller uses REST, gRPC, local in-process calls, or a serverless function entry point. That same generated runtime can be packaged as a standard Quarkus service for containers and Kubernetes or as a `FUNCTION` deployment when that model fits better. See [Portable Serverless Functions](/value/integration-flexibility) and [runtime layouts](/versions/v26.5.2/guide/build/runtime-layouts/) when you want the details behind platform mode, transport mode, logical placement, and Maven/container packaging.
+Generated code keeps business logic independent of whether a caller uses REST, gRPC, local in-process calls, or a serverless function entry point. That same generated runtime can be packaged as a standard Quarkus service for containers and Kubernetes or as a `FUNCTION` deployment when that model fits better. See [Portable Serverless Functions](/versions/v26.5.2/value/integration-flexibility) and [runtime layouts](/versions/v26.5.2/guide/build/runtime-layouts/) when you want the details behind platform mode, transport mode, logical placement, and Maven/container packaging.
 
 ### Run the flow reliably
 
@@ -137,7 +137,7 @@ TPF does not just generate code and walk away. In the background execution path,
 
 That keeps business functions focused on domain behaviour while TPF keeps generated plugin calls aligned across REST, gRPC, and local execution.
 
-See [State, Replay, and Queryable Data](/value/state-replay-and-queryable-data) for the full persistence-and-caching story.
+See [State, Replay, and Queryable Data](/versions/v26.5.2/value/state-replay-and-queryable-data) for the full persistence-and-caching story.
 
 <Callout type="tip" title="Operators preserve existing investment">
 If you already have proven Java libraries or remote endpoints, operators let you reuse them as pipeline functions. TPF still validates the method reference, input/output types, type-translation compatibility, and generated function call instead of turning reuse into hidden service glue.

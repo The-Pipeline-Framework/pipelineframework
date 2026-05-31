@@ -298,8 +298,8 @@ to the annotation processor if you have a custom descriptor location.
 Generated sources can be found in the target directory:
 
 ```bash
-# Generated sources location
-target/generated-sources/annotations/
+# Generated pipeline sources location
+target/generated-sources/pipeline/
 
 # Generated classes location
 target/classes/

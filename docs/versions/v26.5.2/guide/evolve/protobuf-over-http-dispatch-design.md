@@ -10,8 +10,8 @@ This document defines orchestrator-side dispatch changes required to make Protob
 
 Status in current GA track:
 
-1. Contract parity is being aligned across REST, gRPC, Function, and Protobuf-over-HTTP.
-2. Async control-plane semantics are shared across transports (same transition identity and retry model).
+1. Contract parity is being aligned across REST, gRPC, LOCAL, and Protobuf-over-HTTP transports.
+2. Async control-plane semantics are shared across transports and platform paths (same transition identity and retry model).
 3. Event-sourced dispatch journaling remains a future evolution path, not a GA blocker.
 
 ## Dispatch Metadata Generation
@@ -73,7 +73,7 @@ On restart:
 - Implement an orchestrator worker reconciliation loop for orphaned `SENT` records.
 - Provide durable dead-letter routing for `FAILED_FINAL` with operator-facing diagnostics.
 
-## Additional slice: dispatch parity across all transports
+## Additional work: dispatch parity across all transports
 
 The dispatch metadata/state-machine contract must be enforced consistently beyond Protobuf-over-HTTP.
 
@@ -81,8 +81,9 @@ The dispatch metadata/state-machine contract must be enforced consistently beyon
 
 - gRPC transport
 - REST/JSON transport
-- FUNCTION remote invoke path
 - LOCAL transport (for parity testing and deterministic simulation)
+
+The `FUNCTION` platform path should preserve the same metadata contract through generated provider handlers, but it is a platform mode rather than a transport.
 
 ### Required parity outcomes
 

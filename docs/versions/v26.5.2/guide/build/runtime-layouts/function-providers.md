@@ -121,11 +121,13 @@ See [Azure Functions Testing Guide](/versions/v26.5.2/guide/build/runtime-layout
 | Property | Description | Values | Default |
 |----------|-------------|--------|---------|
 | `tpf.build.platform` | Target platform | `COMPUTE`, `FUNCTION` | `COMPUTE` |
-| `tpf.build.transport` | Transport protocol | `REST`, `GRPC` | `REST` |
+| `tpf.build.transport` | Transport protocol for `FUNCTION` builds | `REST` | `REST` |
 | `tpf.build.lambda.scope` | Lambda dependency scope | `compile`, `provided` | `provided` |
 | `tpf.build.azure.scope` | Azure dependency scope | `compile`, `provided` | `provided` |
 | `tpf.build.gcp.scope` | GCP dependency scope | `compile`, `provided` | `provided` |
 | `quarkus.profile` | Quarkus profile | `lambda`, `azure-functions`, `gcp-functions` | - |
+
+`FUNCTION` is a platform mode, not a transport. Function-provider builds generate provider handler artifacts and currently require `REST` transport; `gRPC` remains a transport option for `COMPUTE` deployments.
 
 ### Provider Selection
 

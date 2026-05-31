@@ -35,9 +35,9 @@ Use this matrix for compile-time/operator-resolution failures.
 
 ```bash
 ./mvnw -f examples/search/pom.xml -pl orchestrator-svc -am \
-  -Dpipeline.platform=FUNCTION \
-  -Dpipeline.transport=REST \
-  -Dpipeline.rest.naming.strategy=RESOURCEFUL \
+  -Dtpf.build.platform=FUNCTION \
+  -Dtpf.build.transport=REST \
+  -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
   -DskipTests compile
 ```
 

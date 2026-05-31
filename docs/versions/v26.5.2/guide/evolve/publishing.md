@@ -209,7 +209,7 @@ Use the Maven Release Plugin as the versioning tool for the root reactor, but ke
    ./mvnw release:prepare \
      -DpushChanges=false \
      -DreleaseVersion=X.Y.Z \
-     -DdevelopmentVersion=NEXT.Y.Z-SNAPSHOT \
+     -DdevelopmentVersion=NEXT_VERSION-SNAPSHOT \
      -Dtag=vX.Y.Z \
      -Darguments="-DskipTests"
    ```
@@ -276,7 +276,7 @@ Use the Maven Release Plugin as the versioning tool for the root reactor, but ke
    git push origin vX.Y.Z
    ```
 
-This triggers the GitHub Actions workflow that runs `mvn deploy` to publish framework artifacts to Maven Central.
+   This triggers the GitHub Actions workflow that runs `mvn deploy` to publish framework artifacts to Maven Central.
 
 **Note**: The `mvn release:perform` step is not used in this setup since deployment is handled by GitHub Actions when a tag is pushed.
 

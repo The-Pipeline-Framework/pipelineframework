@@ -28,9 +28,9 @@ Optional example path (Search reference project):
 
 ```bash
 ./mvnw -f examples/search/pom.xml -pl orchestrator-svc -am \
-  -Dpipeline.platform=FUNCTION \
-  -Dpipeline.transport=REST \
-  -Dpipeline.rest.naming.strategy=RESOURCEFUL \
+  -Dtpf.build.platform=FUNCTION \
+  -Dtpf.build.transport=REST \
+  -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
   -DskipTests compile
 ```
 
@@ -69,9 +69,9 @@ TPFGo reference command paths:
 ### Function/REST mode
 
 - Build with:
-  - `-Dpipeline.platform=FUNCTION`
-  - `-Dpipeline.transport=REST`
-  - `-Dpipeline.rest.naming.strategy=RESOURCEFUL`
+  - `-Dtpf.build.platform=FUNCTION`
+  - `-Dtpf.build.transport=REST`
+  - `-Dtpf.build.rest.naming.strategy=RESOURCEFUL`
 - Validate handler path with `LambdaMockEventServerSmokeTest`.
 
 ## Signals to Watch
