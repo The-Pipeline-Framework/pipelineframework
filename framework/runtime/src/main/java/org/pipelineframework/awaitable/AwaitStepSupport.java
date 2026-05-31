@@ -2,6 +2,7 @@ package org.pipelineframework.awaitable;
 
 import java.lang.reflect.Array;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -176,16 +177,8 @@ public class AwaitStepSupport {
     }
 
     private <I, O> Uni<O> awaitManyToOne(AwaitStepDescriptor descriptor, Multi<I> input, AwaitExecutionContext context) {
-        return input.collect().asList()
-            .onItem().transformToUni(items -> {
-                List<I> materialized = List.copyOf(items);
-                enforceAggregateItemLimit(
-                    "input",
-                    descriptor,
-                    materialized.size(),
-                    orchestratorConfig.awaitAggregateMaxInputItems());
-                return awaitOneToOne(descriptor, materialized, context);
-            });
+        return materializeAggregateInput(descriptor, input)
+            .onItem().transformToUni(materialized -> awaitOneToOne(descriptor, materialized, context));
     }
 
     /**
@@ -227,17 +220,11 @@ public class AwaitStepSupport {
 
     @SuppressWarnings("unchecked")
     private <I, O> Multi<O> awaitManyToMany(AwaitStepDescriptor descriptor, Multi<I> input, AwaitExecutionContext context) {
-        return input.collect().asList()
-            .onItem().transformToMulti(items -> {
-                if (items.isEmpty()) {
+        return materializeAggregateInput(descriptor, input)
+            .onItem().transformToMulti(materialized -> {
+                if (materialized.isEmpty()) {
                     return Multi.createFrom().<O>empty();
                 }
-                List<I> materialized = List.copyOf(items);
-                enforceAggregateItemLimit(
-                    "input",
-                    descriptor,
-                    materialized.size(),
-                    orchestratorConfig.awaitAggregateMaxInputItems());
                 return this.<List<I>, Object>awaitOneToOne(descriptor, materialized, context)
                     .toMulti()
                     .onItem().transformToMultiAndConcatenate(result ->
@@ -245,6 +232,16 @@ public class AwaitStepSupport {
                             ? Multi.createFrom().<O>iterable((Iterable<O>) result)
                             : Multi.createFrom().<O>item((O) result));
             });
+    }
+
+    private <T> Uni<List<T>> materializeAggregateInput(AwaitStepDescriptor descriptor, Multi<T> input) {
+        int configuredLimit = orchestratorConfig.awaitAggregateMaxInputItems();
+        java.util.function.Supplier<List<T>> supplier = ArrayList::new;
+        java.util.function.BiConsumer<List<T>, T> accumulator = (items, item) -> {
+            items.add(item);
+            enforceAggregateItemLimit("input", descriptor, items.size(), configuredLimit);
+        };
+        return input.collect().in(supplier, accumulator).onItem().transform(List::copyOf);
     }
 
     private AwaitExecutionContext captureExecutionContext() {
