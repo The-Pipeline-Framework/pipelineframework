@@ -2,7 +2,7 @@
 
 Standalone Three.js viewer for framework replay JSON.
 
-The canonical replay viewer source lives in `tools/replay-viewer/`. The docs site publishes the app at `/replay-viewer/` by copying these files into `docs/public/replay-viewer/` during the docs build. `/replay-viewer/index.html` stays valid as a compatibility entrypoint.
+The canonical replay viewer source lives in `tools/replay-viewer/`. The docs site exposes `/replay-viewer/` as a VitePress route and hosts the standalone viewer assets from `docs/public/replay-viewer-app/` during the docs build.
 
 ## Supported input
 
@@ -70,5 +70,5 @@ These are curated viewer datasets. They are not the source of truth for replay s
 ## Source layout
 
 - application source: `tools/replay-viewer/`
-- published docs copy: `docs/public/replay-viewer/`
+- published docs copy: `docs/public/replay-viewer-app/`
 - vendored Three.js runtime: `tools/replay-viewer/vendor/`

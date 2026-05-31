@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 class CsvPaymentsAwaitPersistenceScopeTest {
 
     @Test
-    void persistenceAspectTargetsOnlyPreAwaitSteps() throws IOException {
+    void persistenceAspectTargetsConcreteServiceSteps() throws IOException {
         String pipelineYaml = Files.readString(resolveConfigPath("pipeline.yaml"));
 
         assertTrue(pipelineYaml.contains("aspects:\n  persistence:"), "Expected persistence aspect in pipeline.yaml");
@@ -26,15 +26,15 @@ class CsvPaymentsAwaitPersistenceScopeTest {
         assertTrue(
                 pipelineYaml.contains("- ProcessCsvPaymentsInputService"),
                 "Persistence should include the CSV parsing step");
+        assertTrue(
+                pipelineYaml.contains("- ProcessPaymentStatusService"),
+                "Persistence should include post-await status processing");
+        assertTrue(
+                pipelineYaml.contains("- ProcessCsvPaymentsOutputFileService"),
+                "Persistence should include output generation");
         assertFalse(
                 pipelineYaml.contains("- Await Payment Provider"),
                 "Persistence should not target the replayable await boundary");
-        assertFalse(
-                pipelineYaml.contains("- ProcessPaymentStatusService"),
-                "Persistence should not target post-await status processing");
-        assertFalse(
-                pipelineYaml.contains("- ProcessCsvPaymentsOutputFileService"),
-                "Persistence should not target post-await output generation");
     }
 
     @Test

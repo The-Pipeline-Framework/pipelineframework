@@ -21,6 +21,8 @@ modules:
     runtime: lambda
   tokenize-content-svc:
     runtime: lambda
+  embed-content-svc:
+    runtime: lambda
   index-document-svc:
     runtime: lambda
 
@@ -31,5 +33,7 @@ steps:
     module: parse-document-svc
   ProcessTokenizeContentService:
     module: tokenize-content-svc
+  ProcessEmbedContentService:
+    module: embed-content-svc
   ProcessIndexDocumentService:
     module: index-document-svc

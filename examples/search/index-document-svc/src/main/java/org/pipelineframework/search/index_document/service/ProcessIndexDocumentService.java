@@ -22,8 +22,8 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.PipelineStep;
+import org.pipelineframework.search.common.domain.EmbeddedChunk;
 import org.pipelineframework.search.common.domain.IndexAck;
-import org.pipelineframework.search.common.domain.TokenBatch;
 import org.pipelineframework.search.common.util.HashingUtils;
 import org.pipelineframework.service.ReactiveStreamingClientService;
 import org.pipelineframework.step.NonRetryableException;
@@ -39,7 +39,7 @@ import org.pipelineframework.step.NonRetryableException;
  */
 @ApplicationScoped
 public class ProcessIndexDocumentService
-    implements ReactiveStreamingClientService<TokenBatch, IndexAck> {
+    implements ReactiveStreamingClientService<EmbeddedChunk, IndexAck> {
   private static final int MAX_BATCHES = 10_000;
   // This value represents retries after the initial attempt.
   private static final int DEFAULT_MAX_TRANSIENT_RETRIES = 3;
@@ -91,17 +91,17 @@ public class ProcessIndexDocumentService
   }
 
   @Override
-  public Uni<IndexAck> process(Multi<TokenBatch> input) {
+  public Uni<IndexAck> process(Multi<EmbeddedChunk> input) {
     return input
         .collect()
         .asList()
-        .onItem().transformToUni(this::processBatchesWithReliability);
+        .onItem().transformToUni(this::processChunksWithReliability);
   }
 
-  private Uni<IndexAck> processBatchesWithReliability(List<TokenBatch> batches) {
-    UUID docId = extractDocId(batches);
+  private Uni<IndexAck> processChunksWithReliability(List<EmbeddedChunk> chunks) {
+    UUID docId = extractDocId(chunks);
     String docIdLabel = docId == null ? "unknown-doc" : docId.toString();
-    return Uni.createFrom().deferred(() -> processBatches(batches))
+    return Uni.createFrom().deferred(() -> processChunks(chunks))
         .onFailure(TransientIndexingException.class)
         .retry()
         .withBackOff(retryWait, maxBackoff)
@@ -123,73 +123,77 @@ public class ProcessIndexDocumentService
     return error instanceof TransientIndexingException || error instanceof NonRetryableException;
   }
 
-  private Uni<IndexAck> processBatches(List<TokenBatch> batches) {
-    if (batches == null || batches.isEmpty()) {
-      return Uni.createFrom().failure(new IllegalArgumentException("token batches are required"));
+  private Uni<IndexAck> processChunks(List<EmbeddedChunk> chunks) {
+    if (chunks == null || chunks.isEmpty()) {
+      return Uni.createFrom().failure(new IllegalArgumentException("embedded chunks are required"));
     }
-    if (batches.size() > MAX_BATCHES) {
+    if (chunks.size() > MAX_BATCHES) {
       return Uni.createFrom()
-          .failure(new IllegalArgumentException("token batch count exceeds limit: " + MAX_BATCHES));
+          .failure(new IllegalArgumentException("embedded chunk count exceeds limit: " + MAX_BATCHES));
     }
-    if (batches.stream().anyMatch(batch ->
-        batch == null
-            || batch.tokens == null
-            || batch.tokens.isBlank()
-            || batch.tokensHash == null
-            || batch.tokensHash.isBlank())) {
+    if (chunks.stream().anyMatch(chunk ->
+        chunk == null
+            || chunk.tokens == null
+            || chunk.tokens.isBlank()
+            || chunk.tokensHash == null
+            || chunk.tokensHash.isBlank()
+            || chunk.vectorHash == null
+            || chunk.vectorHash.isBlank()
+            || chunk.vectorVersion == null
+            || chunk.vectorVersion.isBlank())) {
       return Uni.createFrom().failure(new IllegalArgumentException(
-          "all token batches must contain tokens and tokensHash"));
+          "all embedded chunks must contain tokens, tokensHash, vectorHash, and vectorVersion"));
     }
-    UUID docId = batches.get(0).docId;
+    UUID docId = chunks.get(0).docId;
     if (docId == null) {
       return Uni.createFrom().failure(new IllegalArgumentException("docId is required"));
     }
-    if (batches.stream().anyMatch(batch -> batch.docId == null || !docId.equals(batch.docId))) {
-      return Uni.createFrom().failure(new IllegalArgumentException("all token batches must share the same docId"));
+    if (chunks.stream().anyMatch(chunk -> chunk.docId == null || !docId.equals(chunk.docId))) {
+      return Uni.createFrom().failure(new IllegalArgumentException("all embedded chunks must share the same docId"));
     }
-    if (batches.stream().anyMatch(batch ->
-        batch.batchIndex == null || batch.batchIndex < 0 || batch.tokenCount == null || batch.tokenCount <= 0)) {
+    if (chunks.stream().anyMatch(chunk ->
+        chunk.batchIndex == null || chunk.batchIndex < 0 || chunk.tokenCount == null || chunk.tokenCount <= 0)) {
       return Uni.createFrom().failure(new IllegalArgumentException(
-          "invalid token batch metrics for docId " + docId + ": batchIndex must be >= 0 and tokenCount must be > 0"));
+          "invalid embedded chunk metrics for docId " + docId + ": batchIndex must be >= 0 and tokenCount must be > 0"));
     }
-    List<TokenBatch> orderedBatches = orderBatchesForAggregation(batches);
-    FailureDirective directive = evaluateFailureDirective(orderedBatches, docId);
+    List<EmbeddedChunk> orderedChunks = orderChunksForAggregation(chunks);
+    FailureDirective directive = evaluateFailureDirective(orderedChunks, docId);
     if (directive != null) {
       return Uni.createFrom().failure(directive.toException());
     }
 
     String indexVersion = resolveIndexVersion();
-    String joinedTokenHashes = orderedBatches.stream()
-        .map(batch -> batch.tokensHash)
+    String joinedVectorHashes = orderedChunks.stream()
+        .map(chunk -> chunk.vectorHash)
         .collect(Collectors.joining("|"));
-    String combinedTokensHash = HashingUtils.sha256Base64Url(joinedTokenHashes);
-    AggregationSummary summary = summarizeTokens(orderedBatches);
+    String combinedTokensHash = HashingUtils.sha256Base64Url(joinedVectorHashes);
+    AggregationSummary summary = summarizeTokens(orderedChunks);
 
     IndexAck output = new IndexAck();
     output.docId = docId;
     output.setIndexVersion(indexVersion);
     output.setTokensHash(combinedTokensHash);
-    output.setTokenBatchCount(orderedBatches.size());
+    output.setTokenBatchCount(orderedChunks.size());
     output.setUniqueTokenCount(summary.uniqueTokenCount());
     output.setTopToken(summary.topToken());
     output.setIndexedAt(Instant.now());
     output.setSuccess(true);
 
     LOGGER.debugf(
-        "Indexed doc %s from %s token batches (version=%s, uniqueTokens=%s, topToken=%s)",
+        "Indexed doc %s from %s embedded chunks (version=%s, uniqueTokens=%s, topToken=%s)",
         docId,
-        orderedBatches.size(),
+        orderedChunks.size(),
         indexVersion,
         summary.uniqueTokenCount(),
         summary.topToken());
     return Uni.createFrom().item(output);
   }
 
-  private UUID extractDocId(List<TokenBatch> batches) {
-    if (batches == null || batches.isEmpty()) {
+  private UUID extractDocId(List<EmbeddedChunk> chunks) {
+    if (chunks == null || chunks.isEmpty()) {
       return null;
     }
-    return batches.get(0).docId;
+    return chunks.get(0).docId;
   }
 
   /**
@@ -199,15 +203,15 @@ public class ProcessIndexDocumentService
    * produce non-retryable failures. Marker evaluation is intentionally limited to reliability test
    * scenarios and should not be enabled for unsanitized external input.
    */
-  private FailureDirective evaluateFailureDirective(List<TokenBatch> batches, UUID docId) {
-    if (!chaosEnabled || docId == null || batches == null) {
+  private FailureDirective evaluateFailureDirective(List<EmbeddedChunk> chunks, UUID docId) {
+    if (!chaosEnabled || docId == null || chunks == null) {
       return null;
     }
-    for (TokenBatch batch : batches) {
-      if (batch == null || batch.tokens == null) {
+    for (EmbeddedChunk chunk : chunks) {
+      if (chunk == null || chunk.tokens == null) {
         continue;
       }
-      String tokens = batch.tokens;
+      String tokens = chunk.tokens;
       // Marker hooks are for controlled tests only; do not allow untrusted payloads to set these.
       if (tokens.contains(PERMANENT_FAILURE_MARKER)) {
         return FailureDirective.permanent("permanent indexing failure marker received");
@@ -241,32 +245,32 @@ public class ProcessIndexDocumentService
     transientAttemptsByDoc.keySet().removeIf(key -> key.startsWith(prefix));
   }
 
-  private List<TokenBatch> orderBatchesForAggregation(List<TokenBatch> batches) {
-    return batches.stream()
+  private List<EmbeddedChunk> orderChunksForAggregation(List<EmbeddedChunk> chunks) {
+    return chunks.stream()
         .sorted(Comparator
-            .comparing((TokenBatch batch) -> batch.batchIndex, Comparator.nullsLast(Integer::compareTo))
-            .thenComparing(batch -> batch.tokensHash, Comparator.nullsLast(String::compareTo))
-            .thenComparing(batch -> batch.tokens, Comparator.nullsLast(String::compareTo)))
+            .comparing((EmbeddedChunk chunk) -> chunk.batchIndex, Comparator.nullsLast(Integer::compareTo))
+            .thenComparing(chunk -> chunk.vectorHash, Comparator.nullsLast(String::compareTo))
+            .thenComparing(chunk -> chunk.tokens, Comparator.nullsLast(String::compareTo)))
         .toList();
   }
 
   /**
-   * Produces a summary of tokens found across the given token batches.
+   * Produces a summary of tokens found across the given embedded chunks.
    *
    * Tokens are extracted by splitting each batch's `tokens` text on whitespace; null or blank token strings are ignored.
    *
-   * @param batches the token batches to aggregate
+   * @param chunks the embedded chunks to aggregate
    * @return an AggregationSummary whose first element is the number of distinct tokens and whose second element is the most frequent token;
    *         if no tokens are present the unique token count is 0 and the top token is `null`. The top token is chosen by highest frequency,
    *         with ties broken by selecting the lexicographically smaller token (earlier in natural string order).
    */
-  private AggregationSummary summarizeTokens(List<TokenBatch> batches) {
+  private AggregationSummary summarizeTokens(List<EmbeddedChunk> chunks) {
     Map<String, Integer> counts = new HashMap<>();
-    for (TokenBatch batch : batches) {
-      if (batch.tokens == null || batch.tokens.isBlank()) {
+    for (EmbeddedChunk chunk : chunks) {
+      if (chunk.tokens == null || chunk.tokens.isBlank()) {
         continue;
       }
-      for (String token : batch.tokens.trim().split("\\s+")) {
+      for (String token : chunk.tokens.trim().split("\\s+")) {
         if (token.isBlank()) {
           continue;
         }

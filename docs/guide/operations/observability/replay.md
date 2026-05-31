@@ -105,10 +105,6 @@ The supported replay viewer is published from the docs site at:
 
 - `/replay-viewer/`
 
-Compatibility entrypoint:
-
-- `/replay-viewer/index.html`
-
 It ships with built-in datasets and also accepts imported replay JSON files generated from your own runs.
 
 The viewer exposes:
