@@ -53,6 +53,15 @@ Await has the same side-effect rule as the rest of `QUEUE_ASYNC`: orchestrator s
 
 Aggregate await shapes materialize input and/or output units in the current runtime. Do not use unbounded payloads for `ONE_TO_MANY`, `MANY_TO_ONE`, or `MANY_TO_MANY` await boundaries. If replay of a materialized multi-item output fails halfway through downstream execution, TPF restarts that output unit as a whole; it does not claim exactly-once partial stream progress inside the unit.
 
+The runtime also enforces aggregate materialization guardrails:
+
+| Config key | Default | Applies to |
+| --- | --- | --- |
+| `pipeline.orchestrator.await-aggregate-max-input-items` | `10000` | materialized input units for `MANY_TO_ONE` and `MANY_TO_MANY` await steps |
+| `pipeline.orchestrator.await-aggregate-max-output-items` | `10000` | materialized output units for `ONE_TO_MANY` and `MANY_TO_MANY` await steps |
+
+Set either value to `0` only when the application has its own upstream size control and storage budget. Prefer stable business limits at the API/file/broker boundary rather than relying on these guards as the first line of defense.
+
 Transport choice changes operational responsibility. `interaction-api` requires an API consumer to query and complete pending work. `webhook` requires stable resume-token signing and callback reachability. `kafka` requires broker channel configuration, consumer health, and response-envelope monitoring.
 
 That matters for plugin-style side effects after an await boundary. A resumed queue-async execution can replay the remainder of the pipeline after a downstream retry, so once-only side-effect checkpointing is a separate concern from await durability itself.

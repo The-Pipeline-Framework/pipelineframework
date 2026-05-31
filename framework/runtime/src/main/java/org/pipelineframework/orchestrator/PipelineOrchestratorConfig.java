@@ -156,6 +156,28 @@ public interface PipelineOrchestratorConfig {
     Optional<String> resumeTokenSecret();
 
     /**
+     * Maximum number of items an aggregate await step may materialize from its input stream.
+     *
+     * A value of zero disables the guard.
+     *
+     * @return max materialized input items for aggregate await units
+     */
+    @WithName("await-aggregate-max-input-items")
+    @WithDefault("10000")
+    int awaitAggregateMaxInputItems();
+
+    /**
+     * Maximum number of items an aggregate await step may replay from one materialized output unit.
+     *
+     * A value of zero disables the guard.
+     *
+     * @return max materialized output items for aggregate await units
+     */
+    @WithName("await-aggregate-max-output-items")
+    @WithDefault("10000")
+    int awaitAggregateMaxOutputItems();
+
+    /**
      * DynamoDB provider configuration.
      *
      * @return dynamo provider config

@@ -1,6 +1,8 @@
 package org.pipelineframework.awaitable;
 
+import java.lang.reflect.Array;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -175,8 +177,8 @@ public class AwaitStepSupport {
     }
 
     private <I, O> Uni<O> awaitManyToOne(AwaitStepDescriptor descriptor, Multi<I> input, AwaitExecutionContext context) {
-        return input.collect().asList()
-            .onItem().transformToUni(items -> awaitOneToOne(descriptor, List.copyOf(items), context));
+        return materializeAggregateInput(descriptor, input)
+            .onItem().transformToUni(materialized -> awaitOneToOne(descriptor, materialized, context));
     }
 
     /**
@@ -218,18 +220,28 @@ public class AwaitStepSupport {
 
     @SuppressWarnings("unchecked")
     private <I, O> Multi<O> awaitManyToMany(AwaitStepDescriptor descriptor, Multi<I> input, AwaitExecutionContext context) {
-        return input.collect().asList()
-            .onItem().transformToMulti(items -> {
-                if (items.isEmpty()) {
+        return materializeAggregateInput(descriptor, input)
+            .onItem().transformToMulti(materialized -> {
+                if (materialized.isEmpty()) {
                     return Multi.createFrom().<O>empty();
                 }
-                return this.<List<I>, Object>awaitOneToOne(descriptor, List.copyOf(items), context)
+                return this.<List<I>, Object>awaitOneToOne(descriptor, materialized, context)
                     .toMulti()
                     .onItem().transformToMultiAndConcatenate(result ->
                         result instanceof Iterable
                             ? Multi.createFrom().<O>iterable((Iterable<O>) result)
                             : Multi.createFrom().<O>item((O) result));
             });
+    }
+
+    private <T> Uni<List<T>> materializeAggregateInput(AwaitStepDescriptor descriptor, Multi<T> input) {
+        int configuredLimit = orchestratorConfig.awaitAggregateMaxInputItems();
+        java.util.function.Supplier<List<T>> supplier = ArrayList::new;
+        java.util.function.BiConsumer<List<T>, T> accumulator = (items, item) -> {
+            items.add(item);
+            enforceAggregateItemLimit("input", descriptor, items.size(), configuredLimit);
+        };
+        return input.collect().in(supplier, accumulator).onItem().transform(List::copyOf);
     }
 
     private AwaitExecutionContext captureExecutionContext() {
@@ -243,6 +255,7 @@ public class AwaitStepSupport {
         return new AwaitExecutionContext(context.tenantId(), context.executionId(), context.currentStepIndex());
     }
 
+    @SuppressWarnings("unchecked")
     private <I, O> Multi<O> awaitOneToOneStream(
         AwaitStepDescriptor descriptor,
         Multi<I> input,
@@ -275,20 +288,38 @@ public class AwaitStepSupport {
         return dispatched
             .collect().in(() -> Boolean.TRUE, (ignored, record) -> {
             })
-            .onItem().transformToUni(ignored -> itemIndex.get() == 0
-                ? Uni.createFrom().item(Boolean.FALSE)
-                : awaitCoordinator.markDispatchComplete(
+            .onItem().transformToMulti(ignored -> {
+                if (itemIndex.get() == 0) {
+                    return Multi.createFrom().empty();
+                }
+                return awaitCoordinator.markDispatchComplete(
                     context.tenantId(),
                     unitId,
                     itemIndex.get(),
-                    System.currentTimeMillis()).replaceWith(Boolean.TRUE))
-            .onItem().transformToMulti(dispatchedAny -> Boolean.TRUE.equals(dispatchedAny)
-                ? Uni.createFrom().<O>failure(new AwaitSuspendedException(
-                    context.tenantId(),
-                    context.executionId(),
-                    unitId,
-                    stepIndex)).toMulti()
-                : Multi.createFrom().empty());
+                    System.currentTimeMillis())
+                    .onItem().transformToMulti(unit -> unit.status() == AwaitUnitStatus.COMPLETED
+                        ? awaitCoordinator.loadResumePayload(context.tenantId(), unitId)
+                            .toMulti()
+                            .onItem().transformToMultiAndConcatenate(payload -> {
+                                if (payload instanceof Iterable) {
+                                    return Multi.createFrom().<O>iterable((Iterable<O>) payload);
+                                } else if (payload != null && payload.getClass().isArray()) {
+                                    int length = Array.getLength(payload);
+                                    O[] items = (O[]) new Object[length];
+                                    for (int i = 0; i < length; i++) {
+                                        items[i] = (O) Array.get(payload, i);
+                                    }
+                                    return Multi.createFrom().<O>items(items);
+                                } else {
+                                    return Multi.createFrom().<O>item((O) payload);
+                                }
+                            })
+                        : Uni.createFrom().<O>failure(new AwaitSuspendedException(
+                            context.tenantId(),
+                            context.executionId(),
+                            unitId,
+                            stepIndex)).toMulti());
+            });
     }
 
     private <T> Uni<T> withAwaitExecutionContext(AwaitExecutionContext context, java.util.function.Supplier<Uni<T>> supplier) {
@@ -310,5 +341,22 @@ public class AwaitStepSupport {
         } else {
             AwaitExecutionContextHolder.set(previous);
         }
+    }
+
+    private static void enforceAggregateItemLimit(
+        String materializedSide,
+        AwaitStepDescriptor descriptor,
+        int itemCount,
+        int configuredLimit
+    ) {
+        if (configuredLimit <= 0 || itemCount <= configuredLimit) {
+            return;
+        }
+        throw new IllegalStateException(
+            "Await step " + descriptor.stepId()
+                + " materialized " + itemCount + " " + materializedSide
+                + " items for " + descriptor.cardinality()
+                + ", exceeding pipeline.orchestrator.await-aggregate-max-" + materializedSide
+                + "-items=" + configuredLimit + ".");
     }
 }
