@@ -368,8 +368,8 @@ Ensure the required dependency is present. Both runtime and deployment component
 Verify the processor is on the classpath:
 
 ```bash
-# Check that deployment module is included
-mvn dependency:tree | grep pipeline-framework
+# Check that the pipelineframework dependency is included
+mvn dependency:tree | grep pipelineframework
 ```
 
 #### 3. Generated Classes Not Found

@@ -151,8 +151,8 @@ This page is maintainer process guidance rather than versioned user documentatio
 
   if (relativePath === 'index.md') {
     return content.replace(
-      /^(\s*link:\s*)\/guide\//gm,
-      `$1/versions/${normalizedVersion}/guide/`
+      /^(\s*link:\s*)\/(guide|value)\//gm,
+      `$1/versions/${normalizedVersion}/$2/`
     )
   }
 
