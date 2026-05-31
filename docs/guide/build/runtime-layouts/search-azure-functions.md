@@ -280,7 +280,8 @@ Maintainer-only notes for GitHub OIDC subjects and workflow dispatch details liv
 
 ## Non-Unary Function Bridge Lane
 
-Run targeted tests that validate generated non-unary function bridge paths for Search shape mappings:
+Run targeted tests that validate generated non-unary function bridge paths for Search shape mappings.
+The deployment lane uses the provider-neutral REST function handler renderer test; there is no Azure-specific orchestrator renderer test in the current codebase.
 
 ```bash
 # Framework runtime tests
