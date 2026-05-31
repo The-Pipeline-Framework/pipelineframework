@@ -114,6 +114,66 @@ Open the supported replay viewer at `/replay-viewer/` and either:
 
 The built-in CSV dataset is sourced from the 1k-input replay lane and is intended as the longer default demo dataset for the viewer.
 
+For the unified runtime demo suite, use these capture profiles.
+
+### Demo capture profiles
+
+Build the modular telemetry images before recording any profile:
+
+```bash
+cd <repo-root>
+./examples/csv-payments/build-modular-telemetry-images.sh
+```
+
+Baseline typed runtime flow:
+
+```bash
+./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.telemetry.enabled=true \
+  -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
+  -Dcsv.e2e.reader-demand-pacer.rows-per-period=10 \
+  -Dcsv.e2e.reader-demand-pacer.millis-period=100 \
+  -Dcsv-payments.payment-provider.permits-per-second=250 \
+  -Dcsv-payments.payment-provider.timeout-millis=5000 \
+  -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+Await/Kafka/provider close-up:
+
+```bash
+./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.telemetry.enabled=true \
+  -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_12.csv \
+  -Dcsv.e2e.reader-demand-pacer.rows-per-period=5 \
+  -Dcsv.e2e.reader-demand-pacer.millis-period=500 \
+  -Dcsv-payments.payment-provider.permits-per-second=25 \
+  -Dcsv-payments.payment-provider.timeout-millis=5000 \
+  -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+Provider-reject failure handling:
+
+```bash
+./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.telemetry.enabled=true \
+  -Dcsv.e2e.telemetry.happy-path-only=false \
+  -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
+  -Dcsv-payments.payment-provider.provider-reject-probability=0.08 \
+  -Dtest=CsvPaymentsProviderRejectEndToEndIT \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+Each profile writes the merged replay artifact to:
+
+- `examples/csv-payments/orchestrator-svc/target/test-e2e/replay/csv-payments-replay.json`
+
+Copy that file to a scenario-specific local capture name before running the next profile.
+
 ## Tempo / LGTM Verification
 
 Replay export and live Tempo verification are separate lanes.

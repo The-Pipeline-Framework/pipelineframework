@@ -40,7 +40,6 @@
                   </div>
 
                   <div class="player-controls-utility">
-                    <button id="sourceButton" class="icon-button" type="button" aria-haspopup="dialog" aria-controls="sourceModal" aria-label="Replay sources" title="Replay sources">☰</button>
                     <button id="infoButton" class="icon-button" type="button" aria-haspopup="dialog" aria-controls="infoModal" aria-label="Replay info" title="Replay info">ⓘ</button>
                     <button id="fullscreenButton" class="icon-button" type="button" aria-label="Full screen" title="Full screen">⛶</button>
                   </div>
@@ -57,41 +56,37 @@
           </section>
 
           <section class="metadata-strip" aria-label="Replay metadata">
-            <div id="datasetName" class="headline">CSV Payments built-in</div>
-            <div id="pipelineName" class="meta-line"></div>
-            <div id="durationText" class="meta-line"></div>
-            <div id="topologyText" class="meta-line"></div>
-            <div id="eventCountText" class="meta-line"></div>
+            <div class="metadata-heading">
+              <div id="datasetName" class="headline">Replay viewer ready</div>
+              <div class="source-controls" aria-label="Replay source controls">
+                <label class="source-control">
+                  <span>Replay source</span>
+                  <select id="datasetSelect" aria-label="Select replay source">
+                    <option value="none" selected>Choose replay...</option>
+                    <option value="csv-payments">CSV Payments built-in</option>
+                    <option value="search-warm-cache">Search built-in pre-warm</option>
+                    <option value="search-cache-hit">Search built-in</option>
+                    <option value="custom">Custom replay</option>
+                  </select>
+                </label>
+                <label id="customReplayInputWrap" class="source-control source-control--file" hidden aria-hidden="true">
+                  <span>Replay JSON</span>
+                  <span class="file-input-button">Choose file</span>
+                  <input id="replayFileInput" type="file" accept="application/json,.json" />
+                </label>
+                <button id="sourceApplyButton" class="source-action" type="button">Load</button>
+                <button id="resetLayoutButton" class="source-action source-action--secondary" type="button" disabled>Reset layout</button>
+              </div>
+            </div>
+            <div class="metadata-lines">
+              <div id="pipelineName" class="meta-line">Choose a replay to begin.</div>
+              <div id="durationText" class="meta-line"></div>
+              <div id="topologyText" class="meta-line"></div>
+              <div id="eventCountText" class="meta-line"></div>
+            </div>
           </section>
         </section>
       </main>
-    </div>
-
-    <div id="sourceModal" class="info-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="sourceModalTitle">
-      <div class="info-modal-backdrop" data-close-modal="source"></div>
-      <div class="info-modal-panel info-modal-panel--compact">
-        <div class="info-modal-header">
-          <h2 id="sourceModalTitle">Replay source</h2>
-          <button id="sourceCloseButton" class="icon-button icon-button--close" type="button" aria-label="Close replay source" title="Close replay source">✕</button>
-        </div>
-        <div class="info-modal-body info-modal-body--compact">
-          <label class="modal-field">
-            <span>Replay source</span>
-            <select id="datasetSelect" aria-label="Select replay source">
-              <option value="csv-payments" selected>CSV Payments built-in</option>
-              <option value="search-warm-cache">Search built-in pre-warm</option>
-              <option value="search-cache-hit">Search built-in</option>
-              <option value="custom">Custom replay</option>
-            </select>
-          </label>
-          <label id="customReplayInputWrap" class="modal-field file-input" hidden aria-hidden="true">
-            <span>Replay JSON file</span>
-            <span class="file-input-button">Choose file</span>
-            <input id="replayFileInput" type="file" accept="application/json,.json" />
-          </label>
-          <button id="sourceApplyButton" type="button">Load dataset</button>
-        </div>
-      </div>
     </div>
 
     <div id="infoModal" class="info-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="infoModalTitle">

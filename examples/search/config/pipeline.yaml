@@ -125,6 +125,35 @@ messages:
       - number: 7
         name: tokenizedAt
         type: timestamp
+  EmbeddedChunk:
+    fields:
+      - number: 1
+        name: docId
+        type: uuid
+      - number: 2
+        name: batchIndex
+        type: int32
+      - number: 3
+        name: tokenCount
+        type: int32
+      - number: 4
+        name: tokens
+        type: string
+      - number: 5
+        name: tokensHash
+        type: string
+      - number: 6
+        name: contentHash
+        type: string
+      - number: 7
+        name: vectorHash
+        type: string
+      - number: 8
+        name: vectorVersion
+        type: string
+      - number: 9
+        name: embeddedAt
+        type: timestamp
   IndexAck:
     fields:
       - number: 1
@@ -179,12 +208,21 @@ steps:
     output: org.pipelineframework.search.common.domain.TokenBatch
     outputTypeName: TokenBatch
     outboundMapper: org.pipelineframework.search.common.mapper.TokenBatchMapper
-  - name: Index Document
-    service: org.pipelineframework.search.index_document.service.ProcessIndexDocumentService
-    cardinality: MANY_TO_ONE
+  - name: Embed Content
+    service: org.pipelineframework.search.embed_content.service.ProcessEmbedContentService
+    cardinality: ONE_TO_ONE
     input: org.pipelineframework.search.common.domain.TokenBatch
     inputTypeName: TokenBatch
     inboundMapper: org.pipelineframework.search.common.mapper.TokenBatchMapper
+    output: org.pipelineframework.search.common.domain.EmbeddedChunk
+    outputTypeName: EmbeddedChunk
+    outboundMapper: org.pipelineframework.search.common.mapper.EmbeddedChunkMapper
+  - name: Index Document
+    service: org.pipelineframework.search.index_document.service.ProcessIndexDocumentService
+    cardinality: MANY_TO_ONE
+    input: org.pipelineframework.search.common.domain.EmbeddedChunk
+    inputTypeName: EmbeddedChunk
+    inboundMapper: org.pipelineframework.search.common.mapper.EmbeddedChunkMapper
     output: org.pipelineframework.search.common.domain.IndexAck
     outputTypeName: IndexAck
     outboundMapper: org.pipelineframework.search.common.mapper.IndexAckMapper

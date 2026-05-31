@@ -6,8 +6,10 @@ import jakarta.enterprise.context.ApplicationScoped;
 import io.quarkus.arc.Unremovable;
 import org.pipelineframework.cache.CacheKeyStrategy;
 import org.pipelineframework.context.PipelineContext;
+import org.pipelineframework.search.common.domain.EmbeddedChunk;
 import org.pipelineframework.search.common.domain.IndexAck;
 import org.pipelineframework.search.common.domain.TokenBatch;
+import org.pipelineframework.search.common.dto.EmbeddedChunkDto;
 import org.pipelineframework.search.common.dto.IndexAckDto;
 import org.pipelineframework.search.common.dto.TokenBatchDto;
 
@@ -18,7 +20,8 @@ public class IndexCacheKeyStrategy implements CacheKeyStrategy {
   /**
    * Derives a cache key string from an index-related item and pipeline context.
    *
-   * <p>Supports items of types IndexAck, IndexAckDto, TokenBatch, and TokenBatchDto. If a tokens hash
+   * <p>Supports items of types IndexAck, IndexAckDto, EmbeddedChunk, EmbeddedChunkDto, TokenBatch,
+   * and TokenBatchDto. If a tokens hash
    * is present the method normalizes and (when necessary) resolves an index version, then returns a
    * key in the form:
    * <pre>
@@ -27,37 +30,66 @@ public class IndexCacheKeyStrategy implements CacheKeyStrategy {
    * If the item type is unsupported or the tokens hash is missing or blank, the method returns
    * {@code Optional.empty()}.
    *
-   * @param item the object to derive the key from; expected types: IndexAck, IndexAckDto, TokenBatch, or TokenBatchDto
+   * @param item the object to derive the key from; expected types: IndexAck, IndexAckDto,
+   *             EmbeddedChunk, EmbeddedChunkDto, TokenBatch, or TokenBatchDto
    * @param context the pipeline context (may be used for resolution in implementations)
    * @return an {@code Optional} containing the derived key string when available, {@code Optional.empty()} otherwise
    */
   @Override
   public Optional<String> resolveKey(Object item, PipelineContext context) {
+    String docId;
+    Integer batchIndex = null;
     String tokensHash;
     String indexVersion;
     if (item instanceof IndexAck ack) {
+      docId = ack.docId == null ? null : ack.docId.toString();
       tokensHash = ack.getTokensHash();
       indexVersion = ack.getIndexVersion();
     } else if (item instanceof IndexAckDto dto) {
+      docId = dto.getDocId() == null ? null : dto.getDocId().toString();
       tokensHash = dto.getTokensHash();
       indexVersion = dto.getIndexVersion();
+    } else if (item instanceof EmbeddedChunk chunk) {
+      docId = chunk.docId == null ? null : chunk.docId.toString();
+      batchIndex = chunk.batchIndex;
+      tokensHash = chunk.tokensHash;
+      indexVersion = null;
+    } else if (item instanceof EmbeddedChunkDto dto) {
+      docId = dto.getDocId() == null ? null : dto.getDocId().toString();
+      batchIndex = dto.getBatchIndex();
+      tokensHash = dto.getTokensHash();
+      indexVersion = null;
     } else if (item instanceof TokenBatch batch) {
+      docId = batch.docId == null ? null : batch.docId.toString();
+      batchIndex = batch.batchIndex;
       tokensHash = batch.tokensHash;
       indexVersion = null;
     } else if (item instanceof TokenBatchDto dto) {
+      docId = dto.getDocId() == null ? null : dto.getDocId().toString();
+      batchIndex = dto.getBatchIndex();
       tokensHash = dto.getTokensHash();
       indexVersion = null;
     } else {
       return Optional.empty();
     }
-    if (tokensHash == null || tokensHash.isBlank()) {
+    if (docId == null || docId.isBlank() || tokensHash == null || tokensHash.isBlank()) {
       return Optional.empty();
     }
     indexVersion = normalize(indexVersion);
     if (indexVersion == null) {
       indexVersion = resolveIndexVersion();
     }
-    return Optional.of(IndexAck.class.getName() + ":" + tokensHash.trim() + ":schema=" + indexVersion);
+    StringBuilder key = new StringBuilder(IndexAck.class.getName())
+        .append(":doc=").append(docId.trim());
+    if (batchIndex != null) {
+      if (batchIndex < 0) {
+        return Optional.empty();
+      }
+      key.append(":batch=").append(batchIndex);
+    }
+    key.append(":tokens=").append(tokensHash.trim())
+        .append(":schema=").append(indexVersion);
+    return Optional.of(key.toString());
   }
 
   /**

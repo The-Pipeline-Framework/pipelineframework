@@ -30,10 +30,11 @@ class TokenizeCacheKeyStrategyTest {
         TokenizeCacheKeyStrategy strategy = new TokenizeCacheKeyStrategy();
         TokenBatchDto batch = TokenBatchDto.builder()
             .contentHash("content-hash-2")
+            .batchIndex(3)
             .build();
 
         Optional<String> resolved = strategy.resolveKey(batch, new PipelineContext(null, null, null));
         assertTrue(resolved.isPresent());
-        assertEquals(TokenBatch.class.getName() + ":content-hash-2:model=v1", resolved.get());
+        assertEquals(TokenBatch.class.getName() + ":content-hash-2:model=v1:batch=3", resolved.get());
     }
 }

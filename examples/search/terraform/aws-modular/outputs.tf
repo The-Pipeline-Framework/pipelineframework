@@ -18,6 +18,11 @@ output "tokenize_content_function_url" {
   value       = aws_lambda_function_url.step["tokenize-content-svc"].function_url
 }
 
+output "embed_content_function_url" {
+  description = "Public Function URL for embed-content-svc."
+  value       = aws_lambda_function_url.step["embed-content-svc"].function_url
+}
+
 output "index_document_function_url" {
   description = "Public Function URL for index-document-svc."
   value       = aws_lambda_function_url.step["index-document-svc"].function_url
