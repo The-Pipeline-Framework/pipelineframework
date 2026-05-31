@@ -1,0 +1,48 @@
+name: CI — Docs
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - "tools/homepage-replay-video/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  docs-build:
+    name: Docs Build and Links
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Build docs
+        run: |
+          npm --prefix docs ci
+          npm --prefix docs exec -- playwright install chromium --with-deps
+          npm --prefix docs run build:homepage-video
+          git diff --exit-code -- \
+            docs/public/home/replay-proof-manifest.json \
+            tools/homepage-replay-video/data/csv-payments-cinematic.json
+          git checkout -- \
+            docs/public/home/replay-proof.webm \
+            docs/public/home/replay-proof.mp4 \
+            docs/public/home/replay-proof-poster.jpg
+          npm --prefix docs run build
