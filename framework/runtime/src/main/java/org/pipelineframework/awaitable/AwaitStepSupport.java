@@ -257,6 +257,7 @@ public class AwaitStepSupport {
         return new AwaitExecutionContext(context.tenantId(), context.executionId(), context.currentStepIndex());
     }
 
+    @SuppressWarnings("unchecked")
     private <I, O> Multi<O> awaitOneToOneStream(
         AwaitStepDescriptor descriptor,
         Multi<I> input,
@@ -289,20 +290,28 @@ public class AwaitStepSupport {
         return dispatched
             .collect().in(() -> Boolean.TRUE, (ignored, record) -> {
             })
-            .onItem().transformToUni(ignored -> itemIndex.get() == 0
-                ? Uni.createFrom().item(Boolean.FALSE)
-                : awaitCoordinator.markDispatchComplete(
+            .onItem().transformToMulti(ignored -> {
+                if (itemIndex.get() == 0) {
+                    return Multi.createFrom().empty();
+                }
+                return awaitCoordinator.markDispatchComplete(
                     context.tenantId(),
                     unitId,
                     itemIndex.get(),
-                    System.currentTimeMillis()).replaceWith(Boolean.TRUE))
-            .onItem().transformToMulti(dispatchedAny -> Boolean.TRUE.equals(dispatchedAny)
-                ? Uni.createFrom().<O>failure(new AwaitSuspendedException(
-                    context.tenantId(),
-                    context.executionId(),
-                    unitId,
-                    stepIndex)).toMulti()
-                : Multi.createFrom().empty());
+                    System.currentTimeMillis())
+                    .onItem().transformToMulti(unit -> unit.status() == AwaitUnitStatus.COMPLETED
+                        ? awaitCoordinator.loadResumePayload(context.tenantId(), unitId)
+                            .toMulti()
+                            .onItem().transformToMultiAndConcatenate(payload ->
+                                payload instanceof Iterable
+                                    ? Multi.createFrom().<O>iterable((Iterable<O>) payload)
+                                    : Multi.createFrom().<O>item((O) payload))
+                        : Uni.createFrom().<O>failure(new AwaitSuspendedException(
+                            context.tenantId(),
+                            context.executionId(),
+                            unitId,
+                            stepIndex)).toMulti());
+            });
     }
 
     private <T> Uni<T> withAwaitExecutionContext(AwaitExecutionContext context, java.util.function.Supplier<Uni<T>> supplier) {
