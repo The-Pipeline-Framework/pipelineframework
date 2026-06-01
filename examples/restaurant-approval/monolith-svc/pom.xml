@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.pipelineframework.restaurantapproval</groupId>
         <artifactId>restaurant-approval</artifactId>
-        <version>26.5.2</version>
+        <version>26.6.1-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
