@@ -4,10 +4,11 @@ The Pipeline Framework documentation is available for the following versions:
 
 ## Latest Version
 
-- [v26.5.1](/) - Current documentation
+- [v26.5.2](/) - Current documentation
 
 ## Previous Versions
 
+- [v26.5.2](/versions/v26.5.2/) - Snapshot of the v26.5.2 docs
 - [v26.5.1](/versions/v26.5.1/) - Snapshot of the v26.5.1 docs
 - [v26.4.4](/versions/v26.4.4/) - Snapshot of the v26.4.4 docs
 - [v26.4.3](/versions/v26.4.3/) - Snapshot of the v26.4.3 docs

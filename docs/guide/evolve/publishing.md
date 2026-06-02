@@ -9,13 +9,19 @@ The release process uses the Maven Release Plugin for the root reactor, then Git
 1. **Prepare locally without pushing**:
 
    ```bash
-   ./mvnw release:prepare -DpushChanges=false -Darguments="-DskipTests"
+   ./mvnw release:prepare \
+     -DpushChanges=false \
+     -DreleaseVersion=26.5.2 \
+     -DdevelopmentVersion=26.6.1-SNAPSHOT \
+     -Dtag=v26.5.2 \
+     -Darguments="-DskipTests"
    ```
 
 2. **Synchronize release-coupled standalone POMs**: confirm alternate topology and standalone reference POMs moved to the next snapshot, including `examples/csv-payments/pom.pipeline-runtime.xml`, `examples/csv-payments/pom.monolith.xml`, `examples/checkout/pom.xml`, and `ai-sdk/pom.xml`.
 3. **Run the release validation gate**: at minimum run version-drift checks, framework verification, CSV topology checks, and docs build before pushing.
 4. **Push only after validation**: push the prepared commits to `main`, then push the immutable `vX.Y.Z` tag to trigger publishing.
 5. **Verify on Maven Central**: check artifacts at <https://central.sonatype.com/>.
+6. **Publish the bridge separately when needed**: `tpf-mcp-bridge` uses npm semver and tag format `tpf-mcp-bridge-vX.Y.Z`; it is coordinated with TPF releases but not version-number synchronized.
 
 The GitHub Actions workflow automatically:
 - Runs the workflows selected by the pushed paths on `main`
@@ -56,6 +62,8 @@ In the root POM (`pom.xml`):
 ```
 
 Root-reactor children should inherit this version through the parent relationship and omit their own project `<version>` where possible. Alternate top-level POMs and standalone builds may need an explicit parent version or dependency property, so they must be checked separately.
+
+For the `v26.5.2` release, use release version `26.5.2`, tag `v26.5.2`, and next development version `26.6.1-SNAPSHOT`.
 
 ### Using Maven Versions Plugin
 
@@ -194,7 +202,12 @@ Use the Maven Release Plugin as the versioning tool for the root reactor, but ke
 2. **Prepare the release locally without pushing**:
 
    ```bash
-   ./mvnw release:prepare -DpushChanges=false -Darguments="-DskipTests"
+   ./mvnw release:prepare \
+     -DpushChanges=false \
+     -DreleaseVersion=X.Y.Z \
+     -DdevelopmentVersion=NEXT_VERSION-SNAPSHOT \
+     -Dtag=vX.Y.Z \
+     -Darguments="-DskipTests"
    ```
 
    The root POM also configures `<pushChanges>false</pushChanges>` for the release plugin. Keep the command-line flag anyway so the behavior is explicit in shell history and release notes.
@@ -262,6 +275,25 @@ Use the Maven Release Plugin as the versioning tool for the root reactor, but ke
    This triggers the GitHub Actions workflow that runs `mvn deploy` to publish framework artifacts to Maven Central.
 
 **Note**: The `mvn release:perform` step is not used in this setup since deployment is handled by GitHub Actions when a tag is pushed.
+
+### Coordinated tpf-mcp-bridge release
+
+The [`tpf-mcp-bridge`](https://github.com/The-Pipeline-Framework/tpf-mcp-bridge) repository is released independently from the Maven framework artifacts. It contains the MCP bridge and the vendored template generator snapshot, so it should be published after a framework release when schema or generator-facing behavior changes.
+
+Do not reuse the Maven framework version for this package. Keep normal npm semver in `package.json` and publish with the bridge tag format:
+
+```bash
+git tag tpf-mcp-bridge-vX.Y.Z
+git push origin tpf-mcp-bridge-vX.Y.Z
+```
+
+Before tagging the bridge:
+
+1. Sync `template-generator-node/src/pipeline-template-schema.json` from the matching released framework deployment artifact.
+2. Update generator templates that embed framework parent or dependency versions so generated projects target the released TPF version.
+3. Bump the root npm package version and keep `package-lock.json` aligned.
+4. Run `npm test`, `npm --prefix template-generator-node test`, and `npm pack --dry-run`.
+5. Note the compatible TPF release in the bridge release notes, for example `compatible with TPF v26.5.2`.
 
 ## Important Publishing Details (Central Validation)
 
