@@ -20,6 +20,7 @@ import static java.text.MessageFormat.format;
 
 import jakarta.persistence.Convert;
 import jakarta.persistence.MappedSuperclass;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Transient;
 import java.io.File;
 import java.io.Serializable;
@@ -59,6 +60,11 @@ public abstract class BaseCsvPaymentsFile extends BaseEntity implements Serializ
   @Override
   public String toString() {
     return format("CsvPaymentsFile'{'filepath=''{0}'''}'", filepath);
+  }
+
+  @PrePersist
+  protected void useStableFileId() {
+    CsvPaymentsStableIdSupport.stableId(getClass().getSimpleName(), filepath).ifPresent(stableId -> id = stableId);
   }
 
   @Override

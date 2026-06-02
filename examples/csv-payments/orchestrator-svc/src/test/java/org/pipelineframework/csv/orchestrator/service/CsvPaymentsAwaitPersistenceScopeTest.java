@@ -28,10 +28,10 @@ class CsvPaymentsAwaitPersistenceScopeTest {
                 "Persistence should include the CSV parsing step");
         assertTrue(
                 pipelineYaml.contains("- ProcessPaymentStatusService"),
-                "Persistence should include post-await status processing");
+                "Persistence should include post-await status processing with idempotent entity keys");
         assertTrue(
                 pipelineYaml.contains("- ProcessCsvPaymentsOutputFileService"),
-                "Persistence should include output generation");
+                "Persistence should include output generation with idempotent entity keys");
         assertFalse(
                 pipelineYaml.contains("- Await Payment Provider"),
                 "Persistence should not target the replayable await boundary");
@@ -46,9 +46,9 @@ class CsvPaymentsAwaitPersistenceScopeTest {
 
         for (String relativePath : configFiles) {
             String config = Files.readString(resolveExamplePath(relativePath));
-            assertFalse(
-                    config.contains("persistence.duplicate-key=upsert"),
-                    () -> relativePath + " should not hide replay duplicates behind upsert");
+            assertTrue(
+                    config.contains("persistence.duplicate-key=ignore"),
+                    () -> relativePath + " should ignore duplicate idempotent persistence side effects");
         }
     }
 
