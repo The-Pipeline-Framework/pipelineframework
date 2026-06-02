@@ -8,11 +8,13 @@ aspects:
     scope: STEPS
     position: AFTER_STEP
     config:
-      # Queue-async resume is at-least-once from the await boundary onward. Keep persistence scoped to
-      # pre-await steps until the runtime has durable once-only checkpointing for post-await side effects.
+      # Queue-async resume is at-least-once from the await boundary onward. Persisted CSV entities
+      # use stable business IDs and duplicate-key=ignore so replayed side effects stay idempotent.
       targetSteps:
         - ProcessFolderService
         - ProcessCsvPaymentsInputService
+        - ProcessPaymentStatusService
+        - ProcessCsvPaymentsOutputFileService
       pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
       enabledTargets:
         - GRPC_SERVICE

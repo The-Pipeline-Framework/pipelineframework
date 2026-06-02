@@ -2403,6 +2403,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertReplayStepEvents(replayDocument, "ProcessCsvPaymentsOutputFile");
         assertReplayStepEvents(replayDocument, "PersistenceCsvPaymentsInputFileSideEffect");
         assertReplayStepEvents(replayDocument, "PersistencePaymentRecordSideEffect");
+        assertReplayStepEvents(replayDocument, "PersistencePaymentOutputSideEffect");
+        assertReplayStepEvents(replayDocument, "PersistenceCsvPaymentsOutputFileSideEffect");
         assertTrue(
                 replayDocument.events().stream().anyMatch(event ->
                         "ProcessCsvPaymentsInput".equals(event.step())

@@ -35,7 +35,7 @@ The canonical modular flow is:
 
 This is durable brokered completion, not polling. Kafka delivery remains at-least-once; TPF handles idempotent completion admission and ordered await-unit reconstruction for the resumed pipeline.
 
-The CSV example keeps the persistence aspect scoped to pre-await steps only. That is intentional: queue-async resume is at-least-once from the await boundary onward, and this example avoids teaching `persistence.duplicate-key=upsert` as the main answer to replayable post-await side effects. Once-only checkpointing for post-await side effects is a separate runtime concern.
+The CSV example persists pre-await and post-await service outputs. Queue-async resume is at-least-once from the await boundary onward, so persisted CSV entities use stable business IDs and the persistence runtime uses `persistence.duplicate-key=ignore`; duplicate redelivery becomes a no-op instead of a second business row.
 
 The orchestrator must run in queue-async mode and needs a stable resume-token secret:
 

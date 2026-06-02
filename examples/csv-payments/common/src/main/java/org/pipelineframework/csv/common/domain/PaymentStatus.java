@@ -47,6 +47,13 @@ public class PaymentStatus extends BaseEntity implements Serializable {
   @Transient private PaymentRecord paymentRecord;
   @NonNull private UUID paymentRecordId;
 
+  @PrePersist
+  protected void useStablePaymentStatusId() {
+    CsvPaymentsStableIdSupport.stableId(
+            "PaymentStatus", paymentRecordId, reference, status, statusCode, message)
+        .ifPresent(stableId -> id = stableId);
+  }
+
   @Override
   public String toString() {
     return format(
