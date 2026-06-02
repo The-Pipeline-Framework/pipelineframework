@@ -2101,9 +2101,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 assertTrue(tables.next(), "paymentrecord table should exist in the database");
             }
 
-            // Query the paymentrecord table to ensure records were persisted.
-            // Custom-input replay/observability lanes can persist additional service-side records;
-            // validate the distinct CSV payment keys instead of the raw row count there.
+            // Query the paymentrecord table to ensure records were persisted
             String query = "SELECT COUNT(*) FROM paymentrecord";
             try (PreparedStatement stmt = connection.prepareStatement(query);
                     ResultSet rs = stmt.executeQuery()) {
@@ -2114,27 +2112,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 LOG.infof("Found %d records in paymentrecord table", recordCount);
 
                 long expectedRecords = expectedPaymentRecordCount();
-                if (CUSTOM_INPUT_FILE) {
-                    long distinctCsvRecords = countDistinctCsvPaymentRecords(connection);
-                    assertEquals(
-                            expectedRecords,
-                            distinctCsvRecords,
-                            String.format(
-                                    "Expected %d distinct CSV payment records in database, but found %d",
-                                    expectedRecords,
-                                    distinctCsvRecords));
-                    assertTrue(
-                            recordCount >= expectedRecords,
-                            String.format(
-                                    "Expected at least %d records in database, but found %d",
-                                    expectedRecords,
-                                    recordCount));
-                } else {
-                    assertEquals(
-                            expectedRecords,
-                            recordCount,
-                            String.format("Expected %d records in database, but found %d", expectedRecords, recordCount));
-                }
+                assertEquals(
+                        expectedRecords,
+                        recordCount,
+                        String.format("Expected %d records in database, but found %d", expectedRecords, recordCount));
             }
 
             if (!CUSTOM_INPUT_FILE) {
@@ -2144,34 +2125,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
             LOG.info("Database verification completed successfully");
         }
-    }
-
-    private long countDistinctCsvPaymentRecords(Connection connection) throws SQLException {
-        String csvIdColumn = resolvePaymentRecordCsvIdColumn(connection);
-        String query = "SELECT COUNT(DISTINCT " + quoteSqlIdentifier(csvIdColumn) + ") FROM paymentrecord WHERE "
-                + quoteSqlIdentifier(csvIdColumn) + " IS NOT NULL";
-        try (PreparedStatement stmt = connection.prepareStatement(query);
-                ResultSet rs = stmt.executeQuery()) {
-            assertTrue(rs.next(), "Distinct CSV payment record query should return results");
-            return rs.getLong(1);
-        }
-    }
-
-    private String resolvePaymentRecordCsvIdColumn(Connection connection) throws SQLException {
-        DatabaseMetaData metaData = connection.getMetaData();
-        try (ResultSet columns = metaData.getColumns(null, null, "paymentrecord", null)) {
-            while (columns.next()) {
-                String columnName = columns.getString("COLUMN_NAME");
-                if ("csvid".equalsIgnoreCase(columnName) || "csv_id".equalsIgnoreCase(columnName)) {
-                    return columnName;
-                }
-            }
-        }
-        throw new SQLException("paymentrecord table does not expose a csvId/csv_id column");
-    }
-
-    private static String quoteSqlIdentifier(String identifier) {
-        return "\"" + identifier.replace("\"", "\"\"") + "\"";
     }
 
     private void verifyDatabasePersistenceForRecipients(
@@ -2450,8 +2403,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertReplayStepEvents(replayDocument, "ProcessCsvPaymentsOutputFile");
         assertReplayStepEvents(replayDocument, "PersistenceCsvPaymentsInputFileSideEffect");
         assertReplayStepEvents(replayDocument, "PersistencePaymentRecordSideEffect");
-        assertReplayStepEvents(replayDocument, "PersistencePaymentOutputSideEffect");
-        assertReplayStepEvents(replayDocument, "PersistenceCsvPaymentsOutputFileSideEffect");
         assertTrue(
                 replayDocument.events().stream().anyMatch(event ->
                         "ProcessCsvPaymentsInput".equals(event.step())

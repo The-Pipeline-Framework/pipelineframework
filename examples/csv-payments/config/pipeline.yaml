@@ -8,13 +8,11 @@ aspects:
     scope: STEPS
     position: AFTER_STEP
     config:
-      # Keep persistence scoped to concrete service stages so the replay shows the
-      # per-service stores without adding a persistence side effect to the await boundary itself.
+      # Queue-async resume is at-least-once from the await boundary onward. Keep persistence scoped to
+      # pre-await steps until the runtime has durable once-only checkpointing for post-await side effects.
       targetSteps:
         - ProcessFolderService
         - ProcessCsvPaymentsInputService
-        - ProcessPaymentStatusService
-        - ProcessCsvPaymentsOutputFileService
       pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
       enabledTargets:
         - GRPC_SERVICE
