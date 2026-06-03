@@ -113,7 +113,7 @@ public class OrchestratorClientModuleMapping {
                 switch (field) {
                     case "host" -> modules.put(moduleName, new ModuleConfig(moduleName, rawValue, existing.port()));
                     case "port" -> {
-                        Integer port = parsePort(rawValue, moduleName, env);
+                        String port = parsePortValue(rawValue, moduleName, env);
                         modules.put(moduleName, new ModuleConfig(moduleName, existing.host(), port));
                     }
                     case "steps" -> {
@@ -203,7 +203,7 @@ public class OrchestratorClientModuleMapping {
         for (int i = 0; i < moduleOrder.size(); i++) {
             String name = moduleOrder.get(i);
             ModuleConfig config = resolved.getOrDefault(name, new ModuleConfig(name));
-            int port = config.port() != null ? config.port() : basePort + i + 1;
+            String port = config.port() != null ? config.port() : String.valueOf(basePort + i + 1);
             String host = config.host() != null && !config.host().isBlank() ? config.host() : DEFAULT_HOST;
             resolved.put(name, new ModuleConfig(name, host, port));
         }
@@ -302,12 +302,17 @@ public class OrchestratorClientModuleMapping {
         return new ClientConfig(normalized, module.host(), module.port(), tlsConfigurationName);
     }
 
-    private static Integer parsePort(String value, String moduleName, ProcessingEnvironment env) {
+    private static String parsePortValue(String value, String moduleName, ProcessingEnvironment env) {
         if (value == null || value.isBlank()) {
             return null;
         }
+        String trimmed = value.trim();
+        if (isConfigExpression(trimmed)) {
+            return trimmed;
+        }
         try {
-            return Integer.parseInt(value.trim());
+            Integer.parseInt(trimmed);
+            return trimmed;
         } catch (NumberFormatException e) {
             if (env != null) {
                 env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
@@ -315,6 +320,10 @@ public class OrchestratorClientModuleMapping {
             }
             return null;
         }
+    }
+
+    private static boolean isConfigExpression(String value) {
+        return value.startsWith("${") && value.endsWith("}");
     }
 
     private static List<String> splitList(String rawValue) {
@@ -368,9 +377,9 @@ public class OrchestratorClientModuleMapping {
      *
      * @param name module name
      * @param host module host (nullable)
-     * @param port module port (nullable)
+     * @param port module port property value (nullable)
      */
-    public record ModuleConfig(String name, String host, Integer port) {
+    public record ModuleConfig(String name, String host, String port) {
         /**
          * Create a module config with only a name, leaving host and port unset.
          *
@@ -386,9 +395,9 @@ public class OrchestratorClientModuleMapping {
      *
      * @param name client name
      * @param host module host
-     * @param port module port
+     * @param port module port property value
      * @param tlsConfigurationName optional TLS configuration name
      */
-    public record ClientConfig(String name, String host, int port, String tlsConfigurationName) {
+    public record ClientConfig(String name, String host, String port, String tlsConfigurationName) {
     }
 }

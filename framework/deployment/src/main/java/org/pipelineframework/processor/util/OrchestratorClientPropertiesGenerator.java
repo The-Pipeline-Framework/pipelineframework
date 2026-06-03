@@ -395,7 +395,7 @@ public class OrchestratorClientPropertiesGenerator {
             writer.append("quarkus.grpc.clients.").append(client.name()).append(".host=")
                 .append(client.host()).append("\n");
             writer.append("quarkus.grpc.clients.").append(client.name()).append(".port=")
-                .append(String.valueOf(client.port())).append("\n");
+                .append(client.port()).append("\n");
             writer.append("quarkus.grpc.clients.").append(client.name())
                 .append(".use-quarkus-grpc-client=true\n");
             if (client.tlsConfigurationName() != null) {
@@ -447,7 +447,7 @@ public class OrchestratorClientPropertiesGenerator {
             writer.append("quarkus.grpc.clients.").append(client.name()).append(".host=")
                 .append(client.host()).append("\n");
             writer.append("quarkus.grpc.clients.").append(client.name()).append(".port=")
-                .append(String.valueOf(client.port())).append("\n");
+                .append(client.port()).append("\n");
             writer.append("quarkus.grpc.clients.").append(client.name())
                 .append(".use-quarkus-grpc-client=true\n");
             if (client.tlsConfigurationName() != null) {
@@ -512,7 +512,7 @@ public class OrchestratorClientPropertiesGenerator {
             }
             writer.append("\n# Talk to ").append(client.name()).append(" service\n");
             writer.append("quarkus.rest-client.").append(client.name()).append(".url=https://")
-                .append(client.host()).append(":").append(String.valueOf(client.port())).append("\n");
+                .append(client.host()).append(":").append(client.port()).append("\n");
             if (client.tlsConfigurationName() != null) {
                 String tlsDefault = client.tlsConfigurationName();
                 String tlsExpression = "${pipeline.client.tls-configuration-name:" + tlsDefault + "}";
