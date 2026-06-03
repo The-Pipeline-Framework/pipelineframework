@@ -30,10 +30,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.MockitoAnnotations;
+import org.pipelineframework.blocking.BlockingIteratorPacer;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.util.BlockingIteratorPacer;
 import org.pipelineframework.csv.util.DemandPacerConfig;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

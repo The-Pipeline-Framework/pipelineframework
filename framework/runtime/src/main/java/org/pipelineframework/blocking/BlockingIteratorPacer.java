@@ -14,18 +14,17 @@
  * limitations under the License.
  */
 
-package org.pipelineframework.csv.util;
+package org.pipelineframework.blocking;
 
+import java.time.Duration;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
-import org.pipelineframework.blocking.CloseableIterator;
-
 /**
- * Example-local pacing decorator for blocking CSV iterators.
+ * Pacing decorator for blocking iterators.
  *
- * <p>This limits how quickly a blocking iterator is consumed. It is not reactive
- * backpressure; it deliberately blocks the worker or virtual thread that is
- * executing the iterator bridge.
+ * <p>This limits how quickly a blocking iterator is consumed. It is not reactive backpressure; it deliberately blocks
+ * the worker or virtual thread that is executing the iterator bridge.
  *
  * @param <T> item type
  */
@@ -42,7 +41,7 @@ public final class BlockingIteratorPacer<T> implements CloseableIterator<T> {
     }
 
     private final CloseableIterator<T> delegate;
-    private final long rowsPerPeriod;
+    private final long itemsPerPeriod;
     private final long periodNanos;
     private final NanoClock clock;
     private final NanoSleeper sleeper;
@@ -50,33 +49,35 @@ public final class BlockingIteratorPacer<T> implements CloseableIterator<T> {
     private long windowStartNanos;
     private long emittedInWindow;
 
+    /**
+     * Creates a pacing wrapper.
+     *
+     * @param delegate iterator being paced
+     * @param itemsPerPeriod maximum items emitted during each period
+     * @param period pacing period
+     */
     public BlockingIteratorPacer(
-            CloseableIterator<T> delegate,
-            long rowsPerPeriod,
-            long millisPeriod) {
-        this(delegate, rowsPerPeriod, millisPeriod, System::nanoTime, TimeUnit.NANOSECONDS::sleep);
+        CloseableIterator<T> delegate,
+        long itemsPerPeriod,
+        Duration period) {
+        this(delegate, itemsPerPeriod, period, System::nanoTime, TimeUnit.NANOSECONDS::sleep);
     }
 
     BlockingIteratorPacer(
-            CloseableIterator<T> delegate,
-            long rowsPerPeriod,
-            long millisPeriod,
-            NanoClock clock,
-            NanoSleeper sleeper) {
-        if (delegate == null) {
-            throw new IllegalArgumentException("delegate must not be null");
+        CloseableIterator<T> delegate,
+        long itemsPerPeriod,
+        Duration period,
+        NanoClock clock,
+        NanoSleeper sleeper) {
+        if (itemsPerPeriod <= 0) {
+            throw new IllegalArgumentException("itemsPerPeriod must be positive");
         }
-        if (rowsPerPeriod <= 0) {
-            throw new IllegalArgumentException("rowsPerPeriod must be positive");
-        }
-        if (millisPeriod <= 0) {
-            throw new IllegalArgumentException("millisPeriod must be positive");
-        }
-        this.delegate = delegate;
-        this.rowsPerPeriod = rowsPerPeriod;
-        this.periodNanos = TimeUnit.MILLISECONDS.toNanos(millisPeriod);
-        this.clock = clock;
-        this.sleeper = sleeper;
+        long nanos = periodNanos(period);
+        this.delegate = Objects.requireNonNull(delegate, "delegate must not be null");
+        this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.sleeper = Objects.requireNonNull(sleeper, "sleeper must not be null");
+        this.itemsPerPeriod = itemsPerPeriod;
+        this.periodNanos = nanos;
     }
 
     @Override
@@ -106,7 +107,7 @@ public final class BlockingIteratorPacer<T> implements CloseableIterator<T> {
             resetWindow(now);
         }
 
-        if (emittedInWindow >= rowsPerPeriod) {
+        if (emittedInWindow >= itemsPerPeriod) {
             long waitNanos = periodNanos - (now - windowStartNanos);
             if (waitNanos > 0) {
                 sleep(waitNanos);
@@ -130,5 +131,14 @@ public final class BlockingIteratorPacer<T> implements CloseableIterator<T> {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Interrupted while pacing blocking iterator", e);
         }
+    }
+
+    private static long periodNanos(Duration period) {
+        Objects.requireNonNull(period, "period must not be null");
+        long nanos = period.toNanos();
+        if (nanos <= 0) {
+            throw new IllegalArgumentException("period must be positive");
+        }
+        return nanos;
     }
 }
