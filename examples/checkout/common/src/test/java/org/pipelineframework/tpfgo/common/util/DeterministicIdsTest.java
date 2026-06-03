@@ -3,6 +3,7 @@ package org.pipelineframework.tpfgo.common.util;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.UUID;
 
@@ -39,10 +40,11 @@ class DeterministicIdsTest {
     }
 
     @Test
-    void nullPartsTreatedAsEmptyString() {
-        UUID withNull = DeterministicIds.uuid("ns", (String) null);
-        UUID withEmpty = DeterministicIds.uuid("ns", "");
-        assertEquals(withNull, withEmpty);
+    void nullPartElementFailsFast() {
+        NullPointerException exception = assertThrows(
+            NullPointerException.class,
+            () -> DeterministicIds.uuid("ns", "a", null));
+        assertEquals("parts[1] must not be null", exception.getMessage());
     }
 
     @Test
@@ -53,10 +55,11 @@ class DeterministicIdsTest {
     }
 
     @Test
-    void nullPartsArrayProducesStableUuid() {
-        UUID first = DeterministicIds.uuid("order", (String[]) null);
-        UUID second = DeterministicIds.uuid("order", (String[]) null);
-        assertEquals(first, second);
+    void nullPartsArrayFailsFast() {
+        NullPointerException exception = assertThrows(
+            NullPointerException.class,
+            () -> DeterministicIds.uuid("order", (String[]) null));
+        assertEquals("parts must not be null", exception.getMessage());
     }
 
     @Test
@@ -86,7 +89,7 @@ class DeterministicIdsTest {
     void emptyPartsDistinguishFromNoArgs() {
         UUID withEmptyPart = DeterministicIds.uuid("ns", "");
         UUID noArgs = DeterministicIds.uuid("ns");
-        // May or may not be equal depending on implementation; the key property is stability
+        assertNotEquals(withEmptyPart, noArgs);
         assertEquals(withEmptyPart, DeterministicIds.uuid("ns", ""));
         assertEquals(noArgs, DeterministicIds.uuid("ns"));
     }
