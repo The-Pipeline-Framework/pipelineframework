@@ -22,6 +22,7 @@ import com.opencsv.bean.CsvBindByName;
 import com.opencsv.bean.CsvNumber;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
+import jakarta.persistence.PrePersist;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.nio.file.Path;
@@ -64,6 +65,13 @@ public class PaymentRecord extends BaseEntity implements Serializable {
         NumberFormat.getCurrencyInstance(Locale.UK).format(amount),
         currency,
         csvPaymentsInputFilePath != null ? csvPaymentsInputFilePath.toString() : "null");
+  }
+
+  @PrePersist
+  protected void useStablePaymentRecordId() {
+    CsvPaymentsStableIdSupport.stableId(
+            "PaymentRecord", csvPaymentsInputFilePath, csvId, recipient, amount, currency)
+        .ifPresent(stableId -> id = stableId);
   }
 
   @Override

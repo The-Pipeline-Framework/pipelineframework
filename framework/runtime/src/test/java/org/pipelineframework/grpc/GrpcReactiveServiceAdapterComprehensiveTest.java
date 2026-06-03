@@ -19,7 +19,6 @@ package org.pipelineframework.grpc;
 import static org.junit.jupiter.api.Assertions.*;
 
 import io.grpc.StatusRuntimeException;
-import io.quarkus.test.junit.QuarkusTest;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.UniAssertSubscriber;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,7 +30,6 @@ import org.mockito.MockitoAnnotations;
 import org.pipelineframework.service.ReactiveService;
 import org.pipelineframework.service.throwStatusRuntimeExceptionFunction;
 
-@QuarkusTest
 class GrpcReactiveServiceAdapterComprehensiveTest {
 
     @Mock

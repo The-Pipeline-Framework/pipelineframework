@@ -68,6 +68,8 @@ class SearchPipelineEndToEndIT {
         "search.image.parse-document", "localhost/search-pipeline/parse-document-svc:latest");
     private static final String TOKENIZE_IMAGE = System.getProperty(
         "search.image.tokenize-content", "localhost/search-pipeline/tokenize-content-svc:latest");
+    private static final String EMBED_IMAGE = System.getProperty(
+        "search.image.embed-content", "localhost/search-pipeline/embed-content-svc:latest");
     private static final String INDEX_IMAGE = System.getProperty(
         "search.image.index-document", "localhost/search-pipeline/index-document-svc:latest");
     private static final String ORCHESTRATOR_IMAGE = System.getProperty(
@@ -142,6 +144,26 @@ class SearchPipelineEndToEndIT {
             .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
             .withEnv("QUARKUS_HTTP_INSECURE_REQUESTS", "enabled")
             .withEnv("QUARKUS_HTTP_PORT", "8080")
+            .waitingFor(
+                Wait.forHttp("/q/health")
+                    .forPort(8080)
+                    .withStartupTimeout(Duration.ofSeconds(60)));
+
+    private static final GenericContainer<?> embedService =
+        new GenericContainer<>(EMBED_IMAGE)
+            .withNetwork(NETWORK)
+            .withNetworkAliases("embed-content-svc")
+            .withFileSystemBind(
+                DEV_CERTS_DIR.resolve("embed-content-svc/server-keystore.jks").toString(),
+                CONTAINER_KEYSTORE_PATH,
+                BindMode.READ_ONLY)
+            .withExposedPorts(8080)
+            .withEnv("QUARKUS_PROFILE", "test")
+            .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
+            .withEnv("QUARKUS_HTTP_INSECURE_REQUESTS", "enabled")
+            .withEnv("QUARKUS_HTTP_PORT", "8080")
+            .withEnv("SEARCH_EMBED_DELAY_MS", System.getProperty("search.e2e.embed.delay-ms", "0"))
+            .withEnv("SEARCH_EMBED_VECTOR_VERSION", System.getProperty("search.e2e.embed.vector-version", "v1"))
             .waitingFor(
                 Wait.forHttp("/q/health")
                     .forPort(8080)
@@ -230,15 +252,18 @@ class SearchPipelineEndToEndIT {
             .withEnv("QUARKUS_REST_CLIENT_PROCESS_CRAWL_SOURCE_URL", "http://crawl-source-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_PROCESS_PARSE_DOCUMENT_URL", "http://parse-document-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_PROCESS_TOKENIZE_CONTENT_URL", "http://tokenize-content-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_PROCESS_EMBED_CONTENT_URL", "http://embed-content-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_PROCESS_INDEX_DOCUMENT_URL", "http://index-document-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_ORCHESTRATOR_SERVICE_URL", "http://orchestrator-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_RAW_DOCUMENT_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_PARSED_DOCUMENT_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_TOKEN_BATCH_SIDE_EFFECT_URL", "http://persistence-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_EMBEDDED_CHUNK_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_INDEX_ACK_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_RAW_DOCUMENT_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_PARSED_DOCUMENT_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_TOKEN_BATCH_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_EMBEDDED_CHUNK_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_INDEX_ACK_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_INVALIDATE_CRAWL_REQUEST_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_INVALIDATE_RAW_DOCUMENT_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
@@ -261,6 +286,7 @@ class SearchPipelineEndToEndIT {
             crawlService,
             parseService,
             tokenizeService,
+            embedService,
             indexService,
             persistenceService,
             cacheInvalidationService,
@@ -274,6 +300,7 @@ class SearchPipelineEndToEndIT {
         cacheInvalidationService.stop();
         persistenceService.stop();
         indexService.stop();
+        embedService.stop();
         tokenizeService.stop();
         parseService.stop();
         crawlService.stop();
@@ -309,6 +336,8 @@ class SearchPipelineEndToEndIT {
             "Expected no ParsedDocument persisted for failed cold require-cache run");
         assertEquals(0, countRowsForDocId("tokenbatch", docId),
             "Expected no TokenBatch persisted for failed cold require-cache run");
+        assertEquals(0, countRowsForDocId("embeddedchunk", docId),
+            "Expected no EmbeddedChunk persisted for failed cold require-cache run");
         assertEquals(0, countRowsForDocId("indexack", docId),
             "Expected no IndexAck persisted for failed cold require-cache run");
     }
@@ -333,6 +362,10 @@ class SearchPipelineEndToEndIT {
         assertTrue(tokenBatchCount >= 1,
             "Expected at least one TokenBatch row after warm run for docId " + docId
                 + " but found " + tokenBatchCount);
+        int embeddedChunkCount = awaitRowCountAtLeastForDocId("embeddedchunk", docId, tokenBatchCount, Duration.ofSeconds(30));
+        assertEquals(tokenBatchCount, embeddedChunkCount,
+            () -> "Expected one EmbeddedChunk row per TokenBatch for docId " + docId
+                + diagnosticRowsForDocId("embeddedchunk", docId));
         assertEquals(1, awaitRowCountAtLeastForDocId("indexack", docId, 1, Duration.ofSeconds(10)),
             "Expected one IndexAck row after warm run for docId " + docId);
 
@@ -410,11 +443,12 @@ class SearchPipelineEndToEndIT {
         assertTrue(countRows("rawdocument") > 0, "Expected RawDocument persistence");
         assertTrue(countRows("parseddocument") > 0, "Expected ParsedDocument persistence");
         assertTrue(countRows("tokenbatch") > 0, "Expected TokenBatch persistence");
+        assertTrue(countRows("embeddedchunk") > 0, "Expected EmbeddedChunk persistence");
         assertTrue(countRows("indexack") > 0, "Expected IndexAck persistence");
     }
 
     @Test
-    void tokenizeAndIndexPersistFanoutBatchesPerDocId() throws Exception {
+    void tokenizeEmbedAndIndexPersistFanoutBatchesPerDocId() throws Exception {
         String input = "https://example.com/fanout-" + UUID.randomUUID();
         String version = "fanout-fanin-" + UUID.randomUUID();
         ProcessResult result = orchestratorTriggerRun(input, "prefer-cache", version, false);
@@ -424,6 +458,7 @@ class SearchPipelineEndToEndIT {
         int rawDocumentCount = awaitRowCountAtLeastForDocId("rawdocument", docId, 1, Duration.ofSeconds(10));
         int parsedDocumentCount = awaitRowCountAtLeastForDocId("parseddocument", docId, 1, Duration.ofSeconds(10));
         int tokenBatchCount = awaitRowCountAtLeastForDocId("tokenbatch", docId, 1, Duration.ofSeconds(10));
+        int embeddedChunkCount = awaitRowCountAtLeastForDocId("embeddedchunk", docId, tokenBatchCount, Duration.ofSeconds(30));
         int indexAckCount = awaitRowCountAtLeastForDocId("indexack", docId, 1, Duration.ofSeconds(10));
 
         assertEquals(1, rawDocumentCount,
@@ -433,6 +468,10 @@ class SearchPipelineEndToEndIT {
         assertTrue(tokenBatchCount > 1,
             "Expected fan-out to persist multiple TokenBatch rows linked to docId " + docId
                 + " but found " + tokenBatchCount);
+        assertEquals(tokenBatchCount, embeddedChunkCount,
+            () -> "Expected embed step to persist exactly one EmbeddedChunk per TokenBatch for docId " + docId
+                + " but found " + embeddedChunkCount
+                + diagnosticRowsForDocId("embeddedchunk", docId));
         assertEquals(1, indexAckCount,
             "Expected MANY_TO_ONE fan-in to persist exactly one IndexAck row for docId " + docId
                 + " but found " + indexAckCount);
@@ -587,6 +626,27 @@ class SearchPipelineEndToEndIT {
         throw new SQLException("Unexpected count output for " + context + ": " + trimmed);
     }
 
+    private String diagnosticRowsForDocId(String table, UUID docId) {
+        String query = "select * from " + table + " where doc_id = '" + docId + "' order by 1";
+        try {
+            Container.ExecResult result = postgres.execInContainer(
+                "psql",
+                "-P",
+                "pager=off",
+                "-U",
+                postgres.getUsername(),
+                "-d",
+                postgres.getDatabaseName(),
+                "-c",
+                "\\d " + table,
+                "-c",
+                query);
+            return "\n" + table + " diagnostics:\n" + result.getStdout() + result.getStderr();
+        } catch (Exception e) {
+            return "\nUnable to collect " + table + " diagnostics: " + e.getMessage();
+        }
+    }
+
     private int awaitRowCountAtLeastForDocId(String table, UUID docId, int minCount, Duration timeout)
         throws Exception {
         long deadlineNanos = System.nanoTime() + timeout.toNanos();
@@ -674,6 +734,7 @@ class SearchPipelineEndToEndIT {
             + "\n- crawl-source-svc:\n" + tailLogs(crawlService.getLogs(), 25)
             + "\n- parse-document-svc:\n" + tailLogs(parseService.getLogs(), 25)
             + "\n- tokenize-content-svc:\n" + tailLogs(tokenizeService.getLogs(), 25)
+            + "\n- embed-content-svc:\n" + tailLogs(embedService.getLogs(), 25)
             + "\n- index-document-svc:\n" + tailLogs(indexService.getLogs(), 25)
             + "\n- persistence-svc:\n" + tailLogs(persistenceService.getLogs(), 25)
             + "\n- cache-invalidation-svc:\n" + tailLogs(cacheInvalidationService.getLogs(), 25);

@@ -30,10 +30,13 @@ public class TokenizeCacheKeyStrategy implements CacheKeyStrategy {
   @Override
   public Optional<String> resolveKey(Object item, PipelineContext context) {
     String contentHash;
+    Integer batchIndex = null;
     if (item instanceof TokenBatch batch) {
       contentHash = batch.contentHash;
+      batchIndex = batch.batchIndex;
     } else if (item instanceof TokenBatchDto dto) {
       contentHash = dto.getContentHash();
+      batchIndex = dto.getBatchIndex();
     } else if (item instanceof ParsedDocument document) {
       contentHash = document.contentHash;
     } else if (item instanceof ParsedDocumentDto dto) {
@@ -45,7 +48,18 @@ public class TokenizeCacheKeyStrategy implements CacheKeyStrategy {
       return Optional.empty();
     }
     String modelVersion = resolveModelVersion();
-    return Optional.of(TokenBatch.class.getName() + ":" + contentHash.trim() + ":model=" + modelVersion);
+    StringBuilder key = new StringBuilder(TokenBatch.class.getName())
+        .append(':')
+        .append(contentHash.trim())
+        .append(":model=")
+        .append(modelVersion);
+    if (batchIndex != null) {
+      if (batchIndex < 0) {
+        throw new IllegalArgumentException("batchIndex must be >= 0 for tokenize cache key: " + batchIndex);
+      }
+      key.append(":batch=").append(batchIndex);
+    }
+    return Optional.of(key.toString());
   }
 
   /**

@@ -62,6 +62,8 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+For a recording-oriented walkthrough, see [Restaurant Approval Interaction API Demo Runbook](./DEMO-RUNBOOK.md).
+
 Default UI environment:
 
 - `TPF_BASE_URL=http://localhost:8081`

@@ -47,11 +47,14 @@ The harness keeps the current process-scoped replay limitation explicit:
 - it does not claim true overlapping multi-run replay capture yet
 
 The cache-hit dataset is produced by running the same URLs twice with the same pipeline version after the cache has been warmed.
+The replay topology now shows `Crawl -> Parse -> Tokenize -> Embed -> Index`, including token fan-out, slower one-to-one embedding, persistence/cache side effects, and document-level fan-in.
 
 Open the supported replay viewer from the docs site at `/replay-viewer/index.html` and either:
 
 - import the generated JSON files, or
 - use the built-in datasets `Search built-in pre-warm` and `Search built-in`
+
+For video demo guidance, see [Search Replay Demo Runbook](./DEMO-RUNBOOK.md).
 
 ### In Development Mode
 
@@ -153,7 +156,8 @@ The search FUNCTION lane now includes explicit fan-out/fan-in path coverage.
 - `pipeline.platform=FUNCTION` supports unary and streaming shapes via generated bridge adapters.
 - `examples/search/config/pipeline.yaml` now includes:
   - `Tokenize Content`: `ONE_TO_MANY` (runtime/generation shape: `UNARY_STREAMING`)
-  - `Index Document`: `MANY_TO_ONE` (runtime/generation shape: `STREAMING_UNARY`)
+  - `Embed Content`: `ONE_TO_ONE` over each `TokenBatch`
+  - `Index Document`: `MANY_TO_ONE` over `EmbeddedChunk` (runtime/generation shape: `STREAMING_UNARY`)
 
 In this lane:
 
@@ -175,35 +179,38 @@ Runtime parity notes:
 
 Cardinality guarantees covered by tests:
 
-- `SearchPipelineEndToEndIT#tokenizeAndIndexPersistFanoutBatchesPerDocId` verifies one `docId` flows
-  through `RawDocument`/`ParsedDocument`, fans out into multiple persisted `TokenBatch` rows (`tokenBatchCount`),
-  then merges into exactly one `IndexAck`.
-- `IndexAckResourceTest#testIndexAckRejectsMixedDocIdsInSingleBatch` verifies fan-in rejects mixed `docId` input.
+- `SearchPipelineEndToEndIT#tokenizeEmbedAndIndexPersistFanoutBatchesPerDocId` verifies one `docId` flows
+  through `RawDocument`/`ParsedDocument`, fans out into multiple persisted `TokenBatch` rows, embeds each
+  batch into an `EmbeddedChunk`, then merges into exactly one `IndexAck`.
+- `ProcessIndexDocumentServiceReliabilityTest#rejectsMixedDocIdsBeforeAggregation` verifies fan-in rejects mixed `docId` input.
 
 ### Branching Reference Lane (Business Semantics)
 
 The search pipeline includes a non-unary business lane:
 
 1. `Tokenize Content` (`ONE_TO_MANY`) expands one `ParsedDocument` into multiple `TokenBatch` units.
-2. `Index Document` (`MANY_TO_ONE`) reduces all batches for the same `docId` into one meaningful `IndexAck`.
+2. `Embed Content` (`ONE_TO_ONE`) deterministically embeds each `TokenBatch` into one `EmbeddedChunk`.
+3. `Index Document` (`MANY_TO_ONE`) reduces all embedded chunks for the same `docId` into one meaningful `IndexAck`.
 
 The reduced `IndexAck` now carries aggregate document signals:
 
 - `tokenBatchCount`: how many batches participated in fan-in.
 - `uniqueTokenCount`: unique vocabulary size for the reduced document.
 - `topToken`: most frequent token across all batches; when frequencies tie, the lexicographically smallest token is selected.
-- fan-in input invariants: each `TokenBatch` must have `batchIndex >= 0` and `tokenCount > 0`; malformed batches fail fast before aggregation.
+- fan-in input invariants: each `EmbeddedChunk` must have `batchIndex >= 0`, `tokenCount > 0`,
+  `vectorHash`, and `vectorVersion`; malformed chunks fail fast before aggregation.
 
 This keeps the lane business-relevant (document-level indexing summary), not just structural fan-out/fan-in.
 
 ### Modular AWS Lambda Lane
 
-The supported live AWS lane for Search is now the modular 5-Lambda topology:
+The supported live AWS lane for Search is now the modular 6-Lambda topology:
 
 - `orchestrator-svc`
 - `crawl-source-svc`
 - `parse-document-svc`
 - `tokenize-content-svc`
+- `embed-content-svc`
 - `index-document-svc`
 
 Build it with:

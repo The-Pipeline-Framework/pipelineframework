@@ -19,7 +19,7 @@ PIPELINE_PLATFORM="${PIPELINE_PLATFORM:-FUNCTION}"
 PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-REST}"
 PIPELINE_REST_NAMING_STRATEGY="${PIPELINE_REST_NAMING_STRATEGY:-RESOURCEFUL}"
 PIPELINE_CONFIG_PATH="${PIPELINE_CONFIG_PATH:-$SEARCH_DIR/config/pipeline.modular-lambda.yaml}"
-MODULES="${MODULES:-common,crawl-source-svc,parse-document-svc,tokenize-content-svc,index-document-svc,orchestrator-svc}"
+MODULES="${MODULES:-common,crawl-source-svc,parse-document-svc,tokenize-content-svc,embed-content-svc,index-document-svc,orchestrator-svc}"
 
 "$ROOT_DIR/scripts/ci/bootstrap-local-repo-prereqs.sh" search
 
