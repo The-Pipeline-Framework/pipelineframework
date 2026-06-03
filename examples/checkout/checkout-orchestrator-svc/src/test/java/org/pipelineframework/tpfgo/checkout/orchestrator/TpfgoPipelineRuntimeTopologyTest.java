@@ -3,6 +3,7 @@ package org.pipelineframework.tpfgo.checkout.orchestrator;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -52,11 +53,14 @@ class TpfgoPipelineRuntimeTopologyTest {
                 .map(clientId -> properties.getProperty(prefix + clientId + ".port"))
                 .collect(Collectors.toSet());
 
-            assertEquals(Set.of("127.0.0.1"), hosts, "Grouped runtime clients should target the shared runtime host");
-            assertEquals(Set.of("9000"), ports, "Grouped runtime clients should share the configured runtime port");
+            assertEquals(Set.of("${PIPELINE_RUNTIME_HOST:127.0.0.1}"), hosts,
+                "Grouped runtime clients should preserve the externalized runtime host");
+            assertEquals(Set.of("${PIPELINE_RUNTIME_GRPC_PORT:9000}"), ports,
+                "Grouped runtime clients should preserve the externalized runtime port");
             assertFalse(properties.stringPropertyNames().stream().anyMatch(name -> name.contains("tpfgo.checkout.order-pending.v1")),
                 "Checkpoint publication bindings should not appear in orchestrator client metadata");
             assertRuntimeMappingActive();
+            assertPipelineRuntimePortMatchesClientPort();
         }
     }
 
@@ -89,6 +93,33 @@ class TpfgoPipelineRuntimeTopologyTest {
             return parent;
         }
         fail("Could not resolve examples/checkout/config/pipeline.runtime.yaml");
+        return Path.of(".");
+    }
+
+    private static void assertPipelineRuntimePortMatchesClientPort() throws IOException {
+        Path configPath = resolveCheckoutRoot()
+            .resolve("pipeline-runtime-svc")
+            .resolve("src")
+            .resolve("main")
+            .resolve("resources")
+            .resolve("application.properties");
+        String content = Files.readString(configPath);
+        assertTrue(content.contains("quarkus.http.port=${PIPELINE_RUNTIME_GRPC_PORT:9000}"),
+            "pipeline-runtime-svc should listen on the same externalized port used by generated clients");
+        assertTrue(content.contains("quarkus.grpc.server.use-separate-server=false"),
+            "pipeline-runtime-svc should keep gRPC bound to the HTTP listener port");
+    }
+
+    private static Path resolveCheckoutRoot() {
+        Path userDir = Path.of(System.getProperty("user.dir", ".")).normalize();
+        if (Files.exists(userDir.resolve("pipeline-runtime-svc"))) {
+            return userDir;
+        }
+        Path parent = userDir.resolve("..").normalize();
+        if (Files.exists(parent.resolve("pipeline-runtime-svc"))) {
+            return parent;
+        }
+        fail("Could not resolve examples/checkout project root");
         return Path.of(".");
     }
 }

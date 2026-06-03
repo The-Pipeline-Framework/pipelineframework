@@ -107,8 +107,8 @@ To override routing or ports, set the following in `application.properties`:
 
 | Property                                 | Type   | Default | Description                                       |
 |------------------------------------------|--------|---------|---------------------------------------------------|
-| `pipeline.module.<module>.host`          | string | none    | Host for a module (applies to all its services).  |
-| `pipeline.module.<module>.port`          | int    | none    | Port for a module (applies to all its services).  |
+| `pipeline.module.<module>.host`          | string | none    | Host for a module; Quarkus config expressions are preserved. |
+| `pipeline.module.<module>.port`          | int or expression | none    | Port for a module; literal values are validated and Quarkus config expressions are preserved. |
 | `pipeline.module.<module>.steps`         | list   | none    | Comma/space-separated client names to assign.     |
 | `pipeline.module.<module>.aspects`       | list   | none    | Aspect names to assign (e.g. `persistence`).      |
 | `pipeline.client.base-port`              | int    | `8443`  | Base port used when assigning per-module offsets. |
@@ -125,6 +125,7 @@ About modules:
 
 Avoiding drift:
 - Keep server ports and orchestrator client ports aligned by sourcing them from the same `pipeline.module.<module>.port` or shared environment variables.
+- For deployment-specific endpoints, use Quarkus/MicroProfile config expressions such as `pipeline.module.pipeline-runtime-svc.host=${PIPELINE_RUNTIME_HOST:127.0.0.1}` and `pipeline.module.pipeline-runtime-svc.port=${PIPELINE_RUNTIME_GRPC_PORT:9000}`.
 - If you override a client endpoint directly, verify the corresponding server listens on the same host/port (especially when TLS is enabled).
 
 If you need to override a single client endpoint, set the Quarkus property directly:
