@@ -548,7 +548,12 @@ class QueueAsyncCoordinator {
 
   private void recordAwaitLifecycle(AwaitReplayLifecycleEvent lifecycleEvent) {
     if (telemetry != null) {
-      telemetry.recordAwaitLifecycle(lifecycleEvent);
+      try {
+        telemetry.recordAwaitLifecycle(lifecycleEvent);
+      } catch (Exception e) {
+        LOG.warnf(e, "Failed to record await lifecycle event: %s",
+            lifecycleEvent == null ? "<null>" : lifecycleEvent.eventName());
+      }
     }
   }
 
