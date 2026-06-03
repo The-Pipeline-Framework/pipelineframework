@@ -244,6 +244,7 @@ Background execution notes:
 4. In-memory providers are for local/dev only; use providers backed by external storage/queues for crash recovery.
 5. For dead-letter handling that survives restarts, set both `pipeline.orchestrator.dlq-provider=sqs` and `pipeline.orchestrator.dlq-url`.
 6. For webhook await steps using signed resume tokens, configure a stable `pipeline.orchestrator.resume-token-secret`; rotating it invalidates outstanding resume tokens.
+7. When `pipeline.orchestrator.dynamo.await-interaction-table` is used, provision ALL-projected GSIs named `await-interaction-by-unit`, `await-interaction-pending-by-tenant`, `await-interaction-pending-by-assignee`, `await-interaction-pending-by-group`, `await-interaction-pending-by-step`, and `await-interaction-pending-by-deadline`. These indexes back await unit lookup, pending interaction listing, and timeout selection without full-table scans.
 
 Example crash-recovery provider configuration:
 
