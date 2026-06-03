@@ -17,7 +17,7 @@ import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineOrchestratorModel;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StepDefinition;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution;
 
@@ -73,7 +73,7 @@ public class PipelineCompilationContext {
     @Setter
     @Getter(AccessLevel.NONE)
     private boolean functionHttpBridge;
-    private TransportMode transportMode;
+    private PipelineTransport transportMode;
     private PlatformMode platformMode;
 
     @Setter
@@ -102,7 +102,7 @@ public class PipelineCompilationContext {
         this.pluginHost = false;
         this.orchestratorGenerated = false;
         this.functionHttpBridge = false;
-        this.transportMode = TransportMode.GRPC;
+        this.transportMode = PipelineTransport.GRPC;
         this.platformMode = PlatformMode.COMPUTE;
     }
 
@@ -194,7 +194,7 @@ public class PipelineCompilationContext {
      * @return true if the transport mode is GRPC, false otherwise.
      */
     public boolean isTransportModeGrpc() {
-        return transportMode == TransportMode.GRPC;
+        return transportMode == PipelineTransport.GRPC;
     }
 
     /**
@@ -203,7 +203,7 @@ public class PipelineCompilationContext {
      * @return true if the transport mode is REST, false otherwise.
      */
     public boolean isTransportModeRest() {
-        return transportMode == TransportMode.REST;
+        return transportMode == PipelineTransport.REST;
     }
 
     /**
@@ -212,15 +212,15 @@ public class PipelineCompilationContext {
      * @return `true` if the transport mode is Local, `false` otherwise
      */
     public boolean isTransportModeLocal() {
-        return transportMode == TransportMode.LOCAL;
+        return transportMode == PipelineTransport.LOCAL;
     }
 
     /**
      * Access the configured transport mode for this compilation context.
      *
-     * @return the configured TransportMode
+     * @return the configured PipelineTransport
      */
-    public TransportMode getTransportMode() {
+    public PipelineTransport getTransportMode() {
         return transportMode;
     }
 
@@ -366,10 +366,10 @@ public class PipelineCompilationContext {
     /**
      * Set the transport mode for the compilation context.
      *
-     * @param transportMode the transport mode to assign; if `null`, defaults to {@link TransportMode#GRPC}
+     * @param transportMode the transport mode to assign; if `null`, defaults to {@link PipelineTransport#GRPC}
      */
-    public void setTransportMode(TransportMode transportMode) {
-        this.transportMode = transportMode == null ? TransportMode.GRPC : transportMode;
+    public void setTransportMode(PipelineTransport transportMode) {
+        this.transportMode = transportMode == null ? PipelineTransport.GRPC : transportMode;
     }
 
     /**

@@ -156,7 +156,7 @@ class ModelExtractionPhaseTest {
 
         context.setPipelineTemplateConfig(templateConfig);
         context.setPluginHost(true);  // Need to be a plugin host or have orchestrator to process templates
-        context.setTransportMode(org.pipelineframework.processor.ir.TransportMode.LOCAL);  // Make plugins colocated to avoid needing plugin aspects
+        context.setTransportMode(org.pipelineframework.processor.ir.PipelineTransport.LOCAL);  // Make plugins colocated to avoid needing plugin aspects
 
         phase.execute(context);
 

@@ -14,7 +14,7 @@ import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.ServiceApiKind;
 import org.pipelineframework.processor.ir.StreamingShape;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.TypeMapping;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -37,42 +37,42 @@ class PipelineTargetResolutionPhaseTest {
 
     @Test
     void resolvesClientRoleTargetsForAllTransportModes() throws Exception {
-        assertResolvedTargets(DeploymentRole.ORCHESTRATOR_CLIENT, TransportMode.GRPC,
+        assertResolvedTargets(DeploymentRole.ORCHESTRATOR_CLIENT, PipelineTransport.GRPC,
             Set.of(GenerationTarget.CLIENT_STEP));
-        assertResolvedTargets(DeploymentRole.ORCHESTRATOR_CLIENT, TransportMode.REST,
+        assertResolvedTargets(DeploymentRole.ORCHESTRATOR_CLIENT, PipelineTransport.REST,
             Set.of(GenerationTarget.REST_CLIENT_STEP));
-        assertResolvedTargets(DeploymentRole.ORCHESTRATOR_CLIENT, TransportMode.LOCAL,
+        assertResolvedTargets(DeploymentRole.ORCHESTRATOR_CLIENT, PipelineTransport.LOCAL,
             Set.of(GenerationTarget.LOCAL_CLIENT_STEP));
 
-        assertResolvedTargets(DeploymentRole.PLUGIN_CLIENT, TransportMode.GRPC,
+        assertResolvedTargets(DeploymentRole.PLUGIN_CLIENT, PipelineTransport.GRPC,
             Set.of(GenerationTarget.CLIENT_STEP));
-        assertResolvedTargets(DeploymentRole.PLUGIN_CLIENT, TransportMode.REST,
+        assertResolvedTargets(DeploymentRole.PLUGIN_CLIENT, PipelineTransport.REST,
             Set.of(GenerationTarget.REST_CLIENT_STEP));
-        assertResolvedTargets(DeploymentRole.PLUGIN_CLIENT, TransportMode.LOCAL,
+        assertResolvedTargets(DeploymentRole.PLUGIN_CLIENT, PipelineTransport.LOCAL,
             Set.of(GenerationTarget.LOCAL_CLIENT_STEP));
     }
 
     @Test
     void resolvesServerRoleTargetsForAllTransportModes() throws Exception {
-        assertResolvedTargets(DeploymentRole.PIPELINE_SERVER, TransportMode.GRPC,
+        assertResolvedTargets(DeploymentRole.PIPELINE_SERVER, PipelineTransport.GRPC,
             Set.of(GenerationTarget.GRPC_SERVICE));
-        assertResolvedTargets(DeploymentRole.PIPELINE_SERVER, TransportMode.REST,
+        assertResolvedTargets(DeploymentRole.PIPELINE_SERVER, PipelineTransport.REST,
             Set.of(GenerationTarget.REST_RESOURCE));
-        assertResolvedTargets(DeploymentRole.PIPELINE_SERVER, TransportMode.LOCAL,
+        assertResolvedTargets(DeploymentRole.PIPELINE_SERVER, PipelineTransport.LOCAL,
             Set.of(GenerationTarget.GRPC_SERVICE_SIDE_EFFECT_ONLY));
 
-        assertResolvedTargets(DeploymentRole.PLUGIN_SERVER, TransportMode.GRPC,
+        assertResolvedTargets(DeploymentRole.PLUGIN_SERVER, PipelineTransport.GRPC,
             Set.of(GenerationTarget.GRPC_SERVICE));
-        assertResolvedTargets(DeploymentRole.PLUGIN_SERVER, TransportMode.REST,
+        assertResolvedTargets(DeploymentRole.PLUGIN_SERVER, PipelineTransport.REST,
             Set.of(GenerationTarget.REST_RESOURCE));
-        assertResolvedTargets(DeploymentRole.PLUGIN_SERVER, TransportMode.LOCAL,
+        assertResolvedTargets(DeploymentRole.PLUGIN_SERVER, PipelineTransport.LOCAL,
             Set.of(GenerationTarget.GRPC_SERVICE_SIDE_EFFECT_ONLY));
 
-        assertResolvedTargets(DeploymentRole.REST_SERVER, TransportMode.GRPC,
+        assertResolvedTargets(DeploymentRole.REST_SERVER, PipelineTransport.GRPC,
             Set.of(GenerationTarget.GRPC_SERVICE));
-        assertResolvedTargets(DeploymentRole.REST_SERVER, TransportMode.REST,
+        assertResolvedTargets(DeploymentRole.REST_SERVER, PipelineTransport.REST,
             Set.of(GenerationTarget.REST_RESOURCE));
-        assertResolvedTargets(DeploymentRole.REST_SERVER, TransportMode.LOCAL,
+        assertResolvedTargets(DeploymentRole.REST_SERVER, PipelineTransport.LOCAL,
             Set.of(GenerationTarget.GRPC_SERVICE_SIDE_EFFECT_ONLY));
     }
 
@@ -94,7 +94,7 @@ class PipelineTargetResolutionPhaseTest {
     void aggregatesResolvedTargetsAcrossModels() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(null, null);
-        context.setTransportMode(TransportMode.REST);
+        context.setTransportMode(PipelineTransport.REST);
         context.setStepModels(List.of(
             step("ServerStep", DeploymentRole.PIPELINE_SERVER),
             step("ClientStep", DeploymentRole.ORCHESTRATOR_CLIENT)));
@@ -112,7 +112,7 @@ class PipelineTargetResolutionPhaseTest {
         PipelineCompilationContext context = new PipelineCompilationContext(null, null);
         PipelineStepModel original = step("IdentityStep", DeploymentRole.PIPELINE_SERVER);
         context.setStepModels(List.of(original));
-        context.setTransportMode(TransportMode.REST);
+        context.setTransportMode(PipelineTransport.REST);
 
         phase.execute(context);
 
@@ -141,7 +141,7 @@ class PipelineTargetResolutionPhaseTest {
             .externalMapper(ClassName.get("com.example.app.mapper", "EmbeddingMapper"))
             .build();
         context.setStepModels(List.of(original));
-        context.setTransportMode(TransportMode.GRPC);
+        context.setTransportMode(PipelineTransport.GRPC);
 
         phase.execute(context);
 
@@ -160,7 +160,7 @@ class PipelineTargetResolutionPhaseTest {
             .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
             .build();
         context.setStepModels(List.of(delegated));
-        context.setTransportMode(TransportMode.GRPC);
+        context.setTransportMode(PipelineTransport.GRPC);
 
         phase.execute(context);
 
@@ -183,7 +183,7 @@ class PipelineTargetResolutionPhaseTest {
                 new PipelineTemplateRemoteTarget(null, "tpf.remote-operators.charge-card.url")))
             .build();
         context.setStepModels(List.of(remote));
-        context.setTransportMode(TransportMode.REST);
+        context.setTransportMode(PipelineTransport.REST);
 
         phase.execute(context);
 
@@ -208,7 +208,7 @@ class PipelineTargetResolutionPhaseTest {
                 new PipelineTemplateRemoteTarget("https://operator.example/process", null)))
             .build();
         context.setStepModels(List.of(remote));
-        context.setTransportMode(TransportMode.GRPC);
+        context.setTransportMode(PipelineTransport.GRPC);
 
         phase.execute(context);
 
@@ -230,7 +230,7 @@ class PipelineTargetResolutionPhaseTest {
             .serviceApiKind(ServiceApiKind.BLOCKING)
             .build();
         context.setStepModels(List.of(blocking));
-        context.setTransportMode(TransportMode.REST);
+        context.setTransportMode(PipelineTransport.REST);
 
         phase.execute(context);
 
@@ -249,7 +249,7 @@ class PipelineTargetResolutionPhaseTest {
             .serviceApiKind(ServiceApiKind.BLOCKING_ITERATOR)
             .build();
         context.setStepModels(List.of(blocking));
-        context.setTransportMode(TransportMode.REST);
+        context.setTransportMode(PipelineTransport.REST);
 
         phase.execute(context);
 
@@ -269,7 +269,7 @@ class PipelineTargetResolutionPhaseTest {
             .delegateService(ClassName.get("com.external.lib", "ExternalService"))
             .build();
         context.setStepModels(List.of(blocking));
-        context.setTransportMode(TransportMode.REST);
+        context.setTransportMode(PipelineTransport.REST);
 
         phase.execute(context);
 
@@ -290,7 +290,7 @@ class PipelineTargetResolutionPhaseTest {
                 new PipelineTemplateRemoteTarget("https://operator.example/process", null)))
             .build();
         context.setStepModels(List.of(blocking));
-        context.setTransportMode(TransportMode.REST);
+        context.setTransportMode(PipelineTransport.REST);
 
         phase.execute(context);
 
@@ -308,7 +308,7 @@ class PipelineTargetResolutionPhaseTest {
             .serviceApiKind(ServiceApiKind.REACTIVE)
             .build();
         context.setStepModels(List.of(reactive));
-        context.setTransportMode(TransportMode.REST);
+        context.setTransportMode(PipelineTransport.REST);
 
         phase.execute(context);
 
@@ -327,7 +327,7 @@ class PipelineTargetResolutionPhaseTest {
             .delegateService(ClassName.get("com.external.lib", "ExternalIteratorService"))
             .build();
         context.setStepModels(List.of(blocking));
-        context.setTransportMode(TransportMode.GRPC);
+        context.setTransportMode(PipelineTransport.GRPC);
 
         phase.execute(context);
 
@@ -338,7 +338,7 @@ class PipelineTargetResolutionPhaseTest {
 
     private void assertResolvedTargets(
             DeploymentRole role,
-            TransportMode transportMode,
+            PipelineTransport transportMode,
             Set<GenerationTarget> expectedTargets) throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(null, null);

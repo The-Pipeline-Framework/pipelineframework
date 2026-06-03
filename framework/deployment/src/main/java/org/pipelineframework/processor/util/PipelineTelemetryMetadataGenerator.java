@@ -20,7 +20,7 @@ import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.TypeMapping;
 
 /**
@@ -75,7 +75,7 @@ public class PipelineTelemetryMetadataGenerator {
         if (itemTypes == null || itemTypes.inputType() == null || itemTypes.outputType() == null) {
             return;
         }
-        TransportMode transportMode = ctx.getTransportMode();
+        PipelineTransport transportMode = ctx.getTransportMode();
         String consumer = findConsumerStep(ordered, itemTypes.inputType(), transportMode);
         String producer = findProducerStep(ordered, itemTypes.outputType(), transportMode);
         Map<String, String> stepParents = resolveStepParents(ctx, ordered);
@@ -222,7 +222,7 @@ public class PipelineTelemetryMetadataGenerator {
      * @param transportMode the transport mode to map
      * @return the GenerationTarget used for client step generation for the given transport mode
      */
-    private GenerationTarget resolveClientTarget(TransportMode transportMode) {
+    private GenerationTarget resolveClientTarget(PipelineTransport transportMode) {
         return switch (transportMode) {
             case REST -> GenerationTarget.REST_CLIENT_STEP;
             case LOCAL -> GenerationTarget.LOCAL_CLIENT_STEP;
@@ -553,7 +553,7 @@ public class PipelineTelemetryMetadataGenerator {
         PipelineStepModel model,
         PipelineYamlStep configStep,
         int index,
-        TransportMode transportMode
+        PipelineTransport transportMode
     ) {
         String service = model.generatedName();
         String logicalStep = baseLogicalStepName(service);
@@ -848,7 +848,7 @@ public class PipelineTelemetryMetadataGenerator {
     private PipelineStepModel selectBestMatch(
         List<PipelineStepModel> candidates,
         String token,
-        TransportMode transportMode
+        PipelineTransport transportMode
     ) {
         PipelineStepModel best = null;
         int bestLength = -1;
@@ -911,7 +911,7 @@ public class PipelineTelemetryMetadataGenerator {
     private String findProducerStep(
         List<PipelineStepModel> ordered,
         String itemType,
-        TransportMode transportMode
+        PipelineTransport transportMode
     ) {
         String lastMatch = null;
         for (PipelineStepModel model : ordered) {
@@ -1025,7 +1025,7 @@ public class PipelineTelemetryMetadataGenerator {
     private String findConsumerStep(
         List<PipelineStepModel> ordered,
         String itemType,
-        TransportMode transportMode) {
+        PipelineTransport transportMode) {
         for (PipelineStepModel model : ordered) {
             if (matchesType(model.inputMapping(), itemType)) {
                 return resolveClientStepClassName(model, transportMode);
@@ -1058,7 +1058,7 @@ public class PipelineTelemetryMetadataGenerator {
      * @param transportMode the transport mode whose client-step suffix is appended
      * @return the fully-qualified client step class name (package + ".pipeline." + generated name without "Service" + transport suffix)
      */
-    private String resolveClientStepClassName(PipelineStepModel model, TransportMode transportMode) {
+    private String resolveClientStepClassName(PipelineStepModel model, PipelineTransport transportMode) {
         String suffix = transportMode.clientStepSuffix();
         return model.servicePackage() + ".pipeline." +
             model.generatedName().replace("Service", "") + suffix;

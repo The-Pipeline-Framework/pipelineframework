@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.config.PlatformMode;
 import org.pipelineframework.processor.PipelineCompilationContext;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -40,7 +40,7 @@ class PipelinePlatformMetadataGeneratorTest {
 
         PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
         ctx.setPlatformMode(PlatformMode.FUNCTION);
-        ctx.setTransportMode(TransportMode.REST);
+        ctx.setTransportMode(PipelineTransport.REST);
         ctx.setModuleName("orchestrator-svc");
         ctx.setPluginHost(false);
 

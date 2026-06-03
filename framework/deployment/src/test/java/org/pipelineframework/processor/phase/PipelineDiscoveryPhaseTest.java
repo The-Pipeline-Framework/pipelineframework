@@ -219,7 +219,7 @@ class PipelineDiscoveryPhaseTest {
                 "com.example", "GRPC", "COMPUTE", java.util.List.of(), java.util.List.of()));
         when(configLoader.loadRuntimeMapping(moduleDir, messager)).thenReturn(null);
         when(tpResolver.resolveTransport("GRPC", messager))
-            .thenReturn(org.pipelineframework.processor.ir.TransportMode.GRPC);
+            .thenReturn(org.pipelineframework.processor.ir.PipelineTransport.GRPC);
         when(tpResolver.resolvePlatform("COMPUTE", messager))
             .thenReturn(org.pipelineframework.config.PlatformMode.COMPUTE);
         when(processingEnv.getOptions()).thenReturn(Map.of());
@@ -288,7 +288,7 @@ class PipelineDiscoveryPhaseTest {
             });
         when(configLoader.loadRuntimeMapping(moduleDir, messager)).thenReturn(null);
         when(tpResolver.resolveTransport("LOCAL", messager))
-            .thenReturn(org.pipelineframework.processor.ir.TransportMode.LOCAL);
+            .thenReturn(org.pipelineframework.processor.ir.PipelineTransport.LOCAL);
         when(tpResolver.resolvePlatform("COMPUTE", messager))
             .thenReturn(org.pipelineframework.config.PlatformMode.COMPUTE);
 

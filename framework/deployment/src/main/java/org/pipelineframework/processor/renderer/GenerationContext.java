@@ -7,7 +7,7 @@ import javax.annotation.processing.ProcessingEnvironment;
 import com.google.protobuf.DescriptorProtos;
 import com.squareup.javapoet.ClassName;
 import org.pipelineframework.processor.ir.DeploymentRole;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 
 /**
  * Context for code generation operations, containing processing environment and output directory information.
@@ -24,7 +24,7 @@ import org.pipelineframework.processor.ir.TransportMode;
 public record GenerationContext(ProcessingEnvironment processingEnv, Path outputDir, DeploymentRole role,
                                 Set<String> enabledAspects, ClassName cacheKeyGenerator,
                                 DescriptorProtos.FileDescriptorSet descriptorSet,
-                                TransportMode transportMode,
+                                PipelineTransport transportMode,
                                 String pipelineBasePackage) {
     /**
      * Creates a new GenerationContext instance.

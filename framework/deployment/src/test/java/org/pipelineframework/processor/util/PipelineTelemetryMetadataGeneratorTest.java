@@ -274,7 +274,7 @@ class PipelineTelemetryMetadataGeneratorTest {
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
         PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
         ctx.setOrchestratorGenerated(true);
-        ctx.setTransportMode(TransportMode.GRPC);
+        ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setModuleDir(tempDir);
         return ctx;
     }

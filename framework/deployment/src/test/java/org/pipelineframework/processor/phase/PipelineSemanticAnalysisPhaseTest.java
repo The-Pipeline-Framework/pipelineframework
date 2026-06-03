@@ -26,7 +26,7 @@ import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.TypeMapping;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -138,7 +138,7 @@ public class PipelineSemanticAnalysisPhaseTest {
     public void functionPlatformRequiresRestTransport() throws Exception {
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
         context.setPlatformMode(PlatformMode.FUNCTION);
-        context.setTransportMode(TransportMode.GRPC);
+        context.setTransportMode(PipelineTransport.GRPC);
         context.setStepModels(List.of(step(StreamingShape.UNARY_UNARY)));
 
         phase.execute(context);
@@ -154,7 +154,7 @@ public class PipelineSemanticAnalysisPhaseTest {
     public void functionPlatformAllowsStreamingShapes(StreamingShape shape) throws Exception {
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
         context.setPlatformMode(PlatformMode.FUNCTION);
-        context.setTransportMode(TransportMode.REST);
+        context.setTransportMode(PipelineTransport.REST);
         context.setStepModels(List.of(step(shape)));
 
         phase.execute(context);
@@ -166,7 +166,7 @@ public class PipelineSemanticAnalysisPhaseTest {
     public void functionPlatformAllowsUnaryRestSteps() throws Exception {
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
         context.setPlatformMode(PlatformMode.FUNCTION);
-        context.setTransportMode(TransportMode.REST);
+        context.setTransportMode(PipelineTransport.REST);
         context.setStepModels(List.of(step(StreamingShape.UNARY_UNARY)));
 
         phase.execute(context);
