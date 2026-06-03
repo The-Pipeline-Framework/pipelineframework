@@ -15,19 +15,12 @@ if (typeof window !== "undefined") {
 </div>
 
 <style>
-html,
-body,
-#app {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  background: #07101f;
-}
-
 .replay-viewer-route {
-  min-height: 100%;
+  min-height: 100vh;
   display: grid;
   place-items: center;
+  margin: 0;
+  background: #07101f;
   color: #f8fbff;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
