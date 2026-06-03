@@ -1,0 +1,7 @@
+reviews:
+  path_filters:
+    - "!tools/replay-viewer/datasets/**"
+    - "!docs/public/replay-viewer-app/datasets/**"
+    - "!docs/public/replay-viewer/datasets/**"
+    - "!tools/replay-viewer/vendor/**"
+    - "!docs/public/replay-viewer-app/vendor/**"

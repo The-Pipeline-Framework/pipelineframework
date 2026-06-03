@@ -2399,11 +2399,12 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertEquals("completed", replayDocument.status(), "Expected merged replay to complete successfully.");
         assertReplayStepEvents(replayDocument, "ProcessFolder");
         assertReplayStepEvents(replayDocument, "ProcessCsvPaymentsInput");
-        assertReplayStepEvents(replayDocument, "ProcessAwaitPaymentProviderAwaitClientStep");
         assertReplayStepEvents(replayDocument, "ProcessPaymentStatus");
         assertReplayStepEvents(replayDocument, "ProcessCsvPaymentsOutputFile");
         assertReplayStepEvents(replayDocument, "PersistenceCsvPaymentsInputFileSideEffect");
         assertReplayStepEvents(replayDocument, "PersistencePaymentRecordSideEffect");
+        assertReplayStepEvents(replayDocument, "PersistencePaymentOutputSideEffect");
+        assertReplayStepEvents(replayDocument, "PersistenceCsvPaymentsOutputFileSideEffect");
         assertTrue(
                 replayDocument.events().stream().anyMatch(event ->
                         "ProcessCsvPaymentsInput".equals(event.step())

@@ -23,6 +23,10 @@ locals {
       zip_path = "${path.root}/${var.tokenize_content_zip_path}"
       timeout  = 60
     }
+    embed-content-svc = {
+      zip_path = "${path.root}/${var.embed_content_zip_path}"
+      timeout  = 60
+    }
     index-document-svc = {
       zip_path = "${path.root}/${var.index_document_zip_path}"
       timeout  = 60
@@ -121,6 +125,7 @@ resource "aws_lambda_function" "orchestrator" {
       QUARKUS_REST_CLIENT_PROCESS_CRAWL_SOURCE_URL     = aws_lambda_function_url.step["crawl-source-svc"].function_url
       QUARKUS_REST_CLIENT_PROCESS_PARSE_DOCUMENT_URL   = aws_lambda_function_url.step["parse-document-svc"].function_url
       QUARKUS_REST_CLIENT_PROCESS_TOKENIZE_CONTENT_URL = aws_lambda_function_url.step["tokenize-content-svc"].function_url
+      QUARKUS_REST_CLIENT_PROCESS_EMBED_CONTENT_URL    = aws_lambda_function_url.step["embed-content-svc"].function_url
       QUARKUS_REST_CLIENT_PROCESS_INDEX_DOCUMENT_URL   = aws_lambda_function_url.step["index-document-svc"].function_url
     })
   }

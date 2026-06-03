@@ -32,6 +32,12 @@ variable "tokenize_content_zip_path" {
   default     = "../../tokenize-content-svc/target/function.zip"
 }
 
+variable "embed_content_zip_path" {
+  description = "Path to the embed-content Lambda ZIP."
+  type        = string
+  default     = "../../embed-content-svc/target/function.zip"
+}
+
 variable "index_document_zip_path" {
   description = "Path to the index-document Lambda ZIP."
   type        = string

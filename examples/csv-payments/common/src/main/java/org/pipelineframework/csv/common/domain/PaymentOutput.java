@@ -62,6 +62,13 @@ public class PaymentOutput extends BaseEntity implements Serializable {
     @CsvNumber("#,###.00")
     BigDecimal fee;
 
+  @PrePersist
+  protected void useStablePaymentOutputId() {
+    CsvPaymentsStableIdSupport.stableId(
+            "PaymentOutput", csvId, recipient, amount, currency, status, message)
+        .ifPresent(stableId -> id = stableId);
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;

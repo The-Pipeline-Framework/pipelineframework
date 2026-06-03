@@ -1,0 +1,3195 @@
+import * as THREE from "./vendor/three.module.min.js";
+import { BUILT_IN_REPLAYS_CONFIG } from "./built-in-replays.js";
+
+const mount = document.getElementById("threeMount");
+const viewport = document.querySelector(".viewport");
+const playerSurface = document.getElementById("playerSurface");
+const playerChrome = document.getElementById("playerChrome");
+const backToDocsLink = document.getElementById("backToDocsLink");
+const playPauseButton = document.getElementById("playPauseButton");
+const stopButton = document.getElementById("stopButton");
+const restartButton = document.getElementById("restartButton");
+const stepBackButton = document.getElementById("stepBackButton");
+const stepButton = document.getElementById("stepButton");
+const infoButton = document.getElementById("infoButton");
+const infoModal = document.getElementById("infoModal");
+const infoCloseButton = document.getElementById("infoCloseButton");
+const fullscreenButton = document.getElementById("fullscreenButton");
+const datasetSelect = document.getElementById("datasetSelect");
+const sourceApplyButton = document.getElementById("sourceApplyButton");
+const resetLayoutButton = document.getElementById("resetLayoutButton");
+const customReplayInputWrap = document.getElementById("customReplayInputWrap");
+const replayFileInput = document.getElementById("replayFileInput");
+const speedInputs = [...document.querySelectorAll('input[name="speed"]')];
+const timelineSlider = document.getElementById("timelineSlider");
+const datasetName = document.getElementById("datasetName");
+const pipelineName = document.getElementById("pipelineName");
+const durationText = document.getElementById("durationText");
+const topologyText = document.getElementById("topologyText");
+const playbackText = document.getElementById("playbackText");
+const eventCountText = document.getElementById("eventCountText");
+const loadProgress = document.getElementById("loadProgress");
+const loadProgressFill = document.getElementById("loadProgressFill");
+const loadProgressText = document.getElementById("loadProgressText");
+const runParametersContent = document.getElementById("runParametersContent");
+const runtimeStatus = document.getElementById("runtimeStatus");
+const CAMERA_PADDING = 1.2;
+const BASE_NODE_RADIUS = 0.68;
+const BRANCH_NODE_RADIUS = 0.6;
+const BASE_LABEL_HEIGHT = 0.8;
+const SUPPORT_LABEL_HEIGHT = 0.5;
+const LABEL_OFFSET_Y = 1.12;
+const COUNTER_LABEL_HEIGHT = 0.44;
+const PRIMARY_ROW_Y = 2.45;
+const BRANCH_ROW_OFFSET_Y = 2.05;
+const EMPTY_REPLAY_SOURCE_KEY = "none";
+const DEFAULT_REPLAY_SOURCE_KEY = EMPTY_REPLAY_SOURCE_KEY;
+const LAYOUT_STORAGE_PREFIX = "tpf-replay-viewer-layout";
+const BUILT_IN_REPLAYS = new Map(BUILT_IN_REPLAYS_CONFIG.map((entry) => [entry.key, { label: entry.label, path: entry.path }]));
+const EFFECT_PRESETS = {
+  pulse: {
+    start: { duration: 0.72, startScale: 0.92, endScale: 2.7, opacity: 0.96 },
+    success: { duration: 0.82, startScale: 1.06, endScale: 2.28, opacity: 0.72 },
+    retryPrimary: { duration: 1.55, startScale: 1.05, endScale: 3.4, opacity: 1 },
+    retrySecondary: { duration: 1.05, startScale: 0.92, endScale: 2.3, opacity: 0.62 },
+    errorPrimary: { duration: 1.18, startScale: 1.08, endScale: 3.95, opacity: 0.96 },
+    errorSecondary: { duration: 0.92, startScale: 0.94, endScale: 2.45, opacity: 0.58 }
+  },
+  burst: {
+    duration: 1.18,
+    endScale: 3.9,
+    opacity: 0.98
+  },
+  shockwave: {
+    duration: 1.4,
+    startScale: 1.3,
+    endScale: 4.7,
+    opacity: 0.54
+  },
+  retryLoop: {
+    duration: 2.2,
+    radius: 0.82,
+    verticalDrift: 0.42,
+    revolutions: 5.6,
+    opacity: 1
+  },
+  background: {
+    idleDriftAmplitude: 0.18,
+    idleDriftSpeed: 0.35,
+    pulseDuration: 1.25
+  },
+  node: {
+    breathScaleAmplitude: 0.038,
+    breathEmissiveAmplitude: 0.12,
+    highlightScaleBoost: 0.13,
+    retryHoldSeconds: 2.2,
+    errorHoldSeconds: 1.9,
+    defaultHoldSeconds: 1.25
+  },
+  edge: {
+    decay: 0.92,
+    shimmerAmplitude: 0.08
+  },
+  emit: {
+    trailDelay: 0.06
+  }
+};
+const END_DRAIN_SECONDS = Math.max(
+  1.4,
+  ...Object.values(EFFECT_PRESETS)
+      .flatMap((preset) => Object.values(preset))
+      .flatMap((value) => {
+        if (typeof value === "number") {
+          return [value];
+        }
+        if (value && typeof value === "object" && typeof value.duration === "number") {
+          return [value.duration];
+        }
+        return [];
+      })
+);
+const CHROME_HIDE_DELAY_MS = 1800;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(mount.clientWidth, mount.clientHeight);
+mount.appendChild(renderer.domElement);
+renderer.domElement.style.touchAction = "none";
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x07101f);
+
+const camera = new THREE.PerspectiveCamera(40, mount.clientWidth / mount.clientHeight, 0.1, 100);
+camera.position.set(0, 0, 24);
+camera.lookAt(0, 0, 0);
+
+const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+const directionalLight = new THREE.DirectionalLight(0x8ab4ff, 1.05);
+directionalLight.position.set(4, 8, 10);
+scene.add(ambientLight, directionalLight);
+
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2(2, 2);
+
+const nodeMeshes = new Map();
+const nodePositions = new Map();
+const automaticNodePositions = new Map();
+const nodeLabelSprites = new Map();
+const nodeValueSprites = new Map();
+const nodeIconSprites = new Map();
+const edgeLines = new Map();
+const particles = new Map();
+const pulseEffects = [];
+const burstEffects = [];
+const retryLoops = [];
+const backgroundFlashes = [];
+const eventIndexByKey = new Set();
+const itemAnchors = new Map();
+const highlightExpirations = new Map();
+const stepMetadataByName = new Map();
+const runtimeStepState = new Map();
+const directEventSteps = new Set();
+const displayStepAliases = new Map();
+const rawStepMetadataByName = new Map();
+const supportFlowSampleCounts = new Map();
+const STEP_LABELS = {
+  PaymentProvider: "Payment Provider",
+  Database: "Database"
+};
+const STEP_ROLE_LABELS = {
+  broker: "Kafka Broker",
+  "external-provider": "Payment Provider",
+  store: "Database"
+};
+let fallbackAwaitDisplayStep = null;
+let activeAnimationPolicy = emptyAnimationPolicy();
+
+let replayDocument = normalizeReplayDocument(validateReplayDocument({ topology: { steps: [], transitions: [] }, events: [], durationMs: 0, pipeline: "loading" }));
+let replayDurationSeconds = 0.1;
+let nextEventCursor = 0;
+let currentTimeSeconds = 0;
+let isPlaying = false;
+let isLoadingReplay = false;
+let isFinishingEffects = false;
+let playbackSpeed = Number(speedInputs.find((input) => input.checked)?.value ?? 0.5);
+let previousAnimationFrame = performance.now();
+let hoveredStepName = null;
+let nodeValueUpdateTick = 0;
+let activeReplaySourceKey = DEFAULT_REPLAY_SOURCE_KEY;
+let stagedReplaySourceKey = activeReplaySourceKey;
+let activeLayoutStorageKey = null;
+let chromeHideTimeout = null;
+let fatalRenderErrorLatched = false;
+let openModal = null;
+let isScrubbingTimeline = false;
+let dragState = null;
+let suppressNextCanvasClick = false;
+let prefersTapChrome = window.matchMedia("(hover: none), (pointer: coarse)").matches;
+let loadProgressHideTimeout = null;
+
+function resolveReplayDocsHref() {
+  const replayDocsPath = "/guide/operations/observability/replay";
+  const currentPath = window.location.pathname;
+  if (currentPath.includes("/replay-viewer/") || currentPath.includes("/replay-viewer-app/")) {
+    return `${window.location.origin}${replayDocsPath}`;
+  }
+  return `https://pipelineframework.org${replayDocsPath}`;
+}
+
+function reloadIfViewerShellRouteChanged() {
+  const currentPath = window.location.pathname;
+  if (!currentPath.includes("/replay-viewer/") && !currentPath.includes("/replay-viewer-app/")) {
+    window.location.replace(window.location.href);
+    return true;
+  }
+  return false;
+}
+
+function clearReplayFileSelection() {
+  if (replayFileInput) {
+    replayFileInput.value = "";
+  }
+}
+
+function syncStagedReplaySourceToActive() {
+  stagedReplaySourceKey = activeReplaySourceKey;
+  datasetSelect.value = stagedReplaySourceKey;
+  setCustomReplayVisibility(stagedReplaySourceKey === "custom");
+  clearReplayFileSelection();
+  updateSourceApplyButton();
+}
+
+function setCustomReplayVisibility(visible) {
+  customReplayInputWrap.hidden = !visible;
+  customReplayInputWrap.setAttribute("aria-hidden", visible ? "false" : "true");
+}
+
+function updateSourceApplyButton() {
+  if (!sourceApplyButton) {
+    return;
+  }
+  const nextSourceKey = datasetSelect.value;
+  const hasPendingCustomReplay = nextSourceKey === "custom" && Boolean(replayFileInput.files?.length);
+  sourceApplyButton.disabled = nextSourceKey === EMPTY_REPLAY_SOURCE_KEY
+    || (nextSourceKey === "custom" && !hasPendingCustomReplay);
+}
+
+function isAnyModalOpen() {
+  return openModal !== null;
+}
+
+function hashString(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function replayLayoutStorageKey(document) {
+  const topology = document?.topology ?? {};
+  const fingerprint = {
+    pipeline: document?.pipeline ?? "unknown",
+    steps: (topology.steps ?? []).map((step) => ({
+      step: step.step,
+      role: step.renderRole,
+      actorKind: step.actorKind,
+      parentStep: step.parentStep,
+      sideEffect: step.sideEffect === true,
+      index: step.index
+    })),
+    transitions: (topology.transitions ?? []).map((transition) => ({
+      from: transition.from,
+      to: transition.to,
+      relationKind: transition.relationKind
+    }))
+  };
+  return `${LAYOUT_STORAGE_PREFIX}:${hashString(JSON.stringify(fingerprint))}`;
+}
+
+function readSavedLayoutPositions() {
+  if (!activeLayoutStorageKey) {
+    return new Map();
+  }
+  try {
+    const raw = localStorage.getItem(activeLayoutStorageKey);
+    if (!raw) {
+      return new Map();
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return new Map();
+    }
+    return new Map(Object.entries(parsed)
+      .filter(([, position]) => Number.isFinite(position?.x) && Number.isFinite(position?.y))
+      .map(([stepName, position]) => [stepName, new THREE.Vector3(position.x, position.y, 0)]));
+  } catch (error) {
+    reportViewerIssue(`saved layout ignored (${error.message})`);
+    return new Map();
+  }
+}
+
+function saveCurrentLayoutPositions() {
+  if (!activeLayoutStorageKey || nodePositions.size === 0) {
+    return;
+  }
+  const positions = {};
+  for (const [stepName, position] of nodePositions.entries()) {
+    positions[stepName] = {
+      x: Number(position.x.toFixed(4)),
+      y: Number(position.y.toFixed(4))
+    };
+  }
+  try {
+    localStorage.setItem(activeLayoutStorageKey, JSON.stringify(positions));
+  } catch (error) {
+    reportViewerIssue(`layout could not be saved (${error.message})`);
+  }
+}
+
+function clearSavedLayoutPositions() {
+  if (!activeLayoutStorageKey) {
+    return;
+  }
+  try {
+    localStorage.removeItem(activeLayoutStorageKey);
+  } catch (error) {
+    reportViewerIssue(`saved layout could not be cleared (${error.message})`);
+  }
+}
+
+function validateReplayDocument(document) {
+  if (Array.isArray(document)) {
+    throw new Error("The replay viewer expects a replay document object, not an array.");
+  }
+  if (!document || typeof document !== "object") {
+    throw new Error("Replay JSON must be an object.");
+  }
+  if (!document.topology || !Array.isArray(document.topology.steps) || !Array.isArray(document.events)) {
+    throw new Error("Replay JSON must contain topology.steps and events arrays.");
+  }
+  return document;
+}
+
+function emptyAnimationPolicy() {
+  return {
+    awaitRequestByTargetStep: new Map(),
+    awaitCompletionByResumeStep: new Map(),
+    outputResumeByTargetStep: new Map(),
+    storeWriteByRawStep: new Map()
+  };
+}
+
+function normalizeReplayDocument(document) {
+  const events = Array.isArray(document.events)
+    ? [...document.events].sort((left, right) => {
+        const leftTime = playbackTimeForEvent(left);
+        const rightTime = playbackTimeForEvent(right);
+        if (leftTime !== rightTime) {
+          return leftTime - rightTime;
+        }
+        return (left.sequence ?? 0) - (right.sequence ?? 0);
+      })
+    : [];
+  const topology = augmentTopologyWithDisplayNodes(
+    document.topology,
+    events.some((event) => event.event === "reject")
+  );
+  const { topology: displayTopology, aliases } = normalizeTopologyForDisplay(topology, events);
+  return Object.assign({}, document, {
+    rawTopology: topology,
+    topology: displayTopology,
+    displayAliases: aliases,
+    fallbackAwaitDisplayStep: defaultAwaitStepNameForTopology(displayTopology),
+    events
+  });
+}
+
+function defaultAwaitStepNameForTopology(topology) {
+  if (!topology?.steps) {
+    return null;
+  }
+  return topology.steps.find((step) => resolveDisplayRole(step) === "await")?.step ?? null;
+}
+
+function normalizeTopologyForDisplay(topology, events = []) {
+  if (!topology || !Array.isArray(topology.steps) || !Array.isArray(topology.transitions)) {
+    return { topology, aliases: {} };
+  }
+  const aliases = {};
+  const directEventSteps = new Set(events.map((event) => event?.step).filter(Boolean));
+  const eventBearingPrimarySteps = topology.steps.filter((step) =>
+    resolveDisplayRole(step) === "primary" && !step.sideEffect && directEventSteps.has(step.step)
+  );
+  const visibleAwaitSteps = topology.steps.filter((step) =>
+    resolveDisplayRole(step) === "await" && !isInternalAwaitClientStep(step.step)
+  );
+  const defaultAwaitStep = visibleAwaitSteps[0]?.step ?? null;
+  const hasConcretePersistenceNodes = topology.steps.some((step) => resolveDisplayRole(step) === "persistence-plugin");
+  const hiddenSteps = new Set();
+  for (const step of topology.steps) {
+    if (hasConcretePersistenceNodes && resolveDisplayRole(step) === "store") {
+      hiddenSteps.add(step.step);
+      continue;
+    }
+    if (isInternalAwaitClientStep(step.step) && defaultAwaitStep) {
+      aliases[step.step] = defaultAwaitStep;
+      hiddenSteps.add(step.step);
+    }
+    if (
+      eventBearingPrimarySteps.length > 0
+      && resolveDisplayRole(step) === "primary"
+      && !step.sideEffect
+      && !directEventSteps.has(step.step)
+      && isGeneratedBaseTopologyStep(step)
+    ) {
+      hiddenSteps.add(step.step);
+    }
+  }
+  for (const step of topology.steps) {
+    if (step.sideEffect && hiddenSteps.has(step.parentStep) && !directEventSteps.has(step.step)) {
+      hiddenSteps.add(step.step);
+    }
+  }
+  if (hiddenSteps.size === 0) {
+    return { topology, aliases };
+  }
+  return {
+    topology: Object.assign({}, topology, {
+      steps: topology.steps.filter((step) => !hiddenSteps.has(step.step)),
+      transitions: topology.transitions
+        .filter((transition) => !hiddenSteps.has(transition.from) && !hiddenSteps.has(transition.to))
+    }),
+    aliases
+  };
+}
+
+function uniqueStepName(baseName, existingStepNames) {
+  let candidate = baseName;
+  let suffix = 2;
+  while (existingStepNames.has(candidate)) {
+    candidate = `${baseName}${suffix}`;
+    suffix += 1;
+  }
+  existingStepNames.add(candidate);
+  return candidate;
+}
+
+function isGeneratedBaseTopologyStep(step) {
+  return typeof step?.runtimeStepClass === "string"
+    && /^runtime::.+\$BaseStep$/.test(step.runtimeStepClass);
+}
+
+function isInternalAwaitClientStep(stepName) {
+  return /AwaitClientStep$/.test(stepName ?? "");
+}
+
+function aliasStepNameForDisplay(stepName) {
+  if (!stepName) {
+    return stepName;
+  }
+  if (isInternalAwaitClientStep(stepName) && fallbackAwaitDisplayStep) {
+    return fallbackAwaitDisplayStep;
+  }
+  return displayStepAliases.get(stepName) ?? stepName;
+}
+
+function mapEventForDisplay(event) {
+  if (!event) {
+    return event;
+  }
+  return Object.assign({}, event, {
+    step: aliasStepNameForDisplay(event.step),
+    from: aliasStepNameForDisplay(event.from),
+    to: aliasStepNameForDisplay(event.to)
+  });
+}
+
+function isAwaitResumableError(event) {
+  return event?.event === "error"
+    && event?.errorType === "org.pipelineframework.awaitable.AwaitSuspendedException";
+}
+
+function isAwaitSuspensionEvent(event) {
+  return isInternalAwaitClientStep(event?.step) && isAwaitResumableError(event);
+}
+
+function sameReplayTarget(left, right) {
+  return (left?.step ?? "") === (right?.step ?? "")
+    && (left?.from ?? "") === (right?.from ?? "")
+    && (left?.to ?? "") === (right?.to ?? "")
+    && (left?.itemId ?? "") === (right?.itemId ?? "");
+}
+
+function isAwaitSuspensionStartEvent(event, nextEvent) {
+  if (event?.event !== "start" || !isAwaitResumableError(nextEvent) || !sameReplayTarget(event, nextEvent)) {
+    return false;
+  }
+  return Math.abs(playbackTimeForEvent(nextEvent) - playbackTimeForEvent(event)) < 0.05;
+}
+
+function firstDisplayedStepByRole(renderRole) {
+  for (const step of stepMetadataByName.values()) {
+    if (step?.renderRole === renderRole && nodePositions.has(step.step)) {
+      return step.step;
+    }
+  }
+  return null;
+}
+
+function awaitDisplayStepForEvent(event) {
+  const eventStep = resolveStepDefinition(event?.step);
+  if (eventStep?.renderRole === "await" && nodePositions.has(event.step)) {
+    return event.step;
+  }
+  return fallbackAwaitDisplayStep || firstDisplayedStepByRole("await") || event?.step || event?.from || event?.to;
+}
+
+function nextAwaitResumeTimeAfter(timeSeconds) {
+  for (let index = nextEventCursor; index < replayDocument.events.length; index += 1) {
+    const rawCandidate = replayDocument.events[index];
+    const candidate = mapEventForDisplay(rawCandidate);
+    const completionFlow = candidate?.step ? activeAnimationPolicy.awaitCompletionByResumeStep.get(candidate.step) : null;
+    if (rawCandidate.event === "start" && completionFlow && candidate.from === completionFlow.awaitStep) {
+      const candidateTime = playbackTimeForEvent(rawCandidate);
+      if (candidateTime > timeSeconds) {
+        return candidateTime;
+      }
+    }
+  }
+  return null;
+}
+
+function resolveRawStepDefinition(stepName) {
+  return rawStepMetadataByName.get(stepName) ?? resolveStepDefinition(stepName);
+}
+
+function isPersistenceSideEffectStep(stepOrName) {
+  const step = typeof stepOrName === "string"
+    ? resolveRawStepDefinition(stepOrName)
+    : stepOrName;
+  return step?.sideEffect === true && step?.pluginKind === "persistence";
+}
+
+function playbackTimeForEvent(event) {
+  if (!event) {
+    return 0;
+  }
+  return event.event === "success" || event.event === "error"
+    ? (event.endTime ?? event.startTime)
+    : event.startTime;
+}
+
+function computeReplayDurationSeconds(document) {
+  const declaredDurationSeconds = Math.max(0.1, (document.durationMs || 0) / 1000);
+  const maxEventTimeSeconds = Array.isArray(document.events) && document.events.length > 0
+    ? document.events.reduce((latest, event) => Math.max(latest, playbackTimeForEvent(event)), 0)
+    : 0;
+  return Math.max(declaredDurationSeconds, maxEventTimeSeconds);
+}
+
+function augmentTopologyWithDisplayNodes(topology, includeRejectNodes = true) {
+  if (!topology || !Array.isArray(topology.steps) || !Array.isArray(topology.transitions)) {
+    return topology;
+  }
+  if (!includeRejectNodes) {
+    return topology;
+  }
+  const steps = [...topology.steps];
+  const transitions = [...topology.transitions];
+  const stepNames = new Set(steps.map((step) => step.step));
+  const transitionIds = new Set(transitions.map((transition) => transition.id));
+  const runtimeStepClasses = new Set(steps.map((step) => step.runtimeStepClass).filter(Boolean));
+
+  for (const step of topology.steps) {
+    if (step.sideEffect) {
+      continue;
+    }
+    const rejectStepName = `Rejects ${step.step}`;
+    let rejectRuntimeStepClass = steps.find((candidate) => candidate.step === rejectStepName)?.runtimeStepClass;
+    if (!stepNames.has(rejectStepName)) {
+      rejectRuntimeStepClass = uniqueSyntheticRuntimeClass(step.runtimeStepClass, "RejectQueueDisplayStep", runtimeStepClasses);
+      steps.push({
+        runtimeStepClass: rejectRuntimeStepClass,
+        step: rejectStepName,
+        service: "RejectQueue",
+        cardinality: "one-to-one",
+        index: step.index,
+        sideEffect: true,
+        parentStep: step.step,
+        pluginKind: "reject"
+      });
+      stepNames.add(rejectStepName);
+      runtimeStepClasses.add(rejectRuntimeStepClass);
+    }
+    const transitionId = `${step.step}->${rejectStepName}`;
+    if (!transitionIds.has(transitionId)) {
+      transitions.push({
+        id: transitionId,
+        fromRuntimeStepClass: step.runtimeStepClass,
+        toRuntimeStepClass: rejectRuntimeStepClass,
+        from: step.step,
+        to: rejectStepName,
+        fromService: step.service,
+        toService: "RejectQueue",
+        cardinality: step.cardinality
+      });
+      transitionIds.add(transitionId);
+    }
+  }
+
+  return Object.assign({}, topology, {
+    steps,
+    transitions
+  });
+}
+
+function uniqueSyntheticRuntimeClass(baseRuntimeClass, suffix, existingRuntimeClasses) {
+  const normalizedBase = baseRuntimeClass || "org.pipelineframework.synthetic.Replay";
+  let candidate = `${normalizedBase}$${suffix}`;
+  let counter = 2;
+  while (existingRuntimeClasses.has(candidate)) {
+    candidate = `${normalizedBase}$${suffix}${counter}`;
+    counter += 1;
+  }
+  return candidate;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function setLoadProgress(visible, ratio = 0, text = "Loading replay...") {
+  isLoadingReplay = visible;
+  if (loadProgressHideTimeout) {
+    window.clearTimeout(loadProgressHideTimeout);
+    loadProgressHideTimeout = null;
+  }
+  loadProgress.hidden = !visible;
+  loadProgressFill.style.width = `${Math.round(clamp(ratio, 0, 1) * 100)}%`;
+  loadProgressText.textContent = text;
+  if (visible) {
+    revealPlayerChrome(true);
+  } else if (!isAnyModalOpen()) {
+    scheduleChromeHide();
+  }
+}
+
+function finishLoadProgress(text = "Replay loaded") {
+  if (loadProgressHideTimeout) {
+    window.clearTimeout(loadProgressHideTimeout);
+  }
+  isLoadingReplay = false;
+  loadProgress.hidden = false;
+  loadProgressFill.style.width = "100%";
+  loadProgressText.textContent = text;
+  loadProgressHideTimeout = window.setTimeout(() => {
+    loadProgress.hidden = true;
+    loadProgressHideTimeout = null;
+    if (!isAnyModalOpen()) {
+      scheduleChromeHide();
+    }
+  }, 1100);
+}
+
+function nextAnimationFrame() {
+  return new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+async function readResponseTextWithProgress(response, label) {
+  const totalBytes = Number(response.headers.get("Content-Length"));
+  if (!response.body || !Number.isFinite(totalBytes) || totalBytes <= 0) {
+    setLoadProgress(true, 0.45, `Downloading ${label}...`);
+    await nextAnimationFrame();
+    return response.text();
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const chunks = [];
+  let loadedBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    chunks.push(decoder.decode(value, { stream: true }));
+    loadedBytes += value.byteLength;
+    const downloadRatio = clamp(loadedBytes / totalBytes, 0, 1);
+    setLoadProgress(true, 0.15 + downloadRatio * 0.65, `Downloading ${label}... ${Math.round(downloadRatio * 100)}%`);
+  }
+  chunks.push(decoder.decode());
+  return chunks.join("");
+}
+
+function hexToRgbTriplet(hexColor) {
+  const value = hexColor.replace("#", "");
+  const normalized = value.length === 3
+    ? value.split("").map((part) => part + part).join("")
+    : value;
+  const intValue = Number.parseInt(normalized, 16);
+  const red = (intValue >> 16) & 255;
+  const green = (intValue >> 8) & 255;
+  const blue = intValue & 255;
+  return `${red}, ${green}, ${blue}`;
+}
+
+function setViewportBackground(accentStrength, accentColor, driftPhase) {
+  if (!viewport) {
+    return;
+  }
+  const strength = clamp(accentStrength, 0, 1);
+  viewport.style.setProperty("--bg-accent-strength", strength.toFixed(3));
+  viewport.style.setProperty("--bg-accent-rgb", hexToRgbTriplet(accentColor));
+  viewport.style.setProperty("--bg-drift-x", `${(Math.sin(driftPhase) * 16).toFixed(1)}px`);
+  viewport.style.setProperty("--bg-drift-y", `${(Math.cos(driftPhase * 0.7) * 14).toFixed(1)}px`);
+}
+
+function resolveStepDefinition(stepName) {
+  return stepMetadataByName.get(stepName) ?? null;
+}
+
+function stepHasRenderRole(stepName, renderRole) {
+  return resolveStepDefinition(stepName)?.renderRole === renderRole;
+}
+
+function resolveDisplayRole(step) {
+  if (!step) {
+    return "primary";
+  }
+  if (step.renderRole) {
+    return step.renderRole;
+  }
+  if (step.pluginKind === "persistence") {
+    return "persistence-plugin";
+  }
+  return step.sideEffect ? "plugin" : "primary";
+}
+
+function resolveDisplayIconKind(step) {
+  const role = resolveDisplayRole(step);
+  if (step?.pluginKind) {
+    if (step.pluginKind === "persistence" && step.actorKind === "database") {
+      return "store";
+    }
+    return step.pluginKind;
+  }
+  switch (role) {
+    case "store":
+      return "store";
+    case "broker":
+      return "broker";
+    case "external-provider":
+      return "provider";
+    default:
+      return "plugin";
+  }
+}
+
+function isNamedSupportActor(step) {
+  const role = resolveDisplayRole(step);
+  return role === "broker" || role === "external-provider" || role === "store";
+}
+
+function resolveDisplayStepName(event) {
+  if (!event || (event.event !== "retry" && event.event !== "error")) {
+    return aliasStepNameForDisplay(event?.step ?? null);
+  }
+  const step = resolveStepDefinition(aliasStepNameForDisplay(event.step));
+  if (step?.sideEffect && step.parentStep) {
+    return step.parentStep;
+  }
+  return aliasStepNameForDisplay(event.step);
+}
+
+function resolveDisplayTargets(event) {
+  const primaryStep = resolveDisplayStepName(event);
+  return {
+    primaryStep,
+    secondaryStep: primaryStep && primaryStep !== event.step ? event.step : null
+  };
+}
+
+function indexStepsByRole(topology) {
+  const stepsByRole = new Map();
+  for (const step of topology?.steps ?? []) {
+    const role = resolveDisplayRole(step);
+    if (!stepsByRole.has(role)) {
+      stepsByRole.set(role, []);
+    }
+    stepsByRole.get(role).push(step);
+  }
+  return stepsByRole;
+}
+
+function indexTransitionsByRelation(topology) {
+  const transitionsByRelation = new Map();
+  for (const transition of topology?.transitions ?? []) {
+    const relationKind = transition?.relationKind ?? "primary";
+    if (!transitionsByRelation.has(relationKind)) {
+      transitionsByRelation.set(relationKind, []);
+    }
+    transitionsByRelation.get(relationKind).push(transition);
+  }
+  return transitionsByRelation;
+}
+
+function findTransitionByFrom(transitions, fromStep) {
+  return transitions.find((transition) => transition.from === fromStep) ?? null;
+}
+
+function findTransitionByTo(transitions, toStep) {
+  return transitions.find((transition) => transition.to === toStep) ?? null;
+}
+
+function buildSupportAnimationPolicy(displayTopology, rawTopology = displayTopology) {
+  const policy = emptyAnimationPolicy();
+  const displayTransitions = Array.isArray(displayTopology?.transitions) ? displayTopology.transitions : [];
+  const rawSteps = Array.isArray(rawTopology?.steps) ? rawTopology.steps : [];
+  const stepsByRole = indexStepsByRole(displayTopology);
+  const transitionsByRelation = indexTransitionsByRelation(displayTopology);
+  const awaitRequestTransitions = transitionsByRelation.get("await-request") ?? [];
+  const awaitCompletionTransitions = transitionsByRelation.get("await-completion") ?? [];
+  const primaryTransitions = transitionsByRelation.get("primary") ?? [];
+  const storeTransitions = transitionsByRelation.get("store") ?? [];
+
+  for (const awaitStep of stepsByRole.get("await") ?? []) {
+    const firstRequest = findTransitionByFrom(awaitRequestTransitions, awaitStep.step);
+    const secondRequest = firstRequest ? findTransitionByFrom(awaitRequestTransitions, firstRequest.to) : null;
+    if (firstRequest) {
+      policy.awaitRequestByTargetStep.set(awaitStep.step, {
+        awaitStep: awaitStep.step,
+        requestEdges: [firstRequest, secondRequest].filter(Boolean)
+      });
+    }
+
+    const resumeEdge = findTransitionByFrom(primaryTransitions, awaitStep.step);
+    const downstreamEdge = resumeEdge ? findTransitionByFrom(primaryTransitions, resumeEdge.to) : null;
+    const completionToAwait = findTransitionByTo(awaitCompletionTransitions, awaitStep.step);
+    const completionFromExternal = completionToAwait
+      ? findTransitionByTo(awaitCompletionTransitions, completionToAwait.from)
+      : null;
+    if (resumeEdge) {
+      policy.awaitCompletionByResumeStep.set(resumeEdge.to, {
+        awaitStep: awaitStep.step,
+        completionEdges: [completionFromExternal, completionToAwait].filter(Boolean),
+        resumeEdge
+      });
+      if (downstreamEdge) {
+        policy.outputResumeByTargetStep.set(downstreamEdge.to, downstreamEdge);
+      }
+    }
+  }
+
+  const displayStepsByName = new Map((displayTopology?.steps ?? []).map((step) => [step.step, step]));
+  const rawTransitionsById = new Map((rawTopology?.transitions ?? []).map((transition) => [transition.id, transition]));
+  for (const rawStep of rawSteps) {
+    if (!isPersistenceSideEffectStep(rawStep)) {
+      continue;
+    }
+    const displayTarget = aliasStepNameForDisplay(rawStep.step);
+    const displaySource = aliasStepNameForDisplay(rawStep.parentStep);
+    const displayTargetStep = displayTarget ? displayStepsByName.get(displayTarget) : null;
+    const explicitStoreTransition = rawStep.parentStep
+      ? rawTransitionsById.get(`${rawStep.parentStep}->${displayTarget}`)
+      : null;
+    const storeTransition = explicitStoreTransition
+      ?? storeTransitions.find((transition) => transition.from === displaySource && transition.to === displayTarget)
+      ?? displayTransitions.find((transition) => transition.from === displaySource && transition.to === displayTarget);
+    policy.storeWriteByRawStep.set(rawStep.step, {
+      fromStep: displaySource,
+      toStep: displayTarget,
+      aggregate: displayTarget !== rawStep.step
+        || (displayTargetStep?.cardinality?.toLowerCase()?.includes("many") ?? false)
+        || storeTransition?.cardinality?.toLowerCase()?.includes("many") === true
+    });
+  }
+
+  return policy;
+}
+
+function resolvePluginStepForDisplay(parentStep, pluginKind) {
+  for (const step of stepMetadataByName.values()) {
+    if (step.sideEffect && step.parentStep === parentStep && step.pluginKind === pluginKind) {
+      return step.step;
+    }
+  }
+  return null;
+}
+
+function disposeMaterial(material) {
+  if (!material) {
+    return;
+  }
+  if (Array.isArray(material)) {
+    material.forEach(disposeMaterial);
+    return;
+  }
+  if (material.map) {
+    material.map.dispose();
+  }
+  material.dispose?.();
+}
+
+function disposeThreeObject(object) {
+  if (!object) {
+    return;
+  }
+  object.geometry?.dispose?.();
+  disposeMaterial(object.material);
+}
+
+function removeAndDispose(object) {
+  if (!object) {
+    return;
+  }
+  scene.remove(object);
+  disposeThreeObject(object);
+}
+
+function clearScene() {
+  for (const { line } of edgeLines.values()) {
+    removeAndDispose(line);
+  }
+  edgeLines.clear();
+  stepMetadataByName.clear();
+  for (const sprite of nodeLabelSprites.values()) {
+    removeAndDispose(sprite);
+  }
+  nodeLabelSprites.clear();
+  for (const sprite of nodeValueSprites.values()) {
+    removeAndDispose(sprite);
+  }
+  nodeValueSprites.clear();
+  for (const sprite of nodeIconSprites.values()) {
+    removeAndDispose(sprite);
+  }
+  nodeIconSprites.clear();
+  for (const mesh of nodeMeshes.values()) {
+    removeAndDispose(mesh);
+  }
+  nodeMeshes.clear();
+  nodePositions.clear();
+  automaticNodePositions.clear();
+  for (const particle of particles.values()) {
+    removeAndDispose(particle.mesh);
+  }
+  particles.clear();
+  pulseEffects.splice(0).forEach((effect) => removeAndDispose(effect.mesh));
+  burstEffects.splice(0).forEach((effect) => removeAndDispose(effect.mesh));
+  retryLoops.splice(0).forEach((effect) => removeAndDispose(effect.mesh));
+  backgroundFlashes.splice(0);
+  runtimeStepState.clear();
+  directEventSteps.clear();
+  displayStepAliases.clear();
+  rawStepMetadataByName.clear();
+  activeAnimationPolicy = emptyAnimationPolicy();
+  fallbackAwaitDisplayStep = null;
+  nodeValueUpdateTick += 1;
+}
+
+function clearReplayDynamics() {
+  eventIndexByKey.clear();
+  itemAnchors.clear();
+  highlightExpirations.clear();
+  supportFlowSampleCounts.clear();
+  hoveredStepName = null;
+  for (const particle of particles.values()) {
+    removeAndDispose(particle.mesh);
+  }
+  particles.clear();
+  pulseEffects.splice(0).forEach((effect) => removeAndDispose(effect.mesh));
+  burstEffects.splice(0).forEach((effect) => removeAndDispose(effect.mesh));
+  retryLoops.splice(0).forEach((effect) => removeAndDispose(effect.mesh));
+  backgroundFlashes.splice(0);
+  runtimeStepState.clear();
+  nodeValueUpdateTick += 1;
+  for (const edge of edgeLines.values()) {
+    edge.intensity = 0;
+    edge.line.material.opacity = edge.baseOpacity;
+    edge.line.material.color.setHex(edge.baseColor);
+  }
+  isFinishingEffects = false;
+}
+
+function resetPlaybackState() {
+  nextEventCursor = 0;
+  clearReplayDynamics();
+}
+
+function cancelChromeHide() {
+  if (chromeHideTimeout != null) {
+    window.clearTimeout(chromeHideTimeout);
+    chromeHideTimeout = null;
+  }
+}
+
+function setPlayerChromeVisible(visible) {
+  playerChrome.dataset.visible = visible ? "true" : "false";
+}
+
+function scheduleChromeHide(delayMs = CHROME_HIDE_DELAY_MS) {
+  cancelChromeHide();
+  if (!prefersTapChrome) {
+    setPlayerChromeVisible(true);
+    return;
+  }
+  if (isAnyModalOpen() || isScrubbingTimeline || isLoadingReplay) {
+    setPlayerChromeVisible(true);
+    return;
+  }
+  chromeHideTimeout = window.setTimeout(() => {
+    if (isAnyModalOpen() || isScrubbingTimeline || isLoadingReplay) {
+      setPlayerChromeVisible(true);
+      return;
+    }
+    if (prefersTapChrome && !isPlaying) {
+      return;
+    }
+    setPlayerChromeVisible(false);
+  }, delayMs);
+}
+
+function revealPlayerChrome(sticky = false) {
+  setPlayerChromeVisible(true);
+  if (!prefersTapChrome) {
+    cancelChromeHide();
+    return;
+  }
+  if (!sticky) {
+    scheduleChromeHide();
+  } else {
+    cancelChromeHide();
+  }
+}
+
+function openModalElement(name, element) {
+  if (name === "source") {
+    syncStagedReplaySourceToActive();
+  }
+  openModal = name;
+  element.hidden = false;
+  element.setAttribute("aria-hidden", "false");
+  revealPlayerChrome(true);
+}
+
+function closeModalElement(name, element) {
+  if (openModal !== name) {
+    return;
+  }
+  if (name === "source") {
+    syncStagedReplaySourceToActive();
+  }
+  openModal = null;
+  element.hidden = true;
+  element.setAttribute("aria-hidden", "true");
+  revealPlayerChrome(!prefersTapChrome);
+}
+
+function clearElement(element) {
+  while (element.firstChild) {
+    element.removeChild(element.firstChild);
+  }
+}
+
+function renderRunParameters(runParameters) {
+  clearElement(runParametersContent);
+  const sections = Array.isArray(runParameters?.sections)
+    ? runParameters.sections.filter((section) => section?.id !== "telemetry")
+    : [];
+  if (sections.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "run-parameters-empty";
+    empty.textContent = "Run parameters unavailable";
+    runParametersContent.appendChild(empty);
+    return;
+  }
+
+  for (const section of sections) {
+    const entries = Array.isArray(section?.entries) ? section.entries : [];
+    if (entries.length === 0) {
+      continue;
+    }
+
+    const sectionElement = document.createElement("section");
+    sectionElement.className = "run-parameters-section";
+
+    const title = document.createElement("div");
+    title.className = "run-parameters-section-title";
+    title.textContent = section.label || section.id || "Parameters";
+    sectionElement.appendChild(title);
+
+    const list = document.createElement("div");
+    list.className = "run-parameters-list";
+
+    for (const entry of entries) {
+      const row = document.createElement("div");
+      row.className = "run-parameters-entry";
+
+      const label = document.createElement("div");
+      label.className = "run-parameters-label";
+      label.textContent = entry.label || entry.key || "Parameter";
+
+      const value = document.createElement("div");
+      value.className = "run-parameters-value";
+      value.textContent = entry.value ?? "";
+
+      row.append(label, value);
+      list.appendChild(row);
+    }
+
+    sectionElement.appendChild(list);
+    runParametersContent.appendChild(sectionElement);
+  }
+
+  if (!runParametersContent.childElementCount) {
+    const empty = document.createElement("div");
+    empty.className = "run-parameters-empty";
+    empty.textContent = "Run parameters unavailable";
+    runParametersContent.appendChild(empty);
+  }
+}
+
+function reportViewerIssue(message) {
+  eventCountText.textContent = `Status: ${message}`;
+  if (runtimeStatus) {
+    runtimeStatus.textContent = message;
+  }
+  console.error(`[replay-viewer] ${message}`);
+}
+
+function reportRuntimeError(context, error) {
+  const message = error?.message ?? String(error);
+  isPlaying = false;
+  isFinishingEffects = false;
+  reportViewerIssue(`${context} (${message})`);
+  updateUi();
+}
+
+function reportNonFatalRuntimeIssue(context, error) {
+  const message = error?.message ?? String(error);
+  console.error(`[replay-viewer] ${context} (${message})`, error);
+}
+
+function loadReplay(document, label, sourceKey = activeReplaySourceKey) {
+  fatalRenderErrorLatched = false;
+  if (runtimeStatus) {
+    runtimeStatus.textContent = "";
+  }
+  clearScene();
+  replayDocument = normalizeReplayDocument(validateReplayDocument(document));
+  activeLayoutStorageKey = replayLayoutStorageKey(replayDocument);
+  replayDurationSeconds = computeReplayDurationSeconds(replayDocument);
+  currentTimeSeconds = 0;
+  isPlaying = false;
+  isFinishingEffects = false;
+  fallbackAwaitDisplayStep = replayDocument.fallbackAwaitDisplayStep ?? null;
+  for (const [rawStepName, displayStepName] of Object.entries(replayDocument.displayAliases ?? {})) {
+    displayStepAliases.set(rawStepName, displayStepName);
+  }
+  for (const step of replayDocument.rawTopology?.steps ?? replayDocument.topology.steps) {
+    rawStepMetadataByName.set(step.step, step);
+  }
+  activeAnimationPolicy = buildSupportAnimationPolicy(
+    replayDocument.topology,
+    replayDocument.rawTopology ?? replayDocument.topology
+  );
+  try {
+    buildTopology(replayDocument.topology);
+  } catch (error) {
+    clearScene();
+    replayDocument = normalizeReplayDocument(validateReplayDocument({
+      topology: { steps: [], transitions: [] },
+      events: [],
+      durationMs: 0,
+      pipeline: "error"
+    }));
+    replayDurationSeconds = 0.1;
+    currentTimeSeconds = 0;
+    isPlaying = false;
+    isFinishingEffects = false;
+    resetPlaybackState();
+    reportViewerIssue(`failed to render replay topology (${error.message ?? error})`);
+    throw error;
+  }
+  for (const event of replayDocument.events) {
+    const displayStepName = aliasStepNameForDisplay(event?.step);
+    const displayFromName = aliasStepNameForDisplay(event?.from);
+    const displayToName = aliasStepNameForDisplay(event?.to);
+    if (displayStepName) {
+      directEventSteps.add(displayStepName);
+    }
+    for (const transitionStepName of [displayFromName, displayToName]) {
+      if (stepHasRenderRole(transitionStepName, "await")) {
+        directEventSteps.add(transitionStepName);
+      }
+    }
+  }
+  activeReplaySourceKey = sourceKey;
+  stagedReplaySourceKey = sourceKey;
+  datasetSelect.value = sourceKey;
+  setCustomReplayVisibility(sourceKey === "custom");
+  updateSourceApplyButton();
+  datasetName.textContent = label;
+  pipelineName.textContent = `Pipeline: ${replayDocument.pipeline}`;
+  durationText.textContent = `Duration: ${replayDurationSeconds.toFixed(2)}s`;
+  topologyText.textContent = `Topology: ${replayDocument.topology.steps.length} nodes / ${replayDocument.topology.transitions.length} edges`;
+  eventCountText.textContent = `Events: ${replayDocument.events.length}`;
+  renderRunParameters(replayDocument.runParameters);
+  resetPlaybackState();
+  revealPlayerChrome(true);
+  updateUi();
+}
+
+async function loadBuiltInReplay(datasetKey) {
+  const dataset = BUILT_IN_REPLAYS.get(datasetKey);
+  if (!dataset) {
+    return;
+  }
+  isPlaying = false;
+  setLoadProgress(true, 0.12, `Loading ${dataset.label}...`);
+  updateUi();
+  await nextAnimationFrame();
+  const response = await fetch(dataset.path, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch built-in dataset (${response.status})`);
+  }
+  const text = await readResponseTextWithProgress(response, dataset.label);
+  setLoadProgress(true, 0.88, `Parsing ${dataset.label}...`);
+  await nextAnimationFrame();
+  let document;
+  try {
+    document = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`${dataset.label} is not valid replay JSON: ${error.message}`);
+  }
+  setLoadProgress(true, 0.96, `Rendering ${dataset.label}...`);
+  await nextAnimationFrame();
+  try {
+    loadReplay(document, dataset.label, datasetKey);
+  } catch (error) {
+    throw new Error(`${dataset.label} could not be rendered: ${error.message}`);
+  }
+  finishLoadProgress(`${dataset.label} loaded`);
+}
+
+function readReplayFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onprogress = (event) => {
+      if (!event.lengthComputable) {
+        setLoadProgress(true, 0, `Loading ${file.name}...`);
+        return;
+      }
+      setLoadProgress(
+        true,
+        event.loaded / event.total,
+        `Loading ${file.name} (${Math.round((event.loaded / event.total) * 100)}%)`
+      );
+    };
+    reader.onerror = () => reject(reader.error ?? new Error(`Failed to read ${file.name}.`));
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.readAsText(file);
+  });
+}
+
+function computeAutomaticLayoutPositions(topology) {
+  const steps = Array.isArray(topology.steps) ? topology.steps : [];
+  const transitions = Array.isArray(topology.transitions) ? topology.transitions : [];
+  const positions = new Map();
+  const baseSteps = steps.filter((step) => !step.sideEffect);
+  const sideEffects = steps.filter((step) => step.sideEffect);
+  const sideEffectsByParent = new Map();
+
+  for (const step of sideEffects) {
+    const parentStep = step.parentStep || "__unattached__";
+    if (!sideEffectsByParent.has(parentStep)) {
+      sideEffectsByParent.set(parentStep, []);
+    }
+    sideEffectsByParent.get(parentStep).push(step);
+  }
+
+  const spacing = baseSteps.length > 4 ? 3.5 : 4.35;
+  const totalWidth = Math.max(0, (baseSteps.length - 1) * spacing);
+  baseSteps.forEach((step, index) => {
+    const x = index * spacing - totalWidth / 2;
+    const stagger = baseSteps.length > 4
+      ? (index % 2 === 0 ? 0.34 : -0.34)
+      : (index % 2 === 0 ? 0.18 : -0.18);
+    positions.set(step.step, new THREE.Vector3(x, PRIMARY_ROW_Y + stagger, 0));
+  });
+
+  for (const step of sideEffects) {
+    const role = resolveDisplayRole(step);
+    if (role === "store") {
+      continue;
+    }
+    const parentPosition = step.parentStep ? positions.get(step.parentStep) : null;
+    if (!parentPosition) {
+      continue;
+    }
+    let offsetX = 0;
+    let offsetY = BRANCH_ROW_OFFSET_Y;
+    if (role === "broker") {
+      offsetX = -1.52;
+      offsetY = -1.45;
+    } else if (role === "external-provider") {
+      offsetX = 1.52;
+      offsetY = -1.45;
+    } else {
+      const siblings = sideEffectsByParent.get(step.parentStep) || [];
+      const siblingIndex = siblings.findIndex((candidate) => candidate.step === step.step);
+      const band = Math.floor(siblingIndex / 2);
+      const centeredIndex = siblingIndex - (siblings.length - 1) / 2;
+      offsetX = centeredIndex * 1.28;
+      offsetY = BRANCH_ROW_OFFSET_Y + band * 1;
+    }
+    positions.set(step.step, new THREE.Vector3(parentPosition.x + offsetX, parentPosition.y - offsetY, 0));
+  }
+
+  const storeActors = sideEffects.filter((step) => resolveDisplayRole(step) === "store");
+  const topologyPositions = [...positions.values()];
+  const topologyMinX = topologyPositions.length > 0
+    ? Math.min(...topologyPositions.map((position) => position.x))
+    : -1;
+  const topologyMaxX = topologyPositions.length > 0
+    ? Math.max(...topologyPositions.map((position) => position.x))
+    : 1;
+  const topologyCenterX = (topologyMinX + topologyMaxX) / 2;
+  const topologyWidth = Math.max(1.6, topologyMaxX - topologyMinX);
+  storeActors.forEach((step, index) => {
+    const inboundStoreTransitions = transitions.filter((transition) => transition.to === step.step && transition.relationKind === "store");
+    const sourcePositions = inboundStoreTransitions
+      .map((transition) => positions.get(transition.from))
+      .filter(Boolean);
+    const averageX = sourcePositions.length > 0
+      ? sourcePositions.reduce((sum, position) => sum + position.x, 0) / sourcePositions.length
+      : topologyCenterX;
+    const spreadOffset = storeActors.length > 1
+      ? ((index / (storeActors.length - 1)) - 0.5) * Math.min(2.4, topologyWidth * 0.38)
+      : 0;
+    const x = averageX + spreadOffset;
+    const y = PRIMARY_ROW_Y - BRANCH_ROW_OFFSET_Y - 0.28 - index * 0.3;
+    positions.set(step.step, new THREE.Vector3(x, y, 0));
+  });
+
+  return positions;
+}
+
+function buildTopology(topology) {
+  const steps = Array.isArray(topology.steps) ? topology.steps : [];
+  const transitions = Array.isArray(topology.transitions) ? topology.transitions : [];
+  steps.forEach((step) => {
+    stepMetadataByName.set(step.step, step);
+  });
+
+  const savedPositions = readSavedLayoutPositions();
+  const autoPositions = computeAutomaticLayoutPositions(topology);
+  automaticNodePositions.clear();
+  for (const [stepName, position] of autoPositions.entries()) {
+    automaticNodePositions.set(stepName, position.clone());
+  }
+
+  for (const step of steps) {
+    const autoPosition = autoPositions.get(step.step);
+    if (!autoPosition) {
+      continue;
+    }
+    const savedPosition = savedPositions.get(step.step);
+    registerNode(step, savedPosition ?? autoPosition);
+  }
+
+  transitions.forEach((transition) => {
+    const source = nodePositions.get(transition.from);
+    const target = nodePositions.get(transition.to);
+    if (!source || !target) {
+      return;
+    }
+    const isBranch = steps.find((step) => step.step === transition.to)?.sideEffect === true;
+    const material = isBranch
+      ? new THREE.LineDashedMaterial({ color: 0x8f7aea, transparent: true, opacity: 0.55, dashSize: 0.32, gapSize: 0.18 })
+      : new THREE.LineBasicMaterial({ color: 0x34527f, transparent: true, opacity: 0.8 });
+    const geometry = new THREE.BufferGeometry().setFromPoints([source.clone(), target.clone()]);
+    const line = new THREE.Line(geometry, material);
+    if (isBranch) {
+      line.computeLineDistances();
+    }
+    scene.add(line);
+    edgeLines.set(edgeKey(transition.from, transition.to), {
+      line,
+      from: transition.from,
+      to: transition.to,
+      baseColor: isBranch ? 0x8f7aea : 0x34527f,
+      accentColor: isBranch ? 0xcf9cff : 0x7ad7ff,
+      baseOpacity: isBranch ? 0.55 : 0.8,
+      intensity: 0,
+      shimmerPhase: Math.random() * Math.PI * 2,
+      branch: isBranch
+    });
+  });
+
+  fitCameraToTopology(steps);
+}
+
+function registerNode(step, position) {
+  const isSideEffect = Boolean(step.sideEffect);
+  const role = resolveDisplayRole(step);
+  const geometry = new THREE.SphereGeometry(isSideEffect ? BRANCH_NODE_RADIUS : BASE_NODE_RADIUS, 24, 24);
+  const material = new THREE.MeshStandardMaterial({
+    color: nodeColorForStep(step),
+    emissive: isSideEffect ? 0x1d2742 : 0x17355b,
+    emissiveIntensity: 0.34,
+    roughness: 0.35,
+    metalness: 0.15
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.copy(position);
+  mesh.userData.step = step;
+  mesh.userData.phase = step.index * 0.73 + (isSideEffect ? 0.4 : 0);
+  mesh.userData.isSideEffect = isSideEffect;
+  scene.add(mesh);
+  nodeMeshes.set(step.step, mesh);
+  nodePositions.set(step.step, position.clone());
+  if (!isSideEffect || isNamedSupportActor(step)) {
+    const sprite = buildStepLabelSprite(step.step);
+    const labelOffset = isSideEffect ? LABEL_OFFSET_Y - 0.08 : LABEL_OFFSET_Y;
+    sprite.scale.multiplyScalar(isSideEffect ? SUPPORT_LABEL_HEIGHT / BASE_LABEL_HEIGHT : 1);
+    sprite.userData.baseHeight = isSideEffect ? SUPPORT_LABEL_HEIGHT : BASE_LABEL_HEIGHT;
+    sprite.position.copy(position).add(new THREE.Vector3(0, -labelOffset, 0));
+    scene.add(sprite);
+    nodeLabelSprites.set(step.step, sprite);
+  }
+  if (!isSideEffect) {
+    const valueSprite = buildTextSprite("0|0", {
+      fontSize: 28,
+      fontWeight: 700,
+      fillStyle: "#f8fbff",
+      paddingX: 12,
+      paddingY: 8,
+      backgroundStyle: "rgba(7, 16, 31, 0.0)",
+      borderStyle: null,
+      height: COUNTER_LABEL_HEIGHT
+    });
+    valueSprite.position.copy(position);
+    scene.add(valueSprite);
+    nodeValueSprites.set(step.step, valueSprite);
+  } else {
+    const iconSprite = buildPluginIconSprite(step);
+    iconSprite.position.copy(position);
+    scene.add(iconSprite);
+    nodeIconSprites.set(step.step, iconSprite);
+    if (step.pluginKind === "reject") {
+      const rejectSprite = buildTextSprite("0", {
+        fontSize: 26,
+        fontWeight: 700,
+        fillStyle: "#f8fbff",
+        paddingX: 7,
+        paddingY: 5,
+        backgroundStyle: "rgba(7, 16, 31, 0.0)",
+        borderStyle: null,
+        height: 0.24
+      });
+      rejectSprite.position.copy(position).add(new THREE.Vector3(0, -0.3, 0));
+      scene.add(rejectSprite);
+      nodeValueSprites.set(step.step, rejectSprite);
+    }
+  }
+}
+
+function labelOffsetForStep(step) {
+  const isSideEffect = Boolean(step?.sideEffect);
+  return isSideEffect ? LABEL_OFFSET_Y - 0.08 : LABEL_OFFSET_Y;
+}
+
+function updateNodeDecorations(stepName) {
+  const position = nodePositions.get(stepName);
+  const step = resolveStepDefinition(stepName);
+  if (!position || !step) {
+    return;
+  }
+  const label = nodeLabelSprites.get(stepName);
+  if (label) {
+    label.position.copy(position).add(new THREE.Vector3(0, -labelOffsetForStep(step), 0));
+  }
+  const value = nodeValueSprites.get(stepName);
+  if (value) {
+    const valueOffset = step.sideEffect && step.pluginKind === "reject"
+      ? new THREE.Vector3(0, -0.3, 0)
+      : new THREE.Vector3(0, 0, 0);
+    value.position.copy(position).add(valueOffset);
+  }
+  const icon = nodeIconSprites.get(stepName);
+  if (icon) {
+    icon.position.copy(position);
+  }
+}
+
+function updateEdgeGeometry(edge) {
+  const source = nodePositions.get(edge.from);
+  const target = nodePositions.get(edge.to);
+  if (!source || !target) {
+    return;
+  }
+  edge.line.geometry.dispose();
+  edge.line.geometry = new THREE.BufferGeometry().setFromPoints([source.clone(), target.clone()]);
+  if (edge.branch) {
+    edge.line.computeLineDistances();
+  }
+}
+
+function updateConnectedEdges(stepName) {
+  for (const edge of edgeLines.values()) {
+    if (edge.from === stepName || edge.to === stepName) {
+      updateEdgeGeometry(edge);
+    }
+  }
+}
+
+function setNodePosition(stepName, position) {
+  const mesh = nodeMeshes.get(stepName);
+  if (!mesh) {
+    return;
+  }
+  const nextPosition = position.clone();
+  mesh.position.copy(nextPosition);
+  nodePositions.set(stepName, nextPosition);
+  updateNodeDecorations(stepName);
+  updateConnectedEdges(stepName);
+}
+
+function resetCurrentLayout() {
+  if (automaticNodePositions.size === 0) {
+    return;
+  }
+  clearSavedLayoutPositions();
+  for (const [stepName, position] of automaticNodePositions.entries()) {
+    setNodePosition(stepName, position);
+  }
+  fitCameraToTopology(replayDocument.topology.steps);
+  updateLabels();
+}
+
+function buildStepLabelSprite(stepName) {
+  const labelLines = layoutStepLabel(stepName);
+  const paddingX = 14;
+  const paddingY = 10;
+  const lineGap = 6;
+  return buildTextSprite(labelLines.join("\n"), {
+    fontSize: 30,
+    fontWeight: 600,
+    fillStyle: "#f8fbff",
+    paddingX,
+    paddingY,
+    lineGap,
+    backgroundStyle: "rgba(7, 16, 31, 0.0)",
+    borderStyle: null,
+    shadowColor: "rgba(7, 16, 31, 0.92)",
+    shadowBlur: 10,
+    height: BASE_LABEL_HEIGHT
+  });
+}
+
+function buildPluginIconSprite(step) {
+  const iconKind = resolveDisplayIconKind(step);
+  return buildIconSprite(iconKind, iconKind === "reject" ? 0.54 : 0.72);
+}
+
+function buildTextSprite(text, options = {}) {
+  const {
+    fontSize = 20,
+    fontWeight = 600,
+    paddingX = 10,
+    paddingY = 8,
+    lineGap = 4,
+    fillStyle = "#f8fbff",
+    backgroundStyle = "rgba(7, 16, 31, 0.0)",
+    borderStyle = null,
+    shadowColor = "rgba(7, 16, 31, 0.0)",
+    shadowBlur = 0,
+    height = 0.4
+  } = options;
+  const lines = String(text).split("\n");
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  context.font = `${fontWeight} ${fontSize}px Inter, system-ui, sans-serif`;
+  const lineWidths = lines.map((line) => Math.ceil(context.measureText(line).width));
+  const textWidth = Math.max(...lineWidths, 1);
+  const lineHeight = fontSize + lineGap;
+  canvas.width = textWidth + paddingX * 2;
+  canvas.height = lines.length * lineHeight + paddingY * 2 - lineGap;
+  const draw = canvas.getContext("2d");
+  draw.clearRect(0, 0, canvas.width, canvas.height);
+  if (backgroundStyle && backgroundStyle !== "transparent") {
+    draw.fillStyle = backgroundStyle;
+    draw.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  if (borderStyle) {
+    draw.strokeStyle = borderStyle;
+    draw.lineWidth = 2;
+    draw.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
+  }
+  draw.font = `${fontWeight} ${fontSize}px Inter, system-ui, sans-serif`;
+  draw.fillStyle = fillStyle;
+  draw.textAlign = "center";
+  draw.textBaseline = "top";
+  draw.shadowColor = shadowColor;
+  draw.shadowBlur = shadowBlur;
+  lines.forEach((line, index) => {
+    draw.fillText(line, canvas.width / 2, paddingY + index * lineHeight);
+  });
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  texture.minFilter = THREE.LinearFilter;
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false
+  });
+  const sprite = new THREE.Sprite(material);
+  const aspect = canvas.width / canvas.height;
+  sprite.scale.set(height * aspect, height, 1);
+  sprite.userData.aspect = aspect;
+  sprite.userData.baseHeight = height;
+  sprite.userData.text = text;
+  sprite.userData.options = options;
+  sprite.renderOrder = 10;
+  return sprite;
+}
+
+function replaceSpriteText(sprite, text, options = sprite.userData.options ?? {}) {
+  const replacement = buildTextSprite(text, options);
+  sprite.material.map?.dispose();
+  sprite.material.dispose();
+  sprite.material = replacement.material;
+  sprite.scale.copy(replacement.scale);
+  sprite.userData.aspect = replacement.userData.aspect;
+  sprite.userData.baseHeight = replacement.userData.baseHeight;
+  sprite.userData.text = text;
+  sprite.userData.options = options;
+}
+
+function buildIconSprite(pluginKind, height = 0.28) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 160;
+  canvas.height = 160;
+  const context = canvas.getContext("2d");
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.strokeStyle = "#f8fbff";
+  context.fillStyle = "#f8fbff";
+  context.lineWidth = 9;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+
+  switch (pluginKind) {
+    case "persistence":
+    case "store":
+      drawDatabaseIcon(context);
+      break;
+    case "broker":
+      drawBrokerIcon(context);
+      break;
+    case "provider":
+      drawProviderIcon(context);
+      break;
+    case "cache":
+      drawCacheIcon(context);
+      break;
+    case "cache-invalidate":
+      drawCacheIcon(context);
+      drawInvalidateAccent(context, "!");
+      break;
+    case "cache-invalidate-all":
+      drawCacheIcon(context);
+      drawInvalidateAccent(context, "x");
+      break;
+    case "reject":
+      drawRejectQueueIcon(context);
+      break;
+    default:
+      drawPluginDefaultIcon(context);
+      break;
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  texture.minFilter = THREE.LinearFilter;
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false
+  });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(height, height, 1);
+  sprite.userData.aspect = 1;
+  sprite.userData.baseHeight = height;
+  sprite.renderOrder = 10;
+  return sprite;
+}
+
+function drawDatabaseIcon(context) {
+  context.beginPath();
+  context.ellipse(80, 38, 34, 15, 0, 0, Math.PI * 2);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(46, 38);
+  context.lineTo(46, 102);
+  context.moveTo(114, 38);
+  context.lineTo(114, 102);
+  context.stroke();
+  context.beginPath();
+  context.ellipse(80, 102, 34, 15, 0, 0, Math.PI);
+  context.stroke();
+  context.beginPath();
+  context.ellipse(80, 70, 34, 15, 0, 0, Math.PI);
+  context.stroke();
+}
+
+function drawBrokerIcon(context) {
+  roundRectPath(context, 28, 34, 22, 72, 8);
+  context.stroke();
+  roundRectPath(context, 57, 46, 22, 60, 8);
+  context.stroke();
+  roundRectPath(context, 86, 28, 22, 78, 8);
+  context.stroke();
+}
+
+function drawProviderIcon(context) {
+  roundRectPath(context, 38, 38, 60, 64, 12);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(98, 56);
+  context.lineTo(122, 56);
+  context.moveTo(98, 84);
+  context.lineTo(122, 84);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(58, 58);
+  context.lineTo(78, 58);
+  context.moveTo(58, 80);
+  context.lineTo(78, 80);
+  context.stroke();
+}
+
+function drawCacheIcon(context) {
+  roundRectPath(context, 40, 38, 64, 24, 10);
+  context.stroke();
+  roundRectPath(context, 34, 62, 76, 24, 10);
+  context.stroke();
+  roundRectPath(context, 28, 86, 88, 24, 10);
+  context.stroke();
+}
+
+function drawInvalidateAccent(context, glyph) {
+  context.save();
+  context.fillStyle = "#ffdf8f";
+  context.strokeStyle = "#ffdf8f";
+  context.font = glyph === "!" ? "700 40px Inter, system-ui, sans-serif" : "700 36px Inter, system-ui, sans-serif";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.beginPath();
+  context.arc(124, 40, 20, 0, Math.PI * 2);
+  context.fillStyle = "rgba(7, 16, 31, 0.72)";
+  context.fill();
+  context.lineWidth = 4;
+  context.strokeStyle = "#ffdf8f";
+  context.stroke();
+  context.fillStyle = "#ffdf8f";
+  context.fillText(glyph === "!" ? "!" : "×", 124, 41);
+  context.restore();
+}
+
+function drawRejectQueueIcon(context) {
+  roundRectPath(context, 38, 46, 84, 38, 10);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(50, 60);
+  context.lineTo(110, 60);
+  context.moveTo(50, 72);
+  context.lineTo(110, 72);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(38, 84);
+  context.lineTo(58, 110);
+  context.lineTo(102, 110);
+  context.lineTo(122, 84);
+  context.stroke();
+}
+
+function drawPluginDefaultIcon(context) {
+  roundRectPath(context, 42, 42, 76, 76, 14);
+  context.stroke();
+}
+
+function roundRectPath(context, x, y, width, height, radius) {
+  context.beginPath();
+  context.moveTo(x + radius, y);
+  context.lineTo(x + width - radius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + radius);
+  context.lineTo(x + width, y + height - radius);
+  context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  context.lineTo(x + radius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - radius);
+  context.lineTo(x, y + radius);
+  context.quadraticCurveTo(x, y, x + radius, y);
+}
+
+function layoutStepLabel(stepName) {
+  const normalized = normalizeStepLabel(stepName);
+  const words = normalized.split(/\s+/).filter(Boolean);
+  if (words.length <= 2) {
+    return [normalized];
+  }
+
+  const lines = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= 14) {
+      current = candidate;
+      continue;
+    }
+    if (current) {
+      lines.push(current);
+    }
+    current = word;
+  }
+  if (current) {
+    lines.push(current);
+  }
+  return lines.slice(0, 3);
+}
+
+function normalizeStepLabel(stepName) {
+  const step = resolveStepDefinition(stepName);
+  const roleLabel = STEP_ROLE_LABELS[resolveDisplayRole(step)];
+  if (roleLabel) {
+    return roleLabel;
+  }
+  const explicitLabel = STEP_LABELS[stepName];
+  if (explicitLabel) {
+    return explicitLabel;
+  }
+  const withoutPrefix = stepName.replace(/^Process/, "");
+  return withoutPrefix
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function nodeColorForStep(step) {
+  const role = resolveDisplayRole(step);
+  if (!step?.sideEffect) {
+    if (role === "await") {
+      return 0x78c8ff;
+    }
+    return 0x5cc8ff;
+  }
+  switch (resolveDisplayIconKind(step)) {
+    case "store":
+      return 0x67b2f3;
+    case "broker":
+      return 0x8f7aea;
+    case "provider":
+      return 0xb08cff;
+    case "persistence":
+      return 0x7ed0ff;
+    case "cache":
+      return 0x8bffa5;
+    case "cache-invalidate":
+      return 0xffd166;
+    case "cache-invalidate-all":
+      return 0xff9f68;
+    case "reject":
+      return 0xff7c8f;
+    default:
+      return 0xcaa6ff;
+  }
+}
+
+function fitCameraToTopology(steps) {
+  if (!steps || steps.length === 0 || nodePositions.size === 0) {
+    camera.position.set(0, 0, 24);
+    camera.lookAt(0, 0, 0);
+    return;
+  }
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+
+  for (const step of steps) {
+    const position = nodePositions.get(step.step);
+    if (!position) {
+      continue;
+    }
+    const radius = step.sideEffect ? BRANCH_NODE_RADIUS : BASE_NODE_RADIUS;
+    const labelHeight = !step.sideEffect ? BASE_LABEL_HEIGHT : (isNamedSupportActor(step) ? SUPPORT_LABEL_HEIGHT : 0);
+    const valueHeight = step.sideEffect ? (step.pluginKind === "reject" ? 0.24 : 0.08) : COUNTER_LABEL_HEIGHT * 0.5;
+    const labelAspect = nodeLabelSprites.get(step.step)?.userData?.aspect ?? 1;
+    const labelWidth = !step.sideEffect
+      ? labelAspect * BASE_LABEL_HEIGHT * 0.5
+      : (isNamedSupportActor(step) ? labelAspect * SUPPORT_LABEL_HEIGHT * 0.5 : 0);
+    minX = Math.min(minX, position.x - radius - labelWidth);
+    maxX = Math.max(maxX, position.x + radius + labelWidth);
+    minY = Math.min(minY, position.y - radius - labelHeight - valueHeight - 0.42);
+    maxY = Math.max(maxY, position.y + radius + 0.32);
+  }
+
+  if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+    return;
+  }
+
+  const width = Math.max(1, maxX - minX);
+  const height = Math.max(1, maxY - minY);
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2 + height * 0.16;
+  const halfFovRadians = THREE.MathUtils.degToRad(camera.fov / 2);
+  const fitHeightDistance = height * 0.5 / Math.tan(halfFovRadians);
+  const fitWidthDistance = width * 0.5 / (Math.tan(halfFovRadians) * camera.aspect);
+  const distance = Math.max(fitHeightDistance, fitWidthDistance) * CAMERA_PADDING;
+
+  camera.position.set(centerX, centerY, clamp(distance, 8, 34));
+  camera.lookAt(centerX, centerY, 0);
+}
+
+function highlightStep(stepName, holdSeconds = EFFECT_PRESETS.node.defaultHoldSeconds, atTime = currentTimeSeconds) {
+  if (!stepName || !nodeMeshes.has(stepName)) {
+    return;
+  }
+  const nextExpiry = atTime + holdSeconds;
+  highlightExpirations.set(stepName, Math.max(highlightExpirations.get(stepName) ?? 0, nextExpiry));
+}
+
+function particleColorForEvent(eventName) {
+  if (eventName === "error") {
+    return 0xff647c;
+  }
+  if (eventName === "retry") {
+    return 0xffb454;
+  }
+  if (eventName === "emit") {
+    return 0x8bffa5;
+  }
+  return 0x7ad7ff;
+}
+
+function edgeKey(from, to) {
+  return `${from ?? "entry"}->${to ?? "exit"}`;
+}
+
+function boostEdge(from, to, amount = 0.65) {
+  const edge = edgeLines.get(edgeKey(from, to));
+  if (!edge) {
+    return;
+  }
+  edge.intensity = Math.min(1.4, edge.intensity + amount);
+}
+
+function resolveSourceAnchors(event) {
+  if (event.cardinality === "many-to-one" && Array.isArray(event.parentItemIds) && event.parentItemIds.length > 1) {
+    const sources = event.parentItemIds
+      .map((itemId) => itemAnchors.get(itemId))
+      .map((stepName) => ({ stepName, position: nodePositions.get(stepName) }))
+      .filter((source) => source.position);
+    if (sources.length > 0) {
+      return sources;
+    }
+  }
+  const anchoredSource = event.from ? nodePositions.get(event.from) : null;
+  return anchoredSource ? [{ stepName: event.from, position: anchoredSource }] : [];
+}
+
+function spawnTransit(event) {
+  const toNode = nodePositions.get(event.step);
+  if (!toNode) {
+    return;
+  }
+  const eventEndTime = event.endTime ?? event.startTime;
+  const duration = Math.max(0.12, eventEndTime - event.startTime);
+  const color = particleColorForEvent(event.event);
+  if (event.from && event.step) {
+    boostEdge(event.from, event.step, event.event === "error" ? 1.1 : 0.78);
+  }
+  const sources = resolveSourceAnchors(event);
+  (sources.length > 0 ? sources : [{ stepName: event.step, position: toNode }]).forEach((source, index) => {
+    const geometry = new THREE.SphereGeometry(0.13, 16, 16);
+    const material = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.95
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    scene.add(mesh);
+    particles.set(`${event.sequence}:${event.event}:${index}`, {
+      mesh,
+      source: source.position.clone(),
+      target: toNode.clone(),
+      sourceStep: source.stepName,
+      targetStep: event.step,
+      start: event.startTime,
+      end: event.startTime + duration
+    });
+  });
+}
+
+function spawnEmitSpark(event) {
+  const sourceStep = event.from || event.step;
+  const source = nodePositions.get(sourceStep);
+  const targetStep = event.to || sourceStep;
+  const target = event.to
+    ? nodePositions.get(event.to) || source
+    : source;
+  if (!source || !target) {
+    return;
+  }
+  if (event.from && event.to) {
+    boostEdge(event.from, event.to, 0.88);
+  }
+  const trailCount = event.cardinality === "one-to-many" ? 2 : 1;
+  for (let index = 0; index < trailCount; index += 1) {
+    const geometry = new THREE.SphereGeometry(index === 0 ? 0.1 : 0.075, 12, 12);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x8bffa5,
+      transparent: true,
+      opacity: index === 0 ? 0.95 : 0.78
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    scene.add(mesh);
+    particles.set(`${event.sequence}:emit:${index}`, {
+      mesh,
+      source: source.clone(),
+      target: target.clone(),
+      sourceStep,
+      targetStep,
+      start: event.startTime + index * EFFECT_PRESETS.emit.trailDelay,
+      end: event.startTime + 0.35 + index * EFFECT_PRESETS.emit.trailDelay
+    });
+  }
+  if (!event.to && event.from) {
+    spawnPulse(event.from, 0x8bffa5, EFFECT_PRESETS.pulse.success, event.startTime + 0.2);
+  }
+}
+
+function spawnPulse(stepName, color, preset, startTime = currentTimeSeconds) {
+  const node = nodePositions.get(stepName);
+  if (!node) {
+    return;
+  }
+  const geometry = new THREE.RingGeometry(0.48, 0.58, 32);
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.88,
+    side: THREE.DoubleSide
+  });
+  const ring = new THREE.Mesh(geometry, material);
+  ring.position.copy(node);
+  scene.add(ring);
+  pulseEffects.push({
+    mesh: ring,
+    anchorStep: stepName,
+    start: startTime,
+    end: startTime + preset.duration,
+    startScale: preset.startScale,
+    endScale: preset.endScale,
+    startOpacity: preset.opacity
+  });
+}
+
+function spawnBurst(stepName, startTime = currentTimeSeconds, strong = false) {
+  const node = nodePositions.get(stepName);
+  if (!node) {
+    return;
+  }
+  const geometry = new THREE.SphereGeometry(0.22, 18, 18);
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xff647c,
+    transparent: true,
+    opacity: 0.95
+  });
+  const burst = new THREE.Mesh(geometry, material);
+  burst.position.copy(node);
+  scene.add(burst);
+  burstEffects.push({
+    mesh: burst,
+    anchorStep: stepName,
+    start: startTime,
+    end: startTime + EFFECT_PRESETS.burst.duration,
+    endScale: EFFECT_PRESETS.burst.endScale,
+    startOpacity: EFFECT_PRESETS.burst.opacity
+  });
+  if (strong) {
+    const ringGeometry = new THREE.RingGeometry(0.72, 0.9, 40);
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color: 0xff7c8f,
+      transparent: true,
+      opacity: EFFECT_PRESETS.shockwave.opacity,
+      side: THREE.DoubleSide
+    });
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+    ring.position.copy(node);
+    scene.add(ring);
+    pulseEffects.push({
+      mesh: ring,
+      anchorStep: stepName,
+      start: startTime + 0.08,
+      end: startTime + EFFECT_PRESETS.shockwave.duration,
+      startScale: EFFECT_PRESETS.shockwave.startScale,
+      endScale: EFFECT_PRESETS.shockwave.endScale,
+      startOpacity: EFFECT_PRESETS.shockwave.opacity
+    });
+  }
+}
+
+function spawnRetryLoop(stepName, startTime = currentTimeSeconds) {
+  const node = nodePositions.get(stepName);
+  if (!node) {
+    return;
+  }
+  const geometry = new THREE.SphereGeometry(0.08, 12, 12);
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xffb454,
+    transparent: true,
+    opacity: 1
+  });
+  const orb = new THREE.Mesh(geometry, material);
+  scene.add(orb);
+  retryLoops.push({
+    mesh: orb,
+    center: node.clone(),
+    anchorStep: stepName,
+    radius: EFFECT_PRESETS.retryLoop.radius,
+    start: startTime,
+    end: startTime + EFFECT_PRESETS.retryLoop.duration,
+    revolutions: EFFECT_PRESETS.retryLoop.revolutions,
+    verticalDrift: EFFECT_PRESETS.retryLoop.verticalDrift,
+    startOpacity: EFFECT_PRESETS.retryLoop.opacity
+  });
+}
+
+function queueBackgroundFlash(color, startTime = currentTimeSeconds, duration = EFFECT_PRESETS.background.pulseDuration, intensity = 1) {
+  backgroundFlashes.push({
+    color,
+    start: startTime,
+    end: startTime + duration,
+    intensity
+  });
+}
+
+function resolveEventKey(event) {
+  if (event.sequence != null) {
+    return `seq:${event.sequence}`;
+  }
+  return `${event.spanId}:${event.event}:${event.itemId ?? "no-item"}:${event.startTime}`;
+}
+
+function stateForStep(stepName) {
+  if (!runtimeStepState.has(stepName)) {
+    runtimeStepState.set(stepName, { inflight: 0, processed: 0, rejects: 0 });
+  }
+  return runtimeStepState.get(stepName);
+}
+
+function countedItemCount(event) {
+  if (Array.isArray(event?.parentItemIds) && event.parentItemIds.length > 0) {
+    return event.parentItemIds.length;
+  }
+  return event?.itemId ? 1 : 0;
+}
+
+function displayStateForStep(stepName) {
+  const directState = stateForStep(stepName);
+  const step = resolveStepDefinition(stepName);
+  if (!step || step.pluginKind === "reject") {
+    return {
+      state: directState,
+      unknown: false
+    };
+  }
+  return {
+    state: directState,
+    unknown: !directEventSteps.has(stepName)
+  };
+}
+
+function rejectStepNameFor(stepName) {
+  return `Rejects ${stepName}`;
+}
+
+function stepCardinality(stepName) {
+  return resolveStepDefinition(stepName)?.cardinality?.toLowerCase() ?? null;
+}
+
+function recordReplayCounters(rawEvent) {
+  const event = mapEventForDisplay(rawEvent);
+  if (!event?.step) {
+    return;
+  }
+  const state = stateForStep(event.step);
+  const itemCount = countedItemCount(rawEvent);
+  const cardinality = stepCardinality(event.step);
+  if (isAwaitResumableError(rawEvent)) {
+    if (itemCount > 0) {
+      state.inflight = Math.max(0, state.inflight - itemCount);
+      state.processed += itemCount;
+    }
+    return;
+  }
+  if (event.event === "emit" && event.to && stepHasRenderRole(event.to, "await")) {
+    stateForStep(event.to).inflight += itemCount;
+  }
+  if (event.event === "start" && event.from && stepHasRenderRole(event.from, "await")) {
+    const awaitState = stateForStep(event.from);
+    awaitState.inflight = Math.max(0, awaitState.inflight - itemCount);
+    awaitState.processed += itemCount;
+  }
+  if (event.event === "start") {
+    state.inflight += itemCount;
+    return;
+  }
+  if (event.event === "emit" && cardinality === "one-to-many" && event.from === event.step) {
+    state.processed += itemCount;
+    return;
+  }
+  if (event.event === "cache_hit") {
+    state.processed += itemCount;
+    return;
+  }
+  if (event.event === "reject") {
+    const rejectStepName = event.to || rejectStepNameFor(event.step);
+    const rejectState = stateForStep(rejectStepName);
+    rejectState.rejects += itemCount;
+    return;
+  }
+  if (event.event === "success" || event.event === "error") {
+    state.inflight = Math.max(0, state.inflight - itemCount);
+    if (event.event === "success" && cardinality !== "one-to-many") {
+      state.processed += itemCount;
+    }
+  }
+}
+
+function spawnSupportTransit(fromStep, toStep, startTime, color, duration = 0.36, size = 0.085) {
+  const source = nodePositions.get(fromStep);
+  const target = nodePositions.get(toStep);
+  if (!source || !target) {
+    return;
+  }
+  boostEdge(fromStep, toStep, 0.82);
+  const geometry = new THREE.SphereGeometry(size, 12, 12);
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.92
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  scene.add(mesh);
+  particles.set(`support:${fromStep}:${toStep}:${startTime}:${Math.random()}`, {
+    mesh,
+    source: source.clone(),
+    target: target.clone(),
+    sourceStep: fromStep,
+    targetStep: toStep,
+    start: startTime,
+    end: startTime + duration
+  });
+}
+
+function shouldSampleSupportFlow(sampleKey, interval = 18) {
+  const nextCount = (supportFlowSampleCounts.get(sampleKey) ?? 0) + 1;
+  supportFlowSampleCounts.set(sampleKey, nextCount);
+  return nextCount === 1 || nextCount % interval === 0;
+}
+
+function animateAwaitRequest(flow, timeSeconds) {
+  if (!flow?.awaitStep) {
+    return;
+  }
+  highlightStep(flow.awaitStep, 1.1, timeSeconds);
+  const [firstEdge, secondEdge] = flow.requestEdges ?? [];
+  if (firstEdge && nodePositions.has(firstEdge.to)) {
+    highlightStep(firstEdge.to, 0.95, timeSeconds);
+    spawnSupportTransit(firstEdge.from, firstEdge.to, timeSeconds, 0x8f7aea, 0.72, 0.11);
+  }
+  if (secondEdge && nodePositions.has(secondEdge.to)) {
+    highlightStep(secondEdge.to, 0.95, timeSeconds);
+    spawnSupportTransit(secondEdge.from, secondEdge.to, timeSeconds + 0.1, 0xb08cff, 0.84, 0.11);
+  }
+}
+
+function animateAwaitCompletion(flow, timeSeconds) {
+  if (!flow?.awaitStep || !flow?.resumeEdge) {
+    return;
+  }
+  const completionEdges = flow.completionEdges ?? [];
+  if (completionEdges[0] && nodePositions.has(completionEdges[0].from)) {
+    highlightStep(completionEdges[0].from, 0.85, timeSeconds);
+    spawnSupportTransit(completionEdges[0].from, completionEdges[0].to, timeSeconds, 0xb08cff, 0.78, 0.11);
+  }
+  if (completionEdges[1] && nodePositions.has(completionEdges[1].from)) {
+    highlightStep(completionEdges[1].from, 0.92, timeSeconds);
+    spawnSupportTransit(completionEdges[1].from, completionEdges[1].to, timeSeconds + 0.1, 0x8f7aea, 0.86, 0.11);
+  }
+  highlightStep(flow.awaitStep, 1.05, timeSeconds);
+  highlightStep(flow.resumeEdge.to, 1.05, timeSeconds + 0.1);
+  spawnSupportTransit(flow.resumeEdge.from, flow.resumeEdge.to, timeSeconds + 0.22, 0x7ad7ff, 0.96, 0.12);
+}
+
+function animateStoreWrite(flow, timeSeconds) {
+  if (!flow?.fromStep || !flow?.toStep) {
+    return;
+  }
+  highlightStep(flow.toStep, 1.05, timeSeconds);
+  highlightStep(flow.fromStep, 0.9, timeSeconds);
+  const burstCount = flow.aggregate ? 3 : 2;
+  for (let index = 0; index < burstCount; index += 1) {
+    spawnSupportTransit(
+      flow.fromStep,
+      flow.toStep,
+      timeSeconds + index * 0.07,
+      0x79dfff,
+      flow.aggregate ? 1.18 + index * 0.12 : 0.94 + index * 0.1,
+      flow.aggregate ? 0.13 : 0.11
+    );
+  }
+}
+
+function animateOutputResume(edge, timeSeconds, aggregate = false) {
+  if (!edge?.from || !edge?.to) {
+    return;
+  }
+  highlightStep(edge.from, 1.05, timeSeconds);
+  highlightStep(edge.to, 1.15, timeSeconds);
+  const burstCount = aggregate ? 3 : 1;
+  for (let index = 0; index < burstCount; index += 1) {
+    spawnSupportTransit(
+      edge.from,
+      edge.to,
+      timeSeconds + index * 0.08,
+      0x86f0cf,
+      aggregate ? 1.18 + index * 0.1 : 0.72,
+      aggregate ? 0.13 : 0.1
+    );
+  }
+}
+
+function animateDataBackedStartEdge(event) {
+  if (!event?.from || !event?.step || event.from === event.step) {
+    return;
+  }
+  if (!nodePositions.has(event.from) || !nodePositions.has(event.step)) {
+    return;
+  }
+  if (!shouldSampleSupportFlow(`start:${event.from}->${event.step}`, 18)) {
+    return;
+  }
+  spawnSupportTransit(event.from, event.step, event.startTime, 0x79dfff, 0.72, 0.1);
+}
+
+function processEvent(rawEvent) {
+  const event = mapEventForDisplay(rawEvent);
+  const key = resolveEventKey(rawEvent);
+  if (eventIndexByKey.has(key)) {
+    return;
+  }
+  eventIndexByKey.add(key);
+  recordReplayCounters(rawEvent);
+  const awaitRequestFlow = event?.to ? activeAnimationPolicy.awaitRequestByTargetStep.get(event.to) : null;
+  if (rawEvent.event === "emit" && awaitRequestFlow
+      && shouldSampleSupportFlow(`await-request:${awaitRequestFlow.awaitStep}`)) {
+    animateAwaitRequest(awaitRequestFlow, rawEvent.startTime);
+  }
+  const awaitCompletionFlow = event?.step ? activeAnimationPolicy.awaitCompletionByResumeStep.get(event.step) : null;
+  if (rawEvent.event === "start" && awaitCompletionFlow && event.from === awaitCompletionFlow.awaitStep
+      && shouldSampleSupportFlow(`await-completion:${awaitCompletionFlow.awaitStep}`)) {
+    animateAwaitCompletion(awaitCompletionFlow, rawEvent.startTime);
+  }
+  const storeWriteFlow = activeAnimationPolicy.storeWriteByRawStep.get(rawEvent.step);
+  if (rawEvent.event === "success" && storeWriteFlow && isPersistenceSideEffectStep(rawEvent.step)
+      && (!storeWriteFlow.aggregate || shouldSampleSupportFlow(`store:${storeWriteFlow.fromStep}->${storeWriteFlow.toStep}`, 24))) {
+    animateStoreWrite(storeWriteFlow, rawEvent.endTime ?? rawEvent.startTime);
+  }
+  const outputResumeEdge = event?.step ? activeAnimationPolicy.outputResumeByTargetStep.get(event.step) : null;
+  if (rawEvent.event === "start" && outputResumeEdge && event.from === outputResumeEdge.from) {
+    animateOutputResume(outputResumeEdge, rawEvent.startTime, countedItemCount(rawEvent) > 1);
+  }
+  const displayTargets = resolveDisplayTargets(event);
+  if (isAwaitResumableError(rawEvent)) {
+    const suspensionTime = Number.isFinite(event.endTime)
+      ? event.endTime
+      : (Number.isFinite(event.startTime) ? event.startTime : 0);
+    const awaitStepName = awaitDisplayStepForEvent(event);
+    if (awaitStepName) {
+      const resumeTime = nextAwaitResumeTimeAfter(suspensionTime);
+      const holdSeconds = resumeTime
+        ? Math.max(EFFECT_PRESETS.node.defaultHoldSeconds + 0.5, resumeTime - suspensionTime)
+        : EFFECT_PRESETS.node.defaultHoldSeconds + 0.5;
+      highlightStep(awaitStepName, holdSeconds, suspensionTime);
+      spawnPulse(awaitStepName, 0x8f7aea, {
+        duration: Math.min(holdSeconds, 7),
+        startScale: 1,
+        endScale: 1.95,
+        opacity: 0.58
+      }, suspensionTime);
+      queueBackgroundFlash("#8f7aea", suspensionTime, 0.8, 0.24);
+      if (rawEvent.itemId) {
+        itemAnchors.set(rawEvent.itemId, awaitStepName);
+      }
+    }
+    return;
+  }
+  highlightStep(event.step, EFFECT_PRESETS.node.defaultHoldSeconds, event.startTime);
+  highlightStep(event.from, 0.9, event.startTime);
+  highlightStep(event.to, 0.9, event.startTime);
+  if (event.event === "start") {
+    animateDataBackedStartEdge(event);
+    spawnPulse(event.step, 0x6ce2ff, EFFECT_PRESETS.pulse.start, event.startTime);
+    itemAnchors.set(event.itemId, event.step);
+  } else if (event.event === "retry") {
+    highlightStep(displayTargets.primaryStep, EFFECT_PRESETS.node.retryHoldSeconds, event.startTime);
+    spawnPulse(displayTargets.primaryStep, 0xffc164, EFFECT_PRESETS.pulse.retryPrimary, event.startTime);
+    spawnRetryLoop(displayTargets.primaryStep, event.startTime);
+    queueBackgroundFlash("#ffb454", event.startTime, 1.05, 0.68);
+    if (displayTargets.secondaryStep) {
+      highlightStep(displayTargets.secondaryStep, 1.2, event.startTime);
+      spawnPulse(displayTargets.secondaryStep, 0xffb454, EFFECT_PRESETS.pulse.retrySecondary, event.startTime + 0.04);
+      boostEdge(event.from, displayTargets.secondaryStep, 0.58);
+    }
+    if (event.from) {
+      boostEdge(event.from, displayTargets.primaryStep, 1.12);
+    }
+  } else if (event.event === "error") {
+    spawnTransit(event);
+    highlightStep(displayTargets.primaryStep, EFFECT_PRESETS.node.errorHoldSeconds, event.startTime);
+    spawnPulse(displayTargets.primaryStep, 0xff7488, EFFECT_PRESETS.pulse.errorPrimary, event.startTime);
+    spawnBurst(displayTargets.primaryStep, event.startTime, true);
+    queueBackgroundFlash("#ff647c", event.startTime, 1.35, 1);
+    if (displayTargets.secondaryStep) {
+      highlightStep(displayTargets.secondaryStep, 1.2, event.startTime);
+      spawnPulse(displayTargets.secondaryStep, 0xff8ca3, EFFECT_PRESETS.pulse.errorSecondary, event.startTime + 0.05);
+      boostEdge(event.from, displayTargets.secondaryStep, 0.62);
+    }
+    itemAnchors.set(event.itemId, event.step);
+  } else if (event.event === "success") {
+    spawnTransit(event);
+    spawnPulse(event.step, 0x79f2c6, EFFECT_PRESETS.pulse.success, event.endTime);
+    itemAnchors.set(event.itemId, event.step);
+  } else if (event.event === "cache_hit") {
+    spawnTransit(Object.assign({}, event, {
+      from: event.from || resolvePluginStepForDisplay(event.step, "cache"),
+      step: event.to || event.step
+    }));
+    highlightStep(event.step, EFFECT_PRESETS.node.defaultHoldSeconds + 0.4, event.startTime);
+    spawnPulse(event.step, 0x8bffa5, EFFECT_PRESETS.pulse.success, event.endTime);
+    queueBackgroundFlash("#8bffa5", event.startTime, 0.85, 0.42);
+    itemAnchors.set(event.itemId, event.step);
+  } else if (event.event === "reject") {
+    spawnTransit(event);
+    highlightStep(displayTargets.primaryStep, EFFECT_PRESETS.node.errorHoldSeconds, event.startTime);
+    if (event.to) {
+      highlightStep(event.to, EFFECT_PRESETS.node.errorHoldSeconds, event.startTime);
+      spawnPulse(event.to, 0xff7c8f, EFFECT_PRESETS.pulse.errorSecondary, event.startTime);
+    }
+    spawnPulse(displayTargets.primaryStep, 0xff7c8f, EFFECT_PRESETS.pulse.errorPrimary, event.startTime);
+    queueBackgroundFlash("#ff647c", event.startTime, 0.95, 0.58);
+    itemAnchors.set(event.itemId, event.to || event.step);
+  } else if (event.event === "emit") {
+    spawnEmitSpark(event);
+    itemAnchors.set(event.itemId, event.to || event.step);
+  }
+}
+
+function processEventsUntil(timeSeconds) {
+  while (nextEventCursor < replayDocument.events.length) {
+    const event = replayDocument.events[nextEventCursor];
+    if (playbackTimeForEvent(event) > timeSeconds) {
+      break;
+    }
+    if (isAwaitSuspensionStartEvent(event, replayDocument.events[nextEventCursor + 1])) {
+      nextEventCursor += 1;
+      continue;
+    }
+    processEvent(event);
+    nextEventCursor += 1;
+  }
+}
+
+function rebuildPlaybackTo(timeSeconds) {
+  currentTimeSeconds = clamp(timeSeconds, 0, replayDurationSeconds);
+  resetPlaybackState();
+  processEventsUntil(currentTimeSeconds);
+  updateParticles(currentTimeSeconds);
+  updateEffects(currentTimeSeconds);
+  updateEdges(currentTimeSeconds);
+  updateNodes(currentTimeSeconds);
+  updateBackgroundEffects(currentTimeSeconds);
+  updateLabels();
+  updateUi();
+}
+
+function rebuildPlaybackToCursor(targetCursor) {
+  const safeCursor = clamp(targetCursor, 0, replayDocument.events.length);
+  resetPlaybackState();
+  currentTimeSeconds = 0;
+  for (let index = 0; index < safeCursor; index += 1) {
+    const event = replayDocument.events[index];
+    nextEventCursor = index + 1;
+    if (isAwaitSuspensionStartEvent(event, replayDocument.events[index + 1])) {
+      continue;
+    }
+    currentTimeSeconds = Math.max(currentTimeSeconds, playbackTimeForEvent(event));
+    processEvent(event);
+  }
+  updateParticles(currentTimeSeconds);
+  updateEffects(currentTimeSeconds);
+  updateEdges(currentTimeSeconds);
+  updateNodes(currentTimeSeconds);
+  updateBackgroundEffects(currentTimeSeconds);
+  updateLabels();
+  updateUi();
+}
+
+function updateParticles(timeSeconds) {
+  for (const [key, particle] of [...particles.entries()]) {
+    const duration = Math.max(0.001, particle.end - particle.start);
+    const progress = Math.min(1, Math.max(0, (timeSeconds - particle.start) / duration));
+    const source = particle.sourceStep ? nodePositions.get(particle.sourceStep) ?? particle.source : particle.source;
+    const target = particle.targetStep ? nodePositions.get(particle.targetStep) ?? particle.target : particle.target;
+    particle.mesh.position.lerpVectors(source, target, progress);
+    if (timeSeconds >= particle.end) {
+      removeAndDispose(particle.mesh);
+      particles.delete(key);
+    }
+  }
+}
+
+function updateEffects(timeSeconds) {
+  for (const effect of [...pulseEffects]) {
+    const anchor = effect.anchorStep ? nodePositions.get(effect.anchorStep) : null;
+    if (anchor) {
+      effect.mesh.position.copy(anchor);
+    }
+    const progress = Math.min(1, Math.max(0, (timeSeconds - effect.start) / (effect.end - effect.start)));
+    const scale = effect.startScale + (effect.endScale - effect.startScale) * progress;
+    effect.mesh.scale.setScalar(scale);
+    effect.mesh.material.opacity = effect.startOpacity * (1 - progress);
+    if (timeSeconds >= effect.end) {
+      removeAndDispose(effect.mesh);
+      pulseEffects.splice(pulseEffects.indexOf(effect), 1);
+    }
+  }
+  for (const effect of [...burstEffects]) {
+    const anchor = effect.anchorStep ? nodePositions.get(effect.anchorStep) : null;
+    if (anchor) {
+      effect.mesh.position.copy(anchor);
+    }
+    const progress = Math.min(1, Math.max(0, (timeSeconds - effect.start) / (effect.end - effect.start)));
+    effect.mesh.scale.setScalar(1 + progress * effect.endScale);
+    effect.mesh.material.opacity = effect.startOpacity * Math.max(0, 1 - progress * 1.25);
+    if (timeSeconds >= effect.end) {
+      removeAndDispose(effect.mesh);
+      burstEffects.splice(burstEffects.indexOf(effect), 1);
+    }
+  }
+  for (const effect of [...retryLoops]) {
+    const anchor = effect.anchorStep ? nodePositions.get(effect.anchorStep) : null;
+    if (anchor) {
+      effect.center.copy(anchor);
+    }
+    const progress = Math.min(1, Math.max(0, (timeSeconds - effect.start) / (effect.end - effect.start)));
+    const angle = progress * Math.PI * effect.revolutions;
+    effect.mesh.position.set(
+      effect.center.x + Math.cos(angle) * effect.radius,
+      effect.center.y + Math.sin(angle) * effect.radius,
+      effect.center.z + Math.sin(angle * 0.5) * effect.verticalDrift
+    );
+    effect.mesh.material.opacity = Math.max(0.28, effect.startOpacity - progress * 0.32);
+    if (timeSeconds >= effect.end) {
+      removeAndDispose(effect.mesh);
+      retryLoops.splice(retryLoops.indexOf(effect), 1);
+    }
+  }
+}
+
+function updateEdges(timeSeconds) {
+  for (const edge of edgeLines.values()) {
+    edge.intensity *= EFFECT_PRESETS.edge.decay;
+    const shimmer = (Math.sin(timeSeconds * 1.35 + edge.shimmerPhase) + 1) * 0.5 * EFFECT_PRESETS.edge.shimmerAmplitude;
+    edge.line.material.opacity = edge.baseOpacity + shimmer + edge.intensity * 0.38;
+    edge.line.material.color.setHex(edge.intensity > 0.02 ? edge.accentColor : edge.baseColor);
+  }
+}
+
+function updateNodes(timeSeconds) {
+  nodeMeshes.forEach((mesh, stepName) => {
+    const highlightedUntil = highlightExpirations.get(stepName) ?? 0;
+    const highlighted = highlightedUntil > timeSeconds;
+    const pulse = mesh.userData.isSideEffect ? 0.012 : EFFECT_PRESETS.node.breathScaleAmplitude;
+    const phase = mesh.userData.phase ?? 0;
+    const breath = Math.sin(timeSeconds * 2.2 + phase);
+    const baseScale = 1 + breath * pulse;
+    const highlightScale = highlighted ? EFFECT_PRESETS.node.highlightScaleBoost : 0;
+    mesh.scale.setScalar(baseScale + highlightScale);
+    const baseEmissive = mesh.userData.isSideEffect ? 0.34 : 0.34 + ((breath + 1) * 0.5) * EFFECT_PRESETS.node.breathEmissiveAmplitude;
+    mesh.material.emissiveIntensity = baseEmissive + (highlighted ? 0.3 : 0);
+  });
+
+  for (const [stepName, sprite] of nodeValueSprites.entries()) {
+    const step = resolveStepDefinition(stepName);
+    const display = displayStateForStep(stepName);
+    const state = display.state;
+    const expectedText = step?.pluginKind === "reject"
+      ? `${state.rejects}`
+      : display.unknown
+        ? "—|—"
+        : `${state.inflight}|${state.processed}`;
+    if (sprite.userData.text !== expectedText) {
+      replaceSpriteText(sprite, expectedText, step?.pluginKind === "reject" ? {
+        fontSize: 26,
+        fontWeight: 700,
+        fillStyle: "#f8fbff",
+        paddingX: 6,
+        paddingY: 4,
+        backgroundStyle: "rgba(7, 16, 31, 0.0)",
+        borderStyle: null,
+        height: 0.22
+      } : {
+        fontSize: 28,
+        fontWeight: 700,
+        fillStyle: "#f8fbff",
+        paddingX: 12,
+        paddingY: 8,
+        backgroundStyle: "rgba(7, 16, 31, 0.0)",
+        borderStyle: null,
+        height: COUNTER_LABEL_HEIGHT
+      });
+      sprite.userData.text = expectedText;
+    }
+  }
+}
+
+function updateBackgroundEffects(timeSeconds) {
+  let strongest = null;
+  for (const flash of [...backgroundFlashes]) {
+    if (timeSeconds >= flash.end) {
+      backgroundFlashes.splice(backgroundFlashes.indexOf(flash), 1);
+      continue;
+    }
+    const progress = Math.min(1, Math.max(0, (timeSeconds - flash.start) / (flash.end - flash.start)));
+    const intensity = Math.sin(progress * Math.PI) * flash.intensity;
+    if (!strongest || intensity > strongest.intensity) {
+      strongest = { color: flash.color, intensity };
+    }
+  }
+  const driftPhase = timeSeconds * EFFECT_PRESETS.background.idleDriftSpeed;
+  const idle = 0.18 + (Math.sin(driftPhase) + 1) * 0.5 * EFFECT_PRESETS.background.idleDriftAmplitude;
+  setViewportBackground(idle + (strongest?.intensity ?? 0) * 0.32, strongest?.color ?? "#5cc8ff", driftPhase);
+}
+
+function updateLabels() {
+  nodeLabelSprites.forEach((sprite, stepName) => {
+    const highlighted = (highlightExpirations.get(stepName) ?? 0) > currentTimeSeconds;
+    sprite.material.opacity = highlighted || hoveredStepName === stepName ? 1 : 0.92;
+  });
+}
+
+function hasActiveTransientEffects() {
+  return (
+    particles.size > 0 ||
+    pulseEffects.length > 0 ||
+    burstEffects.length > 0 ||
+    retryLoops.length > 0 ||
+    backgroundFlashes.length > 0
+  );
+}
+
+function updateUi() {
+  const playbackSeconds = Math.min(currentTimeSeconds, replayDurationSeconds);
+  const ratio = replayDurationSeconds <= 0 ? 0 : playbackSeconds / replayDurationSeconds;
+  timelineSlider.value = `${Math.round(ratio * 10000)}`;
+  playbackText.textContent = `${playbackSeconds.toFixed(2)}s / ${replayDurationSeconds.toFixed(2)}s`;
+  playPauseButton.textContent = isPlaying ? "⏸" : "▶";
+  stopButton.disabled = isLoadingReplay || (nextEventCursor === 0 && currentTimeSeconds <= 0);
+  stepBackButton.disabled = isLoadingReplay || nextEventCursor <= 0;
+  stepButton.disabled = isLoadingReplay || nextEventCursor >= replayDocument.events.length;
+  playPauseButton.disabled = isLoadingReplay;
+  restartButton.disabled = isLoadingReplay;
+  if (resetLayoutButton) {
+    resetLayoutButton.disabled = isLoadingReplay || automaticNodePositions.size === 0;
+  }
+  speedInputs.forEach((input) => {
+    input.checked = Number(input.value) === playbackSpeed;
+    input.disabled = isLoadingReplay;
+  });
+}
+
+function restartPlayback() {
+  isFinishingEffects = false;
+  rebuildPlaybackTo(0);
+}
+
+function stepBackwardOneEvent() {
+  isFinishingEffects = false;
+  if (nextEventCursor <= 0) {
+    rebuildPlaybackToCursor(0);
+    return;
+  }
+  isPlaying = false;
+  rebuildPlaybackToCursor(nextEventCursor - 1);
+}
+
+function stepForwardOneEvent() {
+  if (nextEventCursor >= replayDocument.events.length) {
+    return;
+  }
+  isPlaying = false;
+  isFinishingEffects = false;
+  while (nextEventCursor < replayDocument.events.length
+      && isAwaitSuspensionStartEvent(replayDocument.events[nextEventCursor], replayDocument.events[nextEventCursor + 1])) {
+    nextEventCursor += 1;
+  }
+  if (nextEventCursor >= replayDocument.events.length) {
+    updateUi();
+    return;
+  }
+  const nextEvent = replayDocument.events[nextEventCursor];
+  currentTimeSeconds = playbackTimeForEvent(nextEvent);
+  processEvent(nextEvent);
+  nextEventCursor += 1;
+  updateParticles(currentTimeSeconds);
+  updateEffects(currentTimeSeconds);
+  updateEdges(currentTimeSeconds);
+  updateNodes(currentTimeSeconds);
+  updateBackgroundEffects(currentTimeSeconds);
+  updateLabels();
+  updateUi();
+}
+
+function updateHoveredStep(clientX, clientY) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const intersections = raycaster.intersectObjects([...nodeMeshes.values()], false);
+  hoveredStepName = intersections[0]?.object?.userData?.step?.step ?? null;
+  renderer.domElement.style.cursor = hoveredStepName ? "grab" : "default";
+}
+
+function worldPointForPointer(clientX, clientY) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  const point = new THREE.Vector3();
+  return raycaster.ray.intersectPlane(plane, point) ? point : null;
+}
+
+function nodeAtPointer(clientX, clientY) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  return raycaster.intersectObjects([...nodeMeshes.values()], false)[0]?.object ?? null;
+}
+
+function beginNodeDrag(event) {
+  if (event.button !== 0 || isLoadingReplay || isAnyModalOpen()) {
+    return false;
+  }
+  const mesh = nodeAtPointer(event.clientX, event.clientY);
+  const stepName = mesh?.userData?.step?.step;
+  const hitPoint = worldPointForPointer(event.clientX, event.clientY);
+  const position = stepName ? nodePositions.get(stepName) : null;
+  if (!stepName || !hitPoint || !position) {
+    return false;
+  }
+  dragState = {
+    stepName,
+    offset: position.clone().sub(hitPoint),
+    moved: false
+  };
+  hoveredStepName = stepName;
+  cancelChromeHide();
+  renderer.domElement.setPointerCapture(event.pointerId);
+  renderer.domElement.style.cursor = "grabbing";
+  event.preventDefault();
+  return true;
+}
+
+function updateNodeDrag(event) {
+  if (!dragState) {
+    return false;
+  }
+  const hitPoint = worldPointForPointer(event.clientX, event.clientY);
+  if (!hitPoint) {
+    return true;
+  }
+  const nextPosition = hitPoint.add(dragState.offset);
+  nextPosition.z = 0;
+  setNodePosition(dragState.stepName, nextPosition);
+  dragState.moved = true;
+  event.preventDefault();
+  return true;
+}
+
+function endNodeDrag(event) {
+  if (!dragState) {
+    return false;
+  }
+  const moved = dragState.moved;
+  saveCurrentLayoutPositions();
+  dragState = null;
+  suppressNextCanvasClick = moved;
+  try {
+    renderer.domElement.releasePointerCapture(event.pointerId);
+  } catch {
+    // Pointer capture may already be gone after browser-level cancellation.
+  }
+  renderer.domElement.style.cursor = hoveredStepName ? "grab" : "default";
+  if (!prefersTapChrome) {
+    scheduleChromeHide();
+  }
+  event.preventDefault();
+  return moved;
+}
+
+function tick(now) {
+  try {
+    const deltaSeconds = (now - previousAnimationFrame) / 1000;
+    previousAnimationFrame = now;
+
+    if (isPlaying) {
+      if (isFinishingEffects) {
+        currentTimeSeconds += deltaSeconds;
+      } else {
+        const nextPlaybackTime = currentTimeSeconds + deltaSeconds * playbackSpeed;
+        if (nextPlaybackTime >= replayDurationSeconds) {
+          currentTimeSeconds = replayDurationSeconds;
+          isFinishingEffects = true;
+        } else {
+          currentTimeSeconds = nextPlaybackTime;
+        }
+      }
+      if (currentTimeSeconds >= replayDurationSeconds) {
+        isFinishingEffects = true;
+      }
+    }
+
+    processEventsUntil(Math.min(currentTimeSeconds, replayDurationSeconds));
+    updateParticles(currentTimeSeconds);
+    updateEffects(currentTimeSeconds);
+    updateEdges(currentTimeSeconds);
+    updateNodes(currentTimeSeconds);
+    updateBackgroundEffects(currentTimeSeconds);
+    updateLabels();
+    if (isPlaying && isFinishingEffects
+        && (!hasActiveTransientEffects() || currentTimeSeconds >= replayDurationSeconds + END_DRAIN_SECONDS)) {
+      isPlaying = false;
+      isFinishingEffects = false;
+      currentTimeSeconds = replayDurationSeconds;
+    }
+    updateUi();
+    renderer.render(scene, camera);
+  } catch (error) {
+    reportRuntimeError("playback paused after a rendering error", error);
+    fatalRenderErrorLatched = true;
+  }
+  if (!fatalRenderErrorLatched) {
+    requestAnimationFrame(tick);
+  }
+}
+
+playPauseButton.addEventListener("click", () => {
+  if (isLoadingReplay) {
+    return;
+  }
+  revealPlayerChrome(true);
+  if (!isPlaying && currentTimeSeconds >= replayDurationSeconds) {
+    rebuildPlaybackTo(0);
+  }
+  if (!isPlaying && nextEventCursor === 0 && replayDocument.events.length > 0) {
+    rebuildPlaybackToCursor(1);
+  }
+  previousAnimationFrame = performance.now();
+  isFinishingEffects = false;
+  isPlaying = !isPlaying;
+  scheduleChromeHide();
+  updateUi();
+});
+
+restartButton.addEventListener("click", () => {
+  revealPlayerChrome(true);
+  restartPlayback();
+  scheduleChromeHide();
+});
+
+stopButton.addEventListener("click", () => {
+  if (isLoadingReplay) {
+    return;
+  }
+  revealPlayerChrome(true);
+  isPlaying = false;
+  restartPlayback();
+  if (!prefersTapChrome) {
+    scheduleChromeHide();
+  }
+});
+
+stepBackButton.addEventListener("click", () => {
+  if (isLoadingReplay) {
+    return;
+  }
+  revealPlayerChrome(true);
+  stepBackwardOneEvent();
+  scheduleChromeHide();
+});
+
+stepButton.addEventListener("click", () => {
+  if (isLoadingReplay) {
+    return;
+  }
+  revealPlayerChrome(true);
+  stepForwardOneEvent();
+  scheduleChromeHide();
+});
+
+timelineSlider.addEventListener("input", () => {
+  revealPlayerChrome(true);
+  isScrubbingTimeline = true;
+  const nextTime = (Number(timelineSlider.value) / 10000) * replayDurationSeconds;
+  isPlaying = false;
+  isFinishingEffects = false;
+  rebuildPlaybackTo(nextTime);
+});
+
+timelineSlider.addEventListener("pointerdown", () => {
+  revealPlayerChrome(true);
+  isScrubbingTimeline = true;
+});
+
+timelineSlider.addEventListener("pointerup", () => {
+  isScrubbingTimeline = false;
+  scheduleChromeHide();
+});
+
+timelineSlider.addEventListener("change", () => {
+  isScrubbingTimeline = false;
+  scheduleChromeHide();
+});
+
+speedInputs.forEach((input) => {
+  input.addEventListener("change", () => {
+    if (!input.checked) {
+      return;
+    }
+    playbackSpeed = Number(input.value);
+    revealPlayerChrome(true);
+    scheduleChromeHide();
+    updateUi();
+  });
+});
+
+datasetSelect.addEventListener("change", () => {
+  stagedReplaySourceKey = datasetSelect.value;
+  setCustomReplayVisibility(stagedReplaySourceKey === "custom");
+  updateSourceApplyButton();
+  revealPlayerChrome(true);
+});
+
+replayFileInput.addEventListener("change", async (event) => {
+  stagedReplaySourceKey = datasetSelect.value;
+  updateSourceApplyButton();
+  revealPlayerChrome(true);
+});
+
+infoButton.addEventListener("click", () => {
+  openModalElement("info", infoModal);
+});
+
+infoCloseButton.addEventListener("click", () => {
+  closeModalElement("info", infoModal);
+});
+
+sourceApplyButton.addEventListener("click", async () => {
+  if (isLoadingReplay) {
+    return;
+  }
+  const nextSource = datasetSelect.value;
+  if (nextSource === EMPTY_REPLAY_SOURCE_KEY) {
+    return;
+  }
+  try {
+    if (nextSource === "custom") {
+      const [file] = replayFileInput.files || [];
+      if (!file) {
+        return;
+      }
+      isPlaying = false;
+      setLoadProgress(true, 0, `Loading ${file.name}...`);
+      updateUi();
+      await nextAnimationFrame();
+      const text = await readReplayFile(file);
+      setLoadProgress(true, 1, `Parsing ${file.name}...`);
+      await nextAnimationFrame();
+      const parsed = JSON.parse(text);
+      loadReplay(parsed, file.name, "custom");
+      finishLoadProgress(`${file.name} loaded`);
+    } else {
+      await loadBuiltInReplay(nextSource);
+    }
+    scheduleChromeHide();
+    updateUi();
+  } catch (error) {
+    setLoadProgress(false);
+    reportViewerIssue(`failed to load replay (${error.message})`);
+    playPauseButton.disabled = false;
+    restartButton.disabled = false;
+    stepBackButton.disabled = false;
+    stepButton.disabled = false;
+  }
+});
+
+fullscreenButton.addEventListener("click", async () => {
+  try {
+    if (document.fullscreenElement === playerSurface) {
+      await document.exitFullscreen();
+    } else {
+      await playerSurface.requestFullscreen();
+    }
+  } catch (error) {
+    reportViewerIssue(`fullscreen unavailable (${error.message})`);
+  }
+});
+
+document.addEventListener("fullscreenchange", () => {
+  fullscreenButton.textContent = document.fullscreenElement === playerSurface
+    ? "🡼"
+    : "⛶";
+});
+
+renderer.domElement.addEventListener("pointermove", (event) => {
+  if (updateNodeDrag(event)) {
+    return;
+  }
+  updateHoveredStep(event.clientX, event.clientY);
+  if (!prefersTapChrome) {
+    revealPlayerChrome();
+  }
+});
+
+renderer.domElement.addEventListener("pointerdown", (event) => {
+  beginNodeDrag(event);
+});
+
+renderer.domElement.addEventListener("pointerup", (event) => {
+  endNodeDrag(event);
+});
+
+renderer.domElement.addEventListener("pointercancel", (event) => {
+  endNodeDrag(event);
+});
+
+renderer.domElement.addEventListener("pointerleave", () => {
+  if (dragState) {
+    return;
+  }
+  hoveredStepName = null;
+  renderer.domElement.style.cursor = "default";
+});
+
+renderer.domElement.addEventListener("click", (event) => {
+  if (suppressNextCanvasClick) {
+    suppressNextCanvasClick = false;
+    event.preventDefault();
+    return;
+  }
+  if (dragState) {
+    return;
+  }
+  if (!prefersTapChrome) {
+    revealPlayerChrome();
+    return;
+  }
+  if (playerChrome.dataset.visible === "true") {
+    setPlayerChromeVisible(false);
+    cancelChromeHide();
+  } else {
+    revealPlayerChrome();
+  }
+});
+
+if (resetLayoutButton) {
+  resetLayoutButton.addEventListener("click", () => {
+    resetCurrentLayout();
+    revealPlayerChrome(true);
+    updateUi();
+  });
+}
+
+playerChrome.addEventListener("pointermove", () => {
+  revealPlayerChrome(true);
+});
+
+playerChrome.addEventListener("pointerleave", () => {
+  if (prefersTapChrome && !isAnyModalOpen()) {
+    scheduleChromeHide(900);
+  }
+});
+
+playerChrome.addEventListener("click", (event) => {
+  event.stopPropagation();
+  revealPlayerChrome(true);
+});
+
+window.addEventListener("resize", () => {
+  renderer.setSize(mount.clientWidth, mount.clientHeight);
+  camera.aspect = mount.clientWidth / mount.clientHeight;
+  camera.updateProjectionMatrix();
+  fitCameraToTopology(replayDocument.topology.steps);
+  updateLabels();
+  prefersTapChrome = window.matchMedia("(hover: none), (pointer: coarse)").matches;
+  setPlayerChromeVisible(true);
+  if (prefersTapChrome && !isAnyModalOpen() && !isLoadingReplay) {
+    scheduleChromeHide();
+  } else {
+    cancelChromeHide();
+  }
+});
+
+for (const modal of [infoModal]) {
+  modal.addEventListener("click", (event) => {
+    const closeTarget = event.target.closest("[data-close-modal]");
+    if (closeTarget) {
+      const name = closeTarget.getAttribute("data-close-modal");
+      if (name === "info") {
+        closeModalElement("info", infoModal);
+      }
+    }
+  });
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    if (openModal === "info") {
+      closeModalElement("info", infoModal);
+    }
+  }
+});
+
+window.addEventListener("popstate", () => {
+  reloadIfViewerShellRouteChanged();
+});
+
+window.addEventListener("pageshow", () => {
+  if (reloadIfViewerShellRouteChanged()) {
+    return;
+  }
+  if (!infoModal.hidden) {
+    infoModal.hidden = true;
+    infoModal.setAttribute("aria-hidden", "true");
+  }
+  openModal = null;
+  syncStagedReplaySourceToActive();
+  revealPlayerChrome(prefersTapChrome || isLoadingReplay);
+});
+
+window.addEventListener("error", (event) => {
+  reportNonFatalRuntimeIssue("viewer error", event.error ?? event.message);
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  reportNonFatalRuntimeIssue("viewer promise error", event.reason);
+});
+
+setCustomReplayVisibility(false);
+updateSourceApplyButton();
+renderRunParameters(replayDocument.runParameters);
+if (backToDocsLink) {
+  backToDocsLink.href = resolveReplayDocsHref();
+  backToDocsLink.addEventListener("click", (event) => {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+    event.preventDefault();
+    window.location.assign(backToDocsLink.href);
+  });
+}
+setPlayerChromeVisible(true);
+updateUi();
+requestAnimationFrame(tick);
+// Intentionally starts empty so large built-in datasets load only after an explicit picker selection.
+if (DEFAULT_REPLAY_SOURCE_KEY !== EMPTY_REPLAY_SOURCE_KEY) {
+  loadBuiltInReplay(DEFAULT_REPLAY_SOURCE_KEY).catch((error) => {
+    setLoadProgress(false);
+    reportViewerIssue(`failed to load built-in dataset (${error.message})`);
+  });
+}

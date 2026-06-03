@@ -20,6 +20,7 @@
         <module>crawl-source-svc</module>
         <module>parse-document-svc</module>
         <module>tokenize-content-svc</module>
+        <module>embed-content-svc</module>
         <module>index-document-svc</module>
         <module>persistence-svc</module>
         <module>cache-invalidation-svc</module>

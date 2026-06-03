@@ -1,4 +1,5 @@
 import * as THREE from "./vendor/three.module.min.js";
+import { BUILT_IN_REPLAYS_CONFIG } from "./built-in-replays.js";
 
 const mount = document.getElementById("threeMount");
 const viewport = document.querySelector(".viewport");
@@ -10,15 +11,13 @@ const stopButton = document.getElementById("stopButton");
 const restartButton = document.getElementById("restartButton");
 const stepBackButton = document.getElementById("stepBackButton");
 const stepButton = document.getElementById("stepButton");
-const sourceButton = document.getElementById("sourceButton");
 const infoButton = document.getElementById("infoButton");
-const sourceModal = document.getElementById("sourceModal");
 const infoModal = document.getElementById("infoModal");
-const sourceCloseButton = document.getElementById("sourceCloseButton");
 const infoCloseButton = document.getElementById("infoCloseButton");
 const fullscreenButton = document.getElementById("fullscreenButton");
 const datasetSelect = document.getElementById("datasetSelect");
 const sourceApplyButton = document.getElementById("sourceApplyButton");
+const resetLayoutButton = document.getElementById("resetLayoutButton");
 const customReplayInputWrap = document.getElementById("customReplayInputWrap");
 const replayFileInput = document.getElementById("replayFileInput");
 const speedInputs = [...document.querySelectorAll('input[name="speed"]')];
@@ -33,6 +32,7 @@ const loadProgress = document.getElementById("loadProgress");
 const loadProgressFill = document.getElementById("loadProgressFill");
 const loadProgressText = document.getElementById("loadProgressText");
 const runParametersContent = document.getElementById("runParametersContent");
+const runtimeStatus = document.getElementById("runtimeStatus");
 const CAMERA_PADDING = 1.2;
 const BASE_NODE_RADIUS = 0.68;
 const BRANCH_NODE_RADIUS = 0.6;
@@ -42,11 +42,10 @@ const LABEL_OFFSET_Y = 1.12;
 const COUNTER_LABEL_HEIGHT = 0.44;
 const PRIMARY_ROW_Y = 2.45;
 const BRANCH_ROW_OFFSET_Y = 2.05;
-const BUILT_IN_REPLAYS = new Map([
-  ["csv-payments", { label: "CSV Payments built-in", path: "./datasets/csv-payments-built-in.json" }],
-  ["search-warm-cache", { label: "Search built-in pre-warm", path: "./datasets/search-built-in-pre-warm.json" }],
-  ["search-cache-hit", { label: "Search built-in", path: "./datasets/search-built-in.json" }]
-]);
+const EMPTY_REPLAY_SOURCE_KEY = "none";
+const DEFAULT_REPLAY_SOURCE_KEY = EMPTY_REPLAY_SOURCE_KEY;
+const LAYOUT_STORAGE_PREFIX = "tpf-replay-viewer-layout";
+const BUILT_IN_REPLAYS = new Map(BUILT_IN_REPLAYS_CONFIG.map((entry) => [entry.key, { label: entry.label, path: entry.path }]));
 const EFFECT_PRESETS = {
   pulse: {
     start: { duration: 0.72, startScale: 0.92, endScale: 2.7, opacity: 0.96 },
@@ -95,6 +94,20 @@ const EFFECT_PRESETS = {
     trailDelay: 0.06
   }
 };
+const END_DRAIN_SECONDS = Math.max(
+  1.4,
+  ...Object.values(EFFECT_PRESETS)
+      .flatMap((preset) => Object.values(preset))
+      .flatMap((value) => {
+        if (typeof value === "number") {
+          return [value];
+        }
+        if (value && typeof value === "object" && typeof value.duration === "number") {
+          return [value.duration];
+        }
+        return [];
+      })
+);
 const CHROME_HIDE_DELAY_MS = 1800;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -120,6 +133,7 @@ const pointer = new THREE.Vector2(2, 2);
 
 const nodeMeshes = new Map();
 const nodePositions = new Map();
+const automaticNodePositions = new Map();
 const nodeLabelSprites = new Map();
 const nodeValueSprites = new Map();
 const nodeIconSprites = new Map();
@@ -161,24 +175,30 @@ let playbackSpeed = Number(speedInputs.find((input) => input.checked)?.value ?? 
 let previousAnimationFrame = performance.now();
 let hoveredStepName = null;
 let nodeValueUpdateTick = 0;
-let activeReplaySourceKey = "csv-payments";
+let activeReplaySourceKey = DEFAULT_REPLAY_SOURCE_KEY;
 let stagedReplaySourceKey = activeReplaySourceKey;
+let activeLayoutStorageKey = null;
 let chromeHideTimeout = null;
+let fatalRenderErrorLatched = false;
 let openModal = null;
 let isScrubbingTimeline = false;
+let dragState = null;
+let suppressNextCanvasClick = false;
 let prefersTapChrome = window.matchMedia("(hover: none), (pointer: coarse)").matches;
+let loadProgressHideTimeout = null;
 
 function resolveReplayDocsHref() {
   const replayDocsPath = "/guide/operations/observability/replay";
   const currentPath = window.location.pathname;
-  if (currentPath.includes("/replay-viewer/")) {
+  if (currentPath.includes("/replay-viewer/") || currentPath.includes("/replay-viewer-app/")) {
     return `${window.location.origin}${replayDocsPath}`;
   }
   return `https://pipelineframework.org${replayDocsPath}`;
 }
 
 function reloadIfViewerShellRouteChanged() {
-  if (!window.location.pathname.includes("/replay-viewer/")) {
+  const currentPath = window.location.pathname;
+  if (!currentPath.includes("/replay-viewer/") && !currentPath.includes("/replay-viewer-app/")) {
     window.location.replace(window.location.href);
     return true;
   }
@@ -210,11 +230,93 @@ function updateSourceApplyButton() {
   }
   const nextSourceKey = datasetSelect.value;
   const hasPendingCustomReplay = nextSourceKey === "custom" && Boolean(replayFileInput.files?.length);
-  sourceApplyButton.disabled = nextSourceKey === "custom" && !hasPendingCustomReplay;
+  sourceApplyButton.disabled = nextSourceKey === EMPTY_REPLAY_SOURCE_KEY
+    || (nextSourceKey === "custom" && !hasPendingCustomReplay);
 }
 
 function isAnyModalOpen() {
   return openModal !== null;
+}
+
+function hashString(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function replayLayoutStorageKey(document) {
+  const topology = document?.topology ?? {};
+  const fingerprint = {
+    pipeline: document?.pipeline ?? "unknown",
+    steps: (topology.steps ?? []).map((step) => ({
+      step: step.step,
+      role: step.renderRole,
+      actorKind: step.actorKind,
+      parentStep: step.parentStep,
+      sideEffect: step.sideEffect === true,
+      index: step.index
+    })),
+    transitions: (topology.transitions ?? []).map((transition) => ({
+      from: transition.from,
+      to: transition.to,
+      relationKind: transition.relationKind
+    }))
+  };
+  return `${LAYOUT_STORAGE_PREFIX}:${hashString(JSON.stringify(fingerprint))}`;
+}
+
+function readSavedLayoutPositions() {
+  if (!activeLayoutStorageKey) {
+    return new Map();
+  }
+  try {
+    const raw = localStorage.getItem(activeLayoutStorageKey);
+    if (!raw) {
+      return new Map();
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return new Map();
+    }
+    return new Map(Object.entries(parsed)
+      .filter(([, position]) => Number.isFinite(position?.x) && Number.isFinite(position?.y))
+      .map(([stepName, position]) => [stepName, new THREE.Vector3(position.x, position.y, 0)]));
+  } catch (error) {
+    reportViewerIssue(`saved layout ignored (${error.message})`);
+    return new Map();
+  }
+}
+
+function saveCurrentLayoutPositions() {
+  if (!activeLayoutStorageKey || nodePositions.size === 0) {
+    return;
+  }
+  const positions = {};
+  for (const [stepName, position] of nodePositions.entries()) {
+    positions[stepName] = {
+      x: Number(position.x.toFixed(4)),
+      y: Number(position.y.toFixed(4))
+    };
+  }
+  try {
+    localStorage.setItem(activeLayoutStorageKey, JSON.stringify(positions));
+  } catch (error) {
+    reportViewerIssue(`layout could not be saved (${error.message})`);
+  }
+}
+
+function clearSavedLayoutPositions() {
+  if (!activeLayoutStorageKey) {
+    return;
+  }
+  try {
+    localStorage.removeItem(activeLayoutStorageKey);
+  } catch (error) {
+    reportViewerIssue(`saved layout could not be cleared (${error.message})`);
+  }
 }
 
 function validateReplayDocument(document) {
@@ -254,15 +356,14 @@ function normalizeReplayDocument(document) {
     document.topology,
     events.some((event) => event.event === "reject")
   );
-  const { topology: displayTopology, aliases } = normalizeTopologyForDisplay(topology);
-  return {
-    ...document,
+  const { topology: displayTopology, aliases } = normalizeTopologyForDisplay(topology, events);
+  return Object.assign({}, document, {
     rawTopology: topology,
     topology: displayTopology,
     displayAliases: aliases,
     fallbackAwaitDisplayStep: defaultAwaitStepNameForTopology(displayTopology),
     events
-  };
+  });
 }
 
 function defaultAwaitStepNameForTopology(topology) {
@@ -272,48 +373,72 @@ function defaultAwaitStepNameForTopology(topology) {
   return topology.steps.find((step) => resolveDisplayRole(step) === "await")?.step ?? null;
 }
 
-function normalizeTopologyForDisplay(topology) {
+function normalizeTopologyForDisplay(topology, events = []) {
   if (!topology || !Array.isArray(topology.steps) || !Array.isArray(topology.transitions)) {
     return { topology, aliases: {} };
   }
   const aliases = {};
-  const storeActorsByKind = new Map();
+  const directEventSteps = new Set(events.map((event) => event?.step).filter(Boolean));
+  const eventBearingPrimarySteps = topology.steps.filter((step) =>
+    resolveDisplayRole(step) === "primary" && !step.sideEffect && directEventSteps.has(step.step)
+  );
   const visibleAwaitSteps = topology.steps.filter((step) =>
     resolveDisplayRole(step) === "await" && !isInternalAwaitClientStep(step.step)
   );
   const defaultAwaitStep = visibleAwaitSteps[0]?.step ?? null;
-  for (const step of topology.steps) {
-    if (resolveDisplayRole(step) === "store") {
-      storeActorsByKind.set(step.actorKind ?? "default", step.step);
-    }
-  }
+  const hasConcretePersistenceNodes = topology.steps.some((step) => resolveDisplayRole(step) === "persistence-plugin");
   const hiddenSteps = new Set();
   for (const step of topology.steps) {
-    if (resolveDisplayRole(step) === "persistence-plugin") {
-      const storeActor = storeActorsByKind.get(step.actorKind ?? "default");
-      if (storeActor) {
-        aliases[step.step] = storeActor;
-        hiddenSteps.add(step.step);
-      }
+    if (hasConcretePersistenceNodes && resolveDisplayRole(step) === "store") {
+      hiddenSteps.add(step.step);
       continue;
     }
     if (isInternalAwaitClientStep(step.step) && defaultAwaitStep) {
       aliases[step.step] = defaultAwaitStep;
       hiddenSteps.add(step.step);
     }
+    if (
+      eventBearingPrimarySteps.length > 0
+      && resolveDisplayRole(step) === "primary"
+      && !step.sideEffect
+      && !directEventSteps.has(step.step)
+      && isGeneratedBaseTopologyStep(step)
+    ) {
+      hiddenSteps.add(step.step);
+    }
   }
-  const storeStep = topology.steps.find((step) => resolveDisplayRole(step) === "store");
-  if (!storeStep && hiddenSteps.size === 0) {
+  for (const step of topology.steps) {
+    if (step.sideEffect && hiddenSteps.has(step.parentStep) && !directEventSteps.has(step.step)) {
+      hiddenSteps.add(step.step);
+    }
+  }
+  if (hiddenSteps.size === 0) {
     return { topology, aliases };
   }
   return {
-    topology: {
-      ...topology,
+    topology: Object.assign({}, topology, {
       steps: topology.steps.filter((step) => !hiddenSteps.has(step.step)),
-      transitions: topology.transitions.filter((transition) => !hiddenSteps.has(transition.from) && !hiddenSteps.has(transition.to))
-    },
+      transitions: topology.transitions
+        .filter((transition) => !hiddenSteps.has(transition.from) && !hiddenSteps.has(transition.to))
+    }),
     aliases
   };
+}
+
+function uniqueStepName(baseName, existingStepNames) {
+  let candidate = baseName;
+  let suffix = 2;
+  while (existingStepNames.has(candidate)) {
+    candidate = `${baseName}${suffix}`;
+    suffix += 1;
+  }
+  existingStepNames.add(candidate);
+  return candidate;
+}
+
+function isGeneratedBaseTopologyStep(step) {
+  return typeof step?.runtimeStepClass === "string"
+    && /^runtime::.+\$BaseStep$/.test(step.runtimeStepClass);
 }
 
 function isInternalAwaitClientStep(stepName) {
@@ -334,12 +459,11 @@ function mapEventForDisplay(event) {
   if (!event) {
     return event;
   }
-  return {
-    ...event,
+  return Object.assign({}, event, {
     step: aliasStepNameForDisplay(event.step),
     from: aliasStepNameForDisplay(event.from),
     to: aliasStepNameForDisplay(event.to)
-  };
+  });
 }
 
 function isAwaitResumableError(event) {
@@ -349,6 +473,52 @@ function isAwaitResumableError(event) {
 
 function isAwaitSuspensionEvent(event) {
   return isInternalAwaitClientStep(event?.step) && isAwaitResumableError(event);
+}
+
+function sameReplayTarget(left, right) {
+  return (left?.step ?? "") === (right?.step ?? "")
+    && (left?.from ?? "") === (right?.from ?? "")
+    && (left?.to ?? "") === (right?.to ?? "")
+    && (left?.itemId ?? "") === (right?.itemId ?? "");
+}
+
+function isAwaitSuspensionStartEvent(event, nextEvent) {
+  if (event?.event !== "start" || !isAwaitResumableError(nextEvent) || !sameReplayTarget(event, nextEvent)) {
+    return false;
+  }
+  return Math.abs(playbackTimeForEvent(nextEvent) - playbackTimeForEvent(event)) < 0.05;
+}
+
+function firstDisplayedStepByRole(renderRole) {
+  for (const step of stepMetadataByName.values()) {
+    if (step?.renderRole === renderRole && nodePositions.has(step.step)) {
+      return step.step;
+    }
+  }
+  return null;
+}
+
+function awaitDisplayStepForEvent(event) {
+  const eventStep = resolveStepDefinition(event?.step);
+  if (eventStep?.renderRole === "await" && nodePositions.has(event.step)) {
+    return event.step;
+  }
+  return fallbackAwaitDisplayStep || firstDisplayedStepByRole("await") || event?.step || event?.from || event?.to;
+}
+
+function nextAwaitResumeTimeAfter(timeSeconds) {
+  for (let index = nextEventCursor; index < replayDocument.events.length; index += 1) {
+    const rawCandidate = replayDocument.events[index];
+    const candidate = mapEventForDisplay(rawCandidate);
+    const completionFlow = candidate?.step ? activeAnimationPolicy.awaitCompletionByResumeStep.get(candidate.step) : null;
+    if (rawCandidate.event === "start" && completionFlow && candidate.from === completionFlow.awaitStep) {
+      const candidateTime = playbackTimeForEvent(rawCandidate);
+      if (candidateTime > timeSeconds) {
+        return candidateTime;
+      }
+    }
+  }
+  return null;
 }
 
 function resolveRawStepDefinition(stepName) {
@@ -429,11 +599,10 @@ function augmentTopologyWithDisplayNodes(topology, includeRejectNodes = true) {
     }
   }
 
-  return {
-    ...topology,
+  return Object.assign({}, topology, {
     steps,
     transitions
-  };
+  });
 }
 
 function uniqueSyntheticRuntimeClass(baseRuntimeClass, suffix, existingRuntimeClasses) {
@@ -453,6 +622,10 @@ function clamp(value, min, max) {
 
 function setLoadProgress(visible, ratio = 0, text = "Loading replay...") {
   isLoadingReplay = visible;
+  if (loadProgressHideTimeout) {
+    window.clearTimeout(loadProgressHideTimeout);
+    loadProgressHideTimeout = null;
+  }
   loadProgress.hidden = !visible;
   loadProgressFill.style.width = `${Math.round(clamp(ratio, 0, 1) * 100)}%`;
   loadProgressText.textContent = text;
@@ -461,6 +634,52 @@ function setLoadProgress(visible, ratio = 0, text = "Loading replay...") {
   } else if (!isAnyModalOpen()) {
     scheduleChromeHide();
   }
+}
+
+function finishLoadProgress(text = "Replay loaded") {
+  if (loadProgressHideTimeout) {
+    window.clearTimeout(loadProgressHideTimeout);
+  }
+  isLoadingReplay = false;
+  loadProgress.hidden = false;
+  loadProgressFill.style.width = "100%";
+  loadProgressText.textContent = text;
+  loadProgressHideTimeout = window.setTimeout(() => {
+    loadProgress.hidden = true;
+    loadProgressHideTimeout = null;
+    if (!isAnyModalOpen()) {
+      scheduleChromeHide();
+    }
+  }, 1100);
+}
+
+function nextAnimationFrame() {
+  return new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+async function readResponseTextWithProgress(response, label) {
+  const totalBytes = Number(response.headers.get("Content-Length"));
+  if (!response.body || !Number.isFinite(totalBytes) || totalBytes <= 0) {
+    setLoadProgress(true, 0.45, `Downloading ${label}...`);
+    await nextAnimationFrame();
+    return response.text();
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const chunks = [];
+  let loadedBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    chunks.push(decoder.decode(value, { stream: true }));
+    loadedBytes += value.byteLength;
+    const downloadRatio = clamp(loadedBytes / totalBytes, 0, 1);
+    setLoadProgress(true, 0.15 + downloadRatio * 0.65, `Downloading ${label}... ${Math.round(downloadRatio * 100)}%`);
+  }
+  chunks.push(decoder.decode());
+  return chunks.join("");
 }
 
 function hexToRgbTriplet(hexColor) {
@@ -488,6 +707,10 @@ function setViewportBackground(accentStrength, accentColor, driftPhase) {
 
 function resolveStepDefinition(stepName) {
   return stepMetadataByName.get(stepName) ?? null;
+}
+
+function stepHasRenderRole(stepName, renderRole) {
+  return resolveStepDefinition(stepName)?.renderRole === renderRole;
 }
 
 function resolveDisplayRole(step) {
@@ -707,6 +930,7 @@ function clearScene() {
   }
   nodeMeshes.clear();
   nodePositions.clear();
+  automaticNodePositions.clear();
   for (const particle of particles.values()) {
     removeAndDispose(particle.mesh);
   }
@@ -888,11 +1112,33 @@ function renderRunParameters(runParameters) {
 
 function reportViewerIssue(message) {
   eventCountText.textContent = `Status: ${message}`;
+  if (runtimeStatus) {
+    runtimeStatus.textContent = message;
+  }
+  console.error(`[replay-viewer] ${message}`);
+}
+
+function reportRuntimeError(context, error) {
+  const message = error?.message ?? String(error);
+  isPlaying = false;
+  isFinishingEffects = false;
+  reportViewerIssue(`${context} (${message})`);
+  updateUi();
+}
+
+function reportNonFatalRuntimeIssue(context, error) {
+  const message = error?.message ?? String(error);
+  console.error(`[replay-viewer] ${context} (${message})`, error);
 }
 
 function loadReplay(document, label, sourceKey = activeReplaySourceKey) {
+  fatalRenderErrorLatched = false;
+  if (runtimeStatus) {
+    runtimeStatus.textContent = "";
+  }
   clearScene();
   replayDocument = normalizeReplayDocument(validateReplayDocument(document));
+  activeLayoutStorageKey = replayLayoutStorageKey(replayDocument);
   replayDurationSeconds = computeReplayDurationSeconds(replayDocument);
   currentTimeSeconds = 0;
   isPlaying = false;
@@ -908,13 +1154,37 @@ function loadReplay(document, label, sourceKey = activeReplaySourceKey) {
     replayDocument.topology,
     replayDocument.rawTopology ?? replayDocument.topology
   );
+  try {
+    buildTopology(replayDocument.topology);
+  } catch (error) {
+    clearScene();
+    replayDocument = normalizeReplayDocument(validateReplayDocument({
+      topology: { steps: [], transitions: [] },
+      events: [],
+      durationMs: 0,
+      pipeline: "error"
+    }));
+    replayDurationSeconds = 0.1;
+    currentTimeSeconds = 0;
+    isPlaying = false;
+    isFinishingEffects = false;
+    resetPlaybackState();
+    reportViewerIssue(`failed to render replay topology (${error.message ?? error})`);
+    throw error;
+  }
   for (const event of replayDocument.events) {
     const displayStepName = aliasStepNameForDisplay(event?.step);
+    const displayFromName = aliasStepNameForDisplay(event?.from);
+    const displayToName = aliasStepNameForDisplay(event?.to);
     if (displayStepName) {
       directEventSteps.add(displayStepName);
     }
+    for (const transitionStepName of [displayFromName, displayToName]) {
+      if (stepHasRenderRole(transitionStepName, "await")) {
+        directEventSteps.add(transitionStepName);
+      }
+    }
   }
-  buildTopology(replayDocument.topology);
   activeReplaySourceKey = sourceKey;
   stagedReplaySourceKey = sourceKey;
   datasetSelect.value = sourceKey;
@@ -939,14 +1209,28 @@ async function loadBuiltInReplay(datasetKey) {
   isPlaying = false;
   setLoadProgress(true, 0.12, `Loading ${dataset.label}...`);
   updateUi();
+  await nextAnimationFrame();
   const response = await fetch(dataset.path, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to fetch built-in dataset (${response.status})`);
   }
-  setLoadProgress(true, 0.55, `Parsing ${dataset.label}...`);
-  const document = await response.json();
-  loadReplay(document, dataset.label, datasetKey);
-  setLoadProgress(false);
+  const text = await readResponseTextWithProgress(response, dataset.label);
+  setLoadProgress(true, 0.88, `Parsing ${dataset.label}...`);
+  await nextAnimationFrame();
+  let document;
+  try {
+    document = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`${dataset.label} is not valid replay JSON: ${error.message}`);
+  }
+  setLoadProgress(true, 0.96, `Rendering ${dataset.label}...`);
+  await nextAnimationFrame();
+  try {
+    loadReplay(document, dataset.label, datasetKey);
+  } catch (error) {
+    throw new Error(`${dataset.label} could not be rendered: ${error.message}`);
+  }
+  finishLoadProgress(`${dataset.label} loaded`);
 }
 
 function readReplayFile(file) {
@@ -969,12 +1253,10 @@ function readReplayFile(file) {
   });
 }
 
-function buildTopology(topology) {
+function computeAutomaticLayoutPositions(topology) {
   const steps = Array.isArray(topology.steps) ? topology.steps : [];
   const transitions = Array.isArray(topology.transitions) ? topology.transitions : [];
-  steps.forEach((step) => {
-    stepMetadataByName.set(step.step, step);
-  });
+  const positions = new Map();
   const baseSteps = steps.filter((step) => !step.sideEffect);
   const sideEffects = steps.filter((step) => step.sideEffect);
   const sideEffectsByParent = new Map();
@@ -991,7 +1273,10 @@ function buildTopology(topology) {
   const totalWidth = Math.max(0, (baseSteps.length - 1) * spacing);
   baseSteps.forEach((step, index) => {
     const x = index * spacing - totalWidth / 2;
-    registerNode(step, new THREE.Vector3(x, PRIMARY_ROW_Y, 0));
+    const stagger = baseSteps.length > 4
+      ? (index % 2 === 0 ? 0.34 : -0.34)
+      : (index % 2 === 0 ? 0.18 : -0.18);
+    positions.set(step.step, new THREE.Vector3(x, PRIMARY_ROW_Y + stagger, 0));
   });
 
   for (const step of sideEffects) {
@@ -999,18 +1284,18 @@ function buildTopology(topology) {
     if (role === "store") {
       continue;
     }
-    const parentPosition = step.parentStep ? nodePositions.get(step.parentStep) : null;
+    const parentPosition = step.parentStep ? positions.get(step.parentStep) : null;
     if (!parentPosition) {
       continue;
     }
     let offsetX = 0;
     let offsetY = BRANCH_ROW_OFFSET_Y;
     if (role === "broker") {
-      offsetX = -1.02;
-      offsetY = 1.9;
+      offsetX = -1.52;
+      offsetY = -1.45;
     } else if (role === "external-provider") {
-      offsetX = 1.12;
-      offsetY = 1.9;
+      offsetX = 1.52;
+      offsetY = -1.45;
     } else {
       const siblings = sideEffectsByParent.get(step.parentStep) || [];
       const siblingIndex = siblings.findIndex((candidate) => candidate.step === step.step);
@@ -1019,11 +1304,11 @@ function buildTopology(topology) {
       offsetX = centeredIndex * 1.28;
       offsetY = BRANCH_ROW_OFFSET_Y + band * 1;
     }
-    registerNode(step, new THREE.Vector3(parentPosition.x + offsetX, parentPosition.y - offsetY, 0));
+    positions.set(step.step, new THREE.Vector3(parentPosition.x + offsetX, parentPosition.y - offsetY, 0));
   }
 
   const storeActors = sideEffects.filter((step) => resolveDisplayRole(step) === "store");
-  const topologyPositions = [...nodePositions.values()];
+  const topologyPositions = [...positions.values()];
   const topologyMinX = topologyPositions.length > 0
     ? Math.min(...topologyPositions.map((position) => position.x))
     : -1;
@@ -1035,7 +1320,7 @@ function buildTopology(topology) {
   storeActors.forEach((step, index) => {
     const inboundStoreTransitions = transitions.filter((transition) => transition.to === step.step && transition.relationKind === "store");
     const sourcePositions = inboundStoreTransitions
-      .map((transition) => nodePositions.get(transition.from))
+      .map((transition) => positions.get(transition.from))
       .filter(Boolean);
     const averageX = sourcePositions.length > 0
       ? sourcePositions.reduce((sum, position) => sum + position.x, 0) / sourcePositions.length
@@ -1045,8 +1330,34 @@ function buildTopology(topology) {
       : 0;
     const x = averageX + spreadOffset;
     const y = PRIMARY_ROW_Y - BRANCH_ROW_OFFSET_Y - 0.28 - index * 0.3;
-    registerNode(step, new THREE.Vector3(x, y, 0));
+    positions.set(step.step, new THREE.Vector3(x, y, 0));
   });
+
+  return positions;
+}
+
+function buildTopology(topology) {
+  const steps = Array.isArray(topology.steps) ? topology.steps : [];
+  const transitions = Array.isArray(topology.transitions) ? topology.transitions : [];
+  steps.forEach((step) => {
+    stepMetadataByName.set(step.step, step);
+  });
+
+  const savedPositions = readSavedLayoutPositions();
+  const autoPositions = computeAutomaticLayoutPositions(topology);
+  automaticNodePositions.clear();
+  for (const [stepName, position] of autoPositions.entries()) {
+    automaticNodePositions.set(stepName, position.clone());
+  }
+
+  for (const step of steps) {
+    const autoPosition = autoPositions.get(step.step);
+    if (!autoPosition) {
+      continue;
+    }
+    const savedPosition = savedPositions.get(step.step);
+    registerNode(step, savedPosition ?? autoPosition);
+  }
 
   transitions.forEach((transition) => {
     const source = nodePositions.get(transition.from);
@@ -1066,6 +1377,8 @@ function buildTopology(topology) {
     scene.add(line);
     edgeLines.set(edgeKey(transition.from, transition.to), {
       line,
+      from: transition.from,
+      to: transition.to,
       baseColor: isBranch ? 0x8f7aea : 0x34527f,
       accentColor: isBranch ? 0xcf9cff : 0x7ad7ff,
       baseOpacity: isBranch ? 0.55 : 0.8,
@@ -1141,6 +1454,79 @@ function registerNode(step, position) {
       nodeValueSprites.set(step.step, rejectSprite);
     }
   }
+}
+
+function labelOffsetForStep(step) {
+  const isSideEffect = Boolean(step?.sideEffect);
+  return isSideEffect ? LABEL_OFFSET_Y - 0.08 : LABEL_OFFSET_Y;
+}
+
+function updateNodeDecorations(stepName) {
+  const position = nodePositions.get(stepName);
+  const step = resolveStepDefinition(stepName);
+  if (!position || !step) {
+    return;
+  }
+  const label = nodeLabelSprites.get(stepName);
+  if (label) {
+    label.position.copy(position).add(new THREE.Vector3(0, -labelOffsetForStep(step), 0));
+  }
+  const value = nodeValueSprites.get(stepName);
+  if (value) {
+    const valueOffset = step.sideEffect && step.pluginKind === "reject"
+      ? new THREE.Vector3(0, -0.3, 0)
+      : new THREE.Vector3(0, 0, 0);
+    value.position.copy(position).add(valueOffset);
+  }
+  const icon = nodeIconSprites.get(stepName);
+  if (icon) {
+    icon.position.copy(position);
+  }
+}
+
+function updateEdgeGeometry(edge) {
+  const source = nodePositions.get(edge.from);
+  const target = nodePositions.get(edge.to);
+  if (!source || !target) {
+    return;
+  }
+  edge.line.geometry.dispose();
+  edge.line.geometry = new THREE.BufferGeometry().setFromPoints([source.clone(), target.clone()]);
+  if (edge.branch) {
+    edge.line.computeLineDistances();
+  }
+}
+
+function updateConnectedEdges(stepName) {
+  for (const edge of edgeLines.values()) {
+    if (edge.from === stepName || edge.to === stepName) {
+      updateEdgeGeometry(edge);
+    }
+  }
+}
+
+function setNodePosition(stepName, position) {
+  const mesh = nodeMeshes.get(stepName);
+  if (!mesh) {
+    return;
+  }
+  const nextPosition = position.clone();
+  mesh.position.copy(nextPosition);
+  nodePositions.set(stepName, nextPosition);
+  updateNodeDecorations(stepName);
+  updateConnectedEdges(stepName);
+}
+
+function resetCurrentLayout() {
+  if (automaticNodePositions.size === 0) {
+    return;
+  }
+  clearSavedLayoutPositions();
+  for (const [stepName, position] of automaticNodePositions.entries()) {
+    setNodePosition(stepName, position);
+  }
+  fitCameraToTopology(replayDocument.topology.steps);
+  updateLabels();
 }
 
 function buildStepLabelSprite(stepName) {
@@ -1560,18 +1946,18 @@ function boostEdge(from, to, amount = 0.65) {
   edge.intensity = Math.min(1.4, edge.intensity + amount);
 }
 
-function resolveSourcePositions(event) {
+function resolveSourceAnchors(event) {
   if (event.cardinality === "many-to-one" && Array.isArray(event.parentItemIds) && event.parentItemIds.length > 1) {
     const sources = event.parentItemIds
       .map((itemId) => itemAnchors.get(itemId))
-      .map((stepName) => nodePositions.get(stepName))
-      .filter(Boolean);
+      .map((stepName) => ({ stepName, position: nodePositions.get(stepName) }))
+      .filter((source) => source.position);
     if (sources.length > 0) {
       return sources;
     }
   }
   const anchoredSource = event.from ? nodePositions.get(event.from) : null;
-  return anchoredSource ? [anchoredSource] : [];
+  return anchoredSource ? [{ stepName: event.from, position: anchoredSource }] : [];
 }
 
 function spawnTransit(event) {
@@ -1579,26 +1965,28 @@ function spawnTransit(event) {
   if (!toNode) {
     return;
   }
-  const sources = resolveSourcePositions(event);
   const eventEndTime = event.endTime ?? event.startTime;
   const duration = Math.max(0.12, eventEndTime - event.startTime);
   const color = particleColorForEvent(event.event);
   if (event.from && event.step) {
     boostEdge(event.from, event.step, event.event === "error" ? 1.1 : 0.78);
   }
-  (sources.length > 0 ? sources : [toNode]).forEach((source, index) => {
+  const sources = resolveSourceAnchors(event);
+  (sources.length > 0 ? sources : [{ stepName: event.step, position: toNode }]).forEach((source, index) => {
     const geometry = new THREE.SphereGeometry(0.13, 16, 16);
-    const material = new THREE.MeshStandardMaterial({
+    const material = new THREE.MeshBasicMaterial({
       color,
-      emissive: color,
-      emissiveIntensity: 0.45
+      transparent: true,
+      opacity: 0.95
     });
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
     particles.set(`${event.sequence}:${event.event}:${index}`, {
       mesh,
-      source: source.clone(),
+      source: source.position.clone(),
       target: toNode.clone(),
+      sourceStep: source.stepName,
+      targetStep: event.step,
       start: event.startTime,
       end: event.startTime + duration
     });
@@ -1606,7 +1994,9 @@ function spawnTransit(event) {
 }
 
 function spawnEmitSpark(event) {
-  const source = nodePositions.get(event.from) || nodePositions.get(event.step);
+  const sourceStep = event.from || event.step;
+  const source = nodePositions.get(sourceStep);
+  const targetStep = event.to || sourceStep;
   const target = event.to
     ? nodePositions.get(event.to) || source
     : source;
@@ -1619,10 +2009,10 @@ function spawnEmitSpark(event) {
   const trailCount = event.cardinality === "one-to-many" ? 2 : 1;
   for (let index = 0; index < trailCount; index += 1) {
     const geometry = new THREE.SphereGeometry(index === 0 ? 0.1 : 0.075, 12, 12);
-    const material = new THREE.MeshStandardMaterial({
+    const material = new THREE.MeshBasicMaterial({
       color: 0x8bffa5,
-      emissive: 0x8bffa5,
-      emissiveIntensity: index === 0 ? 0.65 : 0.45
+      transparent: true,
+      opacity: index === 0 ? 0.95 : 0.78
     });
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
@@ -1630,6 +2020,8 @@ function spawnEmitSpark(event) {
       mesh,
       source: source.clone(),
       target: target.clone(),
+      sourceStep,
+      targetStep,
       start: event.startTime + index * EFFECT_PRESETS.emit.trailDelay,
       end: event.startTime + 0.35 + index * EFFECT_PRESETS.emit.trailDelay
     });
@@ -1656,6 +2048,7 @@ function spawnPulse(stepName, color, preset, startTime = currentTimeSeconds) {
   scene.add(ring);
   pulseEffects.push({
     mesh: ring,
+    anchorStep: stepName,
     start: startTime,
     end: startTime + preset.duration,
     startScale: preset.startScale,
@@ -1680,6 +2073,7 @@ function spawnBurst(stepName, startTime = currentTimeSeconds, strong = false) {
   scene.add(burst);
   burstEffects.push({
     mesh: burst,
+    anchorStep: stepName,
     start: startTime,
     end: startTime + EFFECT_PRESETS.burst.duration,
     endScale: EFFECT_PRESETS.burst.endScale,
@@ -1698,6 +2092,7 @@ function spawnBurst(stepName, startTime = currentTimeSeconds, strong = false) {
     scene.add(ring);
     pulseEffects.push({
       mesh: ring,
+      anchorStep: stepName,
       start: startTime + 0.08,
       end: startTime + EFFECT_PRESETS.shockwave.duration,
       startScale: EFFECT_PRESETS.shockwave.startScale,
@@ -1713,10 +2108,8 @@ function spawnRetryLoop(stepName, startTime = currentTimeSeconds) {
     return;
   }
   const geometry = new THREE.SphereGeometry(0.08, 12, 12);
-  const material = new THREE.MeshStandardMaterial({
+  const material = new THREE.MeshBasicMaterial({
     color: 0xffb454,
-    emissive: 0xffb454,
-    emissiveIntensity: 0.8,
     transparent: true,
     opacity: 1
   });
@@ -1725,6 +2118,7 @@ function spawnRetryLoop(stepName, startTime = currentTimeSeconds) {
   retryLoops.push({
     mesh: orb,
     center: node.clone(),
+    anchorStep: stepName,
     radius: EFFECT_PRESETS.retryLoop.radius,
     start: startTime,
     end: startTime + EFFECT_PRESETS.retryLoop.duration,
@@ -1802,6 +2196,14 @@ function recordReplayCounters(rawEvent) {
     }
     return;
   }
+  if (event.event === "emit" && event.to && stepHasRenderRole(event.to, "await")) {
+    stateForStep(event.to).inflight += itemCount;
+  }
+  if (event.event === "start" && event.from && stepHasRenderRole(event.from, "await")) {
+    const awaitState = stateForStep(event.from);
+    awaitState.inflight = Math.max(0, awaitState.inflight - itemCount);
+    awaitState.processed += itemCount;
+  }
   if (event.event === "start") {
     state.inflight += itemCount;
     return;
@@ -1836,10 +2238,10 @@ function spawnSupportTransit(fromStep, toStep, startTime, color, duration = 0.36
   }
   boostEdge(fromStep, toStep, 0.82);
   const geometry = new THREE.SphereGeometry(size, 12, 12);
-  const material = new THREE.MeshStandardMaterial({
+  const material = new THREE.MeshBasicMaterial({
     color,
-    emissive: color,
-    emissiveIntensity: 0.58
+    transparent: true,
+    opacity: 0.92
   });
   const mesh = new THREE.Mesh(geometry, material);
   scene.add(mesh);
@@ -1847,6 +2249,8 @@ function spawnSupportTransit(fromStep, toStep, startTime, color, duration = 0.36
     mesh,
     source: source.clone(),
     target: target.clone(),
+    sourceStep: fromStep,
+    targetStep: toStep,
     start: startTime,
     end: startTime + duration
   });
@@ -1930,6 +2334,19 @@ function animateOutputResume(edge, timeSeconds, aggregate = false) {
   }
 }
 
+function animateDataBackedStartEdge(event) {
+  if (!event?.from || !event?.step || event.from === event.step) {
+    return;
+  }
+  if (!nodePositions.has(event.from) || !nodePositions.has(event.step)) {
+    return;
+  }
+  if (!shouldSampleSupportFlow(`start:${event.from}->${event.step}`, 18)) {
+    return;
+  }
+  spawnSupportTransit(event.from, event.step, event.startTime, 0x79dfff, 0.72, 0.1);
+}
+
 function processEvent(rawEvent) {
   const event = mapEventForDisplay(rawEvent);
   const key = resolveEventKey(rawEvent);
@@ -1958,22 +2375,35 @@ function processEvent(rawEvent) {
     animateOutputResume(outputResumeEdge, rawEvent.startTime, countedItemCount(rawEvent) > 1);
   }
   const displayTargets = resolveDisplayTargets(event);
-  highlightStep(event.step, EFFECT_PRESETS.node.defaultHoldSeconds, event.startTime);
-  highlightStep(event.from, 0.9, event.startTime);
-  highlightStep(event.to, 0.9, event.startTime);
   if (isAwaitResumableError(rawEvent)) {
-    if (isAwaitSuspensionEvent(rawEvent)) {
-      const suspensionTime = Number.isFinite(event.endTime)
-        ? event.endTime
-        : (Number.isFinite(event.startTime) ? event.startTime : 0);
-      const awaitStepName = event.step || fallbackAwaitDisplayStep || "AwaitPaymentProvider";
-      highlightStep(awaitStepName, EFFECT_PRESETS.node.defaultHoldSeconds + 0.5, suspensionTime);
+    const suspensionTime = Number.isFinite(event.endTime)
+      ? event.endTime
+      : (Number.isFinite(event.startTime) ? event.startTime : 0);
+    const awaitStepName = awaitDisplayStepForEvent(event);
+    if (awaitStepName) {
+      const resumeTime = nextAwaitResumeTimeAfter(suspensionTime);
+      const holdSeconds = resumeTime
+        ? Math.max(EFFECT_PRESETS.node.defaultHoldSeconds + 0.5, resumeTime - suspensionTime)
+        : EFFECT_PRESETS.node.defaultHoldSeconds + 0.5;
+      highlightStep(awaitStepName, holdSeconds, suspensionTime);
+      spawnPulse(awaitStepName, 0x8f7aea, {
+        duration: Math.min(holdSeconds, 7),
+        startScale: 1,
+        endScale: 1.95,
+        opacity: 0.58
+      }, suspensionTime);
       queueBackgroundFlash("#8f7aea", suspensionTime, 0.8, 0.24);
-      itemAnchors.set(rawEvent.itemId, awaitStepName);
+      if (rawEvent.itemId) {
+        itemAnchors.set(rawEvent.itemId, awaitStepName);
+      }
     }
     return;
   }
+  highlightStep(event.step, EFFECT_PRESETS.node.defaultHoldSeconds, event.startTime);
+  highlightStep(event.from, 0.9, event.startTime);
+  highlightStep(event.to, 0.9, event.startTime);
   if (event.event === "start") {
+    animateDataBackedStartEdge(event);
     spawnPulse(event.step, 0x6ce2ff, EFFECT_PRESETS.pulse.start, event.startTime);
     itemAnchors.set(event.itemId, event.step);
   } else if (event.event === "retry") {
@@ -2006,11 +2436,10 @@ function processEvent(rawEvent) {
     spawnPulse(event.step, 0x79f2c6, EFFECT_PRESETS.pulse.success, event.endTime);
     itemAnchors.set(event.itemId, event.step);
   } else if (event.event === "cache_hit") {
-    spawnTransit({
-      ...event,
+    spawnTransit(Object.assign({}, event, {
       from: event.from || resolvePluginStepForDisplay(event.step, "cache"),
       step: event.to || event.step
-    });
+    }));
     highlightStep(event.step, EFFECT_PRESETS.node.defaultHoldSeconds + 0.4, event.startTime);
     spawnPulse(event.step, 0x8bffa5, EFFECT_PRESETS.pulse.success, event.endTime);
     queueBackgroundFlash("#8bffa5", event.startTime, 0.85, 0.42);
@@ -2037,6 +2466,10 @@ function processEventsUntil(timeSeconds) {
     if (playbackTimeForEvent(event) > timeSeconds) {
       break;
     }
+    if (isAwaitSuspensionStartEvent(event, replayDocument.events[nextEventCursor + 1])) {
+      nextEventCursor += 1;
+      continue;
+    }
     processEvent(event);
     nextEventCursor += 1;
   }
@@ -2061,9 +2494,12 @@ function rebuildPlaybackToCursor(targetCursor) {
   currentTimeSeconds = 0;
   for (let index = 0; index < safeCursor; index += 1) {
     const event = replayDocument.events[index];
+    nextEventCursor = index + 1;
+    if (isAwaitSuspensionStartEvent(event, replayDocument.events[index + 1])) {
+      continue;
+    }
     currentTimeSeconds = Math.max(currentTimeSeconds, playbackTimeForEvent(event));
     processEvent(event);
-    nextEventCursor = index + 1;
   }
   updateParticles(currentTimeSeconds);
   updateEffects(currentTimeSeconds);
@@ -2078,7 +2514,9 @@ function updateParticles(timeSeconds) {
   for (const [key, particle] of [...particles.entries()]) {
     const duration = Math.max(0.001, particle.end - particle.start);
     const progress = Math.min(1, Math.max(0, (timeSeconds - particle.start) / duration));
-    particle.mesh.position.lerpVectors(particle.source, particle.target, progress);
+    const source = particle.sourceStep ? nodePositions.get(particle.sourceStep) ?? particle.source : particle.source;
+    const target = particle.targetStep ? nodePositions.get(particle.targetStep) ?? particle.target : particle.target;
+    particle.mesh.position.lerpVectors(source, target, progress);
     if (timeSeconds >= particle.end) {
       removeAndDispose(particle.mesh);
       particles.delete(key);
@@ -2088,6 +2526,10 @@ function updateParticles(timeSeconds) {
 
 function updateEffects(timeSeconds) {
   for (const effect of [...pulseEffects]) {
+    const anchor = effect.anchorStep ? nodePositions.get(effect.anchorStep) : null;
+    if (anchor) {
+      effect.mesh.position.copy(anchor);
+    }
     const progress = Math.min(1, Math.max(0, (timeSeconds - effect.start) / (effect.end - effect.start)));
     const scale = effect.startScale + (effect.endScale - effect.startScale) * progress;
     effect.mesh.scale.setScalar(scale);
@@ -2098,6 +2540,10 @@ function updateEffects(timeSeconds) {
     }
   }
   for (const effect of [...burstEffects]) {
+    const anchor = effect.anchorStep ? nodePositions.get(effect.anchorStep) : null;
+    if (anchor) {
+      effect.mesh.position.copy(anchor);
+    }
     const progress = Math.min(1, Math.max(0, (timeSeconds - effect.start) / (effect.end - effect.start)));
     effect.mesh.scale.setScalar(1 + progress * effect.endScale);
     effect.mesh.material.opacity = effect.startOpacity * Math.max(0, 1 - progress * 1.25);
@@ -2107,6 +2553,10 @@ function updateEffects(timeSeconds) {
     }
   }
   for (const effect of [...retryLoops]) {
+    const anchor = effect.anchorStep ? nodePositions.get(effect.anchorStep) : null;
+    if (anchor) {
+      effect.center.copy(anchor);
+    }
     const progress = Math.min(1, Math.max(0, (timeSeconds - effect.start) / (effect.end - effect.start)));
     const angle = progress * Math.PI * effect.revolutions;
     effect.mesh.position.set(
@@ -2225,6 +2675,9 @@ function updateUi() {
   stepButton.disabled = isLoadingReplay || nextEventCursor >= replayDocument.events.length;
   playPauseButton.disabled = isLoadingReplay;
   restartButton.disabled = isLoadingReplay;
+  if (resetLayoutButton) {
+    resetLayoutButton.disabled = isLoadingReplay || automaticNodePositions.size === 0;
+  }
   speedInputs.forEach((input) => {
     input.checked = Number(input.value) === playbackSpeed;
     input.disabled = isLoadingReplay;
@@ -2252,6 +2705,14 @@ function stepForwardOneEvent() {
   }
   isPlaying = false;
   isFinishingEffects = false;
+  while (nextEventCursor < replayDocument.events.length
+      && isAwaitSuspensionStartEvent(replayDocument.events[nextEventCursor], replayDocument.events[nextEventCursor + 1])) {
+    nextEventCursor += 1;
+  }
+  if (nextEventCursor >= replayDocument.events.length) {
+    updateUi();
+    return;
+  }
   const nextEvent = replayDocument.events[nextEventCursor];
   currentTimeSeconds = playbackTimeForEvent(nextEvent);
   processEvent(nextEvent);
@@ -2272,34 +2733,132 @@ function updateHoveredStep(clientX, clientY) {
   raycaster.setFromCamera(pointer, camera);
   const intersections = raycaster.intersectObjects([...nodeMeshes.values()], false);
   hoveredStepName = intersections[0]?.object?.userData?.step?.step ?? null;
+  renderer.domElement.style.cursor = hoveredStepName ? "grab" : "default";
+}
+
+function worldPointForPointer(clientX, clientY) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  const point = new THREE.Vector3();
+  return raycaster.ray.intersectPlane(plane, point) ? point : null;
+}
+
+function nodeAtPointer(clientX, clientY) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  return raycaster.intersectObjects([...nodeMeshes.values()], false)[0]?.object ?? null;
+}
+
+function beginNodeDrag(event) {
+  if (event.button !== 0 || isLoadingReplay || isAnyModalOpen()) {
+    return false;
+  }
+  const mesh = nodeAtPointer(event.clientX, event.clientY);
+  const stepName = mesh?.userData?.step?.step;
+  const hitPoint = worldPointForPointer(event.clientX, event.clientY);
+  const position = stepName ? nodePositions.get(stepName) : null;
+  if (!stepName || !hitPoint || !position) {
+    return false;
+  }
+  dragState = {
+    stepName,
+    offset: position.clone().sub(hitPoint),
+    moved: false
+  };
+  hoveredStepName = stepName;
+  cancelChromeHide();
+  renderer.domElement.setPointerCapture(event.pointerId);
+  renderer.domElement.style.cursor = "grabbing";
+  event.preventDefault();
+  return true;
+}
+
+function updateNodeDrag(event) {
+  if (!dragState) {
+    return false;
+  }
+  const hitPoint = worldPointForPointer(event.clientX, event.clientY);
+  if (!hitPoint) {
+    return true;
+  }
+  const nextPosition = hitPoint.add(dragState.offset);
+  nextPosition.z = 0;
+  setNodePosition(dragState.stepName, nextPosition);
+  dragState.moved = true;
+  event.preventDefault();
+  return true;
+}
+
+function endNodeDrag(event) {
+  if (!dragState) {
+    return false;
+  }
+  const moved = dragState.moved;
+  saveCurrentLayoutPositions();
+  dragState = null;
+  suppressNextCanvasClick = moved;
+  try {
+    renderer.domElement.releasePointerCapture(event.pointerId);
+  } catch {
+    // Pointer capture may already be gone after browser-level cancellation.
+  }
+  renderer.domElement.style.cursor = hoveredStepName ? "grab" : "default";
+  if (!prefersTapChrome) {
+    scheduleChromeHide();
+  }
+  event.preventDefault();
+  return moved;
 }
 
 function tick(now) {
-  const deltaSeconds = (now - previousAnimationFrame) / 1000;
-  previousAnimationFrame = now;
+  try {
+    const deltaSeconds = (now - previousAnimationFrame) / 1000;
+    previousAnimationFrame = now;
 
-  if (isPlaying) {
-    currentTimeSeconds += deltaSeconds * playbackSpeed;
-    if (currentTimeSeconds >= replayDurationSeconds) {
-      isFinishingEffects = true;
+    if (isPlaying) {
+      if (isFinishingEffects) {
+        currentTimeSeconds += deltaSeconds;
+      } else {
+        const nextPlaybackTime = currentTimeSeconds + deltaSeconds * playbackSpeed;
+        if (nextPlaybackTime >= replayDurationSeconds) {
+          currentTimeSeconds = replayDurationSeconds;
+          isFinishingEffects = true;
+        } else {
+          currentTimeSeconds = nextPlaybackTime;
+        }
+      }
+      if (currentTimeSeconds >= replayDurationSeconds) {
+        isFinishingEffects = true;
+      }
     }
-  }
 
-  processEventsUntil(Math.min(currentTimeSeconds, replayDurationSeconds));
-  updateParticles(currentTimeSeconds);
-  updateEffects(currentTimeSeconds);
-  updateEdges(currentTimeSeconds);
-  updateNodes(currentTimeSeconds);
-  updateBackgroundEffects(currentTimeSeconds);
-  updateLabels();
-  if (isPlaying && currentTimeSeconds >= replayDurationSeconds && !hasActiveTransientEffects()) {
-    isPlaying = false;
-    isFinishingEffects = false;
-    currentTimeSeconds = replayDurationSeconds;
+    processEventsUntil(Math.min(currentTimeSeconds, replayDurationSeconds));
+    updateParticles(currentTimeSeconds);
+    updateEffects(currentTimeSeconds);
+    updateEdges(currentTimeSeconds);
+    updateNodes(currentTimeSeconds);
+    updateBackgroundEffects(currentTimeSeconds);
+    updateLabels();
+    if (isPlaying && isFinishingEffects
+        && (!hasActiveTransientEffects() || currentTimeSeconds >= replayDurationSeconds + END_DRAIN_SECONDS)) {
+      isPlaying = false;
+      isFinishingEffects = false;
+      currentTimeSeconds = replayDurationSeconds;
+    }
+    updateUi();
+    renderer.render(scene, camera);
+  } catch (error) {
+    reportRuntimeError("playback paused after a rendering error", error);
+    fatalRenderErrorLatched = true;
   }
-  updateUi();
-  renderer.render(scene, camera);
-  requestAnimationFrame(tick);
+  if (!fatalRenderErrorLatched) {
+    requestAnimationFrame(tick);
+  }
 }
 
 playPauseButton.addEventListener("click", () => {
@@ -2405,16 +2964,8 @@ replayFileInput.addEventListener("change", async (event) => {
   revealPlayerChrome(true);
 });
 
-sourceButton.addEventListener("click", () => {
-  openModalElement("source", sourceModal);
-});
-
 infoButton.addEventListener("click", () => {
   openModalElement("info", infoModal);
-});
-
-sourceCloseButton.addEventListener("click", () => {
-  closeModalElement("source", sourceModal);
 });
 
 infoCloseButton.addEventListener("click", () => {
@@ -2426,6 +2977,9 @@ sourceApplyButton.addEventListener("click", async () => {
     return;
   }
   const nextSource = datasetSelect.value;
+  if (nextSource === EMPTY_REPLAY_SOURCE_KEY) {
+    return;
+  }
   try {
     if (nextSource === "custom") {
       const [file] = replayFileInput.files || [];
@@ -2435,16 +2989,16 @@ sourceApplyButton.addEventListener("click", async () => {
       isPlaying = false;
       setLoadProgress(true, 0, `Loading ${file.name}...`);
       updateUi();
+      await nextAnimationFrame();
       const text = await readReplayFile(file);
       setLoadProgress(true, 1, `Parsing ${file.name}...`);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await nextAnimationFrame();
       const parsed = JSON.parse(text);
       loadReplay(parsed, file.name, "custom");
+      finishLoadProgress(`${file.name} loaded`);
     } else {
       await loadBuiltInReplay(nextSource);
     }
-    setLoadProgress(false);
-    closeModalElement("source", sourceModal);
     scheduleChromeHide();
     updateUi();
   } catch (error) {
@@ -2476,17 +3030,44 @@ document.addEventListener("fullscreenchange", () => {
 });
 
 renderer.domElement.addEventListener("pointermove", (event) => {
+  if (updateNodeDrag(event)) {
+    return;
+  }
   updateHoveredStep(event.clientX, event.clientY);
   if (!prefersTapChrome) {
     revealPlayerChrome();
   }
 });
 
-renderer.domElement.addEventListener("pointerleave", () => {
-  hoveredStepName = null;
+renderer.domElement.addEventListener("pointerdown", (event) => {
+  beginNodeDrag(event);
 });
 
-renderer.domElement.addEventListener("click", () => {
+renderer.domElement.addEventListener("pointerup", (event) => {
+  endNodeDrag(event);
+});
+
+renderer.domElement.addEventListener("pointercancel", (event) => {
+  endNodeDrag(event);
+});
+
+renderer.domElement.addEventListener("pointerleave", () => {
+  if (dragState) {
+    return;
+  }
+  hoveredStepName = null;
+  renderer.domElement.style.cursor = "default";
+});
+
+renderer.domElement.addEventListener("click", (event) => {
+  if (suppressNextCanvasClick) {
+    suppressNextCanvasClick = false;
+    event.preventDefault();
+    return;
+  }
+  if (dragState) {
+    return;
+  }
   if (!prefersTapChrome) {
     revealPlayerChrome();
     return;
@@ -2498,6 +3079,14 @@ renderer.domElement.addEventListener("click", () => {
     revealPlayerChrome();
   }
 });
+
+if (resetLayoutButton) {
+  resetLayoutButton.addEventListener("click", () => {
+    resetCurrentLayout();
+    revealPlayerChrome(true);
+    updateUi();
+  });
+}
 
 playerChrome.addEventListener("pointermove", () => {
   revealPlayerChrome(true);
@@ -2529,14 +3118,12 @@ window.addEventListener("resize", () => {
   }
 });
 
-for (const modal of [sourceModal, infoModal]) {
+for (const modal of [infoModal]) {
   modal.addEventListener("click", (event) => {
     const closeTarget = event.target.closest("[data-close-modal]");
     if (closeTarget) {
       const name = closeTarget.getAttribute("data-close-modal");
-      if (name === "source") {
-        closeModalElement("source", sourceModal);
-      } else if (name === "info") {
+      if (name === "info") {
         closeModalElement("info", infoModal);
       }
     }
@@ -2545,9 +3132,7 @@ for (const modal of [sourceModal, infoModal]) {
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
-    if (openModal === "source") {
-      closeModalElement("source", sourceModal);
-    } else if (openModal === "info") {
+    if (openModal === "info") {
       closeModalElement("info", infoModal);
     }
   }
@@ -2561,10 +3146,6 @@ window.addEventListener("pageshow", () => {
   if (reloadIfViewerShellRouteChanged()) {
     return;
   }
-  if (!sourceModal.hidden) {
-    sourceModal.hidden = true;
-    sourceModal.setAttribute("aria-hidden", "true");
-  }
   if (!infoModal.hidden) {
     infoModal.hidden = true;
     infoModal.setAttribute("aria-hidden", "true");
@@ -2572,6 +3153,14 @@ window.addEventListener("pageshow", () => {
   openModal = null;
   syncStagedReplaySourceToActive();
   revealPlayerChrome(prefersTapChrome || isLoadingReplay);
+});
+
+window.addEventListener("error", (event) => {
+  reportNonFatalRuntimeIssue("viewer error", event.error ?? event.message);
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  reportNonFatalRuntimeIssue("viewer promise error", event.reason);
 });
 
 setCustomReplayVisibility(false);
@@ -2597,7 +3186,10 @@ if (backToDocsLink) {
 setPlayerChromeVisible(true);
 updateUi();
 requestAnimationFrame(tick);
-loadBuiltInReplay("csv-payments").catch((error) => {
-  setLoadProgress(false);
-  reportViewerIssue(`failed to load built-in dataset (${error.message})`);
-});
+// Intentionally starts empty so large built-in datasets load only after an explicit picker selection.
+if (DEFAULT_REPLAY_SOURCE_KEY !== EMPTY_REPLAY_SOURCE_KEY) {
+  loadBuiltInReplay(DEFAULT_REPLAY_SOURCE_KEY).catch((error) => {
+    setLoadProgress(false);
+    reportViewerIssue(`failed to load built-in dataset (${error.message})`);
+  });
+}

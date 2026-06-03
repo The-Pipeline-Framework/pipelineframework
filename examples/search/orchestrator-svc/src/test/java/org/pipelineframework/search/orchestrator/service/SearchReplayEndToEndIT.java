@@ -87,6 +87,8 @@ class SearchReplayEndToEndIT {
         "search.image.parse-document", "localhost/search-pipeline/parse-document-svc:latest");
     private static final String TOKENIZE_IMAGE = System.getProperty(
         "search.image.tokenize-content", "localhost/search-pipeline/tokenize-content-svc:latest");
+    private static final String EMBED_IMAGE = System.getProperty(
+        "search.image.embed-content", "localhost/search-pipeline/embed-content-svc:latest");
     private static final String INDEX_IMAGE = System.getProperty(
         "search.image.index-document", "localhost/search-pipeline/index-document-svc:latest");
     private static final String ORCHESTRATOR_IMAGE = System.getProperty(
@@ -155,6 +157,23 @@ class SearchReplayEndToEndIT {
             .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
             .withEnv("QUARKUS_HTTP_INSECURE_REQUESTS", "enabled")
             .withEnv("QUARKUS_HTTP_PORT", "8080")
+            .waitingFor(Wait.forHttp("/q/health").forPort(8080).withStartupTimeout(Duration.ofSeconds(60)));
+
+    private static final GenericContainer<?> embedService =
+        new GenericContainer<>(EMBED_IMAGE)
+            .withNetwork(NETWORK)
+            .withNetworkAliases("embed-content-svc")
+            .withFileSystemBind(
+                DEV_CERTS_DIR.resolve("embed-content-svc/server-keystore.jks").toString(),
+                CONTAINER_KEYSTORE_PATH,
+                BindMode.READ_ONLY)
+            .withExposedPorts(8080)
+            .withEnv("QUARKUS_PROFILE", "test")
+            .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
+            .withEnv("QUARKUS_HTTP_INSECURE_REQUESTS", "enabled")
+            .withEnv("QUARKUS_HTTP_PORT", "8080")
+            .withEnv("SEARCH_EMBED_DELAY_MS", System.getProperty("search.replay.embed.delay-ms", "25"))
+            .withEnv("SEARCH_EMBED_VECTOR_VERSION", System.getProperty("search.replay.embed.vector-version", "demo-v1"))
             .waitingFor(Wait.forHttp("/q/health").forPort(8080).withStartupTimeout(Duration.ofSeconds(60)));
 
     private static final GenericContainer<?> indexService =
@@ -232,15 +251,18 @@ class SearchReplayEndToEndIT {
             .withEnv("QUARKUS_REST_CLIENT_PROCESS_CRAWL_SOURCE_URL", "http://crawl-source-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_PROCESS_PARSE_DOCUMENT_URL", "http://parse-document-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_PROCESS_TOKENIZE_CONTENT_URL", "http://tokenize-content-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_PROCESS_EMBED_CONTENT_URL", "http://embed-content-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_PROCESS_INDEX_DOCUMENT_URL", "http://index-document-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_ORCHESTRATOR_SERVICE_URL", "http://orchestrator-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_RAW_DOCUMENT_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_PARSED_DOCUMENT_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_TOKEN_BATCH_SIDE_EFFECT_URL", "http://persistence-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_EMBEDDED_CHUNK_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_INDEX_ACK_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_RAW_DOCUMENT_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_PARSED_DOCUMENT_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_TOKEN_BATCH_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_EMBEDDED_CHUNK_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_INDEX_ACK_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_INVALIDATE_CRAWL_REQUEST_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_INVALIDATE_RAW_DOCUMENT_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
@@ -278,6 +300,7 @@ class SearchReplayEndToEndIT {
             crawlService,
             parseService,
             tokenizeService,
+            embedService,
             indexService,
             persistenceService,
             cacheInvalidationService,
@@ -291,6 +314,7 @@ class SearchReplayEndToEndIT {
         cacheInvalidationService.stop();
         persistenceService.stop();
         indexService.stop();
+        embedService.stop();
         tokenizeService.stop();
         parseService.stop();
         crawlService.stop();
@@ -318,23 +342,52 @@ class SearchReplayEndToEndIT {
         assertFalse(cacheHit.events().isEmpty(), "Expected cache-hit replay events");
         assertTrue(warmCache.topology().steps().stream().filter(PipelineReplayTopology.Step::sideEffect).count() >= 3,
             "Expected plugin nodes in warm-cache topology");
+        assertTrue(hasAnyStep(warmCache, "Embed Content", "EmbedContent", "ProcessEmbedContent"),
+            "Expected Embed Content in warm-cache replay topology");
+        assertTrue(hasAnyPrimaryTransition(warmCache,
+            List.of("Tokenize Content", "TokenizeContent", "ProcessTokenizeContent"),
+            List.of("Embed Content", "EmbedContent", "ProcessEmbedContent")),
+            "Expected Tokenize Content -> Embed Content replay transition");
+        assertTrue(hasAnyPrimaryTransition(warmCache,
+            List.of("Embed Content", "EmbedContent", "ProcessEmbedContent"),
+            List.of("Index Document", "IndexDocument", "ProcessIndexDocument")),
+            "Expected Embed Content -> Index Document replay transition");
+        assertTrue(warmCache.events().stream().anyMatch(event ->
+                (event.step() != null && event.step().contains("EmbedContent"))
+                    || (event.service() != null && event.service().contains("ProcessEmbedContentService"))),
+            "Expected direct Embed Content events in warm-cache replay");
         assertTrue(cacheHit.events().stream().anyMatch(event -> "cache_hit".equals(event.event())),
             "Expected cache-hit events in cache-hit replay");
         LOG.infof("Wrote search replay datasets to %s and %s", WARM_CACHE_REPLAY_FILE, CACHE_HIT_REPLAY_FILE);
+    }
+
+    private static boolean hasAnyStep(PipelineReplayDocument document, String... stepNames) {
+        return document.topology().steps().stream()
+            .anyMatch(step -> List.of(stepNames).contains(step.step()));
+    }
+
+    private static boolean hasAnyPrimaryTransition(PipelineReplayDocument document, List<String> fromSteps, List<String> toSteps) {
+        return document.topology().transitions().stream()
+            .anyMatch(transition ->
+                fromSteps.contains(transition.from())
+                    && toSteps.contains(transition.to())
+                    && ("primary".equals(transition.relationKind()) || transition.relationKind() == null));
     }
 
     private static PipelineReplayDocument runPhase(List<String> urls, String versionTag, Path outputFile) throws Exception {
         clearReplayDirectory();
         List<ProcessResult> results = new ArrayList<>();
         for (String url : urls) {
-            results.add(orchestratorTriggerRun(url, versionTag, true));
+            // Deliberately omit x-pipeline-replay; this test captures telemetry replay via the environment flag, not replay invalidation side effects.
+            results.add(orchestratorTriggerRun(url, versionTag, false));
         }
         assertTrue(results.stream().allMatch(ProcessResult::success),
             () -> "Expected all replay runs to succeed but saw failures: " + results.stream()
                 .filter(result -> !result.success())
                 .map(ProcessResult::output)
                 .limit(3)
-                .toList());
+                .toList()
+                + diagnosticLogTail());
 
         await()
             .atMost(Duration.ofSeconds(60))
@@ -506,6 +559,27 @@ class SearchReplayEndToEndIT {
 
     private static String nullSafe(String value) {
         return value == null ? "" : value;
+    }
+
+    private static String diagnosticLogTail() {
+        return "\n\nContainer log tails:"
+            + "\n- orchestrator-svc:\n" + tailLogs(orchestratorService.getLogs(), 40)
+            + "\n- crawl-source-svc:\n" + tailLogs(crawlService.getLogs(), 25)
+            + "\n- parse-document-svc:\n" + tailLogs(parseService.getLogs(), 25)
+            + "\n- tokenize-content-svc:\n" + tailLogs(tokenizeService.getLogs(), 25)
+            + "\n- embed-content-svc:\n" + tailLogs(embedService.getLogs(), 25)
+            + "\n- index-document-svc:\n" + tailLogs(indexService.getLogs(), 40)
+            + "\n- persistence-svc:\n" + tailLogs(persistenceService.getLogs(), 25)
+            + "\n- cache-invalidation-svc:\n" + tailLogs(cacheInvalidationService.getLogs(), 25);
+    }
+
+    private static String tailLogs(String logs, int lines) {
+        if (logs == null || logs.isBlank()) {
+            return "<no logs>";
+        }
+        String[] split = logs.split("\\R");
+        int start = Math.max(0, split.length - lines);
+        return String.join(System.lineSeparator(), java.util.Arrays.copyOfRange(split, start, split.length));
     }
 
     private static void clearReplayDirectory() throws IOException {

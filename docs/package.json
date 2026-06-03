@@ -6,9 +6,10 @@
   "scripts": {
     "test": "node --test ./scripts/*.test.js",
     "sync-replay-viewer": "node ./scripts/sync-replay-viewer.js",
+    "check-replay-datasets": "node ./scripts/check-replay-datasets.js",
     "build:homepage-video": "NODE_MODULES_DIR=\"$PWD/node_modules\" bash ../tools/homepage-replay-video/build_homepage_replay_video.sh",
     "dev": "npm run sync-replay-viewer && vitepress dev",
-    "build": "npm run sync-replay-viewer && vitepress build",
+    "build": "npm run check-replay-datasets && npm run sync-replay-viewer && vitepress build",
     "preview": "npm run sync-replay-viewer && vitepress preview",
     "snapshot": "node ./scripts/snapshot-docs.js"
   },

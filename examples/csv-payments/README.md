@@ -35,7 +35,7 @@ The canonical modular flow is:
 
 This is durable brokered completion, not polling. Kafka delivery remains at-least-once; TPF handles idempotent completion admission and ordered await-unit reconstruction for the resumed pipeline.
 
-The CSV example keeps the persistence aspect scoped to pre-await steps only. That is intentional: queue-async resume is at-least-once from the await boundary onward, and this example avoids teaching `persistence.duplicate-key=upsert` as the main answer to replayable post-await side effects. Once-only checkpointing for post-await side effects is a separate runtime concern.
+The CSV example persists pre-await and post-await service outputs. Queue-async resume is at-least-once from the await boundary onward, so persisted CSV entities use stable business IDs and the persistence runtime uses `persistence.duplicate-key=ignore`; duplicate redelivery becomes a no-op instead of a second business row.
 
 The orchestrator must run in queue-async mode and needs a stable resume-token secret:
 
@@ -113,6 +113,66 @@ Open the supported replay viewer at `/replay-viewer/` and either:
 - switch the sidebar selector to `Custom replay` and load the generated JSON locally
 
 The built-in CSV dataset is sourced from the 1k-input replay lane and is intended as the longer default demo dataset for the viewer.
+
+For the unified runtime demo suite, use these capture profiles.
+
+### Demo capture profiles
+
+Build the modular telemetry images before recording any profile:
+
+```bash
+cd <repo-root>
+./examples/csv-payments/build-modular-telemetry-images.sh
+```
+
+Baseline typed runtime flow:
+
+```bash
+./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.telemetry.enabled=true \
+  -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
+  -Dcsv.e2e.reader-demand-pacer.rows-per-period=10 \
+  -Dcsv.e2e.reader-demand-pacer.millis-period=100 \
+  -Dcsv-payments.payment-provider.permits-per-second=250 \
+  -Dcsv-payments.payment-provider.timeout-millis=5000 \
+  -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+Await/Kafka/provider close-up:
+
+```bash
+./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.telemetry.enabled=true \
+  -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_12.csv \
+  -Dcsv.e2e.reader-demand-pacer.rows-per-period=5 \
+  -Dcsv.e2e.reader-demand-pacer.millis-period=500 \
+  -Dcsv-payments.payment-provider.permits-per-second=25 \
+  -Dcsv-payments.payment-provider.timeout-millis=5000 \
+  -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+Provider-reject failure handling:
+
+```bash
+./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.telemetry.enabled=true \
+  -Dcsv.e2e.telemetry.happy-path-only=false \
+  -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
+  -Dcsv-payments.payment-provider.provider-reject-probability=0.08 \
+  -Dtest=CsvPaymentsProviderRejectEndToEndIT \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+Each profile writes the merged replay artifact to:
+
+- `examples/csv-payments/orchestrator-svc/target/test-e2e/replay/csv-payments-replay.json`
+
+Copy that file to a scenario-specific local capture name before running the next profile.
 
 ## Tempo / LGTM Verification
 
