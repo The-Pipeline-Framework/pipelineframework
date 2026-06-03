@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -34,8 +35,8 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.Put;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
-import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.TransactWriteItem;
 import software.amazon.awssdk.services.dynamodb.model.TransactWriteItemsRequest;
 import software.amazon.awssdk.services.dynamodb.model.TransactionCanceledException;
@@ -43,10 +44,25 @@ import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 
 /**
  * DynamoDB-backed await interaction store.
+ *
+ * <p>The interaction table uses primary key {@code tenant_id, interaction_id} and expects ALL-projected GSIs:
+ * {@code await-interaction-by-unit}, {@code await-interaction-pending-by-tenant},
+ * {@code await-interaction-pending-by-assignee}, {@code await-interaction-pending-by-group},
+ * {@code await-interaction-pending-by-step}, and {@code await-interaction-pending-by-deadline}.
+ * Runtime lookup paths query those indexes by await unit, tenant pending queue, tenant filter bucket,
+ * or due active deadline instead of scanning the interaction table.
  */
 @ApplicationScoped
 public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     private static final Logger LOG = Logger.getLogger(DynamoAwaitInteractionStore.class);
+
+    private static final String UNIT_INDEX = "await-interaction-by-unit";
+    private static final String PENDING_TENANT_INDEX = "await-interaction-pending-by-tenant";
+    private static final String PENDING_ASSIGNEE_INDEX = "await-interaction-pending-by-assignee";
+    private static final String PENDING_GROUP_INDEX = "await-interaction-pending-by-group";
+    private static final String PENDING_STEP_INDEX = "await-interaction-pending-by-step";
+    private static final String PENDING_DEADLINE_INDEX = "await-interaction-pending-by-deadline";
+    private static final String ACTIVE_DEADLINE_PARTITION = "active";
 
     private static final String TENANT_ID = "tenant_id";
     private static final String INTERACTION_ID = "interaction_id";
@@ -74,6 +90,15 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     private static final String CREATED_AT_EPOCH_MS = "created_at_epoch_ms";
     private static final String UPDATED_AT_EPOCH_MS = "updated_at_epoch_ms";
     private static final String TTL_EPOCH_S = "ttl_epoch_s";
+    private static final String QUERY_UNIT_KEY = "query_unit_key";
+    private static final String QUERY_UNIT_SORT = "query_unit_sort";
+    private static final String QUERY_PENDING_TENANT_KEY = "query_pending_tenant_key";
+    private static final String QUERY_PENDING_ASSIGNEE_KEY = "query_pending_assignee_key";
+    private static final String QUERY_PENDING_GROUP_KEY = "query_pending_group_key";
+    private static final String QUERY_PENDING_STEP_KEY = "query_pending_step_key";
+    private static final String QUERY_PENDING_DEADLINE_SORT = "query_pending_deadline_sort";
+    private static final String QUERY_DEADLINE_KEY = "query_deadline_key";
+    private static final String QUERY_DEADLINE_SORT = "query_deadline_sort";
     private static final String ENCODED_JAVA_CLASS = "_tpf_java_class";
     private static final String ENCODED_PAYLOAD = "_tpf_payload";
 
@@ -127,30 +152,34 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         String unitId) {
         return blocking(() -> {
             Map<String, String> names = Map.of(
-                "#tenant", TENANT_ID,
-                "#unit", UNIT_ID,
+                "#unitKey", QUERY_UNIT_KEY,
                 "#ttl", TTL_EPOCH_S);
             Map<String, AttributeValue> values = Map.of(
-                ":tenant", avS(tenantId),
-                ":unit", avS(unitId),
+                ":unitKey", avS(scopedKey(tenantId, unitId)),
                 ":nowSec", avN(Instant.now().getEpochSecond()));
             List<AwaitInteractionRecord> records = new ArrayList<>();
             Map<String, AttributeValue> lastEvaluatedKey = null;
             do {
-                ScanRequest.Builder request = ScanRequest.builder()
+                QueryRequest.Builder request = QueryRequest.builder()
                     .tableName(interactionTable())
-                    .filterExpression("#tenant = :tenant AND #unit = :unit "
-                        + "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
+                    .indexName(UNIT_INDEX)
+                    .keyConditionExpression("#unitKey = :unitKey")
+                    .filterExpression("(attribute_not_exists(#ttl) OR #ttl > :nowSec)")
                     .expressionAttributeNames(names)
                     .expressionAttributeValues(values)
-                    .limit(scanPageLimit(100));
+                    .limit(queryPageLimit(100));
                 if (lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty()) {
                     request.exclusiveStartKey(lastEvaluatedKey);
                 }
-                var response = dynamoClient().scan(request.build());
+                var response = dynamoClient().query(request.build());
                 if (response.items() != null) {
                     for (Map<String, AttributeValue> item : response.items()) {
-                        records.add(toRecord(item));
+                        AwaitInteractionRecord record = toRecord(item);
+                        if (Objects.equals(tenantId, record.tenantId())
+                            && Objects.equals(unitId, record.unitId())
+                            && !ttlExpired(record, System.currentTimeMillis())) {
+                            records.add(record);
+                        }
                     }
                 }
                 lastEvaluatedKey = response.lastEvaluatedKey();
@@ -267,11 +296,13 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
                 return List.of();
             }
             Map<String, String> names = Map.of(
+                "#deadlineKey", QUERY_DEADLINE_KEY,
+                "#deadlineSort", QUERY_DEADLINE_SORT,
                 "#status", STATUS,
-                "#deadline", DEADLINE_EPOCH_MS,
                 "#ttl", TTL_EPOCH_S);
             Map<String, AttributeValue> values = Map.of(
-                ":now", avN(nowEpochMs),
+                ":deadlineKey", avS(ACTIVE_DEADLINE_PARTITION),
+                ":deadlineCutoff", avS(deadlineUpperBound(nowEpochMs)),
                 ":completed", avS(AwaitInteractionStatus.COMPLETED.name()),
                 ":failed", avS(AwaitInteractionStatus.FAILED.name()),
                 ":timedOut", avS(AwaitInteractionStatus.TIMED_OUT.name()),
@@ -281,21 +312,28 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             List<AwaitInteractionRecord> records = new ArrayList<>();
             Map<String, AttributeValue> lastEvaluatedKey = null;
             do {
-                ScanRequest.Builder request = ScanRequest.builder()
+                QueryRequest.Builder request = QueryRequest.builder()
                     .tableName(interactionTable())
-                    .filterExpression("#deadline <= :now AND #status <> :completed AND #status <> :failed "
+                    .indexName(PENDING_DEADLINE_INDEX)
+                    .keyConditionExpression("#deadlineKey = :deadlineKey AND #deadlineSort <= :deadlineCutoff")
+                    .filterExpression("#status <> :completed AND #status <> :failed "
                         + "AND #status <> :timedOut AND #status <> :cancelled AND #status <> :expired "
                         + "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
                     .expressionAttributeNames(names)
                     .expressionAttributeValues(values)
-                    .limit(scanPageLimit(limit));
+                    .limit(queryPageLimit(limit));
                 if (lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty()) {
                     request.exclusiveStartKey(lastEvaluatedKey);
                 }
-                var response = dynamoClient().scan(request.build());
+                var response = dynamoClient().query(request.build());
                 if (response.items() != null) {
                     for (Map<String, AttributeValue> item : response.items()) {
-                        records.add(toRecord(item));
+                        AwaitInteractionRecord record = toRecord(item);
+                        if (!record.status().terminal()
+                            && record.deadlineEpochMs() <= nowEpochMs
+                            && !ttlExpired(record, nowEpochMs)) {
+                            records.add(record);
+                        }
                         if (records.size() >= limit) {
                             break;
                         }
@@ -319,29 +357,33 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             if (limit <= 0) {
                 return List.of();
             }
-            Map<String, String> names = new HashMap<>(Map.of("#tenant", TENANT_ID, "#status", STATUS, "#ttl", TTL_EPOCH_S));
+            PendingIndexSelection indexSelection = pendingIndexSelection(tenantId, assignee, group, stepId);
+            Map<String, String> names = new HashMap<>(Map.of(
+                "#pendingKey", indexSelection.keyAttribute(),
+                "#status", STATUS,
+                "#ttl", TTL_EPOCH_S));
             Map<String, AttributeValue> values = new HashMap<>(Map.of(
-                ":tenant", avS(tenantId),
+                ":pendingKey", avS(indexSelection.keyValue()),
                 ":completed", avS(AwaitInteractionStatus.COMPLETED.name()),
                 ":failed", avS(AwaitInteractionStatus.FAILED.name()),
                 ":timedOut", avS(AwaitInteractionStatus.TIMED_OUT.name()),
                 ":cancelled", avS(AwaitInteractionStatus.CANCELLED.name()),
                 ":expired", avS(AwaitInteractionStatus.EXPIRED.name()),
                 ":nowSec", avN(Instant.now().getEpochSecond())));
-            StringBuilder filter = new StringBuilder("#tenant = :tenant AND #status <> :completed AND #status <> :failed "
+            StringBuilder filter = new StringBuilder("#status <> :completed AND #status <> :failed "
                 + "AND #status <> :timedOut AND #status <> :cancelled AND #status <> :expired "
                 + "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)");
-            if (assignee != null) {
+            if (assignee != null && indexSelection.filterAssignee()) {
                 names.put("#assignee", ASSIGNEE);
                 values.put(":assignee", avS(assignee));
                 filter.append(" AND #assignee = :assignee");
             }
-            if (group != null) {
+            if (group != null && indexSelection.filterGroup()) {
                 names.put("#group", GROUP);
                 values.put(":group", avS(group));
                 filter.append(" AND #group = :group");
             }
-            if (stepId != null) {
+            if (stepId != null && indexSelection.filterStepId()) {
                 names.put("#stepId", STEP_ID);
                 values.put(":stepId", avS(stepId));
                 filter.append(" AND #stepId = :stepId");
@@ -349,20 +391,24 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             List<AwaitInteractionRecord> records = new ArrayList<>();
             Map<String, AttributeValue> lastEvaluatedKey = null;
             do {
-                ScanRequest.Builder request = ScanRequest.builder()
+                QueryRequest.Builder request = QueryRequest.builder()
                     .tableName(interactionTable())
+                    .indexName(indexSelection.indexName())
+                    .keyConditionExpression("#pendingKey = :pendingKey")
                     .filterExpression(filter.toString())
                     .expressionAttributeNames(names)
                     .expressionAttributeValues(values)
-                    .limit(scanPageLimit(limit));
+                    .limit(queryPageLimit(limit));
                 if (lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty()) {
                     request.exclusiveStartKey(lastEvaluatedKey);
                 }
-                var response = dynamoClient().scan(request.build());
+                var response = dynamoClient().query(request.build());
                 if (response.items() != null) {
                     for (Map<String, AttributeValue> item : response.items()) {
                         AwaitInteractionRecord record = toRecord(item);
-                        records.add(record);
+                        if (matchesPendingQuery(record, tenantId, assignee, group, stepId, System.currentTimeMillis())) {
+                            records.add(record);
+                        }
                         if (records.size() >= limit) {
                             break;
                         }
@@ -578,6 +624,15 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         if (transportMetadata != null) {
             values.put(":metadata", avS(toJson(transportMetadata)));
         }
+        if (status.terminal()) {
+            names.put("#pendingTenantKey", QUERY_PENDING_TENANT_KEY);
+            names.put("#pendingAssigneeKey", QUERY_PENDING_ASSIGNEE_KEY);
+            names.put("#pendingGroupKey", QUERY_PENDING_GROUP_KEY);
+            names.put("#pendingStepKey", QUERY_PENDING_STEP_KEY);
+            names.put("#pendingDeadlineSort", QUERY_PENDING_DEADLINE_SORT);
+            names.put("#deadlineKey", QUERY_DEADLINE_KEY);
+            names.put("#deadlineSort", QUERY_DEADLINE_SORT);
+        }
         StringBuilder update = new StringBuilder("SET #status = :status, #version = #version + :one, #updated = :now");
         if (responsePayload != null) {
             update.append(", #response = :response");
@@ -587,6 +642,10 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         }
         if (transportMetadata != null) {
             update.append(", #metadata = :metadata");
+        }
+        if (status.terminal()) {
+            update.append(" REMOVE #pendingTenantKey, #pendingAssigneeKey, #pendingGroupKey, #pendingStepKey, ")
+                .append("#pendingDeadlineSort, #deadlineKey, #deadlineSort");
         }
         String condition = "#version = :expected AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)";
         if (requiredStatus != null) {
@@ -681,6 +740,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         putIfPresent(item, ACTOR, record.actor());
         putIfPresent(item, ASSIGNEE, record.assignee());
         putIfPresent(item, GROUP, record.group());
+        putQueryKeys(item, record);
         return item;
     }
 
@@ -803,7 +863,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         return value == null ? null : AttributeValue.builder().s(value).build();
     }
 
-    private static int scanPageLimit(int limit) {
+    private static int queryPageLimit(int limit) {
         return (int) Math.min(Math.max((long) limit * 3L, (long) limit), 1_000L);
     }
 
@@ -813,6 +873,109 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
 
     private static AttributeValue avN(long value) {
         return AttributeValue.builder().n(Long.toString(value)).build();
+    }
+
+    private static void putQueryKeys(Map<String, AttributeValue> item, AwaitInteractionRecord record) {
+        if (record.unitId() != null && !record.unitId().isBlank()) {
+            item.put(QUERY_UNIT_KEY, avS(scopedKey(record.tenantId(), record.unitId())));
+            item.put(QUERY_UNIT_SORT, avS(itemSortKey(record.itemIndex(), record.causationId(), record.interactionId())));
+        }
+        if (record.status().terminal()) {
+            return;
+        }
+        item.put(QUERY_PENDING_TENANT_KEY, avS(record.tenantId()));
+        putIfPresent(item, QUERY_PENDING_ASSIGNEE_KEY, scopedOptionalKey(record.tenantId(), record.assignee()));
+        putIfPresent(item, QUERY_PENDING_GROUP_KEY, scopedOptionalKey(record.tenantId(), record.group()));
+        putIfPresent(item, QUERY_PENDING_STEP_KEY, scopedOptionalKey(record.tenantId(), record.stepId()));
+        item.put(QUERY_PENDING_DEADLINE_SORT, avS(deadlineSortKey(record.deadlineEpochMs(), record.interactionId())));
+        item.put(QUERY_DEADLINE_KEY, avS(ACTIVE_DEADLINE_PARTITION));
+        item.put(QUERY_DEADLINE_SORT, avS(deadlineSortKey(record.deadlineEpochMs(), record.tenantId(), record.interactionId())));
+    }
+
+    private static PendingIndexSelection pendingIndexSelection(String tenantId, String assignee, String group, String stepId) {
+        if (assignee != null && !assignee.isBlank()) {
+            return new PendingIndexSelection(
+                PENDING_ASSIGNEE_INDEX,
+                QUERY_PENDING_ASSIGNEE_KEY,
+                scopedKey(tenantId, assignee),
+                false,
+                true,
+                true);
+        }
+        if (group != null && !group.isBlank()) {
+            return new PendingIndexSelection(
+                PENDING_GROUP_INDEX,
+                QUERY_PENDING_GROUP_KEY,
+                scopedKey(tenantId, group),
+                true,
+                false,
+                true);
+        }
+        if (stepId != null && !stepId.isBlank()) {
+            return new PendingIndexSelection(
+                PENDING_STEP_INDEX,
+                QUERY_PENDING_STEP_KEY,
+                scopedKey(tenantId, stepId),
+                true,
+                true,
+                false);
+        }
+        return new PendingIndexSelection(
+            PENDING_TENANT_INDEX,
+            QUERY_PENDING_TENANT_KEY,
+            tenantId,
+            true,
+            true,
+            true);
+    }
+
+    private static boolean matchesPendingQuery(
+        AwaitInteractionRecord record,
+        String tenantId,
+        String assignee,
+        String group,
+        String stepId,
+        long nowEpochMs) {
+        return !record.status().terminal()
+            && Objects.equals(record.tenantId(), tenantId)
+            && (assignee == null || Objects.equals(record.assignee(), assignee))
+            && (group == null || Objects.equals(record.group(), group))
+            && (stepId == null || Objects.equals(record.stepId(), stepId))
+            && !ttlExpired(record, nowEpochMs);
+    }
+
+    private static boolean ttlExpired(AwaitInteractionRecord record, long nowEpochMs) {
+        return record.ttlEpochS() > 0 && record.ttlEpochS() <= Instant.ofEpochMilli(nowEpochMs).getEpochSecond();
+    }
+
+    private static String scopedOptionalKey(String tenantId, String value) {
+        return value == null || value.isBlank() ? null : scopedKey(tenantId, value);
+    }
+
+    private static String scopedKey(String left, String right) {
+        return left.length() + ":" + left + ":" + right.length() + ":" + right;
+    }
+
+    private static String itemSortKey(Integer itemIndex, String causationId, String interactionId) {
+        int safeItemIndex = itemIndex == null ? Integer.MAX_VALUE : itemIndex;
+        return String.format("%010d#%s#%s", safeItemIndex, nullToEmpty(causationId), interactionId);
+    }
+
+    private static String deadlineSortKey(long deadlineEpochMs, String... suffixParts) {
+        return String.format("%019d#%s", deadlineEpochMs, String.join("#", suffixParts));
+    }
+
+    private static String deadlineUpperBound(long deadlineEpochMs) {
+        return String.format("%019d~", deadlineEpochMs);
+    }
+
+    private record PendingIndexSelection(
+        String indexName,
+        String keyAttribute,
+        String keyValue,
+        boolean filterAssignee,
+        boolean filterGroup,
+        boolean filterStepId) {
     }
 
     private static String readString(Map<String, AttributeValue> item, String key) {
