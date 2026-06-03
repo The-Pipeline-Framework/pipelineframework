@@ -17,6 +17,7 @@
 package org.pipelineframework.csv.service;
 
 import java.io.Reader;
+import java.time.Duration;
 import java.util.Iterator;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -27,9 +28,9 @@ import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.blocking.CloseableIterator;
+import org.pipelineframework.blocking.BlockingIteratorPacer;
 import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.util.BlockingIteratorPacer;
 import org.pipelineframework.csv.util.DemandPacerConfig;
 import org.pipelineframework.service.blocking.BlockingIteratorService;
 
@@ -81,7 +82,7 @@ public class ProcessCsvPaymentsInputService
             return new BlockingIteratorPacer<>(
                 new OpenCsvPaymentRecordIterator(reader, delegate, input, rowsPerPeriod, millisPeriod),
                 rowsPerPeriod,
-                millisPeriod);
+                Duration.ofMillis(millisPeriod));
         } catch (Exception e) {
             reader.close();
             throw e;

@@ -1,36 +1,22 @@
-/*
- * Copyright (c) 2023-2026 Mariano Barcia
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+package org.pipelineframework.blocking;
 
-package org.pipelineframework.csv.util;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.blocking.CloseableIterator;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BlockingIteratorPacerTest {
 
@@ -43,8 +29,12 @@ class BlockingIteratorPacerTest {
     void emitsFirstRowsPerPeriodWithoutDelay() {
         FakeClock clock = new FakeClock();
         RecordingSleeper sleeper = new RecordingSleeper(clock);
-        BlockingIteratorPacer<String> pacer =
-                new BlockingIteratorPacer<>(iteratorOf("a", "b", "c"), 2, 100, clock::nanoTime, sleeper::sleepNanos);
+        BlockingIteratorPacer<String> pacer = new BlockingIteratorPacer<>(
+            iteratorOf("a", "b", "c"),
+            2,
+            Duration.ofMillis(100),
+            clock::nanoTime,
+            sleeper::sleepNanos);
 
         assertEquals("a", pacer.next());
         assertEquals("b", pacer.next());
@@ -56,8 +46,12 @@ class BlockingIteratorPacerTest {
     void blocksBeforeFirstRecordBeyondConfiguredPeriod() {
         FakeClock clock = new FakeClock();
         RecordingSleeper sleeper = new RecordingSleeper(clock);
-        BlockingIteratorPacer<String> pacer =
-                new BlockingIteratorPacer<>(iteratorOf("a", "b", "c"), 2, 100, clock::nanoTime, sleeper::sleepNanos);
+        BlockingIteratorPacer<String> pacer = new BlockingIteratorPacer<>(
+            iteratorOf("a", "b", "c"),
+            2,
+            Duration.ofMillis(100),
+            clock::nanoTime,
+            sleeper::sleepNanos);
 
         assertEquals("a", pacer.next());
         assertEquals("b", pacer.next());
@@ -70,13 +64,52 @@ class BlockingIteratorPacerTest {
     void resetsPermitsAfterPeriod() {
         FakeClock clock = new FakeClock();
         RecordingSleeper sleeper = new RecordingSleeper(clock);
-        BlockingIteratorPacer<String> pacer =
-                new BlockingIteratorPacer<>(iteratorOf("a", "b"), 1, 100, clock::nanoTime, sleeper::sleepNanos);
+        BlockingIteratorPacer<String> pacer = new BlockingIteratorPacer<>(
+            iteratorOf("a", "b"),
+            1,
+            Duration.ofMillis(100),
+            clock::nanoTime,
+            sleeper::sleepNanos);
 
         assertEquals("a", pacer.next());
         clock.advanceNanos(TimeUnit.MILLISECONDS.toNanos(100));
         assertEquals("b", pacer.next());
 
+        assertTrue(sleeper.sleeps().isEmpty());
+    }
+
+    @Test
+    void hasNextDelegatesWithoutPacing() {
+        AtomicInteger hasNextCalls = new AtomicInteger();
+        FakeClock clock = new FakeClock();
+        RecordingSleeper sleeper = new RecordingSleeper(clock);
+        CloseableIterator<String> delegate = new CloseableIterator<>() {
+            @Override
+            public boolean hasNext() {
+                hasNextCalls.incrementAndGet();
+                return true;
+            }
+
+            @Override
+            public String next() {
+                return "next";
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+        BlockingIteratorPacer<String> pacer = new BlockingIteratorPacer<>(
+            delegate,
+            1,
+            Duration.ofMillis(100),
+            clock::nanoTime,
+            sleeper::sleepNanos);
+
+        assertTrue(pacer.hasNext());
+        assertTrue(pacer.hasNext());
+
+        assertEquals(2, hasNextCalls.get());
         assertTrue(sleeper.sleeps().isEmpty());
     }
 
@@ -100,18 +133,46 @@ class BlockingIteratorPacerTest {
             }
         };
 
-        new BlockingIteratorPacer<>(delegate, 1, 100).close();
+        new BlockingIteratorPacer<>(delegate, 1, Duration.ofMillis(100)).close();
 
         assertTrue(closed.get());
+    }
+
+    @Test
+    void propagatesCloseFailure() {
+        Exception closeFailure = new Exception("close failed");
+        CloseableIterator<String> delegate = new CloseableIterator<>() {
+            @Override
+            public boolean hasNext() {
+                return false;
+            }
+
+            @Override
+            public String next() {
+                throw new IllegalStateException("no items");
+            }
+
+            @Override
+            public void close() throws Exception {
+                throw closeFailure;
+            }
+        };
+        BlockingIteratorPacer<String> pacer = new BlockingIteratorPacer<>(delegate, 1, Duration.ofMillis(100));
+
+        Exception failure = assertThrows(Exception.class, pacer::close);
+
+        assertSame(closeFailure, failure);
     }
 
     @Test
     void rejectsInvalidConfiguration() {
         CloseableIterator<String> delegate = iteratorOf("a");
 
-        assertThrows(IllegalArgumentException.class, () -> new BlockingIteratorPacer<>(delegate, 0, 100));
-        assertThrows(IllegalArgumentException.class, () -> new BlockingIteratorPacer<>(delegate, 1, 0));
-        assertThrows(IllegalArgumentException.class, () -> new BlockingIteratorPacer<>(null, 1, 100));
+        assertThrows(IllegalArgumentException.class, () -> new BlockingIteratorPacer<>(delegate, 0, Duration.ofMillis(100)));
+        assertThrows(IllegalArgumentException.class, () -> new BlockingIteratorPacer<>(delegate, 1, Duration.ZERO));
+        assertThrows(IllegalArgumentException.class, () -> new BlockingIteratorPacer<>(delegate, 1, Duration.ofNanos(-1)));
+        assertThrows(NullPointerException.class, () -> new BlockingIteratorPacer<>(null, 1, Duration.ofMillis(100)));
+        assertThrows(NullPointerException.class, () -> new BlockingIteratorPacer<>(delegate, 1, null));
     }
 
     @Test
@@ -120,8 +181,12 @@ class BlockingIteratorPacerTest {
         BlockingIteratorPacer.NanoSleeper sleeper = ignored -> {
             throw new InterruptedException("stop");
         };
-        BlockingIteratorPacer<String> pacer =
-                new BlockingIteratorPacer<>(iteratorOf("a", "b"), 1, 100, clock::nanoTime, sleeper);
+        BlockingIteratorPacer<String> pacer = new BlockingIteratorPacer<>(
+            iteratorOf("a", "b"),
+            1,
+            Duration.ofMillis(100),
+            clock::nanoTime,
+            sleeper);
 
         assertEquals("a", pacer.next());
         RuntimeException failure = assertThrows(RuntimeException.class, pacer::next);
