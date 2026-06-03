@@ -15,7 +15,7 @@ import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.ServiceApiKind;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 
 /**
  * Resolves generation targets and client/server roles based on configuration and annotation settings.
@@ -65,8 +65,8 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
      */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
-        TransportMode mode = ctx.getTransportMode();
-        TransportMode transportMode = Objects.requireNonNullElse(mode, TransportMode.GRPC);
+        PipelineTransport mode = ctx.getTransportMode();
+        PipelineTransport transportMode = Objects.requireNonNullElse(mode, PipelineTransport.GRPC);
 
         // Apply transport targets and resolve client/server roles for each step model
         List<PipelineStepModel> updatedModels = new ArrayList<>();
@@ -95,7 +95,7 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
      * @throws IllegalArgumentException if the deployment role is not supported
      */
     private Set<GenerationTarget> resolveTargetsForRole(
-            DeploymentRole role, TransportMode transportMode) {
+            DeploymentRole role, PipelineTransport transportMode) {
         TargetResolutionStrategy strategy = strategiesByRole.get(role);
         if (strategy == null) {
             throw new IllegalArgumentException("Unsupported deployment role: " + role);
@@ -113,7 +113,7 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
      * @param transportMode the transport mode used to influence resolution (may be null if caller applies a default)
      * @return a set of GenerationTarget values applicable to the given step model
      */
-    private Set<GenerationTarget> resolveTargetsForModel(PipelineStepModel model, TransportMode transportMode) {
+    private Set<GenerationTarget> resolveTargetsForModel(PipelineStepModel model, PipelineTransport transportMode) {
         if (model.serviceClassName() != null
             && AWAIT_STEP_DESCRIPTOR_CLASS.equals(model.serviceClassName().canonicalName())) {
             return Set.of(GenerationTarget.AWAIT_CLIENT_STEP);
@@ -129,7 +129,7 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
             // External adapter generation is bound later in PipelineBindingConstructionPhase.
             return Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
         }
-        if (transportMode == TransportMode.LOCAL
+        if (transportMode == PipelineTransport.LOCAL
             && model.sideEffect()
             && model.deploymentRole() == DeploymentRole.PLUGIN_SERVER) {
             return Set.of(GenerationTarget.LOCAL_CLIENT_STEP);

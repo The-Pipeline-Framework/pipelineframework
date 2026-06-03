@@ -25,7 +25,7 @@ import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineOrchestratorModel;
 import org.pipelineframework.processor.ir.StepDefinition;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.processor.parser.StepDefinitionParser;
 
@@ -163,7 +163,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
 
         // Determine transport and platform modes
         PipelineStepConfigLoader.StepConfig stepConfig = loadPipelineStepConfig(configPath, options, messager);
-        TransportMode transportMode = transportPlatformResolver.resolveTransport(stepConfig.transport(), messager);
+        PipelineTransport transportMode = transportPlatformResolver.resolveTransport(stepConfig.transport(), messager);
         ctx.setTransportMode(transportMode);
         PlatformMode platformMode = transportPlatformResolver.resolvePlatform(stepConfig.platform(), messager);
         ctx.setPlatformMode(platformMode);

@@ -5,7 +5,7 @@ import java.util.Optional;
 /**
  * Transport mode used for orchestrator client generation.
  */
-public enum TransportMode {
+public enum PipelineTransport {
     GRPC,
     REST,
     LOCAL;
@@ -25,12 +25,12 @@ public enum TransportMode {
     }
 
     /**
-     * Parse a string into a TransportMode when the input matches a known mode name.
+     * Parse a string into a PipelineTransport when the input matches a known mode name.
      *
      * @param raw the input string to parse; null or blank input is treated as no match
-     * @return an Optional containing the matching TransportMode for "REST", "LOCAL", or "GRPC" (case-insensitive), or Optional.empty() if the input is null, blank, or does not match
+     * @return an Optional containing the matching PipelineTransport for "REST", "LOCAL", or "GRPC" (case-insensitive), or Optional.empty() if the input is null, blank, or does not match
      */
-    public static Optional<TransportMode> fromStringOptional(String raw) {
+    public static Optional<PipelineTransport> fromStringOptional(String raw) {
         if (raw == null || raw.isBlank()) {
             return Optional.empty();
         }
@@ -48,13 +48,13 @@ public enum TransportMode {
     }
 
     /**
-     * Parse the given string into a TransportMode, using GRPC as the default when the input is null or blank.
+     * Parse the given string into a PipelineTransport, using GRPC as the default when the input is null or blank.
      *
      * @param raw the input string to parse; may be null or blank
-     * @return the corresponding TransportMode, or GRPC if {@code raw} is null or blank
+     * @return the corresponding PipelineTransport, or GRPC if {@code raw} is null or blank
      * @throws IllegalArgumentException if {@code raw} is non-blank and does not match GRPC, REST, or LOCAL
      */
-    public static TransportMode fromString(String raw) {
+    public static PipelineTransport fromString(String raw) {
         if (raw == null || raw.isBlank()) {
             return GRPC;
         }

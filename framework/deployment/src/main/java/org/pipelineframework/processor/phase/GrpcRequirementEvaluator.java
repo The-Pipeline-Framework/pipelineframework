@@ -10,7 +10,7 @@ import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineOrchestratorModel;
 import org.pipelineframework.processor.ir.PipelineStepModel;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 
 /**
  * Evaluates whether gRPC bindings are required for the current compilation.
@@ -53,7 +53,7 @@ class GrpcRequirementEvaluator {
             if (transport == null || transport.isBlank()) {
                 return true;
             }
-            Optional<TransportMode> resolvedMode = TransportMode.fromStringOptional(transport);
+            Optional<PipelineTransport> resolvedMode = PipelineTransport.fromStringOptional(transport);
             if (resolvedMode.isEmpty()) {
                 if (messager != null) {
                     messager.printMessage(Diagnostic.Kind.WARNING,
@@ -63,7 +63,7 @@ class GrpcRequirementEvaluator {
                 // Mirror resolver behavior: treat unknown transport as GRPC (return true)
                 return true;
             }
-            return resolvedMode.get() == TransportMode.GRPC;
+            return resolvedMode.get() == PipelineTransport.GRPC;
         }
         return false;
     }

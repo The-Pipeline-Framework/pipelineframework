@@ -24,7 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.pipelineframework.config.PlatformMode;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -46,38 +46,38 @@ class TransportPlatformResolverTest {
 
     @Test
     void resolveTransport_grpc() {
-        assertEquals(TransportMode.GRPC, resolver.resolveTransport("GRPC", messager));
+        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport("GRPC", messager));
     }
 
     @Test
     void resolveTransport_rest() {
-        assertEquals(TransportMode.REST, resolver.resolveTransport("REST", messager));
+        assertEquals(PipelineTransport.REST, resolver.resolveTransport("REST", messager));
     }
 
     @Test
     void resolveTransport_local() {
-        assertEquals(TransportMode.LOCAL, resolver.resolveTransport("LOCAL", messager));
+        assertEquals(PipelineTransport.LOCAL, resolver.resolveTransport("LOCAL", messager));
     }
 
     @Test
     void resolveTransport_null_defaultsToGrpc() {
-        assertEquals(TransportMode.GRPC, resolver.resolveTransport(null, messager));
+        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport(null, messager));
     }
 
     @Test
     void resolveTransport_blank_defaultsToGrpc() {
-        assertEquals(TransportMode.GRPC, resolver.resolveTransport("  ", messager));
+        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport("  ", messager));
     }
 
     @Test
     void resolveTransport_unknown_warnsAndDefaultsToGrpc() {
-        assertEquals(TransportMode.GRPC, resolver.resolveTransport("UNKNOWN", messager));
+        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport("UNKNOWN", messager));
         verify(messager).printMessage(eq(Diagnostic.Kind.WARNING), contains("Unknown pipeline transport"));
     }
 
     @Test
     void resolveTransport_nullMessager_noException() {
-        assertEquals(TransportMode.GRPC, resolver.resolveTransport("INVALID", null));
+        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport("INVALID", null));
     }
 
     // --- Platform ---
@@ -115,9 +115,9 @@ class TransportPlatformResolverTest {
 
     @Test
     void resolveTransport_caseInsensitive() {
-        assertEquals(TransportMode.GRPC, resolver.resolveTransport("grpc", messager));
-        assertEquals(TransportMode.REST, resolver.resolveTransport("rest", messager));
-        assertEquals(TransportMode.LOCAL, resolver.resolveTransport("local", messager));
+        assertEquals(PipelineTransport.GRPC, resolver.resolveTransport("grpc", messager));
+        assertEquals(PipelineTransport.REST, resolver.resolveTransport("rest", messager));
+        assertEquals(PipelineTransport.LOCAL, resolver.resolveTransport("local", messager));
     }
 
     @Test

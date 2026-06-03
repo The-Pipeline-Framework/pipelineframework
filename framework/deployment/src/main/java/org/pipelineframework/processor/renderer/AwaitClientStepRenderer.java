@@ -24,7 +24,7 @@ import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.step.StepManyToMany;
 import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.step.StepOneToMany;
@@ -45,7 +45,7 @@ public class AwaitClientStepRenderer {
             : model.generatedName();
         String className = baseName + "AwaitClientStep";
         PipelineConfigHints configHints = resolveConfigHints(ctx);
-        TransportMode transportMode = configHints.transportMode();
+        PipelineTransport transportMode = configHints.transportMode();
         TypeName inputType = clientStepType(model.inboundDomainType(), transportMode, configHints.basePackage());
         TypeName outputType = clientStepType(model.outboundDomainType(), transportMode, configHints.basePackage());
 
@@ -174,7 +174,7 @@ public class AwaitClientStepRenderer {
             return new PipelineConfigHints(ctx.transportMode(), ctx.pipelineBasePackage());
         }
         Map<String, String> options = ctx.processingEnv() == null ? Map.of() : ctx.processingEnv().getOptions();
-        TransportMode configuredTransport = TransportMode.fromStringOptional(
+        PipelineTransport configuredTransport = PipelineTransport.fromStringOptional(
             options == null ? null : options.get("pipeline.transport")).orElse(null);
         String basePackage = null;
         if (options != null) {
@@ -183,14 +183,14 @@ public class AwaitClientStepRenderer {
                 PipelineYamlConfig config = loadPipelineConfig(ctx, configPath);
                 if (config != null) {
                     if (configuredTransport == null) {
-                        configuredTransport = TransportMode.fromString(config.transport());
+                        configuredTransport = PipelineTransport.fromString(config.transport());
                     }
                     basePackage = config.basePackage();
                 }
             }
         }
         if (configuredTransport == null) {
-            configuredTransport = TransportMode.GRPC;
+            configuredTransport = PipelineTransport.GRPC;
         }
         return new PipelineConfigHints(configuredTransport, basePackage);
     }
@@ -209,7 +209,7 @@ public class AwaitClientStepRenderer {
         }
     }
 
-    private TypeName clientStepType(TypeName domainType, TransportMode transportMode, String pipelineBasePackage) {
+    private TypeName clientStepType(TypeName domainType, PipelineTransport transportMode, String pipelineBasePackage) {
         if (!(domainType instanceof ClassName className)) {
             return domainType;
         }
@@ -240,6 +240,6 @@ public class AwaitClientStepRenderer {
         return packageName;
     }
 
-    private record PipelineConfigHints(TransportMode transportMode, String basePackage) {
+    private record PipelineConfigHints(PipelineTransport transportMode, String basePackage) {
     }
 }

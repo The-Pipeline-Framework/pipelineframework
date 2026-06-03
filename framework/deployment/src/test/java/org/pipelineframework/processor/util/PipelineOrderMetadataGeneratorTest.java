@@ -28,7 +28,7 @@ import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.TypeMapping;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -73,7 +73,7 @@ class PipelineOrderMetadataGeneratorTest {
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
 
         PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
-        ctx.setTransportMode(TransportMode.GRPC);
+        ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setOrchestratorGenerated(true);
         ctx.setModuleDir(moduleDir);
 
@@ -139,7 +139,7 @@ class PipelineOrderMetadataGeneratorTest {
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
 
         PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
-        ctx.setTransportMode(TransportMode.GRPC);
+        ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setOrchestratorGenerated(false);
         ctx.setModuleDir(moduleDir);
 
@@ -192,7 +192,7 @@ class PipelineOrderMetadataGeneratorTest {
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
 
         PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
-        ctx.setTransportMode(TransportMode.GRPC);
+        ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setOrchestratorGenerated(true);
         ctx.setModuleDir(moduleDir);
 
@@ -243,7 +243,7 @@ class PipelineOrderMetadataGeneratorTest {
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
 
         PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
-        ctx.setTransportMode(TransportMode.GRPC);
+        ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setOrchestratorGenerated(true);
         ctx.setModuleDir(moduleDir);
         ctx.setStepModels(List.of());  // no models
@@ -287,7 +287,7 @@ class PipelineOrderMetadataGeneratorTest {
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
 
         PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
-        ctx.setTransportMode(TransportMode.GRPC);
+        ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setOrchestratorGenerated(true);
         ctx.setModuleDir(moduleDir);
 

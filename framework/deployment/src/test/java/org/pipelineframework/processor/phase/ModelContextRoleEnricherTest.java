@@ -20,7 +20,7 @@ import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.TypeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 
@@ -46,7 +46,7 @@ class ModelContextRoleEnricherTest {
     void enrichProducesPluginAndClientModelsForColocatedPluginHost() {
         PipelineCompilationContext ctx = new PipelineCompilationContext(null, null);
         ctx.setPluginHost(true);
-        ctx.setTransportMode(TransportMode.LOCAL);
+        ctx.setTransportMode(PipelineTransport.LOCAL);
         ctx.setAspectModels(List.of());
 
         List<PipelineStepModel> result = enricher.enrich(
@@ -70,7 +70,7 @@ class ModelContextRoleEnricherTest {
 
         PipelineCompilationContext ctx = new PipelineCompilationContext(null, roundEnv);
         ctx.setPluginHost(true);
-        ctx.setTransportMode(TransportMode.GRPC);
+        ctx.setTransportMode(PipelineTransport.GRPC);
         ctx.setAspectModels(List.of(new PipelineAspectModel(
             "audit",
             AspectScope.GLOBAL,
