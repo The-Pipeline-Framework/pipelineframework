@@ -35,6 +35,8 @@ import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCoordinator;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
+import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
+import org.pipelineframework.telemetry.PipelineTelemetry;
 import org.pipelineframework.orchestrator.CreateExecutionResult;
 import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.ExecutionCreateCommand;
@@ -85,6 +87,9 @@ class QueueAsyncCoordinator {
 
   @Inject
   AwaitCoordinator awaitCoordinator;
+
+  @Inject
+  PipelineTelemetry telemetry;
 
   private final ScheduledExecutorService queueSweepExecutor = Executors.newSingleThreadScheduledExecutor(
       runnable -> {
@@ -401,6 +406,20 @@ class QueueAsyncCoordinator {
                 record.executionId(),
                 suspended.stepIndex(),
                 suspended.unitId());
+            recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
+                AwaitReplayLifecycleEvent.EXECUTION_WAITING,
+                record.executionId(),
+                suspended.unitId(),
+                null,
+                suspended.stepIndex(),
+                ExecutionStatus.WAITING_EXTERNAL.name(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null));
             return Uni.createFrom().voidItem();
           }
           return Uni.createFrom().failure(new IllegalStateException(
@@ -493,6 +512,20 @@ class QueueAsyncCoordinator {
                 updated.get().executionId(),
                 awaitUnitId,
                 updated.get().currentStepIndex());
+            recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
+                AwaitReplayLifecycleEvent.RESUME_RELEASED,
+                record.executionId(),
+                awaitUnitId,
+                record.stepId(),
+                record.stepIndex(),
+                updated.get().status().name(),
+                record.interactionId(),
+                record.correlationId(),
+                record.transportType(),
+                record.itemIndex(),
+                null,
+                null,
+                null));
             return workDispatcher.enqueueNow(new ExecutionWorkItem(
                     updated.get().tenantId(),
                     updated.get().executionId()))
@@ -511,6 +544,12 @@ class QueueAsyncCoordinator {
               + ", record tenant=" + result.record().tenantId()));
     }
     return Uni.createFrom().item(result);
+  }
+
+  private void recordAwaitLifecycle(AwaitReplayLifecycleEvent lifecycleEvent) {
+    if (telemetry != null) {
+      telemetry.recordAwaitLifecycle(lifecycleEvent);
+    }
   }
 
   private ExecutionStateStore selectExecutionStateStore(String providerName) {

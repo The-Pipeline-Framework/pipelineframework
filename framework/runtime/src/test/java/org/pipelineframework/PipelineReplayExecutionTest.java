@@ -51,6 +51,7 @@ import org.pipelineframework.step.StepOneToMany;
 import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.cache.CacheKeyStrategy;
 import org.pipelineframework.cache.PipelineCacheReader;
+import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
 import org.pipelineframework.telemetry.FilePipelineReplayExporter;
 import org.pipelineframework.telemetry.PipelineExecutionEvent;
 import org.pipelineframework.telemetry.PipelineReplayDocument;
@@ -293,6 +294,48 @@ class PipelineReplayExecutionTest {
     }
 
     @Test
+    void fileReplayExporterWritesAwaitLifecycleControlFragmentInDirectoryMode() throws Exception {
+        Path outputDir = tempDir.resolve("await-control-runs");
+        PipelineTelemetry telemetry = new PipelineTelemetry(
+            new ReplayEnabledPipelineStepConfig(outputDir.toString()),
+            new FilePipelineReplayExporter(outputDir),
+            awaitTopology());
+
+        telemetry.recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
+            AwaitReplayLifecycleEvent.UNIT_ITEM_COMPLETED,
+            "exec-1",
+            "unit-1",
+            "AwaitProvider",
+            1,
+            "WAITING_EXTERNAL",
+            "interaction-1",
+            "correlation-1",
+            "kafka",
+            0,
+            2,
+            1,
+            true));
+
+        List<Path> replayFiles;
+        try (var replayFileStream = Files.list(outputDir)) {
+            replayFiles = replayFileStream
+                .filter(path -> path.getFileName().toString().endsWith(".json"))
+                .sorted()
+                .toList();
+        }
+        assertEquals(1, replayFiles.size());
+        PipelineReplayDocument document = PipelineJson.mapper().readValue(replayFiles.getFirst().toFile(), PipelineReplayDocument.class);
+        assertEquals("completed", document.status());
+        PipelineExecutionEvent event = document.events().getFirst();
+        assertEquals(AwaitReplayLifecycleEvent.UNIT_ITEM_COMPLETED, event.event());
+        assertEquals("AwaitProvider", event.step());
+        assertEquals("unit-1", event.attributes().get("tpf.await.unit_id"));
+        assertEquals("interaction-1", event.attributes().get("tpf.await.interaction_id"));
+        assertEquals("2", event.attributes().get("tpf.await.expected_item_count"));
+        assertEquals("1", event.attributes().get("tpf.await.completed_item_count"));
+    }
+
+    @Test
     void replayStaysColdWhenReplayExportIsDisabled() {
         Path output = tempDir.resolve("disabled-replay.json");
         PipelineTelemetry telemetry = new PipelineTelemetry(
@@ -443,6 +486,25 @@ class PipelineReplayExecutionTest {
             "search",
             List.of(new PipelineReplayTopology.Step(step, "Rejecting", "RejectingService", "one-to-one", 0, false, null, null)),
             List.of());
+    }
+
+    private PipelineReplayTopology awaitTopology() {
+        String inputStep = "org.pipelineframework.test.InputStep";
+        String awaitStep = "org.pipelineframework.test.AwaitProviderStep";
+        String resumedStep = "org.pipelineframework.test.ResumedStep";
+        return new PipelineReplayTopology(
+            "csv-payments",
+            List.of(
+                new PipelineReplayTopology.Step(inputStep, "Input", "InputService", "one-to-one", 0, false, null, null, "primary", null),
+                new PipelineReplayTopology.Step(awaitStep, "AwaitProvider", "AwaitProviderService", "one-to-one", 1, false, null, null, "await", null),
+                new PipelineReplayTopology.Step(resumedStep, "Resumed", "ResumedService", "one-to-one", 2, false, null, null, "primary", null)
+            ),
+            List.of(
+                new PipelineReplayTopology.Transition("Input->AwaitProvider", inputStep, awaitStep, "Input", "AwaitProvider",
+                    "InputService", "AwaitProviderService", "one-to-one", "primary"),
+                new PipelineReplayTopology.Transition("AwaitProvider->Resumed", awaitStep, resumedStep, "AwaitProvider", "Resumed",
+                    "AwaitProviderService", "ResumedService", "one-to-one", "primary")
+            ));
     }
 
     record Payload(String value) {

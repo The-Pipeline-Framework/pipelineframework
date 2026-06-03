@@ -531,6 +531,14 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.await-unit-entry {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+}
+
+.await-unit-entry .run-parameters-label {
+  overflow-wrap: anywhere;
+}
+
 .speed-group {
   display: flex;
   flex-wrap: wrap;

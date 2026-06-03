@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.trace.Span;
@@ -51,6 +52,18 @@ final class ExecutionReplayTracker {
     private static final AttributeKey<String> SOURCE_SERVICE = AttributeKey.stringKey("tpf.source.service");
     private static final AttributeKey<String> TARGET_SERVICE = AttributeKey.stringKey("tpf.target.service");
     private static final AttributeKey<String> CARDINALITY = AttributeKey.stringKey("tpf.cardinality");
+    private static final String AWAIT_UNIT_ID = "tpf.await.unit_id";
+    private static final String AWAIT_EXECUTION_ID = "tpf.await.execution_id";
+    private static final String AWAIT_STEP_ID = "tpf.await.step_id";
+    private static final String AWAIT_STEP_INDEX = "tpf.await.step_index";
+    private static final String AWAIT_STATUS = "tpf.await.status";
+    private static final String AWAIT_INTERACTION_ID = "tpf.await.interaction_id";
+    private static final String AWAIT_CORRELATION_ID = "tpf.await.correlation_id";
+    private static final String AWAIT_TRANSPORT = "tpf.await.transport";
+    private static final String AWAIT_ITEM_INDEX = "tpf.await.item_index";
+    private static final String AWAIT_EXPECTED_ITEM_COUNT = "tpf.await.expected_item_count";
+    private static final String AWAIT_COMPLETED_ITEM_COUNT = "tpf.await.completed_item_count";
+    private static final String AWAIT_DISPATCH_COMPLETE = "tpf.await.dispatch_complete";
 
     private final Tracer tracer;
     private final PipelineReplayExporter exporter;
@@ -105,6 +118,43 @@ final class ExecutionReplayTracker {
             return;
         }
         exporter.runFailed(runContext.runId(), topology.pipeline(), runContext.startedAt(), durationMs, topology, failure);
+    }
+
+    void recordAwaitLifecycle(AwaitReplayLifecycleEvent lifecycleEvent, Instant occurredAt) {
+        if (!enabled() || lifecycleEvent == null) {
+            return;
+        }
+        PipelineReplayTopology.Step step = resolveAwaitStep(lifecycleEvent.stepId(), lifecycleEvent.stepIndex());
+        String stepName = step == null ? lifecycleEvent.stepId() : step.step();
+        if (stepName == null || stepName.isBlank()) {
+            stepName = "Await";
+        }
+        String to = AwaitReplayLifecycleEvent.RESUME_RELEASED.equals(lifecycleEvent.eventName())
+            ? resumeTargetFor(stepName)
+            : stepName;
+        PipelineExecutionEvent event = new PipelineExecutionEvent(
+            null,
+            null,
+            null,
+            lifecycleEvent.unitId(),
+            topology.pipeline(),
+            stepName,
+            step == null ? stepName : step.service(),
+            lifecycleEvent.eventName(),
+            0d,
+            0d,
+            0L,
+            stepName,
+            to,
+            step == null ? null : step.cardinality(),
+            List.of(),
+            null,
+            null,
+            null,
+            null,
+            awaitAttributes(lifecycleEvent, stepName));
+        exporter.emitControlEvent(topology.pipeline(), occurredAt, topology, event);
+        addAwaitSpanEvent(lifecycleEvent);
     }
 
     StepExecutionScope beginStep(
@@ -515,6 +565,95 @@ final class ExecutionReplayTracker {
         String service = step.endsWith("Service") ? step : step + "Service";
         String renderRole = step.toLowerCase(Locale.ROOT).contains("await") ? "await" : "primary";
         return new PipelineReplayTopology.Step(runtimeStepClass, step, service, "one-to-one", -1, false, null, null, renderRole, null);
+    }
+
+    private PipelineReplayTopology.Step resolveAwaitStep(String stepId, Integer stepIndex) {
+        if (topology == null || topology.steps() == null) {
+            return null;
+        }
+        PipelineReplayTopology.Step firstAwaitStep = null;
+        if (stepId != null && !stepId.isBlank()) {
+            String normalizedStepId = normalizeAwaitStepId(stepId);
+            for (PipelineReplayTopology.Step step : topology.steps()) {
+                if (stepId.equals(step.step()) || normalizedStepId.equals(step.step())) {
+                    return step;
+                }
+                if ("await".equals(step.renderRole()) && firstAwaitStep == null) {
+                    firstAwaitStep = step;
+                }
+            }
+        }
+        if (stepIndex != null) {
+            for (PipelineReplayTopology.Step step : topology.steps()) {
+                if (step.index() == stepIndex && "await".equals(step.renderRole())) {
+                    return step;
+                }
+                if ("await".equals(step.renderRole()) && firstAwaitStep == null) {
+                    firstAwaitStep = step;
+                }
+            }
+        }
+        return firstAwaitStep;
+    }
+
+    private static String normalizeAwaitStepId(String stepId) {
+        if (stepId == null || stepId.isBlank()) {
+            return "";
+        }
+        String normalized = stepId;
+        if (normalized.startsWith("Process") && normalized.length() > "Process".length()) {
+            normalized = normalized.substring("Process".length());
+        }
+        if (normalized.endsWith("Service") && normalized.length() > "Service".length()) {
+            normalized = normalized.substring(0, normalized.length() - "Service".length());
+        }
+        return normalized;
+    }
+
+    private String resumeTargetFor(String awaitStep) {
+        if (awaitStep == null || topology == null || topology.transitions() == null) {
+            return awaitStep;
+        }
+        return topology.transitions().stream()
+            .filter(transition -> awaitStep.equals(transition.from()) && "primary".equals(transition.relationKind()))
+            .map(PipelineReplayTopology.Transition::to)
+            .findFirst()
+            .orElse(awaitStep);
+    }
+
+    private Map<String, String> awaitAttributes(AwaitReplayLifecycleEvent lifecycleEvent, String resolvedStepName) {
+        LinkedHashMap<String, String> attributes = new LinkedHashMap<>();
+        put(attributes, AWAIT_UNIT_ID, lifecycleEvent.unitId());
+        put(attributes, AWAIT_EXECUTION_ID, lifecycleEvent.executionId());
+        put(attributes, AWAIT_STEP_ID, lifecycleEvent.stepId() == null ? resolvedStepName : lifecycleEvent.stepId());
+        put(attributes, AWAIT_STEP_INDEX, lifecycleEvent.stepIndex());
+        put(attributes, AWAIT_STATUS, lifecycleEvent.status());
+        put(attributes, AWAIT_INTERACTION_ID, lifecycleEvent.interactionId());
+        put(attributes, AWAIT_CORRELATION_ID, lifecycleEvent.correlationId());
+        put(attributes, AWAIT_TRANSPORT, lifecycleEvent.transport());
+        put(attributes, AWAIT_ITEM_INDEX, lifecycleEvent.itemIndex());
+        put(attributes, AWAIT_EXPECTED_ITEM_COUNT, lifecycleEvent.expectedItemCount());
+        put(attributes, AWAIT_COMPLETED_ITEM_COUNT, lifecycleEvent.completedItemCount());
+        put(attributes, AWAIT_DISPATCH_COMPLETE, lifecycleEvent.dispatchComplete());
+        return Map.copyOf(attributes);
+    }
+
+    private void put(Map<String, String> attributes, String key, Object value) {
+        if (value != null) {
+            attributes.put(key, value.toString());
+        }
+    }
+
+    private void addAwaitSpanEvent(AwaitReplayLifecycleEvent lifecycleEvent) {
+        Span current = Span.current();
+        if (current == null || !current.getSpanContext().isValid()) {
+            return;
+        }
+        PipelineReplayTopology.Step step = resolveAwaitStep(lifecycleEvent.stepId(), lifecycleEvent.stepIndex());
+        String stepName = step == null ? lifecycleEvent.stepId() : step.step();
+        AttributesBuilder builder = Attributes.builder();
+        awaitAttributes(lifecycleEvent, stepName).forEach((key, value) -> builder.put(AttributeKey.stringKey(key), value));
+        current.addEvent("tpf.await." + lifecycleEvent.eventName(), builder.build());
     }
 
     private PipelineReplayTopology.Transition inbound(String runtimeStepClass) {

@@ -723,6 +723,13 @@ public class PipelineTelemetry {
         }
     }
 
+    public void recordAwaitLifecycle(AwaitReplayLifecycleEvent lifecycleEvent) {
+        if (!replayEnabled || replayTracker == null || lifecycleEvent == null) {
+            return;
+        }
+        replayTracker.recordAwaitLifecycle(lifecycleEvent, Instant.now());
+    }
+
     private Span startStepSpan(Class<?> stepClass, RunContext runContext, boolean perItemOperation) {
         if (!tracingEnabled || runContext == null || !runContext.enabled()) {
             return null;

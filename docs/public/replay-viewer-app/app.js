@@ -161,8 +161,28 @@ const STEP_ROLE_LABELS = {
   "external-provider": "Payment Provider",
   store: "Database"
 };
+const AWAIT_LIFECYCLE_EVENTS = new Set([
+  "await_interaction_dispatched",
+  "await_unit_dispatch_complete",
+  "await_execution_waiting",
+  "await_unit_item_completed",
+  "await_unit_completed",
+  "await_resume_released",
+  "await_unit_terminal"
+]);
+const AWAIT_ATTR = {
+  unitId: "tpf.await.unit_id",
+  executionId: "tpf.await.execution_id",
+  stepId: "tpf.await.step_id",
+  stepIndex: "tpf.await.step_index",
+  status: "tpf.await.status",
+  interactionId: "tpf.await.interaction_id",
+  expectedItemCount: "tpf.await.expected_item_count",
+  completedItemCount: "tpf.await.completed_item_count"
+};
 let fallbackAwaitDisplayStep = null;
 let activeAnimationPolicy = emptyAnimationPolicy();
+let replayHasAwaitLifecycleEvents = false;
 
 let replayDocument = normalizeReplayDocument(validateReplayDocument({ topology: { steps: [], transitions: [] }, events: [], durationMs: 0, pipeline: "loading" }));
 let replayDurationSeconds = 0.1;
@@ -335,7 +355,9 @@ function validateReplayDocument(document) {
 function emptyAnimationPolicy() {
   return {
     awaitRequestByTargetStep: new Map(),
+    awaitRequestByAwaitStep: new Map(),
     awaitCompletionByResumeStep: new Map(),
+    awaitCompletionByAwaitStep: new Map(),
     outputResumeByTargetStep: new Map(),
     storeWriteByRawStep: new Map()
   };
@@ -362,6 +384,7 @@ function normalizeReplayDocument(document) {
     topology: displayTopology,
     displayAliases: aliases,
     fallbackAwaitDisplayStep: defaultAwaitStepNameForTopology(displayTopology),
+    hasAwaitLifecycleEvents: events.some(isAwaitLifecycleEvent),
     events
   });
 }
@@ -509,6 +532,12 @@ function awaitDisplayStepForEvent(event) {
 function nextAwaitResumeTimeAfter(timeSeconds) {
   for (let index = nextEventCursor; index < replayDocument.events.length; index += 1) {
     const rawCandidate = replayDocument.events[index];
+    if (replayHasAwaitLifecycleEvents && rawCandidate?.event === "await_resume_released") {
+      const candidateTime = playbackTimeForEvent(rawCandidate);
+      if (candidateTime > timeSeconds) {
+        return candidateTime;
+      }
+    }
     const candidate = mapEventForDisplay(rawCandidate);
     const completionFlow = candidate?.step ? activeAnimationPolicy.awaitCompletionByResumeStep.get(candidate.step) : null;
     if (rawCandidate.event === "start" && completionFlow && candidate.from === completionFlow.awaitStep) {
@@ -539,6 +568,35 @@ function playbackTimeForEvent(event) {
   return event.event === "success" || event.event === "error"
     ? (event.endTime ?? event.startTime)
     : event.startTime;
+}
+
+function isAwaitLifecycleEvent(event) {
+  return AWAIT_LIFECYCLE_EVENTS.has(event?.event);
+}
+
+function awaitLifecycleAttribute(event, key) {
+  return event?.attributes?.[key] ?? null;
+}
+
+function awaitLifecycleNumber(event, key) {
+  const value = awaitLifecycleAttribute(event, key);
+  if (value == null || value === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function awaitStepForLifecycleEvent(rawEvent, displayEvent = mapEventForDisplay(rawEvent)) {
+  const stepId = awaitLifecycleAttribute(rawEvent, AWAIT_ATTR.stepId);
+  const aliasedStep = aliasStepNameForDisplay(stepId);
+  if (stepHasRenderRole(aliasedStep, "await")) {
+    return aliasedStep;
+  }
+  if (stepHasRenderRole(displayEvent?.step, "await")) {
+    return displayEvent.step;
+  }
+  return awaitDisplayStepForEvent(displayEvent);
 }
 
 function computeReplayDurationSeconds(document) {
@@ -817,10 +875,12 @@ function buildSupportAnimationPolicy(displayTopology, rawTopology = displayTopol
     const firstRequest = findTransitionByFrom(awaitRequestTransitions, awaitStep.step);
     const secondRequest = firstRequest ? findTransitionByFrom(awaitRequestTransitions, firstRequest.to) : null;
     if (firstRequest) {
-      policy.awaitRequestByTargetStep.set(awaitStep.step, {
+      const requestFlow = {
         awaitStep: awaitStep.step,
         requestEdges: [firstRequest, secondRequest].filter(Boolean)
-      });
+      };
+      policy.awaitRequestByTargetStep.set(awaitStep.step, requestFlow);
+      policy.awaitRequestByAwaitStep.set(awaitStep.step, requestFlow);
     }
 
     const resumeEdge = findTransitionByFrom(primaryTransitions, awaitStep.step);
@@ -830,11 +890,13 @@ function buildSupportAnimationPolicy(displayTopology, rawTopology = displayTopol
       ? findTransitionByTo(awaitCompletionTransitions, completionToAwait.from)
       : null;
     if (resumeEdge) {
-      policy.awaitCompletionByResumeStep.set(resumeEdge.to, {
+      const completionFlow = {
         awaitStep: awaitStep.step,
         completionEdges: [completionFromExternal, completionToAwait].filter(Boolean),
         resumeEdge
-      });
+      };
+      policy.awaitCompletionByResumeStep.set(resumeEdge.to, completionFlow);
+      policy.awaitCompletionByAwaitStep.set(awaitStep.step, completionFlow);
       if (downstreamEdge) {
         policy.outputResumeByTargetStep.set(downstreamEdge.to, downstreamEdge);
       }
@@ -945,6 +1007,7 @@ function clearScene() {
   rawStepMetadataByName.clear();
   activeAnimationPolicy = emptyAnimationPolicy();
   fallbackAwaitDisplayStep = null;
+  replayHasAwaitLifecycleEvents = false;
   nodeValueUpdateTick += 1;
 }
 
@@ -1057,13 +1120,6 @@ function renderRunParameters(runParameters) {
   const sections = Array.isArray(runParameters?.sections)
     ? runParameters.sections.filter((section) => section?.id !== "telemetry")
     : [];
-  if (sections.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "run-parameters-empty";
-    empty.textContent = "Run parameters unavailable";
-    runParametersContent.appendChild(empty);
-    return;
-  }
 
   for (const section of sections) {
     const entries = Array.isArray(section?.entries) ? section.entries : [];
@@ -1102,12 +1158,89 @@ function renderRunParameters(runParameters) {
     runParametersContent.appendChild(sectionElement);
   }
 
+  renderAwaitUnitSummary();
+
   if (!runParametersContent.childElementCount) {
     const empty = document.createElement("div");
     empty.className = "run-parameters-empty";
     empty.textContent = "Run parameters unavailable";
     runParametersContent.appendChild(empty);
   }
+}
+
+function renderAwaitUnitSummary() {
+  const units = awaitUnitSummaries(replayDocument.events);
+  if (units.length === 0) {
+    return;
+  }
+  const sectionElement = document.createElement("section");
+  sectionElement.className = "run-parameters-section await-unit-section";
+
+  const title = document.createElement("div");
+  title.className = "run-parameters-section-title";
+  title.textContent = "Await units";
+  sectionElement.appendChild(title);
+
+  const list = document.createElement("div");
+  list.className = "run-parameters-list";
+
+  for (const unit of units) {
+    const row = document.createElement("div");
+    row.className = "run-parameters-entry await-unit-entry";
+
+    const label = document.createElement("div");
+    label.className = "run-parameters-label";
+    label.textContent = unit.label;
+
+    const value = document.createElement("div");
+    value.className = "run-parameters-value";
+    value.textContent = unit.value;
+
+    row.append(label, value);
+    list.appendChild(row);
+  }
+
+  sectionElement.appendChild(list);
+  runParametersContent.appendChild(sectionElement);
+}
+
+function awaitUnitSummaries(events) {
+  const summariesByUnit = new Map();
+  for (const event of events ?? []) {
+    if (!isAwaitLifecycleEvent(event)) {
+      continue;
+    }
+    const unitId = awaitLifecycleAttribute(event, AWAIT_ATTR.unitId) ?? event.itemId;
+    if (!unitId) {
+      continue;
+    }
+    const summary = summariesByUnit.get(unitId) ?? {
+      unitId,
+      stepId: null,
+      status: null,
+      expected: null,
+      completed: null,
+      lastTime: 0
+    };
+    summary.stepId = awaitLifecycleAttribute(event, AWAIT_ATTR.stepId) ?? summary.stepId;
+    summary.status = awaitLifecycleAttribute(event, AWAIT_ATTR.status) ?? summary.status;
+    summary.expected = awaitLifecycleNumber(event, AWAIT_ATTR.expectedItemCount) ?? summary.expected;
+    summary.completed = awaitLifecycleNumber(event, AWAIT_ATTR.completedItemCount) ?? summary.completed;
+    summary.lastTime = Math.max(summary.lastTime, playbackTimeForEvent(event));
+    summariesByUnit.set(unitId, summary);
+  }
+  return [...summariesByUnit.values()]
+    .sort((left, right) => left.lastTime - right.lastTime)
+    .map((summary) => {
+      const shortUnit = summary.unitId.length > 8 ? `${summary.unitId.slice(0, 8)}...` : summary.unitId;
+      const countText = summary.expected == null || summary.completed == null
+        ? "count unknown"
+        : `${summary.completed}/${summary.expected}`;
+      return {
+        label: `${normalizeStepLabel(summary.stepId ?? "Await")} ${shortUnit}`,
+        value: `${summary.status ?? "UNKNOWN"} | ${countText} | ${summary.lastTime.toFixed(2)}s`
+      };
+    });
 }
 
 function reportViewerIssue(message) {
@@ -1144,6 +1277,7 @@ function loadReplay(document, label, sourceKey = activeReplaySourceKey) {
   isPlaying = false;
   isFinishingEffects = false;
   fallbackAwaitDisplayStep = replayDocument.fallbackAwaitDisplayStep ?? null;
+  replayHasAwaitLifecycleEvents = replayDocument.hasAwaitLifecycleEvents === true;
   for (const [rawStepName, displayStepName] of Object.entries(replayDocument.displayAliases ?? {})) {
     displayStepAliases.set(rawStepName, displayStepName);
   }
@@ -1178,6 +1312,12 @@ function loadReplay(document, label, sourceKey = activeReplaySourceKey) {
     const displayToName = aliasStepNameForDisplay(event?.to);
     if (displayStepName) {
       directEventSteps.add(displayStepName);
+    }
+    if (isAwaitLifecycleEvent(event)) {
+      const awaitStepName = awaitStepForLifecycleEvent(event, mapEventForDisplay(event));
+      if (awaitStepName) {
+        directEventSteps.add(awaitStepName);
+      }
     }
     for (const transitionStepName of [displayFromName, displayToName]) {
       if (stepHasRenderRole(transitionStepName, "await")) {
@@ -2146,7 +2286,7 @@ function resolveEventKey(event) {
 
 function stateForStep(stepName) {
   if (!runtimeStepState.has(stepName)) {
-    runtimeStepState.set(stepName, { inflight: 0, processed: 0, rejects: 0 });
+    runtimeStepState.set(stepName, { inflight: 0, processed: 0, rejects: 0, known: false });
   }
   return runtimeStepState.get(stepName);
 }
@@ -2167,6 +2307,12 @@ function displayStateForStep(stepName) {
       unknown: false
     };
   }
+  if (step.renderRole === "await" && replayHasAwaitLifecycleEvents) {
+    return {
+      state: directState,
+      unknown: !directState.known
+    };
+  }
   return {
     state: directState,
     unknown: !directEventSteps.has(stepName)
@@ -2183,6 +2329,10 @@ function stepCardinality(stepName) {
 
 function recordReplayCounters(rawEvent) {
   const event = mapEventForDisplay(rawEvent);
+  if (isAwaitLifecycleEvent(rawEvent)) {
+    recordAwaitLifecycleCounters(rawEvent, event);
+    return;
+  }
   if (!event?.step) {
     return;
   }
@@ -2228,6 +2378,22 @@ function recordReplayCounters(rawEvent) {
       state.processed += itemCount;
     }
   }
+}
+
+function recordAwaitLifecycleCounters(rawEvent, event) {
+  const awaitStepName = awaitStepForLifecycleEvent(rawEvent, event);
+  if (!awaitStepName) {
+    return;
+  }
+  const expected = awaitLifecycleNumber(rawEvent, AWAIT_ATTR.expectedItemCount);
+  const completed = awaitLifecycleNumber(rawEvent, AWAIT_ATTR.completedItemCount);
+  if (expected == null || completed == null) {
+    return;
+  }
+  const state = stateForStep(awaitStepName);
+  state.inflight = Math.max(0, expected - completed);
+  state.processed = completed;
+  state.known = true;
 }
 
 function spawnSupportTransit(fromStep, toStep, startTime, color, duration = 0.36, size = 0.085) {
@@ -2278,7 +2444,7 @@ function animateAwaitRequest(flow, timeSeconds) {
   }
 }
 
-function animateAwaitCompletion(flow, timeSeconds) {
+function animateAwaitCompletion(flow, timeSeconds, includeResume = true) {
   if (!flow?.awaitStep || !flow?.resumeEdge) {
     return;
   }
@@ -2292,8 +2458,18 @@ function animateAwaitCompletion(flow, timeSeconds) {
     spawnSupportTransit(completionEdges[1].from, completionEdges[1].to, timeSeconds + 0.1, 0x8f7aea, 0.86, 0.11);
   }
   highlightStep(flow.awaitStep, 1.05, timeSeconds);
+  if (includeResume) {
+    animateAwaitResume(flow, timeSeconds + 0.16);
+  }
+}
+
+function animateAwaitResume(flow, timeSeconds) {
+  if (!flow?.awaitStep || !flow?.resumeEdge) {
+    return;
+  }
+  highlightStep(flow.awaitStep, 1.05, timeSeconds);
   highlightStep(flow.resumeEdge.to, 1.05, timeSeconds + 0.1);
-  spawnSupportTransit(flow.resumeEdge.from, flow.resumeEdge.to, timeSeconds + 0.22, 0x7ad7ff, 0.96, 0.12);
+  spawnSupportTransit(flow.resumeEdge.from, flow.resumeEdge.to, timeSeconds + 0.12, 0x7ad7ff, 0.96, 0.12);
 }
 
 function animateStoreWrite(flow, timeSeconds) {
@@ -2355,13 +2531,17 @@ function processEvent(rawEvent) {
   }
   eventIndexByKey.add(key);
   recordReplayCounters(rawEvent);
+  if (isAwaitLifecycleEvent(rawEvent)) {
+    processAwaitLifecycleEvent(rawEvent, event);
+    return;
+  }
   const awaitRequestFlow = event?.to ? activeAnimationPolicy.awaitRequestByTargetStep.get(event.to) : null;
-  if (rawEvent.event === "emit" && awaitRequestFlow
+  if (!replayHasAwaitLifecycleEvents && rawEvent.event === "emit" && awaitRequestFlow
       && shouldSampleSupportFlow(`await-request:${awaitRequestFlow.awaitStep}`)) {
     animateAwaitRequest(awaitRequestFlow, rawEvent.startTime);
   }
   const awaitCompletionFlow = event?.step ? activeAnimationPolicy.awaitCompletionByResumeStep.get(event.step) : null;
-  if (rawEvent.event === "start" && awaitCompletionFlow && event.from === awaitCompletionFlow.awaitStep
+  if (!replayHasAwaitLifecycleEvents && rawEvent.event === "start" && awaitCompletionFlow && event.from === awaitCompletionFlow.awaitStep
       && shouldSampleSupportFlow(`await-completion:${awaitCompletionFlow.awaitStep}`)) {
     animateAwaitCompletion(awaitCompletionFlow, rawEvent.startTime);
   }
@@ -2458,6 +2638,51 @@ function processEvent(rawEvent) {
     spawnEmitSpark(event);
     itemAnchors.set(event.itemId, event.to || event.step);
   }
+}
+
+function processAwaitLifecycleEvent(rawEvent, event) {
+  const timeSeconds = playbackTimeForEvent(rawEvent);
+  const awaitStepName = awaitStepForLifecycleEvent(rawEvent, event);
+  if (!awaitStepName) {
+    return;
+  }
+  const requestFlow = activeAnimationPolicy.awaitRequestByAwaitStep.get(awaitStepName);
+  const completionFlow = activeAnimationPolicy.awaitCompletionByAwaitStep.get(awaitStepName);
+  if (rawEvent.event === "await_interaction_dispatched") {
+    if (requestFlow && shouldSampleSupportFlow(`await-request:${awaitStepName}`)) {
+      animateAwaitRequest(requestFlow, timeSeconds);
+    } else {
+      highlightStep(awaitStepName, 0.9, timeSeconds);
+    }
+    itemAnchors.set(rawEvent.itemId ?? awaitLifecycleAttribute(rawEvent, AWAIT_ATTR.unitId), awaitStepName);
+    return;
+  }
+  if (rawEvent.event === "await_unit_item_completed" || rawEvent.event === "await_unit_completed") {
+    if (completionFlow && shouldSampleSupportFlow(`await-completion:${awaitStepName}`)) {
+      animateAwaitCompletion(completionFlow, timeSeconds, false);
+    } else {
+      highlightStep(awaitStepName, 0.9, timeSeconds);
+    }
+    itemAnchors.set(rawEvent.itemId ?? awaitLifecycleAttribute(rawEvent, AWAIT_ATTR.unitId), awaitStepName);
+    return;
+  }
+  if (rawEvent.event === "await_resume_released") {
+    if (completionFlow) {
+      animateAwaitResume(completionFlow, timeSeconds);
+    } else {
+      highlightStep(awaitStepName, 1.05, timeSeconds);
+    }
+    itemAnchors.set(rawEvent.itemId ?? awaitLifecycleAttribute(rawEvent, AWAIT_ATTR.unitId), awaitStepName);
+    return;
+  }
+  if (rawEvent.event === "await_unit_terminal") {
+    highlightStep(awaitStepName, EFFECT_PRESETS.node.errorHoldSeconds, timeSeconds);
+    spawnPulse(awaitStepName, 0xff7488, EFFECT_PRESETS.pulse.errorPrimary, timeSeconds);
+    queueBackgroundFlash("#ff647c", timeSeconds, 0.95, 0.58);
+    return;
+  }
+  highlightStep(awaitStepName, EFFECT_PRESETS.node.defaultHoldSeconds + 0.5, timeSeconds);
+  spawnPulse(awaitStepName, 0x8f7aea, EFFECT_PRESETS.pulse.start, timeSeconds);
 }
 
 function processEventsUntil(timeSeconds) {
