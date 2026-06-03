@@ -199,7 +199,7 @@ That lane starts a dedicated LGTM stack, points the modular services and package
 
 The input CSV step is authored as a blocking iterator service. It still reads rows incrementally from OpenCSV, and it also applies demand pacing before each row is pulled from the iterator.
 
-This pacing uses the framework-provided `BlockingIteratorPacer`. It is a blocking-thread throttle, not end-to-end reactive backpressure. The framework offloads the iterator to worker or virtual threads, and the pacer deliberately blocks that offloaded thread when the configured row budget is exhausted.
+This pacing uses the framework-provided `BlockingIteratorPacer`. It is a blocking-thread throttle, not end-to-end reactive backpressure. The framework offloads the iterator to worker or virtual threads, and the pacer deliberately blocks that offloaded thread when the configured item budget is exhausted. In this example, that budget is expressed as CSV rows.
 
 Configure the default row budget in the input service:
 

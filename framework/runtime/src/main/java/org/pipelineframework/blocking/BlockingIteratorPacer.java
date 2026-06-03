@@ -41,7 +41,7 @@ public final class BlockingIteratorPacer<T> implements CloseableIterator<T> {
     }
 
     private final CloseableIterator<T> delegate;
-    private final long rowsPerPeriod;
+    private final long itemsPerPeriod;
     private final long periodNanos;
     private final NanoClock clock;
     private final NanoSleeper sleeper;
@@ -53,30 +53,30 @@ public final class BlockingIteratorPacer<T> implements CloseableIterator<T> {
      * Creates a pacing wrapper.
      *
      * @param delegate iterator being paced
-     * @param rowsPerPeriod maximum rows emitted during each period
+     * @param itemsPerPeriod maximum items emitted during each period
      * @param period pacing period
      */
     public BlockingIteratorPacer(
         CloseableIterator<T> delegate,
-        long rowsPerPeriod,
+        long itemsPerPeriod,
         Duration period) {
-        this(delegate, rowsPerPeriod, period, System::nanoTime, TimeUnit.NANOSECONDS::sleep);
+        this(delegate, itemsPerPeriod, period, System::nanoTime, TimeUnit.NANOSECONDS::sleep);
     }
 
     BlockingIteratorPacer(
         CloseableIterator<T> delegate,
-        long rowsPerPeriod,
+        long itemsPerPeriod,
         Duration period,
         NanoClock clock,
         NanoSleeper sleeper) {
-        if (rowsPerPeriod <= 0) {
-            throw new IllegalArgumentException("rowsPerPeriod must be positive");
+        if (itemsPerPeriod <= 0) {
+            throw new IllegalArgumentException("itemsPerPeriod must be positive");
         }
         long nanos = periodNanos(period);
         this.delegate = Objects.requireNonNull(delegate, "delegate must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.sleeper = Objects.requireNonNull(sleeper, "sleeper must not be null");
-        this.rowsPerPeriod = rowsPerPeriod;
+        this.itemsPerPeriod = itemsPerPeriod;
         this.periodNanos = nanos;
     }
 
@@ -107,7 +107,7 @@ public final class BlockingIteratorPacer<T> implements CloseableIterator<T> {
             resetWindow(now);
         }
 
-        if (emittedInWindow >= rowsPerPeriod) {
+        if (emittedInWindow >= itemsPerPeriod) {
             long waitNanos = periodNanos - (now - windowStartNanos);
             if (waitNanos > 0) {
                 sleep(waitNanos);

@@ -26,7 +26,7 @@ class BlockingIteratorPacerTest {
     }
 
     @Test
-    void emitsFirstRowsPerPeriodWithoutDelay() {
+    void emitsFirstItemsPerPeriodWithoutDelay() {
         FakeClock clock = new FakeClock();
         RecordingSleeper sleeper = new RecordingSleeper(clock);
         BlockingIteratorPacer<String> pacer = new BlockingIteratorPacer<>(
@@ -43,7 +43,7 @@ class BlockingIteratorPacerTest {
     }
 
     @Test
-    void blocksBeforeFirstRecordBeyondConfiguredPeriod() {
+    void blocksBeforeFirstItemBeyondConfiguredPeriod() {
         FakeClock clock = new FakeClock();
         RecordingSleeper sleeper = new RecordingSleeper(clock);
         BlockingIteratorPacer<String> pacer = new BlockingIteratorPacer<>(
