@@ -357,7 +357,14 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             if (limit <= 0) {
                 return List.of();
             }
-            PendingIndexSelection indexSelection = pendingIndexSelection(tenantId, assignee, group, stepId);
+            String normalizedAssignee = normalizeFilter(assignee);
+            String normalizedGroup = normalizeFilter(group);
+            String normalizedStepId = normalizeFilter(stepId);
+            PendingIndexSelection indexSelection = pendingIndexSelection(
+                tenantId,
+                normalizedAssignee,
+                normalizedGroup,
+                normalizedStepId);
             Map<String, String> names = new HashMap<>(Map.of(
                 "#pendingKey", indexSelection.keyAttribute(),
                 "#status", STATUS,
@@ -373,19 +380,19 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             StringBuilder filter = new StringBuilder("#status <> :completed AND #status <> :failed "
                 + "AND #status <> :timedOut AND #status <> :cancelled AND #status <> :expired "
                 + "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)");
-            if (assignee != null && indexSelection.filterAssignee()) {
+            if (normalizedAssignee != null && indexSelection.filterAssignee()) {
                 names.put("#assignee", ASSIGNEE);
-                values.put(":assignee", avS(assignee));
+                values.put(":assignee", avS(normalizedAssignee));
                 filter.append(" AND #assignee = :assignee");
             }
-            if (group != null && indexSelection.filterGroup()) {
+            if (normalizedGroup != null && indexSelection.filterGroup()) {
                 names.put("#group", GROUP);
-                values.put(":group", avS(group));
+                values.put(":group", avS(normalizedGroup));
                 filter.append(" AND #group = :group");
             }
-            if (stepId != null && indexSelection.filterStepId()) {
+            if (normalizedStepId != null && indexSelection.filterStepId()) {
                 names.put("#stepId", STEP_ID);
-                values.put(":stepId", avS(stepId));
+                values.put(":stepId", avS(normalizedStepId));
                 filter.append(" AND #stepId = :stepId");
             }
             List<AwaitInteractionRecord> records = new ArrayList<>();
@@ -406,7 +413,13 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
                 if (response.items() != null) {
                     for (Map<String, AttributeValue> item : response.items()) {
                         AwaitInteractionRecord record = toRecord(item);
-                        if (matchesPendingQuery(record, tenantId, assignee, group, stepId, System.currentTimeMillis())) {
+                        if (matchesPendingQuery(
+                            record,
+                            tenantId,
+                            normalizedAssignee,
+                            normalizedGroup,
+                            normalizedStepId,
+                            System.currentTimeMillis())) {
                             records.add(record);
                         }
                         if (records.size() >= limit) {
@@ -936,12 +949,23 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         String group,
         String stepId,
         long nowEpochMs) {
+        String normalizedAssignee = normalizeFilter(assignee);
+        String normalizedGroup = normalizeFilter(group);
+        String normalizedStepId = normalizeFilter(stepId);
         return !record.status().terminal()
             && Objects.equals(record.tenantId(), tenantId)
-            && (assignee == null || Objects.equals(record.assignee(), assignee))
-            && (group == null || Objects.equals(record.group(), group))
-            && (stepId == null || Objects.equals(record.stepId(), stepId))
+            && (normalizedAssignee == null || Objects.equals(record.assignee(), normalizedAssignee))
+            && (normalizedGroup == null || Objects.equals(record.group(), normalizedGroup))
+            && (normalizedStepId == null || Objects.equals(record.stepId(), normalizedStepId))
             && !ttlExpired(record, nowEpochMs);
+    }
+
+    private static String normalizeFilter(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private static boolean ttlExpired(AwaitInteractionRecord record, long nowEpochMs) {

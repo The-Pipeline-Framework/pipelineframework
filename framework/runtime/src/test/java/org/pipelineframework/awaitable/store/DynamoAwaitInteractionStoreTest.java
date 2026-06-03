@@ -121,6 +121,30 @@ class DynamoAwaitInteractionStoreTest {
     }
 
     @Test
+    void queryPendingTreatsBlankFiltersAsNotProvided() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoAwaitInteractionStore store = new DynamoAwaitInteractionStore(client, mockConfig());
+        when(client.query(any(QueryRequest.class))).thenReturn(QueryResponse.builder()
+            .items(List.of(item("tenant-a", "interaction-1", "unit-1", null, AwaitInteractionStatus.WAITING, 10_000L, "alice", "finance")))
+            .build());
+
+        List<AwaitInteractionRecord> records = store.queryPending("tenant-a", " ", "", "\t", 10)
+            .await().indefinitely();
+
+        assertEquals(1, records.size());
+        ArgumentCaptor<QueryRequest> captor = ArgumentCaptor.forClass(QueryRequest.class);
+        verify(client).query(captor.capture());
+        QueryRequest request = captor.getValue();
+        assertEquals("await-interaction-pending-by-tenant", request.indexName());
+        assertEquals("query_pending_tenant_key", request.expressionAttributeNames().get("#pendingKey"));
+        assertEquals("tenant-a", request.expressionAttributeValues().get(":pendingKey").s());
+        assertFalse(request.filterExpression().contains("#assignee = :assignee"));
+        assertFalse(request.filterExpression().contains("#group = :group"));
+        assertFalse(request.filterExpression().contains("#stepId = :stepId"));
+        verify(client, never()).scan(any(ScanRequest.class));
+    }
+
+    @Test
     void findTimedOutQueriesDeadlineIndexAcrossTenantsAndRespectsLimit() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         DynamoAwaitInteractionStore store = new DynamoAwaitInteractionStore(client, mockConfig());
@@ -164,6 +188,7 @@ class DynamoAwaitInteractionStoreTest {
         assertTrue(updateExpression.contains("#pendingAssigneeKey"));
         assertTrue(updateExpression.contains("#pendingGroupKey"));
         assertTrue(updateExpression.contains("#pendingStepKey"));
+        assertTrue(updateExpression.contains("#pendingDeadlineSort"));
         assertTrue(updateExpression.contains("#deadlineKey"));
         assertTrue(updateExpression.contains("#deadlineSort"));
         verify(client, never()).scan(any(ScanRequest.class));
