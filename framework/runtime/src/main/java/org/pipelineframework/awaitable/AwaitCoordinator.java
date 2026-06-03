@@ -19,6 +19,8 @@ import org.pipelineframework.awaitable.spi.AwaitTransportAdapter;
 import org.pipelineframework.awaitable.spi.AwaitUnitStore;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
+import org.pipelineframework.telemetry.PipelineTelemetry;
 
 /**
  * Coordinates await unit persistence, interaction dispatch, completion admission, and replay payload loading.
@@ -40,6 +42,9 @@ public class AwaitCoordinator {
 
     @Inject
     AwaitResumeTokenService resumeTokenService;
+
+    @Inject
+    PipelineTelemetry telemetry;
 
     private volatile AwaitInteractionStore resolvedInteractionStore;
     private volatile AwaitUnitStore resolvedUnitStore;
@@ -136,7 +141,8 @@ public class AwaitCoordinator {
                     System.currentTimeMillis()))
                 .onItem().transform(optional -> optional.orElseThrow(() ->
                     new IllegalStateException("Await interaction metadata update lost OCC race: "
-                        + claimedInteraction.interactionId()))));
+                        + claimedInteraction.interactionId())))
+                .onItem().invoke(this::recordInteractionDispatched));
     }
 
     public Uni<AwaitCompletionResult> complete(AwaitCompletionCommand command) {
@@ -178,18 +184,21 @@ public class AwaitCoordinator {
         if (record.status() == AwaitInteractionStatus.TIMED_OUT) {
             return unitStore().markTerminal(record.tenantId(), record.unitId(), AwaitUnitStatus.TIMED_OUT, nowEpochMs)
                 .onItem().transform(optional -> optional.orElseThrow(
-                    () -> new IllegalStateException("Await unit not found for timed-out interaction " + record.unitId())));
+                    () -> new IllegalStateException("Await unit not found for timed-out interaction " + record.unitId())))
+                .onItem().invoke(unit -> recordUnitTerminal(record, unit));
         }
         if (record.status() == AwaitInteractionStatus.FAILED) {
             return unitStore().markTerminal(record.tenantId(), record.unitId(), AwaitUnitStatus.FAILED, nowEpochMs)
                 .onItem().transform(optional -> optional.orElseThrow(
-                    () -> new IllegalStateException("Await unit not found for failed interaction " + record.unitId())));
+                    () -> new IllegalStateException("Await unit not found for failed interaction " + record.unitId())))
+                .onItem().invoke(unit -> recordUnitTerminal(record, unit));
         }
         Uni<Optional<AwaitUnitRecord>> updated = record.itemInteraction()
             ? unitStore().recordItemCompleted(record.tenantId(), record.unitId(), itemCompletionKey(record), nowEpochMs)
             : unitStore().markCompleted(record.tenantId(), record.unitId(), nowEpochMs);
         return updated.onItem().transform(optional -> optional.orElseThrow(
-            () -> new IllegalStateException("Await unit not found while recording completion: " + record.unitId())));
+            () -> new IllegalStateException("Await unit not found while recording completion: " + record.unitId())))
+            .onItem().invoke(unit -> recordCompletionLifecycle(record, unit));
     }
 
     private static String itemCompletionKey(AwaitInteractionRecord record) {
@@ -199,7 +208,8 @@ public class AwaitCoordinator {
     public Uni<AwaitUnitRecord> markDispatchComplete(String tenantId, String unitId, int expectedItemCount, long nowEpochMs) {
         return unitStore().markDispatchComplete(tenantId, unitId, expectedItemCount, nowEpochMs)
             .onItem().transform(optional -> optional.orElseThrow(
-                () -> new IllegalStateException("Await unit not found while completing dispatch: " + unitId)));
+                () -> new IllegalStateException("Await unit not found while completing dispatch: " + unitId)))
+            .onItem().invoke(this::recordUnitDispatchComplete);
     }
 
     public Uni<AwaitUnitRecord> getUnit(String tenantId, String unitId) {
@@ -266,8 +276,101 @@ public class AwaitCoordinator {
                         record.unitId(),
                         AwaitUnitStatus.TIMED_OUT,
                         nowEpochMs)
+                    .onItem().invoke(unit -> unit.ifPresent(value -> recordUnitTerminal(updated.get(), value)))
                     .replaceWith(updated);
             });
+    }
+
+    private void recordInteractionDispatched(AwaitInteractionRecord record) {
+        recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
+            AwaitReplayLifecycleEvent.INTERACTION_DISPATCHED,
+            record.executionId(),
+            record.unitId(),
+            record.stepId(),
+            record.stepIndex(),
+            record.status().name(),
+            record.interactionId(),
+            record.correlationId(),
+            record.transportType(),
+            record.itemIndex(),
+            null,
+            null,
+            null));
+    }
+
+    private void recordUnitDispatchComplete(AwaitUnitRecord unit) {
+        recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
+            AwaitReplayLifecycleEvent.UNIT_DISPATCH_COMPLETE,
+            unit.executionId(),
+            unit.unitId(),
+            unit.stepId(),
+            unit.stepIndex(),
+            unit.status().name(),
+            unit.primaryInteractionId(),
+            null,
+            null,
+            null,
+            unit.expectedItemCount(),
+            unit.completedItemCount(),
+            unit.dispatchComplete()));
+    }
+
+    private void recordCompletionLifecycle(AwaitInteractionRecord record, AwaitUnitRecord unit) {
+        if (record.itemInteraction()) {
+            recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
+                AwaitReplayLifecycleEvent.UNIT_ITEM_COMPLETED,
+                record.executionId(),
+                record.unitId(),
+                record.stepId(),
+                record.stepIndex(),
+                unit.status().name(),
+                record.interactionId(),
+                record.correlationId(),
+                record.transportType(),
+                record.itemIndex(),
+                unit.expectedItemCount(),
+                unit.completedItemCount(),
+                unit.dispatchComplete()));
+        }
+        if (unit.status() == AwaitUnitStatus.COMPLETED) {
+            recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
+                AwaitReplayLifecycleEvent.UNIT_COMPLETED,
+                unit.executionId(),
+                unit.unitId(),
+                unit.stepId(),
+                unit.stepIndex(),
+                unit.status().name(),
+                record.interactionId(),
+                record.correlationId(),
+                record.transportType(),
+                record.itemIndex(),
+                unit.expectedItemCount(),
+                unit.completedItemCount(),
+                unit.dispatchComplete()));
+        }
+    }
+
+    private void recordUnitTerminal(AwaitInteractionRecord record, AwaitUnitRecord unit) {
+        recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
+            AwaitReplayLifecycleEvent.UNIT_TERMINAL,
+            unit.executionId(),
+            unit.unitId(),
+            unit.stepId(),
+            unit.stepIndex(),
+            unit.status().name(),
+            record.interactionId(),
+            record.correlationId(),
+            record.transportType(),
+            record.itemIndex(),
+            unit.expectedItemCount(),
+            unit.completedItemCount(),
+            unit.dispatchComplete()));
+    }
+
+    private void recordAwaitLifecycle(AwaitReplayLifecycleEvent lifecycleEvent) {
+        if (telemetry != null) {
+            telemetry.recordAwaitLifecycle(lifecycleEvent);
+        }
     }
 
     private Uni<AwaitCreateResult> createInteraction(

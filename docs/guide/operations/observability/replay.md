@@ -27,6 +27,13 @@ It is emitted by the framework replay exporter and contains:
   - `success`
   - `cache_hit`
   - `reject`
+  - `await_interaction_dispatched`
+  - `await_unit_dispatch_complete`
+  - `await_execution_waiting`
+  - `await_unit_item_completed`
+  - `await_unit_completed`
+  - `await_resume_released`
+  - `await_unit_terminal`
 
 Replay JSON is the supported offline input for the TPF replay viewer.
 
@@ -80,9 +87,7 @@ TPF emits:
 
 Replay JSON is written from the same runtime semantics by the framework replay exporter.
 
-Await unit note:
-
-Await boundaries park the owning `QUEUE_ASYNC` execution on a durable await unit and resume from that unit after completion admission. Current replay output remains step/event focused; first-class await unit lifecycle visibility in replay and related observability surfaces is tracked in [#313](https://github.com/The-Pipeline-Framework/pipelineframework/issues/313). For the implementation model, see [Await Unit Runtime](/guide/evolve/await-unit-runtime/).
+Await boundaries park the owning `QUEUE_ASYNC` execution on a durable await unit and resume from that unit after completion admission. Replay events include await unit ids, execution ids, interaction ids, step ids, unit status, and expected/completed item counts where the runtime knows them. For the implementation model, see [Await Unit Runtime](/guide/evolve/await-unit-runtime/).
 
 ## Replay exporter configuration
 

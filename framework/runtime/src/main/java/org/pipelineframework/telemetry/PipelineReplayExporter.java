@@ -35,6 +35,13 @@ public interface PipelineReplayExporter {
     default void emit(String runId, PipelineExecutionEvent event) {
     }
 
+    default void emitControlEvent(
+        String pipeline,
+        Instant occurredAt,
+        PipelineReplayTopology topology,
+        PipelineExecutionEvent event) {
+    }
+
     default void runCompleted(
         String runId,
         String pipeline,
