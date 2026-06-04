@@ -35,6 +35,7 @@ import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCoordinator;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
+import org.pipelineframework.awaitable.AwaitUnitStatus;
 import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 import org.pipelineframework.orchestrator.CreateExecutionResult;
@@ -367,8 +368,8 @@ class QueueAsyncCoordinator {
         .onItem().transformToUni(result -> validateAwaitCompletionTenant(result, normalized)
             .onItem().transformToUni(validated -> {
               return awaitCoordinator.recordCompletion(validated.record(), normalized.nowEpochMs())
-                  .onItem().transformToUni(unit -> unit.status() == org.pipelineframework.awaitable.AwaitUnitStatus.COMPLETED
-                      ? resumeAwaitExecution(validated, unit.unitId(), normalized.nowEpochMs())
+                  .onItem().transformToUni(unit -> unit.status() == AwaitUnitStatus.COMPLETED
+                      ? releaseAwaitResume(validated.record(), unit.unitId(), normalized.nowEpochMs()).replaceWith(validated)
                       : Uni.createFrom().item(validated));
             }));
   }
@@ -391,6 +392,7 @@ class QueueAsyncCoordinator {
       ExecutionRecord<Object, Object> record,
       AwaitSuspendedException suspended,
       String transitionKey) {
+    long nowEpochMs = System.currentTimeMillis();
     return executionStateStore.markWaitingExternal(
             record.tenantId(),
             record.executionId(),
@@ -398,7 +400,7 @@ class QueueAsyncCoordinator {
             transitionKey,
             suspended.unitId(),
             suspended.stepIndex(),
-            System.currentTimeMillis())
+            nowEpochMs)
         .onItem().transformToUni(updated -> {
           if (updated.isPresent()) {
             LOG.infof(
@@ -420,7 +422,7 @@ class QueueAsyncCoordinator {
                 null,
                 null,
                 null));
-            return Uni.createFrom().voidItem();
+            return releaseAlreadyCompletedAwaitUnit(record, suspended, nowEpochMs);
           }
           return Uni.createFrom().failure(new IllegalStateException(
               "Failed to persist WAITING_EXTERNAL state for execution "
@@ -494,16 +496,62 @@ class QueueAsyncCoordinator {
     return items.getFirst();
   }
 
-  private Uni<AwaitCompletionResult> resumeAwaitExecution(
-      AwaitCompletionResult result,
+  private Uni<Void> releaseAlreadyCompletedAwaitUnit(
+      ExecutionRecord<Object, Object> record,
+      AwaitSuspendedException suspended,
+      long nowEpochMs) {
+    return awaitCoordinator.getUnit(record.tenantId(), suspended.unitId())
+        .onItem().transformToUni(unit -> {
+          if (unit == null || unit.status() != AwaitUnitStatus.COMPLETED) {
+            return Uni.createFrom().voidItem();
+          }
+          return releaseAwaitResume(
+              record.tenantId(),
+              record.executionId(),
+              unit.unitId(),
+              unit.stepId(),
+              suspended.stepIndex(),
+              null,
+              null,
+              null,
+              null,
+              nowEpochMs);
+        });
+  }
+
+  private Uni<Void> releaseAwaitResume(
+      AwaitInteractionRecord record,
       String awaitUnitId,
       long nowEpochMs) {
-    AwaitInteractionRecord record = result.record();
+    return releaseAwaitResume(
+        record.tenantId(),
+        record.executionId(),
+        awaitUnitId,
+        record.stepId(),
+        record.stepIndex(),
+        record.interactionId(),
+        record.correlationId(),
+        record.transportType(),
+        record.itemIndex(),
+        nowEpochMs);
+  }
+
+  private Uni<Void> releaseAwaitResume(
+      String tenantId,
+      String executionId,
+      String awaitUnitId,
+      String stepId,
+      int stepIndex,
+      String interactionId,
+      String correlationId,
+      String transportType,
+      Integer itemIndex,
+      long nowEpochMs) {
     return executionStateStore.markAwaitCompleted(
-            record.tenantId(),
-            record.executionId(),
+            tenantId,
+            executionId,
             awaitUnitId,
-            record.stepIndex() + 1,
+            stepIndex + 1,
             nowEpochMs)
         .onItem().transformToUni(updated -> {
           if (updated.isPresent()) {
@@ -514,24 +562,29 @@ class QueueAsyncCoordinator {
                 updated.get().currentStepIndex());
             recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
                 AwaitReplayLifecycleEvent.RESUME_RELEASED,
-                record.executionId(),
+                executionId,
                 awaitUnitId,
-                record.stepId(),
-                record.stepIndex(),
+                stepId,
+                stepIndex,
                 updated.get().status().name(),
-                record.interactionId(),
-                record.correlationId(),
-                record.transportType(),
-                record.itemIndex(),
+                interactionId,
+                correlationId,
+                transportType,
+                itemIndex,
                 null,
                 null,
                 null));
             return workDispatcher.enqueueNow(new ExecutionWorkItem(
                     updated.get().tenantId(),
                     updated.get().executionId()))
-                .replaceWith(result);
+                .replaceWithVoid();
           }
-          return Uni.createFrom().item(result);
+          LOG.debugf(
+              "Await resume release for execution %s awaitUnitId=%s at stepIndex=%d produced no state update; treating as idempotent no-op",
+              executionId,
+              awaitUnitId,
+              stepIndex);
+          return Uni.createFrom().voidItem();
         });
   }
 

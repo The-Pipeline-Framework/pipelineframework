@@ -2454,10 +2454,17 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "Expected await item completion event to include unit id.");
         assertTrue(attributes.containsKey("tpf.await.interaction_id"),
                 "Expected await item completion event to include interaction id.");
-        assertTrue(attributes.containsKey("tpf.await.expected_item_count"),
-                "Expected await item completion event to include expected item count.");
         assertTrue(attributes.containsKey("tpf.await.completed_item_count"),
                 "Expected await item completion event to include completed item count.");
+        assertTrue(
+                replayDocument.events().stream()
+                        .filter(event -> AWAIT_UNIT_ITEM_COMPLETED.equals(event.event())
+                                || AWAIT_UNIT_DISPATCH_COMPLETE.equals(event.event())
+                                || AWAIT_UNIT_COMPLETED.equals(event.event()))
+                        .map(PipelineExecutionEvent::attributes)
+                        .anyMatch(eventAttributes -> eventAttributes != null
+                                && eventAttributes.containsKey("tpf.await.expected_item_count")),
+                "Expected await lifecycle events to include expected item count once dispatch size is known.");
     }
 
     private void assertReplayEvent(PipelineReplayDocument replayDocument, String eventName) {
