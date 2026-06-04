@@ -112,6 +112,14 @@ public class PipelineRunner implements AutoCloseable {
     }
 
     public ExecutionResult runFromStepWithContext(Object input, List<Object> steps, int startStepIndex) {
+        return runFromStepUntilWithContext(input, steps, startStepIndex, steps == null ? 0 : steps.size());
+    }
+
+    public ExecutionResult runFromStepUntilWithContext(
+        Object input,
+        List<Object> steps,
+        int startStepIndex,
+        int stopBeforeStepIndex) {
         Objects.requireNonNull(steps, "Steps list must not be null");
         if (!(input instanceof Uni<?> || input instanceof Multi<?>)) {
             throw new IllegalArgumentException(MessageFormat.format(
@@ -122,6 +130,9 @@ public class PipelineRunner implements AutoCloseable {
         List<Object> orderedSteps = stepOrderer.orderSteps(steps);
         if (startStepIndex < 0 || startStepIndex > orderedSteps.size()) {
             throw new IllegalArgumentException("startStepIndex is out of range: " + startStepIndex);
+        }
+        if (stopBeforeStepIndex < startStepIndex || stopBeforeStepIndex > orderedSteps.size()) {
+            throw new IllegalArgumentException("stopBeforeStepIndex is out of range: " + stopBeforeStepIndex);
         }
 
         Object current = input;
@@ -134,7 +145,7 @@ public class PipelineRunner implements AutoCloseable {
         PipelineContext contextSnapshot = PipelineContextHolder.get();
         CacheReadSupport cacheReadSupport = cacheSupportFactory.buildCacheReadSupport();
         AwaitExecutionContext awaitContext = AwaitExecutionContextHolder.get();
-        for (int index = startStepIndex; index < orderedSteps.size(); index++) {
+        for (int index = startStepIndex; index < stopBeforeStepIndex; index++) {
             Object step = orderedSteps.get(index);
             if (step == null) {
                 logger.warn("Warning: Found null step in configuration, skipping...");

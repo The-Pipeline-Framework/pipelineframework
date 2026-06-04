@@ -39,11 +39,17 @@ import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
+import org.pipelineframework.awaitable.AwaitPayloadSupport;
 import org.pipelineframework.awaitable.AwaitCoordinator;
+import org.pipelineframework.awaitable.AwaitUnitRecord;
+import org.pipelineframework.orchestrator.ExecutionInputShape;
+import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
+import org.pipelineframework.step.StepManyToMany;
+import org.pipelineframework.step.functional.ManyToOne;
 
 /**
  * Service responsible for executing pipeline logic.
@@ -62,6 +68,9 @@ public class PipelineExecutionService {
   /** Runner responsible for executing pipeline steps. */
   @Inject
   protected PipelineRunner pipelineRunner;
+
+  @Inject
+  PipelineStepOrderer stepOrderer;
 
   /** Health check service to verify dependent services. */
   @Inject
@@ -214,7 +223,45 @@ public class PipelineExecutionService {
    * Completes a durable await interaction and schedules owning execution continuation.
    */
   public Uni<AwaitCompletionResult> completeAwaitInteraction(AwaitCompletionCommand command) {
-    return queueAsyncCoordinator.completeAwait(command);
+    return queueAsyncCoordinator.completeAwait(command, new AwaitItemContinuationHandler() {
+      @Override
+      public Uni<Void> continueAwaitItem(
+          AwaitInteractionRecord record,
+          AwaitUnitRecord unit,
+          int nextStepIndex,
+          java.util.Optional<ExecutionRecord<Object, Object>> parent,
+          long nowEpochMs) {
+        if (parent.isEmpty()) {
+          return Uni.createFrom().voidItem();
+        }
+        List<Object> steps = loadStepsForExecution();
+        List<Object> orderedSteps = stepOrderer.orderSteps(steps);
+        int aggregateStepIndex = firstAggregateStepIndex(orderedSteps, nextStepIndex);
+        Object awaitPayload = coerceAwaitItemPayload(record);
+        ExecutionInputSnapshot continuationInput = new ExecutionInputSnapshot(ExecutionInputShape.UNI, awaitPayload);
+        return executePipelineSegment(
+                Uni.createFrom().item(awaitPayload),
+                steps,
+                nextStepIndex,
+                aggregateStepIndex)
+            .onItem().transformToUni(outputs -> queueAsyncCoordinator.recordAwaitItemContinuation(
+                record,
+                unit,
+                aggregateStepIndex,
+                continuationInput,
+                outputs,
+                nowEpochMs));
+      }
+
+      @Override
+      public Uni<Void> releaseAwaitParentIfReady(
+          ExecutionRecord<Object, Object> parent,
+          AwaitUnitRecord unit,
+          int nextStepIndex,
+          long nowEpochMs) {
+        return releaseItemizedAwaitParentIfReady(parent, unit, nextStepIndex, nowEpochMs);
+      }
+    });
   }
 
   /**
@@ -248,7 +295,29 @@ public class PipelineExecutionService {
    * Processes one execution work item and advances lifecycle state.
    */
   public Uni<Void> processExecutionWorkItem(ExecutionWorkItem workItem) {
-    return queueAsyncCoordinator.processExecutionWorkItem(workItem, this::executePipelineStreamingFromRecord);
+    return queueAsyncCoordinator.processExecutionWorkItem(
+        workItem,
+        this::executePipelineStreamingFromRecord,
+        new AwaitItemContinuationHandler() {
+          @Override
+          public Uni<Void> continueAwaitItem(
+              AwaitInteractionRecord record,
+              AwaitUnitRecord unit,
+              int nextStepIndex,
+              java.util.Optional<ExecutionRecord<Object, Object>> parent,
+              long nowEpochMs) {
+            return Uni.createFrom().voidItem();
+          }
+
+          @Override
+          public Uni<Void> releaseAwaitParentIfReady(
+              ExecutionRecord<Object, Object> parent,
+              AwaitUnitRecord unit,
+              int nextStepIndex,
+              long nowEpochMs) {
+            return releaseItemizedAwaitParentIfReady(parent, unit, nextStepIndex, nowEpochMs);
+          }
+        });
   }
 
   /**
@@ -316,7 +385,7 @@ public class PipelineExecutionService {
 
   private Multi<?> executePipelineStreamingFromRecord(ExecutionRecord<Object, Object> record) {
     return Multi.createFrom().deferred(() -> {
-      Uni<Object> sourcePayload = record.currentStepIndex() > 0
+      Uni<Object> sourcePayload = record.awaitUnitId() != null
           ? awaitCoordinator.loadResumePayload(record.tenantId(), record.awaitUnitId())
           : Uni.createFrom().item(record.inputPayload());
       return sourcePayload.onItem().transformToMulti(payload -> {
@@ -357,12 +426,24 @@ public class PipelineExecutionService {
   }
 
   private Object executePipelineStreamingInternalFromStep(Object input, int startStepIndex) {
-    StopWatch watch = new StopWatch();
     List<Object> steps = loadStepsForExecution();
     if (steps == null) {
       return Multi.createFrom().failure(new IllegalStateException("Pipeline steps could not be loaded."));
     }
-    PipelineRunner.ExecutionResult executionResult = pipelineRunner.runFromStepWithContext(input, steps, startStepIndex);
+    return executePipelineStreamingInternalFromStep(input, steps, startStepIndex, steps.size());
+  }
+
+  private Object executePipelineStreamingInternalFromStep(
+      Object input,
+      List<Object> steps,
+      int startStepIndex,
+      int stopBeforeStepIndex) {
+    StopWatch watch = new StopWatch();
+    if (steps == null) {
+      return Multi.createFrom().failure(new IllegalStateException("Pipeline steps could not be loaded."));
+    }
+    PipelineRunner.ExecutionResult executionResult =
+        pipelineRunner.runFromStepUntilWithContext(input, steps, startStepIndex, stopBeforeStepIndex);
     Object result = executionResult.result();
     if (result instanceof Multi<?> multi) {
       return executionHooks.attachMultiHooks(multi, watch, executionResult.telemetryContext());
@@ -377,6 +458,70 @@ public class PipelineExecutionService {
             startStepIndex,
             resultType)));
     return executionHooks.attachMultiHooks(failed, watch, executionResult.telemetryContext());
+  }
+
+  private Uni<List<?>> executePipelineSegment(Object input, List<Object> steps, int startStepIndex, int stopBeforeStepIndex) {
+    Object result = executePipelineStreamingInternalFromStep(input, steps, startStepIndex, stopBeforeStepIndex);
+    if (result instanceof Multi<?> multi) {
+      return multi.collect().asList().onItem().transform(list -> (List<?>) list);
+    }
+    if (result instanceof Uni<?> uni) {
+      return uni.toMulti().collect().asList().onItem().transform(list -> (List<?>) list);
+    }
+    return Uni.createFrom().failure(new IllegalStateException("Pipeline segment returned unsupported result"));
+  }
+
+  private static int firstAggregateStepIndex(List<Object> steps, int startStepIndex) {
+    if (steps == null) {
+      return startStepIndex;
+    }
+    for (int index = Math.max(0, startStepIndex); index < steps.size(); index++) {
+      Object step = steps.get(index);
+      if (step instanceof ManyToOne<?, ?> || step instanceof StepManyToMany<?, ?>) {
+        return index;
+      }
+    }
+    return steps.size();
+  }
+
+  private Object coerceAwaitItemPayload(AwaitInteractionRecord record) {
+    try {
+      ClassLoader loader = Thread.currentThread().getContextClassLoader();
+      if (loader == null) {
+        loader = AwaitPayloadSupport.class.getClassLoader();
+      }
+      Class<?> outputType = AwaitPayloadSupport.resolvePayloadClass(
+          record.outputType(),
+          loader);
+      return AwaitPayloadSupport.coercePayload(record.responsePayload(), outputType);
+    } catch (ClassNotFoundException e) {
+      throw new IllegalStateException(
+          "Failed resolving await output type " + record.outputType()
+              + " for interaction " + record.interactionId(),
+          e);
+    }
+  }
+
+  private Uni<Void> releaseItemizedAwaitParentIfReady(
+      ExecutionRecord<Object, Object> parent,
+      AwaitUnitRecord unit,
+      int nextStepIndex,
+      long nowEpochMs) {
+    List<Object> steps = loadStepsForExecution();
+    if (steps == null) {
+      return Uni.createFrom().failure(new IllegalStateException(
+          "Failed loading pipeline steps for await itemized parent release executionId="
+              + parent.executionId()
+              + ", awaitUnitId="
+              + unit.unitId()));
+    }
+    List<Object> orderedSteps = stepOrderer.orderSteps(steps);
+    int aggregateStepIndex = firstAggregateStepIndex(orderedSteps, nextStepIndex);
+    return queueAsyncCoordinator.releaseItemizedAwaitParentIfReady(
+        parent,
+        unit,
+        aggregateStepIndex,
+        nowEpochMs);
   }
 
   private void restoreAwaitContext(AwaitExecutionContext previous) {
