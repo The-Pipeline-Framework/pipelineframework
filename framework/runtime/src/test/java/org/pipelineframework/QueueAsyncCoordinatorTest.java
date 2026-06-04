@@ -43,6 +43,8 @@ import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.awaitable.AwaitUnitRecord;
 import org.pipelineframework.awaitable.AwaitUnitStatus;
 import org.pipelineframework.checkpoint.CheckpointPublicationService;
+import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
+import org.pipelineframework.telemetry.PipelineTelemetry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -82,6 +84,9 @@ class QueueAsyncCoordinatorTest {
     private CheckpointPublicationService checkpointPublicationService;
 
     @Mock
+    private PipelineTelemetry telemetry;
+
+    @Mock
     private Instance<ExecutionStateStore> executionStateStores;
 
     @Mock
@@ -107,6 +112,7 @@ class QueueAsyncCoordinatorTest {
         coordinator.workDispatcher = workDispatcher;
         coordinator.deadLetterPublisher = deadLetterPublisher;
         coordinator.awaitCoordinator = awaitCoordinator;
+        coordinator.telemetry = telemetry;
         coordinator.checkpointPublicationService = checkpointPublicationService;
         coordinator.executionStateStores = executionStateStores;
         coordinator.workDispatchers = workDispatchers;
@@ -281,6 +287,8 @@ class QueueAsyncCoordinatorTest {
                 org.mockito.ArgumentMatchers.eq(0),
                 org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(awaitCoordinator.getUnit("tenant-1", "unit-1"))
+            .thenReturn(Uni.createFrom().item(awaitUnit("unit-1", AwaitUnitStatus.WAITING_EXTERNAL, 1, 0, false, null)));
 
         coordinator.processExecutionWorkItem(
                 new ExecutionWorkItem("tenant-1", "exec-await"),
@@ -299,6 +307,106 @@ class QueueAsyncCoordinatorTest {
             org.mockito.ArgumentMatchers.eq("unit-1"),
             org.mockito.ArgumentMatchers.eq(0),
             org.mockito.ArgumentMatchers.anyLong());
+        verify(executionStateStore, never()).markAwaitCompleted(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyInt(),
+            org.mockito.ArgumentMatchers.anyLong());
+        verify(workDispatcher, never()).enqueueNow(any());
+    }
+
+    @Test
+    void processExecutionWorkItemReleasesResumeWhenAwaitUnitCompletedBeforeWaitingPersists() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.leaseMs()).thenReturn(1000L);
+        ExecutionRecord<Object, Object> claimed = createRecord("tenant-1", "exec-await", "key-await");
+        ExecutionRecord<Object, Object> waiting = new ExecutionRecord<>(
+            "tenant-1",
+            "exec-await",
+            "key-await",
+            ExecutionResultShape.SINGLE,
+            ExecutionStatus.WAITING_EXTERNAL,
+            1L,
+            2,
+            0,
+            null,
+            0L,
+            Long.MAX_VALUE,
+            "exec-await:0:0",
+            "input",
+            "unit-1",
+            null,
+            null,
+            null,
+            1L,
+            2L,
+            99999999L);
+        ExecutionRecord<Object, Object> resumed = new ExecutionRecord<>(
+            "tenant-1",
+            "exec-await",
+            "key-await",
+            ExecutionResultShape.SINGLE,
+            ExecutionStatus.QUEUED,
+            2L,
+            3,
+            0,
+            null,
+            0L,
+            3L,
+            "exec-await:0:0",
+            "input",
+            "unit-1",
+            null,
+            null,
+            null,
+            1L,
+            3L,
+            99999999L);
+        when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(executionStateStore.markWaitingExternal(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-await"),
+                org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq("exec-await:0:0"),
+                org.mockito.ArgumentMatchers.eq("unit-1"),
+                org.mockito.ArgumentMatchers.eq(2),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(waiting)));
+        when(awaitCoordinator.getUnit("tenant-1", "unit-1"))
+            .thenReturn(Uni.createFrom().item(awaitUnit("unit-1", AwaitUnitStatus.COMPLETED, 10, 10, true, null)));
+        when(executionStateStore.markAwaitCompleted(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-await"),
+                org.mockito.ArgumentMatchers.eq("unit-1"),
+                org.mockito.ArgumentMatchers.eq(3),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(resumed)));
+        when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
+
+        coordinator.processExecutionWorkItem(
+                new ExecutionWorkItem("tenant-1", "exec-await"),
+                record -> Multi.createFrom().failure(new AwaitSuspendedException(
+                    "tenant-1",
+                    "exec-await",
+                    "unit-1",
+                    2)))
+            .await().indefinitely();
+
+        verify(executionStateStore).markAwaitCompleted(
+            org.mockito.ArgumentMatchers.eq("tenant-1"),
+            org.mockito.ArgumentMatchers.eq("exec-await"),
+            org.mockito.ArgumentMatchers.eq("unit-1"),
+            org.mockito.ArgumentMatchers.eq(3),
+            org.mockito.ArgumentMatchers.anyLong());
+        verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-1", "exec-await"));
+        ArgumentCaptor<AwaitReplayLifecycleEvent> lifecycleCaptor =
+            ArgumentCaptor.forClass(AwaitReplayLifecycleEvent.class);
+        verify(telemetry, org.mockito.Mockito.times(2)).recordAwaitLifecycle(lifecycleCaptor.capture());
+        assertEquals(
+            List.of(AwaitReplayLifecycleEvent.EXECUTION_WAITING, AwaitReplayLifecycleEvent.RESUME_RELEASED),
+            lifecycleCaptor.getAllValues().stream().map(AwaitReplayLifecycleEvent::eventName).toList());
     }
 
     @Test
@@ -317,6 +425,8 @@ class QueueAsyncCoordinatorTest {
                 org.mockito.ArgumentMatchers.eq(0),
                 org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(awaitCoordinator.getUnit("tenant-1", "unit-1"))
+            .thenReturn(Uni.createFrom().item(awaitUnit("unit-1", AwaitUnitStatus.WAITING_EXTERNAL, 1, 0, false, null)));
 
         coordinator.processExecutionWorkItem(
                 new ExecutionWorkItem("tenant-1", "exec-await"),
