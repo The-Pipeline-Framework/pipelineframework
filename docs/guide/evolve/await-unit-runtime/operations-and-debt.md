@@ -32,4 +32,3 @@ Do not use checkpoint handoff to model a human approval, webhook callback, or br
 1. [#304](https://github.com/The-Pipeline-Framework/pipelineframework/issues/304): generated common modules should not trigger `com.google.protobuf` split-package warnings.
 2. [#305](https://github.com/The-Pipeline-Framework/pipelineframework/issues/305): template generator should scaffold union DTO/mappers for REST await outputs.
 3. [#311](https://github.com/The-Pipeline-Framework/pipelineframework/issues/311): template generator should not emit confusing inactive runtime mapping variants.
-4. [#313](https://github.com/The-Pipeline-Framework/pipelineframework/issues/313): expose await unit lifecycle in replay and observability surfaces.

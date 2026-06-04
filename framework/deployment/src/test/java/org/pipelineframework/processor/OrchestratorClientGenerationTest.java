@@ -83,7 +83,16 @@ class OrchestratorClientGenerationTest {
         Path projectRoot = initProjectRoot();
         Path moduleDir = projectRoot.resolve("test-module");
         Path generatedSourcesDir = moduleDir.resolve("target").resolve("generated-sources").resolve("pipeline");
+        Path moduleResourcesDir = moduleDir.resolve("src").resolve("main").resolve("resources");
         Files.createDirectories(generatedSourcesDir);
+        Files.createDirectories(moduleResourcesDir);
+
+        String moduleOverrides = """
+            pipeline.module.search-svc.host=${PIPELINE_RUNTIME_HOST:127.0.0.1}
+            pipeline.module.search-svc.port=${PIPELINE_RUNTIME_PORT:9000}
+            pipeline.module.search-svc.steps=process-crawl-source
+            """;
+        Files.writeString(moduleResourcesDir.resolve("application.properties"), moduleOverrides);
 
         Files.copy(resourcePath("pipeline-search.yaml"), projectRoot.resolve("pipeline.yaml"));
 
@@ -127,6 +136,14 @@ class OrchestratorClientGenerationTest {
         Path orchestratorClientDir = generatedSourcesDir.resolve("orchestrator-client");
         assertTrue(hasGeneratedClass(orchestratorClientDir, "ProcessCrawlSourceRestClientStep"));
         assertTrue(hasGeneratedClass(orchestratorClientDir, "PersistenceRawDocumentSideEffectRestClientStep"));
+
+        JavaFileObject propertiesFile = compilation.generatedFile(
+            StandardLocation.CLASS_OUTPUT,
+            "META-INF/pipeline",
+            "orchestrator-clients.properties").orElseThrow();
+        String propertiesContent = propertiesFile.getCharContent(true).toString();
+        assertTrue(propertiesContent.contains(
+            "quarkus.rest-client.process-crawl-source.url=https://${PIPELINE_RUNTIME_HOST:127.0.0.1}:${PIPELINE_RUNTIME_PORT:9000}"));
     }
 
     @Test
@@ -200,6 +217,83 @@ class OrchestratorClientGenerationTest {
             "quarkus.grpc.clients.process-parse-document.port=8444"));
         assertTrue(propertiesContent.contains(
             "tls-configuration-name=${pipeline.client.tls-configuration-name:pipeline-client}"));
+    }
+
+    @Test
+    void preservesExternalizedModuleEndpointExpressions() throws IOException {
+        Path projectRoot = initProjectRoot();
+        Path moduleDir = projectRoot.resolve("test-module");
+        Path generatedSourcesDir = moduleDir.resolve("target").resolve("generated-sources").resolve("pipeline");
+        Path moduleResourcesDir = moduleDir.resolve("src").resolve("main").resolve("resources");
+        Files.createDirectories(generatedSourcesDir);
+        Files.createDirectories(moduleResourcesDir);
+
+        String moduleOverrides = """
+            pipeline.module.pipeline-runtime-svc.host=${PIPELINE_RUNTIME_HOST:127.0.0.1}
+            pipeline.module.pipeline-runtime-svc.port=${PIPELINE_RUNTIME_GRPC_PORT:9000}
+            pipeline.module.pipeline-runtime-svc.steps=process-crawl-source
+            pipeline.module.invalid-svc.port=not-a-port
+            pipeline.module.invalid-svc.steps=process-parse-document
+            """;
+        Files.writeString(moduleResourcesDir.resolve("application.properties"), moduleOverrides);
+
+        Path pipelineYaml = projectRoot.resolve("pipeline.yaml");
+        String pipelineConfig = Files.readString(resourcePath("pipeline-search.yaml"))
+            .replace("transport: \"REST\"", "transport: \"GRPC\"");
+        Files.writeString(pipelineYaml, stripAspectsSection(pipelineConfig));
+
+        Compilation compilation = Compiler.javac()
+            .withProcessors(new PipelineStepProcessor())
+            .withOptions(
+                "-Apipeline.generatedSourcesDir=" + generatedSourcesDir,
+                "-Aprotobuf.descriptor.file=" + resourcePath("descriptor_set_search.dsc"))
+            .compile(
+                JavaFileObjects.forSourceString(
+                    "org.example.OrchestratorMarker",
+                    """
+                        package org.example;
+
+                        import org.pipelineframework.annotation.PipelineOrchestrator;
+
+                        @PipelineOrchestrator
+                        public class OrchestratorMarker {
+                        }
+                        """),
+                searchServiceStub("ProcessCrawlSourceService", "CrawlRequest", "RawDocument"),
+                searchServiceStub("ProcessParseDocumentService", "RawDocument", "ParsedDocument"),
+                searchServiceStub("ProcessTokenizeContentService", "ParsedDocument", "TokenBatch"),
+                searchServiceStub("ProcessIndexDocumentService", "TokenBatch", "IndexAck"),
+                domainStub("CrawlRequest"),
+                domainStub("RawDocument"),
+                domainStub("ParsedDocument"),
+                domainStub("TokenBatch"),
+                domainStub("IndexAck"),
+                dtoStub("CrawlRequestDto"),
+                dtoStub("RawDocumentDto"),
+                dtoStub("ParsedDocumentDto"),
+                dtoStub("TokenBatchDto"),
+                dtoStub("IndexAckDto"),
+                mapperStub("CrawlRequestMapper", "CrawlRequest", "CrawlRequestDto"),
+                mapperStub("RawDocumentMapper", "RawDocument", "RawDocumentDto"),
+                mapperStub("ParsedDocumentMapper", "ParsedDocument", "ParsedDocumentDto"),
+                mapperStub("TokenBatchMapper", "TokenBatch", "TokenBatchDto"),
+                mapperStub("IndexAckMapper", "IndexAck", "IndexAckDto"));
+
+        assertThat(compilation).succeeded();
+        assertThat(compilation).hadWarningContaining("Invalid port for module 'invalid-svc'");
+
+        JavaFileObject propertiesFile = compilation.generatedFile(
+            StandardLocation.CLASS_OUTPUT,
+            "META-INF/pipeline",
+            "orchestrator-clients.properties").orElseThrow();
+        String propertiesContent = propertiesFile.getCharContent(true).toString();
+
+        assertTrue(propertiesContent.contains(
+            "quarkus.grpc.clients.process-crawl-source.host=${PIPELINE_RUNTIME_HOST:127.0.0.1}"));
+        assertTrue(propertiesContent.contains(
+            "quarkus.grpc.clients.process-crawl-source.port=${PIPELINE_RUNTIME_GRPC_PORT:9000}"));
+        assertTrue(propertiesContent.contains(
+            "quarkus.grpc.clients.process-parse-document.port=8445"));
     }
 
     private Path initProjectRoot() throws IOException {

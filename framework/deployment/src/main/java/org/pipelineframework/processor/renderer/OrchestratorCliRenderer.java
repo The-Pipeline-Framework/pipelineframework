@@ -8,7 +8,7 @@ import com.squareup.javapoet.*;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.OrchestratorBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
 
 /**
@@ -43,9 +43,9 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
      */
     @Override
     public void render(OrchestratorBinding binding, GenerationContext ctx) throws IOException {
-        TransportMode transportMode = TransportMode.fromStringOptional(binding.normalizedTransport()).orElse(TransportMode.GRPC);
-        boolean restMode = transportMode == TransportMode.REST;
-        boolean localMode = transportMode == TransportMode.LOCAL;
+        PipelineTransport transportMode = PipelineTransport.fromStringOptional(binding.normalizedTransport()).orElse(PipelineTransport.GRPC);
+        boolean restMode = transportMode == PipelineTransport.REST;
+        boolean localMode = transportMode == PipelineTransport.LOCAL;
         ClassName pipelineExecutionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
         ClassName orchestratorConfig = ClassName.get("org.pipelineframework.orchestrator", "PipelineOrchestratorConfig");
         ClassName orchestratorMode = ClassName.get("org.pipelineframework.orchestrator", "OrchestratorMode");

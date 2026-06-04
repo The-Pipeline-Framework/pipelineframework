@@ -87,6 +87,12 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
     private static final Logger LOG = Logger.getLogger(AbstractCsvPaymentsEndToEnd.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final String AWAIT_INTERACTION_DISPATCHED = "await_interaction_dispatched";
+    private static final String AWAIT_UNIT_DISPATCH_COMPLETE = "await_unit_dispatch_complete";
+    private static final String AWAIT_EXECUTION_WAITING = "await_execution_waiting";
+    private static final String AWAIT_UNIT_ITEM_COMPLETED = "await_unit_item_completed";
+    private static final String AWAIT_UNIT_COMPLETED = "await_unit_completed";
+    private static final String AWAIT_RESUME_RELEASED = "await_resume_released";
 
     private static final Network network = Network.newNetwork();
     private static final String TEST_E2E_DIR = System.getProperty("user.dir") + "/target/test-e2e";
@@ -2300,8 +2306,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
         }
 
         shiftedEvents.sort((left, right) -> {
-            if (left.startTime() != right.startTime()) {
-                return Double.compare(left.startTime(), right.startTime());
+            double leftTime = playbackTimeForEvent(left);
+            double rightTime = playbackTimeForEvent(right);
+            if (leftTime != rightTime) {
+                return Double.compare(leftTime, rightTime);
             }
             long leftSequence = left.sequence() == null ? 0 : left.sequence();
             long rightSequence = right.sequence() == null ? 0 : right.sequence();
@@ -2427,12 +2435,50 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertTrue(topology.transitions().stream().anyMatch(transition ->
                         "store".equals(transition.relationKind())),
                 "Expected store transitions in merged replay topology.");
+        assertReplayLifecycleEvents(replayDocument);
+    }
+
+    private void assertReplayLifecycleEvents(PipelineReplayDocument replayDocument) {
+        assertReplayEvent(replayDocument, AWAIT_INTERACTION_DISPATCHED);
+        assertReplayEvent(replayDocument, AWAIT_UNIT_DISPATCH_COMPLETE);
+        assertReplayEvent(replayDocument, AWAIT_EXECUTION_WAITING);
+        assertReplayEvent(replayDocument, AWAIT_UNIT_ITEM_COMPLETED);
+        assertReplayEvent(replayDocument, AWAIT_UNIT_COMPLETED);
+        assertReplayEvent(replayDocument, AWAIT_RESUME_RELEASED);
+        PipelineExecutionEvent itemCompleted = replayDocument.events().stream()
+                .filter(event -> AWAIT_UNIT_ITEM_COMPLETED.equals(event.event()))
+                .findFirst()
+                .orElseThrow();
+        Map<String, String> attributes = itemCompleted.attributes();
+        assertTrue(attributes != null && attributes.containsKey("tpf.await.unit_id"),
+                "Expected await item completion event to include unit id.");
+        assertTrue(attributes.containsKey("tpf.await.interaction_id"),
+                "Expected await item completion event to include interaction id.");
+        assertTrue(attributes.containsKey("tpf.await.expected_item_count"),
+                "Expected await item completion event to include expected item count.");
+        assertTrue(attributes.containsKey("tpf.await.completed_item_count"),
+                "Expected await item completion event to include completed item count.");
+    }
+
+    private void assertReplayEvent(PipelineReplayDocument replayDocument, String eventName) {
+        assertTrue(
+                replayDocument.events().stream().anyMatch(event -> eventName.equals(event.event())),
+                "Expected merged replay to contain " + eventName + " events.");
     }
 
     private static boolean isAwaitSuspensionFragment(PipelineReplayDocument document) {
         return document != null
                 && "failed".equals(document.status())
                 && "org.pipelineframework.awaitable.AwaitSuspendedException".equals(document.failureType());
+    }
+
+    private static double playbackTimeForEvent(PipelineExecutionEvent event) {
+        if (event == null) {
+            return 0d;
+        }
+        return "success".equals(event.event()) || "error".equals(event.event())
+                ? event.endTime()
+                : event.startTime();
     }
 
     private void assertReplayStepEvents(PipelineReplayDocument replayDocument, String stepName) {

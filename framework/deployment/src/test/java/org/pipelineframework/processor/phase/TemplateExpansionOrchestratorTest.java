@@ -79,7 +79,7 @@ class TemplateExpansionOrchestratorTest {
         PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
         ctx.setPluginHost(true);
         // For local transport mode, plugins are colocated
-        ctx.setTransportMode(org.pipelineframework.processor.ir.TransportMode.LOCAL);
+        ctx.setTransportMode(org.pipelineframework.processor.ir.PipelineTransport.LOCAL);
         
         List<PipelineStepModel> baseModels = List.of(TestModelFactory.createTestModel("TestService"));
         
@@ -112,7 +112,7 @@ class TemplateExpansionOrchestratorTest {
         ctx.setPluginHost(true);
         
         // Test with monolith layout
-        ctx.setTransportMode(org.pipelineframework.processor.ir.TransportMode.GRPC);
+        ctx.setTransportMode(org.pipelineframework.processor.ir.PipelineTransport.GRPC);
         // Without monolith mapping, this should behave differently than with monolith
         
         List<PipelineStepModel> baseModels = List.of(TestModelFactory.createTestModel("TestService"));

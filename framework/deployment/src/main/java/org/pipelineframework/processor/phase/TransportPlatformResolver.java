@@ -5,7 +5,7 @@ import javax.annotation.processing.Messager;
 import javax.tools.Diagnostic;
 
 import org.pipelineframework.config.PlatformMode;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 
 /**
  * Resolves transport and platform modes from configuration values.
@@ -20,17 +20,17 @@ class TransportPlatformResolver {
      * @param messager the messager for warning reporting, may be null
      * @return the resolved transport mode, defaults to GRPC
      */
-    TransportMode resolveTransport(String value, Messager messager) {
+    PipelineTransport resolveTransport(String value, Messager messager) {
         if (value == null || value.isBlank()) {
-            return TransportMode.GRPC;
+            return PipelineTransport.GRPC;
         }
-        Optional<TransportMode> mode = TransportMode.fromStringOptional(value);
+        Optional<PipelineTransport> mode = PipelineTransport.fromStringOptional(value);
         if (mode.isEmpty()) {
             if (messager != null) {
                 messager.printMessage(Diagnostic.Kind.WARNING,
                     "Unknown pipeline transport '" + value + "'; defaulting to GRPC.");
             }
-            return TransportMode.GRPC;
+            return PipelineTransport.GRPC;
         }
         return mode.get();
     }

@@ -476,8 +476,10 @@ class SearchReplayEndToEndIT {
         }
 
         shiftedEvents.sort((left, right) -> {
-            if (left.startTime() != right.startTime()) {
-                return Double.compare(left.startTime(), right.startTime());
+            double leftTime = playbackTimeForEvent(left);
+            double rightTime = playbackTimeForEvent(right);
+            if (leftTime != rightTime) {
+                return Double.compare(leftTime, rightTime);
             }
             long leftSequence = left.sequence() == null ? 0 : left.sequence();
             long rightSequence = right.sequence() == null ? 0 : right.sequence();
@@ -559,6 +561,15 @@ class SearchReplayEndToEndIT {
 
     private static String nullSafe(String value) {
         return value == null ? "" : value;
+    }
+
+    private static double playbackTimeForEvent(PipelineExecutionEvent event) {
+        if (event == null) {
+            return 0d;
+        }
+        return "success".equals(event.event()) || "error".equals(event.event())
+            ? event.endTime()
+            : event.startTime();
     }
 
     private static String diagnosticLogTail() {

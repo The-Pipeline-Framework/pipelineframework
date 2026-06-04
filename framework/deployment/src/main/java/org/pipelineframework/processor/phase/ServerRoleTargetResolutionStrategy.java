@@ -4,7 +4,7 @@ import java.util.Set;
 import java.util.Objects;
 
 import org.pipelineframework.processor.ir.GenerationTarget;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 
 /**
  * Target resolution strategy for server roles.
@@ -12,7 +12,7 @@ import org.pipelineframework.processor.ir.TransportMode;
 public class ServerRoleTargetResolutionStrategy implements TargetResolutionStrategy {
 
     @Override
-    public Set<GenerationTarget> resolve(TransportMode transportMode) {
+    public Set<GenerationTarget> resolve(PipelineTransport transportMode) {
         Objects.requireNonNull(transportMode, "transportMode must not be null");
         return switch (transportMode) {
             case REST -> Set.of(GenerationTarget.REST_RESOURCE);

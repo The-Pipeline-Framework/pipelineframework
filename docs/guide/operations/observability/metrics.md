@@ -143,7 +143,7 @@ Await signal:
 
 - `tpf.await.completion.dropped.total` (counter): completions that cannot be admitted because the target interaction is already terminal, stale, or otherwise not admissible.
 
-Await execution logs include the parked await unit when a `QUEUE_ASYNC` execution waits or resumes. First-class await unit lifecycle views in replay and observability are tracked in [#313](https://github.com/The-Pipeline-Framework/pipelineframework/issues/313).
+Await execution logs include the parked await unit when a `QUEUE_ASYNC` execution waits or resumes. Replay and trace events expose await unit lifecycle transitions, including dispatch, waiting, item completion, unit completion, resume release, and terminal timeout/failure states. The metrics surface intentionally remains limited to dropped-completion counting plus provider-native backlog/latency signals.
 
 Backlog signal note:
 

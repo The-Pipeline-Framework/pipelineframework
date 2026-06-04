@@ -107,8 +107,8 @@ To override routing or ports, set the following in `application.properties`:
 
 | Property                                 | Type   | Default | Description                                       |
 |------------------------------------------|--------|---------|---------------------------------------------------|
-| `pipeline.module.<module>.host`          | string | none    | Host for a module (applies to all its services).  |
-| `pipeline.module.<module>.port`          | int    | none    | Port for a module (applies to all its services).  |
+| `pipeline.module.<module>.host`          | string | none    | Host for a module; Quarkus config expressions are preserved. |
+| `pipeline.module.<module>.port`          | int or expression | none    | Port for a module; literal values are validated and Quarkus config expressions are preserved. |
 | `pipeline.module.<module>.steps`         | list   | none    | Comma/space-separated client names to assign.     |
 | `pipeline.module.<module>.aspects`       | list   | none    | Aspect names to assign (e.g. `persistence`).      |
 | `pipeline.client.base-port`              | int    | `8443`  | Base port used when assigning per-module offsets. |
@@ -125,6 +125,7 @@ About modules:
 
 Avoiding drift:
 - Keep server ports and orchestrator client ports aligned by sourcing them from the same `pipeline.module.<module>.port` or shared environment variables.
+- For deployment-specific endpoints, use Quarkus/MicroProfile config expressions such as `pipeline.module.pipeline-runtime-svc.host=${PIPELINE_RUNTIME_HOST:127.0.0.1}` and `pipeline.module.pipeline-runtime-svc.port=${PIPELINE_RUNTIME_GRPC_PORT:9000}`.
 - If you override a client endpoint directly, verify the corresponding server listens on the same host/port (especially when TLS is enabled).
 
 If you need to override a single client endpoint, set the Quarkus property directly:
@@ -244,6 +245,7 @@ Background execution notes:
 4. In-memory providers are for local/dev only; use providers backed by external storage/queues for crash recovery.
 5. For dead-letter handling that survives restarts, set both `pipeline.orchestrator.dlq-provider=sqs` and `pipeline.orchestrator.dlq-url`.
 6. For webhook await steps using signed resume tokens, configure a stable `pipeline.orchestrator.resume-token-secret`; rotating it invalidates outstanding resume tokens.
+7. When `pipeline.orchestrator.dynamo.await-interaction-table` is used, provision ALL-projected GSIs named `await-interaction-by-unit`, `await-interaction-pending-by-tenant`, `await-interaction-pending-by-assignee`, `await-interaction-pending-by-group`, `await-interaction-pending-by-step`, and `await-interaction-pending-by-deadline`. These indexes back await unit lookup, pending interaction listing, and timeout selection without full-table scans.
 
 Example crash-recovery provider configuration:
 

@@ -18,7 +18,7 @@ import org.pipelineframework.config.pipeline.PipelineYamlStep;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
-import org.pipelineframework.processor.ir.TransportMode;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolver;
@@ -109,7 +109,7 @@ public class OrchestratorClientPropertiesGenerator {
      */
     private List<PipelineStepModel> filterClientModels(
         List<PipelineStepModel> models,
-        org.pipelineframework.processor.ir.TransportMode transportMode
+        org.pipelineframework.processor.ir.PipelineTransport transportMode
     ) {
         GenerationTarget target = switch (transportMode) {
             case REST -> GenerationTarget.REST_CLIENT_STEP;
@@ -395,7 +395,7 @@ public class OrchestratorClientPropertiesGenerator {
             writer.append("quarkus.grpc.clients.").append(client.name()).append(".host=")
                 .append(client.host()).append("\n");
             writer.append("quarkus.grpc.clients.").append(client.name()).append(".port=")
-                .append(String.valueOf(client.port())).append("\n");
+                .append(client.port()).append("\n");
             writer.append("quarkus.grpc.clients.").append(client.name())
                 .append(".use-quarkus-grpc-client=true\n");
             if (client.tlsConfigurationName() != null) {
@@ -423,7 +423,7 @@ public class OrchestratorClientPropertiesGenerator {
         if (config == null || config.steps() == null || config.steps().isEmpty()) {
             return;
         }
-        TransportMode mode = ctx.getTransportMode() == null ? TransportMode.GRPC : ctx.getTransportMode();
+        PipelineTransport mode = ctx.getTransportMode() == null ? PipelineTransport.GRPC : ctx.getTransportMode();
         String suffix = mode.clientStepSuffix();
         List<String> baseClassNames = orderedBaseSteps.stream()
             .map(model -> model.servicePackage() + ".pipeline."
@@ -447,7 +447,7 @@ public class OrchestratorClientPropertiesGenerator {
             writer.append("quarkus.grpc.clients.").append(client.name()).append(".host=")
                 .append(client.host()).append("\n");
             writer.append("quarkus.grpc.clients.").append(client.name()).append(".port=")
-                .append(String.valueOf(client.port())).append("\n");
+                .append(client.port()).append("\n");
             writer.append("quarkus.grpc.clients.").append(client.name())
                 .append(".use-quarkus-grpc-client=true\n");
             if (client.tlsConfigurationName() != null) {
@@ -512,7 +512,7 @@ public class OrchestratorClientPropertiesGenerator {
             }
             writer.append("\n# Talk to ").append(client.name()).append(" service\n");
             writer.append("quarkus.rest-client.").append(client.name()).append(".url=https://")
-                .append(client.host()).append(":").append(String.valueOf(client.port())).append("\n");
+                .append(client.host()).append(":").append(client.port()).append("\n");
             if (client.tlsConfigurationName() != null) {
                 String tlsDefault = client.tlsConfigurationName();
                 String tlsExpression = "${pipeline.client.tls-configuration-name:" + tlsDefault + "}";

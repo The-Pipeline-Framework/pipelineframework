@@ -18,6 +18,7 @@ package org.pipelineframework.telemetry;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -28,6 +29,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -50,6 +53,8 @@ public class FilePipelineReplayExporter implements PipelineReplayExporter {
 
     private final Path configuredOutputFile;
     private final ConcurrentMap<String, RunState> runStates = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, RunState> controlRunStates = new ConcurrentHashMap<>();
+    private final AtomicBoolean controlSingleFileWarningLogged = new AtomicBoolean();
 
     public FilePipelineReplayExporter() {
         this(resolveConfiguredOutputFile());
@@ -92,6 +97,40 @@ public class FilePipelineReplayExporter implements PipelineReplayExporter {
     }
 
     @Override
+    public void emitControlEvent(
+        String pipeline,
+        Instant occurredAt,
+        PipelineReplayTopology topology,
+        PipelineExecutionEvent event) {
+        if (configuredOutputFile == null || event == null || topology == null) {
+            return;
+        }
+        if (!isDirectoryMode(configuredOutputFile)) {
+            if (controlSingleFileWarningLogged.compareAndSet(false, true)) {
+                LOG.warn("Replay control-plane events require directory-mode replay output; skipping await lifecycle events.");
+            }
+            return;
+        }
+        Instant eventInstant = occurredAt == null ? Instant.now() : occurredAt;
+        String resolvedPipeline = pipeline == null || pipeline.isBlank() ? topology.pipeline() : pipeline;
+        String controlKey = sanitizeFileToken(resolvedPipeline == null ? "pipeline" : resolvedPipeline);
+        RunState runState = controlRunStates.computeIfAbsent(
+            controlKey,
+            ignored -> new RunState(
+                resolveControlOutputFile(resolvedPipeline, eventInstant),
+                resolvedPipeline,
+                eventInstant,
+                topology,
+                null));
+        runState.pipeline(resolvedPipeline);
+        runState.topology(topology);
+        runState.status("completed");
+        runState.durationMs(Math.max(0L, Duration.between(runState.startedAt(), eventInstant).toMillis()));
+        runState.addEvent(relativeControlEvent(runState, event, eventInstant));
+        writeDocument(runState);
+    }
+
+    @Override
     public void runCompleted(
         String runId,
         String pipeline,
@@ -131,6 +170,12 @@ public class FilePipelineReplayExporter implements PipelineReplayExporter {
                 }
             }
             writeDocument(runState);
+        }
+        for (RunState runState : controlRunStates.values()) {
+            if (!runState.events().isEmpty()) {
+                runState.status("completed");
+                writeDocument(runState);
+            }
         }
     }
 
@@ -223,6 +268,40 @@ public class FilePipelineReplayExporter implements PipelineReplayExporter {
         return configuredOutputFile.resolve(sanitizedPipeline + "-" + startedAtToken + "-" + UUID.randomUUID() + ".json");
     }
 
+    private Path resolveControlOutputFile(String pipeline, Instant startedAt) {
+        String sanitizedPipeline = sanitizeFileToken(pipeline == null ? "pipeline" : pipeline);
+        String startedAtToken = startedAt == null ? "unknown" : String.valueOf(startedAt.toEpochMilli());
+        return configuredOutputFile.resolve(sanitizedPipeline + "-await-control-" + startedAtToken + "-" + UUID.randomUUID() + ".json");
+    }
+
+    private static PipelineExecutionEvent relativeControlEvent(
+        RunState runState,
+        PipelineExecutionEvent event,
+        Instant occurredAt) {
+        double timeSeconds = Duration.between(runState.startedAt(), occurredAt).toNanos() / 1_000_000_000d;
+        return new PipelineExecutionEvent(
+            event.traceId(),
+            event.spanId(),
+            event.parentSpanId(),
+            event.itemId(),
+            event.pipeline(),
+            event.step(),
+            event.service(),
+            event.event(),
+            timeSeconds,
+            timeSeconds,
+            0L,
+            event.from(),
+            event.to(),
+            event.cardinality(),
+            event.parentItemIds(),
+            runState.nextSequence(),
+            event.attempt(),
+            event.errorType(),
+            event.errorMessage(),
+            event.attributes());
+    }
+
     private static boolean isDirectoryMode(Path path) {
         Path absolute = path.toAbsolutePath().normalize();
         if (Files.exists(absolute)) {
@@ -239,6 +318,7 @@ public class FilePipelineReplayExporter implements PipelineReplayExporter {
     private static final class RunState {
         private final Path outputFile;
         private final List<PipelineExecutionEvent> events = java.util.Collections.synchronizedList(new ArrayList<>());
+        private final AtomicLong eventSequence = new AtomicLong();
         private volatile String pipeline;
         private volatile Instant startedAt;
         private volatile PipelineReplayTopology topology;
@@ -264,6 +344,8 @@ public class FilePipelineReplayExporter implements PipelineReplayExporter {
 
         Path outputFile() { return outputFile; }
         List<PipelineExecutionEvent> events() { return events; }
+        void addEvent(PipelineExecutionEvent event) { events.add(event); }
+        Long nextSequence() { return eventSequence.incrementAndGet(); }
         String pipeline() { return pipeline; }
         void pipeline(String pipeline) { this.pipeline = pipeline; }
         Instant startedAt() { return startedAt; }
