@@ -44,6 +44,8 @@ This proves the monolith path pauses at the await step, completes through the in
 
 ## Run The Demo
 
+This is the UI-focused monolith demo. For the self-hosted coordinator and separate worker path, see [Self-Hosted Coordinator + Worker](#self-hosted-coordinator--worker).
+
 ### 1. Start the monolith backend
 
 The dev profile enables plain HTTP on port `8081` so the Next.js app can call the generated REST APIs without dealing with local TLS trust first.
@@ -82,6 +84,23 @@ Override them before `npm run dev` if you need a different runtime target.
 
 The UI is presentation only. TPF owns orchestration, durable waiting, completion admission, and resume semantics.
 
+## Self-Hosted Coordinator + Worker
+
+The self-hosted reference path runs the packaged monolith twice:
+
+1. a coordinator process with the generic control-plane and bundle-admin APIs enabled,
+2. a separate REST transition worker process.
+
+Run it from the repository root:
+
+```bash
+./examples/restaurant-approval/self-host/run-self-hosted-demo.sh --ci
+```
+
+The script packages the monolith, starts both processes, registers and activates the generated bundle JAR, submits accepted and declined orders through `/tpf/control-plane/...`, completes the await interaction, and verifies terminal results.
+
+See [Self-Hosted Coordinator Runbook](./self-host/README.md) for manual commands, environment defaults, and the current local/dev limits.
+
 ## Await Contract
 
 The await step in `config/pipeline.yaml` is:
@@ -100,5 +119,6 @@ The decision output is a typed union:
 ## Notes
 
 - The default local monolith demo path is intentionally HTTP-first for UI ergonomics. The non-dev runtime configs still keep the generated TLS-oriented wiring.
+- The self-hosted coordinator path is a public adoption reference, not a managed service. It proves coordinator/worker separation with local processes and the REST worker protocol.
 - The current example includes manual union DTO/mapper support for the decision type because the generator does not scaffold that part yet. This is tracked as generator debt in [#305](https://github.com/The-Pipeline-Framework/pipelineframework/issues/305).
 - The generated `common` module currently emits a non-blocking `com.google.protobuf` split-package warning in Quarkus builds. That scaffold issue is tracked in [#304](https://github.com/The-Pipeline-Framework/pipelineframework/issues/304).

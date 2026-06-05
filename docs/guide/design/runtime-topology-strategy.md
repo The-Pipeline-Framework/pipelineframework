@@ -28,6 +28,8 @@ Keeping the orchestrator isolated is usually a good default when you want:
 - Reduced attack surface for internal services/plugins
 - Stable migration path from grouped runtime to more modular layouts
 
+Current topologies still assume the generated application owns and runs the orchestrator host. For the internal target architecture that separates app/data-plane workers from a durable control plane, see [Durable Coordinator](/guide/evolve/durable-coordinator/).
+
 ## Plugin/synthetic placement
 
 Treat plugin side effects as first-class when designing topology. They are easy to forget and can silently add coupling or load to the wrong runtime.

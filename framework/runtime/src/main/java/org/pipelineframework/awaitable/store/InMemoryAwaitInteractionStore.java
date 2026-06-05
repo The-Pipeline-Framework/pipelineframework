@@ -107,6 +107,29 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
     }
 
     @Override
+    public Uni<AwaitInteractionRecord> importRecord(AwaitInteractionRecord record) {
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                long now = System.currentTimeMillis();
+                purgeExpired(now);
+                String scopedId = scopedInteractionId(record.tenantId(), record.interactionId());
+                AwaitInteractionRecord existing = interactionsByScopedId.get(scopedId);
+                if (existing != null) {
+                    return existing;
+                }
+                interactionsByScopedId.put(scopedId, record);
+                interactionIdByScopedIdempotencyKey.put(
+                    scopedIdempotencyKey(record.tenantId(), record.stepId(), record.idempotencyKey()),
+                    record.interactionId());
+                interactionIdByScopedCorrelation.put(
+                    scopedCorrelation(record.tenantId(), record.correlationId()),
+                    record.interactionId());
+                return record;
+            }
+        });
+    }
+
+    @Override
     public Uni<Optional<AwaitInteractionRecord>> findByCorrelation(String tenantId, String correlationId) {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {

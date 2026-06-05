@@ -52,6 +52,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private static final String TENANT_ID = "tenant_id";
     private static final String EXECUTION_ID = "execution_id";
     private static final String EXECUTION_KEY = "execution_key";
+    private static final String PIPELINE_ID = "pipeline_id";
+    private static final String BUNDLE_VERSION_ID = "bundle_version_id";
     private static final String RESULT_SHAPE = "result_shape";
     private static final String TENANT_EXECUTION_KEY = "tenant_execution_key";
     private static final String STATUS = "status";
@@ -268,6 +270,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             command.tenantId(),
             executionId,
             command.executionKey(),
+            command.pipelineId(),
+            command.bundleVersionId(),
             command.resultShape(),
             ExecutionStatus.QUEUED,
             0L,
@@ -848,6 +852,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         item.put(TENANT_ID, avS(record.tenantId()));
         item.put(EXECUTION_ID, avS(record.executionId()));
         item.put(EXECUTION_KEY, avS(record.executionKey()));
+        item.put(PIPELINE_ID, avS(record.pipelineId()));
+        item.put(BUNDLE_VERSION_ID, avS(record.bundleVersionId()));
         item.put(RESULT_SHAPE, avS(record.resultShape().name()));
         item.put(STATUS, avS(record.status().name()));
         item.put(VERSION, avN(record.version()));
@@ -891,6 +897,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         String tenantId = readString(item, TENANT_ID);
         String executionId = readString(item, EXECUTION_ID);
         String executionKey = readString(item, EXECUTION_KEY);
+        String pipelineId = readString(item, PIPELINE_ID);
+        String bundleVersionId = readString(item, BUNDLE_VERSION_ID);
         String resultShapeValue = readString(item, RESULT_SHAPE);
         ExecutionResultShape resultShape;
         if (resultShapeValue == null || resultShapeValue.isBlank()) {
@@ -924,6 +932,12 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             tenantId,
             executionId,
             executionKey,
+            pipelineId == null || pipelineId.isBlank()
+                ? PipelineBundleManifest.DEFAULT_PIPELINE_ID
+                : pipelineId,
+            bundleVersionId == null || bundleVersionId.isBlank()
+                ? PipelineBundleManifest.DEFAULT_BUNDLE_VERSION_ID
+                : bundleVersionId,
             resultShape,
             status,
             version,

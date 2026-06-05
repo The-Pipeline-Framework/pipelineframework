@@ -24,10 +24,28 @@ class ExecutionCreateCommandTest {
 
         assertEquals("tenant1", command.tenantId());
         assertEquals("exec-key-1", command.executionKey());
+        assertEquals(PipelineBundleManifest.DEFAULT_PIPELINE_ID, command.pipelineId());
+        assertEquals(PipelineBundleManifest.DEFAULT_BUNDLE_VERSION_ID, command.bundleVersionId());
         assertEquals(payload, command.inputPayload());
         assertEquals(ExecutionResultShape.SINGLE, command.resultShape());
         assertEquals(now, command.nowEpochMs());
         assertEquals(ttl, command.ttlEpochS());
+    }
+
+    @Test
+    void createsCommandWithExplicitBundleIdentity() {
+        ExecutionCreateCommand command = new ExecutionCreateCommand(
+            "tenant1",
+            "exec-key-1",
+            "org.example.pipeline",
+            "sha256:bundle",
+            "payload",
+            ExecutionResultShape.SINGLE,
+            1L,
+            2L);
+
+        assertEquals("org.example.pipeline", command.pipelineId());
+        assertEquals("sha256:bundle", command.bundleVersionId());
     }
 
     @Test

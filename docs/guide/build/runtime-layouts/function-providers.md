@@ -53,6 +53,8 @@ It does not currently document or implement:
 
 If you need queue-backed recovery, checkpoint handoff, or orchestrator-managed HA, use the `COMPUTE` + `QUEUE_ASYNC` path instead of treating function providers as a replacement for that runtime model.
 
+For how function providers relate to an external durable control plane, see [Durable Coordinator](/guide/evolve/durable-coordinator/).
+
 ## Quick Start
 
 ### AWS Lambda

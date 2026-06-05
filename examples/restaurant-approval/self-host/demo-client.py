@@ -1,0 +1,298 @@
+#!/usr/bin/env python3
+import argparse
+import json
+import sys
+import time
+import urllib.error
+import urllib.request
+import uuid
+import zipfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+PAYLOAD_ENCODING = "application/tpf-transition+json"
+ORDER_TYPE = "org.pipelineframework.restaurantapproval.common.domain.PlaceRestaurantOrderRequest"
+
+
+def request(method, url, token=None, body=None, timeout=10):
+    data = None
+    headers = {"Accept": "application/json"}
+    if body is not None:
+        data = json.dumps(body).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            raw = response.read().decode("utf-8")
+            if not raw:
+                return None
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                return raw
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"{method} {url} failed with HTTP {exc.code}: {raw}") from exc
+
+
+def wait_health(args):
+    deadline = time.time() + args.timeout_seconds
+    url = f"{args.base_url}/q/health/live"
+    last_error = None
+    while time.time() < deadline:
+        try:
+            request("GET", url, timeout=2)
+            print(f"{args.name} is healthy at {args.base_url}")
+            return
+        except Exception as exc:
+            last_error = exc
+            time.sleep(0.25)
+    raise RuntimeError(f"Timed out waiting for {args.name} at {url}: {last_error}")
+
+
+def locate_bundle(args):
+    target_dir = Path(args.target_dir)
+    matches = []
+    for candidate in target_dir.rglob("*.jar"):
+        if {"tpf-self-host", "transition-worker-split-it"} & set(candidate.parts):
+            continue
+        try:
+            with zipfile.ZipFile(candidate) as jar:
+                with jar.open("META-INF/pipeline/bundle-manifest.json") as manifest_file:
+                    manifest = json.load(manifest_file)
+                    if manifest.get("pipelineId") == args.pipeline_id:
+                        matches.append(candidate)
+        except (zipfile.BadZipFile, KeyError, json.JSONDecodeError):
+            continue
+    if matches:
+        selected = max(matches, key=lambda path: path.stat().st_mtime)
+        print(selected.resolve())
+        return
+    raise RuntimeError(f"No bundle JAR with pipelineId={args.pipeline_id} found under {target_dir}")
+
+
+def register_activate(args):
+    base = f"{args.base_url}/tpf/admin/tenants/{args.tenant_id}/pipelines/{args.pipeline_id}/bundles"
+    registered = request(
+        "POST",
+        f"{base}/register",
+        token=args.admin_token,
+        body={"artifactPath": str(Path(args.artifact_path).resolve())},
+    )
+    bundle_version_id = registered["bundleVersionId"]
+    request("POST", f"{base}/{bundle_version_id}/activate", token=args.admin_token)
+    print(f"Registered and activated bundle {bundle_version_id}")
+
+
+def encoded_payload(payload, payload_type=None):
+    if payload is None:
+        return {
+            "payloadTypeId": "null",
+            "payloadEncoding": PAYLOAD_ENCODING,
+            "payload": "null",
+        }
+    if isinstance(payload, dict) and (payload_type is None or payload_type == "java.util.Map"):
+        items = {str(key): encoded_payload(value) for key, value in payload.items()}
+        return {
+            "payloadTypeId": "java.util.Map",
+            "payloadEncoding": PAYLOAD_ENCODING,
+            "payload": json.dumps({"items": items}, separators=(",", ":")),
+        }
+    if isinstance(payload, list) and (payload_type is None or payload_type == "java.util.List"):
+        return {
+            "payloadTypeId": "java.util.List",
+            "payloadEncoding": PAYLOAD_ENCODING,
+            "payload": json.dumps({"items": [encoded_payload(item) for item in payload]}, separators=(",", ":")),
+        }
+    if payload_type is None:
+        payload_type = scalar_type_id(payload)
+    return {
+        "payloadTypeId": payload_type,
+        "payloadEncoding": PAYLOAD_ENCODING,
+        "payload": json.dumps(payload, separators=(",", ":")),
+    }
+
+
+def scalar_type_id(payload):
+    if isinstance(payload, str):
+        return "java.lang.String"
+    if isinstance(payload, bool):
+        return "java.lang.Boolean"
+    if isinstance(payload, int):
+        return "java.lang.Long"
+    if isinstance(payload, float):
+        return "java.lang.Double"
+    return type(payload).__name__
+
+
+def auth(args):
+    return args.control_plane_token
+
+
+def submit_order(args, customer_name, restaurant_name):
+    request_id = str(uuid.uuid4())
+    order = {
+        "requestId": request_id,
+        "customerName": customer_name,
+        "restaurantName": restaurant_name,
+        "items": "Margherita Pizza, Sparkling Water",
+        "totalAmount": "27.50",
+        "currency": "EUR",
+    }
+    body = {
+        "pipelineId": args.pipeline_id,
+        "inputShape": "UNI",
+        "inputPayload": encoded_payload(order, ORDER_TYPE),
+        "idempotencyKey": f"order-{request_id}",
+        "outputStreaming": False,
+    }
+    result = request(
+        "POST",
+        f"{args.base_url}/tpf/control-plane/tenants/{args.tenant_id}/executions",
+        token=auth(args),
+        body=body,
+    )
+    print(f"Submitted execution {result['executionId']} for {customer_name}")
+    return result["executionId"]
+
+
+def wait_status(args, execution_id, target_status, timeout_seconds=30):
+    deadline = time.time() + timeout_seconds
+    last = None
+    url = f"{args.base_url}/tpf/control-plane/tenants/{args.tenant_id}/executions/{execution_id}"
+    while time.time() < deadline:
+        last = request("GET", url, token=auth(args))
+        status = last["status"]
+        if status == target_status:
+            print(f"Execution {execution_id} reached {target_status}")
+            return last
+        if status in {"FAILED", "DLQ"}:
+            raise RuntimeError(f"Execution {execution_id} failed: {last}")
+        time.sleep(0.2)
+    raise RuntimeError(f"Execution {execution_id} did not reach {target_status}; last={last}")
+
+
+def pending_interaction(args, execution_id, timeout_seconds=30):
+    deadline = time.time() + timeout_seconds
+    url = (
+        f"{args.base_url}/tpf/control-plane/tenants/{args.tenant_id}/interactions/pending"
+        f"?stepId={args.await_step_id}"
+    )
+    while time.time() < deadline:
+        interactions = request("GET", url, token=auth(args))
+        for interaction in interactions:
+            if interaction.get("executionId") == execution_id:
+                payload = interaction.get("requestPayload") or {}
+                print(f"Pending interaction {interaction['interactionId']} for order {payload.get('orderId')}")
+                return interaction
+        time.sleep(0.2)
+    raise RuntimeError(f"No pending interaction found for execution {execution_id}")
+
+
+def complete(args, interaction, decision):
+    order_id = (interaction.get("requestPayload") or {}).get("orderId")
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    if decision == "accepted":
+        decision_payload = {
+            "accepted": {
+                "orderId": order_id,
+                "decidedAt": now,
+                "note": "Approved by Cafe TPF",
+            }
+        }
+    else:
+        decision_payload = {
+            "declined": {
+                "orderId": order_id,
+                "decidedAt": now,
+                "note": "Need more prep time",
+                "declineReason": "Kitchen is overloaded tonight",
+            }
+        }
+    body = {
+        "interactionId": interaction["interactionId"],
+        "idempotencyKey": f"complete-{interaction['interactionId']}",
+        "responsePayload": encoded_payload(decision_payload, "java.util.Map"),
+        "actor": "restaurant-self-host-demo",
+    }
+    completed = request(
+        "POST",
+        f"{args.base_url}/tpf/control-plane/tenants/{args.tenant_id}/interactions/complete",
+        token=auth(args),
+        body=body,
+    )
+    print(f"Completed interaction {completed['interactionId']} as {decision}")
+
+
+def result_payload(args, execution_id):
+    result = request(
+        "GET",
+        f"{args.base_url}/tpf/control-plane/tenants/{args.tenant_id}/executions/{execution_id}/result",
+        token=auth(args),
+    )
+    payload = result["resultPayload"]["payload"]
+    return json.loads(payload)
+
+
+def run_one(args, decision, customer_name, restaurant_name, expected_outcome):
+    execution_id = submit_order(args, customer_name, restaurant_name)
+    wait_status(args, execution_id, "WAITING_EXTERNAL")
+    interaction = pending_interaction(args, execution_id)
+    if interaction.get("stepId") != args.await_step_id:
+        raise RuntimeError(f"Unexpected await step: {interaction.get('stepId')}")
+    complete(args, interaction, decision)
+    wait_status(args, execution_id, "SUCCEEDED")
+    result = result_payload(args, execution_id)
+    if result.get("outcome") != expected_outcome:
+        raise RuntimeError(f"Expected outcome={expected_outcome}, got result={result}")
+    print(f"Terminal result for {execution_id}: {json.dumps(result, sort_keys=True)}")
+
+
+def run_flows(args):
+    run_one(args, "accepted", "Ada Lovelace", "Cafe TPF", "APPROVED")
+    run_one(args, "declined", "Grace Hopper", "Bistro Queue", "DECLINED")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Restaurant Approval self-hosted coordinator demo client")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    health = sub.add_parser("wait-health")
+    health.add_argument("--base-url", required=True)
+    health.add_argument("--name", required=True)
+    health.add_argument("--timeout-seconds", type=int, default=60)
+    health.set_defaults(func=wait_health)
+
+    locate = sub.add_parser("locate-bundle")
+    locate.add_argument("--target-dir", required=True)
+    locate.add_argument("--pipeline-id", required=True)
+    locate.set_defaults(func=locate_bundle)
+
+    reg = sub.add_parser("register-activate")
+    reg.add_argument("--base-url", required=True)
+    reg.add_argument("--tenant-id", required=True)
+    reg.add_argument("--pipeline-id", required=True)
+    reg.add_argument("--admin-token", required=True)
+    reg.add_argument("--artifact-path", required=True)
+    reg.set_defaults(func=register_activate)
+
+    flows = sub.add_parser("run-flows")
+    flows.add_argument("--base-url", required=True)
+    flows.add_argument("--tenant-id", required=True)
+    flows.add_argument("--pipeline-id", required=True)
+    flows.add_argument("--await-step-id", required=True)
+    flows.add_argument("--control-plane-token", required=True)
+    flows.set_defaults(func=run_flows)
+
+    args = parser.parse_args()
+    try:
+        args.func(args)
+    except Exception as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -46,6 +47,26 @@ class PipelineOrchestratorConfigTest {
         assertFalse(config.resumeTokenSecret().isPresent());
         assertEquals(10000, config.awaitAggregateMaxInputItems());
         assertEquals(10000, config.awaitAggregateMaxOutputItems());
+        assertEquals(List.of("org.pipelineframework."), config.workerRest().allowedPayloadPrefixes());
+        assertFalse(config.workerRest().sharedSecret().isPresent());
+        assertFalse(config.workerRest().sharedSecretRef().isPresent());
+        assertEquals(Duration.ofMinutes(2), config.workerRest().signatureTolerance());
+        assertFalse(config.workerGrpc().endpoint().isPresent());
+        assertFalse(config.workerGrpc().plaintext());
+        assertEquals(Duration.ofSeconds(30), config.workerGrpc().requestTimeout());
+        assertFalse(config.workerGrpc().serverEnabled());
+        assertFalse(config.workerGrpc().sharedSecret().isPresent());
+        assertFalse(config.workerGrpc().sharedSecretRef().isPresent());
+        assertEquals(Duration.ofMinutes(2), config.workerGrpc().signatureTolerance());
+        assertFalse(config.workerSqs().requestQueueUrl().isPresent());
+        assertFalse(config.workerSqs().responseQueueUrl().isPresent());
+        assertFalse(config.workerSqs().serverEnabled());
+        assertEquals(Duration.ofSeconds(30), config.workerSqs().requestTimeout());
+        assertEquals(Duration.ZERO, config.workerSqs().pollStartDelay());
+        assertEquals(Duration.ofSeconds(30), config.workerSqs().visibilityTimeout());
+        assertFalse(config.workerSqs().sharedSecret().isPresent());
+        assertFalse(config.workerSqs().sharedSecretRef().isPresent());
+        assertEquals(Duration.ofMinutes(2), config.workerSqs().signatureTolerance());
     }
 
     @ParameterizedTest(name = "{index} => {0}={1}")
@@ -184,6 +205,121 @@ class PipelineOrchestratorConfigTest {
                 "250",
                 (Consumer<PipelineOrchestratorConfig>) config ->
                     assertEquals(250, config.awaitAggregateMaxOutputItems())),
+            Arguments.of(
+                "pipeline.orchestrator.control-plane.enabled",
+                "true",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertTrue(config.controlPlane().enabled())),
+            Arguments.of(
+                "pipeline.orchestrator.control-plane.admin-token",
+                "admin-secret",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("admin-secret", config.controlPlane().adminToken().orElseThrow())),
+            Arguments.of(
+                "pipeline.orchestrator.control-plane.admin-token-ref",
+                "env:TPF_CONTROL_PLANE_ADMIN_TOKEN",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("env:TPF_CONTROL_PLANE_ADMIN_TOKEN", config.controlPlane().adminTokenRef().orElseThrow())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.rest.allowed-payload-prefixes",
+                "com.example.,org.acme.",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(List.of("com.example.", "org.acme."), config.workerRest().allowedPayloadPrefixes())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.rest.shared-secret",
+                "worker-secret",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("worker-secret", config.workerRest().sharedSecret().orElseThrow())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.rest.shared-secret-ref",
+                "env:TPF_REST_WORKER_SECRET",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("env:TPF_REST_WORKER_SECRET", config.workerRest().sharedSecretRef().orElseThrow())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.rest.signature-tolerance",
+                "PT30S",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(Duration.ofSeconds(30), config.workerRest().signatureTolerance())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.grpc.endpoint",
+                "localhost:9000",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("localhost:9000", config.workerGrpc().endpoint().orElseThrow())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.grpc.plaintext",
+                "true",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertTrue(config.workerGrpc().plaintext())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.grpc.request-timeout",
+                "PT5S",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(Duration.ofSeconds(5), config.workerGrpc().requestTimeout())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.grpc.server-enabled",
+                "true",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertTrue(config.workerGrpc().serverEnabled())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.grpc.shared-secret",
+                "grpc-worker-secret",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("grpc-worker-secret", config.workerGrpc().sharedSecret().orElseThrow())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.grpc.shared-secret-ref",
+                "sys:tpf.grpc.worker.secret",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("sys:tpf.grpc.worker.secret", config.workerGrpc().sharedSecretRef().orElseThrow())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.grpc.signature-tolerance",
+                "PT45S",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(Duration.ofSeconds(45), config.workerGrpc().signatureTolerance())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.sqs.request-queue-url",
+                "https://sqs.local/request",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("https://sqs.local/request", config.workerSqs().requestQueueUrl().orElseThrow())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.sqs.response-queue-url",
+                "https://sqs.local/response",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("https://sqs.local/response", config.workerSqs().responseQueueUrl().orElseThrow())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.sqs.server-enabled",
+                "true",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertTrue(config.workerSqs().serverEnabled())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.sqs.request-timeout",
+                "PT8S",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(Duration.ofSeconds(8), config.workerSqs().requestTimeout())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.sqs.poll-start-delay",
+                "PT3S",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(Duration.ofSeconds(3), config.workerSqs().pollStartDelay())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.sqs.visibility-timeout",
+                "PT45S",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(Duration.ofSeconds(45), config.workerSqs().visibilityTimeout())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.sqs.shared-secret",
+                "sqs-worker-secret",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("sqs-worker-secret", config.workerSqs().sharedSecret().orElseThrow())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.sqs.shared-secret-ref",
+                "config:tpf.sqs.worker.secret",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("config:tpf.sqs.worker.secret", config.workerSqs().sharedSecretRef().orElseThrow())),
+            Arguments.of(
+                "pipeline.orchestrator.worker.sqs.signature-tolerance",
+                "PT50S",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(Duration.ofSeconds(50), config.workerSqs().signatureTolerance())),
             Arguments.of(
                 "pipeline.orchestrator.strict-startup",
                 "false",

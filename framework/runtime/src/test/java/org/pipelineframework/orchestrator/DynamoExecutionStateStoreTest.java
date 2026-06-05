@@ -80,6 +80,8 @@ class DynamoExecutionStateStoreTest {
         ExecutionCreateCommand command = new ExecutionCreateCommand(
             "tenant-a",
             "key-1",
+            "org.example.pipeline",
+            "sha256:bundle",
             "payload",
             ExecutionResultShape.SINGLE,
             now,
@@ -96,6 +98,8 @@ class DynamoExecutionStateStoreTest {
 
         assertTrue(result.duplicate());
         assertEquals("exec-1", result.record().executionId());
+        assertEquals("org.example.pipeline", result.record().pipelineId());
+        assertEquals("sha256:bundle", result.record().bundleVersionId());
         verify(client, never()).transactWriteItems(any(TransactWriteItemsRequest.class));
     }
 
@@ -211,6 +215,8 @@ class DynamoExecutionStateStoreTest {
             Map.entry("tenant_id", AttributeValue.builder().s(tenantId).build()),
             Map.entry("execution_id", AttributeValue.builder().s(executionId).build()),
             Map.entry("execution_key", AttributeValue.builder().s(executionKey).build()),
+            Map.entry("pipeline_id", AttributeValue.builder().s("org.example.pipeline").build()),
+            Map.entry("bundle_version_id", AttributeValue.builder().s("sha256:bundle").build()),
             Map.entry("status", AttributeValue.builder().s(status.name()).build()),
             Map.entry("version", AttributeValue.builder().n("0").build()),
             Map.entry("current_step_index", AttributeValue.builder().n("0").build()),

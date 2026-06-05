@@ -40,10 +40,21 @@ import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitCoordinator;
+import org.pipelineframework.awaitable.AwaitSuspendedException;
+import org.pipelineframework.awaitable.AwaitThrowableSupport;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
-import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
+import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
+import org.pipelineframework.orchestrator.PipelineBundleIdentityResolver;
+import org.pipelineframework.orchestrator.PipelineControlPlane;
+import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.PipelineTransitionWorker;
+import org.pipelineframework.orchestrator.PipelineTransitionWorkerSelector;
+import org.pipelineframework.orchestrator.TransitionCommandEnvelope;
+import org.pipelineframework.orchestrator.TransitionPayloadCodec;
+import org.pipelineframework.orchestrator.TransitionResultEnvelope;
+import org.pipelineframework.orchestrator.TransitionWorkerCommand;
 
 /**
  * Service responsible for executing pipeline logic.
@@ -51,7 +62,7 @@ import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
  * the PipelineApplication and the CLI app without duplicating code.
  */
 @ApplicationScoped
-public class PipelineExecutionService {
+public class PipelineExecutionService implements PipelineTransitionWorker {
 
   private static final Logger LOG = Logger.getLogger(PipelineExecutionService.class);
 
@@ -77,10 +88,25 @@ public class PipelineExecutionService {
   ExecutionInputPolicy executionInputPolicy;
 
   @Inject
-  QueueAsyncCoordinator queueAsyncCoordinator;
+  AwaitCoordinator awaitCoordinator;
 
   @Inject
-  AwaitCoordinator awaitCoordinator;
+  PipelineControlPlane controlPlane;
+
+  @Inject
+  PipelineOrchestratorConfig orchestratorConfig;
+
+  @Inject
+  PipelineTransitionWorkerSelector transitionWorkerSelector;
+
+  @Inject
+  TransitionPayloadCodec transitionPayloadCodec;
+
+  @Inject
+  PipelineBundleIdentityResolver bundleIdentityResolver;
+
+  private volatile TransitionPayloadCodec fallbackPayloadCodec;
+  private volatile PipelineBundleIdentityResolver fallbackBundleIdentityResolver;
 
   private final java.util.concurrent.atomic.AtomicReference<StartupHealthState> startupHealthState =
       new java.util.concurrent.atomic.AtomicReference<>(StartupHealthState.PENDING);
@@ -110,7 +136,7 @@ public class PipelineExecutionService {
 
   @PostConstruct
   void runStartupHealthChecks() {
-    queueAsyncCoordinator.initializeQueueMode();
+    controlPlane.initializeQueueMode();
     List<Object> steps;
     try {
       steps = loadPipelineSteps();
@@ -193,28 +219,28 @@ public class PipelineExecutionService {
       String tenantId,
       String idempotencyKey,
       boolean outputStreaming) {
-    return queueAsyncCoordinator.executePipelineAsync(input, tenantId, idempotencyKey, outputStreaming);
+    return controlPlane.executePipelineAsync(input, tenantId, idempotencyKey, outputStreaming);
   }
 
   /**
    * Reads asynchronous execution status.
    */
   public Uni<ExecutionStatusDto> getExecutionStatus(String tenantId, String executionId) {
-    return queueAsyncCoordinator.getExecutionStatus(tenantId, executionId);
+    return controlPlane.getExecutionStatus(tenantId, executionId);
   }
 
   /**
    * Reads asynchronous execution result.
    */
   public <T> Uni<T> getExecutionResult(String tenantId, String executionId, Class<?> outputType, boolean outputStreaming) {
-    return queueAsyncCoordinator.getExecutionResult(tenantId, executionId, outputType, outputStreaming);
+    return controlPlane.getExecutionResult(tenantId, executionId, outputType, outputStreaming);
   }
 
   /**
    * Completes a durable await interaction and schedules owning execution continuation.
    */
   public Uni<AwaitCompletionResult> completeAwaitInteraction(AwaitCompletionCommand command) {
-    return queueAsyncCoordinator.completeAwait(command);
+    return controlPlane.completeAwait(command);
   }
 
   /**
@@ -226,7 +252,7 @@ public class PipelineExecutionService {
       String group,
       String stepId,
       int limit) {
-    return queueAsyncCoordinator.queryPendingAwaitInteractions(tenantId, assignee, group, stepId, limit);
+    return controlPlane.queryPendingAwaitInteractions(tenantId, assignee, group, stepId, limit);
   }
 
   /**
@@ -248,7 +274,37 @@ public class PipelineExecutionService {
    * Processes one execution work item and advances lifecycle state.
    */
   public Uni<Void> processExecutionWorkItem(ExecutionWorkItem workItem) {
-    return queueAsyncCoordinator.processExecutionWorkItem(workItem, this::executePipelineStreamingFromRecord);
+    PipelineTransitionWorker selectedWorker = transitionWorkerSelector.select(this);
+    return controlPlane.processExecutionWorkItem(workItem, selectedWorker);
+  }
+
+  /**
+   * Executes one local transition and converts runtime control flow into an explicit worker result.
+   *
+   * @param command transition command
+   * @return worker result
+   */
+  @Override
+  public Uni<TransitionResultEnvelope> executeTransition(TransitionCommandEnvelope command) {
+    var identityMismatch = bundleIdentityResolver().validateCommandIdentity(command, orchestratorConfig);
+    if (identityMismatch.isPresent()) {
+      return Uni.createFrom().item(TransitionResultEnvelope.failed(new IllegalArgumentException(identityMismatch.get())));
+    }
+    TransitionWorkerCommand decodedCommand;
+    try {
+      decodedCommand = command.toCommand(payloadCodec());
+    } catch (Throwable failure) {
+      return Uni.createFrom().item(TransitionResultEnvelope.failed(failure));
+    }
+    return executePipelineStreamingFromCommand(decodedCommand)
+        .collect().asList()
+        .onItem().transform(items -> TransitionResultEnvelope.completed(payloadCodec(), items))
+        .onFailure(AwaitThrowableSupport::containsAwaitSuspension).recoverWithUni(failure -> {
+          AwaitSuspendedException suspended = AwaitThrowableSupport.extractAwaitSuspension(failure);
+          return awaitCoordinator.suspensionSnapshot(suspended)
+              .onItem().transform(TransitionResultEnvelope::waiting);
+        })
+        .onFailure().recoverWithItem(TransitionResultEnvelope::failed);
   }
 
   /**
@@ -314,18 +370,16 @@ public class PipelineExecutionService {
     });
   }
 
-  private Multi<?> executePipelineStreamingFromRecord(ExecutionRecord<Object, Object> record) {
+  private Multi<?> executePipelineStreamingFromCommand(TransitionWorkerCommand command) {
     return Multi.createFrom().deferred(() -> {
-      Uni<Object> sourcePayload = record.currentStepIndex() > 0
-          ? awaitCoordinator.loadResumePayload(record.tenantId(), record.awaitUnitId())
-          : Uni.createFrom().item(record.inputPayload());
+      Uni<Object> sourcePayload = Uni.createFrom().item(command.inputPayload());
       return sourcePayload.onItem().transformToMulti(payload -> {
         Object reactiveInput = executionInputPolicy.toReplayInput(payload);
         AwaitExecutionContext previous = AwaitExecutionContextHolder.get();
         AwaitExecutionContextHolder.set(new AwaitExecutionContext(
-            record.tenantId(),
-            record.executionId(),
-            record.currentStepIndex()));
+            command.tenantId(),
+            command.executionId(),
+            command.currentStepIndex()));
         try {
           RuntimeException healthFailure = healthCheckFailure();
           if (healthFailure != null) {
@@ -337,7 +391,7 @@ public class PipelineExecutionService {
             restoreAwaitContext(previous);
             return Multi.createFrom().failure(inputFailure);
           }
-          Object result = executePipelineStreamingInternalFromStep(reactiveInput, record.currentStepIndex());
+          Object result = executePipelineStreamingInternalFromStep(reactiveInput, command.currentStepIndex());
           Multi<?> stream;
           if (result instanceof Multi<?> multi) {
             stream = multi;
@@ -354,6 +408,40 @@ public class PipelineExecutionService {
         }
       });
     });
+  }
+
+  private TransitionPayloadCodec payloadCodec() {
+    if (transitionPayloadCodec != null) {
+      return transitionPayloadCodec;
+    }
+    TransitionPayloadCodec fallback = fallbackPayloadCodec;
+    if (fallback == null) {
+      synchronized (this) {
+        fallback = fallbackPayloadCodec;
+        if (fallback == null) {
+          fallback = new JsonTransitionPayloadCodec();
+          fallbackPayloadCodec = fallback;
+        }
+      }
+    }
+    return fallback;
+  }
+
+  private PipelineBundleIdentityResolver bundleIdentityResolver() {
+    if (bundleIdentityResolver != null) {
+      return bundleIdentityResolver;
+    }
+    PipelineBundleIdentityResolver fallback = fallbackBundleIdentityResolver;
+    if (fallback == null) {
+      synchronized (this) {
+        fallback = fallbackBundleIdentityResolver;
+        if (fallback == null) {
+          fallback = new PipelineBundleIdentityResolver();
+          fallbackBundleIdentityResolver = fallback;
+        }
+      }
+    }
+    return fallback;
   }
 
   private Object executePipelineStreamingInternalFromStep(Object input, int startStepIndex) {

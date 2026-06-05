@@ -4,6 +4,8 @@ Await units are the durable suspend/resume model for `kind: await` steps. The un
 
 This guide is implementation-facing. Application-facing usage lives in [Await Boundaries](/guide/development/orchestrator-runtime/await).
 
+For the longer-term orchestration boundary that can move await units out of each app-hosted orchestrator, see [Durable Coordinator](/guide/evolve/durable-coordinator/).
+
 ## Guide Pages
 
 1. [Model](/guide/evolve/await-unit-runtime/) explains the durable records and cardinality semantics.

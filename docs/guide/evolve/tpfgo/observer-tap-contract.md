@@ -38,7 +38,7 @@ Recommended diagnostic payload fields:
 ## Out of scope for current implementation
 
 - Dedicated runtime delivery semantics for observer/tap streams.
-- Backpressure and durability SLA guarantees beyond existing checkpoint pipelines.
+- Backpressure and durability guarantees beyond existing checkpoint pipelines.
 - Checkpoint/non-checkpoint attachment validation.
 - Unresolved-step resolution diagnostics.
 - Expected-vs-actual output shape diagnostics.

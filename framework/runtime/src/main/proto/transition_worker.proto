@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package org.pipelineframework.orchestrator.grpc;
+
+option java_multiple_files = true;
+option java_package = "org.pipelineframework.orchestrator.grpc";
+
+service TransitionWorkerService {
+  rpc Execute (TransitionWorkerRequest) returns (TransitionWorkerResponse);
+  rpc Capabilities (TransitionWorkerCapabilitiesRequest) returns (TransitionWorkerCapabilitiesResponse);
+}
+
+message TransitionWorkerRequest {
+  string protocol_version = 1;
+  string payload_encoding = 2;
+  bytes command_envelope = 3;
+  string timestamp = 4;
+  string nonce = 5;
+  string signature = 6;
+}
+
+message TransitionWorkerResponse {
+  string protocol_version = 1;
+  string payload_encoding = 2;
+  bytes result_envelope = 3;
+}
+
+message TransitionWorkerCapabilitiesRequest {
+  string protocol_version = 1;
+  string timestamp = 2;
+  string nonce = 3;
+  string signature = 4;
+}
+
+message TransitionWorkerCapabilitiesResponse {
+  string protocol_version = 1;
+  string payload_encoding = 2;
+  bytes capability_envelope = 3;
+}
