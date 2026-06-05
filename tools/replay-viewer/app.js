@@ -3774,6 +3774,8 @@ renderer.domElement.addEventListener("click", (event) => {
     return;
   }
   if (!prefersTapChrome) {
+    revealPlayerChrome();
+    event.preventDefault();
     return;
   }
   if (playerChrome.dataset.visible === "true") {
