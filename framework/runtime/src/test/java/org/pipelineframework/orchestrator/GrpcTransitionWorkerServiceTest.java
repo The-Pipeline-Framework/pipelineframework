@@ -70,7 +70,7 @@ class GrpcTransitionWorkerServiceTest {
         TransitionCommandEnvelope envelope = envelope();
         TransitionResultEnvelope result = TransitionResultEnvelope.completed(payloadCodec, List.of("ok"));
         when(grpcConfig.serverEnabled()).thenReturn(true);
-        when(executionService.executeTransition(envelope))
+        when(executionService.executePortableTransition(envelope))
             .thenReturn(Uni.createFrom().item(result));
 
         TransitionWorkerResponse response = service.execute(signed(envelope)).await().indefinitely();
@@ -88,11 +88,11 @@ class GrpcTransitionWorkerServiceTest {
         when(grpcConfig.serverEnabled()).thenReturn(true);
         when(grpcConfig.sharedSecret()).thenReturn(Optional.empty());
         when(grpcConfig.sharedSecretRef()).thenReturn(Optional.of("sys:tpf.grpc.worker.secret"));
-        System.setProperty("tpf.grpc.worker.secret", "worker-secret");
-        when(executionService.executeTransition(envelope))
+        when(executionService.executePortableTransition(envelope))
             .thenReturn(Uni.createFrom().item(result));
 
         try {
+            System.setProperty("tpf.grpc.worker.secret", "worker-secret");
             TransitionWorkerResponse response = service.execute(signed(envelope)).await().indefinitely();
             TransitionResultEnvelope decoded = PipelineJson.mapper()
                 .readValue(response.getResultEnvelope().toByteArray(), TransitionResultEnvelope.class);
@@ -148,7 +148,7 @@ class GrpcTransitionWorkerServiceTest {
         TransitionCommandEnvelope envelope = envelope();
         TransitionResultEnvelope result = TransitionResultEnvelope.completed(payloadCodec, List.of("ok"));
         when(grpcConfig.serverEnabled()).thenReturn(true);
-        when(executionService.executeTransition(envelope))
+        when(executionService.executePortableTransition(envelope))
             .thenReturn(Uni.createFrom().item(result));
         TransitionWorkerRequest request = signed(envelope);
 

@@ -8,8 +8,14 @@ import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -23,12 +29,19 @@ import org.pipelineframework.config.pipeline.PipelineJson;
 public class RestPipelineTransitionWorker implements PipelineTransitionWorker {
 
     private static final ObjectMapper JSON = PipelineJson.mapper();
+    private static final AtomicInteger THREAD_SEQUENCE = new AtomicInteger();
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
 
     @Inject
     ControlPlaneSecretResolver secretResolver;
+
+    private final ExecutorService blockingExecutor = Executors.newCachedThreadPool(task -> {
+        Thread thread = new Thread(task, "rest-transition-worker-client-" + THREAD_SEQUENCE.incrementAndGet());
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private volatile HttpClient httpClient;
 
@@ -42,34 +55,12 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker {
 
     @Override
     public Uni<TransitionResultEnvelope> executeTransition(TransitionCommandEnvelope command) {
-        return Uni.createFrom().completionStage(() -> {
-            try {
-                byte[] body = JSON.writeValueAsBytes(command);
-                URI uri = workerUri(orchestratorConfig.workerRest().path());
-                String timestamp = Instant.now().toString();
-                String nonce = UUID.randomUUID().toString();
-                String signature = TransitionWorkerSignature.sign(
-                    sharedSecret(),
-                    "POST",
-                    orchestratorConfig.workerRest().path(),
-                    timestamp,
-                    nonce,
-                    body);
-                HttpRequest request = HttpRequest.newBuilder(uri)
-                    .timeout(orchestratorConfig.workerRest().requestTimeout())
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .header(TransitionWorkerSignature.TIMESTAMP_HEADER, timestamp)
-                    .header(TransitionWorkerSignature.NONCE_HEADER, nonce)
-                    .header(TransitionWorkerSignature.SIGNATURE_HEADER, signature)
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(body))
-                    .build();
-                return httpClient().sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                    .thenApply(response -> decodeResponse(response, command));
-            } catch (IOException e) {
-                throw new IllegalStateException("Failed encoding REST transition worker command", e);
-            }
-        });
+        return Uni.createFrom().completionStage(() -> CompletableFuture.supplyAsync(() -> request(command), blockingExecutor)
+            .thenCompose(request -> httpClient().sendAsync(request, HttpResponse.BodyHandlers.ofString()))
+            .thenCompose(response -> CompletableFuture.supplyAsync(
+                () -> decodeResponse(response, command),
+                blockingExecutor)))
+            .onFailure().transform(this::unwrapFailure);
     }
 
     /**
@@ -78,29 +69,12 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker {
      * @return remote worker capabilities
      */
     public Uni<PipelineWorkerCapability> capabilities() {
-        return Uni.createFrom().completionStage(() -> {
-            URI uri = workerUri(orchestratorConfig.workerRest().capabilitiesPath());
-            byte[] body = new byte[0];
-            String timestamp = Instant.now().toString();
-            String nonce = UUID.randomUUID().toString();
-            String signature = TransitionWorkerSignature.sign(
-                sharedSecret(),
-                "GET",
-                orchestratorConfig.workerRest().capabilitiesPath(),
-                timestamp,
-                nonce,
-                body);
-            HttpRequest request = HttpRequest.newBuilder(uri)
-                .timeout(orchestratorConfig.workerRest().requestTimeout())
-                .header("Accept", "application/json")
-                .header(TransitionWorkerSignature.TIMESTAMP_HEADER, timestamp)
-                .header(TransitionWorkerSignature.NONCE_HEADER, nonce)
-                .header(TransitionWorkerSignature.SIGNATURE_HEADER, signature)
-                .GET()
-                .build();
-            return httpClient().sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                .thenApply(this::decodeCapabilitiesResponse);
-        });
+        return Uni.createFrom().completionStage(() -> CompletableFuture.supplyAsync(this::capabilitiesRequest, blockingExecutor)
+            .thenCompose(request -> httpClient().sendAsync(request, HttpResponse.BodyHandlers.ofString()))
+            .thenCompose(response -> CompletableFuture.supplyAsync(
+                () -> decodeCapabilitiesResponse(response),
+                blockingExecutor)))
+            .onFailure().transform(this::unwrapFailure);
     }
 
     @Override
@@ -163,6 +137,55 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker {
         }
     }
 
+    private HttpRequest request(TransitionCommandEnvelope command) {
+        try {
+            byte[] body = JSON.writeValueAsBytes(command);
+            URI uri = workerUri(orchestratorConfig.workerRest().path());
+            String timestamp = Instant.now().toString();
+            String nonce = UUID.randomUUID().toString();
+            String signature = TransitionWorkerSignature.sign(
+                sharedSecret(),
+                "POST",
+                orchestratorConfig.workerRest().path(),
+                timestamp,
+                nonce,
+                body);
+            return HttpRequest.newBuilder(uri)
+                .timeout(orchestratorConfig.workerRest().requestTimeout())
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .header(TransitionWorkerSignature.TIMESTAMP_HEADER, timestamp)
+                .header(TransitionWorkerSignature.NONCE_HEADER, nonce)
+                .header(TransitionWorkerSignature.SIGNATURE_HEADER, signature)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body))
+                .build();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed encoding REST transition worker command", e);
+        }
+    }
+
+    private HttpRequest capabilitiesRequest() {
+        URI uri = workerUri(orchestratorConfig.workerRest().capabilitiesPath());
+        byte[] body = new byte[0];
+        String timestamp = Instant.now().toString();
+        String nonce = UUID.randomUUID().toString();
+        String signature = TransitionWorkerSignature.sign(
+            sharedSecret(),
+            "GET",
+            orchestratorConfig.workerRest().capabilitiesPath(),
+            timestamp,
+            nonce,
+            body);
+        return HttpRequest.newBuilder(uri)
+            .timeout(orchestratorConfig.workerRest().requestTimeout())
+            .header("Accept", "application/json")
+            .header(TransitionWorkerSignature.TIMESTAMP_HEADER, timestamp)
+            .header(TransitionWorkerSignature.NONCE_HEADER, nonce)
+            .header(TransitionWorkerSignature.SIGNATURE_HEADER, signature)
+            .GET()
+            .build();
+    }
+
     private PipelineWorkerCapability decodeCapabilitiesResponse(HttpResponse<String> response) {
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new TransitionWorkerFailureException(
@@ -214,5 +237,17 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker {
             }
             return httpClient;
         }
+    }
+
+    private Throwable unwrapFailure(Throwable failure) {
+        if (failure instanceof CompletionException && failure.getCause() != null) {
+            return unwrapFailure(failure.getCause());
+        }
+        return failure;
+    }
+
+    @PreDestroy
+    void close() {
+        blockingExecutor.shutdownNow();
     }
 }

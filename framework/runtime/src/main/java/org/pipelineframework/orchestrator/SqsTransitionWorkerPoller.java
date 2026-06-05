@@ -170,7 +170,7 @@ public class SqsTransitionWorkerPoller {
         }
         TransitionResultEnvelope result;
         try {
-            result = executionService.executeTransition(command)
+            result = executionService.executePortableTransition(command)
                 .await().atMost(orchestratorConfig.workerSqs().requestTimeout());
         } catch (RuntimeException e) {
             LOG.errorf(e, "Failed processing SQS transition worker requestId=%s executionId=%s",

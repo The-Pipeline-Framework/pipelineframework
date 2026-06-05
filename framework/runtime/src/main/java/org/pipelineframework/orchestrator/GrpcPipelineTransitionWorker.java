@@ -55,7 +55,8 @@ public class GrpcPipelineTransitionWorker implements PipelineTransitionWorker {
             .chain(request -> stub().execute(request))
             .ifNoItem().after(orchestratorConfig.workerGrpc().requestTimeout())
             .fail()
-            .onItem().transform(response -> decodeResponse(response, command))
+            .onItem().transformToUni(response -> Uni.createFrom().item(() -> decodeResponse(response, command))
+                .runSubscriptionOn(Infrastructure.getDefaultWorkerPool()))
             .onFailure().transform(failure -> failure instanceof TransitionWorkerFailureException
                 ? failure
                 : new TransitionWorkerFailureException(
@@ -73,7 +74,8 @@ public class GrpcPipelineTransitionWorker implements PipelineTransitionWorker {
             .chain(request -> stub().capabilities(request))
             .ifNoItem().after(orchestratorConfig.workerGrpc().requestTimeout())
             .fail()
-            .onItem().transform(this::decodeCapabilitiesResponse)
+            .onItem().transformToUni(response -> Uni.createFrom().item(() -> decodeCapabilitiesResponse(response))
+                .runSubscriptionOn(Infrastructure.getDefaultWorkerPool()))
             .onFailure().transform(failure -> failure instanceof TransitionWorkerFailureException
                 ? failure
                 : new TransitionWorkerFailureException("gRPC transition worker capability check failed", failure));

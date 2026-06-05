@@ -65,11 +65,11 @@ class SqsTransitionWorkerPollerTest {
         when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
             .messages(requestMessage("receipt-1", "request-1", envelope))
             .build());
-        when(executionService.executeTransition(envelope)).thenReturn(Uni.createFrom().item(result));
+        when(executionService.executePortableTransition(envelope)).thenReturn(Uni.createFrom().item(result));
 
         poller.pollOnce();
 
-        verify(executionService).executeTransition(envelope);
+        verify(executionService).executePortableTransition(envelope);
         verify(client).sendMessage(argThat((SendMessageRequest request) -> {
             SqsTransitionWorkerResponse response = decodeResponse(request.messageBody());
             return request.queueUrl().equals("https://sqs.local/response")
@@ -88,11 +88,11 @@ class SqsTransitionWorkerPollerTest {
         when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
             .messages(requestMessage("receipt-failed", "request-failed", envelope))
             .build());
-        when(executionService.executeTransition(envelope)).thenReturn(Uni.createFrom().item(result));
+        when(executionService.executePortableTransition(envelope)).thenReturn(Uni.createFrom().item(result));
 
         poller.pollOnce();
 
-        verify(executionService).executeTransition(envelope);
+        verify(executionService).executePortableTransition(envelope);
         verify(client).sendMessage(argThat((SendMessageRequest request) -> {
             SqsTransitionWorkerResponse response = decodeResponse(request.messageBody());
             return request.queueUrl().equals("https://sqs.local/response")
@@ -110,16 +110,16 @@ class SqsTransitionWorkerPollerTest {
         TransitionResultEnvelope result = TransitionResultEnvelope.completed(payloadCodec, List.of("ok"));
         when(sqsWorkerConfig.sharedSecret()).thenReturn(Optional.empty());
         when(sqsWorkerConfig.sharedSecretRef()).thenReturn(Optional.of("sys:tpf.sqs.worker.secret"));
-        System.setProperty("tpf.sqs.worker.secret", "worker-secret");
         when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
             .messages(requestMessage("receipt-1", "request-1", envelope))
             .build());
-        when(executionService.executeTransition(envelope)).thenReturn(Uni.createFrom().item(result));
+        when(executionService.executePortableTransition(envelope)).thenReturn(Uni.createFrom().item(result));
 
         try {
+            System.setProperty("tpf.sqs.worker.secret", "worker-secret");
             poller.pollOnce();
 
-            verify(executionService).executeTransition(envelope);
+            verify(executionService).executePortableTransition(envelope);
             verify(client).deleteMessage(argThat((DeleteMessageRequest request) ->
                 request.receiptHandle().equals("receipt-1")));
         } finally {
@@ -133,7 +133,7 @@ class SqsTransitionWorkerPollerTest {
         when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
             .messages(requestMessage("receipt-2", "request-2", envelope))
             .build());
-        when(executionService.executeTransition(envelope))
+        when(executionService.executePortableTransition(envelope))
             .thenReturn(Uni.createFrom().item(TransitionResultEnvelope.completed(payloadCodec, List.of("ok"))));
         when(client.sendMessage(any(SendMessageRequest.class))).thenThrow(new IllegalStateException("send failed"));
 
@@ -152,7 +152,7 @@ class SqsTransitionWorkerPollerTest {
 
         poller.pollOnce();
 
-        verify(executionService, never()).executeTransition(any());
+        verify(executionService, never()).executePortableTransition(any());
         verify(client, never()).sendMessage(any(SendMessageRequest.class));
         verify(client).deleteMessage(argThat((DeleteMessageRequest request) ->
             request.receiptHandle().equals("receipt-3")));
@@ -166,7 +166,7 @@ class SqsTransitionWorkerPollerTest {
 
         poller.pollOnce();
 
-        verify(executionService, never()).executeTransition(any());
+        verify(executionService, never()).executePortableTransition(any());
         verify(client, never()).sendMessage(any(SendMessageRequest.class));
         verify(client).deleteMessage(argThat((DeleteMessageRequest request) ->
             request.receiptHandle().equals("receipt-4")));

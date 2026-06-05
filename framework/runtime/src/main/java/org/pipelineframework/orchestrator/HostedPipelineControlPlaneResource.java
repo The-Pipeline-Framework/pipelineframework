@@ -112,6 +112,14 @@ public class HostedPipelineControlPlaneResource {
             return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
                 .entity("pipelineId is required").build());
         }
+        if (request.inputShape() == null) {
+            return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
+                .entity("inputShape is required").build());
+        }
+        if (request.inputPayload() == null) {
+            return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
+                .entity("inputPayload is required").build());
+        }
         Object input;
         try {
             input = executionInput(request);
@@ -243,6 +251,14 @@ public class HostedPipelineControlPlaneResource {
         if (request == null) {
             return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
                 .entity("Await completion request is required").build());
+        }
+        if (isBlank(request.interactionId()) && isBlank(request.correlationId()) && isBlank(request.resumeToken())) {
+            return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
+                .entity("interactionId, correlationId, or resumeToken is required").build());
+        }
+        if (request.responsePayload() == null) {
+            return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
+                .entity("responsePayload is required").build());
         }
         Object responsePayload;
         try {
@@ -489,5 +505,9 @@ public class HostedPipelineControlPlaneResource {
         private IngressPayloadTypeResolutionException(Throwable cause) {
             super(cause);
         }
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

@@ -51,6 +51,14 @@ public class RestTransitionWorkerResource {
         if (!orchestratorConfig.workerRest().serverEnabled()) {
             return;
         }
+        if (!"/pipeline/worker/transitions/execute".equals(orchestratorConfig.workerRest().path())) {
+            throw new IllegalStateException("REST transition worker server only supports "
+                + "pipeline.orchestrator.worker.rest.path=/pipeline/worker/transitions/execute");
+        }
+        if (!"/pipeline/worker/capabilities".equals(orchestratorConfig.workerRest().capabilitiesPath())) {
+            throw new IllegalStateException("REST transition worker server only supports "
+                + "pipeline.orchestrator.worker.rest.capabilities-path=/pipeline/worker/capabilities");
+        }
         WorkerSecretSupport.validationError(
             orchestratorConfig.workerRest().sharedSecret(),
             orchestratorConfig.workerRest().sharedSecretRef(),
@@ -93,7 +101,7 @@ public class RestTransitionWorkerResource {
         if (envelope == null) {
             return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST).build());
         }
-        return executionService.executeTransition(envelope)
+        return executionService.executePortableTransition(envelope)
             .onItem().transform(result -> Response.ok(result).build());
     }
 

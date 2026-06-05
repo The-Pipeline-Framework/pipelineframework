@@ -135,6 +135,22 @@ class HostedBundleAdminResourceTest {
     }
 
     @Test
+    void registersBundleWhoseOptionalStepKindIsOmittedFromManifest() throws Exception {
+        when(adminConfig.enabled()).thenReturn(true);
+        Path jar = bundleJar(PIPELINE_ID, false, false, false);
+
+        Response registeredResponse = resource.register(
+            TENANT_ID,
+            PIPELINE_ID,
+            AUTH,
+            new HostedBundleRegisterRequest(jar.toString())).await().indefinitely();
+
+        assertEquals(200, registeredResponse.getStatus());
+        PipelineBundleRecord registered = assertInstanceOf(PipelineBundleRecord.class, registeredResponse.getEntity());
+        assertEquals(PIPELINE_ID, registered.pipelineId());
+    }
+
+    @Test
     void activationFailsWhenStoredArtifactIsMissing() throws Exception {
         when(adminConfig.enabled()).thenReturn(true);
         Path jar = bundleJar(PIPELINE_ID, false, false);
@@ -196,7 +212,11 @@ class HostedBundleAdminResourceTest {
     }
 
     private Path bundleJar(String pipelineId, boolean corruptHash, boolean emptySteps) throws Exception {
-        Map<String, Object> withoutHash = canonicalContent(pipelineId, emptySteps);
+        return bundleJar(pipelineId, corruptHash, emptySteps, true);
+    }
+
+    private Path bundleJar(String pipelineId, boolean corruptHash, boolean emptySteps, boolean includeStepKind) throws Exception {
+        Map<String, Object> withoutHash = canonicalContent(pipelineId, emptySteps, includeStepKind);
         String hash = sha256(PipelineJson.mapper().writeValueAsString(withoutHash));
         if (corruptHash) {
             hash = "bad" + hash.substring(3);
@@ -219,6 +239,10 @@ class HostedBundleAdminResourceTest {
     }
 
     private Map<String, Object> canonicalContent(String pipelineId, boolean emptySteps) {
+        return canonicalContent(pipelineId, emptySteps, true);
+    }
+
+    private Map<String, Object> canonicalContent(String pipelineId, boolean emptySteps, boolean includeStepKind) {
         Map<String, Object> content = new LinkedHashMap<>();
         content.put("schemaVersion", 1);
         content.put("pipelineId", pipelineId);
@@ -227,16 +251,18 @@ class HostedBundleAdminResourceTest {
         content.put("module", "monolith-svc");
         content.put("pluginHost", false);
         content.put("runtimeLayout", "monolith");
-        content.put("steps", emptySteps ? List.of() : List.of(step()));
+        content.put("steps", emptySteps ? List.of() : List.of(step(includeStepKind)));
         content.put("capabilities", capabilities());
         return content;
     }
 
-    private Map<String, Object> step() {
+    private Map<String, Object> step(boolean includeKind) {
         Map<String, Object> step = new LinkedHashMap<>();
         step.put("index", 0);
         step.put("authoredName", "Validate");
-        step.put("kind", "service");
+        if (includeKind) {
+            step.put("kind", "service");
+        }
         step.put("cardinality", "ONE_TO_ONE");
         step.put("inputTypeId", "Input");
         step.put("outputTypeId", "Output");

@@ -95,7 +95,7 @@ public class PipelineBundleRegistrar {
     }
 
     private void validateManifest(String expectedPipelineId, PipelineBundleManifest manifest) {
-        if (!expectedPipelineId.trim().equals(manifest.pipelineId())) {
+        if (manifest.pipelineId() == null || !expectedPipelineId.trim().equals(manifest.pipelineId().trim())) {
             throw new IllegalArgumentException("Bundle pipelineId does not match request path");
         }
         if (manifest.bundleHash() == null || manifest.bundleHash().isBlank()) {
@@ -154,7 +154,7 @@ public class PipelineBundleRegistrar {
         Map<String, Object> content = new LinkedHashMap<>();
         content.put("index", step.index());
         content.put("authoredName", step.authoredName());
-        content.put("kind", step.kind());
+        putIfNotNull(content, "kind", step.kind());
         content.put("cardinality", step.cardinality());
         content.put("inputTypeId", step.inputTypeId());
         content.put("outputTypeId", step.outputTypeId());

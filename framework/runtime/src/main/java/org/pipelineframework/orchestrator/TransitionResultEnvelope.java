@@ -1,5 +1,6 @@
 package org.pipelineframework.orchestrator;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.List;
 import java.util.Objects;
 
@@ -15,21 +16,40 @@ public record TransitionResultEnvelope(
     TransitionWorkerOutcome outcome,
     List<SerializedTransitionPayload> outputPayloads,
     TransitionAwaitSuspension awaitSuspension,
-    TransitionFailureEnvelope failure) {
+    TransitionFailureEnvelope failure,
+    @JsonIgnore List<?> decodedOutputItems) {
+    public TransitionResultEnvelope(
+        TransitionWorkerOutcome outcome,
+        List<SerializedTransitionPayload> outputPayloads,
+        TransitionAwaitSuspension awaitSuspension,
+        TransitionFailureEnvelope failure) {
+        this(outcome, outputPayloads, awaitSuspension, failure, null);
+    }
+
     public TransitionResultEnvelope {
         Objects.requireNonNull(outcome, "TransitionResultEnvelope.outcome must not be null");
         outputPayloads = outputPayloads == null ? List.of() : List.copyOf(outputPayloads);
+        decodedOutputItems = decodedOutputItems == null ? null : List.copyOf(decodedOutputItems);
         if (outcome == TransitionWorkerOutcome.WAITING_EXTERNAL && awaitSuspension == null) {
             throw new IllegalArgumentException("WAITING_EXTERNAL transition envelope requires awaitSuspension");
         }
         if (outcome == TransitionWorkerOutcome.FAILED && failure == null) {
             throw new IllegalArgumentException("FAILED transition envelope requires failure");
         }
+        if (outcome == TransitionWorkerOutcome.COMPLETED && !outputPayloads.isEmpty() && decodedOutputItems != null) {
+            throw new IllegalArgumentException("COMPLETED transition envelope must not include both encoded and decoded outputs");
+        }
         if (outcome == TransitionWorkerOutcome.COMPLETED && awaitSuspension != null) {
             throw new IllegalArgumentException("COMPLETED transition envelope must not include awaitSuspension");
         }
         if (outcome == TransitionWorkerOutcome.COMPLETED && failure != null) {
             throw new IllegalArgumentException("COMPLETED transition envelope must not include failure");
+        }
+        if (outcome == TransitionWorkerOutcome.WAITING_EXTERNAL && (!outputPayloads.isEmpty() || failure != null || decodedOutputItems != null)) {
+            throw new IllegalArgumentException("WAITING_EXTERNAL transition envelope must only include awaitSuspension");
+        }
+        if (outcome == TransitionWorkerOutcome.FAILED && (!outputPayloads.isEmpty() || awaitSuspension != null || decodedOutputItems != null)) {
+            throw new IllegalArgumentException("FAILED transition envelope must only include failure");
         }
     }
 
@@ -46,6 +66,21 @@ public record TransitionResultEnvelope(
             ? List.of()
             : outputItems.stream().map(codec::encode).toList();
         return new TransitionResultEnvelope(TransitionWorkerOutcome.COMPLETED, encoded, null, null);
+    }
+
+    /**
+     * Creates a completed in-process envelope with decoded output items.
+     *
+     * @param outputItems decoded output items
+     * @return completed envelope
+     */
+    public static TransitionResultEnvelope completedInProcess(List<?> outputItems) {
+        return new TransitionResultEnvelope(
+            TransitionWorkerOutcome.COMPLETED,
+            List.of(),
+            null,
+            null,
+            outputItems == null ? List.of() : outputItems);
     }
 
     /**
@@ -85,6 +120,9 @@ public record TransitionResultEnvelope(
      */
     public List<?> decodeOutputItems(TransitionPayloadCodec codec) {
         Objects.requireNonNull(codec, "codec must not be null");
+        if (decodedOutputItems != null) {
+            return decodedOutputItems;
+        }
         return outputPayloads.stream().map(codec::decode).toList();
     }
 }

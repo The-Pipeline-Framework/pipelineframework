@@ -93,7 +93,7 @@ public class GrpcTransitionWorkerService
                 .withCause(e)
                 .asRuntimeException());
         }
-        return executionService.executeTransition(envelope)
+        return executionService.executePortableTransition(envelope)
             .onItem().transform(this::response)
             .onFailure().transform(this::toGrpcFailure);
     }

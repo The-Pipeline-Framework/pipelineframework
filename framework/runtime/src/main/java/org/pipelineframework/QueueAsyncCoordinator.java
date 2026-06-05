@@ -823,13 +823,17 @@ class QueueAsyncCoordinator {
     if (controlPlaneAdmissionPolicy != null) {
       return controlPlaneAdmissionPolicy;
     }
-    ControlPlaneAdmissionPolicy existing = fallbackAdmissionPolicy;
-    if (existing != null) {
-      return existing;
+    ControlPlaneAdmissionPolicy fallback = fallbackAdmissionPolicy;
+    if (fallback == null) {
+      synchronized (this) {
+        fallback = fallbackAdmissionPolicy;
+        if (fallback == null) {
+          fallback = new org.pipelineframework.orchestrator.LocalControlPlaneAdmissionPolicy(orchestratorConfig);
+          fallbackAdmissionPolicy = fallback;
+        }
+      }
     }
-    ControlPlaneAdmissionPolicy created = new org.pipelineframework.orchestrator.LocalControlPlaneAdmissionPolicy(orchestratorConfig);
-    fallbackAdmissionPolicy = created;
-    return created;
+    return fallback;
   }
 
   private RuntimeException admissionFailure(ControlPlaneAdmissionRequest request) {

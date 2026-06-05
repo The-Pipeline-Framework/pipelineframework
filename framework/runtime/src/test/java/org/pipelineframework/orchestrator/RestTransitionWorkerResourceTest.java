@@ -12,6 +12,7 @@ import org.pipelineframework.PipelineExecutionService;
 import org.pipelineframework.config.pipeline.PipelineJson;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -60,7 +61,7 @@ class RestTransitionWorkerResourceTest {
         TransitionCommandEnvelope envelope = envelope();
         TransitionResultEnvelope result = TransitionResultEnvelope.completed(payloadCodec, List.of("ok"));
         when(restConfig.serverEnabled()).thenReturn(true);
-        when(executionService.executeTransition(envelope))
+        when(executionService.executePortableTransition(envelope))
             .thenReturn(Uni.createFrom().item(result));
 
         SignedRequest request = signed(envelope);
@@ -81,11 +82,11 @@ class RestTransitionWorkerResourceTest {
         when(restConfig.serverEnabled()).thenReturn(true);
         when(restConfig.sharedSecret()).thenReturn(java.util.Optional.empty());
         when(restConfig.sharedSecretRef()).thenReturn(java.util.Optional.of("sys:tpf.rest.worker.secret"));
-        System.setProperty("tpf.rest.worker.secret", "worker-secret");
-        when(executionService.executeTransition(envelope))
+        when(executionService.executePortableTransition(envelope))
             .thenReturn(Uni.createFrom().item(result));
 
         try {
+            System.setProperty("tpf.rest.worker.secret", "worker-secret");
             SignedRequest request = signed(envelope);
             Response response = resource.execute(
                 request.timestamp(),
@@ -106,6 +107,19 @@ class RestTransitionWorkerResourceTest {
         Response response = resource.execute(null, null, null, new byte[0]).await().indefinitely();
 
         assertEquals(401, response.getStatus());
+    }
+
+    @Test
+    void startupValidationRejectsUnsupportedCustomServerPaths() {
+        when(restConfig.serverEnabled()).thenReturn(true);
+        when(restConfig.path()).thenReturn("/custom/execute");
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, resource::validateServerConfig);
+
+        assertEquals(
+            "REST transition worker server only supports "
+                + "pipeline.orchestrator.worker.rest.path=/pipeline/worker/transitions/execute",
+            error.getMessage());
     }
 
     @Test
@@ -146,7 +160,7 @@ class RestTransitionWorkerResourceTest {
         TransitionCommandEnvelope envelope = envelope();
         TransitionResultEnvelope result = TransitionResultEnvelope.completed(payloadCodec, List.of("ok"));
         when(restConfig.serverEnabled()).thenReturn(true);
-        when(executionService.executeTransition(envelope))
+        when(executionService.executePortableTransition(envelope))
             .thenReturn(Uni.createFrom().item(result));
         SignedRequest request = signed(envelope);
 

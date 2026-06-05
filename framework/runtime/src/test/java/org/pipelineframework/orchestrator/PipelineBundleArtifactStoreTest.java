@@ -37,7 +37,7 @@ class PipelineBundleArtifactStoreTest {
 
         assertNotEquals(source.toString(), stored.artifactPath());
         assertTrue(Files.isRegularFile(Path.of(stored.artifactPath())));
-        assertEquals(Files.size(Path.of(stored.artifactPath())), stored.artifactSizeBytes());
+        assertEquals(stored.artifactSizeBytes(), Files.size(Path.of(stored.artifactPath())));
 
         PipelineBundleRecord record = record(manifest, stored);
         store.verify(record);

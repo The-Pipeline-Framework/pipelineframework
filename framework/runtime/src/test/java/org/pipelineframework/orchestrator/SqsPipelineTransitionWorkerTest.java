@@ -93,7 +93,6 @@ class SqsPipelineTransitionWorkerTest {
     void sendsRequestWithSharedSecretReference() {
         when(sqsWorkerConfig.sharedSecret()).thenReturn(Optional.empty());
         when(sqsWorkerConfig.sharedSecretRef()).thenReturn(Optional.of("sys:tpf.sqs.worker.secret"));
-        System.setProperty("tpf.sqs.worker.secret", "worker-secret");
         when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenAnswer(invocation ->
             ReceiveMessageResponse.builder()
                 .messages(responseMessage("receipt-1", sentRequest.get().requestId(),
@@ -101,6 +100,7 @@ class SqsPipelineTransitionWorkerTest {
                 .build());
 
         try {
+            System.setProperty("tpf.sqs.worker.secret", "worker-secret");
             TransitionResultEnvelope result = worker.executeTransition(envelope()).await().indefinitely();
 
             assertEquals(TransitionWorkerOutcome.COMPLETED, result.outcome());

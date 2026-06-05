@@ -286,6 +286,20 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
    */
   @Override
   public Uni<TransitionResultEnvelope> executeTransition(TransitionCommandEnvelope command) {
+    return executeTransition(command, false);
+  }
+
+  /**
+   * Executes one transition and returns a wire-portable encoded result envelope.
+   *
+   * @param command transition command
+   * @return encoded worker result
+   */
+  public Uni<TransitionResultEnvelope> executePortableTransition(TransitionCommandEnvelope command) {
+    return executeTransition(command, true);
+  }
+
+  private Uni<TransitionResultEnvelope> executeTransition(TransitionCommandEnvelope command, boolean encodeOutputs) {
     var identityMismatch = bundleIdentityResolver().validateCommandIdentity(command, orchestratorConfig);
     if (identityMismatch.isPresent()) {
       return Uni.createFrom().item(TransitionResultEnvelope.failed(new IllegalArgumentException(identityMismatch.get())));
@@ -298,7 +312,9 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     }
     return executePipelineStreamingFromCommand(decodedCommand)
         .collect().asList()
-        .onItem().transform(items -> TransitionResultEnvelope.completed(payloadCodec(), items))
+        .onItem().transform(items -> encodeOutputs
+            ? TransitionResultEnvelope.completed(payloadCodec(), items)
+            : TransitionResultEnvelope.completedInProcess(items))
         .onFailure(AwaitThrowableSupport::containsAwaitSuspension).recoverWithUni(failure -> {
           AwaitSuspendedException suspended = AwaitThrowableSupport.extractAwaitSuspension(failure);
           return awaitCoordinator.suspensionSnapshot(suspended)

@@ -156,6 +156,34 @@ class TransitionCommandEnvelopeTest {
     }
 
     @Test
+    void inProcessResultCarriesDecodedOutputsWithoutSerializedPayloads() {
+        Object output = new Object();
+        TransitionResultEnvelope result = TransitionResultEnvelope.completedInProcess(List.of(output));
+
+        assertEquals(TransitionWorkerOutcome.COMPLETED, result.outcome());
+        assertEquals(List.of(), result.outputPayloads());
+        assertEquals(output, result.decodeOutputItems(payloadCodec).getFirst());
+    }
+
+    @Test
+    void rejectsMutuallyExclusiveTransitionResultStates() {
+        TransitionFailureEnvelope failure = TransitionFailureEnvelope.from(new IllegalStateException("boom"));
+        TransitionAwaitSuspension suspension = new TransitionAwaitSuspension("tenant-1", "exec-1", "unit-1", 0);
+
+        assertThrows(IllegalArgumentException.class, () ->
+            new TransitionResultEnvelope(TransitionWorkerOutcome.WAITING_EXTERNAL, List.of(), suspension, failure));
+        assertThrows(IllegalArgumentException.class, () ->
+            new TransitionResultEnvelope(TransitionWorkerOutcome.FAILED, List.of(), suspension, failure));
+        assertThrows(IllegalArgumentException.class, () ->
+            new TransitionResultEnvelope(
+                TransitionWorkerOutcome.COMPLETED,
+                List.of(payloadCodec.encode("encoded")),
+                null,
+                null,
+                List.of("decoded")));
+    }
+
+    @Test
     void preservesContainerPayloadsAcrossCodecRoundTrip() {
         Object decodedMap = payloadCodec.decode(payloadCodec.encode(Map.of(
             "approved", true,

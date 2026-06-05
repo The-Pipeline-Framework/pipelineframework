@@ -593,6 +593,42 @@ class QueueAsyncCoordinatorTest {
     }
 
     @Test
+    void processExecutionWorkItemPersistsDecodedInProcessOutputWithoutSerialization() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.leaseMs()).thenReturn(1000L);
+        ExecutionRecord<Object, Object> claimed = createRecord("tenant-1", "exec-local", "key-local");
+        NonSerializableOutput output = new NonSerializableOutput(new Object());
+        when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(checkpointPublicationService.publishIfConfigured(org.mockito.ArgumentMatchers.eq(claimed), org.mockito.ArgumentMatchers.same(output)))
+            .thenReturn(Uni.createFrom().voidItem());
+        when(executionStateStore.markSucceeded(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-local"),
+                org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq("exec-local:0:0"),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+
+        coordinator.processExecutionWorkItem(
+                new ExecutionWorkItem("tenant-1", "exec-local"),
+                command -> Uni.createFrom().item(TransitionResultEnvelope.completedInProcess(List.of(output))))
+            .await().indefinitely();
+
+        ArgumentCaptor<Object> resultCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(executionStateStore).markSucceeded(
+            org.mockito.ArgumentMatchers.eq("tenant-1"),
+            org.mockito.ArgumentMatchers.eq("exec-local"),
+            org.mockito.ArgumentMatchers.eq(0L),
+            org.mockito.ArgumentMatchers.eq("exec-local:0:0"),
+            resultCaptor.capture(),
+            org.mockito.ArgumentMatchers.anyLong());
+        List<?> persisted = assertInstanceOf(List.class, resultCaptor.getValue());
+        assertEquals(output, persisted.getFirst());
+    }
+
+    @Test
     void transitionCommandUsesExecutionPinnedBundleIdentity() {
         TransitionCommandEnvelope envelope = prepareTransitionCommand(
             createRecord(
@@ -1141,6 +1177,9 @@ class QueueAsyncCoordinatorTest {
             1L,
             1L,
             99999999L);
+    }
+
+    private record NonSerializableOutput(Object writer) {
     }
 
     @SuppressWarnings("unchecked")
