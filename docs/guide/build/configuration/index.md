@@ -249,7 +249,7 @@ Prefix: `pipeline.orchestrator`
 | `pipeline.orchestrator.worker.rest.shared-secret` | string | none | HMAC secret used to sign and verify REST transition worker requests. Required when `rest.base-url` or `rest.server-enabled=true` is used. |
 | `pipeline.orchestrator.worker.rest.shared-secret-ref` | string | none | Local secret reference for the REST transition worker signing secret. Supports `env:NAME`, `sys:property.name`, and `config:some.config.key`. Configure exactly one of `shared-secret` or `shared-secret-ref`. |
 | `pipeline.orchestrator.worker.rest.signature-tolerance` | duration | `PT2M` | Maximum timestamp skew accepted for signed REST transition worker requests. |
-| `pipeline.orchestrator.worker.rest.allowed-payload-prefixes` | list | `org.pipelineframework.` | Java package prefixes accepted by the JSON transition payload codec for application payload classes. |
+| `pipeline.orchestrator.worker.allowed-payload-prefixes` | list | `org.pipelineframework.` | Java package prefixes accepted by the JSON transition payload codec for application payload classes across local, REST, gRPC, and SQS workers. |
 | `pipeline.orchestrator.worker.grpc.endpoint` | string | none | Optional remote gRPC transition worker endpoint in `host:port` form. When set, transition work is routed to the gRPC worker client instead of the local in-process worker. |
 | `pipeline.orchestrator.worker.grpc.plaintext` | boolean | `false` | Uses plaintext gRPC channels for local/test worker processes. |
 | `pipeline.orchestrator.worker.grpc.request-timeout` | duration | `PT30S` | gRPC transition worker request timeout. |

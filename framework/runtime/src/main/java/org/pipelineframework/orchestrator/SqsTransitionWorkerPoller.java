@@ -153,7 +153,7 @@ public class SqsTransitionWorkerPoller {
             deleteRequest(message.receiptHandle());
             return;
         }
-        if (!authenticate(request)) {
+        if (!authenticate(request, false)) {
             LOG.warnf("Dropping unauthenticated SQS transition worker request id=%s requestId=%s",
                 message.messageId(),
                 request.requestId());
@@ -178,6 +178,7 @@ public class SqsTransitionWorkerPoller {
                 command.executionId());
             try {
                 sendResponse(request.requestId(), TransitionResultEnvelope.failed(e));
+                recordAuthenticatedNonce(request);
                 deleteRequest(message.receiptHandle());
             } catch (RuntimeException responseFailure) {
                 LOG.errorf(responseFailure, "Failed sending SQS transition worker failure response requestId=%s",
@@ -187,6 +188,7 @@ public class SqsTransitionWorkerPoller {
         }
         try {
             sendResponse(request.requestId(), result);
+            recordAuthenticatedNonce(request);
             deleteRequest(message.receiptHandle());
         } catch (RuntimeException responseFailure) {
             LOG.errorf(responseFailure, "Failed sending SQS transition worker response requestId=%s executionId=%s",
@@ -224,7 +226,7 @@ public class SqsTransitionWorkerPoller {
         }
     }
 
-    private boolean authenticate(SqsTransitionWorkerRequest request) {
+    private boolean authenticate(SqsTransitionWorkerRequest request, boolean recordNonce) {
         if (!SqsTransitionWorkerProtocol.PROTOCOL_VERSION.equals(request.protocolVersion())
             || !SqsTransitionWorkerProtocol.PAYLOAD_ENCODING.equals(request.commandEncoding())) {
             return false;
@@ -250,7 +252,16 @@ public class SqsTransitionWorkerPoller {
         if (!TransitionWorkerSignature.matches(expected, request.signature())) {
             return false;
         }
-        return nonceReplayGuard.accept(request.nonce(), timestampEpochMs, now, toleranceMs);
+        if (recordNonce) {
+            return nonceReplayGuard.accept(request.nonce(), timestampEpochMs, now, toleranceMs);
+        }
+        return !nonceReplayGuard.seen(request.nonce(), now, toleranceMs);
+    }
+
+    private void recordAuthenticatedNonce(SqsTransitionWorkerRequest request) {
+        if (!authenticate(request, true)) {
+            LOG.warnf("SQS transition worker request nonce was already recorded requestId=%s", request.requestId());
+        }
     }
 
     private void deleteRequest(String receiptHandle) {

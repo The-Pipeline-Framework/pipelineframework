@@ -155,7 +155,7 @@ public class AwaitCoordinator {
                 AwaitCompletionCommand safeCommand = validated.command();
                 AwaitInteractionRecord record = validated.record();
                 if (safeCommand.resumeToken() == null) {
-                    return Uni.createFrom().item(safeCommand);
+                    return Uni.createFrom().item(withResolvedInteractionId(safeCommand, record));
                 }
                 if (record.status().terminal() && record.status() != AwaitInteractionStatus.COMPLETED) {
                     return Uni.createFrom().failure(
@@ -166,9 +166,27 @@ public class AwaitCoordinator {
                         return safeCommand;
                     })
                     .runSubscriptionOn(Infrastructure.getDefaultExecutor())
-                    .replaceWith(safeCommand);
+                    .replaceWith(withResolvedInteractionId(safeCommand, record));
             })
             .onItem().transformToUni(safeCommand -> interactionStore().complete(safeCommand));
+    }
+
+    private static AwaitCompletionCommand withResolvedInteractionId(
+        AwaitCompletionCommand command,
+        AwaitInteractionRecord record
+    ) {
+        if (command.interactionId() != null) {
+            return command;
+        }
+        return new AwaitCompletionCommand(
+            command.tenantId(),
+            record.interactionId(),
+            command.correlationId(),
+            command.resumeToken(),
+            command.idempotencyKey(),
+            command.responsePayload(),
+            command.actor(),
+            command.nowEpochMs());
     }
 
     private Uni<AwaitCompletionCommand> enforceCompletionPayloadLimitIfUnitPresent(
@@ -532,9 +550,14 @@ public class AwaitCoordinator {
     }
 
     private Uni<AwaitInteractionRecord> resolveForCompletion(AwaitCompletionCommand command) {
-        Uni<Optional<AwaitInteractionRecord>> lookup = command.interactionId() != null
-            ? interactionStore().get(command.tenantId(), command.interactionId())
-            : interactionStore().findByCorrelation(command.tenantId(), command.correlationId());
+        Uni<Optional<AwaitInteractionRecord>> lookup;
+        if (command.interactionId() != null) {
+            lookup = interactionStore().get(command.tenantId(), command.interactionId());
+        } else if (command.correlationId() != null) {
+            lookup = interactionStore().findByCorrelation(command.tenantId(), command.correlationId());
+        } else {
+            lookup = interactionStore().get(command.tenantId(), resumeTokenService.interactionIdHint(command.resumeToken()));
+        }
         return lookup.onItem().transform(optional -> optional.orElseThrow(
             () -> new AwaitInteractionNotFoundException("No await interaction matches completion")));
     }

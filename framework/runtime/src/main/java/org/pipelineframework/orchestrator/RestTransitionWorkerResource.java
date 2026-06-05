@@ -30,6 +30,10 @@ import org.pipelineframework.config.pipeline.PipelineJson;
 @Produces(MediaType.APPLICATION_JSON)
 public class RestTransitionWorkerResource {
 
+    static final String RESOURCE_ROOT = "/pipeline/worker";
+    static final String EXECUTE_PATH = RESOURCE_ROOT + "/transitions/execute";
+    static final String CAPABILITIES_PATH = RESOURCE_ROOT + "/capabilities";
+
     private static final ObjectMapper JSON = PipelineJson.mapper();
 
     @Inject
@@ -51,13 +55,13 @@ public class RestTransitionWorkerResource {
         if (!orchestratorConfig.workerRest().serverEnabled()) {
             return;
         }
-        if (!"/pipeline/worker/transitions/execute".equals(orchestratorConfig.workerRest().path())) {
+        if (!EXECUTE_PATH.equals(orchestratorConfig.workerRest().path())) {
             throw new IllegalStateException("REST transition worker server only supports "
-                + "pipeline.orchestrator.worker.rest.path=/pipeline/worker/transitions/execute");
+                + "pipeline.orchestrator.worker.rest.path=" + EXECUTE_PATH);
         }
-        if (!"/pipeline/worker/capabilities".equals(orchestratorConfig.workerRest().capabilitiesPath())) {
+        if (!CAPABILITIES_PATH.equals(orchestratorConfig.workerRest().capabilitiesPath())) {
             throw new IllegalStateException("REST transition worker server only supports "
-                + "pipeline.orchestrator.worker.rest.capabilities-path=/pipeline/worker/capabilities");
+                + "pipeline.orchestrator.worker.rest.capabilities-path=" + CAPABILITIES_PATH);
         }
         WorkerSecretSupport.validationError(
             orchestratorConfig.workerRest().sharedSecret(),
@@ -84,7 +88,7 @@ public class RestTransitionWorkerResource {
         }
         Response authFailure = authenticate(
             "POST",
-            orchestratorConfig.workerRest().path(),
+            EXECUTE_PATH,
             timestamp,
             nonce,
             signature,
@@ -118,7 +122,7 @@ public class RestTransitionWorkerResource {
         }
         Response authFailure = authenticate(
             "GET",
-            orchestratorConfig.workerRest().capabilitiesPath(),
+            CAPABILITIES_PATH,
             timestamp,
             nonce,
             signature,

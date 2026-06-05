@@ -35,6 +35,7 @@ public record PipelineBundleManifest(
     public static final String RESOURCE_PATH = "META-INF/pipeline/bundle-manifest.json";
     public static final String DEFAULT_PIPELINE_ID = "local-pipeline";
     public static final String DEFAULT_BUNDLE_VERSION_ID = "local-bundle";
+    public static final String DEFAULT_BUNDLE_HASH = "local-bundle-hash";
 
     public PipelineBundleManifest {
         if (schemaVersion != CURRENT_SCHEMA_VERSION) {
@@ -58,7 +59,7 @@ public record PipelineBundleManifest(
             CURRENT_SCHEMA_VERSION,
             DEFAULT_PIPELINE_ID,
             DEFAULT_BUNDLE_VERSION_ID,
-            DEFAULT_BUNDLE_VERSION_ID,
+            DEFAULT_BUNDLE_HASH,
             null,
             null,
             null,

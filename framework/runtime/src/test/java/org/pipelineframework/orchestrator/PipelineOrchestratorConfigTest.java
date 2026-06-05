@@ -47,7 +47,7 @@ class PipelineOrchestratorConfigTest {
         assertFalse(config.resumeTokenSecret().isPresent());
         assertEquals(10000, config.awaitAggregateMaxInputItems());
         assertEquals(10000, config.awaitAggregateMaxOutputItems());
-        assertEquals(List.of("org.pipelineframework."), config.workerRest().allowedPayloadPrefixes());
+        assertEquals(List.of("org.pipelineframework."), config.worker().allowedPayloadPrefixes());
         assertFalse(config.workerRest().sharedSecret().isPresent());
         assertFalse(config.workerRest().sharedSecretRef().isPresent());
         assertEquals(Duration.ofMinutes(2), config.workerRest().signatureTolerance());
@@ -221,10 +221,10 @@ class PipelineOrchestratorConfigTest {
                 (Consumer<PipelineOrchestratorConfig>) config ->
                     assertEquals("env:TPF_CONTROL_PLANE_ADMIN_TOKEN", config.controlPlane().adminTokenRef().orElseThrow())),
             Arguments.of(
-                "pipeline.orchestrator.worker.rest.allowed-payload-prefixes",
+                "pipeline.orchestrator.worker.allowed-payload-prefixes",
                 "com.example.,org.acme.",
                 (Consumer<PipelineOrchestratorConfig>) config ->
-                    assertEquals(List.of("com.example.", "org.acme."), config.workerRest().allowedPayloadPrefixes())),
+                    assertEquals(List.of("com.example.", "org.acme."), config.worker().allowedPayloadPrefixes())),
             Arguments.of(
                 "pipeline.orchestrator.worker.rest.shared-secret",
                 "worker-secret",

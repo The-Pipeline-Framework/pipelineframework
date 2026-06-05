@@ -318,6 +318,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.tenantId(),
                     current.executionId(),
                     current.executionKey(),
+                    current.pipelineId(),
+                    current.bundleVersionId(),
                     current.resultShape(),
                     ExecutionStatus.QUEUED,
                     current.version() + 1,

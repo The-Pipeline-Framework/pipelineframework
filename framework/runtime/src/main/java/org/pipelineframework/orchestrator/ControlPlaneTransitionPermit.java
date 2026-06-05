@@ -6,6 +6,9 @@ package org.pipelineframework.orchestrator;
 @FunctionalInterface
 public interface ControlPlaneTransitionPermit extends AutoCloseable {
 
+    ControlPlaneTransitionPermit NOOP = () -> {
+    };
+
     /**
      * Release the transition permit.
      */
@@ -18,7 +21,6 @@ public interface ControlPlaneTransitionPermit extends AutoCloseable {
      * @return no-op permit
      */
     static ControlPlaneTransitionPermit noop() {
-        return () -> {
-        };
+        return NOOP;
     }
 }

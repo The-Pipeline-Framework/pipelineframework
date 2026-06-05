@@ -72,5 +72,8 @@ public record AwaitUnitRecord(
             throw new IllegalArgumentException("completedItemCount must not exceed expectedItemCount");
         }
         completedItemKeys = completedItemKeys == null ? Set.of() : Set.copyOf(completedItemKeys);
+        if (!completedItemKeys.isEmpty() && completedItemKeys.size() != completedItemCount) {
+            throw new IllegalArgumentException("completedItemKeys size must match completedItemCount");
+        }
     }
 }

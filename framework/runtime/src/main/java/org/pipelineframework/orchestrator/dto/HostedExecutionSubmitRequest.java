@@ -19,4 +19,15 @@ public record HostedExecutionSubmitRequest(
     String idempotencyKey,
     boolean outputStreaming
 ) {
+    public HostedExecutionSubmitRequest {
+        if (pipelineId == null || pipelineId.isBlank()) {
+            throw new IllegalArgumentException("pipelineId must not be blank");
+        }
+        if (inputShape == null) {
+            throw new IllegalArgumentException("inputShape must not be null");
+        }
+        if (inputPayload == null) {
+            throw new IllegalArgumentException("inputPayload must not be null");
+        }
+    }
 }

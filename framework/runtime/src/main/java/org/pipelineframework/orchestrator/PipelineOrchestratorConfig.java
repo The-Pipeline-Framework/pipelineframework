@@ -597,6 +597,15 @@ public interface PipelineOrchestratorConfig {
         Duration saturatedDelay();
 
         /**
+         * Allowed Java package prefixes for application payload classes in transition envelopes.
+         *
+         * @return allowed application payload package prefixes
+         */
+        @WithName("allowed-payload-prefixes")
+        @WithDefault("org.pipelineframework.")
+        List<String> allowedPayloadPrefixes();
+
+        /**
          * REST transition worker settings.
          *
          * @return REST worker config
@@ -703,15 +712,6 @@ public interface PipelineOrchestratorConfig {
         @WithName("signature-tolerance")
         @WithDefault("PT2M")
         Duration signatureTolerance();
-
-        /**
-         * Allowed Java package prefixes for application payload classes in transition envelopes.
-         *
-         * @return allowed application payload package prefixes
-         */
-        @WithName("allowed-payload-prefixes")
-        @WithDefault("org.pipelineframework.")
-        List<String> allowedPayloadPrefixes();
 
         /**
          * True when a remote REST worker target is configured.

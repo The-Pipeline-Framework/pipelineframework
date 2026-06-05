@@ -42,7 +42,7 @@ public class LocalControlPlaneAdmissionPolicy implements ControlPlaneAdmissionPo
         if (!allowedTenants.isEmpty() && !allowedTenants.contains(tenantId)) {
             return ControlPlaneAdmissionDecision.deny(
                 ControlPlaneAdmissionDecision.TENANT_NOT_ALLOWED,
-                "Tenant '" + request.tenantId() + "' is not allowed for local control-plane operations");
+                "Tenant '" + tenantId + "' is not allowed for local control-plane operations");
         }
         return ControlPlaneAdmissionDecision.allow();
     }
@@ -68,12 +68,12 @@ public class LocalControlPlaneAdmissionPolicy implements ControlPlaneAdmissionPo
                         + maxInFlight));
             }
             if (counter.compareAndSet(current, current + 1)) {
-                return ControlPlaneTransitionAdmission.admitted(() -> releasePermit(tenantId, counter));
+                return ControlPlaneTransitionAdmission.admitted(() -> releasePermit(tenantId));
             }
         }
     }
 
-    private void releasePermit(String tenantId, AtomicInteger counter) {
+    private void releasePermit(String tenantId) {
         activeTransitionsByTenant.computeIfPresent(tenantId, (ignored, activeCounter) -> {
             int remaining = activeCounter.updateAndGet(value -> Math.max(0, value - 1));
             return remaining == 0 ? null : activeCounter;

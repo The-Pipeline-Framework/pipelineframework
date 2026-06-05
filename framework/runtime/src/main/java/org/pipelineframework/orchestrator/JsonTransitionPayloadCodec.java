@@ -290,10 +290,10 @@ public class JsonTransitionPayloadCodec implements TransitionPayloadCodec {
     }
 
     private List<String> allowedApplicationPayloadPrefixes() {
-        if (orchestratorConfig == null || orchestratorConfig.workerRest() == null) {
+        if (orchestratorConfig == null || orchestratorConfig.worker() == null) {
             return DEFAULT_APPLICATION_PAYLOAD_PREFIXES;
         }
-        List<String> configured = orchestratorConfig.workerRest().allowedPayloadPrefixes();
+        List<String> configured = orchestratorConfig.worker().allowedPayloadPrefixes();
         if (configured == null || configured.isEmpty()) {
             return DEFAULT_APPLICATION_PAYLOAD_PREFIXES;
         }

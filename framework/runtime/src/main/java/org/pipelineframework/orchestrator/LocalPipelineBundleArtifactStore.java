@@ -2,6 +2,7 @@ package org.pipelineframework.orchestrator;
 
 import java.io.InputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -48,9 +49,17 @@ public class LocalPipelineBundleArtifactStore implements PipelineBundleArtifactS
             try {
                 Files.copy(sourcePath, temporary, StandardCopyOption.REPLACE_EXISTING);
                 try {
-                    Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                    Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
+                } catch (FileAlreadyExistsException e) {
+                    verifyStoredArtifact(target, size, checksum, manifest);
+                    return new PipelineBundleStoredArtifact(target.toString(), size, checksum);
                 } catch (AtomicMoveNotSupportedException e) {
-                    Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+                    try {
+                        Files.move(temporary, target);
+                    } catch (FileAlreadyExistsException alreadyStored) {
+                        verifyStoredArtifact(target, size, checksum, manifest);
+                        return new PipelineBundleStoredArtifact(target.toString(), size, checksum);
+                    }
                 }
             } finally {
                 Files.deleteIfExists(temporary);

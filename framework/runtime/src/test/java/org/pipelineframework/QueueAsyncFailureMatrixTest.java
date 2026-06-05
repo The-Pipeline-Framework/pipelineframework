@@ -18,6 +18,7 @@ import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.TransitionFailureEnvelope;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.step.NonRetryableException;
 
@@ -151,6 +152,36 @@ class QueueAsyncFailureMatrixTest {
         assertEquals("inner-non-retryable", envelope.errorMessage());
         assertFalse(envelope.retryable());
         assertEquals("non_retryable", envelope.terminalReason());
+    }
+
+    @Test
+    void transitionFailureEnvelopePreservesNonRetryableClassification() {
+        when(orchestratorConfig.maxRetries()).thenReturn(3);
+        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-13", 6L, 0);
+        when(executionStateStore.markTerminalFailure(
+            anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(), anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+        when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
+
+        assertDoesNotThrow(() -> failureHandler.handleExecutionFailure(
+            record,
+            "exec-13:0:0",
+            new TransitionFailureEnvelope(NonRetryableException.class.getName(), "do not retry").toException(),
+            executionStateStore,
+            workDispatcher,
+            deadLetterPublisher).await().atMost(Duration.ofSeconds(3)));
+
+        verify(executionStateStore, never()).scheduleRetry(
+            anyString(), anyString(), anyLong(), anyInt(), anyLong(), anyString(), anyString(), anyString(), anyLong());
+        verify(executionStateStore).markTerminalFailure(
+            eq("tenant-a"),
+            eq("exec-13"),
+            eq(6L),
+            eq(ExecutionStatus.FAILED),
+            eq("exec-13:0:0"),
+            eq("NonRetryableException"),
+            eq("do not retry"),
+            anyLong());
     }
 
     @Test

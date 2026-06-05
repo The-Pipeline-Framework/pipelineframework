@@ -63,6 +63,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -297,6 +298,31 @@ class QueueAsyncCoordinatorTest {
             ArgumentCaptor.forClass(org.pipelineframework.orchestrator.ExecutionCreateCommand.class);
         verify(executionStateStore).createOrGetExecution(captor.capture());
         assertEquals(ExecutionResultShape.MATERIALIZED_MULTI, captor.getValue().resultShape());
+    }
+
+    @Test
+    void executePipelineAsyncScopesIdempotencyKeyByPipelineAndBundle() {
+        configureQueueModeDefaults();
+        PipelineBundleIdentityResolver identityResolver = mock(PipelineBundleIdentityResolver.class);
+        coordinator.bundleIdentityResolver = identityResolver;
+        when(identityResolver.pipelineId(orchestratorConfig)).thenReturn("pipeline-a", "pipeline-b");
+        when(identityResolver.bundleVersionId(orchestratorConfig)).thenReturn("bundle-1", "bundle-1");
+        when(executionStateStore.createOrGetExecution(any()))
+            .thenReturn(
+                Uni.createFrom().item(new CreateExecutionResult(createRecord("tenant-1", "exec-a", "key-a"), false)),
+                Uni.createFrom().item(new CreateExecutionResult(createRecord("tenant-1", "exec-b", "key-b"), false)));
+        when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
+
+        coordinator.executePipelineAsync("input", "tenant-1", "client-key", false).await().indefinitely();
+        coordinator.executePipelineAsync("input", "tenant-1", "client-key", false).await().indefinitely();
+
+        ArgumentCaptor<org.pipelineframework.orchestrator.ExecutionCreateCommand> captor =
+            ArgumentCaptor.forClass(org.pipelineframework.orchestrator.ExecutionCreateCommand.class);
+        verify(executionStateStore, org.mockito.Mockito.times(2)).createOrGetExecution(captor.capture());
+        List<org.pipelineframework.orchestrator.ExecutionCreateCommand> commands = captor.getAllValues();
+        assertEquals("pipeline-a", commands.get(0).pipelineId());
+        assertEquals("pipeline-b", commands.get(1).pipelineId());
+        assertNotEquals(commands.get(0).executionKey(), commands.get(1).executionKey());
     }
 
     @Test

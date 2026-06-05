@@ -24,6 +24,7 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
+import org.pipelineframework.PipelineExecutionService;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.dto.AwaitDtoMapper;
 import org.pipelineframework.config.pipeline.PipelineJson;
@@ -59,6 +60,9 @@ public class HostedPipelineControlPlaneResource {
 
     @Inject
     PipelineControlPlane controlPlane;
+
+    @Inject
+    PipelineExecutionService executionService;
 
     @Inject
     PipelineBundleRegistry bundleRegistry;
@@ -279,7 +283,7 @@ public class HostedPipelineControlPlaneResource {
             responsePayload,
             request.actor(),
             System.currentTimeMillis());
-        return controlPlane.completeAwait(command)
+        return executionService.completeAwaitInteraction(command)
             .onItem().transform(result -> Response.ok(AwaitDtoMapper.toCompletionResponse(result)).build());
     }
 

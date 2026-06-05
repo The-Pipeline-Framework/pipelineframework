@@ -1,5 +1,7 @@
 package org.pipelineframework.orchestrator.dto;
 
+import java.util.stream.Stream;
+
 import org.pipelineframework.orchestrator.SerializedTransitionPayload;
 
 /**
@@ -20,4 +22,15 @@ public record HostedAwaitCompletionRequest(
     SerializedTransitionPayload responsePayload,
     String actor
 ) {
+    public HostedAwaitCompletionRequest {
+        long identifiers = Stream.of(interactionId, correlationId, resumeToken)
+            .filter(value -> value != null && !value.isBlank())
+            .count();
+        if (identifiers == 0) {
+            throw new IllegalArgumentException("interactionId, correlationId, or resumeToken is required");
+        }
+        if (responsePayload == null) {
+            throw new IllegalArgumentException("responsePayload is required");
+        }
+    }
 }

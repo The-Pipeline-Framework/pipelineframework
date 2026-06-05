@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -269,12 +270,15 @@ class QueueAsyncCoordinator {
 
     return executionInputPolicy.resolveExecutionInputPayload(executionInput)
         .onItem().transformToUni(snapshot -> {
-          String executionKey;
-          try {
-            executionKey = executionInputPolicy.resolveExecutionKey(resolvedTenant, snapshot.payload(), idempotencyKey);
-          } catch (IllegalArgumentException e) {
-            return Uni.createFrom().failure(new BadRequestException(e.getMessage()));
-          }
+              String executionKey;
+              try {
+                executionKey = scopedRootExecutionKey(
+                    pipelineId,
+                    bundleVersionId,
+                    executionInputPolicy.resolveExecutionKey(resolvedTenant, snapshot.payload(), idempotencyKey));
+              } catch (IllegalArgumentException e) {
+                return Uni.createFrom().failure(new BadRequestException(e.getMessage()));
+              }
           ExecutionCreateCommand command = new ExecutionCreateCommand(
               resolvedTenant,
               executionKey,
@@ -885,6 +889,18 @@ class QueueAsyncCoordinator {
 
   private static boolean hasAwaitUnitId(ExecutionRecord<Object, Object> record) {
     return record.awaitUnitId() != null && !record.awaitUnitId().isBlank();
+  }
+
+  private static String scopedRootExecutionKey(String pipelineId, String bundleVersionId, String executionKey) {
+    return compositeScopedKey("pipelineId", pipelineId, "bundleVersionId", bundleVersionId)
+        + ":executionKey:"
+        + Objects.requireNonNull(executionKey, "executionKey must not be null");
+  }
+
+  private static String compositeScopedKey(String leftName, String left, String rightName, String right) {
+    String safeLeft = Objects.requireNonNull(left, leftName + " must not be null");
+    String safeRight = Objects.requireNonNull(right, rightName + " must not be null");
+    return safeLeft.length() + ":" + safeLeft + ":" + safeRight.length() + ":" + safeRight;
   }
 
   private Uni<Object> loadAwaitResumePayload(ExecutionRecord<Object, Object> record) {

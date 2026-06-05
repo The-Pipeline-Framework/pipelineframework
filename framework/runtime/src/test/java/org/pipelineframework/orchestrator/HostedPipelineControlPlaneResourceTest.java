@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.PipelineExecutionService;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
@@ -44,6 +45,7 @@ class HostedPipelineControlPlaneResourceTest {
     private PipelineOrchestratorConfig config;
     private PipelineOrchestratorConfig.ControlPlaneConfig controlPlaneConfig;
     private PipelineControlPlane controlPlane;
+    private PipelineExecutionService executionService;
     private PipelineBundleRegistry bundleRegistry;
     private PipelineBundleArtifactStore bundleArtifactStore;
     private PipelineWorkerAvailability workerAvailability;
@@ -54,11 +56,13 @@ class HostedPipelineControlPlaneResourceTest {
         config = mock(PipelineOrchestratorConfig.class);
         controlPlaneConfig = mock(PipelineOrchestratorConfig.ControlPlaneConfig.class);
         controlPlane = mock(PipelineControlPlane.class);
+        executionService = mock(PipelineExecutionService.class);
         bundleRegistry = mock(PipelineBundleRegistry.class);
         bundleArtifactStore = mock(PipelineBundleArtifactStore.class);
         workerAvailability = mock(PipelineWorkerAvailability.class);
         resource.orchestratorConfig = config;
         resource.controlPlane = controlPlane;
+        resource.executionService = executionService;
         resource.bundleRegistry = bundleRegistry;
         resource.bundleArtifactStore = bundleArtifactStore;
         resource.workerAvailability = workerAvailability;
@@ -169,6 +173,30 @@ class HostedPipelineControlPlaneResourceTest {
             eq(false),
             eq("org.example.restaurant"),
             eq("sha256:bundle"));
+    }
+
+    @Test
+    void submitRequestRequiresPipelineIdShapeAndPayload() {
+        SerializedTransitionPayload payload = payloadCodec.encode("order");
+
+        assertThrows(IllegalArgumentException.class, () -> new HostedExecutionSubmitRequest(
+            " ",
+            ExecutionInputShape.UNI,
+            payload,
+            "idem-1",
+            false));
+        assertThrows(IllegalArgumentException.class, () -> new HostedExecutionSubmitRequest(
+            "org.example.restaurant",
+            null,
+            payload,
+            "idem-1",
+            false));
+        assertThrows(IllegalArgumentException.class, () -> new HostedExecutionSubmitRequest(
+            "org.example.restaurant",
+            ExecutionInputShape.UNI,
+            null,
+            "idem-1",
+            false));
     }
 
     @Test
@@ -294,7 +322,7 @@ class HostedPipelineControlPlaneResourceTest {
             Map.of(),
             Map.of("decision", "accepted"),
             "actor-1");
-        when(controlPlane.completeAwait(any()))
+        when(executionService.completeAwaitInteraction(any()))
             .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(record, false)));
         HostedAwaitCompletionRequest request = new HostedAwaitCompletionRequest(
             "interaction-1",
@@ -309,12 +337,32 @@ class HostedPipelineControlPlaneResourceTest {
         assertEquals(200, response.getStatus());
         AwaitCompletionResponseDto dto = assertInstanceOf(AwaitCompletionResponseDto.class, response.getEntity());
         assertEquals("interaction-1", dto.interactionId());
-        verify(controlPlane).completeAwait(argThat(command ->
+        verify(executionService).completeAwaitInteraction(argThat(command ->
             command instanceof AwaitCompletionCommand
                 && "tenant-1".equals(command.tenantId())
                 && "interaction-1".equals(command.interactionId())
                 && "complete-1".equals(command.idempotencyKey())
                 && command.responsePayload() instanceof Map<?, ?>));
+    }
+
+    @Test
+    void completionRequestRequiresLookupHandleAndPayload() {
+        SerializedTransitionPayload payload = payloadCodec.encode(Map.of("decision", "accepted"));
+
+        assertThrows(IllegalArgumentException.class, () -> new HostedAwaitCompletionRequest(
+            null,
+            null,
+            null,
+            "complete-1",
+            payload,
+            "actor-1"));
+        assertThrows(IllegalArgumentException.class, () -> new HostedAwaitCompletionRequest(
+            "interaction-1",
+            null,
+            null,
+            "complete-1",
+            null,
+            "actor-1"));
     }
 
     private static ExecutionStatusDto status(ExecutionStatus status) {

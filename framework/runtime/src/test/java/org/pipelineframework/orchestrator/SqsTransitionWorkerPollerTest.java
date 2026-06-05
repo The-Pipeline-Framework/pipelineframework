@@ -130,8 +130,9 @@ class SqsTransitionWorkerPollerTest {
     @Test
     void pollOnceLeavesRequestWhenResponseSendFails() {
         TransitionCommandEnvelope envelope = envelope();
+        Message message = requestMessage("receipt-2", "request-2", envelope);
         when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
-            .messages(requestMessage("receipt-2", "request-2", envelope))
+            .messages(message)
             .build());
         when(executionService.executePortableTransition(envelope))
             .thenReturn(Uni.createFrom().item(TransitionResultEnvelope.completed(payloadCodec, List.of("ok"))));
@@ -141,6 +142,29 @@ class SqsTransitionWorkerPollerTest {
 
         verify(client, never()).deleteMessage(argThat((DeleteMessageRequest request) ->
             request.receiptHandle().equals("receipt-2")));
+    }
+
+    @Test
+    void pollOnceAllowsRedeliveryAfterResponseSendFailsBeforeDeletingRequest() {
+        TransitionCommandEnvelope envelope = envelope();
+        Message message = requestMessage("receipt-5", "request-5", envelope);
+        when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(
+            ReceiveMessageResponse.builder().messages(message).build(),
+            ReceiveMessageResponse.builder().messages(message).build());
+        when(executionService.executePortableTransition(envelope))
+            .thenReturn(
+                Uni.createFrom().item(TransitionResultEnvelope.completed(payloadCodec, List.of("ok"))),
+                Uni.createFrom().item(TransitionResultEnvelope.completed(payloadCodec, List.of("ok"))));
+        when(client.sendMessage(any(SendMessageRequest.class)))
+            .thenThrow(new IllegalStateException("send failed"))
+            .thenReturn(null);
+
+        poller.pollOnce();
+        poller.pollOnce();
+
+        verify(executionService, org.mockito.Mockito.times(2)).executePortableTransition(envelope);
+        verify(client).deleteMessage(argThat((DeleteMessageRequest request) ->
+            request.receiptHandle().equals("receipt-5")));
     }
 
     @Test

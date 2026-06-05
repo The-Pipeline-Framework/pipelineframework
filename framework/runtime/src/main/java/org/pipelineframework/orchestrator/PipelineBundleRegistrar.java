@@ -118,8 +118,10 @@ public class PipelineBundleRegistrar {
         if (capabilities == null || !capabilities.localTransitionExecution()) {
             throw new IllegalArgumentException("Bundle manifest must declare local transition execution capability");
         }
-        if (capabilities.transitionWorkerProtocols().stream()
-            .noneMatch(protocol -> List.of("local", "rest", "grpc", "sqs").contains(protocol))) {
+        List<String> allowedProtocols = List.of("local", "rest", "grpc", "sqs");
+        boolean hasSupportedProtocol = capabilities.transitionWorkerProtocols().stream()
+            .anyMatch(allowedProtocols::contains);
+        if (!hasSupportedProtocol) {
             throw new IllegalArgumentException("Bundle manifest must declare at least one supported worker protocol");
         }
         String computedHash = computeBundleHash(manifest);

@@ -215,6 +215,8 @@ class InMemoryExecutionStateStoreTest {
         assertEquals(ExecutionInputShape.MULTI, stored.shape());
         assertEquals(List.of("a", "b"), stored.payload());
         assertNotSame(resumeInput.payload(), stored.payload());
+        assertEquals(created.record().pipelineId(), queued.get().pipelineId());
+        assertEquals(created.record().bundleVersionId(), queued.get().bundleVersionId());
     }
 
     @Test

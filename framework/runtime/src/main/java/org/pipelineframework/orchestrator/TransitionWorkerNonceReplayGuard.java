@@ -28,6 +28,14 @@ final class TransitionWorkerNonceReplayGuard {
         return accepted;
     }
 
+    synchronized boolean seen(String nonce, long nowEpochMs, long toleranceMs) {
+        if (nonce == null || nonce.isBlank()) {
+            return false;
+        }
+        purgeExpired(nowEpochMs, toleranceMs);
+        return acceptedNonces.containsKey(nonce);
+    }
+
     private void purgeExpired(long nowEpochMs, long toleranceMs) {
         long previous = lastPurgeEpochMs.get();
         if (nowEpochMs - previous < PURGE_INTERVAL_MS

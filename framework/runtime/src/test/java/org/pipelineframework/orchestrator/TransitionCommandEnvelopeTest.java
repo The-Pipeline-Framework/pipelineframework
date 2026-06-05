@@ -237,11 +237,11 @@ class TransitionCommandEnvelopeTest {
 
     private JsonTransitionPayloadCodec codecAllowingPrefixes(String... prefixes) {
         PipelineOrchestratorConfig config = mock(PipelineOrchestratorConfig.class);
-        PipelineOrchestratorConfig.RestWorkerConfig restConfig = mock(PipelineOrchestratorConfig.RestWorkerConfig.class);
+        PipelineOrchestratorConfig.WorkerConfig workerConfig = mock(PipelineOrchestratorConfig.WorkerConfig.class);
         JsonTransitionPayloadCodec configuredCodec = new JsonTransitionPayloadCodec();
         configuredCodec.orchestratorConfig = config;
-        when(config.workerRest()).thenReturn(restConfig);
-        when(restConfig.allowedPayloadPrefixes()).thenReturn(List.of(prefixes));
+        when(config.worker()).thenReturn(workerConfig);
+        when(workerConfig.allowedPayloadPrefixes()).thenReturn(List.of(prefixes));
         return configuredCodec;
     }
 

@@ -32,6 +32,7 @@ final class TransitionWorkerMetrics {
     }
 
     static void decrementActive() {
+        ensureInitialized();
         ACTIVE_TRANSITIONS.updateAndGet(current -> Math.max(0L, current - 1L));
     }
 

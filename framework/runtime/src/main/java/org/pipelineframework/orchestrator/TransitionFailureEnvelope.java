@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import java.util.Objects;
+import org.pipelineframework.step.NonRetryableException;
 
 /**
  * Failure details carried by a transition result envelope.
@@ -22,6 +23,9 @@ public record TransitionFailureEnvelope(
     }
 
     public RuntimeException toException() {
+        if (NonRetryableException.class.getName().equals(failureClass)) {
+            return new NonRetryableException(message == null || message.isBlank() ? failureClass : message);
+        }
         String suffix = message == null || message.isBlank() ? "" : ": " + message;
         return new TransitionWorkerFailureException(failureClass + suffix);
     }
