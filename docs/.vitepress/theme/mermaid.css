@@ -15,12 +15,212 @@
  */
 
 /* Mermaid diagram styles */
-.mermaid {
+.vp-doc .mermaid {
+  box-sizing: border-box;
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  margin: 1.35rem 0;
+  padding: 1rem;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  border: 1px solid var(--vp-c-border);
+  border-radius: 12px;
+  background: var(--vp-c-bg-soft);
   text-align: center;
-  margin: 1rem 0;
+  cursor: zoom-in;
+  touch-action: manipulation;
 }
 
-.mermaid svg {
+.vp-doc .mermaid svg {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
   max-width: 100%;
   height: auto;
+  min-width: 0;
+  margin: 0 auto;
+  vertical-align: middle;
+}
+
+.vp-doc .mermaid text,
+.vp-doc .mermaid .label,
+.vp-doc .mermaid .messageText,
+.vp-doc .mermaid .actor {
+  font-family: var(--vp-font-family-base);
+}
+
+.vp-doc .mermaid:hover,
+.vp-doc .mermaid:focus-visible {
+  border-color: var(--vp-c-brand);
+  outline: none;
+}
+
+.tpf-mermaid-lightbox-open body {
+  overflow: hidden !important;
+}
+
+.tpf-mermaid-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(0.75rem, 2vw, 1.5rem);
+  background: rgb(15 23 42 / 68%);
+  backdrop-filter: blur(10px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.tpf-mermaid-lightbox__panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(96vw, 1680px);
+  height: min(92vh, 1040px);
+  overflow: hidden;
+  border: 1px solid var(--vp-c-border);
+  border-radius: 16px;
+  background: var(--vp-c-bg);
+  box-shadow: 0 28px 80px rgb(2 6 23 / 35%);
+}
+
+.tpf-mermaid-lightbox__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.tpf-mermaid-lightbox__header p {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--vp-c-text-1);
+  font-family: var(--vp-font-family-display);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tpf-mermaid-lightbox__close {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 0.8rem;
+  border: 1px solid var(--vp-c-border);
+  border-radius: 999px;
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
+  font-family: var(--vp-font-family-base);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tpf-mermaid-lightbox__close:hover,
+.tpf-mermaid-lightbox__close:focus-visible {
+  border-color: var(--vp-c-brand);
+  color: var(--vp-c-brand);
+}
+
+.tpf-mermaid-lightbox__stage {
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: clamp(1rem, 2vw, 1.75rem);
+  background: var(--vp-c-bg-soft);
+  overscroll-behavior: contain;
+}
+
+.tpf-mermaid-lightbox__stage svg {
+  display: block;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.tpf-mermaid-lightbox__stage text,
+.tpf-mermaid-lightbox__stage .label,
+.tpf-mermaid-lightbox__stage .messageText,
+.tpf-mermaid-lightbox__stage .actor {
+  font-family: var(--vp-font-family-base);
+}
+
+.dark .vp-doc .mermaid {
+  background: var(--vp-c-bg-alt);
+}
+
+.dark .tpf-mermaid-lightbox {
+  background: rgb(2 6 23 / 78%);
+}
+
+@media (max-width: 640px), (max-width: 1279px) and (pointer: coarse) {
+  .vp-doc .mermaid {
+    margin: 1rem 0;
+    padding: 0.65rem;
+    border-radius: 10px;
+  }
+
+  .vp-doc .mermaid svg {
+    min-width: 0;
+  }
+
+  .tpf-mermaid-lightbox {
+    padding: 0;
+  }
+
+  .tpf-mermaid-lightbox__panel {
+    width: 100dvw;
+    height: 100dvh;
+    border-radius: 0;
+  }
+
+  .tpf-mermaid-lightbox__header {
+    padding: 0.45rem 0.6rem;
+  }
+
+  .tpf-mermaid-lightbox__header p {
+    font-size: 0.9rem;
+  }
+
+  .tpf-mermaid-lightbox__close {
+    min-height: 30px;
+    padding: 0 0.65rem;
+  }
+
+  .tpf-mermaid-lightbox__stage {
+    overflow: hidden;
+    padding: 0.25rem;
+    scrollbar-width: none;
+  }
+
+  .tpf-mermaid-lightbox__stage::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tpf-mermaid-lightbox__stage svg {
+    width: auto;
+    height: auto;
+    min-width: 0;
+    max-width: 100%;
+    max-height: 100%;
+  }
+}
+
+@media (min-width: 901px) and (hover: hover) and (pointer: fine) {
+  .tpf-mermaid-lightbox__stage {
+    display: block;
+    overflow: auto;
+  }
+
+  .tpf-mermaid-lightbox__stage svg {
+    min-width: min(1400px, 160vw);
+    max-width: none;
+    max-height: none;
+  }
 }
