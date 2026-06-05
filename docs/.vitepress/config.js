@@ -124,6 +124,7 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Orchestrator Runtime Modes', link: '/guide/development/orchestrator-runtime/'},
+            {text: 'Await Boundaries', link: '/guide/operations/await-boundaries'},
             {text: 'Error Handling & DLQ', link: '/guide/operations/error-handling'},
             {text: 'Queue-Async Crash Semantics', link: '/guide/operations/error-handling#queue-async-crash-matrix'},
             {text: 'In-flight Probe', link: '/guide/operations/in-flight-probe'},
@@ -185,7 +186,7 @@ const mainSidebar = [
                     {text: 'Model', link: '/guide/evolve/await-unit-runtime/'},
                     {text: 'Sequences', link: '/guide/evolve/await-unit-runtime/sequences'},
                     {text: 'Patterns', link: '/guide/evolve/await-unit-runtime/patterns'},
-                    {text: 'Operations And Debt', link: '/guide/evolve/await-unit-runtime/operations-and-debt'}
+                    {text: 'Limitations And Debt', link: '/guide/evolve/await-unit-runtime/operations-and-debt'}
                 ]
             },
             {

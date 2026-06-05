@@ -9,7 +9,7 @@ This guide is implementation-facing. Application-facing usage lives in [Await Bo
 1. [Model](/guide/evolve/await-unit-runtime/) explains the durable records and cardinality semantics.
 2. [Sequences](/guide/evolve/await-unit-runtime/sequences) shows unary, stream, aggregate, timeout, and resume flows.
 3. [Patterns](/guide/evolve/await-unit-runtime/patterns) explains the architectural patterns and why the unit model fixed the design.
-4. [Operations And Debt](/guide/evolve/await-unit-runtime/operations-and-debt) covers checkpoint handoff, limitations, and tracked follow-up work.
+4. [Limitations And Debt](/guide/evolve/await-unit-runtime/operations-and-debt) tracks implementation limitations and follow-up work.
 
 ## Core Model
 
@@ -58,21 +58,88 @@ classDiagram
       transportType
     }
 
+    class PipelineExecutionService
+    class PipelineRunner
+    class QueueAsyncCoordinator
+    class AwaitStepSupport
     class AwaitCoordinator
     class AwaitUnitStore
     class AwaitInteractionStore
     class AwaitTransportAdapter
-    class QueueAsyncCoordinator
+    class ExecutionStateStore
 
     ExecutionRecord --> AwaitUnitRecord : awaitUnitId
     AwaitUnitRecord "1" --> "1..n" AwaitInteractionRecord : owns
+    PipelineExecutionService --> PipelineRunner : run / resume steps
+    PipelineRunner --> AwaitStepSupport : execute generated await step
+    AwaitStepSupport --> AwaitCoordinator : create / dispatch unit
+    PipelineExecutionService --> QueueAsyncCoordinator : async execution lifecycle
     QueueAsyncCoordinator --> AwaitCoordinator : complete / resume
+    QueueAsyncCoordinator --> ExecutionStateStore : wait / resume execution
     AwaitCoordinator --> AwaitUnitStore
     AwaitCoordinator --> AwaitInteractionStore
     AwaitCoordinator --> AwaitTransportAdapter : dispatch
 ```
 
 `AwaitUnitRecord` is the source of truth for completion of the authored await boundary. `AwaitInteractionRecord` is the transport-facing projection. That distinction prevents execution state, dispatch strategy, and step cardinality from collapsing into one ambiguous record.
+
+## CSV Payments Applied Model
+
+`csv-payments` applies this model to a Kafka-backed payment-provider boundary:
+
+1. `Process Csv Payments Input` expands an input file into a stream of `PaymentRecord` items.
+2. `Await Payment Provider` is authored as `kind: await` with `cardinality: ONE_TO_ONE`.
+3. Because the await step receives a stream, TPF creates one owning await unit with one item interaction per `PaymentRecord`.
+4. The Kafka adapter publishes requests to `csv-payments.payment.requests`; the mock provider publishes completions to `csv-payments.payment.results`.
+5. Completed item outputs are `PaymentStatus` records. The runtime can continue per-item work through `Process Payment Status`, then release the parent execution at the next aggregate boundary.
+
+```mermaid
+classDiagram
+    class CsvExecutionRecord {
+      executionId
+      currentStepIndex = Await Payment Provider
+      status = WAITING_EXTERNAL
+      awaitUnitId = csv payment unit
+    }
+
+    class CsvAwaitUnitRecord {
+      stepId = Await Payment Provider
+      cardinality = ONE_TO_ONE
+      expectedItemCount = payment records
+      completedItemCount = provider completions
+      dispatchComplete
+      status
+    }
+
+    class PaymentInteraction0 {
+      itemIndex = 0
+      requestPayload = PaymentRecord
+      responsePayload = PaymentStatus
+      transportType = kafka
+      correlationId
+    }
+
+    class PaymentInteraction1 {
+      itemIndex = 1
+      requestPayload = PaymentRecord
+      responsePayload = PaymentStatus
+      transportType = kafka
+      correlationId
+    }
+
+    class KafkaTopics {
+      request = csv-payments.payment.requests
+      response = csv-payments.payment.results
+    }
+
+    CsvExecutionRecord --> CsvAwaitUnitRecord : awaitUnitId
+    CsvAwaitUnitRecord "1" --> "0..n" PaymentInteraction0 : owns ordered item
+    CsvAwaitUnitRecord "1" --> "0..n" PaymentInteraction1 : owns ordered item
+    PaymentInteraction0 --> KafkaTopics : dispatch / complete
+    PaymentInteraction1 --> KafkaTopics : dispatch / complete
+```
+
+The important detail is that CSV does not model the provider as a pipeline step. The provider is an external actor reached through the await transport. The pipeline resumes from admitted `PaymentStatus` completions.
 
 ## Cardinality As Unit Shape
 
