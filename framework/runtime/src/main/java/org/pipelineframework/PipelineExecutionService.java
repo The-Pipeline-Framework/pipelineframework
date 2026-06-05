@@ -51,6 +51,7 @@ import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
+import org.pipelineframework.orchestrator.PipelineBundleManifest;
 import org.pipelineframework.orchestrator.PipelineBundleIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineControlPlane;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
@@ -355,7 +356,7 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
   }
 
   private Uni<TransitionResultEnvelope> executeTransition(TransitionCommandEnvelope command, boolean encodeOutputs) {
-    var identityMismatch = bundleIdentityResolver().validateCommandIdentity(command, orchestratorConfig);
+    var identityMismatch = validateCommandIdentity(command, !encodeOutputs);
     if (identityMismatch.isPresent()) {
       return Uni.createFrom().item(TransitionResultEnvelope.failed(new IllegalArgumentException(identityMismatch.get())));
     }
@@ -376,6 +377,19 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
               .onItem().transform(TransitionResultEnvelope::waiting);
         })
         .onFailure().recoverWithItem(TransitionResultEnvelope::failed);
+  }
+
+  private java.util.Optional<String> validateCommandIdentity(
+      TransitionCommandEnvelope command,
+      boolean allowLocalFallbackIdentity) {
+    java.util.Optional<String> identityMismatch = bundleIdentityResolver().validateCommandIdentity(command, orchestratorConfig);
+    if (identityMismatch.isPresent()
+        && allowLocalFallbackIdentity
+        && PipelineBundleManifest.DEFAULT_PIPELINE_ID.equals(command.pipelineId())
+        && PipelineBundleManifest.DEFAULT_BUNDLE_VERSION_ID.equals(command.bundleVersionId())) {
+      return java.util.Optional.empty();
+    }
+    return identityMismatch;
   }
 
   /**

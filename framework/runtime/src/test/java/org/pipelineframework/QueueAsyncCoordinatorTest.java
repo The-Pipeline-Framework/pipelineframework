@@ -595,6 +595,67 @@ class QueueAsyncCoordinatorTest {
     }
 
     @Test
+    void processExecutionWorkItemUsesStoredInputForAggregateAwaitItemContinuation() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.leaseMs()).thenReturn(1000L);
+        List<String> aggregateInput = List.of("payment-output-1", "payment-output-2");
+        ExecutionRecord<Object, Object> claimed = new ExecutionRecord<>(
+            "tenant-1",
+            "exec-aggregate",
+            "key-aggregate",
+            "local-pipeline",
+            "local-bundle",
+            ExecutionResultShape.MATERIALIZED_MULTI,
+            ExecutionStatus.QUEUED,
+            0L,
+            7,
+            0,
+            null,
+            0L,
+            0L,
+            null,
+            aggregateInput,
+            null,
+            null,
+            null,
+            null,
+            1L,
+            1L,
+            99999999L);
+        when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(checkpointPublicationService.publishIfConfigured(org.mockito.ArgumentMatchers.eq(claimed), org.mockito.ArgumentMatchers.eq("output-file")))
+            .thenReturn(Uni.createFrom().voidItem());
+        when(executionStateStore.markSucceeded(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-aggregate"),
+                org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq("exec-aggregate:7:0"),
+                org.mockito.ArgumentMatchers.eq(List.of("output-file")),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        java.util.concurrent.atomic.AtomicReference<Object> workerInput = new java.util.concurrent.atomic.AtomicReference<>();
+
+        coordinator.processExecutionWorkItem(
+                new ExecutionWorkItem("tenant-1", "exec-aggregate"),
+                envelope -> {
+                    workerInput.set(envelope.toCommand(payloadCodec).inputPayload());
+                    return Uni.createFrom().item(TransitionResultEnvelope.completed(payloadCodec, List.of("output-file")));
+                })
+            .await().indefinitely();
+
+        assertEquals(aggregateInput, workerInput.get());
+        verify(awaitCoordinator, never()).loadResumePayload(any(), any());
+        verify(executionStateStore).markSucceeded(
+            org.mockito.ArgumentMatchers.eq("tenant-1"),
+            org.mockito.ArgumentMatchers.eq("exec-aggregate"),
+            org.mockito.ArgumentMatchers.eq(0L),
+            org.mockito.ArgumentMatchers.eq("exec-aggregate:7:0"),
+            org.mockito.ArgumentMatchers.eq(List.of("output-file")),
+            org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
     void processExecutionWorkItemPersistsDecodedInProcessOutputWithoutSerialization() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         when(orchestratorConfig.leaseMs()).thenReturn(1000L);

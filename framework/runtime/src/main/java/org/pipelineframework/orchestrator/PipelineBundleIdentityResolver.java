@@ -97,7 +97,9 @@ public class PipelineBundleIdentityResolver {
                 loaded = cachedManifest;
                 if (loaded == null) {
                     loaded = loader().load();
-                    cachedManifest = loaded;
+                    if (loaded.isPresent()) {
+                        cachedManifest = loaded;
+                    }
                 }
             }
         }

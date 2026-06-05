@@ -861,7 +861,7 @@ class QueueAsyncCoordinator {
   private Uni<TransitionCommandEnvelope> prepareTransitionCommand(
       ExecutionRecord<Object, Object> record,
       String transitionKey) {
-    Uni<Object> inputPayload = record.currentStepIndex() > 0
+    Uni<Object> inputPayload = record.currentStepIndex() > 0 && hasAwaitUnitId(record)
         ? loadAwaitResumePayload(record)
         : Uni.createFrom().item(record.inputPayload());
     return inputPayload.onItem().transform(payload -> {
@@ -881,6 +881,10 @@ class QueueAsyncCoordinator {
           transitionKey,
           payloadCodec().encode(payload));
     });
+  }
+
+  private static boolean hasAwaitUnitId(ExecutionRecord<Object, Object> record) {
+    return record.awaitUnitId() != null && !record.awaitUnitId().isBlank();
   }
 
   private Uni<Object> loadAwaitResumePayload(ExecutionRecord<Object, Object> record) {

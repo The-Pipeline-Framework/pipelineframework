@@ -35,6 +35,21 @@ class PipelineBundleIdentityResolverTest {
     }
 
     @Test
+    void transientManifestMissDoesNotCacheLocalFallbackIdentity() {
+        PipelineBundleManifestLoader loader = mock(PipelineBundleManifestLoader.class);
+        when(loader.load()).thenReturn(Optional.empty(), Optional.of(manifest()));
+        PipelineBundleIdentityResolver resolver = new PipelineBundleIdentityResolver();
+        resolver.manifestLoader = loader;
+        PipelineOrchestratorConfig config = mock(PipelineOrchestratorConfig.class);
+        when(config.pipelineId()).thenReturn(PipelineBundleManifest.DEFAULT_PIPELINE_ID);
+        when(config.bundleVersionId()).thenReturn(PipelineBundleManifest.DEFAULT_BUNDLE_VERSION_ID);
+
+        assertEquals(PipelineBundleManifest.DEFAULT_PIPELINE_ID, resolver.pipelineId(config));
+        assertEquals("org.example.restaurant", resolver.pipelineId(config));
+        assertEquals("sha256:manifest", resolver.bundleVersionId(config));
+    }
+
+    @Test
     void detectsCommandIdentityMismatch() {
         PipelineBundleIdentityResolver resolver = resolverWithManifest(manifest());
         PipelineOrchestratorConfig config = mock(PipelineOrchestratorConfig.class);

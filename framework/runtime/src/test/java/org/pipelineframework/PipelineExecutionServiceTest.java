@@ -21,6 +21,7 @@ import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -130,6 +131,56 @@ class PipelineExecutionServiceTest {
             .thenReturn(Optional.of("bundle mismatch"));
 
         TransitionResultEnvelope result = service.executeTransition(command).await().indefinitely();
+
+        assertEquals(TransitionWorkerOutcome.FAILED, result.outcome());
+        assertTrue(result.failure().message().contains("bundle mismatch"));
+    }
+
+    @Test
+    void executeTransitionAllowsLocalFallbackIdentityForInProcessWorker() {
+        TransitionCommandEnvelope command = new TransitionCommandEnvelope(
+            "tenant-1",
+            "exec-6",
+            "local-pipeline",
+            "local-bundle",
+            0,
+            0,
+            ExecutionResultShape.SINGLE,
+            0L,
+            "exec-6:0:0",
+            "trace-6",
+            "java.lang.String",
+            "application/tpf-transition+json",
+            "\"input\"");
+        when(bundleIdentityResolver.validateCommandIdentity(command, null))
+            .thenReturn(Optional.of("bundle mismatch"));
+
+        TransitionResultEnvelope result = service.executeTransition(command).await().indefinitely();
+
+        assertEquals(TransitionWorkerOutcome.FAILED, result.outcome());
+        assertFalse(result.failure().message().contains("bundle mismatch"));
+    }
+
+    @Test
+    void executePortableTransitionRejectsLocalFallbackIdentity() {
+        TransitionCommandEnvelope command = new TransitionCommandEnvelope(
+            "tenant-1",
+            "exec-7",
+            "local-pipeline",
+            "local-bundle",
+            0,
+            0,
+            ExecutionResultShape.SINGLE,
+            0L,
+            "exec-7:0:0",
+            "trace-7",
+            "java.lang.String",
+            "application/tpf-transition+json",
+            "\"input\"");
+        when(bundleIdentityResolver.validateCommandIdentity(command, null))
+            .thenReturn(Optional.of("bundle mismatch"));
+
+        TransitionResultEnvelope result = service.executePortableTransition(command).await().indefinitely();
 
         assertEquals(TransitionWorkerOutcome.FAILED, result.outcome());
         assertTrue(result.failure().message().contains("bundle mismatch"));
