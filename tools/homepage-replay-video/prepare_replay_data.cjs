@@ -361,7 +361,10 @@ function main() {
   const { nodes, mainline, awaitStep, persistenceSteps } = buildNodeSet(steps, transitions);
   const edges = buildEdges(transitions, nodes, mainline, awaitStep, persistenceSteps);
   const cinematic = {
-    sourceReplay: path.relative(process.cwd(), input),
+    sourceReplay: path
+      .relative(path.resolve(__dirname, "../.."), path.resolve(input))
+      .split(path.sep)
+      .join("/"),
     pipeline: replay.pipeline,
     status: replay.status,
     clipDurationSeconds: CLIP_DURATION_SECONDS,
