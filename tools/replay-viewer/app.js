@@ -6,6 +6,7 @@ const viewport = document.querySelector(".viewport");
 const playerSurface = document.getElementById("playerSurface");
 const playerChrome = document.getElementById("playerChrome");
 const backToDocsLink = document.getElementById("backToDocsLink");
+const loadReplayButton = document.getElementById("loadReplayButton");
 const playPauseButton = document.getElementById("playPauseButton");
 const stopButton = document.getElementById("stopButton");
 const restartButton = document.getElementById("restartButton");
@@ -14,6 +15,12 @@ const stepButton = document.getElementById("stepButton");
 const infoButton = document.getElementById("infoButton");
 const infoModal = document.getElementById("infoModal");
 const infoCloseButton = document.getElementById("infoCloseButton");
+const sourceModal = document.getElementById("sourceModal");
+const sourceCloseButton = document.getElementById("sourceCloseButton");
+const sourceCancelButton = document.getElementById("sourceCancelButton");
+const sourceModalTitle = document.getElementById("sourceModalTitle");
+const sourceModalDescription = document.getElementById("sourceModalDescription");
+const sourceModalStatus = document.getElementById("sourceModalStatus");
 const fullscreenButton = document.getElementById("fullscreenButton");
 const datasetSelect = document.getElementById("datasetSelect");
 const sourceApplyButton = document.getElementById("sourceApplyButton");
@@ -22,12 +29,14 @@ const customReplayInputWrap = document.getElementById("customReplayInputWrap");
 const replayFileInput = document.getElementById("replayFileInput");
 const speedInputs = [...document.querySelectorAll('input[name="speed"]')];
 const timelineSlider = document.getElementById("timelineSlider");
-const datasetName = document.getElementById("datasetName");
-const pipelineName = document.getElementById("pipelineName");
-const durationText = document.getElementById("durationText");
-const topologyText = document.getElementById("topologyText");
+const playerTitle = document.getElementById("playerTitle");
 const playbackText = document.getElementById("playbackText");
-const eventCountText = document.getElementById("eventCountText");
+const summaryDatasetName = document.getElementById("summaryDatasetName");
+const summaryPipelineName = document.getElementById("summaryPipelineName");
+const summaryDurationText = document.getElementById("summaryDurationText");
+const summaryTopologyText = document.getElementById("summaryTopologyText");
+const summaryEventCountText = document.getElementById("summaryEventCountText");
+const rejectLegendItems = [...document.querySelectorAll('[data-support-kind="reject"]')];
 const loadProgress = document.getElementById("loadProgress");
 const loadProgressFill = document.getElementById("loadProgressFill");
 const loadProgressText = document.getElementById("loadProgressText");
@@ -44,6 +53,9 @@ const PRIMARY_ROW_Y = 2.45;
 const BRANCH_ROW_OFFSET_Y = 2.05;
 const EMPTY_REPLAY_SOURCE_KEY = "none";
 const DEFAULT_REPLAY_SOURCE_KEY = EMPTY_REPLAY_SOURCE_KEY;
+const FIRST_VISIT_AUTOLOAD_SOURCE_KEY = "csv-payments";
+const FIRST_VISIT_AUTOLOAD_STORAGE_KEY = "tpf-replay-viewer-first-visit-autoloaded:v1";
+const COMPLETION_PROMPT_DELAY_MS = 3000;
 const LAYOUT_STORAGE_PREFIX = "tpf-replay-viewer-layout";
 const BUILT_IN_REPLAYS = new Map(BUILT_IN_REPLAYS_CONFIG.map((entry) => [entry.key, { label: entry.label, path: entry.path }]));
 const EFFECT_PRESETS = {
@@ -108,7 +120,7 @@ const END_DRAIN_SECONDS = Math.max(
         return [];
       })
 );
-const CHROME_HIDE_DELAY_MS = 1800;
+const CHROME_HIDE_DELAY_MS = 2000;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -206,6 +218,8 @@ let dragState = null;
 let suppressNextCanvasClick = false;
 let prefersTapChrome = window.matchMedia("(hover: none), (pointer: coarse)").matches;
 let loadProgressHideTimeout = null;
+let completionPromptTimeout = null;
+let completionPromptShownForPlayback = false;
 
 function resolveReplayDocsHref() {
   const replayDocsPath = "/guide/operations/observability/replay";
@@ -250,7 +264,8 @@ function updateSourceApplyButton() {
   }
   const nextSourceKey = datasetSelect.value;
   const hasPendingCustomReplay = nextSourceKey === "custom" && Boolean(replayFileInput.files?.length);
-  sourceApplyButton.disabled = nextSourceKey === EMPTY_REPLAY_SOURCE_KEY
+  sourceApplyButton.disabled = isLoadingReplay
+    || nextSourceKey === EMPTY_REPLAY_SOURCE_KEY
     || (nextSourceKey === "custom" && !hasPendingCustomReplay);
 }
 
@@ -678,6 +693,12 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function setSourceModalStatus(text) {
+  if (sourceModalStatus) {
+    sourceModalStatus.textContent = text;
+  }
+}
+
 function setLoadProgress(visible, ratio = 0, text = "Loading replay...") {
   isLoadingReplay = visible;
   if (loadProgressHideTimeout) {
@@ -687,11 +708,13 @@ function setLoadProgress(visible, ratio = 0, text = "Loading replay...") {
   loadProgress.hidden = !visible;
   loadProgressFill.style.width = `${Math.round(clamp(ratio, 0, 1) * 100)}%`;
   loadProgressText.textContent = text;
+  setSourceModalStatus(text);
   if (visible) {
     revealPlayerChrome(true);
   } else if (!isAnyModalOpen()) {
     scheduleChromeHide();
   }
+  updateSourceApplyButton();
 }
 
 function finishLoadProgress(text = "Replay loaded") {
@@ -702,6 +725,7 @@ function finishLoadProgress(text = "Replay loaded") {
   loadProgress.hidden = false;
   loadProgressFill.style.width = "100%";
   loadProgressText.textContent = text;
+  setSourceModalStatus(text);
   loadProgressHideTimeout = window.setTimeout(() => {
     loadProgress.hidden = true;
     loadProgressHideTimeout = null;
@@ -709,6 +733,7 @@ function finishLoadProgress(text = "Replay loaded") {
       scheduleChromeHide();
     }
   }, 1100);
+  updateSourceApplyButton();
 }
 
 function nextAnimationFrame() {
@@ -1053,10 +1078,6 @@ function setPlayerChromeVisible(visible) {
 
 function scheduleChromeHide(delayMs = CHROME_HIDE_DELAY_MS) {
   cancelChromeHide();
-  if (!prefersTapChrome) {
-    setPlayerChromeVisible(true);
-    return;
-  }
   if (isAnyModalOpen() || isScrubbingTimeline || isLoadingReplay) {
     setPlayerChromeVisible(true);
     return;
@@ -1066,24 +1087,80 @@ function scheduleChromeHide(delayMs = CHROME_HIDE_DELAY_MS) {
       setPlayerChromeVisible(true);
       return;
     }
-    if (prefersTapChrome && !isPlaying) {
-      return;
-    }
     setPlayerChromeVisible(false);
   }, delayMs);
 }
 
 function revealPlayerChrome(sticky = false) {
   setPlayerChromeVisible(true);
-  if (!prefersTapChrome) {
+  if (sticky || isAnyModalOpen() || isScrubbingTimeline || isLoadingReplay) {
     cancelChromeHide();
     return;
   }
-  if (!sticky) {
-    scheduleChromeHide();
-  } else {
-    cancelChromeHide();
+  scheduleChromeHide();
+}
+
+function setSourceModalMode(mode = "load") {
+  if (!sourceModalTitle || !sourceModalDescription) {
+    return;
   }
+  if (mode === "completion") {
+    sourceModalTitle.textContent = "Replay finished";
+    sourceModalDescription.textContent = "Load another built-in capture or try your own replay JSON.";
+    setSourceModalStatus("Choose what to inspect next.");
+    return;
+  }
+  sourceModalTitle.textContent = "Load replay";
+  sourceModalDescription.textContent = "Choose a captured built-in replay or upload a replay JSON. The viewer plays real event timing, counters, and topology without synthetic flows.";
+  if (isLoadingReplay) {
+    setSourceModalStatus(loadProgressText.textContent);
+  } else if (activeReplaySourceKey === EMPTY_REPLAY_SOURCE_KEY) {
+    setSourceModalStatus("CSV Payments will load automatically on your first visit.");
+  } else {
+    setSourceModalStatus("Choose a different replay or upload a custom JSON file.");
+  }
+}
+
+function openSourceModal(mode = "load") {
+  setSourceModalMode(mode);
+  openModalElement("source", sourceModal);
+}
+
+function cancelCompletionPrompt() {
+  if (completionPromptTimeout != null) {
+    window.clearTimeout(completionPromptTimeout);
+    completionPromptTimeout = null;
+  }
+}
+
+function resetCompletionPromptForPlayback() {
+  cancelCompletionPrompt();
+  completionPromptShownForPlayback = false;
+}
+
+function scheduleCompletionPrompt() {
+  if (
+    completionPromptShownForPlayback ||
+    replayDocument.events.length === 0 ||
+    isLoadingReplay ||
+    isAnyModalOpen()
+  ) {
+    return;
+  }
+  completionPromptShownForPlayback = true;
+  cancelCompletionPrompt();
+  completionPromptTimeout = window.setTimeout(() => {
+    completionPromptTimeout = null;
+    if (
+      isPlaying ||
+      isLoadingReplay ||
+      isAnyModalOpen() ||
+      currentTimeSeconds < replayDurationSeconds
+    ) {
+      return;
+    }
+    openSourceModal("completion");
+  }, COMPLETION_PROMPT_DELAY_MS);
 }
 
 function openModalElement(name, element) {
@@ -1243,8 +1320,19 @@ function awaitUnitSummaries(events) {
     });
 }
 
+function updateLegendForReplay(document) {
+  const hasReject = (document.topology?.steps ?? []).some((step) => step.pluginKind === "reject")
+    || (document.events ?? []).some((event) => event.event === "reject");
+  for (const item of rejectLegendItems) {
+    item.hidden = !hasReject;
+  }
+}
+
 function reportViewerIssue(message) {
-  eventCountText.textContent = `Status: ${message}`;
+  loadProgress.hidden = false;
+  loadProgressFill.style.width = "100%";
+  loadProgressText.textContent = `Status: ${message}`;
+  setSourceModalStatus(`Status: ${message}`);
   if (runtimeStatus) {
     runtimeStatus.textContent = message;
   }
@@ -1276,6 +1364,7 @@ function loadReplay(document, label, sourceKey = activeReplaySourceKey) {
   currentTimeSeconds = 0;
   isPlaying = false;
   isFinishingEffects = false;
+  resetCompletionPromptForPlayback();
   fallbackAwaitDisplayStep = replayDocument.fallbackAwaitDisplayStep ?? null;
   replayHasAwaitLifecycleEvents = replayDocument.hasAwaitLifecycleEvents === true;
   for (const [rawStepName, displayStepName] of Object.entries(replayDocument.displayAliases ?? {})) {
@@ -1330,14 +1419,16 @@ function loadReplay(document, label, sourceKey = activeReplaySourceKey) {
   datasetSelect.value = sourceKey;
   setCustomReplayVisibility(sourceKey === "custom");
   updateSourceApplyButton();
-  datasetName.textContent = label;
-  pipelineName.textContent = `Pipeline: ${replayDocument.pipeline}`;
-  durationText.textContent = `Duration: ${replayDurationSeconds.toFixed(2)}s`;
-  topologyText.textContent = `Topology: ${replayDocument.topology.steps.length} nodes / ${replayDocument.topology.transitions.length} edges`;
-  eventCountText.textContent = `Events: ${replayDocument.events.length}`;
+  playerTitle.textContent = label;
+  summaryDatasetName.textContent = label;
+  summaryPipelineName.textContent = replayDocument.pipeline;
+  summaryDurationText.textContent = `${replayDurationSeconds.toFixed(2)}s`;
+  summaryTopologyText.textContent = `${replayDocument.topology.steps.length} nodes / ${replayDocument.topology.transitions.length} edges`;
+  summaryEventCountText.textContent = String(replayDocument.events.length);
+  updateLegendForReplay(replayDocument);
   renderRunParameters(replayDocument.runParameters);
   resetPlaybackState();
-  revealPlayerChrome(true);
+  revealPlayerChrome();
   updateUi();
 }
 
@@ -1371,6 +1462,83 @@ async function loadBuiltInReplay(datasetKey) {
     throw new Error(`${dataset.label} could not be rendered: ${error.message}`);
   }
   finishLoadProgress(`${dataset.label} loaded`);
+}
+
+async function applySelectedReplaySource({ closeOnSuccess = true } = {}) {
+  if (isLoadingReplay) {
+    return false;
+  }
+  cancelCompletionPrompt();
+  const nextSource = datasetSelect.value;
+  if (nextSource === EMPTY_REPLAY_SOURCE_KEY) {
+    return false;
+  }
+  try {
+    if (nextSource === "custom") {
+      const [file] = replayFileInput.files || [];
+      if (!file) {
+        return false;
+      }
+      isPlaying = false;
+      setLoadProgress(true, 0, `Loading ${file.name}...`);
+      updateUi();
+      await nextAnimationFrame();
+      const text = await readReplayFile(file);
+      setLoadProgress(true, 1, `Parsing ${file.name}...`);
+      await nextAnimationFrame();
+      const parsed = JSON.parse(text);
+      loadReplay(parsed, file.name, "custom");
+      finishLoadProgress(`${file.name} loaded`);
+    } else {
+      await loadBuiltInReplay(nextSource);
+    }
+    resetCompletionPromptForPlayback();
+    if (closeOnSuccess && openModal === "source") {
+      closeModalElement("source", sourceModal);
+    }
+    scheduleChromeHide();
+    updateUi();
+    return true;
+  } catch (error) {
+    setLoadProgress(false);
+    reportViewerIssue(`failed to load replay (${error.message})`);
+    setSourceModalStatus(`Could not load replay: ${error.message}`);
+    playPauseButton.disabled = false;
+    restartButton.disabled = false;
+    stepBackButton.disabled = false;
+    stepButton.disabled = false;
+    return false;
+  }
+}
+
+async function loadFirstVisitReplayAfterPaint() {
+  if (DEFAULT_REPLAY_SOURCE_KEY !== EMPTY_REPLAY_SOURCE_KEY) {
+    return;
+  }
+  try {
+    if (localStorage.getItem(FIRST_VISIT_AUTOLOAD_STORAGE_KEY)) {
+      return;
+    }
+  } catch (_error) {
+    // Keep the first-run experience useful when storage is unavailable.
+  }
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+  await new Promise((resolve) => window.setTimeout(resolve, 2000));
+  if (isLoadingReplay || replayDocument.events.length > 0 || isAnyModalOpen()) {
+    return;
+  }
+  try {
+    await loadBuiltInReplay(FIRST_VISIT_AUTOLOAD_SOURCE_KEY);
+    try {
+      localStorage.setItem(FIRST_VISIT_AUTOLOAD_STORAGE_KEY, "true");
+    } catch (_error) {
+      // Private browsing or locked-down storage should not block the loaded replay.
+    }
+  } catch (error) {
+    setLoadProgress(false);
+    reportViewerIssue(`failed to load first-visit replay (${error.message})`);
+  }
 }
 
 function readReplayFile(file) {
@@ -2043,7 +2211,8 @@ function fitCameraToTopology(steps) {
   const width = Math.max(1, maxX - minX);
   const height = Math.max(1, maxY - minY);
   const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2 + height * 0.16;
+  const verticalBias = camera.aspect < 0.9 ? -0.08 : 0.08;
+  const centerY = (minY + maxY) / 2 + height * verticalBias;
   const halfFovRadians = THREE.MathUtils.degToRad(camera.fov / 2);
   const fitHeightDistance = height * 0.5 / Math.tan(halfFovRadians);
   const fitWidthDistance = width * 0.5 / (Math.tan(halfFovRadians) * camera.aspect);
@@ -3029,7 +3198,7 @@ function endNodeDrag(event) {
   suppressNextCanvasClick = moved;
   try {
     renderer.domElement.releasePointerCapture(event.pointerId);
-  } catch {
+  } catch (_error) {
     // Pointer capture may already be gone after browser-level cancellation.
   }
   renderer.domElement.style.cursor = hoveredStepName ? "grab" : "default";
@@ -3074,6 +3243,7 @@ function tick(now) {
       isPlaying = false;
       isFinishingEffects = false;
       currentTimeSeconds = replayDurationSeconds;
+      scheduleCompletionPrompt();
     }
     updateUi();
     renderer.render(scene, camera);
@@ -3087,24 +3257,34 @@ function tick(now) {
 }
 
 playPauseButton.addEventListener("click", () => {
-  if (isLoadingReplay) {
-    return;
+  try {
+    if (isLoadingReplay) {
+      return;
+    }
+    cancelCompletionPrompt();
+    revealPlayerChrome();
+    const shouldStart = !isPlaying;
+    if (shouldStart && currentTimeSeconds >= replayDurationSeconds) {
+      rebuildPlaybackTo(0);
+      completionPromptShownForPlayback = false;
+    }
+    previousAnimationFrame = performance.now();
+    isFinishingEffects = false;
+    isPlaying = shouldStart;
+    scheduleChromeHide();
+    updateUi();
+  } catch (error) {
+    reportRuntimeError("playback could not start", error);
   }
-  revealPlayerChrome(true);
-  if (!isPlaying && currentTimeSeconds >= replayDurationSeconds) {
-    rebuildPlaybackTo(0);
-  }
-  if (!isPlaying && nextEventCursor === 0 && replayDocument.events.length > 0) {
-    rebuildPlaybackToCursor(1);
-  }
-  previousAnimationFrame = performance.now();
-  isFinishingEffects = false;
-  isPlaying = !isPlaying;
-  scheduleChromeHide();
-  updateUi();
+});
+
+loadReplayButton.addEventListener("click", () => {
+  cancelCompletionPrompt();
+  openSourceModal("load");
 });
 
 restartButton.addEventListener("click", () => {
+  resetCompletionPromptForPlayback();
   revealPlayerChrome(true);
   restartPlayback();
   scheduleChromeHide();
@@ -3114,18 +3294,18 @@ stopButton.addEventListener("click", () => {
   if (isLoadingReplay) {
     return;
   }
+  resetCompletionPromptForPlayback();
   revealPlayerChrome(true);
   isPlaying = false;
   restartPlayback();
-  if (!prefersTapChrome) {
-    scheduleChromeHide();
-  }
+  scheduleChromeHide();
 });
 
 stepBackButton.addEventListener("click", () => {
   if (isLoadingReplay) {
     return;
   }
+  resetCompletionPromptForPlayback();
   revealPlayerChrome(true);
   stepBackwardOneEvent();
   scheduleChromeHide();
@@ -3135,12 +3315,14 @@ stepButton.addEventListener("click", () => {
   if (isLoadingReplay) {
     return;
   }
+  resetCompletionPromptForPlayback();
   revealPlayerChrome(true);
   stepForwardOneEvent();
   scheduleChromeHide();
 });
 
 timelineSlider.addEventListener("input", () => {
+  resetCompletionPromptForPlayback();
   revealPlayerChrome(true);
   isScrubbingTimeline = true;
   const nextTime = (Number(timelineSlider.value) / 10000) * replayDurationSeconds;
@@ -3150,6 +3332,7 @@ timelineSlider.addEventListener("input", () => {
 });
 
 timelineSlider.addEventListener("pointerdown", () => {
+  cancelCompletionPrompt();
   revealPlayerChrome(true);
   isScrubbingTimeline = true;
 });
@@ -3197,43 +3380,16 @@ infoCloseButton.addEventListener("click", () => {
   closeModalElement("info", infoModal);
 });
 
+sourceCloseButton.addEventListener("click", () => {
+  closeModalElement("source", sourceModal);
+});
+
+sourceCancelButton.addEventListener("click", () => {
+  closeModalElement("source", sourceModal);
+});
+
 sourceApplyButton.addEventListener("click", async () => {
-  if (isLoadingReplay) {
-    return;
-  }
-  const nextSource = datasetSelect.value;
-  if (nextSource === EMPTY_REPLAY_SOURCE_KEY) {
-    return;
-  }
-  try {
-    if (nextSource === "custom") {
-      const [file] = replayFileInput.files || [];
-      if (!file) {
-        return;
-      }
-      isPlaying = false;
-      setLoadProgress(true, 0, `Loading ${file.name}...`);
-      updateUi();
-      await nextAnimationFrame();
-      const text = await readReplayFile(file);
-      setLoadProgress(true, 1, `Parsing ${file.name}...`);
-      await nextAnimationFrame();
-      const parsed = JSON.parse(text);
-      loadReplay(parsed, file.name, "custom");
-      finishLoadProgress(`${file.name} loaded`);
-    } else {
-      await loadBuiltInReplay(nextSource);
-    }
-    scheduleChromeHide();
-    updateUi();
-  } catch (error) {
-    setLoadProgress(false);
-    reportViewerIssue(`failed to load replay (${error.message})`);
-    playPauseButton.disabled = false;
-    restartButton.disabled = false;
-    stepBackButton.disabled = false;
-    stepButton.disabled = false;
-  }
+  await applySelectedReplaySource();
 });
 
 fullscreenButton.addEventListener("click", async () => {
@@ -3294,7 +3450,6 @@ renderer.domElement.addEventListener("click", (event) => {
     return;
   }
   if (!prefersTapChrome) {
-    revealPlayerChrome();
     return;
   }
   if (playerChrome.dataset.visible === "true") {
@@ -3309,23 +3464,24 @@ if (resetLayoutButton) {
   resetLayoutButton.addEventListener("click", () => {
     resetCurrentLayout();
     revealPlayerChrome(true);
+    scheduleChromeHide();
     updateUi();
   });
 }
 
 playerChrome.addEventListener("pointermove", () => {
-  revealPlayerChrome(true);
+  revealPlayerChrome();
 });
 
 playerChrome.addEventListener("pointerleave", () => {
-  if (prefersTapChrome && !isAnyModalOpen()) {
-    scheduleChromeHide(900);
+  if (!isAnyModalOpen()) {
+    scheduleChromeHide();
   }
 });
 
 playerChrome.addEventListener("click", (event) => {
   event.stopPropagation();
-  revealPlayerChrome(true);
+  revealPlayerChrome();
 });
 
 window.addEventListener("resize", () => {
@@ -3335,21 +3491,23 @@ window.addEventListener("resize", () => {
   fitCameraToTopology(replayDocument.topology.steps);
   updateLabels();
   prefersTapChrome = window.matchMedia("(hover: none), (pointer: coarse)").matches;
-  setPlayerChromeVisible(true);
-  if (prefersTapChrome && !isAnyModalOpen() && !isLoadingReplay) {
-    scheduleChromeHide();
-  } else {
+  if (isAnyModalOpen() || isLoadingReplay || isScrubbingTimeline) {
+    setPlayerChromeVisible(true);
     cancelChromeHide();
+  } else if (playerChrome.dataset.visible === "true") {
+    scheduleChromeHide();
   }
 });
 
-for (const modal of [infoModal]) {
+for (const modal of [infoModal, sourceModal]) {
   modal.addEventListener("click", (event) => {
     const closeTarget = event.target.closest("[data-close-modal]");
     if (closeTarget) {
       const name = closeTarget.getAttribute("data-close-modal");
       if (name === "info") {
         closeModalElement("info", infoModal);
+      } else if (name === "source") {
+        closeModalElement("source", sourceModal);
       }
     }
   });
@@ -3359,6 +3517,8 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     if (openModal === "info") {
       closeModalElement("info", infoModal);
+    } else if (openModal === "source") {
+      closeModalElement("source", sourceModal);
     }
   }
 });
@@ -3375,9 +3535,19 @@ window.addEventListener("pageshow", () => {
     infoModal.hidden = true;
     infoModal.setAttribute("aria-hidden", "true");
   }
+  if (!sourceModal.hidden) {
+    sourceModal.hidden = true;
+    sourceModal.setAttribute("aria-hidden", "true");
+  }
   openModal = null;
+  cancelCompletionPrompt();
   syncStagedReplaySourceToActive();
-  revealPlayerChrome(prefersTapChrome || isLoadingReplay);
+  if (isLoadingReplay || isScrubbingTimeline) {
+    revealPlayerChrome(true);
+  } else {
+    setPlayerChromeVisible(false);
+    cancelChromeHide();
+  }
 });
 
 window.addEventListener("error", (event) => {
@@ -3408,7 +3578,7 @@ if (backToDocsLink) {
     window.location.assign(backToDocsLink.href);
   });
 }
-setPlayerChromeVisible(true);
+setPlayerChromeVisible(false);
 updateUi();
 requestAnimationFrame(tick);
 // Intentionally starts empty so large built-in datasets load only after an explicit picker selection.
@@ -3417,4 +3587,6 @@ if (DEFAULT_REPLAY_SOURCE_KEY !== EMPTY_REPLAY_SOURCE_KEY) {
     setLoadProgress(false);
     reportViewerIssue(`failed to load built-in dataset (${error.message})`);
   });
+} else {
+  loadFirstVisitReplayAfterPaint();
 }

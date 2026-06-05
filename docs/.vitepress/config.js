@@ -283,6 +283,34 @@ export default withMermaid(
     title: 'The Pipeline Framework',
     description: 'A framework for building reactive pipeline processing systems',
     lang: 'en-GB',
+    mermaid: {
+      fontFamily: 'Red Hat Text, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',
+      fontSize: 16,
+      flowchart: {
+        useMaxWidth: false,
+        htmlLabels: true
+      },
+      class: {
+        useMaxWidth: false,
+        htmlLabels: true
+      },
+      sequence: {
+        useMaxWidth: false,
+        actorFontSize: 17,
+        messageFontSize: 16,
+        noteFontSize: 16,
+        actorFontFamily: 'Red Hat Text, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',
+        messageFontFamily: 'Red Hat Text, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',
+        noteFontFamily: 'Red Hat Text, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif'
+      },
+      themeVariables: {
+        fontFamily: 'Red Hat Text, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',
+        fontSize: '16px',
+        primaryTextColor: '#1f2937',
+        secondaryTextColor: '#374151',
+        lineColor: '#64748b'
+      }
+    },
     
     // Base URL for the site (can be changed for different deployments)
     base: '/',

@@ -18,11 +18,13 @@
 import DefaultTheme from 'vitepress/theme'
 import {h} from 'vue'
 import './custom.css'
+import './mermaid.css'
 import Callout from './components/Callout.vue'
 import FeaturedArticles from './components/FeaturedArticles.vue'
 import HeroSection from './components/HeroSection.vue'
 import VersionBadge from './components/VersionBadge.vue'
 import LatestReleases from './components/LatestReleases.vue'
+import MermaidDiagramEnhancer from './components/MermaidDiagramEnhancer.vue'
 
 function installReplayViewerHardNavigation() {
   if (typeof window === 'undefined' || window.__tpfReplayViewerHardNavInstalled) {
@@ -57,9 +59,12 @@ function installReplayViewerHardNavigation() {
 export default {
   ...DefaultTheme,
   Layout() {
-    return h(DefaultTheme.Layout, null, {
-      'doc-before': () => h(VersionBadge)
-    })
+    return h('div', [
+      h(DefaultTheme.Layout, null, {
+        'doc-before': () => h(VersionBadge)
+      }),
+      h(MermaidDiagramEnhancer)
+    ])
   },
   enhanceApp({ app }) {
     // Register custom components

@@ -17,7 +17,7 @@ The release process uses the Maven Release Plugin for the root reactor, then Git
      -Darguments="-DskipTests"
    ```
 
-2. **Synchronize release-coupled standalone POMs**: confirm alternate topology and standalone reference POMs moved to the next snapshot, including `examples/csv-payments/pom.pipeline-runtime.xml`, `examples/csv-payments/pom.monolith.xml`, `examples/checkout/pom.xml`, and `ai-sdk/pom.xml`.
+2. **Synchronize release-coupled POMs**: confirm every active POM with an explicit parent version moved to the next snapshot, including root-reactor child modules, alternate topology POMs such as `examples/csv-payments/pom.pipeline-runtime.xml` and `examples/csv-payments/pom.monolith.xml`, standalone reference POMs such as `examples/checkout/pom.xml`, and `ai-sdk/pom.xml`.
 3. **Run the release validation gate**: at minimum run version-drift checks, framework verification, CSV topology checks, and docs build before pushing.
 4. **Push only after validation**: push the prepared commits to `main`, then push the immutable `vX.Y.Z` tag to trigger publishing.
 5. **Verify on Maven Central**: check artifacts at <https://central.sonatype.com/>.
@@ -226,12 +226,13 @@ Use the Maven Release Plugin as the versioning tool for the root reactor, but ke
 
    The release commit should contain the release version. The next-development commit should contain the next `-SNAPSHOT` version.
 
-4. **Synchronize release-coupled POMs outside the root reactor**:
-   The release plugin only updates POMs in the Maven reactor it runs. After `release:prepare`, check and fix alternate topology and standalone POMs so they match the next development version on `main`.
+4. **Synchronize every release-coupled POM with an explicit version**:
+   The release plugin updates POMs in the Maven reactor it runs, but newly added modules and alternate build entrypoints can still carry stale explicit parent versions. After `release:prepare`, check and fix root-reactor children, alternate topology POMs, and standalone POMs so they match the next development version on `main`.
 
    Required checks:
 
    ```bash
+   rg -n "<version>X\\.Y\\.Z-SNAPSHOT</version>" --glob "pom*.xml" --glob "!docs/versions/**"
    rg -n "X\\.Y\\.Z-SNAPSHOT" --glob "pom*.xml" --glob "!docs/versions/**"
    rg -n "X\\.Y\\.Z" examples ai-sdk --glob "pom*.xml"
    ```
@@ -239,6 +240,7 @@ Use the Maven Release Plugin as the versioning tool for the root reactor, but ke
    Replace `X.Y.Z` with the just-released version. There should be no remaining references to the old snapshot in active POMs after the next-development commit.
 
    At minimum, check:
+   - Any newly added module POMs under `examples/**`, `framework/**`, and `plugins/**`
    - `examples/csv-payments/pom.pipeline-runtime.xml`
    - `examples/csv-payments/pom.monolith.xml`
    - `examples/csv-payments/pipeline-runtime-svc/pom.xml`
@@ -306,11 +308,11 @@ The publish workflow deploys only the framework artifacts (parent, runtime, depl
 
 Note: Publishing the `framework-parent` artifact is expected. It is the BOM/parent POM that consumers import for dependency management, so it will appear in Maven Central autocomplete results.
 
-Publishing only framework artifacts does not mean example and SDK versions can drift. The E2E CI lanes build compatibility surfaces from the same checkout and expect their parent versions and `tpf.version` properties to match the root development version. A stale alternate POM can fail before tests start with `Non-resolvable parent POM` because its `relativePath` points to the checked-out root POM at a different version.
+Publishing only framework artifacts does not mean example and SDK versions can drift. The CI lanes build compatibility surfaces from the same checkout and expect their parent versions and `tpf.version` properties to match the root development version. A stale POM can fail before tests start with `Non-resolvable parent POM` because its `relativePath` points to the checked-out parent POM at a different version.
 
 ### Main-branch E2E impact
 
-The CSV E2E workflows run from alternate topology POMs. During the `v26.4.4` release, `release:prepare` updated the root reactor to `26.4.5-SNAPSHOT`, but left `examples/csv-payments/pom.pipeline-runtime.xml`, `examples/csv-payments/pom.monolith.xml`, and `ai-sdk/pom.xml` at `26.4.4-SNAPSHOT`. Because the release plugin pushed by default, `main` received the drift before it was reviewed. The next `main` E2E runs then failed at Maven model resolution rather than test execution.
+The CSV E2E workflows run from alternate topology POMs. During the `v26.4.4` release, `release:prepare` updated the root reactor to `26.4.5-SNAPSHOT`, but left `examples/csv-payments/pom.pipeline-runtime.xml`, `examples/csv-payments/pom.monolith.xml`, and `ai-sdk/pom.xml` at `26.4.4-SNAPSHOT`. During the `v26.5.2` release, a newly added Search module kept a stale explicit parent version and PR CI failed before tests started. In both cases, Maven model resolution failed before application tests could run.
 
 Treat this as a release-blocking condition:
 
@@ -397,9 +399,9 @@ This approach allows manual control over when releases happen.
 - Check that artifacts meet Maven Central requirements
 
 **Main E2E Fails Before Tests Start**:
-- Check for stale parent versions in alternate POMs: `rg -n "OLD_VERSION-SNAPSHOT" --glob "pom*.xml" --glob "!docs/versions/**"`
+- Check for stale parent versions in active POMs, including new root-reactor child modules: `rg -n "OLD_VERSION-SNAPSHOT" --glob "pom*.xml" --glob "!docs/versions/**"`
 - Check standalone TPF dependency properties such as `ai-sdk/pom.xml`'s `tpf.version`
-- Confirm the local root POM version matches the parent version in `examples/csv-payments/pom.pipeline-runtime.xml` and `examples/csv-payments/pom.monolith.xml`
+- Confirm the local root POM version matches explicit parent versions in all example, plugin, and framework module POMs, including `examples/csv-payments/pom.pipeline-runtime.xml` and `examples/csv-payments/pom.monolith.xml`
 
 ### Testing the Setup
 
@@ -414,5 +416,5 @@ Before pushing a tag that triggers the release workflow:
 - Only the framework artifacts are published to Maven Central.
 - Examples and SDK surfaces are not Central artifacts, but they are release-coupled because CI and users build them against the checked-out framework version.
 - The root POM orchestrates the main build while the framework POM handles publishing.
-- Prefer parent inheritance inside the root reactor. Check alternate top-level POMs and standalone POM properties separately during release preparation.
+- Prefer parent inheritance inside the root reactor, but remember child module POMs still contain explicit parent versions. Check all active POMs, alternate top-level POMs, and standalone POM properties during release preparation.
 - Always verify release artifacts on Maven Central after a successful deployment.
