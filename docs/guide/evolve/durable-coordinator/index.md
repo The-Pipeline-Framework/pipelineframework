@@ -14,7 +14,7 @@ This section is implementation-facing. Application usage remains in [Orchestrato
 | Await state | `AwaitUnitRecord` plus pending/completion interaction records |
 | Worker boundary | portable command/result envelopes over local, REST, gRPC, or SQS |
 | Bundle identity | generated `META-INF/pipeline/bundle-manifest.json` and strict worker identity validation |
-| Self-host path | coordinator process plus worker process using the restaurant approval example |
+| Self-host path | batteries-included local coordinator using the restaurant approval example |
 
 ```mermaid
 sequenceDiagram

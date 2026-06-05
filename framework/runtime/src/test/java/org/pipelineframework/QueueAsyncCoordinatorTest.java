@@ -39,11 +39,13 @@ import org.pipelineframework.orchestrator.PipelineBundleIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
 import org.pipelineframework.orchestrator.LocalControlPlaneAdmissionPolicy;
+import org.pipelineframework.orchestrator.SerializedTransitionPayload;
 import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
 import org.pipelineframework.orchestrator.TransitionCommandEnvelope;
 import org.pipelineframework.orchestrator.TransitionWorkerExecutor;
 import org.pipelineframework.orchestrator.TransitionWorkerExecutionMode;
 import org.pipelineframework.orchestrator.TransitionResultEnvelope;
+import org.pipelineframework.orchestrator.TransitionWorkerOutcome;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.DynamoExecutionStateStore;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
@@ -608,7 +610,7 @@ class QueueAsyncCoordinatorTest {
 
         coordinator.processExecutionWorkItem(
                 new ExecutionWorkItem("tenant-1", "exec-stream"),
-                command -> Uni.createFrom().item(TransitionResultEnvelope.completed(payloadCodec, List.of("out-1", "out-2"))))
+                command -> Uni.createFrom().item(TransitionResultEnvelope.completedInProcess(List.of("out-1", "out-2"))))
             .await().indefinitely();
 
         verify(executionStateStore).markSucceeded(
@@ -666,7 +668,7 @@ class QueueAsyncCoordinatorTest {
                 new ExecutionWorkItem("tenant-1", "exec-aggregate"),
                 envelope -> {
                     workerInput.set(envelope.toCommand(payloadCodec).inputPayload());
-                    return Uni.createFrom().item(TransitionResultEnvelope.completed(payloadCodec, List.of("output-file")));
+                    return Uni.createFrom().item(TransitionResultEnvelope.completedInProcess(List.of("output-file")));
                 })
             .await().indefinitely();
 
@@ -715,6 +717,49 @@ class QueueAsyncCoordinatorTest {
             org.mockito.ArgumentMatchers.anyLong());
         List<?> persisted = assertInstanceOf(List.class, resultCaptor.getValue());
         assertEquals(output, persisted.getFirst());
+    }
+
+    @Test
+    void processExecutionWorkItemPersistsRemoteSerializedOutputWithoutDecoding() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.leaseMs()).thenReturn(1000L);
+        ExecutionRecord<Object, Object> claimed = createRecord("tenant-1", "exec-remote", "key-remote");
+        SerializedTransitionPayload serialized = new SerializedTransitionPayload(
+            "com.example.remote.NotOnCoordinatorClasspath",
+            JsonTransitionPayloadCodec.ENCODING,
+            "{\"value\":\"remote\"}");
+        when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(checkpointPublicationService.publishIfConfigured(org.mockito.ArgumentMatchers.eq(claimed), org.mockito.ArgumentMatchers.eq(serialized)))
+            .thenReturn(Uni.createFrom().voidItem());
+        when(executionStateStore.markSucceeded(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-remote"),
+                org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq("exec-remote:0:0"),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+
+        coordinator.processExecutionWorkItem(
+                new ExecutionWorkItem("tenant-1", "exec-remote"),
+                command -> Uni.createFrom().item(new TransitionResultEnvelope(
+                    TransitionWorkerOutcome.COMPLETED,
+                    List.of(serialized),
+                    null,
+                    null)))
+            .await().indefinitely();
+
+        ArgumentCaptor<Object> resultCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(executionStateStore).markSucceeded(
+            org.mockito.ArgumentMatchers.eq("tenant-1"),
+            org.mockito.ArgumentMatchers.eq("exec-remote"),
+            org.mockito.ArgumentMatchers.eq(0L),
+            org.mockito.ArgumentMatchers.eq("exec-remote:0:0"),
+            resultCaptor.capture(),
+            org.mockito.ArgumentMatchers.anyLong());
+        List<?> persisted = assertInstanceOf(List.class, resultCaptor.getValue());
+        assertEquals(serialized, persisted.getFirst());
     }
 
     @Test
@@ -1458,7 +1503,7 @@ class QueueAsyncCoordinatorTest {
                             1L,
                             99999999L))
                         .collect().asList()
-                        .onItem().transform(items -> TransitionResultEnvelope.completed(payloadCodec, items))))
+                        .onItem().transform(TransitionResultEnvelope::completedInProcess)))
                 .await().indefinitely();
         } catch (ReflectiveOperationException e) {
             throw new AssertionError("Failed invoking runAsyncExecution", e);

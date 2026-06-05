@@ -19,6 +19,7 @@ import jakarta.ws.rs.core.Response;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.PipelineExecutionService;
@@ -129,8 +130,9 @@ class HostedPipelineControlPlaneResourceTest {
     void submitExecutionDecodesPayloadAndDelegatesToControlPlane() {
         when(controlPlaneConfig.enabled()).thenReturn(true);
         RunAsyncAcceptedDto accepted = new RunAsyncAcceptedDto("exec-1", false, "/pipeline/executions/exec-1", 1L);
+        PipelineBundleRecord bundle = bundleRecord();
         when(bundleRegistry.active("tenant-1", "org.example.restaurant"))
-            .thenReturn(Uni.createFrom().item(Optional.of(bundleRecord())));
+            .thenReturn(Uni.createFrom().item(Optional.of(bundle)));
         when(workerAvailability.check(any()))
             .thenReturn(Uni.createFrom().item(PipelineWorkerAvailabilityResult.available(
                 "rest",
@@ -161,7 +163,7 @@ class HostedPipelineControlPlaneResourceTest {
 
         assertEquals(200, response.getStatus());
         assertEquals(accepted, response.getEntity());
-        verify(bundleArtifactStore).verify(bundleRecord());
+        verify(bundleArtifactStore).verify(bundle);
         verify(workerAvailability).check(argThat(availabilityRequest ->
             "tenant-1".equals(availabilityRequest.tenantId())
                 && "org.example.restaurant".equals(availabilityRequest.pipelineId())
@@ -173,6 +175,57 @@ class HostedPipelineControlPlaneResourceTest {
             eq(false),
             eq("org.example.restaurant"),
             eq("sha256:bundle"));
+    }
+
+    @Test
+    void submitExecutionCoercesInputUsingActiveBundleManifest() {
+        when(controlPlaneConfig.enabled()).thenReturn(true);
+        RunAsyncAcceptedDto accepted = new RunAsyncAcceptedDto("exec-1", false, "/pipeline/executions/exec-1", 1L);
+        PipelineBundleRecord bundle = bundleRecord(Integer.class.getName());
+        when(bundleRegistry.active("tenant-1", "org.example.restaurant"))
+            .thenReturn(Uni.createFrom().item(Optional.of(bundle)));
+        when(workerAvailability.check(any()))
+            .thenReturn(Uni.createFrom().item(PipelineWorkerAvailabilityResult.available(
+                "rest",
+                new PipelineWorkerCapability(
+                    PipelineWorkerCapability.PROTOCOL_VERSION,
+                    "rest",
+                    "org.example.restaurant",
+                    "sha256:bundle",
+                    "bundle",
+                    List.of("application/tpf-transition-envelope+json"),
+                    List.of("rest")))));
+        when(controlPlane.executePipelineAsync(
+                any(),
+                eq("tenant-1"),
+                eq("idem-1"),
+                eq(false),
+                eq("org.example.restaurant"),
+                eq("sha256:bundle")))
+            .thenReturn(Uni.createFrom().item(accepted));
+        HostedExecutionSubmitRequest request = new HostedExecutionSubmitRequest(
+            "org.example.restaurant",
+            ExecutionInputShape.UNI,
+            payloadCodec.encode("42"),
+            "idem-1",
+            false);
+
+        Response response = resource.submitExecution("tenant-1", AUTH, request).await().indefinitely();
+
+        assertEquals(200, response.getStatus());
+        AtomicReference<Object> capturedInput = new AtomicReference<>();
+        verify(controlPlane).executePipelineAsync(
+            argThat(input -> {
+                capturedInput.set(input);
+                return input instanceof Uni<?>;
+            }),
+            eq("tenant-1"),
+            eq("idem-1"),
+            eq(false),
+            eq("org.example.restaurant"),
+            eq("sha256:bundle"));
+        Object item = assertInstanceOf(Uni.class, capturedInput.get()).await().indefinitely();
+        assertEquals(42, item);
     }
 
     @Test
@@ -281,6 +334,22 @@ class HostedPipelineControlPlaneResourceTest {
     }
 
     @Test
+    void getResultReturnsStoredSerializedPayloadWithoutDoubleEncoding() {
+        when(controlPlaneConfig.enabled()).thenReturn(true);
+        when(controlPlane.getExecutionStatus("tenant-1", "exec-1"))
+            .thenReturn(Uni.createFrom().item(status(ExecutionStatus.SUCCEEDED)));
+        SerializedTransitionPayload serialized = payloadCodec.encode("approved");
+        when(controlPlane.getExecutionResultPayload("tenant-1", "exec-1"))
+            .thenReturn(Uni.createFrom().item(serialized));
+
+        Response response = resource.getExecutionResult("tenant-1", "exec-1", AUTH).await().indefinitely();
+
+        assertEquals(200, response.getStatus());
+        HostedExecutionResultResponse result = assertInstanceOf(HostedExecutionResultResponse.class, response.getEntity());
+        assertEquals(serialized, result.resultPayload());
+    }
+
+    @Test
     void getResultReturnsOnlyStatusWhenExecutionIsNotSucceeded() {
         when(controlPlaneConfig.enabled()).thenReturn(true);
         when(controlPlane.getExecutionStatus("tenant-1", "exec-1"))
@@ -370,6 +439,10 @@ class HostedPipelineControlPlaneResourceTest {
     }
 
     private static PipelineBundleRecord bundleRecord() {
+        return bundleRecord(String.class.getName());
+    }
+
+    private static PipelineBundleRecord bundleRecord(String inputTypeId) {
         PipelineBundleManifest manifest = new PipelineBundleManifest(
             PipelineBundleManifest.CURRENT_SCHEMA_VERSION,
             "org.example.restaurant",
@@ -385,7 +458,7 @@ class HostedPipelineControlPlaneResourceTest {
                 "Validate",
                 "service",
                 "ONE_TO_ONE",
-                "Input",
+                inputTypeId,
                 "Output",
                 "Runtime",
                 "Client",

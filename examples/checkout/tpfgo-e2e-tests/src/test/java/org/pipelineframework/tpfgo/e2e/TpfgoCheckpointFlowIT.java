@@ -11,9 +11,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
@@ -319,49 +321,59 @@ class TpfgoCheckpointFlowIT {
      * @throws IOException if a required free port cannot be allocated or underlying spec construction fails
      */
     private List<AppSpec> specs(int collectorPort) throws IOException {
-        AppSpec pipelineRuntime = runtimeSpec("pipeline-runtime-svc");
+        Set<Integer> assignedPorts = new HashSet<>();
+        assignedPorts.add(collectorPort);
+        AppSpec pipelineRuntime = runtimeSpec("pipeline-runtime-svc", assignedPorts);
         int internalGrpcPort = pipelineRuntime.grpcPort();
 
         AppSpec checkout = orchestratorSpec(
             "checkout-orchestrator-svc",
             "tpfgo.checkout.order-pending.v1",
             internalGrpcPort,
-            List.of("process-checkout-validate-request", "process-checkout-create-pending"));
+            List.of("process-checkout-validate-request", "process-checkout-create-pending"),
+            assignedPorts);
         AppSpec consumer = orchestratorSpec(
             "consumer-validation-orchestrator-svc",
             "tpfgo.consumer.order-approved.v1",
             internalGrpcPort,
-            List.of("process-consumer-validate-order"));
+            List.of("process-consumer-validate-order"),
+            assignedPorts);
         AppSpec restaurant = orchestratorSpec(
             "restaurant-acceptance-orchestrator-svc",
             "tpfgo.restaurant.order-accepted.v1",
             internalGrpcPort,
-            List.of("process-restaurant-accept-order"));
+            List.of("process-restaurant-accept-order"),
+            assignedPorts);
         AppSpec kitchen = orchestratorSpec(
             "kitchen-preparation-orchestrator-svc",
             "tpfgo.kitchen.order-ready.v1",
             internalGrpcPort,
-            List.of("process-kitchen-expand-tasks", "process-kitchen-reduce-completion"));
+            List.of("process-kitchen-expand-tasks", "process-kitchen-reduce-completion"),
+            assignedPorts);
         AppSpec dispatch = orchestratorSpec(
             "dispatch-orchestrator-svc",
             "tpfgo.dispatch.delivery-assigned.v1",
             internalGrpcPort,
-            List.of("process-dispatch-assign-courier"));
+            List.of("process-dispatch-assign-courier"),
+            assignedPorts);
         AppSpec delivery = orchestratorSpec(
             "delivery-execution-orchestrator-svc",
             "tpfgo.delivery.order-delivered.v1",
             internalGrpcPort,
-            List.of("process-delivery-execute-order"));
+            List.of("process-delivery-execute-order"),
+            assignedPorts);
         AppSpec payment = orchestratorSpec(
             "payment-capture-orchestrator-svc",
             "tpfgo.payment.capture-result.v1",
             internalGrpcPort,
-            List.of("process-payment-capture-order"));
+            List.of("process-payment-capture-order"),
+            assignedPorts);
         AppSpec compensation = orchestratorSpec(
             "compensation-failure-orchestrator-svc",
             "tpfgo.compensation.terminal-state.v1",
             internalGrpcPort,
-            List.of("process-compensation-finalize-order"));
+            List.of("process-compensation-finalize-order"),
+            assignedPorts);
 
         checkout.bindTo(consumer.grpcPort());
         consumer.bindTo(restaurant.grpcPort());
@@ -391,8 +403,8 @@ class TpfgoCheckpointFlowIT {
      * @return an AppSpec configured for a runtime module (not an orchestrator) with its HTTP and gRPC ports set to an available port and no publications or internal clients
      * @throws IOException if a free port cannot be allocated
      */
-    private AppSpec runtimeSpec(String moduleDir) throws IOException {
-        ServerSocket socket = reservePort();
+    private AppSpec runtimeSpec(String moduleDir, Set<Integer> assignedPorts) throws IOException {
+        ServerSocket socket = reserveUnusedPort(assignedPorts);
         try {
             int httpPort = socket.getLocalPort();
             int grpcPort = httpPort;
@@ -416,10 +428,11 @@ class TpfgoCheckpointFlowIT {
         String moduleDir,
         String publication,
         int internalGrpcTargetPort,
-        List<String> internalGrpcClients
+        List<String> internalGrpcClients,
+        Set<Integer> assignedPorts
     ) throws IOException {
-        ServerSocket httpSocket = reservePort();
-        ServerSocket grpcSocket = reservePort();
+        ServerSocket httpSocket = reserveUnusedPort(assignedPorts);
+        ServerSocket grpcSocket = reserveUnusedPort(assignedPorts);
         try {
             int httpPort = httpSocket.getLocalPort();
             int grpcPort = grpcSocket.getLocalPort();
@@ -465,6 +478,18 @@ class TpfgoCheckpointFlowIT {
         socket.bind(new InetSocketAddress("127.0.0.1", 0));
         socket.setReuseAddress(true);
         return socket;
+    }
+
+    private static ServerSocket reserveUnusedPort(Set<Integer> assignedPorts) throws IOException {
+        for (int attempt = 0; attempt < 100; attempt++) {
+            ServerSocket socket = reservePort();
+            int port = socket.getLocalPort();
+            if (assignedPorts.add(port)) {
+                return socket;
+            }
+            socket.close();
+        }
+        throw new IOException("Unable to reserve a unique test port after 100 attempts");
     }
 
     private record AppSpec(

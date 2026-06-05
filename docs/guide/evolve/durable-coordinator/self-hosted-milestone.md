@@ -2,13 +2,14 @@
 
 The near-term adoption goal is a public, self-hosted durable coordinator path that users can run and inspect without private code.
 
-The first reference is `examples/restaurant-approval/self-host`, which runs one coordinator process and one REST worker process from the same packaged monolith.
+The first reference is `examples/restaurant-approval/self-host`, which runs one batteries-included coordinator process from the packaged `monolith-svc` artifact. It uses the local in-process transition worker by default so users can exercise hosted-style submission, bundle activation, await completion, and result inspection without starting a second service.
 
 ## Current Proof
 
 | Capability | Status |
 | --- | --- |
-| Coordinator and worker run as separate processes | present in `restaurant-approval` |
+| Batteries-included local coordinator demo | present in `restaurant-approval` |
+| Coordinator and worker split-process proof | present in `RestaurantApprovalHostedCoordinatorRestWorkerIT` |
 | Bundle registration and activation | present |
 | Execution pinning to active bundle version | present |
 | Worker availability check before submit | present |

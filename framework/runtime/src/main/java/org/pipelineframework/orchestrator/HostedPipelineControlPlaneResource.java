@@ -1,7 +1,5 @@
 package org.pipelineframework.orchestrator;
 
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -28,14 +26,9 @@ import org.pipelineframework.PipelineExecutionService;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.dto.AwaitDtoMapper;
 import org.pipelineframework.config.pipeline.PipelineJson;
-import org.pipelineframework.config.pipeline.PipelineOrderResourceLoader;
 import org.pipelineframework.orchestrator.dto.HostedAwaitCompletionRequest;
 import org.pipelineframework.orchestrator.dto.HostedExecutionResultResponse;
 import org.pipelineframework.orchestrator.dto.HostedExecutionSubmitRequest;
-import org.pipelineframework.step.StepManyToMany;
-import org.pipelineframework.step.StepManyToOne;
-import org.pipelineframework.step.StepOneToMany;
-import org.pipelineframework.step.StepOneToOne;
 
 /**
  * Default-disabled generic control-plane API for local/dev hosted-coordinator proof.
@@ -79,7 +72,6 @@ public class HostedPipelineControlPlaneResource {
     @Inject
     ControlPlaneSecretResolver secretResolver;
 
-    private volatile Class<?> ingressPayloadType;
     private volatile PipelineBundleRegistry fallbackRegistry;
     private volatile PipelineBundleArtifactStore fallbackArtifactStore;
     private volatile PipelineWorkerAvailability fallbackWorkerAvailability;
@@ -124,18 +116,6 @@ public class HostedPipelineControlPlaneResource {
             return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
                 .entity("inputPayload is required").build());
         }
-        Object input;
-        try {
-            input = executionInput(request);
-        } catch (IngressPayloadTypeResolutionException e) {
-            LOG.errorf(e, "Failed resolving hosted control-plane ingress payload type");
-            return Uni.createFrom().item(Response.status(Response.Status.SERVICE_UNAVAILABLE)
-                .entity(INGRESS_TYPE_UNAVAILABLE).build());
-        } catch (RuntimeException e) {
-            LOG.warnf(e, "Invalid hosted control-plane execution submit payload");
-            return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
-                .entity(INVALID_REQUEST_PAYLOAD).build());
-        }
         return registry().active(tenantId, request.pipelineId())
             .onItem().transformToUni(active -> {
                 if (active.isEmpty()) {
@@ -149,6 +129,18 @@ public class HostedPipelineControlPlaneResource {
                     LOG.warnf("Active hosted bundle is unavailable: %s", e.getMessage());
                     return Uni.createFrom().item(Response.status(Response.Status.CONFLICT)
                         .entity(e.getMessage()).build());
+                }
+                Object input;
+                try {
+                    input = executionInput(request, bundle);
+                } catch (IngressPayloadTypeResolutionException e) {
+                    LOG.errorf(e, "Failed resolving hosted control-plane ingress payload type");
+                    return Uni.createFrom().item(Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                        .entity(INGRESS_TYPE_UNAVAILABLE).build());
+                } catch (RuntimeException e) {
+                    LOG.warnf(e, "Invalid hosted control-plane execution submit payload");
+                    return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
+                        .entity(INVALID_REQUEST_PAYLOAD).build());
                 }
                 return availability().check(new PipelineWorkerAvailabilityRequest(
                         tenantId,
@@ -214,8 +206,15 @@ public class HostedPipelineControlPlaneResource {
                 return controlPlane.getExecutionResultPayload(tenantId, executionId)
                     .onItem().transform(payload -> Response.ok(new HostedExecutionResultResponse(
                         status,
-                        payloadCodec.encode(payload))).build());
+                        resultPayload(payload))).build());
             });
+    }
+
+    private SerializedTransitionPayload resultPayload(Object payload) {
+        if (payload instanceof SerializedTransitionPayload serialized) {
+            return serialized;
+        }
+        return payloadCodec.encode(payload);
     }
 
     @GET
@@ -287,7 +286,7 @@ public class HostedPipelineControlPlaneResource {
             .onItem().transform(result -> Response.ok(AwaitDtoMapper.toCompletionResponse(result)).build());
     }
 
-    private Object executionInput(HostedExecutionSubmitRequest request) {
+    private Object executionInput(HostedExecutionSubmitRequest request, PipelineBundleRecord bundle) {
         if (request == null) {
             throw new IllegalArgumentException("Execution submit request is required");
         }
@@ -299,8 +298,8 @@ public class HostedPipelineControlPlaneResource {
         }
         Object payload = payloadCodec.decode(request.inputPayload());
         return switch (request.inputShape()) {
-            case UNI -> toUni(coerceIngressPayload(payload));
-            case MULTI -> toMulti(payload);
+            case UNI -> toUni(coerceIngressPayload(payload, bundle));
+            case MULTI -> toMulti(payload, bundle);
             case RAW -> payload;
         };
     }
@@ -309,47 +308,36 @@ public class HostedPipelineControlPlaneResource {
         return payload == null ? Uni.createFrom().nullItem() : Uni.createFrom().item(payload);
     }
 
-    private Multi<?> toMulti(Object payload) {
+    private Multi<?> toMulti(Object payload, PipelineBundleRecord bundle) {
         if (payload == null) {
             return Multi.createFrom().empty();
         }
         if (payload instanceof Iterable<?> iterable) {
             List<Object> coerced = new ArrayList<>();
-            iterable.forEach(item -> coerced.add(coerceIngressPayload(item)));
+            iterable.forEach(item -> coerced.add(coerceIngressPayload(item, bundle)));
             return Multi.createFrom().iterable(coerced);
         }
         throw new IllegalArgumentException("MULTI input payload must decode to an iterable value");
     }
 
-    private Object coerceIngressPayload(Object payload) {
-        Class<?> target = ingressPayloadType();
+    private Object coerceIngressPayload(Object payload, PipelineBundleRecord bundle) {
+        Class<?> target = ingressPayloadType(bundle);
         if (target == null || payload == null || target.isInstance(payload)) {
             return payload;
         }
         return PipelineJson.mapper().convertValue(payload, target);
     }
 
-    private Class<?> ingressPayloadType() {
-        Class<?> cached = ingressPayloadType;
-        if (cached != null) {
-            return cached == Void.class ? null : cached;
-        }
-        synchronized (this) {
-            if (ingressPayloadType == null) {
-                ingressPayloadType = resolveIngressPayloadType().orElse(Void.class);
-            }
-            return ingressPayloadType == Void.class ? null : ingressPayloadType;
-        }
-    }
-
-    private java.util.Optional<Class<?>> resolveIngressPayloadType() {
+    private Class<?> ingressPayloadType(PipelineBundleRecord bundle) {
         try {
-            java.util.Optional<List<String>> order = PipelineOrderResourceLoader.loadOrder();
-            if (order.isEmpty() || order.get().isEmpty()) {
-                return java.util.Optional.empty();
+            if (bundle == null || bundle.manifest() == null || bundle.manifest().steps().isEmpty()) {
+                return null;
             }
-            Class<?> firstStepClass = loadClass(order.get().getFirst());
-            return firstGenericInputType(firstStepClass);
+            String inputTypeId = bundle.manifest().steps().getFirst().inputTypeId();
+            if (inputTypeId == null || inputTypeId.isBlank()) {
+                return null;
+            }
+            return loadClass(inputTypeId);
         } catch (Exception e) {
             throw new IngressPayloadTypeResolutionException(e);
         }
@@ -365,42 +353,6 @@ public class HostedPipelineControlPlaneResource {
             }
         }
         return Class.forName(className, false, HostedPipelineControlPlaneResource.class.getClassLoader());
-    }
-
-    private java.util.Optional<Class<?>> firstGenericInputType(Class<?> stepClass) {
-        Class<?> current = stepClass;
-        while (current != null && current != Object.class) {
-            for (Type type : current.getGenericInterfaces()) {
-                java.util.Optional<Class<?>> candidate = genericInputType(type);
-                if (candidate.isPresent()) {
-                    return candidate;
-                }
-            }
-            current = current.getSuperclass();
-        }
-        return java.util.Optional.empty();
-    }
-
-    private java.util.Optional<Class<?>> genericInputType(Type type) {
-        if (type instanceof ParameterizedType parameterized) {
-            Type raw = parameterized.getRawType();
-            if (raw instanceof Class<?> rawClass
-                && (rawClass == StepOneToOne.class
-                    || rawClass == StepOneToMany.class
-                    || rawClass == StepManyToOne.class
-                    || rawClass == StepManyToMany.class)) {
-                Type inputType = parameterized.getActualTypeArguments()[0];
-                if (inputType instanceof Class<?> inputClass) {
-                    return java.util.Optional.of(inputClass);
-                }
-            }
-            if (raw instanceof Class<?> rawClass) {
-                return firstGenericInputType(rawClass);
-            }
-        } else if (type instanceof Class<?> rawClass) {
-            return firstGenericInputType(rawClass);
-        }
-        return java.util.Optional.empty();
     }
 
     private Response guard(String tenantId, String authorization) {

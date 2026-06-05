@@ -125,4 +125,16 @@ public record TransitionResultEnvelope(
         }
         return outputPayloads.stream().map(codec::decode).toList();
     }
+
+    /**
+     * Returns output items in the representation the coordinator should persist.
+     * In-process workers can carry decoded Java objects. Remote workers return
+     * portable payload envelopes, which the coordinator must not eagerly decode
+     * when it may not own the application bundle classes.
+     *
+     * @return decoded local outputs or serialized remote outputs
+     */
+    public List<?> coordinatorOutputItems() {
+        return decodedOutputItems != null ? decodedOutputItems : outputPayloads;
+    }
 }

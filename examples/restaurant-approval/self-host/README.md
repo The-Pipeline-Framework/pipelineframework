@@ -2,12 +2,9 @@
 
 This directory is the local self-hosted coordinator reference path for `restaurant-approval`.
 
-It runs the same packaged monolith twice:
+The default demo runs one packaged `monolith-svc` process with the generic control-plane and bundle-admin APIs enabled. That process also uses the local in-process transition worker, so the first self-hosted run is batteries-included: one Java process owns execution state, await state, bundle activation, worker availability checks, result APIs, and restaurant-order business transitions.
 
-1. one process as a REST transition worker,
-2. one process as the coordinator with generic control-plane and bundle-admin APIs enabled.
-
-The coordinator owns execution state, await state, bundle activation, worker availability checks, and result APIs. The worker executes restaurant-order business transitions through the signed REST worker protocol.
+The separate REST worker script remains available for protocol experiments, but it is not the default adoption path.
 
 ## Quick Start
 
@@ -17,7 +14,7 @@ From the repository root:
 ./examples/restaurant-approval/self-host/run-self-hosted-demo.sh --ci
 ```
 
-The script packages the monolith, starts both processes, registers and activates the generated bundle JAR, submits accepted and declined orders through `/tpf/control-plane/...`, completes the await interaction, and verifies terminal results.
+The script packages `monolith-svc`, starts the coordinator, registers and activates the generated bundle JAR, submits accepted and declined orders through `/tpf/control-plane/...`, completes the await interaction, and verifies terminal results.
 
 By default it first installs the current `framework` SNAPSHOT so the example build uses the runtime code from this checkout. For faster reruns after the local SNAPSHOT is current:
 
@@ -36,7 +33,6 @@ TPF_SKIP_FRAMEWORK_INSTALL=true ./examples/restaurant-approval/self-host/run-sel
 | `TPF_WORKER_PORT` | `8181` |
 | `TPF_CONTROL_PLANE_TOKEN` | `restaurant-control-plane-admin-token` |
 | `TPF_ADMIN_TOKEN` | `restaurant-control-plane-admin-token` |
-| `TPF_WORKER_SECRET` | `restaurant-transition-worker-secret` |
 | `TPF_BUNDLE_STORE_ROOT` | `examples/restaurant-approval/monolith-svc/target/tpf-self-host/bundles` |
 
 These defaults are local/dev only. Real self-host deployments should use secret references, durable stores, and explicit operational runbooks.
@@ -48,12 +44,6 @@ Package the app:
 ```bash
 ./mvnw -f framework/pom.xml -DskipTests install
 ./mvnw -f examples/restaurant-approval/pom.xml -pl monolith-svc -am -DskipTests package
-```
-
-Start the worker:
-
-```bash
-./examples/restaurant-approval/self-host/start-worker.sh
 ```
 
 Start the coordinator:
@@ -85,7 +75,9 @@ Logs are written under `examples/restaurant-approval/monolith-svc/target/tpf-sel
 
 1. A coordinator process can submit and inspect executions without using generated `/pipeline/*` app routes.
 2. Bundle registration, activation, artifact storage, execution pinning, and worker availability checks are exercised.
-3. A separate worker process executes transitions through the REST worker protocol.
+3. Local transition execution works without configuring a remote worker target.
+
+To prove the REST worker protocol separately, start `start-worker.sh`, configure `pipeline.orchestrator.worker.rest.base-url` and `pipeline.orchestrator.worker.rest.shared-secret` on a coordinator process, and run the same control-plane client. The automated split-process IT covers that protocol path.
 4. Await suspension and completion happen through the hosted control-plane API.
 
 This is not a managed service, dynamic JAR loading, worker fleet lifecycle, or production tenancy. It is the public self-host adoption path for the current runtime seams.

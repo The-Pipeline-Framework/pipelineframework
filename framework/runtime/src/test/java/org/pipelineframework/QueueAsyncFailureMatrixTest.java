@@ -185,6 +185,16 @@ class QueueAsyncFailureMatrixTest {
     }
 
     @Test
+    void transitionFailureEnvelopePreservesNonRetryableSubclassClassification() {
+        RuntimeException exception = new TransitionFailureEnvelope(
+            CustomNonRetryableException.class.getName(),
+            "custom non-retryable").toException();
+
+        assertTrue(exception instanceof NonRetryableException);
+        assertEquals("custom non-retryable", exception.getMessage());
+    }
+
+    @Test
     void retryableFailureWithNoBudgetPublishesRetryExhaustedTerminal() {
         when(orchestratorConfig.maxRetries()).thenReturn(0);
         ExecutionRecord<Object, Object> record = record("tenant-a", "exec-12", 5L, 0);
@@ -236,5 +246,11 @@ class QueueAsyncFailureMatrixTest {
             System.currentTimeMillis(),
             System.currentTimeMillis(),
             System.currentTimeMillis() / 1000 + 3600);
+    }
+
+    private static final class CustomNonRetryableException extends NonRetryableException {
+        private CustomNonRetryableException(String message) {
+            super(message);
+        }
     }
 }

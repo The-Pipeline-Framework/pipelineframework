@@ -4,7 +4,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -55,6 +54,7 @@ import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineBundleIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.PipelineTransitionWorker;
+import org.pipelineframework.orchestrator.SerializedTransitionPayload;
 import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
 import org.pipelineframework.orchestrator.TransitionCommandEnvelope;
 import org.pipelineframework.orchestrator.TransitionPayloadCodec;
@@ -715,7 +715,7 @@ class QueueAsyncCoordinator {
           deadLetterPublisher);
     }
     if (result.outcome() == TransitionWorkerOutcome.COMPLETED) {
-      return handleCompletedTransition(record, transitionKey, result.decodeOutputItems(payloadCodec()));
+      return handleCompletedTransition(record, transitionKey, result.coordinatorOutputItems());
     }
     if (result.outcome() == TransitionWorkerOutcome.WAITING_EXTERNAL) {
       return markWaitingExternal(record, result.awaitSuspension(), transitionKey, itemContinuationHandler);
@@ -851,7 +851,7 @@ class QueueAsyncCoordinator {
           if (result.outcome() != TransitionWorkerOutcome.COMPLETED) {
             throw new IllegalStateException("Transition did not complete: " + result.outcome());
           }
-          List<?> copied = result.decodeOutputItems(payloadCodec());
+          List<?> copied = result.coordinatorOutputItems();
           if (record.resultShape() == ExecutionResultShape.SINGLE && copied.size() > 1) {
             throw new IllegalStateException(
                 "Async queue execution " + record.executionId()
@@ -894,13 +894,20 @@ class QueueAsyncCoordinator {
   private static String scopedRootExecutionKey(String pipelineId, String bundleVersionId, String executionKey) {
     return compositeScopedKey("pipelineId", pipelineId, "bundleVersionId", bundleVersionId)
         + ":executionKey:"
-        + Objects.requireNonNull(executionKey, "executionKey must not be null");
+        + requireScopedValue("executionKey", executionKey);
   }
 
   private static String compositeScopedKey(String leftName, String left, String rightName, String right) {
-    String safeLeft = Objects.requireNonNull(left, leftName + " must not be null");
-    String safeRight = Objects.requireNonNull(right, rightName + " must not be null");
+    String safeLeft = requireScopedValue(leftName, left);
+    String safeRight = requireScopedValue(rightName, right);
     return safeLeft.length() + ":" + safeLeft + ":" + safeRight.length() + ":" + safeRight;
+  }
+
+  private static String requireScopedValue(String name, String value) {
+    if (value == null || value.isBlank()) {
+      throw new IllegalArgumentException(name + " must not be blank");
+    }
+    return value;
   }
 
   private Uni<Object> loadAwaitResumePayload(ExecutionRecord<Object, Object> record) {
@@ -928,6 +935,9 @@ class QueueAsyncCoordinator {
   }
 
   private Object coerceStoredResult(Object result, Class<?> outputType) {
+    if (result instanceof SerializedTransitionPayload serialized) {
+      return coerceStoredResult(payloadCodec().decode(serialized), outputType);
+    }
     if (result == null || outputType == null || outputType.isInstance(result)) {
       return result;
     }

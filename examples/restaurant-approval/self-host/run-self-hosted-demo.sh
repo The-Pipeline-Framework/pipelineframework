@@ -10,7 +10,6 @@ TPF_TENANT_ID="${TPF_TENANT_ID:-restaurant-demo}"
 TPF_PIPELINE_ID="${TPF_PIPELINE_ID:-org.pipelineframework.restaurantapproval}"
 TPF_AWAIT_STEP_ID="${TPF_AWAIT_STEP_ID:-ProcessAwaitRestaurantDecisionService}"
 TPF_COORDINATOR_PORT="${TPF_COORDINATOR_PORT:-8081}"
-TPF_WORKER_PORT="${TPF_WORKER_PORT:-8181}"
 TPF_CONTROL_PLANE_TOKEN="${TPF_CONTROL_PLANE_TOKEN:-restaurant-control-plane-admin-token}"
 TPF_ADMIN_TOKEN="${TPF_ADMIN_TOKEN:-restaurant-control-plane-admin-token}"
 TPF_RUN_DIR="${TPF_RUN_DIR:-${MONOLITH_DIR}/target/tpf-self-host}"
@@ -60,11 +59,9 @@ fi
 echo "Packaging restaurant-approval monolith..."
 "${REPO_ROOT}/mvnw" -f "${EXAMPLE_DIR}/pom.xml" -pl monolith-svc -am -DskipTests package
 
-echo "Starting REST worker and coordinator..."
-"${SCRIPT_DIR}/start-worker.sh"
+echo "Starting batteries-included coordinator..."
 "${SCRIPT_DIR}/start-coordinator.sh"
 
-python3 "${SCRIPT_DIR}/demo-client.py" wait-health --base-url "http://localhost:${TPF_WORKER_PORT}" --name worker
 python3 "${SCRIPT_DIR}/demo-client.py" wait-health --base-url "http://localhost:${TPF_COORDINATOR_PORT}" --name coordinator
 
 "${SCRIPT_DIR}/register-and-activate-bundle.sh"
@@ -81,6 +78,5 @@ if [[ "${CI_MODE}" == "true" ]]; then
 else
   echo "Self-hosted coordinator demo completed."
   echo "Logs:"
-  echo "  ${TPF_LOG_DIR}/worker.log"
   echo "  ${TPF_LOG_DIR}/coordinator.log"
 fi
