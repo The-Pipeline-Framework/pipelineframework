@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.jar.JarFile;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -64,6 +66,15 @@ public class PipelineBundleRegistrar {
             nowEpochMs,
             nowEpochMs,
             0L);
+    }
+
+    public Uni<PipelineBundleRecord> validateAsync(
+        String tenantId,
+        String pipelineId,
+        String artifactPath,
+        long nowEpochMs) {
+        return Uni.createFrom().item(() -> validate(tenantId, pipelineId, artifactPath, nowEpochMs))
+            .runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
     }
 
     private PipelineBundleManifest loadManifest(Path path) {

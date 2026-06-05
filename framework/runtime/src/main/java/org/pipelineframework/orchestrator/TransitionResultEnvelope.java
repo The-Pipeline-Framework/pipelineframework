@@ -28,6 +28,9 @@ public record TransitionResultEnvelope(
         if (outcome == TransitionWorkerOutcome.COMPLETED && awaitSuspension != null) {
             throw new IllegalArgumentException("COMPLETED transition envelope must not include awaitSuspension");
         }
+        if (outcome == TransitionWorkerOutcome.COMPLETED && failure != null) {
+            throw new IllegalArgumentException("COMPLETED transition envelope must not include failure");
+        }
     }
 
     /**

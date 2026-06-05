@@ -84,16 +84,13 @@ public class HostedBundleAdminResource {
             return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
                 .entity("artifactPath is required").build());
         }
-        PipelineBundleRecord record;
-        try {
-            record = registrar().validate(tenantId, pipelineId, request.artifactPath(), System.currentTimeMillis());
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            LOG.warnf("Invalid hosted bundle registration request: %s", e.getMessage());
-            return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
-                .entity(e.getMessage()).build());
-        }
-        return registry().register(record)
+        return registrar().validateAsync(tenantId, pipelineId, request.artifactPath(), System.currentTimeMillis())
+            .onFailure(IllegalArgumentException.class).recoverWithUni(failure -> invalidRegistration(failure))
+            .onFailure(IllegalStateException.class).recoverWithUni(failure -> invalidRegistration(failure))
+            .onItem().transformToUni(record -> registry().register(record))
             .onItem().transform(registered -> Response.ok(registered).build())
+            .onFailure(InvalidBundleRegistrationException.class).recoverWithItem(failure ->
+                Response.status(Response.Status.BAD_REQUEST).entity(failure.getMessage()).build())
             .onFailure(IllegalStateException.class).recoverWithItem(failure ->
                 Response.status(Response.Status.CONFLICT).entity(failure.getMessage()).build());
     }
@@ -276,5 +273,16 @@ public class HostedBundleAdminResource {
             }
         }
         return fallback;
+    }
+
+    private Uni<PipelineBundleRecord> invalidRegistration(Throwable failure) {
+        LOG.warnf("Invalid hosted bundle registration request: %s", failure.getMessage());
+        return Uni.createFrom().failure(new InvalidBundleRegistrationException(failure.getMessage()));
+    }
+
+    private static final class InvalidBundleRegistrationException extends RuntimeException {
+        private InvalidBundleRegistrationException(String message) {
+            super(message);
+        }
     }
 }

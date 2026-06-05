@@ -111,6 +111,8 @@ class QueueAsyncCoordinator {
   @Inject
   ControlPlaneAdmissionPolicy controlPlaneAdmissionPolicy;
 
+  private volatile TransitionPayloadCodec fallbackTransitionPayloadCodec;
+  private volatile PipelineBundleIdentityResolver fallbackBundleIdentityResolver;
   private volatile ControlPlaneAdmissionPolicy fallbackAdmissionPolicy;
 
   @Inject
@@ -776,7 +778,20 @@ class QueueAsyncCoordinator {
   }
 
   private TransitionPayloadCodec payloadCodec() {
-    return transitionPayloadCodec == null ? new JsonTransitionPayloadCodec() : transitionPayloadCodec;
+    if (transitionPayloadCodec != null) {
+      return transitionPayloadCodec;
+    }
+    TransitionPayloadCodec fallback = fallbackTransitionPayloadCodec;
+    if (fallback == null) {
+      synchronized (this) {
+        fallback = fallbackTransitionPayloadCodec;
+        if (fallback == null) {
+          fallback = new JsonTransitionPayloadCodec();
+          fallbackTransitionPayloadCodec = fallback;
+        }
+      }
+    }
+    return fallback;
   }
 
   private String pipelineId() {
@@ -788,7 +803,20 @@ class QueueAsyncCoordinator {
   }
 
   private PipelineBundleIdentityResolver bundleIdentityResolver() {
-    return bundleIdentityResolver == null ? new PipelineBundleIdentityResolver() : bundleIdentityResolver;
+    if (bundleIdentityResolver != null) {
+      return bundleIdentityResolver;
+    }
+    PipelineBundleIdentityResolver fallback = fallbackBundleIdentityResolver;
+    if (fallback == null) {
+      synchronized (this) {
+        fallback = fallbackBundleIdentityResolver;
+        if (fallback == null) {
+          fallback = new PipelineBundleIdentityResolver();
+          fallbackBundleIdentityResolver = fallback;
+        }
+      }
+    }
+    return fallback;
   }
 
   private ControlPlaneAdmissionPolicy admissionPolicy() {

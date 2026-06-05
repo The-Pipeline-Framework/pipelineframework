@@ -159,7 +159,7 @@ public class SqsPipelineTransitionWorker implements PipelineTransitionWorker {
                     deleteMessage(responseQueueUrl(), message.receiptHandle());
                     return result;
                 } catch (TransitionWorkerFailureException e) {
-                    restoreVisibility(message);
+                    deleteMessage(responseQueueUrl(), message.receiptHandle());
                     throw e;
                 }
             }

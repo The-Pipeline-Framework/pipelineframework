@@ -108,6 +108,10 @@ public class HostedPipelineControlPlaneResource {
         if (guard != null) {
             return Uni.createFrom().item(guard);
         }
+        if (request == null || request.pipelineId() == null || request.pipelineId().isBlank()) {
+            return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
+                .entity("pipelineId is required").build());
+        }
         Object input;
         try {
             input = executionInput(request);
@@ -119,10 +123,6 @@ public class HostedPipelineControlPlaneResource {
             LOG.warnf(e, "Invalid hosted control-plane execution submit payload");
             return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
                 .entity(INVALID_REQUEST_PAYLOAD).build());
-        }
-        if (request.pipelineId() == null || request.pipelineId().isBlank()) {
-            return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
-                .entity("pipelineId is required").build());
         }
         return registry().active(tenantId, request.pipelineId())
             .onItem().transformToUni(active -> {

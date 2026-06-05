@@ -16,7 +16,7 @@ final class TransitionWorkerNonceReplayGuard {
     private final ConcurrentHashMap<String, Long> acceptedNonces = new ConcurrentHashMap<>();
     private final AtomicLong lastPurgeEpochMs = new AtomicLong();
 
-    boolean accept(String nonce, long timestampEpochMs, long nowEpochMs, long toleranceMs) {
+    synchronized boolean accept(String nonce, long timestampEpochMs, long nowEpochMs, long toleranceMs) {
         if (nonce == null || nonce.isBlank()) {
             return false;
         }
