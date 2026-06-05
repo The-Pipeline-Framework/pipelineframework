@@ -626,6 +626,61 @@ kbd {
   }
 }
 
+@media (max-width: 640px), (max-width: 1279px) and (pointer: coarse) {
+  html,
+  body,
+  #app,
+  .Layout,
+  .VPApp,
+  .VPContent,
+  .VPDoc,
+  .VPDoc .container,
+  .VPDoc .content,
+  .VPDoc .content-container,
+  .vp-doc {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  html,
+  body,
+  #app,
+  .Layout,
+  .VPApp,
+  .VPContent,
+  .VPDoc {
+    overflow-x: hidden !important;
+  }
+
+  .VPDoc {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .VPDoc .container,
+  .VPDoc .content,
+  .VPDoc .content-container {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .VPDoc.has-aside .content-container {
+    max-width: 100% !important;
+  }
+
+  .vp-doc {
+    overflow-wrap: anywhere;
+  }
+
+  .vp-doc div[class*='language-'],
+  .vp-doc table {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
 /* Sidebar */
 .VPSidebar {
   padding-top: 1.5rem;
