@@ -170,6 +170,50 @@ class InMemoryExecutionStateStoreTest {
     }
 
     @Test
+    void itemizedAwaitReleaseStoresSnapshotValueCopy() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult created = store.createOrGetExecution(
+                new ExecutionCreateCommand(
+                    "tenant-a",
+                    "key-itemized-release",
+                    "payload",
+                    ExecutionResultShape.MATERIALIZED_MULTI,
+                    now,
+                    now / 1000 + 60))
+            .await().indefinitely();
+        Optional<ExecutionRecord<Object, Object>> waiting = store.markWaitingExternal(
+                "tenant-a",
+                created.record().executionId(),
+                created.record().version(),
+                "transition-await",
+                "unit-1",
+                5,
+                now + 1)
+            .await().indefinitely();
+        assertTrue(waiting.isPresent());
+        ExecutionInputSnapshot resumeInput = new ExecutionInputSnapshot(
+            ExecutionInputShape.MULTI,
+            new java.util.ArrayList<>(List.of("a", "b")));
+
+        Optional<ExecutionRecord<Object, Object>> queued = store.markAwaitItemContinuationsCompleted(
+                "tenant-a",
+                created.record().executionId(),
+                "unit-1",
+                6,
+                resumeInput,
+                now + 2)
+            .await().indefinitely();
+
+        assertTrue(queued.isPresent());
+        ExecutionInputSnapshot stored = assertInstanceOf(ExecutionInputSnapshot.class, queued.get().inputPayload());
+        assertNotSame(resumeInput, stored);
+        assertEquals(ExecutionInputShape.MULTI, stored.shape());
+        assertEquals(List.of("a", "b"), stored.payload());
+        assertNotSame(resumeInput.payload(), stored.payload());
+    }
+
+    @Test
     void dueSweepReturnsEmptyWhenLimitIsNonPositive() {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();

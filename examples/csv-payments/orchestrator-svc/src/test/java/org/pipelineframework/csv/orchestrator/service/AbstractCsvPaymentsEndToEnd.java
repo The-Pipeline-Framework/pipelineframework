@@ -2436,15 +2436,26 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         "store".equals(transition.relationKind())),
                 "Expected store transitions in merged replay topology.");
         assertReplayLifecycleEvents(replayDocument);
+        assertItemizedAwaitContinuationsStartBeforeUnitCompletes(replayDocument);
     }
 
     private void assertReplayLifecycleEvents(PipelineReplayDocument replayDocument) {
         assertReplayEvent(replayDocument, AWAIT_INTERACTION_DISPATCHED);
         assertReplayEvent(replayDocument, AWAIT_UNIT_DISPATCH_COMPLETE);
-        assertReplayEvent(replayDocument, AWAIT_EXECUTION_WAITING);
         assertReplayEvent(replayDocument, AWAIT_UNIT_ITEM_COMPLETED);
-        assertReplayEvent(replayDocument, AWAIT_UNIT_COMPLETED);
-        assertReplayEvent(replayDocument, AWAIT_RESUME_RELEASED);
+        boolean executionWaited = replayDocument.events().stream()
+                .anyMatch(event -> AWAIT_EXECUTION_WAITING.equals(event.event()));
+        if (executionWaited) {
+            assertReplayEvent(replayDocument, AWAIT_RESUME_RELEASED);
+        }
+        assertTrue(
+                replayDocument.events().stream()
+                        .filter(event -> AWAIT_UNIT_COMPLETED.equals(event.event())
+                                || AWAIT_UNIT_DISPATCH_COMPLETE.equals(event.event()))
+                        .map(PipelineExecutionEvent::attributes)
+                        .anyMatch(eventAttributes -> eventAttributes != null
+                                && "COMPLETED".equals(eventAttributes.get("tpf.await.status"))),
+                "Expected await lifecycle events to show unit completion.");
         PipelineExecutionEvent itemCompleted = replayDocument.events().stream()
                 .filter(event -> AWAIT_UNIT_ITEM_COMPLETED.equals(event.event()))
                 .findFirst()
@@ -2465,6 +2476,23 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         .anyMatch(eventAttributes -> eventAttributes != null
                                 && eventAttributes.containsKey("tpf.await.expected_item_count")),
                 "Expected await lifecycle events to include expected item count once dispatch size is known.");
+    }
+
+    private void assertItemizedAwaitContinuationsStartBeforeUnitCompletes(PipelineReplayDocument replayDocument) {
+        Comparator<PipelineExecutionEvent> playbackOrder = Comparator
+                .comparingDouble(AbstractCsvPaymentsEndToEnd::playbackTimeForEvent)
+                .thenComparingLong(event -> event.sequence() == null ? Long.MAX_VALUE : event.sequence());
+        PipelineExecutionEvent firstPaymentStatusEvent = replayDocument.events().stream()
+                .filter(event -> "ProcessPaymentStatus".equals(event.step()))
+                .min(playbackOrder)
+                .orElseThrow(() -> new AssertionError("Expected ProcessPaymentStatus replay events."));
+        PipelineExecutionEvent awaitUnitCompletedEvent = replayDocument.events().stream()
+                .filter(event -> AWAIT_UNIT_COMPLETED.equals(event.event()))
+                .min(playbackOrder)
+                .orElseThrow(() -> new AssertionError("Expected await_unit_completed replay events."));
+        assertTrue(
+                playbackOrder.compare(firstPaymentStatusEvent, awaitUnitCompletedEvent) < 0,
+                "Expected ONE_TO_ONE await item continuations to reach ProcessPaymentStatus before the full await unit completes.");
     }
 
     private void assertReplayEvent(PipelineReplayDocument replayDocument, String eventName) {

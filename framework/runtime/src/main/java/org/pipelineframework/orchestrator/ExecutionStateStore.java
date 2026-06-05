@@ -61,6 +61,15 @@ public interface ExecutionStateStore {
     Uni<Optional<ExecutionRecord<Object, Object>>> getExecution(String tenantId, String executionId);
 
     /**
+     * Fetches one execution by tenant and idempotency execution key.
+     *
+     * @param tenantId tenant identifier
+     * @param executionKey execution key
+     * @return execution record when available
+     */
+    Uni<Optional<ExecutionRecord<Object, Object>>> getExecutionByKey(String tenantId, String executionKey);
+
+    /**
      * Claims the lease and marks execution RUNNING.
      *
      * @param tenantId tenant identifier
@@ -108,16 +117,14 @@ public interface ExecutionStateStore {
      * @param nowEpochMs transition timestamp
      * @return updated waiting execution when the transition wins optimistic concurrency, otherwise empty
      */
-    default Uni<Optional<ExecutionRecord<Object, Object>>> markWaitingExternal(
+    Uni<Optional<ExecutionRecord<Object, Object>>> markWaitingExternal(
         String tenantId,
         String executionId,
         long expectedVersion,
         String transitionKey,
         String awaitUnitId,
         int awaitStepIndex,
-        long nowEpochMs) {
-        return Uni.createFrom().failure(new UnsupportedOperationException("markWaitingExternal is not implemented"));
-    }
+        long nowEpochMs);
 
     /**
      * Stores a completed await payload and makes the execution due for continuation.
@@ -134,14 +141,40 @@ public interface ExecutionStateStore {
      * @param nowEpochMs transition timestamp
      * @return updated queued execution when completion is accepted, otherwise empty
      */
-    default Uni<Optional<ExecutionRecord<Object, Object>>> markAwaitCompleted(
+    Uni<Optional<ExecutionRecord<Object, Object>>> markAwaitCompleted(
         String tenantId,
         String executionId,
         String awaitUnitId,
         int nextStepIndex,
-        long nowEpochMs) {
-        return Uni.createFrom().failure(new UnsupportedOperationException("markAwaitCompleted is not implemented"));
-    }
+        long nowEpochMs);
+
+    /**
+     * Replaces a waiting execution's input with itemized continuation output and queues the parent
+     * at {@code nextStepIndex}.
+     *
+     * <p>{@code markAwaitItemContinuationsCompleted} is an idempotent release operation for
+     * itemized await continuations. Implementations should match the execution by
+     * {@link ExecutionStatus#WAITING_EXTERNAL} plus the provided {@code awaitUnitId}, not by an
+     * expected version, because duplicate or racing completion checks may safely retry this
+     * transition. When accepted, {@code inputPayload} becomes the replacement input for the
+     * resumed aggregate step and {@code nowEpochMs} is the transition timestamp.</p>
+     *
+     * @param tenantId tenant identifier
+     * @param executionId execution identifier
+     * @param awaitUnitId durable await unit id used to match the waiting execution
+     * @param nextStepIndex next pipeline step index to execute
+     * @param inputPayload replacement input payload for the resumed step
+     * @param nowEpochMs transition timestamp
+     * @return updated queued execution when completion is accepted, otherwise {@link Optional#empty()};
+     *         empty results are safe to retry or treat as an already-lost idempotency race
+     */
+    Uni<Optional<ExecutionRecord<Object, Object>>> markAwaitItemContinuationsCompleted(
+        String tenantId,
+        String executionId,
+        String awaitUnitId,
+        int nextStepIndex,
+        Object inputPayload,
+        long nowEpochMs);
 
     /**
      * Schedules a retry if expected version matches.

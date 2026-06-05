@@ -87,7 +87,7 @@ TPF emits:
 
 Replay JSON is written from the same runtime semantics by the framework replay exporter.
 
-Await boundaries park the owning `QUEUE_ASYNC` execution on a durable await unit and resume from that unit after completion admission. Replay events include await unit ids, execution ids, interaction ids, step ids, unit status, and expected/completed item counts where the runtime knows them. For the implementation model, see [Await Unit Runtime](/guide/evolve/await-unit-runtime/).
+Await boundaries park the owning `QUEUE_ASYNC` execution on a durable await unit and resume from that unit after completion admission. Replay events include await unit ids, execution ids, interaction ids, step ids, unit status, and expected/completed item counts where the runtime knows them. For operations, see [Await Boundary Operations](/guide/operations/await-boundaries); for the implementation model, see [Await Unit Runtime](/guide/evolve/await-unit-runtime/).
 
 ## Replay exporter configuration
 

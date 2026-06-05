@@ -2,7 +2,7 @@
 
 Await steps suspend `QUEUE_ASYNC` execution at an external boundary. TPF persists the interaction, dispatches through the configured adapter, and resumes the owning execution after a correlated completion is admitted.
 
-Internally, await is backed by durable await units. For implementation diagrams and the state model, see [Await Unit Runtime](/guide/evolve/await-unit-runtime/).
+For production operation, see [Await Boundary Operations](/guide/operations/await-boundaries). Internally, await is backed by durable await units; for implementation diagrams and the state model, see [Await Unit Runtime](/guide/evolve/await-unit-runtime/).
 
 ## Supported Shapes
 
@@ -47,6 +47,8 @@ Await and checkpoint handoff both cross a process boundary, but they have differ
 
 Use await for human approvals, webhook callbacks, and brokered provider decisions that must resume the same execution. Use checkpoint handoff when the receiving workflow has separate ownership, scaling, or operational responsibility.
 
+For a deeper checkpoint handoff lifecycle guide, see [Checkpoint Handoff](/guide/development/orchestrator-runtime/checkpoint-handoff).
+
 ## Application Design Notes
 
 Await has the same side-effect rule as the rest of `QUEUE_ASYNC`: orchestrator state transitions are guarded, but external dispatch and external side effects are at-least-once. Use stable business idempotency keys at the external boundary.
@@ -62,7 +64,7 @@ The runtime also enforces aggregate materialization guardrails:
 
 Set either value to `0` only when the application has its own upstream size control and storage budget. Prefer stable business limits at the API/file/broker boundary rather than relying on these guards as the first line of defense.
 
-Transport choice changes operational responsibility. `interaction-api` requires an API consumer to query and complete pending work. `webhook` requires stable resume-token signing and callback reachability. `kafka` requires broker channel configuration, consumer health, and response-envelope monitoring.
+Transport choice changes operational responsibility. `interaction-api` requires an API consumer to query and complete pending work. `webhook` requires stable resume-token signing and callback reachability. `kafka` requires broker channel configuration, consumer health, and response-envelope monitoring. The operational checklist is covered in [Await Boundary Operations](/guide/operations/await-boundaries).
 
 That matters for plugin-style side effects after an await boundary. A resumed queue-async execution can replay the remainder of the pipeline after a downstream retry, so once-only side-effect checkpointing is a separate concern from await durability itself.
 

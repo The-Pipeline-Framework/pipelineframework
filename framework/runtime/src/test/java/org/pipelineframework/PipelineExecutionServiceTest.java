@@ -75,11 +75,17 @@ class PipelineExecutionServiceTest {
     @Test
     void processExecutionWorkItemDelegatesToCoordinator() {
         ExecutionWorkItem item = new ExecutionWorkItem("tenant-1", "exec-4");
-        when(queueAsyncCoordinator.processExecutionWorkItem(eq(item), org.mockito.ArgumentMatchers.any()))
+        when(queueAsyncCoordinator.processExecutionWorkItem(
+                eq(item),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()))
             .thenReturn(Uni.createFrom().voidItem());
 
         service.processExecutionWorkItem(item).await().indefinitely();
 
-        verify(queueAsyncCoordinator).processExecutionWorkItem(eq(item), org.mockito.ArgumentMatchers.any());
+        verify(queueAsyncCoordinator).processExecutionWorkItem(
+            eq(item),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any());
     }
 }
