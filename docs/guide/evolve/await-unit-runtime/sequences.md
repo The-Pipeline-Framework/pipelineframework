@@ -58,6 +58,56 @@ sequenceDiagram
 
 Completion may arrive out of order. Replay preserves input order by reading completed item interactions by `itemIndex`.
 
+## CSV Payments Itemized Await
+
+This is the concrete `csv-payments` shape. `Await Payment Provider` owns the Kafka boundary, but `Process Payment Status` can run per completed item. The parent execution only waits for the next aggregate boundary, `Process Csv Payments Output File`.
+
+```mermaid
+sequenceDiagram
+    participant Input as Process Csv Payments Input
+    participant Runner as PipelineRunner
+    participant Await as Await Payment Provider
+    participant AwaitCoord as AwaitCoordinator
+    participant Kafka as Kafka broker
+    participant Provider as payments-processing-svc
+    participant Exec as PipelineExecutionService
+    participant Queue as QueueAsyncCoordinator
+    participant Status as Process Payment Status
+    participant Output as Process Csv Payments Output File
+
+    Input-->>Runner: PaymentRecord item 0
+    Runner->>Await: execute item 0
+    Await->>AwaitCoord: create item interaction(itemIndex=0)
+    AwaitCoord->>Kafka: publish request envelope
+    Kafka->>Provider: deliver payment request
+
+    Input-->>Runner: PaymentRecord item 1
+    Runner->>Await: execute item 1
+    Await->>AwaitCoord: create item interaction(itemIndex=1)
+    AwaitCoord->>Kafka: publish request envelope
+    Kafka->>Provider: deliver payment request
+
+    Await-->>Queue: suspend parent execution(awaitUnitId)
+    Queue->>Queue: mark WAITING_EXTERNAL
+
+    Provider-->>Kafka: PaymentStatus item 0
+    Kafka-->>Exec: complete by correlationId
+    Exec->>Queue: complete await interaction
+    Queue->>Status: continue item 0
+    Status-->>Queue: PaymentOutput item 0
+
+    Provider-->>Kafka: PaymentStatus item 1
+    Kafka-->>Exec: complete by correlationId
+    Exec->>Queue: complete await interaction
+    Queue->>Status: continue item 1
+    Status-->>Queue: PaymentOutput item 1
+
+    Queue->>Queue: all item continuations collected in itemIndex order
+    Queue->>Output: resume parent at aggregate boundary
+```
+
+The model is itemized until the next aggregate step. If an authored downstream step is `MANY_TO_ONE` or `MANY_TO_MANY`, the parent execution resumes there with the collected ordered item outputs.
+
 ## Aggregate Unit
 
 `ONE_TO_MANY`, `MANY_TO_ONE`, and `MANY_TO_MANY` are aggregate interaction units. The runtime materializes the relevant side of the boundary so replay has one stable unit to restart.
