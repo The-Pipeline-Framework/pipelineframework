@@ -96,12 +96,18 @@ class PipelineExecutionServiceTest {
         ExecutionWorkItem item = new ExecutionWorkItem("tenant-1", "exec-4");
         PipelineTransitionWorker selectedWorker = service;
         when(transitionWorkerSelector.select(service)).thenReturn(selectedWorker);
-        when(controlPlane.processExecutionWorkItem(eq(item), eq(selectedWorker)))
+        when(controlPlane.processExecutionWorkItem(
+                eq(item),
+                eq(selectedWorker),
+                org.mockito.ArgumentMatchers.any()))
             .thenReturn(Uni.createFrom().voidItem());
 
         service.processExecutionWorkItem(item).await().indefinitely();
 
-        verify(controlPlane).processExecutionWorkItem(eq(item), eq(selectedWorker));
+        verify(controlPlane).processExecutionWorkItem(
+            eq(item),
+            eq(selectedWorker),
+            org.mockito.ArgumentMatchers.any());
     }
 
     @Test

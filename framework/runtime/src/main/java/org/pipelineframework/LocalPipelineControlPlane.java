@@ -82,6 +82,13 @@ public class LocalPipelineControlPlane implements PipelineControlPlane {
     }
 
     @Override
+    public Uni<AwaitCompletionResult> completeAwait(
+        AwaitCompletionCommand command,
+        AwaitItemContinuationHandler itemContinuationHandler) {
+        return queueAsyncCoordinator.completeAwait(command, itemContinuationHandler);
+    }
+
+    @Override
     public Uni<List<AwaitInteractionRecord>> queryPendingAwaitInteractions(
         String tenantId,
         String assignee,
@@ -94,5 +101,13 @@ public class LocalPipelineControlPlane implements PipelineControlPlane {
     @Override
     public Uni<Void> processExecutionWorkItem(ExecutionWorkItem workItem, PipelineTransitionWorker worker) {
         return queueAsyncCoordinator.processExecutionWorkItem(workItem, worker);
+    }
+
+    @Override
+    public Uni<Void> processExecutionWorkItem(
+        ExecutionWorkItem workItem,
+        PipelineTransitionWorker worker,
+        AwaitItemContinuationHandler itemContinuationHandler) {
+        return queueAsyncCoordinator.processExecutionWorkItem(workItem, worker, itemContinuationHandler);
     }
 }

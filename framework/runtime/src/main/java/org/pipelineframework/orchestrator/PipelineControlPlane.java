@@ -6,6 +6,7 @@ import io.smallrye.mutiny.Uni;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
+import org.pipelineframework.AwaitItemContinuationHandler;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 
@@ -41,6 +42,10 @@ public interface PipelineControlPlane {
 
     Uni<AwaitCompletionResult> completeAwait(AwaitCompletionCommand command);
 
+    Uni<AwaitCompletionResult> completeAwait(
+        AwaitCompletionCommand command,
+        AwaitItemContinuationHandler itemContinuationHandler);
+
     Uni<List<AwaitInteractionRecord>> queryPendingAwaitInteractions(
         String tenantId,
         String assignee,
@@ -49,4 +54,9 @@ public interface PipelineControlPlane {
         int limit);
 
     Uni<Void> processExecutionWorkItem(ExecutionWorkItem workItem, PipelineTransitionWorker worker);
+
+    Uni<Void> processExecutionWorkItem(
+        ExecutionWorkItem workItem,
+        PipelineTransitionWorker worker,
+        AwaitItemContinuationHandler itemContinuationHandler);
 }

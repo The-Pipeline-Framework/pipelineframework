@@ -147,6 +147,14 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> getExecutionByKey(String tenantId, String executionKey) {
+        return blocking(() -> findExistingByScopedExecutionKey(
+            tenantId,
+            scopedExecutionKey(tenantId, executionKey),
+            System.currentTimeMillis()));
+    }
+
+    @Override
     public Uni<Optional<ExecutionRecord<Object, Object>>> claimLease(
         String tenantId,
         String executionId,
@@ -470,6 +478,28 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             nowEpochMs));
     }
 
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markAwaitItemContinuationsCompleted(
+        String tenantId,
+        String executionId,
+        String awaitUnitId,
+        int nextStepIndex,
+        Object inputPayload,
+        long nowEpochMs
+    ) {
+        if (awaitUnitId == null || awaitUnitId.isBlank()) {
+            return Uni.createFrom().failure(new IllegalArgumentException(
+                "awaitUnitId must not be blank when releasing await item continuations"));
+        }
+        return blocking(() -> markAwaitItemContinuationsCompletedBlocking(
+            tenantId,
+            executionId,
+            awaitUnitId,
+            nextStepIndex,
+            inputPayload,
+            nowEpochMs));
+    }
+
     private Optional<ExecutionRecord<Object, Object>> markWaitingExternalBlocking(
         String tenantId,
         String executionId,
@@ -567,7 +597,71 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
                     "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
             .updateExpression(
                 "SET #status = :queued, #version = #version + :one, #step = :step, #nextDue = :now, " +
-                    "#leaseExpires = :zero, #updated = :now " +
+                    "#awaitUnit = :awaitUnit, #leaseExpires = :zero, #updated = :now " +
+                    "REMOVE #result, #errorCode, #errorMessage, #leaseOwner")
+            .expressionAttributeNames(names)
+            .expressionAttributeValues(values)
+            .returnValues(ReturnValue.ALL_NEW)
+            .build();
+        try {
+            Map<String, AttributeValue> attributes = dynamoClient().updateItem(request).attributes();
+            if (attributes == null || attributes.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(toRecord(attributes));
+        } catch (ConditionalCheckFailedException ignored) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<ExecutionRecord<Object, Object>> markAwaitItemContinuationsCompletedBlocking(
+        String tenantId,
+        String executionId,
+        String awaitUnitId,
+        int nextStepIndex,
+        Object inputPayload,
+        long nowEpochMs
+    ) {
+        Map<String, String> names = Map.ofEntries(
+            Map.entry("#status", STATUS),
+            Map.entry("#version", VERSION),
+            Map.entry("#step", CURRENT_STEP_INDEX),
+            Map.entry("#nextDue", NEXT_DUE_EPOCH_MS),
+            Map.entry("#awaitUnit", AWAIT_UNIT_ID),
+            Map.entry("#inputPayload", INPUT_PAYLOAD_JSON),
+            Map.entry("#inputShape", INPUT_SHAPE),
+            Map.entry("#result", RESULT_PAYLOAD_JSON),
+            Map.entry("#errorCode", ERROR_CODE),
+            Map.entry("#errorMessage", ERROR_MESSAGE),
+            Map.entry("#leaseOwner", LEASE_OWNER),
+            Map.entry("#leaseExpires", LEASE_EXPIRES_EPOCH_MS),
+            Map.entry("#updated", UPDATED_AT_EPOCH_MS),
+            Map.entry("#ttl", TTL_EPOCH_S));
+        Map<String, AttributeValue> values = new HashMap<>();
+        values.put(":queued", avS(ExecutionStatus.QUEUED.name()));
+        values.put(":waitingExternal", avS(ExecutionStatus.WAITING_EXTERNAL.name()));
+        values.put(":step", avN(nextStepIndex));
+        values.put(":awaitUnit", avS(awaitUnitId));
+        values.put(":inputPayload", avS(toJson(inputPayload instanceof ExecutionInputSnapshot snapshot
+            ? snapshot.payload()
+            : inputPayload)));
+        values.put(":inputShape", avS(inputPayload instanceof ExecutionInputSnapshot snapshot
+            ? snapshot.shape().name()
+            : ExecutionInputShape.RAW.name()));
+        values.put(":zero", avN(0));
+        values.put(":now", avN(nowEpochMs));
+        values.put(":one", avN(1));
+        values.put(":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond()));
+
+        UpdateItemRequest request = UpdateItemRequest.builder()
+            .tableName(executionTable())
+            .key(executionPrimaryKey(tenantId, executionId))
+            .conditionExpression(
+                "#status = :waitingExternal AND #awaitUnit = :awaitUnit " +
+                    "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
+            .updateExpression(
+                "SET #status = :queued, #version = #version + :one, #step = :step, #nextDue = :now, " +
+                    "#inputPayload = :inputPayload, #inputShape = :inputShape, #leaseExpires = :zero, #updated = :now " +
                     "REMOVE #result, #errorCode, #errorMessage, #leaseOwner, #awaitUnit")
             .expressionAttributeNames(names)
             .expressionAttributeValues(values)

@@ -95,6 +95,20 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> getExecutionByKey(String tenantId, String executionKey) {
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                long nowEpochMs = System.currentTimeMillis();
+                String executionId = executionIdByScopedKey.get(scopedExecutionKey(tenantId, executionKey));
+                if (executionId == null) {
+                    return Optional.empty();
+                }
+                return Optional.ofNullable(getActiveRecord(scopedExecutionId(tenantId, executionId), nowEpochMs));
+            }
+        });
+    }
+
+    @Override
     public Uni<Optional<ExecutionRecord<Object, Object>>> claimLease(
         String tenantId,
         String executionId,
@@ -275,6 +289,70 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                 return Optional.of(updated);
             }
         });
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markAwaitItemContinuationsCompleted(
+        String tenantId,
+        String executionId,
+        String awaitUnitId,
+        int nextStepIndex,
+        Object inputPayload,
+        long nowEpochMs) {
+        if (awaitUnitId == null || awaitUnitId.isBlank()) {
+            return Uni.createFrom().failure(new IllegalArgumentException(
+                "awaitUnitId must not be blank when releasing await item continuations"));
+        }
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                String scopedId = scopedExecutionId(tenantId, executionId);
+                ExecutionRecord<Object, Object> current = getActiveRecord(scopedId, nowEpochMs);
+                if (current == null || current.status() != ExecutionStatus.WAITING_EXTERNAL) {
+                    return Optional.empty();
+                }
+                if (!Objects.equals(current.awaitUnitId(), awaitUnitId)) {
+                    return Optional.empty();
+                }
+                ExecutionInputSnapshot normalizedInput = normalizeExecutionInputPayload(inputPayload);
+                ExecutionRecord<Object, Object> updated = new ExecutionRecord<>(
+                    current.tenantId(),
+                    current.executionId(),
+                    current.executionKey(),
+                    current.resultShape(),
+                    ExecutionStatus.QUEUED,
+                    current.version() + 1,
+                    nextStepIndex,
+                    current.attempt(),
+                    null,
+                    0L,
+                    nowEpochMs,
+                    current.lastTransitionKey(),
+                    normalizedInput,
+                    null,
+                    null,
+                    null,
+                    null,
+                    current.createdAtEpochMs(),
+                    nowEpochMs,
+                    current.ttlEpochS());
+                executionsByScopedId.put(scopedId, updated);
+                return Optional.of(updated);
+            }
+        });
+    }
+
+    private static ExecutionInputSnapshot normalizeExecutionInputPayload(Object inputPayload) {
+        if (inputPayload instanceof ExecutionInputSnapshot snapshot) {
+            return new ExecutionInputSnapshot(snapshot.shape(), copySnapshotPayload(snapshot.payload()));
+        }
+        return new ExecutionInputSnapshot(ExecutionInputShape.RAW, copySnapshotPayload(inputPayload));
+    }
+
+    private static Object copySnapshotPayload(Object payload) {
+        if (payload instanceof List<?> list) {
+            return List.copyOf(list);
+        }
+        return payload;
     }
 
     @Override
