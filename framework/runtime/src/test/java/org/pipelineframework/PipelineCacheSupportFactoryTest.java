@@ -18,6 +18,7 @@ package org.pipelineframework;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.Duration;
 
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
@@ -62,7 +63,7 @@ class PipelineCacheSupportFactoryTest {
 
         assertNotNull(support);
         Uni<Optional<Object>> readUni = support.reader().get("v1:key");
-        Optional<Object> cached = readUni.await().indefinitely();
+        Optional<Object> cached = readUni.await().atMost(Duration.ofSeconds(5));
         Object actual = cached.orElseThrow();
         assertEquals("cached-high", actual);
         assertEquals(CachePolicy.REQUIRE_CACHE, support.resolvePolicy(null));

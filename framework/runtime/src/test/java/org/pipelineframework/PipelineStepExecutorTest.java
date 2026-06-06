@@ -83,7 +83,8 @@ class PipelineStepExecutorTest {
             null);
 
         List<String> values = ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5));
-        assertTrue(values.containsAll(Set.of("a-future", "b-future")));
+        values.sort(String::compareTo);
+        assertEquals(List.of("a-future", "b-future"), values);
     }
 
     @Test
@@ -97,7 +98,7 @@ class PipelineStepExecutorTest {
             null,
             null);
 
-        assertEquals(List.of("x-1", "x-2"), ((Multi<String>) result).collect().asList().await().indefinitely());
+        assertEquals(List.of("x-1", "x-2"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
     }
 
     @Test
@@ -149,7 +150,7 @@ class PipelineStepExecutorTest {
             null,
             null);
 
-        assertEquals("a,b", ((Uni<String>) result).await().indefinitely());
+        assertEquals("a,b", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
     }
 
     @Test
@@ -161,7 +162,7 @@ class PipelineStepExecutorTest {
             null,
             null);
 
-        assertEquals(List.of("x-mapped"), ((Multi<String>) result).collect().asList().await().indefinitely());
+        assertEquals(List.of("x-mapped"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
     }
 
     @Test
@@ -170,7 +171,7 @@ class PipelineStepExecutorTest {
             new BlockingSuffixOneToOneStep("-blocking"),
             Uni.createFrom().item("x"));
 
-        assertEquals("x-blocking", ((Uni<String>) result).await().indefinitely());
+        assertEquals("x-blocking", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
     }
 
     @Test
@@ -184,7 +185,7 @@ class PipelineStepExecutorTest {
             null,
             null);
 
-        assertEquals(List.of("x-1", "x-2"), ((Multi<String>) result).collect().asList().await().indefinitely());
+        assertEquals(List.of("x-1", "x-2"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
     }
 
     @Test
@@ -198,7 +199,7 @@ class PipelineStepExecutorTest {
             null,
             null);
 
-        assertEquals(List.of("x-1", "x-2"), ((Multi<String>) result).collect().asList().await().indefinitely());
+        assertEquals(List.of("x-1", "x-2"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
     }
 
     @Test
@@ -210,7 +211,7 @@ class PipelineStepExecutorTest {
             null,
             null);
 
-        assertEquals("a,b", ((Uni<String>) result).await().indefinitely());
+        assertEquals("a,b", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
     }
 
     @Test
@@ -222,7 +223,7 @@ class PipelineStepExecutorTest {
             null,
             null);
 
-        assertEquals(List.of("a-mapped", "b-mapped"), ((Multi<String>) result).collect().asList().await().indefinitely());
+        assertEquals(List.of("a-mapped", "b-mapped"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
     }
 
     static final class SuffixOneToOneStep extends ConfigurableStep implements StepOneToOne<String, String> {
