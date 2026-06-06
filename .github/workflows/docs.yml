@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "docs/**"
+      - "tools/replay-viewer/**"
       - "tools/homepage-replay-video/**"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
@@ -46,3 +47,4 @@ jobs:
             docs/public/home/replay-proof.mp4 \
             docs/public/home/replay-proof-poster.jpg
           npm --prefix docs run build
+          git diff --exit-code -- docs/public/replay-viewer-app
