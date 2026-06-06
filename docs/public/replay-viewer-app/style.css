@@ -218,10 +218,51 @@ button:disabled {
   border-radius: 999px;
 }
 
+.control-icon {
+  width: 20px;
+  height: 20px;
+  display: block;
+  color: currentColor;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.icon-button--transport .control-icon {
+  width: 21px;
+  height: 21px;
+}
+
+#loadReplayButton .control-icon path:first-child,
+#playPauseButton .control-icon--play path,
+#stopButton .control-icon path,
+#stepBackButton .control-icon path:last-child,
+#stepButton .control-icon path:last-child {
+  fill: currentColor;
+  stroke: none;
+}
+
+#playPauseButton .control-icon--pause,
+#fullscreenButton .control-icon--exit-fullscreen {
+  display: none;
+}
+
+#playPauseButton[data-playing="true"] .control-icon--play,
+#fullscreenButton[data-fullscreen="true"] .control-icon--enter-fullscreen {
+  display: none;
+}
+
+#playPauseButton[data-playing="true"] .control-icon--pause,
+#fullscreenButton[data-fullscreen="true"] .control-icon--exit-fullscreen {
+  display: block;
+}
+
 .icon-button--transport {
   width: 44px;
   height: 44px;
-  font-size: 20px;
 }
 
 .load-progress {
@@ -1026,7 +1067,12 @@ button:disabled {
     flex: 0 0 auto;
     width: 34px;
     height: 34px;
-    font-size: 15px;
+  }
+
+  .control-icon,
+  .icon-button--transport .control-icon {
+    width: 17px;
+    height: 17px;
   }
 
   .speed-group--inline {

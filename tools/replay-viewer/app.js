@@ -3421,7 +3421,9 @@ function updateUi() {
   const ratio = replayDurationSeconds <= 0 ? 0 : playbackSeconds / replayDurationSeconds;
   timelineSlider.value = `${Math.round(ratio * 10000)}`;
   playbackText.textContent = `${playbackSeconds.toFixed(2)}s / ${replayDurationSeconds.toFixed(2)}s`;
-  playPauseButton.textContent = isPlaying ? "⏸" : "▶";
+  playPauseButton.dataset.playing = isPlaying ? "true" : "false";
+  playPauseButton.setAttribute("aria-label", isPlaying ? "Pause replay" : "Play replay");
+  playPauseButton.title = isPlaying ? "Pause replay" : "Play replay";
   stopButton.disabled = isLoadingReplay || (nextEventCursor === 0 && currentTimeSeconds <= 0);
   stepBackButton.disabled = isLoadingReplay || nextEventCursor <= 0;
   stepButton.disabled = isLoadingReplay || nextEventCursor >= replayDocument.events.length;
@@ -3764,9 +3766,10 @@ fullscreenButton.addEventListener("click", async () => {
 });
 
 document.addEventListener("fullscreenchange", () => {
-  fullscreenButton.textContent = document.fullscreenElement === playerSurface
-    ? "🡼"
-    : "⛶";
+  const isFullscreen = document.fullscreenElement === playerSurface;
+  fullscreenButton.dataset.fullscreen = isFullscreen ? "true" : "false";
+  fullscreenButton.setAttribute("aria-label", isFullscreen ? "Exit full screen" : "Full screen");
+  fullscreenButton.title = isFullscreen ? "Exit full screen" : "Full screen";
 });
 
 renderer.domElement.addEventListener("pointermove", (event) => {
