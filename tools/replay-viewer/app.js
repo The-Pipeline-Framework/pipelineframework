@@ -2,6 +2,7 @@ import * as THREE from "./vendor/three.module.min.js";
 import { BUILT_IN_REPLAYS_CONFIG } from "./built-in-replays.js";
 
 const mount = document.getElementById("threeMount");
+const appShell = document.querySelector(".app-shell");
 const viewport = document.querySelector(".viewport");
 const playerSurface = document.getElementById("playerSurface");
 const playerChrome = document.getElementById("playerChrome");
@@ -217,6 +218,7 @@ let activeLayoutStorageKey = null;
 let chromeHideTimeout = null;
 let fatalRenderErrorLatched = false;
 let openModal = null;
+let modalReturnFocusElement = null;
 let isScrubbingTimeline = false;
 let dragState = null;
 let suppressNextCanvasClick = false;
@@ -1181,10 +1183,25 @@ function openModalElement(name, element) {
   if (name === "source") {
     syncStagedReplaySourceToActive();
   }
+  if (!openModal) {
+    modalReturnFocusElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }
   openModal = name;
+  if (appShell) {
+    appShell.inert = true;
+  }
   element.hidden = false;
   element.setAttribute("aria-hidden", "false");
   revealPlayerChrome(true);
+  window.requestAnimationFrame(() => {
+    if (openModal !== name || element.hidden) {
+      return;
+    }
+    const focusTarget = name === "source"
+      ? (datasetSelect ?? sourceCloseButton)
+      : infoCloseButton;
+    focusTarget?.focus({ preventScroll: true });
+  });
 }
 
 function closeModalElement(name, element) {
@@ -1197,7 +1214,14 @@ function closeModalElement(name, element) {
   openModal = null;
   element.hidden = true;
   element.setAttribute("aria-hidden", "true");
+  if (appShell) {
+    appShell.inert = false;
+  }
   revealPlayerChrome(!prefersTapChrome);
+  if (modalReturnFocusElement?.isConnected) {
+    modalReturnFocusElement.focus({ preventScroll: true });
+  }
+  modalReturnFocusElement = null;
 }
 
 function clearElement(element) {
@@ -1363,6 +1387,7 @@ function updateLegendForReplay(document) {
 }
 
 function reportViewerIssue(message) {
+  revealPlayerChrome(true);
   loadProgress.hidden = false;
   loadProgressFill.style.width = "100%";
   loadProgressText.textContent = `Status: ${message}`;
@@ -2833,6 +2858,11 @@ function recordReplayCounters(rawEvent) {
       recordReceived(state, inputCount);
     }
     releaseInFlight(state, inputKeys, inputCount);
+    if (!replayHasAwaitLifecycleEvents && stepHasRenderRole(event.from, "await")) {
+      const awaitState = stateForStep(event.from);
+      recordSent(awaitState, inputCount);
+      releaseInFlight(awaitState, inputKeys, inputCount);
+    }
     return;
   }
   if (event.event === "emit") {
@@ -3877,6 +3907,10 @@ window.addEventListener("pageshow", () => {
     sourceModal.setAttribute("aria-hidden", "true");
   }
   openModal = null;
+  modalReturnFocusElement = null;
+  if (appShell) {
+    appShell.inert = false;
+  }
   cancelCompletionPrompt();
   syncStagedReplaySourceToActive();
   if (isLoadingReplay || isScrubbingTimeline) {
