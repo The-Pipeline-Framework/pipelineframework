@@ -2,10 +2,12 @@ import * as THREE from "./vendor/three.module.min.js";
 import { BUILT_IN_REPLAYS_CONFIG } from "./built-in-replays.js";
 
 const mount = document.getElementById("threeMount");
+const appShell = document.querySelector(".app-shell");
 const viewport = document.querySelector(".viewport");
 const playerSurface = document.getElementById("playerSurface");
 const playerChrome = document.getElementById("playerChrome");
 const backToDocsLink = document.getElementById("backToDocsLink");
+const loadReplayButton = document.getElementById("loadReplayButton");
 const playPauseButton = document.getElementById("playPauseButton");
 const stopButton = document.getElementById("stopButton");
 const restartButton = document.getElementById("restartButton");
@@ -14,6 +16,12 @@ const stepButton = document.getElementById("stepButton");
 const infoButton = document.getElementById("infoButton");
 const infoModal = document.getElementById("infoModal");
 const infoCloseButton = document.getElementById("infoCloseButton");
+const sourceModal = document.getElementById("sourceModal");
+const sourceCloseButton = document.getElementById("sourceCloseButton");
+const sourceCancelButton = document.getElementById("sourceCancelButton");
+const sourceModalTitle = document.getElementById("sourceModalTitle");
+const sourceModalDescription = document.getElementById("sourceModalDescription");
+const sourceModalStatus = document.getElementById("sourceModalStatus");
 const fullscreenButton = document.getElementById("fullscreenButton");
 const datasetSelect = document.getElementById("datasetSelect");
 const sourceApplyButton = document.getElementById("sourceApplyButton");
@@ -22,12 +30,14 @@ const customReplayInputWrap = document.getElementById("customReplayInputWrap");
 const replayFileInput = document.getElementById("replayFileInput");
 const speedInputs = [...document.querySelectorAll('input[name="speed"]')];
 const timelineSlider = document.getElementById("timelineSlider");
-const datasetName = document.getElementById("datasetName");
-const pipelineName = document.getElementById("pipelineName");
-const durationText = document.getElementById("durationText");
-const topologyText = document.getElementById("topologyText");
+const playerTitle = document.getElementById("playerTitle");
 const playbackText = document.getElementById("playbackText");
-const eventCountText = document.getElementById("eventCountText");
+const summaryDatasetName = document.getElementById("summaryDatasetName");
+const summaryPipelineName = document.getElementById("summaryPipelineName");
+const summaryDurationText = document.getElementById("summaryDurationText");
+const summaryTopologyText = document.getElementById("summaryTopologyText");
+const summaryEventCountText = document.getElementById("summaryEventCountText");
+const rejectLegendItems = [...document.querySelectorAll('[data-support-kind="reject"]')];
 const loadProgress = document.getElementById("loadProgress");
 const loadProgressFill = document.getElementById("loadProgressFill");
 const loadProgressText = document.getElementById("loadProgressText");
@@ -40,10 +50,15 @@ const BASE_LABEL_HEIGHT = 0.8;
 const SUPPORT_LABEL_HEIGHT = 0.5;
 const LABEL_OFFSET_Y = 1.12;
 const COUNTER_LABEL_HEIGHT = 0.44;
+const PRESSURE_RING_START_ANGLE = (Math.PI * 5) / 4;
+const PRESSURE_RING_SWEEP_ANGLE = -(Math.PI * 3) / 2;
 const PRIMARY_ROW_Y = 2.45;
 const BRANCH_ROW_OFFSET_Y = 2.05;
 const EMPTY_REPLAY_SOURCE_KEY = "none";
 const DEFAULT_REPLAY_SOURCE_KEY = EMPTY_REPLAY_SOURCE_KEY;
+const FIRST_VISIT_AUTOLOAD_SOURCE_KEY = "csv-payments";
+const FIRST_VISIT_AUTOLOAD_STORAGE_KEY = "tpf-replay-viewer-first-visit-autoloaded:v1";
+const COMPLETION_PROMPT_DELAY_MS = 3000;
 const LAYOUT_STORAGE_PREFIX = "tpf-replay-viewer-layout";
 const BUILT_IN_REPLAYS = new Map(BUILT_IN_REPLAYS_CONFIG.map((entry) => [entry.key, { label: entry.label, path: entry.path }]));
 const EFFECT_PRESETS = {
@@ -108,7 +123,7 @@ const END_DRAIN_SECONDS = Math.max(
         return [];
       })
 );
-const CHROME_HIDE_DELAY_MS = 1800;
+const CHROME_HIDE_DELAY_MS = 2000;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -137,6 +152,7 @@ const automaticNodePositions = new Map();
 const nodeLabelSprites = new Map();
 const nodeValueSprites = new Map();
 const nodeIconSprites = new Map();
+const nodePressureRings = new Map();
 const edgeLines = new Map();
 const particles = new Map();
 const pulseEffects = [];
@@ -183,6 +199,7 @@ const AWAIT_ATTR = {
 let fallbackAwaitDisplayStep = null;
 let activeAnimationPolicy = emptyAnimationPolicy();
 let replayHasAwaitLifecycleEvents = false;
+let replayBackpressureCapacity = null;
 
 let replayDocument = normalizeReplayDocument(validateReplayDocument({ topology: { steps: [], transitions: [] }, events: [], durationMs: 0, pipeline: "loading" }));
 let replayDurationSeconds = 0.1;
@@ -201,11 +218,14 @@ let activeLayoutStorageKey = null;
 let chromeHideTimeout = null;
 let fatalRenderErrorLatched = false;
 let openModal = null;
+let modalReturnFocusElement = null;
 let isScrubbingTimeline = false;
 let dragState = null;
 let suppressNextCanvasClick = false;
 let prefersTapChrome = window.matchMedia("(hover: none), (pointer: coarse)").matches;
 let loadProgressHideTimeout = null;
+let completionPromptTimeout = null;
+let completionPromptShownForPlayback = false;
 
 function resolveReplayDocsHref() {
   const replayDocsPath = "/guide/operations/observability/replay";
@@ -250,7 +270,8 @@ function updateSourceApplyButton() {
   }
   const nextSourceKey = datasetSelect.value;
   const hasPendingCustomReplay = nextSourceKey === "custom" && Boolean(replayFileInput.files?.length);
-  sourceApplyButton.disabled = nextSourceKey === EMPTY_REPLAY_SOURCE_KEY
+  sourceApplyButton.disabled = isLoadingReplay
+    || nextSourceKey === EMPTY_REPLAY_SOURCE_KEY
     || (nextSourceKey === "custom" && !hasPendingCustomReplay);
 }
 
@@ -678,6 +699,12 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function setSourceModalStatus(text) {
+  if (sourceModalStatus) {
+    sourceModalStatus.textContent = text;
+  }
+}
+
 function setLoadProgress(visible, ratio = 0, text = "Loading replay...") {
   isLoadingReplay = visible;
   if (loadProgressHideTimeout) {
@@ -687,11 +714,13 @@ function setLoadProgress(visible, ratio = 0, text = "Loading replay...") {
   loadProgress.hidden = !visible;
   loadProgressFill.style.width = `${Math.round(clamp(ratio, 0, 1) * 100)}%`;
   loadProgressText.textContent = text;
+  setSourceModalStatus(text);
   if (visible) {
     revealPlayerChrome(true);
   } else if (!isAnyModalOpen()) {
     scheduleChromeHide();
   }
+  updateSourceApplyButton();
 }
 
 function finishLoadProgress(text = "Replay loaded") {
@@ -702,6 +731,7 @@ function finishLoadProgress(text = "Replay loaded") {
   loadProgress.hidden = false;
   loadProgressFill.style.width = "100%";
   loadProgressText.textContent = text;
+  setSourceModalStatus(text);
   loadProgressHideTimeout = window.setTimeout(() => {
     loadProgress.hidden = true;
     loadProgressHideTimeout = null;
@@ -709,6 +739,7 @@ function finishLoadProgress(text = "Replay loaded") {
       scheduleChromeHide();
     }
   }, 1100);
+  updateSourceApplyButton();
 }
 
 function nextAnimationFrame() {
@@ -983,6 +1014,11 @@ function clearScene() {
     removeAndDispose(sprite);
   }
   nodeValueSprites.clear();
+  for (const ring of nodePressureRings.values()) {
+    removeAndDispose(ring.track);
+    removeAndDispose(ring.arc);
+  }
+  nodePressureRings.clear();
   for (const sprite of nodeIconSprites.values()) {
     removeAndDispose(sprite);
   }
@@ -1049,14 +1085,15 @@ function cancelChromeHide() {
 
 function setPlayerChromeVisible(visible) {
   playerChrome.dataset.visible = visible ? "true" : "false";
+  playerChrome.setAttribute("aria-hidden", visible ? "false" : "true");
+  playerChrome.inert = !visible;
+  if (!visible && playerChrome.contains(document.activeElement)) {
+    document.activeElement.blur();
+  }
 }
 
 function scheduleChromeHide(delayMs = CHROME_HIDE_DELAY_MS) {
   cancelChromeHide();
-  if (!prefersTapChrome) {
-    setPlayerChromeVisible(true);
-    return;
-  }
   if (isAnyModalOpen() || isScrubbingTimeline || isLoadingReplay) {
     setPlayerChromeVisible(true);
     return;
@@ -1066,34 +1103,105 @@ function scheduleChromeHide(delayMs = CHROME_HIDE_DELAY_MS) {
       setPlayerChromeVisible(true);
       return;
     }
-    if (prefersTapChrome && !isPlaying) {
-      return;
-    }
     setPlayerChromeVisible(false);
   }, delayMs);
 }
 
 function revealPlayerChrome(sticky = false) {
   setPlayerChromeVisible(true);
-  if (!prefersTapChrome) {
+  if (sticky || isAnyModalOpen() || isScrubbingTimeline || isLoadingReplay) {
     cancelChromeHide();
     return;
   }
-  if (!sticky) {
-    scheduleChromeHide();
-  } else {
-    cancelChromeHide();
+  scheduleChromeHide();
+}
+
+function setSourceModalMode(mode = "load") {
+  if (!sourceModalTitle || !sourceModalDescription) {
+    return;
   }
+  if (mode === "completion") {
+    sourceModalTitle.textContent = "Replay finished";
+    sourceModalDescription.textContent = "Load another built-in capture or try your own replay JSON.";
+    setSourceModalStatus("Choose what to inspect next.");
+    return;
+  }
+  sourceModalTitle.textContent = "Load replay";
+  sourceModalDescription.textContent = "Choose a captured built-in replay or upload a replay JSON. The viewer plays real event timing, counters, and topology without synthetic flows.";
+  if (isLoadingReplay) {
+    setSourceModalStatus(loadProgressText.textContent);
+  } else if (activeReplaySourceKey === EMPTY_REPLAY_SOURCE_KEY) {
+    setSourceModalStatus("CSV Payments will load automatically on your first visit.");
+  } else {
+    setSourceModalStatus("Choose a different replay or upload a custom JSON file.");
+  }
+}
+
+function openSourceModal(mode = "load") {
+  setSourceModalMode(mode);
+  openModalElement("source", sourceModal);
+}
+
+function cancelCompletionPrompt() {
+  if (completionPromptTimeout != null) {
+    window.clearTimeout(completionPromptTimeout);
+    completionPromptTimeout = null;
+  }
+}
+
+function resetCompletionPromptForPlayback() {
+  cancelCompletionPrompt();
+  completionPromptShownForPlayback = false;
+}
+
+function scheduleCompletionPrompt() {
+  if (
+    completionPromptShownForPlayback ||
+    replayDocument.events.length === 0 ||
+    isLoadingReplay ||
+    isAnyModalOpen()
+  ) {
+    return;
+  }
+  completionPromptShownForPlayback = true;
+  cancelCompletionPrompt();
+  completionPromptTimeout = window.setTimeout(() => {
+    completionPromptTimeout = null;
+    if (
+      isPlaying ||
+      isLoadingReplay ||
+      isAnyModalOpen() ||
+      currentTimeSeconds < replayDurationSeconds
+    ) {
+      return;
+    }
+    openSourceModal("completion");
+  }, COMPLETION_PROMPT_DELAY_MS);
 }
 
 function openModalElement(name, element) {
   if (name === "source") {
     syncStagedReplaySourceToActive();
   }
+  if (!openModal) {
+    modalReturnFocusElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }
   openModal = name;
+  if (appShell) {
+    appShell.inert = true;
+  }
   element.hidden = false;
   element.setAttribute("aria-hidden", "false");
   revealPlayerChrome(true);
+  window.requestAnimationFrame(() => {
+    if (openModal !== name || element.hidden) {
+      return;
+    }
+    const focusTarget = name === "source"
+      ? (datasetSelect ?? sourceCloseButton)
+      : infoCloseButton;
+    focusTarget?.focus({ preventScroll: true });
+  });
 }
 
 function closeModalElement(name, element) {
@@ -1106,7 +1214,14 @@ function closeModalElement(name, element) {
   openModal = null;
   element.hidden = true;
   element.setAttribute("aria-hidden", "true");
+  if (appShell) {
+    appShell.inert = false;
+  }
   revealPlayerChrome(!prefersTapChrome);
+  if (modalReturnFocusElement?.isConnected) {
+    modalReturnFocusElement.focus({ preventScroll: true });
+  }
+  modalReturnFocusElement = null;
 }
 
 function clearElement(element) {
@@ -1166,6 +1281,26 @@ function renderRunParameters(runParameters) {
     empty.textContent = "Run parameters unavailable";
     runParametersContent.appendChild(empty);
   }
+}
+
+function runParameterValue(runParameters, key) {
+  for (const section of runParameters?.sections ?? []) {
+    for (const entry of section?.entries ?? []) {
+      if (entry?.key === key) {
+        return entry.value ?? null;
+      }
+    }
+  }
+  return null;
+}
+
+function numericRunParameter(runParameters, key) {
+  const value = runParameterValue(runParameters, key);
+  if (value == null || value === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function renderAwaitUnitSummary() {
@@ -1243,8 +1378,20 @@ function awaitUnitSummaries(events) {
     });
 }
 
+function updateLegendForReplay(document) {
+  const hasReject = (document.topology?.steps ?? []).some((step) => step.pluginKind === "reject")
+    || (document.events ?? []).some((event) => event.event === "reject");
+  for (const item of rejectLegendItems) {
+    item.hidden = !hasReject;
+  }
+}
+
 function reportViewerIssue(message) {
-  eventCountText.textContent = `Status: ${message}`;
+  revealPlayerChrome(true);
+  loadProgress.hidden = false;
+  loadProgressFill.style.width = "100%";
+  loadProgressText.textContent = `Status: ${message}`;
+  setSourceModalStatus(`Status: ${message}`);
   if (runtimeStatus) {
     runtimeStatus.textContent = message;
   }
@@ -1273,9 +1420,11 @@ function loadReplay(document, label, sourceKey = activeReplaySourceKey) {
   replayDocument = normalizeReplayDocument(validateReplayDocument(document));
   activeLayoutStorageKey = replayLayoutStorageKey(replayDocument);
   replayDurationSeconds = computeReplayDurationSeconds(replayDocument);
+  replayBackpressureCapacity = numericRunParameter(replayDocument.runParameters, "pipeline.defaults.backpressure-buffer-capacity");
   currentTimeSeconds = 0;
   isPlaying = false;
   isFinishingEffects = false;
+  resetCompletionPromptForPlayback();
   fallbackAwaitDisplayStep = replayDocument.fallbackAwaitDisplayStep ?? null;
   replayHasAwaitLifecycleEvents = replayDocument.hasAwaitLifecycleEvents === true;
   for (const [rawStepName, displayStepName] of Object.entries(replayDocument.displayAliases ?? {})) {
@@ -1330,14 +1479,16 @@ function loadReplay(document, label, sourceKey = activeReplaySourceKey) {
   datasetSelect.value = sourceKey;
   setCustomReplayVisibility(sourceKey === "custom");
   updateSourceApplyButton();
-  datasetName.textContent = label;
-  pipelineName.textContent = `Pipeline: ${replayDocument.pipeline}`;
-  durationText.textContent = `Duration: ${replayDurationSeconds.toFixed(2)}s`;
-  topologyText.textContent = `Topology: ${replayDocument.topology.steps.length} nodes / ${replayDocument.topology.transitions.length} edges`;
-  eventCountText.textContent = `Events: ${replayDocument.events.length}`;
+  playerTitle.textContent = label;
+  summaryDatasetName.textContent = label;
+  summaryPipelineName.textContent = replayDocument.pipeline;
+  summaryDurationText.textContent = `${replayDurationSeconds.toFixed(2)}s`;
+  summaryTopologyText.textContent = `${replayDocument.topology.steps.length} nodes / ${replayDocument.topology.transitions.length} edges`;
+  summaryEventCountText.textContent = String(replayDocument.events.length);
+  updateLegendForReplay(replayDocument);
   renderRunParameters(replayDocument.runParameters);
   resetPlaybackState();
-  revealPlayerChrome(true);
+  revealPlayerChrome();
   updateUi();
 }
 
@@ -1371,6 +1522,83 @@ async function loadBuiltInReplay(datasetKey) {
     throw new Error(`${dataset.label} could not be rendered: ${error.message}`);
   }
   finishLoadProgress(`${dataset.label} loaded`);
+}
+
+async function applySelectedReplaySource({ closeOnSuccess = true } = {}) {
+  if (isLoadingReplay) {
+    return false;
+  }
+  cancelCompletionPrompt();
+  const nextSource = datasetSelect.value;
+  if (nextSource === EMPTY_REPLAY_SOURCE_KEY) {
+    return false;
+  }
+  try {
+    if (nextSource === "custom") {
+      const [file] = replayFileInput.files || [];
+      if (!file) {
+        return false;
+      }
+      isPlaying = false;
+      setLoadProgress(true, 0, `Loading ${file.name}...`);
+      updateUi();
+      await nextAnimationFrame();
+      const text = await readReplayFile(file);
+      setLoadProgress(true, 1, `Parsing ${file.name}...`);
+      await nextAnimationFrame();
+      const parsed = JSON.parse(text);
+      loadReplay(parsed, file.name, "custom");
+      finishLoadProgress(`${file.name} loaded`);
+    } else {
+      await loadBuiltInReplay(nextSource);
+    }
+    resetCompletionPromptForPlayback();
+    if (closeOnSuccess && openModal === "source") {
+      closeModalElement("source", sourceModal);
+    }
+    scheduleChromeHide();
+    updateUi();
+    return true;
+  } catch (error) {
+    setLoadProgress(false);
+    reportViewerIssue(`failed to load replay (${error.message})`);
+    setSourceModalStatus(`Could not load replay: ${error.message}`);
+    playPauseButton.disabled = false;
+    restartButton.disabled = false;
+    stepBackButton.disabled = false;
+    stepButton.disabled = false;
+    return false;
+  }
+}
+
+async function loadFirstVisitReplayAfterPaint() {
+  if (DEFAULT_REPLAY_SOURCE_KEY !== EMPTY_REPLAY_SOURCE_KEY) {
+    return;
+  }
+  try {
+    if (localStorage.getItem(FIRST_VISIT_AUTOLOAD_STORAGE_KEY)) {
+      return;
+    }
+  } catch (_error) {
+    // Keep the first-run experience useful when storage is unavailable.
+  }
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+  await new Promise((resolve) => window.setTimeout(resolve, 2000));
+  if (isLoadingReplay || replayDocument.events.length > 0 || isAnyModalOpen()) {
+    return;
+  }
+  try {
+    await loadBuiltInReplay(FIRST_VISIT_AUTOLOAD_SOURCE_KEY);
+    try {
+      localStorage.setItem(FIRST_VISIT_AUTOLOAD_STORAGE_KEY, "true");
+    } catch (_error) {
+      // Private browsing or locked-down storage should not block the loaded replay.
+    }
+  } catch (error) {
+    setLoadProgress(false);
+    reportViewerIssue(`failed to load first-visit replay (${error.message})`);
+  }
 }
 
 function readReplayFile(file) {
@@ -1550,6 +1778,9 @@ function registerNode(step, position) {
   scene.add(mesh);
   nodeMeshes.set(step.step, mesh);
   nodePositions.set(step.step, position.clone());
+  if (!isSideEffect) {
+    registerPressureRing(step, position);
+  }
   if (!isSideEffect || isNamedSupportActor(step)) {
     const sprite = buildStepLabelSprite(step.step);
     const labelOffset = isSideEffect ? LABEL_OFFSET_Y - 0.08 : LABEL_OFFSET_Y;
@@ -1560,16 +1791,7 @@ function registerNode(step, position) {
     nodeLabelSprites.set(step.step, sprite);
   }
   if (!isSideEffect) {
-    const valueSprite = buildTextSprite("0|0", {
-      fontSize: 28,
-      fontWeight: 700,
-      fillStyle: "#f8fbff",
-      paddingX: 12,
-      paddingY: 8,
-      backgroundStyle: "rgba(7, 16, 31, 0.0)",
-      borderStyle: null,
-      height: COUNTER_LABEL_HEIGHT
-    });
+    const valueSprite = buildThroughputCounterSprite("—|—");
     valueSprite.position.copy(position);
     scene.add(valueSprite);
     nodeValueSprites.set(step.step, valueSprite);
@@ -1618,6 +1840,7 @@ function updateNodeDecorations(stepName) {
       : new THREE.Vector3(0, 0, 0);
     value.position.copy(position).add(valueOffset);
   }
+  updatePressureRingPosition(stepName, position);
   const icon = nodeIconSprites.get(stepName);
   if (icon) {
     icon.position.copy(position);
@@ -1692,6 +1915,127 @@ function buildStepLabelSprite(stepName) {
 function buildPluginIconSprite(step) {
   const iconKind = resolveDisplayIconKind(step);
   return buildIconSprite(iconKind, iconKind === "reject" ? 0.54 : 0.72);
+}
+
+function buildThroughputCounterSprite(text) {
+  return buildTextSprite(text, {
+    fontSize: 28,
+    fontWeight: 700,
+    fillStyle: "#f8fbff",
+    paddingX: 12,
+    paddingY: 8,
+    backgroundStyle: "rgba(7, 16, 31, 0.0)",
+    borderStyle: null,
+    height: COUNTER_LABEL_HEIGHT
+  });
+}
+
+function replaceThroughputCounterSprite(sprite, text) {
+  replaceSpriteText(sprite, text, sprite.userData.options ?? {
+    fontSize: 28,
+    fontWeight: 700,
+    fillStyle: "#f8fbff",
+    paddingX: 12,
+    paddingY: 8,
+    backgroundStyle: "rgba(7, 16, 31, 0.0)",
+    borderStyle: null,
+    height: COUNTER_LABEL_HEIGHT
+  });
+  sprite.userData.text = text;
+}
+
+function registerPressureRing(step, position) {
+  const radius = BASE_NODE_RADIUS + 0.14;
+  const width = 0.065;
+  const trackGeometry = new THREE.RingGeometry(
+    radius,
+    radius + width,
+    80,
+    1,
+    PRESSURE_RING_START_ANGLE,
+    PRESSURE_RING_SWEEP_ANGLE
+  );
+  const trackMaterial = new THREE.MeshBasicMaterial({
+    color: 0x8da2c9,
+    transparent: true,
+    opacity: 0.22,
+    side: THREE.DoubleSide,
+    depthTest: false
+  });
+  const track = new THREE.Mesh(trackGeometry, trackMaterial);
+  track.position.copy(position).setZ(0.05);
+  track.renderOrder = 8;
+  scene.add(track);
+
+  const arcMaterial = new THREE.MeshBasicMaterial({
+    color: 0x8bffa5,
+    transparent: true,
+    opacity: 0,
+    side: THREE.DoubleSide,
+    depthTest: false
+  });
+  const arc = new THREE.Mesh(
+    new THREE.RingGeometry(radius, radius + width, 80, 1, PRESSURE_RING_START_ANGLE, -0.001),
+    arcMaterial
+  );
+  arc.position.copy(position).setZ(0.06);
+  arc.renderOrder = 9;
+  scene.add(arc);
+
+  nodePressureRings.set(step.step, {
+    track,
+    arc,
+    radius,
+    width,
+    ratio: null
+  });
+}
+
+function updatePressureRingPosition(stepName, position) {
+  const ring = nodePressureRings.get(stepName);
+  if (!ring) {
+    return;
+  }
+  ring.track.position.copy(position).setZ(0.05);
+  ring.arc.position.copy(position).setZ(0.06);
+}
+
+function updatePressureRing(stepName, pressureRatio) {
+  const ring = nodePressureRings.get(stepName);
+  if (!ring) {
+    return;
+  }
+  const normalizedRatio = Number.isFinite(pressureRatio) ? clamp(pressureRatio, 0, 1) : null;
+  if (ring.ratio === normalizedRatio) {
+    return;
+  }
+  ring.ratio = normalizedRatio;
+  ring.arc.geometry.dispose();
+  const thetaLength = normalizedRatio == null || normalizedRatio <= 0
+    ? -0.001
+    : PRESSURE_RING_SWEEP_ANGLE * normalizedRatio;
+  ring.arc.geometry = new THREE.RingGeometry(
+    ring.radius,
+    ring.radius + ring.width,
+    80,
+    1,
+    PRESSURE_RING_START_ANGLE,
+    thetaLength
+  );
+  ring.arc.material.opacity = normalizedRatio == null || normalizedRatio <= 0 ? 0 : 0.96;
+  if (normalizedRatio != null) {
+    ring.arc.material.color.setHex(pressureColorForRatio(normalizedRatio));
+  }
+}
+
+function pressureColorForRatio(ratio) {
+  if (ratio >= 0.8) {
+    return 0xff7c8f;
+  }
+  if (ratio >= 0.45) {
+    return 0xffd166;
+  }
+  return 0x8bffa5;
 }
 
 function buildTextSprite(text, options = {}) {
@@ -2043,7 +2387,8 @@ function fitCameraToTopology(steps) {
   const width = Math.max(1, maxX - minX);
   const height = Math.max(1, maxY - minY);
   const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2 + height * 0.16;
+  const verticalBias = camera.aspect < 0.9 ? -0.08 : 0.08;
+  const centerY = (minY + maxY) / 2 + height * verticalBias;
   const halfFovRadians = THREE.MathUtils.degToRad(camera.fov / 2);
   const fitHeightDistance = height * 0.5 / Math.tan(halfFovRadians);
   const fitWidthDistance = width * 0.5 / (Math.tan(halfFovRadians) * camera.aspect);
@@ -2286,15 +2631,37 @@ function resolveEventKey(event) {
 
 function stateForStep(stepName) {
   if (!runtimeStepState.has(stepName)) {
-    runtimeStepState.set(stepName, { inflight: 0, processed: 0, rejects: 0, known: false });
+    runtimeStepState.set(stepName, {
+      received: 0,
+      sent: 0,
+      inFlight: 0,
+      rejects: 0,
+      known: false,
+      receivedKnown: true,
+      sentKnown: true,
+      peakPressure: 0,
+      peakInFlight: 0,
+      activeInputKeys: new Set()
+    });
   }
   return runtimeStepState.get(stepName);
 }
 
-function countedItemCount(event) {
+function inputItemKeys(event) {
+  if (Array.isArray(event?.parentItemIds) && event.parentItemIds.length > 0) {
+    return event.parentItemIds.map((itemId) => String(itemId));
+  }
+  return event?.itemId ? [String(event.itemId)] : [];
+}
+
+function inputItemCount(event) {
   if (Array.isArray(event?.parentItemIds) && event.parentItemIds.length > 0) {
     return event.parentItemIds.length;
   }
+  return event?.itemId ? 1 : 0;
+}
+
+function outputItemCount(event) {
   return event?.itemId ? 1 : 0;
 }
 
@@ -2315,16 +2682,159 @@ function displayStateForStep(stepName) {
   }
   return {
     state: directState,
-    unknown: !directEventSteps.has(stepName)
+    unknown: !directState.known
   };
+}
+
+function markCounterEvidence(state, itemCount) {
+  if (itemCount > 0) {
+    state.known = true;
+    state.receivedKnown = true;
+    state.sentKnown = true;
+  }
+}
+
+function formatCounterValue(value, known = true) {
+  return known ? `${value}` : "—";
+}
+
+function recordReceived(state, itemCount) {
+  markCounterEvidence(state, itemCount);
+  if (itemCount > 0) {
+    state.received += itemCount;
+  }
+}
+
+function recordSent(state, itemCount) {
+  markCounterEvidence(state, itemCount);
+  if (itemCount > 0) {
+    state.sent += itemCount;
+  }
+}
+
+function recordInFlight(state, itemKeys, fallbackCount = 0) {
+  if (itemKeys.length > 0) {
+    let added = 0;
+    for (const itemKey of itemKeys) {
+      if (!state.activeInputKeys.has(itemKey)) {
+        state.activeInputKeys.add(itemKey);
+        added += 1;
+      }
+    }
+    if (added > 0) {
+      state.inFlight += added;
+      updatePeakPressure(state);
+    }
+    return;
+  }
+  if (fallbackCount > 0) {
+    state.inFlight += fallbackCount;
+    updatePeakPressure(state);
+  }
+}
+
+function releaseInFlight(state, itemKeys, fallbackCount = 0) {
+  if (itemKeys.length > 0) {
+    let released = 0;
+    for (const itemKey of itemKeys) {
+      if (state.activeInputKeys.delete(itemKey)) {
+        released += 1;
+      }
+    }
+    if (released > 0) {
+      state.inFlight = Math.max(0, state.inFlight - released);
+    }
+    return;
+  }
+  if (fallbackCount > 0) {
+    state.inFlight = Math.max(0, state.inFlight - fallbackCount);
+  }
+}
+
+function setInFlight(state, itemCount) {
+  state.inFlight = Math.max(0, itemCount);
+  state.peakInFlight = Math.max(state.peakInFlight ?? 0, state.inFlight);
+  state.peakPressure = Math.max(state.peakPressure ?? 0, state.inFlight);
+}
+
+function isCountedThroughputStep(stepName) {
+  const step = resolveStepDefinition(stepName);
+  return Boolean(step) && !step.sideEffect && step.pluginKind !== "reject";
+}
+
+function hasPrimaryInboundTransition(stepName) {
+  return (replayDocument.topology?.transitions ?? []).some((transition) =>
+    transition.to === stepName
+      && (transition.relationKind ?? "primary") === "primary"
+      && isCountedThroughputStep(transition.from)
+  );
+}
+
+function shouldCountStartAsReceived(event) {
+  if (!event?.step || !isCountedThroughputStep(event.step)) {
+    return false;
+  }
+  if (!hasPrimaryInboundTransition(event.step)) {
+    return true;
+  }
+  return stepHasRenderRole(event.from, "await");
+}
+
+function updatePeakPressure(state) {
+  state.peakInFlight = Math.max(state.peakInFlight ?? 0, state.inFlight ?? 0);
+  state.peakPressure = Math.max(state.peakPressure ?? 0, state.inFlight ?? 0);
+}
+
+function pressureForState(state) {
+  if (!state?.receivedKnown || !state?.sentKnown) {
+    return null;
+  }
+  return Math.max(0, state.inFlight ?? 0);
+}
+
+function pressureRatioForState(state) {
+  const pressure = pressureForState(state);
+  if (pressure == null) {
+    return null;
+  }
+  const capacity = replayBackpressureCapacity ?? state.peakInFlight ?? state.peakPressure;
+  if (!Number.isFinite(capacity) || capacity <= 0) {
+    return pressure > 0 ? 1 : 0;
+  }
+  return clamp(pressure / capacity, 0, 1);
+}
+
+function pressureCapacityForState(state) {
+  const pressure = pressureForState(state);
+  if (pressure == null) {
+    return null;
+  }
+  const capacity = replayBackpressureCapacity ?? state.peakInFlight ?? state.peakPressure;
+  return Number.isFinite(capacity) && capacity > 0 ? capacity : null;
+}
+
+function tooltipForStep(stepName) {
+  const step = resolveStepDefinition(stepName);
+  if (!step) {
+    return "";
+  }
+  const display = displayStateForStep(stepName);
+  const state = display.state;
+  const label = normalizeStepLabel(stepName);
+  if (step.pluginKind === "reject") {
+    return `${label}: rejected ${state.rejects}`;
+  }
+  if (display.unknown) {
+    return `${label}: received/sent counters unknown for this replay.`;
+  }
+  const pressure = pressureForState(state) ?? 0;
+  const capacity = pressureCapacityForState(state);
+  const capacityText = capacity == null ? "observed peak" : `${capacity} capacity`;
+  return `${label}: received ${formatCounterValue(state.received, state.receivedKnown)}, sent ${formatCounterValue(state.sent, state.sentKnown)}, queued pressure ${pressure} (${capacityText}).`;
 }
 
 function rejectStepNameFor(stepName) {
   return `Rejects ${stepName}`;
-}
-
-function stepCardinality(stepName) {
-  return resolveStepDefinition(stepName)?.cardinality?.toLowerCase() ?? null;
 }
 
 function recordReplayCounters(rawEvent) {
@@ -2337,46 +2847,46 @@ function recordReplayCounters(rawEvent) {
     return;
   }
   const state = stateForStep(event.step);
-  const itemCount = countedItemCount(rawEvent);
-  const cardinality = stepCardinality(event.step);
+  const inputCount = inputItemCount(rawEvent);
+  const inputKeys = inputItemKeys(rawEvent);
+  const outputCount = outputItemCount(rawEvent);
   if (isAwaitResumableError(rawEvent)) {
-    if (itemCount > 0) {
-      state.inflight = Math.max(0, state.inflight - itemCount);
-      state.processed += itemCount;
+    return;
+  }
+  if (event.event === "start") {
+    if (shouldCountStartAsReceived(event)) {
+      recordReceived(state, inputCount);
+    }
+    releaseInFlight(state, inputKeys, inputCount);
+    if (!replayHasAwaitLifecycleEvents && stepHasRenderRole(event.from, "await")) {
+      const awaitState = stateForStep(event.from);
+      recordSent(awaitState, inputCount);
+      releaseInFlight(awaitState, inputKeys, inputCount);
     }
     return;
   }
-  if (event.event === "emit" && event.to && stepHasRenderRole(event.to, "await")) {
-    stateForStep(event.to).inflight += itemCount;
-  }
-  if (event.event === "start" && event.from && stepHasRenderRole(event.from, "await")) {
-    const awaitState = stateForStep(event.from);
-    awaitState.inflight = Math.max(0, awaitState.inflight - itemCount);
-    awaitState.processed += itemCount;
-  }
-  if (event.event === "start") {
-    state.inflight += itemCount;
+  if (event.event === "emit") {
+    recordSent(state, outputCount);
+    if (event.to && isCountedThroughputStep(event.to)) {
+      const targetState = stateForStep(event.to);
+      recordReceived(targetState, outputCount);
+      recordInFlight(targetState, rawEvent?.itemId ? [String(rawEvent.itemId)] : [], outputCount);
+    }
     return;
   }
-  if (event.event === "emit" && cardinality === "one-to-many" && event.from === event.step) {
-    state.processed += itemCount;
+  if (event.event === "success" || event.event === "error") {
+    releaseInFlight(state, inputKeys, inputCount);
     return;
   }
   if (event.event === "cache_hit") {
-    state.processed += itemCount;
     return;
   }
   if (event.event === "reject") {
     const rejectStepName = event.to || rejectStepNameFor(event.step);
     const rejectState = stateForStep(rejectStepName);
-    rejectState.rejects += itemCount;
+    markCounterEvidence(rejectState, inputCount);
+    rejectState.rejects += inputCount;
     return;
-  }
-  if (event.event === "success" || event.event === "error") {
-    state.inflight = Math.max(0, state.inflight - itemCount);
-    if (event.event === "success" && cardinality !== "one-to-many") {
-      state.processed += itemCount;
-    }
   }
 }
 
@@ -2387,13 +2897,33 @@ function recordAwaitLifecycleCounters(rawEvent, event) {
   }
   const expected = awaitLifecycleNumber(rawEvent, AWAIT_ATTR.expectedItemCount);
   const completed = awaitLifecycleNumber(rawEvent, AWAIT_ATTR.completedItemCount);
-  if (expected == null || completed == null) {
+  if (expected == null && completed == null) {
     return;
   }
   const state = stateForStep(awaitStepName);
-  state.inflight = Math.max(0, expected - completed);
-  state.processed = completed;
   state.known = true;
+  state.receivedKnown = true;
+  state.sentKnown = true;
+  if (rawEvent.event === "await_interaction_dispatched") {
+    if (expected != null) {
+      state.received = Math.max(state.received, expected);
+      setInFlight(state, Math.max(0, expected - state.sent));
+    }
+    return;
+  }
+  if (completed != null) {
+    state.sent = completed;
+    state.sentKnown = true;
+  } else {
+    state.sentKnown = false;
+  }
+  if (expected != null) {
+    state.received = Math.max(state.received, expected);
+    state.receivedKnown = true;
+  }
+  const receivedBaseline = expected ?? Math.max(state.received, completed ?? 0);
+  const completedBaseline = completed ?? state.sent;
+  setInFlight(state, Math.max(0, receivedBaseline - completedBaseline));
 }
 
 function spawnSupportTransit(fromStep, toStep, startTime, color, duration = 0.36, size = 0.085) {
@@ -2552,7 +3082,7 @@ function processEvent(rawEvent) {
   }
   const outputResumeEdge = event?.step ? activeAnimationPolicy.outputResumeByTargetStep.get(event.step) : null;
   if (rawEvent.event === "start" && outputResumeEdge && event.from === outputResumeEdge.from) {
-    animateOutputResume(outputResumeEdge, rawEvent.startTime, countedItemCount(rawEvent) > 1);
+    animateOutputResume(outputResumeEdge, rawEvent.startTime, inputItemCount(rawEvent) > 1);
   }
   const displayTargets = resolveDisplayTargets(event);
   if (isAwaitResumableError(rawEvent)) {
@@ -2828,29 +3358,26 @@ function updateNodes(timeSeconds) {
       ? `${state.rejects}`
       : display.unknown
         ? "—|—"
-        : `${state.inflight}|${state.processed}`;
+        : `${formatCounterValue(state.received, state.receivedKnown)}|${formatCounterValue(state.sent, state.sentKnown)}`;
+    const pressureRatio = step?.pluginKind === "reject" || display.unknown ? null : pressureRatioForState(state);
     if (sprite.userData.text !== expectedText) {
-      replaceSpriteText(sprite, expectedText, step?.pluginKind === "reject" ? {
-        fontSize: 26,
-        fontWeight: 700,
-        fillStyle: "#f8fbff",
-        paddingX: 6,
-        paddingY: 4,
-        backgroundStyle: "rgba(7, 16, 31, 0.0)",
-        borderStyle: null,
-        height: 0.22
-      } : {
-        fontSize: 28,
-        fontWeight: 700,
-        fillStyle: "#f8fbff",
-        paddingX: 12,
-        paddingY: 8,
-        backgroundStyle: "rgba(7, 16, 31, 0.0)",
-        borderStyle: null,
-        height: COUNTER_LABEL_HEIGHT
-      });
+      if (step?.pluginKind === "reject") {
+        replaceSpriteText(sprite, expectedText, {
+          fontSize: 26,
+          fontWeight: 700,
+          fillStyle: "#f8fbff",
+          paddingX: 6,
+          paddingY: 4,
+          backgroundStyle: "rgba(7, 16, 31, 0.0)",
+          borderStyle: null,
+          height: 0.22
+        });
+      } else {
+        replaceThroughputCounterSprite(sprite, expectedText);
+      }
       sprite.userData.text = expectedText;
     }
+    updatePressureRing(stepName, pressureRatio);
   }
 }
 
@@ -2959,6 +3486,7 @@ function updateHoveredStep(clientX, clientY) {
   const intersections = raycaster.intersectObjects([...nodeMeshes.values()], false);
   hoveredStepName = intersections[0]?.object?.userData?.step?.step ?? null;
   renderer.domElement.style.cursor = hoveredStepName ? "grab" : "default";
+  renderer.domElement.title = hoveredStepName ? tooltipForStep(hoveredStepName) : "";
 }
 
 function worldPointForPointer(clientX, clientY) {
@@ -3029,7 +3557,7 @@ function endNodeDrag(event) {
   suppressNextCanvasClick = moved;
   try {
     renderer.domElement.releasePointerCapture(event.pointerId);
-  } catch {
+  } catch (_error) {
     // Pointer capture may already be gone after browser-level cancellation.
   }
   renderer.domElement.style.cursor = hoveredStepName ? "grab" : "default";
@@ -3074,6 +3602,7 @@ function tick(now) {
       isPlaying = false;
       isFinishingEffects = false;
       currentTimeSeconds = replayDurationSeconds;
+      scheduleCompletionPrompt();
     }
     updateUi();
     renderer.render(scene, camera);
@@ -3087,24 +3616,34 @@ function tick(now) {
 }
 
 playPauseButton.addEventListener("click", () => {
-  if (isLoadingReplay) {
-    return;
+  try {
+    if (isLoadingReplay) {
+      return;
+    }
+    cancelCompletionPrompt();
+    revealPlayerChrome();
+    const shouldStart = !isPlaying;
+    if (shouldStart && currentTimeSeconds >= replayDurationSeconds) {
+      rebuildPlaybackTo(0);
+      completionPromptShownForPlayback = false;
+    }
+    previousAnimationFrame = performance.now();
+    isFinishingEffects = false;
+    isPlaying = shouldStart;
+    scheduleChromeHide();
+    updateUi();
+  } catch (error) {
+    reportRuntimeError("playback could not start", error);
   }
-  revealPlayerChrome(true);
-  if (!isPlaying && currentTimeSeconds >= replayDurationSeconds) {
-    rebuildPlaybackTo(0);
-  }
-  if (!isPlaying && nextEventCursor === 0 && replayDocument.events.length > 0) {
-    rebuildPlaybackToCursor(1);
-  }
-  previousAnimationFrame = performance.now();
-  isFinishingEffects = false;
-  isPlaying = !isPlaying;
-  scheduleChromeHide();
-  updateUi();
+});
+
+loadReplayButton.addEventListener("click", () => {
+  cancelCompletionPrompt();
+  openSourceModal("load");
 });
 
 restartButton.addEventListener("click", () => {
+  resetCompletionPromptForPlayback();
   revealPlayerChrome(true);
   restartPlayback();
   scheduleChromeHide();
@@ -3114,18 +3653,18 @@ stopButton.addEventListener("click", () => {
   if (isLoadingReplay) {
     return;
   }
+  resetCompletionPromptForPlayback();
   revealPlayerChrome(true);
   isPlaying = false;
   restartPlayback();
-  if (!prefersTapChrome) {
-    scheduleChromeHide();
-  }
+  scheduleChromeHide();
 });
 
 stepBackButton.addEventListener("click", () => {
   if (isLoadingReplay) {
     return;
   }
+  resetCompletionPromptForPlayback();
   revealPlayerChrome(true);
   stepBackwardOneEvent();
   scheduleChromeHide();
@@ -3135,12 +3674,14 @@ stepButton.addEventListener("click", () => {
   if (isLoadingReplay) {
     return;
   }
+  resetCompletionPromptForPlayback();
   revealPlayerChrome(true);
   stepForwardOneEvent();
   scheduleChromeHide();
 });
 
 timelineSlider.addEventListener("input", () => {
+  resetCompletionPromptForPlayback();
   revealPlayerChrome(true);
   isScrubbingTimeline = true;
   const nextTime = (Number(timelineSlider.value) / 10000) * replayDurationSeconds;
@@ -3150,6 +3691,7 @@ timelineSlider.addEventListener("input", () => {
 });
 
 timelineSlider.addEventListener("pointerdown", () => {
+  cancelCompletionPrompt();
   revealPlayerChrome(true);
   isScrubbingTimeline = true;
 });
@@ -3197,43 +3739,16 @@ infoCloseButton.addEventListener("click", () => {
   closeModalElement("info", infoModal);
 });
 
+sourceCloseButton.addEventListener("click", () => {
+  closeModalElement("source", sourceModal);
+});
+
+sourceCancelButton.addEventListener("click", () => {
+  closeModalElement("source", sourceModal);
+});
+
 sourceApplyButton.addEventListener("click", async () => {
-  if (isLoadingReplay) {
-    return;
-  }
-  const nextSource = datasetSelect.value;
-  if (nextSource === EMPTY_REPLAY_SOURCE_KEY) {
-    return;
-  }
-  try {
-    if (nextSource === "custom") {
-      const [file] = replayFileInput.files || [];
-      if (!file) {
-        return;
-      }
-      isPlaying = false;
-      setLoadProgress(true, 0, `Loading ${file.name}...`);
-      updateUi();
-      await nextAnimationFrame();
-      const text = await readReplayFile(file);
-      setLoadProgress(true, 1, `Parsing ${file.name}...`);
-      await nextAnimationFrame();
-      const parsed = JSON.parse(text);
-      loadReplay(parsed, file.name, "custom");
-      finishLoadProgress(`${file.name} loaded`);
-    } else {
-      await loadBuiltInReplay(nextSource);
-    }
-    scheduleChromeHide();
-    updateUi();
-  } catch (error) {
-    setLoadProgress(false);
-    reportViewerIssue(`failed to load replay (${error.message})`);
-    playPauseButton.disabled = false;
-    restartButton.disabled = false;
-    stepBackButton.disabled = false;
-    stepButton.disabled = false;
-  }
+  await applySelectedReplaySource();
 });
 
 fullscreenButton.addEventListener("click", async () => {
@@ -3295,6 +3810,7 @@ renderer.domElement.addEventListener("click", (event) => {
   }
   if (!prefersTapChrome) {
     revealPlayerChrome();
+    event.preventDefault();
     return;
   }
   if (playerChrome.dataset.visible === "true") {
@@ -3309,23 +3825,30 @@ if (resetLayoutButton) {
   resetLayoutButton.addEventListener("click", () => {
     resetCurrentLayout();
     revealPlayerChrome(true);
+    scheduleChromeHide();
     updateUi();
   });
 }
 
 playerChrome.addEventListener("pointermove", () => {
-  revealPlayerChrome(true);
+  revealPlayerChrome();
 });
 
 playerChrome.addEventListener("pointerleave", () => {
-  if (prefersTapChrome && !isAnyModalOpen()) {
-    scheduleChromeHide(900);
+  if (!isAnyModalOpen()) {
+    scheduleChromeHide();
   }
 });
 
 playerChrome.addEventListener("click", (event) => {
   event.stopPropagation();
-  revealPlayerChrome(true);
+  revealPlayerChrome();
+});
+
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Tab" && !isAnyModalOpen()) {
+    revealPlayerChrome();
+  }
 });
 
 window.addEventListener("resize", () => {
@@ -3335,21 +3858,23 @@ window.addEventListener("resize", () => {
   fitCameraToTopology(replayDocument.topology.steps);
   updateLabels();
   prefersTapChrome = window.matchMedia("(hover: none), (pointer: coarse)").matches;
-  setPlayerChromeVisible(true);
-  if (prefersTapChrome && !isAnyModalOpen() && !isLoadingReplay) {
-    scheduleChromeHide();
-  } else {
+  if (isAnyModalOpen() || isLoadingReplay || isScrubbingTimeline) {
+    setPlayerChromeVisible(true);
     cancelChromeHide();
+  } else if (playerChrome.dataset.visible === "true") {
+    scheduleChromeHide();
   }
 });
 
-for (const modal of [infoModal]) {
+for (const modal of [infoModal, sourceModal]) {
   modal.addEventListener("click", (event) => {
     const closeTarget = event.target.closest("[data-close-modal]");
     if (closeTarget) {
       const name = closeTarget.getAttribute("data-close-modal");
       if (name === "info") {
         closeModalElement("info", infoModal);
+      } else if (name === "source") {
+        closeModalElement("source", sourceModal);
       }
     }
   });
@@ -3359,6 +3884,8 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     if (openModal === "info") {
       closeModalElement("info", infoModal);
+    } else if (openModal === "source") {
+      closeModalElement("source", sourceModal);
     }
   }
 });
@@ -3375,9 +3902,23 @@ window.addEventListener("pageshow", () => {
     infoModal.hidden = true;
     infoModal.setAttribute("aria-hidden", "true");
   }
+  if (!sourceModal.hidden) {
+    sourceModal.hidden = true;
+    sourceModal.setAttribute("aria-hidden", "true");
+  }
   openModal = null;
+  modalReturnFocusElement = null;
+  if (appShell) {
+    appShell.inert = false;
+  }
+  cancelCompletionPrompt();
   syncStagedReplaySourceToActive();
-  revealPlayerChrome(prefersTapChrome || isLoadingReplay);
+  if (isLoadingReplay || isScrubbingTimeline) {
+    revealPlayerChrome(true);
+  } else {
+    setPlayerChromeVisible(false);
+    cancelChromeHide();
+  }
 });
 
 window.addEventListener("error", (event) => {
@@ -3408,7 +3949,7 @@ if (backToDocsLink) {
     window.location.assign(backToDocsLink.href);
   });
 }
-setPlayerChromeVisible(true);
+setPlayerChromeVisible(false);
 updateUi();
 requestAnimationFrame(tick);
 // Intentionally starts empty so large built-in datasets load only after an explicit picker selection.
@@ -3417,4 +3958,6 @@ if (DEFAULT_REPLAY_SOURCE_KEY !== EMPTY_REPLAY_SOURCE_KEY) {
     setLoadProgress(false);
     reportViewerIssue(`failed to load built-in dataset (${error.message})`);
   });
+} else {
+  loadFirstVisitReplayAfterPaint();
 }

@@ -21,8 +21,8 @@ So the viewer only needs one file at import time.
 - primary pipeline steps
 - plugin nodes
 - transition edges
-- replay metadata in a strip below the player
-- player chrome over the viewport for transport, scrubber, inline speed radios, and utility icons
+- replay metadata in the info modal
+- hover/tap player chrome over the viewport for transport, scrubber, replay title, inline speed radios, and utility icons
 - a persistent shell link back to the replay docs page outside the player chrome
 - modal source and info surfaces opened from the bottom-right utility icons
 - semantic effects for:
