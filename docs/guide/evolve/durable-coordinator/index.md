@@ -41,9 +41,10 @@ sequenceDiagram
 ## Guides
 
 1. [Worker Protocols](/guide/evolve/durable-coordinator/worker-protocols) explains local, REST, gRPC, and SQS transition workers.
-2. [Bundle Contract](/guide/evolve/durable-coordinator/bundle-contract) explains manifest identity, activation, pinning, and worker availability.
-3. [Local APIs](/guide/evolve/durable-coordinator/local-apis) documents the current default-disabled control-plane and admin APIs.
-4. [Self-Hosted Milestone](/guide/evolve/durable-coordinator/self-hosted-milestone) tracks what remains before the public self-host path is credible.
+2. [Step-Aware Invocation Runtime](/guide/evolve/durable-coordinator/boundary-invocation-model) explains the shared invocation seam used by pipeline steps and transition workers.
+3. [Bundle Contract](/guide/evolve/durable-coordinator/bundle-contract) explains manifest identity, activation, pinning, and worker availability.
+4. [Local APIs](/guide/evolve/durable-coordinator/local-apis) documents the current default-disabled control-plane and admin APIs.
+5. [Self-Hosted Milestone](/guide/evolve/durable-coordinator/self-hosted-milestone) tracks what remains before the public self-host path is credible.
 
 ## Limits
 

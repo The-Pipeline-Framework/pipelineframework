@@ -25,6 +25,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.awaitable.AwaitExecutionContext;
+import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.awaitable.AwaitStreamOneToOneStep;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
@@ -41,6 +44,8 @@ import org.pipelineframework.step.functional.ManyToOne;
 import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineStepExecutorTest {
@@ -69,6 +74,36 @@ class PipelineStepExecutorTest {
             null);
 
         assertEquals(List.of("a-done", "b-done"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void oneToOneStepInvocationInstallsAndRestoresPipelineAndAwaitContext() {
+        PipelineContext previousPipeline = new PipelineContext("previous", "previous-tenant", "previous-cache");
+        AwaitExecutionContext previousAwait = new AwaitExecutionContext("previous-tenant", "previous-exec", 1);
+        PipelineContext currentPipeline = new PipelineContext("current", "tenant-1", "prefer-cache");
+        AwaitExecutionContext currentAwait = new AwaitExecutionContext("tenant-1", "exec-1", 2);
+        PipelineContextHolder.set(previousPipeline);
+        AwaitExecutionContextHolder.set(previousAwait);
+
+        try {
+            Object result = PipelineStepExecutor.applyOneToOneUnchecked(
+                new ContextCapturingOneToOneStep(),
+                Uni.createFrom().item("payload"),
+                false,
+                16,
+                null,
+                null,
+                null,
+                currentPipeline,
+                currentAwait);
+
+            assertEquals("tenant-1:exec-1:payload", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
+            assertSame(previousPipeline, PipelineContextHolder.get());
+            assertSame(previousAwait, AwaitExecutionContextHolder.get());
+        } finally {
+            PipelineContextHolder.clear();
+            AwaitExecutionContextHolder.clear();
+        }
     }
 
     @Test
@@ -165,6 +200,30 @@ class PipelineStepExecutorTest {
     }
 
     @Test
+    void awaitStreamOneToOneInvocationUsesSharedStepContextRuntime() {
+        PipelineContext context = new PipelineContext("v1", "tenant-stream", "prefer-cache");
+        AwaitExecutionContext awaitContext = new AwaitExecutionContext("tenant-stream", "exec-stream", 3);
+
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+        Object result = executor.applyStep(
+            new ContextCapturingAwaitStreamStep(),
+            Multi.createFrom().items("a", "b"),
+            org.pipelineframework.config.ParallelismPolicy.SEQUENTIAL,
+            16,
+            null,
+            null,
+            null,
+            context,
+            awaitContext);
+
+        assertEquals(
+            List.of("tenant-stream:exec-stream:a", "tenant-stream:exec-stream:b"),
+            ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
+        assertNull(PipelineContextHolder.get());
+        assertNull(AwaitExecutionContextHolder.get());
+    }
+
+    @Test
     void blockingOneToOneOnUniProducesOutput() {
         Object result = PipelineStepExecutor.applyOneToOneUnchecked(
             new BlockingSuffixOneToOneStep("-blocking"),
@@ -235,6 +294,27 @@ class PipelineStepExecutorTest {
         @Override
         public Uni<String> applyOneToOne(String input) {
             return Uni.createFrom().item(input + suffix);
+        }
+    }
+
+    static final class ContextCapturingOneToOneStep extends ConfigurableStep implements StepOneToOne<String, String> {
+        @Override
+        public Uni<String> applyOneToOne(String input) {
+            PipelineContext pipelineContext = PipelineContextHolder.get();
+            AwaitExecutionContext awaitContext = AwaitExecutionContextHolder.get();
+            return Uni.createFrom().item(
+                pipelineContext.replayMode() + ":" + awaitContext.executionId() + ":" + input);
+        }
+    }
+
+    static final class ContextCapturingAwaitStreamStep implements AwaitStreamOneToOneStep<String, String> {
+        @Override
+        public Multi<String> applyAwaitPerItem(Multi<String> input) {
+            return input.onItem().transform(item -> {
+                PipelineContext pipelineContext = PipelineContextHolder.get();
+                AwaitExecutionContext awaitContext = AwaitExecutionContextHolder.get();
+                return pipelineContext.replayMode() + ":" + awaitContext.executionId() + ":" + item;
+            });
         }
     }
 

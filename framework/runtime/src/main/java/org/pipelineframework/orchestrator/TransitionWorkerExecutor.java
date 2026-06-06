@@ -11,6 +11,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
+import org.pipelineframework.invocation.PipelineInvocationRuntime;
 
 /**
  * Bounded executor for queue-async transition workers.
@@ -66,26 +67,24 @@ public class TransitionWorkerExecutor {
     public Uni<TransitionResultEnvelope> execute(
         PipelineTransitionWorker worker,
         TransitionCommandEnvelope command) {
-        Uni<TransitionResultEnvelope> execution = Uni.createFrom().deferred(() -> {
-            long startNanos = System.nanoTime();
-            try {
-                Uni<TransitionResultEnvelope> result = worker.executeTransition(command);
-                if (result == null) {
+        Uni<TransitionResultEnvelope> execution = PipelineInvocationRuntime.invokeTransitionWorker(
+            TransitionWorkerMetrics::recordDuration,
+            () -> {
+                try {
+                    Uni<TransitionResultEnvelope> result = worker.executeTransition(command);
+                    if (result == null) {
+                        TransitionWorkerMetrics.recordOutcome(TransitionWorkerOutcome.FAILED);
+                        return Uni.createFrom().item(TransitionResultEnvelope.failed(
+                            new IllegalStateException("PipelineTransitionWorker returned null")));
+                    }
+                    return result
+                        .onItem().invoke(item -> TransitionWorkerMetrics.recordOutcome(item.outcome()))
+                        .onFailure().invoke(failure -> TransitionWorkerMetrics.recordOutcome(TransitionWorkerOutcome.FAILED));
+                } catch (Exception failure) {
                     TransitionWorkerMetrics.recordOutcome(TransitionWorkerOutcome.FAILED);
-                    TransitionWorkerMetrics.recordDuration(startNanos);
-                    return Uni.createFrom().item(TransitionResultEnvelope.failed(
-                        new IllegalStateException("PipelineTransitionWorker returned null")));
+                    return Uni.createFrom().item(TransitionResultEnvelope.failed(failure));
                 }
-                return result
-                    .onItem().invoke(item -> TransitionWorkerMetrics.recordOutcome(item.outcome()))
-                    .onFailure().invoke(failure -> TransitionWorkerMetrics.recordOutcome(TransitionWorkerOutcome.FAILED))
-                    .onTermination().invoke(() -> TransitionWorkerMetrics.recordDuration(startNanos));
-            } catch (Exception failure) {
-                TransitionWorkerMetrics.recordOutcome(TransitionWorkerOutcome.FAILED);
-                TransitionWorkerMetrics.recordDuration(startNanos);
-                return Uni.createFrom().item(TransitionResultEnvelope.failed(failure));
-            }
-        });
+            });
         if (executionMode() == TransitionWorkerExecutionMode.VIRTUAL_THREAD) {
             return execution.runSubscriptionOn(virtualThreadExecutor());
         }
