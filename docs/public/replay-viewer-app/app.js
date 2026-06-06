@@ -1083,6 +1083,11 @@ function cancelChromeHide() {
 
 function setPlayerChromeVisible(visible) {
   playerChrome.dataset.visible = visible ? "true" : "false";
+  playerChrome.setAttribute("aria-hidden", visible ? "false" : "true");
+  playerChrome.inert = !visible;
+  if (!visible && playerChrome.contains(document.activeElement)) {
+    document.activeElement.blur();
+  }
 }
 
 function scheduleChromeHide(delayMs = CHROME_HIDE_DELAY_MS) {
@@ -3808,6 +3813,12 @@ playerChrome.addEventListener("pointerleave", () => {
 playerChrome.addEventListener("click", (event) => {
   event.stopPropagation();
   revealPlayerChrome();
+});
+
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Tab" && !isAnyModalOpen()) {
+    revealPlayerChrome();
+  }
 });
 
 window.addEventListener("resize", () => {
