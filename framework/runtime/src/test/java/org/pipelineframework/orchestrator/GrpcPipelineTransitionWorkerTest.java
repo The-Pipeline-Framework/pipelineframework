@@ -13,6 +13,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.invocation.TransportBoundaryInvocation;
 import org.pipelineframework.orchestrator.grpc.MutinyTransitionWorkerServiceGrpc;
 import org.pipelineframework.orchestrator.grpc.TransitionWorkerCapabilitiesRequest;
 import org.pipelineframework.orchestrator.grpc.TransitionWorkerCapabilitiesResponse;
@@ -76,6 +77,15 @@ class GrpcPipelineTransitionWorkerTest {
         assertEquals(GrpcTransitionWorkerProtocol.PAYLOAD_ENCODING, captured.get().getPayloadEncoding());
         assertTrue(captured.get().getSignature() != null && !captured.get().getSignature().isBlank());
         assertTrue(captured.get().getCommandEnvelope().toStringUtf8().contains("\"transitionKey\":\"exec-1:0:0\""));
+    }
+
+    @Test
+    void exposesTransportBoundaryDiagnostics() {
+        worker = new GrpcPipelineTransitionWorker();
+
+        assertTrue(worker instanceof TransportBoundaryInvocation);
+        assertEquals("grpc", worker.transportBoundary().protocol());
+        assertEquals("transition-worker.execute", worker.transportBoundary().target());
     }
 
     @Test

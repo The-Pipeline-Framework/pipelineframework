@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.invocation.TransportBoundaryInvocation;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.ChangeMessageVisibilityRequest;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
@@ -87,6 +88,13 @@ class SqsPipelineTransitionWorkerTest {
         verify(client).deleteMessage(argThat((DeleteMessageRequest request) ->
             request.queueUrl().equals("https://sqs.local/response")
                 && request.receiptHandle().equals("receipt-1")));
+    }
+
+    @Test
+    void exposesTransportBoundaryDiagnostics() {
+        assertTrue(worker instanceof TransportBoundaryInvocation);
+        assertEquals("sqs", worker.transportBoundary().protocol());
+        assertEquals("transition-worker.execute", worker.transportBoundary().target());
     }
 
     @Test

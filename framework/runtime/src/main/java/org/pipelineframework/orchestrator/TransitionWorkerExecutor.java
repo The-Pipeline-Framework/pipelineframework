@@ -22,6 +22,9 @@ public class TransitionWorkerExecutor {
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
 
+    @Inject
+    PipelineInvocationRuntime invocationRuntime;
+
     private final Object lifecycleLock = new Object();
     private volatile Semaphore permits;
     private volatile int maxInFlight;
@@ -67,7 +70,7 @@ public class TransitionWorkerExecutor {
     public Uni<TransitionResultEnvelope> execute(
         PipelineTransitionWorker worker,
         TransitionCommandEnvelope command) {
-        Uni<TransitionResultEnvelope> execution = PipelineInvocationRuntime.invokeTransitionWorker(
+        Uni<TransitionResultEnvelope> execution = invocationRuntime().invokeTransitionWorker(
             TransitionWorkerMetrics::recordDuration,
             () -> {
                 try {
@@ -130,6 +133,10 @@ public class TransitionWorkerExecutor {
 
     private PipelineOrchestratorConfig.WorkerConfig workerConfig() {
         return orchestratorConfig == null ? null : orchestratorConfig.worker();
+    }
+
+    private PipelineInvocationRuntime invocationRuntime() {
+        return invocationRuntime == null ? new PipelineInvocationRuntime() : invocationRuntime;
     }
 
     private Executor virtualThreadExecutor() {

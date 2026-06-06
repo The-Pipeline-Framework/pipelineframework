@@ -21,21 +21,29 @@ import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.invocation.PipelineInvocationRuntime;
+import org.pipelineframework.invocation.TransportBoundaryDescriptor;
+import org.pipelineframework.invocation.TransportBoundaryInvocation;
 
 /**
  * REST client adapter for transition workers.
  */
 @ApplicationScoped
-public class RestPipelineTransitionWorker implements PipelineTransitionWorker {
+public class RestPipelineTransitionWorker implements PipelineTransitionWorker, TransportBoundaryInvocation {
 
     private static final ObjectMapper JSON = PipelineJson.mapper();
     private static final AtomicInteger THREAD_SEQUENCE = new AtomicInteger();
+    private static final TransportBoundaryDescriptor BOUNDARY =
+        new TransportBoundaryDescriptor("rest", "transition-worker.execute");
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
 
     @Inject
     ControlPlaneSecretResolver secretResolver;
+
+    @Inject
+    PipelineInvocationRuntime invocationRuntime;
 
     private final ExecutorService blockingExecutor = Executors.newCachedThreadPool(task -> {
         Thread thread = new Thread(task, "rest-transition-worker-client-" + THREAD_SEQUENCE.incrementAndGet());
@@ -55,12 +63,13 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker {
 
     @Override
     public Uni<TransitionResultEnvelope> executeTransition(TransitionCommandEnvelope command) {
-        return Uni.createFrom().completionStage(() -> CompletableFuture.supplyAsync(() -> request(command), blockingExecutor)
-            .thenCompose(request -> httpClient().sendAsync(request, HttpResponse.BodyHandlers.ofString()))
-            .thenCompose(response -> CompletableFuture.supplyAsync(
-                () -> decodeResponse(response, command),
-                blockingExecutor)))
-            .onFailure().transform(this::unwrapFailure);
+        return invocationRuntime().invokeTransportUni(this, () ->
+            Uni.createFrom().completionStage(() -> CompletableFuture.supplyAsync(() -> request(command), blockingExecutor)
+                .thenCompose(request -> httpClient().sendAsync(request, HttpResponse.BodyHandlers.ofString()))
+                .thenCompose(response -> CompletableFuture.supplyAsync(
+                    () -> decodeResponse(response, command),
+                    blockingExecutor)))
+                .onFailure().transform(this::unwrapFailure));
     }
 
     /**
@@ -80,6 +89,11 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker {
     @Override
     public String providerName() {
         return "rest";
+    }
+
+    @Override
+    public TransportBoundaryDescriptor transportBoundary() {
+        return BOUNDARY;
     }
 
     @Override
@@ -237,6 +251,10 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker {
             }
             return httpClient;
         }
+    }
+
+    private PipelineInvocationRuntime invocationRuntime() {
+        return invocationRuntime == null ? new PipelineInvocationRuntime() : invocationRuntime;
     }
 
     private Throwable unwrapFailure(Throwable failure) {

@@ -47,6 +47,7 @@ import org.pipelineframework.telemetry.PipelineTelemetry;
 class PipelineStepExecutor {
 
     private static final Logger logger = Logger.getLogger(PipelineStepExecutor.class);
+    private static final PipelineInvocationRuntime DEFAULT_INVOCATION_RUNTIME = new PipelineInvocationRuntime();
 
     Object applyStep(
         Object step,
@@ -388,7 +389,7 @@ class PipelineStepExecutor {
         AwaitExecutionContext awaitContext,
         Supplier<Uni<T>> supplier
     ) {
-        return PipelineInvocationRuntime.invokeStepUni(context, awaitContext, supplier);
+        return DEFAULT_INVOCATION_RUNTIME.invokeStepUni(context, awaitContext, supplier);
     }
 
     static <T> Multi<T> withStepExecutionMulti(
@@ -396,7 +397,7 @@ class PipelineStepExecutor {
         AwaitExecutionContext awaitContext,
         Supplier<Multi<T>> supplier
     ) {
-        return PipelineInvocationRuntime.invokeStepMulti(context, awaitContext, supplier);
+        return DEFAULT_INVOCATION_RUNTIME.invokeStepMulti(context, awaitContext, supplier);
     }
 
     @SuppressWarnings("unchecked")

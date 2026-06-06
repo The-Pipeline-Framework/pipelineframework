@@ -17,6 +17,9 @@ import io.grpc.ManagedChannelBuilder;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.invocation.PipelineInvocationRuntime;
+import org.pipelineframework.invocation.TransportBoundaryDescriptor;
+import org.pipelineframework.invocation.TransportBoundaryInvocation;
 import org.pipelineframework.orchestrator.grpc.MutinyTransitionWorkerServiceGrpc;
 import org.pipelineframework.orchestrator.grpc.TransitionWorkerCapabilitiesRequest;
 import org.pipelineframework.orchestrator.grpc.TransitionWorkerCapabilitiesResponse;
@@ -27,15 +30,20 @@ import org.pipelineframework.orchestrator.grpc.TransitionWorkerResponse;
  * gRPC client adapter for transition workers.
  */
 @ApplicationScoped
-public class GrpcPipelineTransitionWorker implements PipelineTransitionWorker {
+public class GrpcPipelineTransitionWorker implements PipelineTransitionWorker, TransportBoundaryInvocation {
 
     private static final ObjectMapper JSON = PipelineJson.mapper();
+    private static final TransportBoundaryDescriptor BOUNDARY =
+        new TransportBoundaryDescriptor("grpc", "transition-worker.execute");
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
 
     @Inject
     ControlPlaneSecretResolver secretResolver;
+
+    @Inject
+    PipelineInvocationRuntime invocationRuntime;
 
     private volatile ManagedChannel channel;
     private volatile MutinyTransitionWorkerServiceGrpc.MutinyTransitionWorkerServiceStub stub;
@@ -50,17 +58,18 @@ public class GrpcPipelineTransitionWorker implements PipelineTransitionWorker {
 
     @Override
     public Uni<TransitionResultEnvelope> executeTransition(TransitionCommandEnvelope command) {
-        return Uni.createFrom().item(() -> request(command))
-            .runSubscriptionOn(Infrastructure.getDefaultExecutor())
-            .chain(request -> stub().execute(request))
-            .ifNoItem().after(orchestratorConfig.workerGrpc().requestTimeout())
-            .fail()
-            .onItem().transformToUni(response -> Uni.createFrom().item(() -> decodeResponse(response, command))
-                .runSubscriptionOn(Infrastructure.getDefaultWorkerPool()))
-            .onFailure().transform(failure -> failure instanceof TransitionWorkerFailureException
-                ? failure
-                : new TransitionWorkerFailureException(
-                    "gRPC transition worker failed for execution " + command.executionId(), failure));
+        return invocationRuntime().invokeTransportUni(this, () ->
+            Uni.createFrom().item(() -> request(command))
+                .runSubscriptionOn(Infrastructure.getDefaultExecutor())
+                .chain(request -> stub().execute(request))
+                .ifNoItem().after(orchestratorConfig.workerGrpc().requestTimeout())
+                .fail()
+                .onItem().transformToUni(response -> Uni.createFrom().item(() -> decodeResponse(response, command))
+                    .runSubscriptionOn(Infrastructure.getDefaultWorkerPool()))
+                .onFailure().transform(failure -> failure instanceof TransitionWorkerFailureException
+                    ? failure
+                    : new TransitionWorkerFailureException(
+                        "gRPC transition worker failed for execution " + command.executionId(), failure)));
     }
 
     /**
@@ -84,6 +93,11 @@ public class GrpcPipelineTransitionWorker implements PipelineTransitionWorker {
     @Override
     public String providerName() {
         return "grpc";
+    }
+
+    @Override
+    public TransportBoundaryDescriptor transportBoundary() {
+        return BOUNDARY;
     }
 
     @Override
@@ -224,6 +238,10 @@ public class GrpcPipelineTransitionWorker implements PipelineTransitionWorker {
             secretResolver,
             "pipeline.orchestrator.worker.grpc.shared-secret",
             "pipeline.orchestrator.worker.grpc.shared-secret-ref");
+    }
+
+    private PipelineInvocationRuntime invocationRuntime() {
+        return invocationRuntime == null ? new PipelineInvocationRuntime() : invocationRuntime;
     }
 
     @PreDestroy

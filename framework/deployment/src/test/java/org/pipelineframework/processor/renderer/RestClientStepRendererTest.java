@@ -87,6 +87,11 @@ class RestClientStepRendererTest {
         assertTrue(stepSource.contains("ProcessPaymentStatusRestClient restClient;"));
         assertTrue(stepSource.contains("public Uni<PaymentOutputDto> applyOneToOne(PaymentStatusDto input)"));
         assertTrue(stepSource.contains("HttpMetrics.instrumentClient"));
+        assertTrue(stepSource.contains("implements TransportBoundaryInvocation"));
+        assertTrue(stepSource.contains("public TransportBoundaryDescriptor transportBoundary()"));
+        assertTrue(stepSource.contains("PipelineInvocationRuntime invocationRuntime;"));
+        assertTrue(stepSource.contains("this.invocationRuntime.invokeTransportUni"));
+        assertTrue(stepSource.contains("new TransportBoundaryDescriptor(\"rest\", \"ProcessPaymentStatusReactiveService.process\")"));
     }
 
     @Test

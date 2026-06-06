@@ -3,6 +3,7 @@ package org.pipelineframework.invocation;
 import java.util.Objects;
 import java.util.function.LongConsumer;
 import java.util.function.Supplier;
+import jakarta.enterprise.context.ApplicationScoped;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
@@ -14,12 +15,13 @@ import org.pipelineframework.context.PipelineContextHolder;
 /**
  * Shared runtime wrapper for pipeline step and transition worker invocations.
  */
-public final class PipelineInvocationRuntime {
+@ApplicationScoped
+public class PipelineInvocationRuntime {
 
-    private PipelineInvocationRuntime() {
+    public PipelineInvocationRuntime() {
     }
 
-    public static <T> Uni<T> invokeStepUni(
+    public <T> Uni<T> invokeStepUni(
         PipelineContext pipelineContext,
         AwaitExecutionContext awaitContext,
         Supplier<Uni<T>> supplier
@@ -27,7 +29,7 @@ public final class PipelineInvocationRuntime {
         return invokeUni(new StepInvocationStrategy(pipelineContext, awaitContext), supplier);
     }
 
-    public static <T> Multi<T> invokeStepMulti(
+    public <T> Multi<T> invokeStepMulti(
         PipelineContext pipelineContext,
         AwaitExecutionContext awaitContext,
         Supplier<Multi<T>> supplier
@@ -35,14 +37,28 @@ public final class PipelineInvocationRuntime {
         return invokeMulti(new StepInvocationStrategy(pipelineContext, awaitContext), supplier);
     }
 
-    public static <T> Uni<T> invokeTransitionWorker(
+    public <T> Uni<T> invokeTransitionWorker(
         LongConsumer durationRecorder,
         Supplier<Uni<T>> supplier
     ) {
         return invokeUni(new TransitionWorkerInvocationStrategy(durationRecorder), supplier);
     }
 
-    private static <T> Uni<T> invokeUni(PipelineInvocationStrategy strategy, Supplier<Uni<T>> supplier) {
+    public <T> Uni<T> invokeTransportUni(
+        TransportBoundaryInvocation boundary,
+        Supplier<Uni<T>> supplier
+    ) {
+        return invokeUni(new TransportBoundaryInvocationStrategy(boundary), supplier);
+    }
+
+    public <T> Multi<T> invokeTransportMulti(
+        TransportBoundaryInvocation boundary,
+        Supplier<Multi<T>> supplier
+    ) {
+        return invokeMulti(new TransportBoundaryInvocationStrategy(boundary), supplier);
+    }
+
+    private <T> Uni<T> invokeUni(PipelineInvocationStrategy strategy, Supplier<Uni<T>> supplier) {
         Objects.requireNonNull(strategy, "strategy must not be null");
         Objects.requireNonNull(supplier, "supplier must not be null");
         return Uni.createFrom().deferred(() -> {
@@ -53,19 +69,19 @@ public final class PipelineInvocationRuntime {
                 if (result == null) {
                     return Uni.createFrom().failure(new IllegalStateException(strategy.nullUniMessage()));
                 }
-                return result.onTermination().invoke(() -> {
+                return result.onTermination().invoke((item, failure, cancelled) -> {
                     scope.close();
-                    strategy.recordDuration(startNanos);
+                    strategy.recordTermination(startNanos, failure, cancelled);
                 });
             } catch (Throwable failure) {
                 scope.close();
-                strategy.recordDuration(startNanos);
+                strategy.recordTermination(startNanos, failure, false);
                 return Uni.createFrom().failure(failure);
             }
         });
     }
 
-    private static <T> Multi<T> invokeMulti(PipelineInvocationStrategy strategy, Supplier<Multi<T>> supplier) {
+    private <T> Multi<T> invokeMulti(PipelineInvocationStrategy strategy, Supplier<Multi<T>> supplier) {
         Objects.requireNonNull(strategy, "strategy must not be null");
         Objects.requireNonNull(supplier, "supplier must not be null");
         return Multi.createFrom().deferred(() -> {
@@ -78,17 +94,17 @@ public final class PipelineInvocationRuntime {
                 }
                 return result.onTermination().invoke((failure, cancelled) -> {
                     scope.close();
-                    strategy.recordDuration(startNanos);
+                    strategy.recordTermination(startNanos, failure, cancelled);
                 });
             } catch (Throwable failure) {
                 scope.close();
-                strategy.recordDuration(startNanos);
+                strategy.recordTermination(startNanos, failure, false);
                 return Multi.createFrom().failure(failure);
             }
         });
     }
 
-    private static ExecutionContextScope installExecutionContexts(
+    private ExecutionContextScope installExecutionContexts(
         PipelineContext context,
         AwaitExecutionContext awaitContext
     ) {

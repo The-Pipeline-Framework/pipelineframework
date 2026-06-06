@@ -166,6 +166,8 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                     ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role"),
                     role.name())
                 .build());
+        clientStepBuilder.addSuperinterface(
+            ClassName.get("org.pipelineframework.invocation", "TransportBoundaryInvocation"));
         if (model.sideEffect()) {
             clientStepBuilder.addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheReadBypass"));
         }
@@ -183,11 +185,21 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                 .build())
             .build();
 
+        FieldSpec invocationRuntimeField = FieldSpec.builder(
+                ClassName.get("org.pipelineframework.invocation", "PipelineInvocationRuntime"),
+                "invocationRuntime")
+            .addAnnotation(AnnotationSpec.builder(
+                    ClassName.get("jakarta.inject", "Inject"))
+                .build())
+            .build();
+
         clientStepBuilder.addField(restClientField);
+        clientStepBuilder.addField(invocationRuntimeField);
         MethodSpec constructor = MethodSpec.constructorBuilder()
             .addModifiers(Modifier.PUBLIC)
             .build();
         clientStepBuilder.addMethod(constructor);
+        clientStepBuilder.addMethod(transportBoundaryMethod("rest", model.serviceName() + ".process"));
 
         ClassName configurableStep = ClassName.get("org.pipelineframework.step", "ConfigurableStep");
         clientStepBuilder.superclass(configurableStep);
@@ -217,7 +229,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                     .addStatement("String replayMode = context != null ? context.replayMode() : null")
                     .addStatement("String cachePolicy = $L", resolveOutboundCachePolicyExpression(cachePluginSideEffect));
                 applyOneToOneMethod.addStatement(
-                    "return $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, input))",
+                    "return this.invocationRuntime.invokeTransportUni(this, () -> $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, input)))",
                     ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
                     model.serviceName(),
                     "process");
@@ -238,7 +250,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                     .addStatement("String replayMode = context != null ? context.replayMode() : null")
                     .addStatement("String cachePolicy = $L", resolveOutboundCachePolicyExpression(cachePluginSideEffect))
                     .addStatement(
-                        "return $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, input))",
+                        "return this.invocationRuntime.invokeTransportMulti(this, () -> $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, input)))",
                         ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
                         model.serviceName(),
                         "process")
@@ -260,7 +272,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                     .addStatement("String replayMode = context != null ? context.replayMode() : null")
                     .addStatement("String cachePolicy = $L", resolveOutboundCachePolicyExpression(cachePluginSideEffect))
                     .addStatement(
-                        "return inputs.collect().asList().onItem().transformToUni(inputDtos -> $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, inputDtos)))",
+                        "return inputs.collect().asList().onItem().transformToUni(inputDtos -> this.invocationRuntime.invokeTransportUni(this, () -> $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, inputDtos))))",
                         ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
                         model.serviceName(),
                         "process")
@@ -282,7 +294,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                     .addStatement("String replayMode = context != null ? context.replayMode() : null")
                     .addStatement("String cachePolicy = $L", resolveOutboundCachePolicyExpression(cachePluginSideEffect))
                     .addStatement(
-                        "return $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, inputs))",
+                        "return this.invocationRuntime.invokeTransportMulti(this, () -> $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, inputs)))",
                         ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
                         model.serviceName(),
                         "process")
@@ -292,6 +304,18 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         }
 
         return clientStepBuilder.build();
+    }
+
+    private MethodSpec transportBoundaryMethod(String protocol, String target) {
+        return MethodSpec.methodBuilder("transportBoundary")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ClassName.get("org.pipelineframework.invocation", "TransportBoundaryDescriptor"))
+            .addStatement("return new $T($S, $S)",
+                ClassName.get("org.pipelineframework.invocation", "TransportBoundaryDescriptor"),
+                protocol,
+                target)
+            .build();
     }
 
     /**

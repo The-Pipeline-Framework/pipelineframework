@@ -6,12 +6,13 @@ The durable coordinator now has two explicit invocation entrypoints that must no
 | --- | --- | --- |
 | `invokeStepUni` / `invokeStepMulti` | a pipeline step, including generated client steps and hand-written services | `PipelineStepExecutor` |
 | `invokeTransitionWorker` | a bounded queue-async continuation dispatched by the coordinator | `TransitionWorkerExecutor` |
+| `invokeTransportUni` / `invokeTransportMulti` | a remote transport boundary crossed by generated REST/gRPC client steps or REST/gRPC/SQS transition-worker clients | generated client renderers and worker adapters |
 
 The important correction is that worker execution is not the only boundary worth modeling. Every pipeline step already crosses a framework-managed invocation seam where TPF installs pipeline context, await context, replay telemetry, cache policy, and failure handling.
 
 ## Runtime Shape
 
-`PipelineInvocationRuntime` is a small internal wrapper. It is not a public protocol and it does not introduce new config keys.
+`PipelineInvocationRuntime` is a small internal CDI service. It is not a public protocol and it does not introduce new config keys.
 
 ```mermaid
 flowchart LR
@@ -19,8 +20,10 @@ flowchart LR
     StepExecutor["PipelineStepExecutor"]
     WorkerExecutor["TransitionWorkerExecutor"]
     Invocation["PipelineInvocationRuntime"]
+    Transport["Transport boundary diagnostics"]
     Step["Step implementation"]
     Worker["PipelineTransitionWorker"]
+    RemoteStep["Remote step service"]
 
     Runner --> StepExecutor
     Runner --> WorkerExecutor
@@ -28,11 +31,16 @@ flowchart LR
     WorkerExecutor -->|"invokeTransitionWorker"| Invocation
     Invocation --> Step
     Invocation --> Worker
+    Step -->|"invokeTransportUni / invokeTransportMulti"| Transport
+    Worker -->|"invokeTransportUni"| Transport
+    Transport --> RemoteStep
 ```
 
 For step invocation, the runtime owns context installation and restoration. Existing step telemetry, replay capture, cache policy, and cardinality handling remain in `PipelineStepExecutor`.
 
 For transition-worker invocation, the runtime owns invocation lifecycle and duration timing. Admission, leases, retry/DLQ, await parking, and result commits remain in `QueueAsyncCoordinator`.
+
+For transport-boundary invocation, the runtime records boundary-level duration diagnostics around the remote call. The marker descriptor is diagnostic metadata only: protocol plus target. It does not select behavior, own auth, own retries, or replace protocol-specific telemetry.
 
 ## Why This Slice Exists
 
@@ -43,7 +51,7 @@ This slice instead proves the shared model on both sides:
 1. `PipelineStepExecutor` routes step execution through the shared invocation runtime.
 2. `TransitionWorkerExecutor` routes worker execution through the same runtime.
 3. Public configuration remains unchanged.
-4. Generated REST/gRPC client renderers remain unchanged.
+4. Generated REST/gRPC client renderers expose transport-boundary metadata and wrap only the remote call path.
 
 That gives TPF one internal vocabulary for framework-managed invocation without pretending that steps and workers have the same ownership rules.
 
@@ -55,6 +63,7 @@ That gives TPF one internal vocabulary for framework-managed invocation without 
 | Pipeline and await context installation during invocation | `PipelineInvocationRuntime` |
 | Worker admission and saturation before lease claim | `QueueAsyncCoordinator` + `TransitionWorkerExecutor` |
 | Worker duration and execution lifecycle | `PipelineInvocationRuntime` |
+| Transport-boundary duration diagnostics | `PipelineInvocationRuntime` |
 | Execution retry budget, DLQ, await parking, and terminal state | `QueueAsyncCoordinator` |
 | Worker protocol wire shape and signatures | REST/gRPC/SQS worker adapters |
 
@@ -69,10 +78,12 @@ No public config was renamed or added:
 | `pipeline.max-concurrency` | unchanged |
 | `pipeline.orchestrator.worker.*` | unchanged |
 
-No generated client code was rewritten. Generated REST and gRPC client steps still implement ordinary `Step*` interfaces and are covered because they pass through `PipelineStepExecutor`.
+Generated REST and gRPC client steps still implement ordinary `Step*` interfaces. They now also expose a small diagnostic transport-boundary marker so remote step calls and remote transition-worker calls share the same duration/error vocabulary.
+
+The invocation runtime is injected at generated client and worker call sites. It is deliberately not a static utility because the boundary will need configurable diagnostics and replaceable internals as the self-hosted coordinator matures.
 
 ## Follow-Up Direction
 
-Future work can decide whether generated transport clients need more explicit boundary metadata, but that should be driven by a concrete need such as transport-level auth, timeout standardization, or per-boundary observability.
+Future work can decide whether generated transport clients need deeper hooks for timeout standardization or protocol-neutral auth. Do not move retry, DLQ, lease ownership, step cardinality, or worker selection into the invocation runtime.
 
 Do not add another worker-only abstraction layer unless it also explains how step execution benefits.
