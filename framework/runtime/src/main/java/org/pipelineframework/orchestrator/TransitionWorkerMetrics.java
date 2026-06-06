@@ -49,9 +49,9 @@ final class TransitionWorkerMetrics {
         outcomeCounter.add(1, Attributes.of(OUTCOME, outcome.name().toLowerCase(Locale.ROOT)));
     }
 
-    static void recordDuration(long startNanos) {
+    static void recordDuration(long durationNanos) {
         ensureInitialized();
-        durationHistogram.record(Math.max(0.0, (System.nanoTime() - startNanos) / 1_000_000.0));
+        durationHistogram.record(Math.max(0.0, durationNanos / 1_000_000.0));
     }
 
     private static void ensureInitialized() {

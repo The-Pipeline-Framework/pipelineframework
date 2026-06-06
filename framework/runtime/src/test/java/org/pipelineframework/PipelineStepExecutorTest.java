@@ -204,23 +204,28 @@ class PipelineStepExecutorTest {
         PipelineContext context = new PipelineContext("v1", "tenant-stream", "prefer-cache");
         AwaitExecutionContext awaitContext = new AwaitExecutionContext("tenant-stream", "exec-stream", 3);
 
-        PipelineStepExecutor executor = new PipelineStepExecutor();
-        Object result = executor.applyStep(
-            new ContextCapturingAwaitStreamStep(),
-            Multi.createFrom().items("a", "b"),
-            org.pipelineframework.config.ParallelismPolicy.SEQUENTIAL,
-            16,
-            null,
-            null,
-            null,
-            context,
-            awaitContext);
+        try {
+            PipelineStepExecutor executor = new PipelineStepExecutor();
+            Object result = executor.applyStep(
+                new ContextCapturingAwaitStreamStep(),
+                Multi.createFrom().items("a", "b"),
+                org.pipelineframework.config.ParallelismPolicy.SEQUENTIAL,
+                16,
+                null,
+                null,
+                null,
+                context,
+                awaitContext);
 
-        assertEquals(
-            List.of("tenant-stream:exec-stream:a", "tenant-stream:exec-stream:b"),
-            ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
-        assertNull(PipelineContextHolder.get());
-        assertNull(AwaitExecutionContextHolder.get());
+            assertEquals(
+                List.of("tenant-stream:exec-stream:a", "tenant-stream:exec-stream:b"),
+                ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
+            assertNull(PipelineContextHolder.get());
+            assertNull(AwaitExecutionContextHolder.get());
+        } finally {
+            PipelineContextHolder.clear();
+            AwaitExecutionContextHolder.clear();
+        }
     }
 
     @Test

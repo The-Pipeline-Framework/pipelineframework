@@ -51,9 +51,18 @@ public class GrpcPipelineTransitionWorker implements PipelineTransitionWorker, T
     public GrpcPipelineTransitionWorker() {
     }
 
+    GrpcPipelineTransitionWorker(PipelineInvocationRuntime invocationRuntime) {
+        this.invocationRuntime = invocationRuntime;
+    }
+
     GrpcPipelineTransitionWorker(ManagedChannel channel) {
+        this(channel, null);
+    }
+
+    GrpcPipelineTransitionWorker(ManagedChannel channel, PipelineInvocationRuntime invocationRuntime) {
         this.channel = channel;
         this.stub = MutinyTransitionWorkerServiceGrpc.newMutinyStub(channel);
+        this.invocationRuntime = invocationRuntime;
     }
 
     @Override
@@ -241,7 +250,11 @@ public class GrpcPipelineTransitionWorker implements PipelineTransitionWorker, T
     }
 
     private PipelineInvocationRuntime invocationRuntime() {
-        return invocationRuntime == null ? new PipelineInvocationRuntime() : invocationRuntime;
+        if (invocationRuntime == null) {
+            throw new IllegalStateException("PipelineInvocationRuntime was not injected into "
+                + "GrpcPipelineTransitionWorker.invocationRuntime");
+        }
+        return invocationRuntime;
     }
 
     @PreDestroy

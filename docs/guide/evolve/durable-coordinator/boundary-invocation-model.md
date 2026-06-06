@@ -1,6 +1,6 @@
 # Step-Aware Invocation Runtime
 
-The durable coordinator now has two explicit invocation entrypoints that must not drift into separate runtime models:
+The durable coordinator now has three explicit invocation entrypoints that must not drift into separate runtime models: `invokeStepUni` / `invokeStepMulti`, `invokeTransitionWorker`, and `invokeTransportUni` / `invokeTransportMulti`.
 
 | Runtime entrypoint | What it executes | Current proof point |
 | --- | --- | --- |
@@ -36,11 +36,11 @@ flowchart LR
     Transport --> RemoteStep
 ```
 
-For step invocation, the runtime owns context installation and restoration. Existing step telemetry, replay capture, cache policy, and cardinality handling remain in `PipelineStepExecutor`.
+For step invocation, the runtime owns context installation and restoration. It scopes pipeline and await context around step assembly, upstream subscription/request, and downstream signals, then restores the previous context on the same thread or Vert.x context that handled that operation. Existing step telemetry, replay capture, cache policy, and cardinality handling remain in `PipelineStepExecutor`.
 
 For transition-worker invocation, the runtime owns invocation lifecycle and duration timing. Admission, leases, retry/DLQ, await parking, and result commits remain in `QueueAsyncCoordinator`.
 
-For transport-boundary invocation, the runtime records boundary-level duration diagnostics around the remote call. The marker descriptor is diagnostic metadata only: protocol plus target. It does not select behavior, own auth, own retries, or replace protocol-specific telemetry.
+For transport-boundary invocation, the runtime records boundary-level duration and failure-category diagnostics around the remote call. The marker descriptor is diagnostic metadata only: protocol plus target. Failure categories are deliberately low-cardinality: `timeout`, `auth`, `unavailable`, `malformed`, `protocol`, `cancelled`, `unexpected`, or `none` for success. They are operational labels only. They do not select behavior, own auth, own retries, or replace protocol-specific telemetry.
 
 ## Why This Slice Exists
 
@@ -63,7 +63,7 @@ That gives TPF one internal vocabulary for framework-managed invocation without 
 | Pipeline and await context installation during invocation | `PipelineInvocationRuntime` |
 | Worker admission and saturation before lease claim | `QueueAsyncCoordinator` + `TransitionWorkerExecutor` |
 | Worker duration and execution lifecycle | `PipelineInvocationRuntime` |
-| Transport-boundary duration diagnostics | `PipelineInvocationRuntime` |
+| Transport-boundary duration and failure-category diagnostics | `PipelineInvocationRuntime` |
 | Execution retry budget, DLQ, await parking, and terminal state | `QueueAsyncCoordinator` |
 | Worker protocol wire shape and signatures | REST/gRPC/SQS worker adapters |
 
@@ -81,6 +81,8 @@ No public config was renamed or added:
 Generated REST and gRPC client steps still implement ordinary `Step*` interfaces. They now also expose a small diagnostic transport-boundary marker so remote step calls and remote transition-worker calls share the same duration/error vocabulary.
 
 The invocation runtime is injected at generated client and worker call sites. It is deliberately not a static utility because the boundary will need configurable diagnostics and replaceable internals as the self-hosted coordinator matures.
+
+The invocation runtime does not provide a general-purpose context-propagation layer for arbitrary user-created threads. If a step creates its own producer thread before emitting into a `Multi`, that producer thread remains responsible for its own local state. TPF guarantees framework-managed invocation scoping at the subscription, request, and signal boundaries it owns.
 
 ## Follow-Up Direction
 

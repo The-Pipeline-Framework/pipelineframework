@@ -58,7 +58,12 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker, T
     }
 
     RestPipelineTransitionWorker(HttpClient httpClient) {
+        this(httpClient, null);
+    }
+
+    RestPipelineTransitionWorker(HttpClient httpClient, PipelineInvocationRuntime invocationRuntime) {
         this.httpClient = httpClient;
+        this.invocationRuntime = invocationRuntime;
     }
 
     @Override
@@ -254,7 +259,11 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker, T
     }
 
     private PipelineInvocationRuntime invocationRuntime() {
-        return invocationRuntime == null ? new PipelineInvocationRuntime() : invocationRuntime;
+        if (invocationRuntime == null) {
+            throw new IllegalStateException("PipelineInvocationRuntime was not injected into "
+                + "RestPipelineTransitionWorker.invocationRuntime");
+        }
+        return invocationRuntime;
     }
 
     private Throwable unwrapFailure(Throwable failure) {

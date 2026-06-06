@@ -58,6 +58,7 @@ import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.awaitable.AwaitUnitRecord;
 import org.pipelineframework.awaitable.AwaitUnitStatus;
 import org.pipelineframework.checkpoint.CheckpointPublicationService;
+import org.pipelineframework.invocation.PipelineInvocationRuntime;
 import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 
@@ -136,7 +137,9 @@ class QueueAsyncCoordinatorTest {
         coordinator.workDispatcher = workDispatcher;
         coordinator.deadLetterPublisher = deadLetterPublisher;
         coordinator.awaitCoordinator = awaitCoordinator;
-        coordinator.transitionWorkerExecutor = new TransitionWorkerExecutor(orchestratorConfig);
+        coordinator.transitionWorkerExecutor = new TransitionWorkerExecutor(
+            orchestratorConfig,
+            new PipelineInvocationRuntime());
         coordinator.transitionPayloadCodec = payloadCodec;
         coordinator.telemetry = telemetry;
         coordinator.checkpointPublicationService = checkpointPublicationService;
@@ -786,7 +789,9 @@ class QueueAsyncCoordinatorTest {
         when(workDispatcher.enqueueDelayed(any(), org.mockito.ArgumentMatchers.eq(Duration.ofMillis(25))))
             .thenReturn(Uni.createFrom().voidItem());
         when(workerConfig.saturatedDelay()).thenReturn(Duration.ofMillis(25));
-        TransitionWorkerExecutor executor = new TransitionWorkerExecutor(orchestratorConfig);
+        TransitionWorkerExecutor executor = new TransitionWorkerExecutor(
+            orchestratorConfig,
+            new PipelineInvocationRuntime());
         coordinator.transitionWorkerExecutor = executor;
         TransitionWorkerExecutor.TransitionAdmission heldPermit = executor.tryAdmit().orElseThrow();
 

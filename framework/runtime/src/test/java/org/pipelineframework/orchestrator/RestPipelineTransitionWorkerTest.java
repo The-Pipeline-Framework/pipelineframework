@@ -15,6 +15,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.invocation.PipelineInvocationRuntime;
 import org.pipelineframework.invocation.TransportBoundaryInvocation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -46,7 +47,7 @@ class RestPipelineTransitionWorkerTest {
         when(restConfig.sharedSecret()).thenReturn(Optional.of("worker-secret"));
         when(restConfig.sharedSecretRef()).thenReturn(Optional.empty());
         client = HttpClient.newHttpClient();
-        worker = new RestPipelineTransitionWorker(client);
+        worker = new RestPipelineTransitionWorker(client, new PipelineInvocationRuntime());
         worker.orchestratorConfig = config;
     }
 

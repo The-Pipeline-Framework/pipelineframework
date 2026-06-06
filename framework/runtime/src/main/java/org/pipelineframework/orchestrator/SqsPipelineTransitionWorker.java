@@ -55,8 +55,17 @@ public class SqsPipelineTransitionWorker implements PipelineTransitionWorker, Tr
     }
 
     SqsPipelineTransitionWorker(SqsClient client, PipelineOrchestratorConfig orchestratorConfig) {
+        this(client, orchestratorConfig, null);
+    }
+
+    SqsPipelineTransitionWorker(
+        SqsClient client,
+        PipelineOrchestratorConfig orchestratorConfig,
+        PipelineInvocationRuntime invocationRuntime
+    ) {
         this.client = client;
         this.orchestratorConfig = orchestratorConfig;
+        this.invocationRuntime = invocationRuntime;
     }
 
     @Override
@@ -304,7 +313,11 @@ public class SqsPipelineTransitionWorker implements PipelineTransitionWorker, Tr
     }
 
     private PipelineInvocationRuntime invocationRuntime() {
-        return invocationRuntime == null ? new PipelineInvocationRuntime() : invocationRuntime;
+        if (invocationRuntime == null) {
+            throw new IllegalStateException("PipelineInvocationRuntime was not injected into "
+                + "SqsPipelineTransitionWorker.invocationRuntime");
+        }
+        return invocationRuntime;
     }
 
     private int visibilityTimeoutSeconds() {

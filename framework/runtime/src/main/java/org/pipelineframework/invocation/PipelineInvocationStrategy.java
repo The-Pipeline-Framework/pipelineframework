@@ -3,12 +3,6 @@ package org.pipelineframework.invocation;
 import java.util.Objects;
 import java.util.function.LongConsumer;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
-import io.opentelemetry.api.common.AttributeKey;
-import io.opentelemetry.api.common.Attributes;
-import io.opentelemetry.api.metrics.DoubleHistogram;
-import io.opentelemetry.api.metrics.LongCounter;
-import io.opentelemetry.api.metrics.Meter;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.context.PipelineContext;
 
@@ -64,10 +58,10 @@ final class TransitionWorkerInvocationStrategy implements PipelineInvocationStra
     private static final LongConsumer NO_DURATION_RECORDER = ignored -> {
     };
 
-    private final LongConsumer durationRecorder;
+    private final LongConsumer durationNanosRecorder;
 
-    TransitionWorkerInvocationStrategy(LongConsumer durationRecorder) {
-        this.durationRecorder = durationRecorder == null ? NO_DURATION_RECORDER : durationRecorder;
+    TransitionWorkerInvocationStrategy(LongConsumer durationNanosRecorder) {
+        this.durationNanosRecorder = durationNanosRecorder == null ? NO_DURATION_RECORDER : durationNanosRecorder;
     }
 
     @Override
@@ -82,7 +76,7 @@ final class TransitionWorkerInvocationStrategy implements PipelineInvocationStra
 
     @Override
     public void recordTermination(long startNanos, Throwable failure, boolean cancelled) {
-        durationRecorder.accept(startNanos);
+        durationNanosRecorder.accept(System.nanoTime() - startNanos);
     }
 
     @Override
@@ -98,12 +92,14 @@ final class TransitionWorkerInvocationStrategy implements PipelineInvocationStra
 
 final class TransportBoundaryInvocationStrategy implements PipelineInvocationStrategy {
     private final TransportBoundaryDescriptor descriptor;
+    private final TransportBoundaryDiagnostics diagnostics;
 
-    TransportBoundaryInvocationStrategy(TransportBoundaryInvocation boundary) {
+    TransportBoundaryInvocationStrategy(TransportBoundaryInvocation boundary, TransportBoundaryDiagnostics diagnostics) {
         if (boundary == null) {
             throw new NullPointerException("boundary must not be null");
         }
         this.descriptor = Objects.requireNonNull(boundary.transportBoundary(), "transport boundary must not be null");
+        this.diagnostics = Objects.requireNonNull(diagnostics, "diagnostics must not be null");
     }
 
     @Override
@@ -118,7 +114,7 @@ final class TransportBoundaryInvocationStrategy implements PipelineInvocationStr
 
     @Override
     public void recordTermination(long startNanos, Throwable failure, boolean cancelled) {
-        TransportBoundaryDiagnostics.record(descriptor, System.nanoTime() - startNanos, failure, cancelled);
+        diagnostics.record(descriptor, System.nanoTime() - startNanos, failure, cancelled);
     }
 
     @Override
@@ -129,55 +125,5 @@ final class TransportBoundaryInvocationStrategy implements PipelineInvocationStr
     @Override
     public String nullMultiMessage() {
         return "Transport boundary invocation returned null Multi";
-    }
-}
-
-final class TransportBoundaryDiagnostics {
-    private static final AttributeKey<String> PROTOCOL = AttributeKey.stringKey("tpf.boundary.protocol");
-    private static final AttributeKey<String> TARGET = AttributeKey.stringKey("tpf.boundary.target");
-    private static final AttributeKey<String> OUTCOME = AttributeKey.stringKey("tpf.boundary.outcome");
-    private static volatile Meter meter;
-    private static volatile LongCounter invocations;
-    private static volatile DoubleHistogram duration;
-
-    private TransportBoundaryDiagnostics() {
-    }
-
-    static void record(
-        TransportBoundaryDescriptor descriptor,
-        long durationNanos,
-        Throwable failure,
-        boolean cancelled
-    ) {
-        ensureInitialized();
-        Attributes attributes = Attributes.builder()
-            .put(PROTOCOL, descriptor.protocol())
-            .put(TARGET, descriptor.target())
-            .put(OUTCOME, outcome(failure, cancelled))
-            .build();
-        invocations.add(1, attributes);
-        duration.record(durationNanos / 1_000_000.0, attributes);
-    }
-
-    private static String outcome(Throwable failure, boolean cancelled) {
-        if (cancelled) {
-            return "cancelled";
-        }
-        return failure == null ? "completed" : "failed";
-    }
-
-    private static void ensureInitialized() {
-        if (meter != null) {
-            return;
-        }
-        synchronized (TransportBoundaryDiagnostics.class) {
-            if (meter != null) {
-                return;
-            }
-            Meter localMeter = GlobalOpenTelemetry.getMeter("org.pipelineframework.invocation");
-            invocations = localMeter.counterBuilder("tpf.transport.boundary.invocations").build();
-            duration = localMeter.histogramBuilder("tpf.transport.boundary.duration").setUnit("ms").build();
-            meter = localMeter;
-        }
     }
 }

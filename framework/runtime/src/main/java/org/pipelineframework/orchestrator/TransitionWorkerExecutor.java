@@ -42,7 +42,12 @@ public class TransitionWorkerExecutor {
      * @param orchestratorConfig orchestrator config
      */
     public TransitionWorkerExecutor(PipelineOrchestratorConfig orchestratorConfig) {
+        this(orchestratorConfig, null);
+    }
+
+    public TransitionWorkerExecutor(PipelineOrchestratorConfig orchestratorConfig, PipelineInvocationRuntime invocationRuntime) {
         this.orchestratorConfig = orchestratorConfig;
+        this.invocationRuntime = invocationRuntime;
     }
 
     /**
@@ -136,7 +141,11 @@ public class TransitionWorkerExecutor {
     }
 
     private PipelineInvocationRuntime invocationRuntime() {
-        return invocationRuntime == null ? new PipelineInvocationRuntime() : invocationRuntime;
+        if (invocationRuntime == null) {
+            throw new IllegalStateException("PipelineInvocationRuntime was not injected into "
+                + "TransitionWorkerExecutor.invocationRuntime");
+        }
+        return invocationRuntime;
     }
 
     private Executor virtualThreadExecutor() {

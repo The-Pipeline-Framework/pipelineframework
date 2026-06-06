@@ -8,17 +8,23 @@ import jakarta.enterprise.context.ApplicationScoped;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
-import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.context.PipelineContext;
-import org.pipelineframework.context.PipelineContextHolder;
 
 /**
  * Shared runtime wrapper for pipeline step and transition worker invocations.
  */
 @ApplicationScoped
 public class PipelineInvocationRuntime {
+    private final TransportBoundaryDiagnostics transportBoundaryDiagnostics;
 
     public PipelineInvocationRuntime() {
+        this(new TransportBoundaryDiagnostics());
+    }
+
+    PipelineInvocationRuntime(TransportBoundaryDiagnostics transportBoundaryDiagnostics) {
+        this.transportBoundaryDiagnostics = Objects.requireNonNull(
+            transportBoundaryDiagnostics,
+            "transportBoundaryDiagnostics must not be null");
     }
 
     public <T> Uni<T> invokeStepUni(
@@ -38,24 +44,24 @@ public class PipelineInvocationRuntime {
     }
 
     public <T> Uni<T> invokeTransitionWorker(
-        LongConsumer durationRecorder,
+        LongConsumer durationNanosRecorder,
         Supplier<Uni<T>> supplier
     ) {
-        return invokeUni(new TransitionWorkerInvocationStrategy(durationRecorder), supplier);
+        return invokeUni(new TransitionWorkerInvocationStrategy(durationNanosRecorder), supplier);
     }
 
     public <T> Uni<T> invokeTransportUni(
         TransportBoundaryInvocation boundary,
         Supplier<Uni<T>> supplier
     ) {
-        return invokeUni(new TransportBoundaryInvocationStrategy(boundary), supplier);
+        return invokeUni(new TransportBoundaryInvocationStrategy(boundary, transportBoundaryDiagnostics), supplier);
     }
 
     public <T> Multi<T> invokeTransportMulti(
         TransportBoundaryInvocation boundary,
         Supplier<Multi<T>> supplier
     ) {
-        return invokeMulti(new TransportBoundaryInvocationStrategy(boundary), supplier);
+        return invokeMulti(new TransportBoundaryInvocationStrategy(boundary, transportBoundaryDiagnostics), supplier);
     }
 
     private <T> Uni<T> invokeUni(PipelineInvocationStrategy strategy, Supplier<Uni<T>> supplier) {
@@ -63,18 +69,17 @@ public class PipelineInvocationRuntime {
         Objects.requireNonNull(supplier, "supplier must not be null");
         return Uni.createFrom().deferred(() -> {
             long startNanos = System.nanoTime();
-            ExecutionContextScope scope = installExecutionContexts(strategy.pipelineContext(), strategy.awaitContext());
+            InvocationContextSnapshot context =
+                new InvocationContextSnapshot(strategy.pipelineContext(), strategy.awaitContext());
             try {
-                Uni<T> result = supplier.get();
+                Uni<T> result = context.call(supplier);
                 if (result == null) {
-                    return Uni.createFrom().failure(new IllegalStateException(strategy.nullUniMessage()));
+                    IllegalStateException failure = new IllegalStateException(strategy.nullUniMessage());
+                    strategy.recordTermination(startNanos, failure, false);
+                    return Uni.createFrom().failure(failure);
                 }
-                return result.onTermination().invoke((item, failure, cancelled) -> {
-                    scope.close();
-                    strategy.recordTermination(startNanos, failure, cancelled);
-                });
+                return new ContextualUni<>(result, context, strategy, startNanos);
             } catch (Throwable failure) {
-                scope.close();
                 strategy.recordTermination(startNanos, failure, false);
                 return Uni.createFrom().failure(failure);
             }
@@ -86,64 +91,20 @@ public class PipelineInvocationRuntime {
         Objects.requireNonNull(supplier, "supplier must not be null");
         return Multi.createFrom().deferred(() -> {
             long startNanos = System.nanoTime();
-            ExecutionContextScope scope = installExecutionContexts(strategy.pipelineContext(), strategy.awaitContext());
+            InvocationContextSnapshot context =
+                new InvocationContextSnapshot(strategy.pipelineContext(), strategy.awaitContext());
             try {
-                Multi<T> result = supplier.get();
+                Multi<T> result = context.call(supplier);
                 if (result == null) {
-                    return Multi.createFrom().failure(new IllegalStateException(strategy.nullMultiMessage()));
+                    IllegalStateException failure = new IllegalStateException(strategy.nullMultiMessage());
+                    strategy.recordTermination(startNanos, failure, false);
+                    return Multi.createFrom().failure(failure);
                 }
-                return result.onTermination().invoke((failure, cancelled) -> {
-                    scope.close();
-                    strategy.recordTermination(startNanos, failure, cancelled);
-                });
+                return new ContextualMulti<>(result, context, strategy, startNanos);
             } catch (Throwable failure) {
-                scope.close();
                 strategy.recordTermination(startNanos, failure, false);
                 return Multi.createFrom().failure(failure);
             }
         });
-    }
-
-    private ExecutionContextScope installExecutionContexts(
-        PipelineContext context,
-        AwaitExecutionContext awaitContext
-    ) {
-        PipelineContext previousPipeline = PipelineContextHolder.get();
-        AwaitExecutionContext previousAwait = AwaitExecutionContextHolder.get();
-        if (context != null) {
-            PipelineContextHolder.set(context);
-        } else {
-            PipelineContextHolder.clear();
-        }
-        if (awaitContext != null) {
-            AwaitExecutionContextHolder.set(awaitContext);
-        } else {
-            AwaitExecutionContextHolder.clear();
-        }
-        return new ExecutionContextScope(previousPipeline, previousAwait);
-    }
-
-    private static final class ExecutionContextScope implements AutoCloseable {
-        private final PipelineContext previousPipeline;
-        private final AwaitExecutionContext previousAwait;
-
-        private ExecutionContextScope(PipelineContext previousPipeline, AwaitExecutionContext previousAwait) {
-            this.previousPipeline = previousPipeline;
-            this.previousAwait = previousAwait;
-        }
-
-        @Override
-        public void close() {
-            if (previousAwait != null) {
-                AwaitExecutionContextHolder.set(previousAwait);
-            } else {
-                AwaitExecutionContextHolder.clear();
-            }
-            if (previousPipeline != null) {
-                PipelineContextHolder.set(previousPipeline);
-            } else {
-                PipelineContextHolder.clear();
-            }
-        }
     }
 }

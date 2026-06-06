@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.invocation.PipelineInvocationRuntime;
 import org.pipelineframework.invocation.TransportBoundaryInvocation;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.ChangeMessageVisibilityRequest;
@@ -65,7 +66,7 @@ class SqsPipelineTransitionWorkerTest {
                 .readValue(request.messageBody(), SqsTransitionWorkerRequest.class));
             return null;
         }).when(client).sendMessage(any(SendMessageRequest.class));
-        worker = new SqsPipelineTransitionWorker(client, config);
+        worker = new SqsPipelineTransitionWorker(client, config, new PipelineInvocationRuntime());
     }
 
     @Test
