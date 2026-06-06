@@ -19,6 +19,7 @@ package org.pipelineframework;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 import org.pipelineframework.cache.CacheKeyStrategy;
 import org.pipelineframework.cache.CachePolicy;
@@ -45,29 +46,33 @@ class PipelineCacheReadSupport {
         if (item == null) {
             return Optional.empty();
         }
-        // Key resolution is target-aware first: if any strategy supports the requested target type,
-        // only those strategies participate and an all-empty result means an explicit no-match.
-        // If no strategy supports the target type, fall back to the full strategy list.
-        boolean foundSupporting = false;
         if (targetType != null) {
-            for (CacheKeyStrategy strategy : strategies) {
-                if (!strategy.supportsTarget(targetType)) {
-                    continue;
-                }
-                foundSupporting = true;
-                Optional<String> resolved = strategy.resolveKey(item, context);
-                if (resolved.isPresent()) {
-                    String key = resolved.get();
-                    if (!key.isBlank()) {
-                        return Optional.of(key.trim());
-                    }
-                }
+            Predicate<CacheKeyStrategy> supportsTarget = strategy -> strategy.supportsTarget(targetType);
+            Optional<String> targetKey = resolveWithFilter(item, context, supportsTarget);
+            if (targetKey.isPresent()) {
+                return targetKey;
             }
+            boolean foundSupporting = strategies.stream().anyMatch(supportsTarget::test);
             if (foundSupporting) {
                 return Optional.empty();
             }
         }
+        return resolveWithFilter(item, context, strategy -> true);
+    }
+
+    CachePolicy resolvePolicy(PipelineContext context) {
+        String policy = defaultPolicy;
+        if (context != null && context.cachePolicy() != null) {
+            policy = context.cachePolicy();
+        }
+        return CachePolicy.fromConfig(policy);
+    }
+
+    private Optional<String> resolveWithFilter(Object item, PipelineContext context, Predicate<CacheKeyStrategy> strategyFilter) {
         for (CacheKeyStrategy strategy : strategies) {
+            if (!strategyFilter.test(strategy)) {
+                continue;
+            }
             Optional<String> resolved = strategy.resolveKey(item, context);
             if (resolved.isPresent()) {
                 String key = resolved.get();
@@ -77,11 +82,6 @@ class PipelineCacheReadSupport {
             }
         }
         return Optional.empty();
-    }
-
-    CachePolicy resolvePolicy(PipelineContext context) {
-        String policy = context != null ? context.cachePolicy() : defaultPolicy;
-        return CachePolicy.fromConfig(policy);
     }
 
     boolean shouldRead(CachePolicy policy) {

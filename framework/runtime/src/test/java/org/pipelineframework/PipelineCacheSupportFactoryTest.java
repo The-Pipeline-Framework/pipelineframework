@@ -34,30 +34,32 @@ class PipelineCacheSupportFactoryTest {
 
     @Test
     void returnsNullWhenNoReadersPresent() {
-        PipelineCacheSupportFactory factory = new PipelineCacheSupportFactory();
-        factory.cacheReaders = new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of());
-        factory.cacheKeyStrategies = new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(new PipelineRunnerCacheReadTest.FixedKeyStrategy()));
+        PipelineCacheSupportFactory factory = new PipelineCacheSupportFactory(
+            new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(new PipelineRunnerCacheReadTest.FixedKeyStrategy())),
+            new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of()),
+            "prefer-cache");
 
         assertNull(factory.buildCacheReadSupport());
     }
 
     @Test
     void returnsNullWhenNoStrategiesPresent() {
-        PipelineCacheSupportFactory factory = new PipelineCacheSupportFactory();
-        factory.cacheReaders = new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(new PipelineRunnerCacheReadTest.HighPriorityReader()));
-        factory.cacheKeyStrategies = new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of());
+        PipelineCacheSupportFactory factory = new PipelineCacheSupportFactory(
+            new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of()),
+            new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(new PipelineRunnerCacheReadTest.HighPriorityReader())),
+            "prefer-cache");
 
         assertNull(factory.buildCacheReadSupport());
     }
 
     @Test
     void selectsHighestPriorityReaderAndPreservesPolicyWiring() {
-        PipelineCacheSupportFactory factory = new PipelineCacheSupportFactory();
-        factory.cacheReaders = new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(
+        PipelineCacheSupportFactory factory = new PipelineCacheSupportFactory(
+            new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(new PipelineRunnerCacheReadTest.FixedKeyStrategy())),
+            new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(
             new PipelineRunnerCacheReadTest.LowPriorityReader(),
-            new PipelineRunnerCacheReadTest.HighPriorityReader()));
-        factory.cacheKeyStrategies = new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(new PipelineRunnerCacheReadTest.FixedKeyStrategy()));
-        factory.cachePolicyDefault = "require-cache";
+            new PipelineRunnerCacheReadTest.HighPriorityReader())),
+            "require-cache");
 
         PipelineRunner.CacheReadSupport support = factory.buildCacheReadSupport();
 
@@ -71,18 +73,30 @@ class PipelineCacheSupportFactoryTest {
 
     @Test
     void tiesCacheKeyStrategiesByClassNameDeterministically() {
-        PipelineCacheSupportFactory factory = new PipelineCacheSupportFactory();
-        factory.cacheReaders = new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(new PipelineRunnerCacheReadTest.HighPriorityReader()));
-        // Equal-priority strategies are ordered by class name, so AStrategy wins over ZStrategy.
-        factory.cacheKeyStrategies = new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(
-            new ZStrategy(),
-            new AStrategy()));
-        factory.cachePolicyDefault = "prefer-cache";
+        PipelineCacheSupportFactory factory = new PipelineCacheSupportFactory(
+            new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(
+                new ZStrategy(),
+                new AStrategy())),
+            new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(new PipelineRunnerCacheReadTest.HighPriorityReader())),
+            "prefer-cache");
 
         PipelineRunner.CacheReadSupport support = factory.buildCacheReadSupport();
 
         assertNotNull(support);
         assertEquals("a", support.resolveKey("input", null).orElseThrow());
+    }
+
+    @Test
+    void resolvesPolicyFromContextWhenContextPolicyIsNullFallsBackToDefault() {
+        PipelineCacheSupportFactory factory = new PipelineCacheSupportFactory(
+            new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(new PipelineRunnerCacheReadTest.FixedKeyStrategy())),
+            new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(new PipelineRunnerCacheReadTest.HighPriorityReader())),
+            "cache-only");
+
+        PipelineRunner.CacheReadSupport support = factory.buildCacheReadSupport();
+
+        assertNotNull(support);
+        assertEquals(CachePolicy.CACHE_ONLY, support.resolvePolicy(new PipelineContext(null, null, null)));
     }
 
     static final class AStrategy implements CacheKeyStrategy {

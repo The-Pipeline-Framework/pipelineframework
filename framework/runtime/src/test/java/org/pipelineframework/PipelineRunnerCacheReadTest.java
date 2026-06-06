@@ -1,6 +1,7 @@
 package org.pipelineframework;
 
 import java.lang.annotation.Annotation;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -293,12 +294,10 @@ class PipelineRunnerCacheReadTest {
 
     @Test
     void selectsHighestPriorityCacheReader() {
-        PipelineCacheSupportFactory factory = new PipelineCacheSupportFactory();
-        factory.cacheReaders = new SimpleInstance<>(List.of(
-            new LowPriorityReader(),
-            new HighPriorityReader()));
-        factory.cacheKeyStrategies = new SimpleInstance<>(List.of(new FixedKeyStrategy()));
-        factory.cachePolicyDefault = "prefer-cache";
+        PipelineCacheSupportFactory factory = new PipelineCacheSupportFactory(
+            new SimpleInstance<>(List.<CacheKeyStrategy>of(new FixedKeyStrategy())),
+            new SimpleInstance<>(List.<PipelineCacheReader>of(new LowPriorityReader(), new HighPriorityReader())),
+            "prefer-cache");
         PipelineRunner.CacheReadSupport support = factory.buildCacheReadSupport();
 
         CountingStep step = new CountingStep();
@@ -314,7 +313,7 @@ class PipelineRunnerCacheReadTest {
             support,
             context);
 
-        String value = ((Uni<String>) result).await().indefinitely();
+        String value = ((Uni<String>) result).await().atMost(Duration.ofSeconds(5));
         assertEquals("cached-high", value);
         assertEquals(0, step.calls.get());
     }
