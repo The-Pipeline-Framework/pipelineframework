@@ -58,6 +58,15 @@ class TemplateModelBuilderTest {
     }
 
     @Test
+    void pipelineTemplateConfig_whitespaceBasePackage_throwsException() {
+        PipelineTemplateStep step = step("Process Data", "Input", "Output");
+        IllegalArgumentException ex = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineTemplateConfig("app", "  ", "GRPC", List.of(step), null));
+        assertEquals("basePackage must not be blank", ex.getMessage());
+    }
+
+    @Test
     void buildModels_validStep_buildsModel() {
         PipelineTemplateStep step = step("Process Data", "InputDto", "OutputDto");
         PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", "GRPC", List.of(step), null);

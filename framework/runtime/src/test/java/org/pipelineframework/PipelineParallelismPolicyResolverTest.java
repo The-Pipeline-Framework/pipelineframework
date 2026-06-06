@@ -26,6 +26,7 @@ import org.pipelineframework.parallelism.ThreadSafety;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineParallelismPolicyResolverTest {
@@ -84,14 +85,16 @@ class PipelineParallelismPolicyResolverTest {
 
     @Test
     void strictAdvisedOrderingFollowsCurrentBehavior() {
-        assertFalse(resolver.shouldParallelize(
-            new StrictAdvisedAnnotationStep(),
-            ParallelismPolicy.AUTO,
-            PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_MANY));
-        assertTrue(resolver.shouldParallelize(
-            new StrictAdvisedAnnotationStep(),
-            ParallelismPolicy.PARALLEL,
-            PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_MANY));
+        assertAll(
+            "strict-advised ordering behavior",
+            () -> assertFalse(resolver.shouldParallelize(
+                new StrictAdvisedAnnotationStep(),
+                ParallelismPolicy.AUTO,
+                PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_MANY)),
+            () -> assertTrue(resolver.shouldParallelize(
+                new StrictAdvisedAnnotationStep(),
+                ParallelismPolicy.PARALLEL,
+                PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_MANY)));
     }
 
     static class RelaxedSafeHints implements ParallelismHints {

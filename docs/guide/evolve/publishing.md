@@ -37,6 +37,7 @@ The GitHub Actions workflow automatically:
 - [settings.xml Configuration](#local-settingsxml-configuration)
 - [GitHub Actions Workflow](#github-actions-workflow)
 - [Safe Release Process](#safe-release-process)
+- [Coordinated tpf-mcp-bridge Release](#coordinated-tpf-mcp-bridge-release)
 - [Troubleshooting](#troubleshooting)
 
 ## Overview
@@ -287,13 +288,48 @@ git tag tpf-mcp-bridge-vX.Y.Z
 git push origin tpf-mcp-bridge-vX.Y.Z
 ```
 
+Pushing that tag triggers the bridge repository's `.github/workflows/publish.yml`
+workflow. The workflow verifies that the tag name matches the root npm
+`package.json` version, runs the bridge and vendored generator tests, runs
+`npm pack --dry-run`, then publishes `@pipelineframework/tpf-mcp-bridge` to npm.
+
+The bridge publish workflow uses npm trusted publishing rather than a long-lived
+`NPM_TOKEN`. The npm package must have a trusted publisher configured for:
+
+- package: `@pipelineframework/tpf-mcp-bridge`
+- repository: `The-Pipeline-Framework/tpf-mcp-bridge`
+- workflow file: `.github/workflows/publish.yml`
+
+The workflow must retain `permissions: id-token: write` and use an npm version
+that supports trusted publishing. The current bridge workflow uses Node 24 with
+`actions/setup-node@v6` and checks for npm `>= 11.5.1`, matching npm's trusted
+publishing requirements. If `npm publish` fails with a misleading `404 Not Found`
+for an existing package, treat that as an npm authentication/trusted-publisher
+configuration problem before assuming the package is missing.
+
 Before tagging the bridge:
 
 1. Sync `template-generator-node/src/pipeline-template-schema.json` from the matching released framework deployment artifact.
 2. Update generator templates that embed framework parent or dependency versions so generated projects target the released TPF version.
 3. Bump the root npm package version and keep `package-lock.json` aligned.
 4. Run `npm test`, `npm --prefix template-generator-node test`, and `npm pack --dry-run`.
-5. Note the compatible TPF release in the bridge release notes, for example `compatible with TPF v26.5.2`.
+5. For generator changes that affect generated Java, generated POMs, runtime layout, REST await outputs, mapper contracts, or framework version alignment, run the generated-scaffold compile smoke against the matching framework tag. Generate inside a framework tag worktree under `examples/<smoke-name>` so the scaffold root POM's `<relativePath>../../pom.xml</relativePath>` resolves to `pipeline-framework-root`; then run:
+
+   ```bash
+   ./mvnw -f examples/<smoke-name>/pom.xml -DskipTests compile
+   ```
+
+6. Note the compatible TPF release in the bridge release notes, for example `compatible with TPF v26.5.2`.
+
+After the workflow completes:
+
+```bash
+npm view @pipelineframework/tpf-mcp-bridge version --registry=https://registry.npmjs.org
+```
+
+Confirm the returned version matches the bridge package version. If a publish
+fails after the tag exists, keep the tag immutable in normal release practice:
+fix the workflow or package metadata, then publish a new patch version and tag.
 
 ## Important Publishing Details (Central Validation)
 

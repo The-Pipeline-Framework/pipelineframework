@@ -236,6 +236,15 @@ class PipelineIdlCompatibilityCheckerTest {
         List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
 
         assertTrue(errors.isEmpty(), "Expected deprecation metadata to remain compatible, got: " + errors);
+    }
+
+    @Test
+    void compatibilityResultListIsImmutable() {
+        PipelineIdlSnapshot baseline = snapshot(List.of(simpleField(1, "paymentId", "uuid")));
+        PipelineIdlSnapshot current = snapshot(List.of(field(1, "paymentId", "uuid", null, null, null, false, false, true, "string")));
+
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
+        assertTrue(errors.isEmpty(), "Expected deprecation metadata to remain compatible, got: " + errors);
         assertThrows(UnsupportedOperationException.class, () -> errors.add("mutate"));
     }
 

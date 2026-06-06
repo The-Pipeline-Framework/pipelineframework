@@ -40,7 +40,7 @@ import org.pipelineframework.processor.util.RoleMetadataGenerator;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -152,10 +152,9 @@ class StepArtifactGenerationServiceTest {
         ArgumentCaptor<GrpcBinding> bindingCaptor = ArgumentCaptor.forClass(GrpcBinding.class);
         ArgumentCaptor<GenerationContext> contextCaptor = ArgumentCaptor.forClass(GenerationContext.class);
         verify(renderer).render(bindingCaptor.capture(), contextCaptor.capture());
-        Object serviceDescriptor = bindingCaptor.getValue().serviceDescriptor();
-        assertNotNull(serviceDescriptor);
-        assertTrue(serviceDescriptor instanceof Descriptors.ServiceDescriptor);
-        assertEquals("ChargeCard", ((Descriptors.ServiceDescriptor) serviceDescriptor).getName());
+        assertEquals(
+            "ChargeCard",
+            assertInstanceOf(Descriptors.ServiceDescriptor.class, bindingCaptor.getValue().serviceDescriptor()).getName());
         assertEquals(DeploymentRole.PIPELINE_SERVER, contextCaptor.getValue().role());
     }
 
