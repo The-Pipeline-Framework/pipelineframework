@@ -15,6 +15,9 @@ import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.invocation.PipelineInvocationRuntime;
+import org.pipelineframework.invocation.TransportBoundaryDescriptor;
+import org.pipelineframework.invocation.TransportBoundaryInvocation;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sqs.SqsClient;
@@ -28,12 +31,14 @@ import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
  * SQS request/reply client adapter for transition workers.
  */
 @ApplicationScoped
-public class SqsPipelineTransitionWorker implements PipelineTransitionWorker {
+public class SqsPipelineTransitionWorker implements PipelineTransitionWorker, TransportBoundaryInvocation {
 
     private static final Logger LOG = Logger.getLogger(SqsPipelineTransitionWorker.class);
     private static final ObjectMapper JSON = PipelineJson.mapper();
     private static final int MAX_RESPONSE_MESSAGES_PER_POLL = 10;
     private static final int RESPONSE_WAIT_TIME_SECONDS = 1;
+    private static final TransportBoundaryDescriptor BOUNDARY =
+        new TransportBoundaryDescriptor("sqs", "transition-worker.execute");
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
@@ -41,24 +46,41 @@ public class SqsPipelineTransitionWorker implements PipelineTransitionWorker {
     @Inject
     ControlPlaneSecretResolver secretResolver;
 
+    @Inject
+    PipelineInvocationRuntime invocationRuntime;
+
     private volatile SqsClient client;
 
     public SqsPipelineTransitionWorker() {
     }
 
     SqsPipelineTransitionWorker(SqsClient client, PipelineOrchestratorConfig orchestratorConfig) {
+        this(client, orchestratorConfig, null);
+    }
+
+    SqsPipelineTransitionWorker(
+        SqsClient client,
+        PipelineOrchestratorConfig orchestratorConfig,
+        PipelineInvocationRuntime invocationRuntime
+    ) {
         this.client = client;
         this.orchestratorConfig = orchestratorConfig;
+        this.invocationRuntime = invocationRuntime;
     }
 
     @Override
     public Uni<TransitionResultEnvelope> executeTransition(TransitionCommandEnvelope command) {
-        return blocking(() -> executeBlocking(command));
+        return invocationRuntime().invokeTransportUni(this, () -> blocking(() -> executeBlocking(command)));
     }
 
     @Override
     public String providerName() {
         return "sqs";
+    }
+
+    @Override
+    public TransportBoundaryDescriptor transportBoundary() {
+        return BOUNDARY;
     }
 
     @Override
@@ -288,6 +310,14 @@ public class SqsPipelineTransitionWorker implements PipelineTransitionWorker {
             secretResolver,
             "pipeline.orchestrator.worker.sqs.shared-secret",
             "pipeline.orchestrator.worker.sqs.shared-secret-ref");
+    }
+
+    private PipelineInvocationRuntime invocationRuntime() {
+        if (invocationRuntime == null) {
+            throw new IllegalStateException("PipelineInvocationRuntime was not injected into "
+                + "SqsPipelineTransitionWorker.invocationRuntime");
+        }
+        return invocationRuntime;
     }
 
     private int visibilityTimeoutSeconds() {

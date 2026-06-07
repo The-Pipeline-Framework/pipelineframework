@@ -12,6 +12,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.ir.*;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -47,8 +48,15 @@ class ClientStepRendererTest {
         var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
             java.util.Set.of(), null, null);
 
-        // Render the client step - this should not throw an exception
         assertDoesNotThrow(() -> renderer.render(binding, context));
+
+        Path clientStep = tempDir.resolve("com/example/pipeline/TestGrpcClientStep.java");
+        String source = assertDoesNotThrow(() -> java.nio.file.Files.readString(clientStep));
+        assertTrue(source.contains("implements TransportBoundaryInvocation"));
+        assertTrue(source.contains("public TransportBoundaryDescriptor transportBoundary()"));
+        assertTrue(source.contains("PipelineInvocationRuntime invocationRuntime;"));
+        assertTrue(source.contains("this.invocationRuntime.invokeTransportUni"));
+        assertTrue(source.contains("new TransportBoundaryDescriptor(\"grpc\", \"TestService.remoteProcess\")"));
     }
 
     @Test
@@ -71,8 +79,11 @@ class ClientStepRendererTest {
         var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
             java.util.Set.of(), null, null);
 
-        // Render the client step - this should not throw an exception
         assertDoesNotThrow(() -> renderer.render(binding, context));
+
+        Path clientStep = tempDir.resolve("com/example/pipeline/TestGrpcClientStep.java");
+        String source = assertDoesNotThrow(() -> java.nio.file.Files.readString(clientStep));
+        assertTrue(source.contains("this.invocationRuntime.invokeTransportMulti"));
     }
 
     @Test

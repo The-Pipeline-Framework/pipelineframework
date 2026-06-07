@@ -11,6 +11,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
+import org.pipelineframework.invocation.PipelineInvocationRuntime;
 
 /**
  * Bounded executor for queue-async transition workers.
@@ -20,6 +21,9 @@ public class TransitionWorkerExecutor {
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
+
+    @Inject
+    PipelineInvocationRuntime invocationRuntime;
 
     private final Object lifecycleLock = new Object();
     private volatile Semaphore permits;
@@ -38,7 +42,12 @@ public class TransitionWorkerExecutor {
      * @param orchestratorConfig orchestrator config
      */
     public TransitionWorkerExecutor(PipelineOrchestratorConfig orchestratorConfig) {
+        this(orchestratorConfig, null);
+    }
+
+    public TransitionWorkerExecutor(PipelineOrchestratorConfig orchestratorConfig, PipelineInvocationRuntime invocationRuntime) {
         this.orchestratorConfig = orchestratorConfig;
+        this.invocationRuntime = invocationRuntime;
     }
 
     /**
@@ -66,26 +75,24 @@ public class TransitionWorkerExecutor {
     public Uni<TransitionResultEnvelope> execute(
         PipelineTransitionWorker worker,
         TransitionCommandEnvelope command) {
-        Uni<TransitionResultEnvelope> execution = Uni.createFrom().deferred(() -> {
-            long startNanos = System.nanoTime();
-            try {
-                Uni<TransitionResultEnvelope> result = worker.executeTransition(command);
-                if (result == null) {
+        Uni<TransitionResultEnvelope> execution = invocationRuntime().invokeTransitionWorker(
+            TransitionWorkerMetrics::recordDuration,
+            () -> {
+                try {
+                    Uni<TransitionResultEnvelope> result = worker.executeTransition(command);
+                    if (result == null) {
+                        TransitionWorkerMetrics.recordOutcome(TransitionWorkerOutcome.FAILED);
+                        return Uni.createFrom().item(TransitionResultEnvelope.failed(
+                            new IllegalStateException("PipelineTransitionWorker returned null")));
+                    }
+                    return result
+                        .onItem().invoke(item -> TransitionWorkerMetrics.recordOutcome(item.outcome()))
+                        .onFailure().invoke(failure -> TransitionWorkerMetrics.recordOutcome(TransitionWorkerOutcome.FAILED));
+                } catch (Exception failure) {
                     TransitionWorkerMetrics.recordOutcome(TransitionWorkerOutcome.FAILED);
-                    TransitionWorkerMetrics.recordDuration(startNanos);
-                    return Uni.createFrom().item(TransitionResultEnvelope.failed(
-                        new IllegalStateException("PipelineTransitionWorker returned null")));
+                    return Uni.createFrom().item(TransitionResultEnvelope.failed(failure));
                 }
-                return result
-                    .onItem().invoke(item -> TransitionWorkerMetrics.recordOutcome(item.outcome()))
-                    .onFailure().invoke(failure -> TransitionWorkerMetrics.recordOutcome(TransitionWorkerOutcome.FAILED))
-                    .onTermination().invoke(() -> TransitionWorkerMetrics.recordDuration(startNanos));
-            } catch (Exception failure) {
-                TransitionWorkerMetrics.recordOutcome(TransitionWorkerOutcome.FAILED);
-                TransitionWorkerMetrics.recordDuration(startNanos);
-                return Uni.createFrom().item(TransitionResultEnvelope.failed(failure));
-            }
-        });
+            });
         if (executionMode() == TransitionWorkerExecutionMode.VIRTUAL_THREAD) {
             return execution.runSubscriptionOn(virtualThreadExecutor());
         }
@@ -131,6 +138,14 @@ public class TransitionWorkerExecutor {
 
     private PipelineOrchestratorConfig.WorkerConfig workerConfig() {
         return orchestratorConfig == null ? null : orchestratorConfig.worker();
+    }
+
+    private PipelineInvocationRuntime invocationRuntime() {
+        if (invocationRuntime == null) {
+            throw new IllegalStateException("PipelineInvocationRuntime was not injected into "
+                + "TransitionWorkerExecutor.invocationRuntime");
+        }
+        return invocationRuntime;
     }
 
     private Executor virtualThreadExecutor() {

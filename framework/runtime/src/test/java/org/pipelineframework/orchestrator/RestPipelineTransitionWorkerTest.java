@@ -15,6 +15,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.invocation.PipelineInvocationRuntime;
+import org.pipelineframework.invocation.TransportBoundaryInvocation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -45,7 +47,7 @@ class RestPipelineTransitionWorkerTest {
         when(restConfig.sharedSecret()).thenReturn(Optional.of("worker-secret"));
         when(restConfig.sharedSecretRef()).thenReturn(Optional.empty());
         client = HttpClient.newHttpClient();
-        worker = new RestPipelineTransitionWorker(client);
+        worker = new RestPipelineTransitionWorker(client, new PipelineInvocationRuntime());
         worker.orchestratorConfig = config;
     }
 
@@ -80,6 +82,13 @@ class RestPipelineTransitionWorkerTest {
         assertEquals(List.of("ok"), result.decodeOutputItems(payloadCodec));
         assertTrue(requestBody.get().contains("\"transitionKey\":\"exec-1:0:0\""));
         assertTrue(signature.get() != null && !signature.get().isBlank());
+    }
+
+    @Test
+    void exposesTransportBoundaryDiagnostics() {
+        assertTrue(worker instanceof TransportBoundaryInvocation);
+        assertEquals("rest", worker.transportBoundary().protocol());
+        assertEquals("transition-worker.execute", worker.transportBoundary().target());
     }
 
     @Test

@@ -13,6 +13,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.invocation.PipelineInvocationRuntime;
+import org.pipelineframework.invocation.TransportBoundaryInvocation;
 import org.pipelineframework.orchestrator.grpc.MutinyTransitionWorkerServiceGrpc;
 import org.pipelineframework.orchestrator.grpc.TransitionWorkerCapabilitiesRequest;
 import org.pipelineframework.orchestrator.grpc.TransitionWorkerCapabilitiesResponse;
@@ -65,7 +67,7 @@ class GrpcPipelineTransitionWorkerTest {
             .build()
             .start();
         when(grpcConfig.endpoint()).thenReturn(Optional.of("localhost:" + server.getPort()));
-        worker = new GrpcPipelineTransitionWorker();
+        worker = newWorker();
         worker.orchestratorConfig = config;
 
         TransitionResultEnvelope result = worker.executeTransition(envelope()).await().indefinitely();
@@ -76,6 +78,15 @@ class GrpcPipelineTransitionWorkerTest {
         assertEquals(GrpcTransitionWorkerProtocol.PAYLOAD_ENCODING, captured.get().getPayloadEncoding());
         assertTrue(captured.get().getSignature() != null && !captured.get().getSignature().isBlank());
         assertTrue(captured.get().getCommandEnvelope().toStringUtf8().contains("\"transitionKey\":\"exec-1:0:0\""));
+    }
+
+    @Test
+    void exposesTransportBoundaryDiagnostics() {
+        worker = newWorker();
+
+        assertTrue(worker instanceof TransportBoundaryInvocation);
+        assertEquals("grpc", worker.transportBoundary().protocol());
+        assertEquals("transition-worker.execute", worker.transportBoundary().target());
     }
 
     @Test
@@ -92,7 +103,7 @@ class GrpcPipelineTransitionWorkerTest {
             .build()
             .start();
         when(grpcConfig.endpoint()).thenReturn(Optional.of("localhost:" + server.getPort()));
-        worker = new GrpcPipelineTransitionWorker();
+        worker = newWorker();
         worker.orchestratorConfig = config;
 
         try {
@@ -118,7 +129,7 @@ class GrpcPipelineTransitionWorkerTest {
             .build()
             .start();
         when(grpcConfig.endpoint()).thenReturn(Optional.of("localhost:" + server.getPort()));
-        worker = new GrpcPipelineTransitionWorker();
+        worker = newWorker();
         worker.orchestratorConfig = config;
 
         PipelineWorkerCapability capability = worker.capabilities().await().indefinitely();
@@ -140,7 +151,7 @@ class GrpcPipelineTransitionWorkerTest {
             .build()
             .start();
         when(grpcConfig.endpoint()).thenReturn(Optional.of("localhost:" + server.getPort()));
-        worker = new GrpcPipelineTransitionWorker();
+        worker = newWorker();
         worker.orchestratorConfig = config;
 
         TransitionWorkerFailureException error = assertThrows(
@@ -152,7 +163,7 @@ class GrpcPipelineTransitionWorkerTest {
 
     @Test
     void requiresSharedSecretAtStartupValidation() {
-        worker = new GrpcPipelineTransitionWorker();
+        worker = newWorker();
         when(grpcConfig.isEnabled()).thenReturn(true);
         when(grpcConfig.sharedSecret()).thenReturn(Optional.empty());
         when(grpcConfig.sharedSecretRef()).thenReturn(Optional.empty());
@@ -165,7 +176,7 @@ class GrpcPipelineTransitionWorkerTest {
 
     @Test
     void acceptsSharedSecretReferenceAtStartupValidation() {
-        worker = new GrpcPipelineTransitionWorker();
+        worker = newWorker();
         when(grpcConfig.isEnabled()).thenReturn(true);
         when(grpcConfig.sharedSecret()).thenReturn(Optional.empty());
         when(grpcConfig.sharedSecretRef()).thenReturn(Optional.of("env:TPF_GRPC_WORKER_SECRET"));
@@ -177,7 +188,7 @@ class GrpcPipelineTransitionWorkerTest {
 
     @Test
     void rejectsAmbiguousSharedSecretAtStartupValidation() {
-        worker = new GrpcPipelineTransitionWorker();
+        worker = newWorker();
         when(grpcConfig.isEnabled()).thenReturn(true);
         when(grpcConfig.sharedSecret()).thenReturn(Optional.of("worker-secret"));
         when(grpcConfig.sharedSecretRef()).thenReturn(Optional.of("env:TPF_GRPC_WORKER_SECRET"));
@@ -190,7 +201,7 @@ class GrpcPipelineTransitionWorkerTest {
 
     @Test
     void rejectsBlankEndpointAtStartupValidation() {
-        worker = new GrpcPipelineTransitionWorker();
+        worker = newWorker();
         when(grpcConfig.isEnabled()).thenReturn(true);
         when(grpcConfig.sharedSecret()).thenReturn(Optional.of("worker-secret"));
         when(grpcConfig.endpoint()).thenReturn(Optional.of(" "));
@@ -203,6 +214,10 @@ class GrpcPipelineTransitionWorkerTest {
 
     private TransitionCommandEnvelope envelope() {
         return TransitionEnvelopeFixtures.envelope(payloadCodec);
+    }
+
+    private GrpcPipelineTransitionWorker newWorker() {
+        return new GrpcPipelineTransitionWorker(new PipelineInvocationRuntime());
     }
 
     private TransitionWorkerResponse response(TransitionResultEnvelope result) {

@@ -196,6 +196,7 @@ const mainSidebar = [
                 items: [
                     {text: 'Overview', link: '/guide/evolve/durable-coordinator/'},
                     {text: 'Worker Protocols', link: '/guide/evolve/durable-coordinator/worker-protocols'},
+                    {text: 'Step-Aware Invocation Runtime', link: '/guide/evolve/durable-coordinator/boundary-invocation-model'},
                     {text: 'Bundle Contract', link: '/guide/evolve/durable-coordinator/bundle-contract'},
                     {text: 'Local APIs', link: '/guide/evolve/durable-coordinator/local-apis'},
                     {text: 'Self-Hosted Milestone', link: '/guide/evolve/durable-coordinator/self-hosted-milestone'}
