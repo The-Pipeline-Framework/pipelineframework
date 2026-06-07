@@ -2,6 +2,7 @@ package org.pipelineframework.invocation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -147,6 +148,34 @@ class PipelineInvocationRuntimeTest {
             () -> runtime.invokeTransportUni(null, () -> Uni.createFrom().item("ignored")));
 
         assertEquals("boundary must not be null", thrown.getMessage());
+    }
+
+    @Test
+    void transportBoundaryPreservesAmbientContextAtCreationTime() {
+        PipelineContext boundaryPipeline = new PipelineContext("boundary", "tenant-boundary", "prefer-cache");
+        AwaitExecutionContext boundaryAwait = new AwaitExecutionContext("tenant-boundary", "exec-boundary", 5);
+        AtomicReference<PipelineContext> observedPipeline = new AtomicReference<>();
+        AtomicReference<AwaitExecutionContext> observedAwait = new AtomicReference<>();
+
+        PipelineContextHolder.set(boundaryPipeline);
+        AwaitExecutionContextHolder.set(boundaryAwait);
+        Uni<String> result;
+        try {
+            result = runtime.invokeTransportUni(boundary, () -> {
+                observedPipeline.set(PipelineContextHolder.get());
+                observedAwait.set(AwaitExecutionContextHolder.get());
+                return Uni.createFrom().item("ok");
+            });
+        } finally {
+            PipelineContextHolder.clear();
+            AwaitExecutionContextHolder.clear();
+        }
+
+        assertEquals("ok", result.await().indefinitely());
+        assertSame(boundaryPipeline, observedPipeline.get());
+        assertSame(boundaryAwait, observedAwait.get());
+        assertNull(PipelineContextHolder.get());
+        assertNull(AwaitExecutionContextHolder.get());
     }
 
     @Test
