@@ -16,11 +16,25 @@ From the repository root:
 
 The script packages `monolith-svc`, starts the coordinator, registers and activates the generated bundle JAR, submits accepted and declined orders through `/tpf/control-plane/...`, completes the await interaction, and verifies terminal results.
 
+The demo client submits the generated REST input DTO as a `RAW` generic control-plane payload. That matches the current executable-bundle runtime shape: the active step order is made of generated REST client steps, while the bundle manifest still records domain contract types. The strategic model is a pipeline contract; this local JAR bundle path is the current implementation form.
+
 By default it first installs the current `framework` SNAPSHOT so the example build uses the runtime code from this checkout. For faster reruns after the local SNAPSHOT is current:
 
 ```bash
 TPF_SKIP_FRAMEWORK_INSTALL=true ./examples/restaurant-approval/self-host/run-self-hosted-demo.sh --ci
 ```
+
+## Incident Demo
+
+Run the failure-visibility path:
+
+```bash
+./examples/restaurant-approval/self-host/run-self-hosted-incident.sh --ci
+```
+
+This starts the same one-process coordinator, registers and activates the bundle, submits an order, waits for the restaurant approval await interaction, and then completes that interaction with a deliberately invalid but API-valid restaurant decision. The resumed execution fails through the normal queue-async path, publishes through the log DLQ provider, and prints an operator triage summary.
+
+The incident script sets `TPF_ORCHESTRATOR_MAX_RETRIES=0` by default so the failure reaches the terminal path immediately. Override that variable if you want to observe retry state first.
 
 ## Local Defaults
 
@@ -69,15 +83,78 @@ python3 examples/restaurant-approval/self-host/demo-client.py run-flows \
   --control-plane-token restaurant-control-plane-admin-token
 ```
 
+Inspect a known execution:
+
+```bash
+python3 examples/restaurant-approval/self-host/demo-client.py status \
+  --base-url http://localhost:8081 \
+  --tenant-id restaurant-demo \
+  --execution-id <execution-id> \
+  --control-plane-token restaurant-control-plane-admin-token
+```
+
+List pending await interactions:
+
+```bash
+python3 examples/restaurant-approval/self-host/demo-client.py pending \
+  --base-url http://localhost:8081 \
+  --tenant-id restaurant-demo \
+  --await-step-id ProcessAwaitRestaurantDecisionService \
+  --control-plane-token restaurant-control-plane-admin-token
+```
+
+Read a terminal result:
+
+```bash
+python3 examples/restaurant-approval/self-host/demo-client.py result \
+  --base-url http://localhost:8081 \
+  --tenant-id restaurant-demo \
+  --execution-id <execution-id> \
+  --control-plane-token restaurant-control-plane-admin-token
+```
+
+Run the incident flow against an already-started coordinator:
+
+```bash
+python3 examples/restaurant-approval/self-host/demo-client.py run-incident \
+  --base-url http://localhost:8081 \
+  --tenant-id restaurant-demo \
+  --pipeline-id org.pipelineframework.restaurantapproval \
+  --await-step-id ProcessAwaitRestaurantDecisionService \
+  --control-plane-token restaurant-control-plane-admin-token \
+  --log-file examples/restaurant-approval/monolith-svc/target/tpf-self-host/logs/coordinator.log
+```
+
 Logs are written under `examples/restaurant-approval/monolith-svc/target/tpf-self-host/logs`.
+
+## Operator Walkthrough
+
+For a normal await flow:
+
+1. Submit through `/tpf/control-plane/tenants/{tenantId}/executions`.
+2. Poll `/tpf/control-plane/tenants/{tenantId}/executions/{executionId}` until `WAITING_EXTERNAL`.
+3. Query `/tpf/control-plane/tenants/{tenantId}/interactions/pending` with the await step id.
+4. Complete the interaction through `/tpf/control-plane/tenants/{tenantId}/interactions/complete`.
+5. Poll status until `SUCCEEDED`, then read `/result`.
+
+For the incident flow:
+
+1. Submit and wait for `WAITING_EXTERNAL`.
+2. Complete the await interaction with the deliberately invalid decision payload.
+3. Poll status until `FAILED`.
+4. Inspect `errorCode`, `errorMessage`, `attempt`, and `stepIndex` from the status response.
+5. Inspect `coordinator.log` for `Execution moved to DLQ` and the matching execution id.
+
+Current recovery boundary: this self-host reference exposes status, terminal error details, and DLQ publication evidence. It does not provide a built-in generic DLQ replay endpoint yet. Correct the business input or downstream dependency, then re-submit/re-drive through an application-owned procedure with stable idempotency keys.
 
 ## What This Proves
 
 1. A coordinator process can submit and inspect executions without using generated `/pipeline/*` app routes.
 2. Bundle registration, activation, artifact storage, execution pinning, and worker availability checks are exercised.
 3. Local transition execution works without configuring a remote worker target.
+4. Await suspension and completion happen through the hosted control-plane API.
+5. Terminal failure and DLQ publication are visible in the self-host operator flow.
 
 To prove the REST worker protocol separately, start `start-worker.sh`, configure `pipeline.orchestrator.worker.rest.base-url` and `pipeline.orchestrator.worker.rest.shared-secret` on a coordinator process, and run the same control-plane client. The automated split-process IT covers that protocol path.
-4. Await suspension and completion happen through the hosted control-plane API.
 
 This is not a managed service, dynamic JAR loading, worker fleet lifecycle, or production tenancy. It is the public self-host adoption path for the current runtime seams.

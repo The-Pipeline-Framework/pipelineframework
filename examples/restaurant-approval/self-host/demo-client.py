@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 PAYLOAD_ENCODING = "application/tpf-transition+json"
-ORDER_TYPE = "org.pipelineframework.restaurantapproval.common.domain.PlaceRestaurantOrderRequest"
+ORDER_TYPE = "org.pipelineframework.restaurantapproval.common.dto.PlaceRestaurantOrderRequestDto"
 
 
 def request(method, url, token=None, body=None, timeout=10):
@@ -143,7 +143,7 @@ def submit_order(args, customer_name, restaurant_name):
     }
     body = {
         "pipelineId": args.pipeline_id,
-        "inputShape": "UNI",
+        "inputShape": "RAW",
         "inputPayload": encoded_payload(order, ORDER_TYPE),
         "idempotencyKey": f"order-{request_id}",
         "outputStreaming": False,
@@ -158,7 +158,8 @@ def submit_order(args, customer_name, restaurant_name):
     return result["executionId"]
 
 
-def wait_status(args, execution_id, target_status, timeout_seconds=30):
+def wait_status(args, execution_id, target_status, timeout_seconds=None):
+    timeout_seconds = timeout_seconds or getattr(args, "timeout_seconds", 30)
     deadline = time.time() + timeout_seconds
     last = None
     url = f"{args.base_url}/tpf/control-plane/tenants/{args.tenant_id}/executions/{execution_id}"
@@ -174,7 +175,21 @@ def wait_status(args, execution_id, target_status, timeout_seconds=30):
     raise RuntimeError(f"Execution {execution_id} did not reach {target_status}; last={last}")
 
 
-def pending_interaction(args, execution_id, timeout_seconds=30):
+def wait_terminal_failure(args, execution_id, timeout_seconds=30):
+    deadline = time.time() + timeout_seconds
+    last = None
+    url = f"{args.base_url}/tpf/control-plane/tenants/{args.tenant_id}/executions/{execution_id}"
+    while time.time() < deadline:
+        last = request("GET", url, token=auth(args))
+        if last["status"] in {"FAILED", "DLQ"}:
+            print(f"Execution {execution_id} reached terminal failure: {json.dumps(last, sort_keys=True)}")
+            return last
+        time.sleep(0.2)
+    raise RuntimeError(f"Execution {execution_id} did not fail terminally; last={last}")
+
+
+def pending_interaction(args, execution_id, timeout_seconds=None):
+    timeout_seconds = timeout_seconds or getattr(args, "timeout_seconds", 30)
     deadline = time.time() + timeout_seconds
     url = (
         f"{args.base_url}/tpf/control-plane/tenants/{args.tenant_id}/interactions/pending"
@@ -189,6 +204,38 @@ def pending_interaction(args, execution_id, timeout_seconds=30):
                 return interaction
         time.sleep(0.2)
     raise RuntimeError(f"No pending interaction found for execution {execution_id}")
+
+
+def query_pending(args):
+    url = (
+        f"{args.base_url}/tpf/control-plane/tenants/{args.tenant_id}/interactions/pending"
+        f"?stepId={args.await_step_id}"
+    )
+    interactions = request("GET", url, token=auth(args))
+    if args.execution_id:
+        interactions = [
+            interaction for interaction in interactions
+            if interaction.get("executionId") == args.execution_id
+        ]
+    print(json.dumps(interactions, indent=2, sort_keys=True))
+
+
+def inspect_status(args):
+    status = request(
+        "GET",
+        f"{args.base_url}/tpf/control-plane/tenants/{args.tenant_id}/executions/{args.execution_id}",
+        token=auth(args),
+    )
+    print(json.dumps(status, indent=2, sort_keys=True))
+
+
+def inspect_result(args):
+    result = request(
+        "GET",
+        f"{args.base_url}/tpf/control-plane/tenants/{args.tenant_id}/executions/{args.execution_id}/result",
+        token=auth(args),
+    )
+    print(json.dumps(result, indent=2, sort_keys=True))
 
 
 def complete(args, interaction, decision):
@@ -226,6 +273,30 @@ def complete(args, interaction, decision):
     print(f"Completed interaction {completed['interactionId']} as {decision}")
 
 
+def complete_invalid_decision(args, interaction):
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    decision_payload = {
+        "accepted": {
+            "orderId": "not-a-uuid",
+            "decidedAt": now,
+            "note": "This completion is intentionally invalid for the incident demo.",
+        }
+    }
+    body = {
+        "interactionId": interaction["interactionId"],
+        "idempotencyKey": f"complete-invalid-{interaction['interactionId']}",
+        "responsePayload": encoded_payload(decision_payload, "java.util.Map"),
+        "actor": "restaurant-self-host-incident-demo",
+    }
+    completed = request(
+        "POST",
+        f"{args.base_url}/tpf/control-plane/tenants/{args.tenant_id}/interactions/complete",
+        token=auth(args),
+        body=body,
+    )
+    print(f"Completed interaction {completed['interactionId']} with an intentionally invalid decision payload")
+
+
 def result_payload(args, execution_id):
     result = request(
         "GET",
@@ -253,6 +324,44 @@ def run_one(args, decision, customer_name, restaurant_name, expected_outcome):
 def run_flows(args):
     run_one(args, "accepted", "Ada Lovelace", "Cafe TPF", "APPROVED")
     run_one(args, "declined", "Grace Hopper", "Bistro Queue", "DECLINED")
+
+
+def wait_log_contains(log_file, execution_id, timeout_seconds=20):
+    if not log_file:
+        return
+    path = Path(log_file)
+    deadline = time.time() + timeout_seconds
+    needle = "Execution moved to DLQ"
+    while time.time() < deadline:
+        if path.exists():
+            contents = path.read_text(errors="replace")
+            if needle in contents and execution_id in contents:
+                print(f"Observed DLQ publication in {path}: {needle} / execution={execution_id}")
+                return
+        time.sleep(0.2)
+    raise RuntimeError(f"Did not observe DLQ log line for execution {execution_id} in {path}")
+
+
+def run_incident(args):
+    execution_id = submit_order(args, "Katherine Johnson", "Faulty Kitchen")
+    wait_status(args, execution_id, "WAITING_EXTERNAL")
+    interaction = pending_interaction(args, execution_id)
+    complete_invalid_decision(args, interaction)
+    terminal = wait_terminal_failure(args, execution_id)
+    if terminal.get("errorCode") in {None, ""}:
+        raise RuntimeError(f"Expected terminal failure to include errorCode; got {terminal}")
+    if terminal.get("errorMessage") in {None, ""}:
+        raise RuntimeError(f"Expected terminal failure to include errorMessage; got {terminal}")
+    wait_log_contains(args.log_file, execution_id)
+    print("Incident triage summary:")
+    print(json.dumps({
+        "executionId": execution_id,
+        "status": terminal.get("status"),
+        "attempt": terminal.get("attempt"),
+        "errorCode": terminal.get("errorCode"),
+        "errorMessage": terminal.get("errorMessage"),
+        "operatorAction": "Inspect the failure and re-submit corrected business input; built-in DLQ replay is not provided yet.",
+    }, indent=2, sort_keys=True))
 
 
 def main():
@@ -285,6 +394,38 @@ def main():
     flows.add_argument("--await-step-id", required=True)
     flows.add_argument("--control-plane-token", required=True)
     flows.set_defaults(func=run_flows)
+
+    status = sub.add_parser("status")
+    status.add_argument("--base-url", required=True)
+    status.add_argument("--tenant-id", required=True)
+    status.add_argument("--control-plane-token", required=True)
+    status.add_argument("--execution-id", required=True)
+    status.set_defaults(func=inspect_status)
+
+    pending = sub.add_parser("pending")
+    pending.add_argument("--base-url", required=True)
+    pending.add_argument("--tenant-id", required=True)
+    pending.add_argument("--await-step-id", required=True)
+    pending.add_argument("--control-plane-token", required=True)
+    pending.add_argument("--execution-id")
+    pending.set_defaults(func=query_pending)
+
+    result = sub.add_parser("result")
+    result.add_argument("--base-url", required=True)
+    result.add_argument("--tenant-id", required=True)
+    result.add_argument("--control-plane-token", required=True)
+    result.add_argument("--execution-id", required=True)
+    result.set_defaults(func=inspect_result)
+
+    incident = sub.add_parser("run-incident")
+    incident.add_argument("--base-url", required=True)
+    incident.add_argument("--tenant-id", required=True)
+    incident.add_argument("--pipeline-id", required=True)
+    incident.add_argument("--await-step-id", required=True)
+    incident.add_argument("--control-plane-token", required=True)
+    incident.add_argument("--log-file")
+    incident.add_argument("--timeout-seconds", type=int, default=90)
+    incident.set_defaults(func=run_incident)
 
     args = parser.parse_args()
     try:

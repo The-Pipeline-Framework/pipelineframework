@@ -12,6 +12,8 @@ TPF_RUN_DIR="${TPF_RUN_DIR:-${MONOLITH_DIR}/target/tpf-self-host}"
 TPF_BUNDLE_STORE_ROOT="${TPF_BUNDLE_STORE_ROOT:-${TPF_RUN_DIR}/bundles}"
 TPF_LOG_DIR="${TPF_LOG_DIR:-${TPF_RUN_DIR}/logs}"
 TPF_PID_DIR="${TPF_PID_DIR:-${TPF_RUN_DIR}/pids}"
+TPF_ORCHESTRATOR_MAX_RETRIES="${TPF_ORCHESTRATOR_MAX_RETRIES:-3}"
+TPF_ORCHESTRATOR_RETRY_DELAY="${TPF_ORCHESTRATOR_RETRY_DELAY:-PT1S}"
 
 RUNNER="${MONOLITH_DIR}/target/quarkus-app/quarkus-run.jar"
 if [[ ! -f "${RUNNER}" ]]; then
@@ -48,6 +50,8 @@ mkdir -p "${TPF_LOG_DIR}" "${TPF_PID_DIR}" "${TPF_BUNDLE_STORE_ROOT}"
     -Dpipeline.orchestrator.admin.admin-token="${TPF_ADMIN_TOKEN}" \
     -Dpipeline.orchestrator.bundles.registry.provider=file \
     -Dpipeline.orchestrator.bundles.storage.root="${TPF_BUNDLE_STORE_ROOT}" \
+    -Dpipeline.orchestrator.max-retries="${TPF_ORCHESTRATOR_MAX_RETRIES}" \
+    -Dpipeline.orchestrator.retry-delay="${TPF_ORCHESTRATOR_RETRY_DELAY}" \
     -Dpipeline.orchestrator.strict-startup=false \
     -jar "${RUNNER}"
 ) > "${TPF_LOG_DIR}/coordinator.log" 2>&1 &
