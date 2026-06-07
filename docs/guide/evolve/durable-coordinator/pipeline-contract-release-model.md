@@ -131,6 +131,6 @@ CNAB, Open Application Model, Serverless Workflow, and CDEvents are useful refer
 
 ## Relationship To Current Bundle Manifest
 
-`META-INF/pipeline/bundle-manifest.json` is the current v1 implementation artifact. It gives the coordinator and worker enough identity to validate portable transition envelopes and pin executions.
+`META-INF/pipeline/bundle-manifest.json` is the current v1 identity artifact. It gives the coordinator and worker enough identity to validate portable transition envelopes and pin executions.
 
 The next runtime step should not delete that path. It should introduce release registration beside the existing local executable artifact registration, then map the current bundle manifest into the new contract/release vocabulary.

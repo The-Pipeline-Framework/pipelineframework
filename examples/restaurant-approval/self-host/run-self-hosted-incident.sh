@@ -16,6 +16,8 @@ TPF_RUN_DIR="${TPF_RUN_DIR:-${MONOLITH_DIR}/target/tpf-self-host-incident}"
 TPF_LOG_DIR="${TPF_LOG_DIR:-${TPF_RUN_DIR}/logs}"
 TPF_PID_DIR="${TPF_PID_DIR:-${TPF_RUN_DIR}/pids}"
 TPF_SKIP_FRAMEWORK_INSTALL="${TPF_SKIP_FRAMEWORK_INSTALL:-false}"
+# Incident runs default to zero retries, unlike start-coordinator.sh's default of 3,
+# so CI reaches terminal failure/DLQ immediately. Override to observe retry state.
 TPF_ORCHESTRATOR_MAX_RETRIES="${TPF_ORCHESTRATOR_MAX_RETRIES:-0}"
 TPF_ORCHESTRATOR_RETRY_DELAY="${TPF_ORCHESTRATOR_RETRY_DELAY:-PT1S}"
 
