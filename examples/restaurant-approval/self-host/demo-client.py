@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import sys
 import time
@@ -73,17 +74,54 @@ def locate_bundle(args):
     raise RuntimeError(f"No bundle JAR with pipelineId={args.pipeline_id} found under {target_dir}")
 
 
+def create_release(args):
+    artifact_path = Path(args.artifact_path).resolve()
+    descriptor_path = Path(args.output).resolve()
+    if not artifact_path.is_file():
+        raise RuntimeError(f"Release artifact not found: {artifact_path}")
+    with zipfile.ZipFile(artifact_path) as jar:
+        with jar.open("META-INF/pipeline/bundle-manifest.json") as manifest_file:
+            manifest = json.load(manifest_file)
+    if manifest.get("pipelineId") != args.pipeline_id:
+        raise RuntimeError(
+            f"Artifact pipelineId={manifest.get('pipelineId')} does not match {args.pipeline_id}")
+    digest = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+    contract_version = manifest.get("contractVersion") or f"sha256:{manifest['bundleHash']}"
+    release_version = args.release_version or manifest["bundleVersionId"]
+    descriptor = {
+        "schemaVersion": 1,
+        "pipelineId": args.pipeline_id,
+        "contractVersion": contract_version,
+        "releaseVersion": release_version,
+        "artifacts": [
+            {
+                "artifactId": "restaurant-approval-monolith",
+                "kind": "jar",
+                "uri": str(artifact_path),
+                "digest": f"sha256:{digest}",
+                "bundleVersionId": manifest["bundleVersionId"],
+                "bundleHash": manifest["bundleHash"],
+                "stepIds": [step.get("authoredName") for step in manifest.get("steps", [])],
+                "capabilities": ["local-transition-execution", "rest-transition-worker"],
+            }
+        ],
+    }
+    descriptor_path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor_path.write_text(json.dumps(descriptor, indent=2, sort_keys=True), encoding="utf-8")
+    print(descriptor_path)
+
+
 def register_activate(args):
-    base = f"{args.base_url}/tpf/admin/tenants/{args.tenant_id}/pipelines/{args.pipeline_id}/bundles"
+    base = f"{args.base_url}/tpf/admin/tenants/{args.tenant_id}/pipelines/{args.pipeline_id}/releases"
     registered = request(
         "POST",
         f"{base}/register",
         token=args.admin_token,
-        body={"artifactPath": str(Path(args.artifact_path).resolve())},
+        body={"releaseDescriptorPath": str(Path(args.release_descriptor_path).resolve())},
     )
-    bundle_version_id = registered["bundleVersionId"]
-    request("POST", f"{base}/{bundle_version_id}/activate", token=args.admin_token)
-    print(f"Registered and activated bundle {bundle_version_id}")
+    release_version = registered["releaseVersion"]
+    request("POST", f"{base}/{release_version}/activate", token=args.admin_token)
+    print(f"Registered and activated release {release_version}")
 
 
 def encoded_payload(payload, payload_type=None):
@@ -384,8 +422,15 @@ def main():
     reg.add_argument("--tenant-id", required=True)
     reg.add_argument("--pipeline-id", required=True)
     reg.add_argument("--admin-token", required=True)
-    reg.add_argument("--artifact-path", required=True)
+    reg.add_argument("--release-descriptor-path", required=True)
     reg.set_defaults(func=register_activate)
+
+    release = sub.add_parser("create-release")
+    release.add_argument("--pipeline-id", required=True)
+    release.add_argument("--artifact-path", required=True)
+    release.add_argument("--output", required=True)
+    release.add_argument("--release-version")
+    release.set_defaults(func=create_release)
 
     flows = sub.add_parser("run-flows")
     flows.add_argument("--base-url", required=True)

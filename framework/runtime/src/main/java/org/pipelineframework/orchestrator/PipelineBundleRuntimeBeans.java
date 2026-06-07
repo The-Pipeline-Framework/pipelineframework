@@ -44,6 +44,24 @@ public class PipelineBundleRuntimeBeans {
             "Unsupported pipeline.orchestrator.bundles.registry.provider '" + provider + "'");
     }
 
+    @Produces
+    @ApplicationScoped
+    PipelineReleaseRegistry pipelineReleaseRegistry() {
+        String provider = orchestratorConfig == null
+            || orchestratorConfig.bundles() == null
+            || orchestratorConfig.bundles().registry() == null
+                ? "memory"
+                : orchestratorConfig.bundles().registry().provider();
+        if (provider == null || provider.isBlank() || "memory".equalsIgnoreCase(provider)) {
+            return new InMemoryPipelineReleaseRegistry();
+        }
+        if ("file".equalsIgnoreCase(provider)) {
+            return new FileBackedPipelineReleaseRegistry(storageRoot());
+        }
+        throw new IllegalStateException(
+            "Unsupported pipeline.orchestrator.bundles.registry.provider '" + provider + "'");
+    }
+
     static Path storageRoot(PipelineOrchestratorConfig orchestratorConfig) {
         String configured = orchestratorConfig == null
             || orchestratorConfig.bundles() == null

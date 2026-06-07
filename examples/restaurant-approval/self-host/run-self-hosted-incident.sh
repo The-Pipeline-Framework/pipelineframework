@@ -77,7 +77,7 @@ export TPF_ORCHESTRATOR_RETRY_DELAY
 
 python3 "${SCRIPT_DIR}/demo-client.py" wait-health --base-url "http://localhost:${TPF_COORDINATOR_PORT}" --name coordinator
 
-"${SCRIPT_DIR}/register-and-activate-bundle.sh"
+"${SCRIPT_DIR}/register-and-activate-release.sh"
 
 python3 "${SCRIPT_DIR}/demo-client.py" run-incident \
   --base-url "http://localhost:${TPF_COORDINATOR_PORT}" \

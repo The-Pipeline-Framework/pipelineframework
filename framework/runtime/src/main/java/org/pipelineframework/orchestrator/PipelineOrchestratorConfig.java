@@ -237,7 +237,7 @@ public interface PipelineOrchestratorConfig {
     ControlPlaneConfig controlPlane();
 
     /**
-     * Hosted bundle administration API settings.
+     * Local/dev administration API settings.
      *
      * @return admin API config
      */
@@ -482,12 +482,12 @@ public interface PipelineOrchestratorConfig {
     }
 
     /**
-     * Local/dev hosted bundle administration API settings.
+     * Local/dev administration API settings.
      */
     interface AdminConfig {
 
         /**
-         * Enables the internal hosted bundle admin REST surface.
+         * Enables the internal admin REST surface.
          *
          * @return true when the resource should accept requests
          */
@@ -496,7 +496,7 @@ public interface PipelineOrchestratorConfig {
         boolean enabled();
 
         /**
-         * Literal bearer token for local/dev bundle admin calls.
+         * Literal bearer token for local/dev admin calls.
          *
          * @return admin token when configured
          */
@@ -504,7 +504,7 @@ public interface PipelineOrchestratorConfig {
         Optional<String> adminToken();
 
         /**
-         * Secret reference for the local/dev bundle admin bearer token.
+         * Secret reference for the local/dev admin bearer token.
          *
          * @return admin token reference when configured
          */
@@ -843,6 +843,22 @@ public interface PipelineOrchestratorConfig {
          */
         @WithName("bundle-version-id")
         Optional<String> bundleVersionId();
+
+        /**
+         * Static contract version hosted by the configured SQS worker queue.
+         *
+         * @return contract version when configured
+         */
+        @WithName("contract-version")
+        Optional<String> contractVersion();
+
+        /**
+         * Static release version hosted by the configured SQS worker queue.
+         *
+         * @return release version when configured
+         */
+        @WithName("release-version")
+        Optional<String> releaseVersion();
 
         /**
          * Enables the local SQS transition worker poller.

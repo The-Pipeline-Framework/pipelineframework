@@ -38,6 +38,7 @@ import org.pipelineframework.processor.ir.StreamingShape;
 public class PipelineBundleManifestMetadataGenerator {
 
     private static final String RESOURCE_PATH = "META-INF/pipeline/bundle-manifest.json";
+    private static final String CONTRACT_RESOURCE_PATH = "META-INF/pipeline/pipeline-contract.json";
     private static final Logger LOGGER = Logger.getLogger(PipelineBundleManifestMetadataGenerator.class.getName());
     private static final Gson CANONICAL_GSON = new GsonBuilder().disableHtmlEscaping().create();
     private static final Gson PRETTY_GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
@@ -99,6 +100,56 @@ public class PipelineBundleManifestMetadataGenerator {
                 .createResource(StandardLocation.CLASS_OUTPUT, "", RESOURCE_PATH);
             try (var writer = resourceFile.openWriter()) {
                 writer.write(PRETTY_GSON.toJson(finalManifest));
+            }
+        }
+    }
+
+    /**
+     * Writes META-INF/pipeline/pipeline-contract.json when pipeline steps are available.
+     *
+     * @param ctx compilation context
+     * @throws IOException when writing fails
+     */
+    public void writePipelineContract(PipelineCompilationContext ctx) throws IOException {
+        if (ctx == null || ctx.getStepModels() == null || ctx.getStepModels().isEmpty()) {
+            return;
+        }
+        List<Map<String, Object>> steps = stepDescriptors(ctx);
+        if (steps.isEmpty()) {
+            return;
+        }
+
+        String pipelineId = resolvePipelineId(ctx);
+        Map<String, Object> contractWithoutHash = new LinkedHashMap<>();
+        contractWithoutHash.put("schemaVersion", 1);
+        contractWithoutHash.put("pipelineId", pipelineId);
+        contractWithoutHash.put("platform", ctx.getPlatformMode() == null ? "COMPUTE" : ctx.getPlatformMode().name());
+        contractWithoutHash.put("transport", ctx.getTransportMode() == null ? "GRPC" : ctx.getTransportMode().name());
+        contractWithoutHash.put("module", blankToNull(ctx.getModuleName()));
+        contractWithoutHash.put("pluginHost", ctx.isPluginHost());
+        contractWithoutHash.put("runtimeLayout", ctx.getRuntimeMapping() == null ? null : ctx.getRuntimeMapping().layout().name());
+        contractWithoutHash.put("steps", steps);
+        contractWithoutHash.put("capabilities", capabilities());
+
+        String contractHash = sha256(CANONICAL_GSON.toJson(contractWithoutHash));
+        Map<String, Object> finalContract = new LinkedHashMap<>();
+        finalContract.put("schemaVersion", 1);
+        finalContract.put("pipelineId", pipelineId);
+        finalContract.put("contractVersion", "sha256:" + contractHash);
+        finalContract.put("contractHash", contractHash);
+        finalContract.put("platform", contractWithoutHash.get("platform"));
+        finalContract.put("transport", contractWithoutHash.get("transport"));
+        finalContract.put("module", contractWithoutHash.get("module"));
+        finalContract.put("pluginHost", contractWithoutHash.get("pluginHost"));
+        finalContract.put("runtimeLayout", contractWithoutHash.get("runtimeLayout"));
+        finalContract.put("steps", steps);
+        finalContract.put("capabilities", contractWithoutHash.get("capabilities"));
+
+        if (processingEnv != null) {
+            javax.tools.FileObject resourceFile = processingEnv.getFiler()
+                .createResource(StandardLocation.CLASS_OUTPUT, "", CONTRACT_RESOURCE_PATH);
+            try (var writer = resourceFile.openWriter()) {
+                writer.write(PRETTY_GSON.toJson(finalContract));
             }
         }
     }
@@ -208,18 +259,23 @@ public class PipelineBundleManifestMetadataGenerator {
         }
         List<PipelineStepModel> ordered = new ArrayList<>();
         Set<PipelineStepModel> added = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        Set<String> addedTokens = new java.util.LinkedHashSet<>();
         for (PipelineYamlStep step : config.steps()) {
             if (step == null || step.name() == null) {
                 continue;
             }
-            PipelineStepModel model = byToken.get(normalizeStepToken(step.name()));
+            String token = normalizeStepToken(step.name());
+            PipelineStepModel model = byToken.get(token);
             if (model != null && added.add(model)) {
                 ordered.add(model);
+                addedTokens.add(token);
             }
         }
         for (PipelineStepModel model : models) {
-            if (!model.sideEffect() && added.add(model)) {
+            String token = normalizeStepToken(stepTokenFromModel(model));
+            if (!model.sideEffect() && !addedTokens.contains(token) && added.add(model)) {
                 ordered.add(model);
+                addedTokens.add(token);
             }
         }
         return ordered;

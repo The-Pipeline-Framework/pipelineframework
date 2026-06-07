@@ -17,6 +17,16 @@ if [[ ! -f "${RUNNER}" ]]; then
   exit 1
 fi
 
+python3 - "${TPF_WORKER_PORT}" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    if sock.connect_ex(("127.0.0.1", port)) == 0:
+        raise SystemExit(f"Port {port} is already in use; set TPF_WORKER_PORT to a free port.")
+PY
+
 mkdir -p "${TPF_LOG_DIR}" "${TPF_PID_DIR}"
 
 (

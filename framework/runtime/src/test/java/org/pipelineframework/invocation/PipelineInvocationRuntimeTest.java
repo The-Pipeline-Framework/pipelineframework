@@ -151,7 +151,7 @@ class PipelineInvocationRuntimeTest {
     }
 
     @Test
-    void transportBoundaryPreservesAmbientContextAtCreationTime() {
+    void transportBoundaryDoesNotOwnInvocationContext() {
         PipelineContext boundaryPipeline = new PipelineContext("boundary", "tenant-boundary", "prefer-cache");
         AwaitExecutionContext boundaryAwait = new AwaitExecutionContext("tenant-boundary", "exec-boundary", 5);
         AtomicReference<PipelineContext> observedPipeline = new AtomicReference<>();
@@ -172,8 +172,8 @@ class PipelineInvocationRuntimeTest {
         }
 
         assertEquals("ok", result.await().indefinitely());
-        assertSame(boundaryPipeline, observedPipeline.get());
-        assertSame(boundaryAwait, observedAwait.get());
+        assertNull(observedPipeline.get());
+        assertNull(observedAwait.get());
         assertNull(PipelineContextHolder.get());
         assertNull(AwaitExecutionContextHolder.get());
     }

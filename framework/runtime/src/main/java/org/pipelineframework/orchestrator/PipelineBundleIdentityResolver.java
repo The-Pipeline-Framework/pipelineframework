@@ -15,7 +15,11 @@ public class PipelineBundleIdentityResolver {
     @Inject
     PipelineBundleManifestLoader manifestLoader;
 
+    @Inject
+    PipelineContractDescriptorLoader contractLoader;
+
     private volatile Optional<PipelineBundleManifest> cachedManifest;
+    private volatile Optional<PipelineContractDescriptor> cachedContract;
 
     /**
      * Resolve the effective local pipeline id.
@@ -43,6 +47,24 @@ public class PipelineBundleIdentityResolver {
             return configured.trim();
         }
         return manifest().bundleVersionId();
+    }
+
+    /**
+     * Resolve the generated pipeline contract version.
+     *
+     * @return contract version from generated contract or manifest fallback
+     */
+    public String contractVersion() {
+        return contract().contractVersion();
+    }
+
+    /**
+     * Resolve the local release version used by in-process workers.
+     *
+     * @return local release version
+     */
+    public String releaseVersion(PipelineOrchestratorConfig config) {
+        return bundleVersionId(config);
     }
 
     /**
@@ -106,8 +128,28 @@ public class PipelineBundleIdentityResolver {
         return loaded.orElseGet(PipelineBundleManifest::localFallback);
     }
 
+    private PipelineContractDescriptor contract() {
+        Optional<PipelineContractDescriptor> loaded = cachedContract;
+        if (loaded == null) {
+            synchronized (this) {
+                loaded = cachedContract;
+                if (loaded == null) {
+                    loaded = contractLoader().load();
+                    if (loaded.isPresent()) {
+                        cachedContract = loaded;
+                    }
+                }
+            }
+        }
+        return loaded.orElseGet(() -> PipelineContractDescriptor.fromManifest(manifest()));
+    }
+
     private PipelineBundleManifestLoader loader() {
         return manifestLoader == null ? new PipelineBundleManifestLoader() : manifestLoader;
+    }
+
+    private PipelineContractDescriptorLoader contractLoader() {
+        return contractLoader == null ? new PipelineContractDescriptorLoader() : contractLoader;
     }
 
     private static boolean isExplicitPipelineOverride(String configured) {

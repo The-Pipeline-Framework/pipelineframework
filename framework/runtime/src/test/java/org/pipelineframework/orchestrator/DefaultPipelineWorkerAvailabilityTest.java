@@ -44,7 +44,13 @@ class DefaultPipelineWorkerAvailabilityTest {
         when(restConfig.isEnabled()).thenReturn(false);
         when(grpcConfig.isEnabled()).thenReturn(false);
         when(sqsConfig.isEnabled()).thenReturn(false);
+        when(sqsConfig.pipelineId()).thenReturn(Optional.empty());
+        when(sqsConfig.contractVersion()).thenReturn(Optional.empty());
+        when(sqsConfig.releaseVersion()).thenReturn(Optional.empty());
+        when(sqsConfig.bundleVersionId()).thenReturn(Optional.empty());
         when(identityResolver.pipelineId(config)).thenReturn("org.example.restaurant");
+        when(identityResolver.contractVersion()).thenReturn("sha256:bundle");
+        when(identityResolver.releaseVersion(config)).thenReturn("sha256:bundle");
         when(identityResolver.bundleVersionId(config)).thenReturn("sha256:bundle");
         when(identityResolver.bundleHash()).thenReturn("bundle");
         when(identityResolver.capabilities()).thenReturn(PipelineBundleCapabilities.defaults());
@@ -55,6 +61,8 @@ class DefaultPipelineWorkerAvailabilityTest {
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
             "org.example.restaurant",
+            "sha256:bundle",
+            "sha256:bundle",
             "sha256:bundle")).await().atMost(Duration.ofSeconds(2));
 
         assertTrue(result.available());
@@ -74,11 +82,15 @@ class DefaultPipelineWorkerAvailabilityTest {
     void sqsWorkerAvailabilityRequiresStaticIdentity() {
         when(sqsConfig.isEnabled()).thenReturn(true);
         when(sqsConfig.pipelineId()).thenReturn(Optional.empty());
+        when(sqsConfig.contractVersion()).thenReturn(Optional.empty());
+        when(sqsConfig.releaseVersion()).thenReturn(Optional.empty());
         when(sqsConfig.bundleVersionId()).thenReturn(Optional.empty());
 
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
             "org.example.restaurant",
+            "sha256:bundle",
+            "sha256:bundle",
             "sha256:bundle")).await().atMost(Duration.ofSeconds(2));
 
         assertFalse(result.available());
@@ -88,11 +100,15 @@ class DefaultPipelineWorkerAvailabilityTest {
     void sqsWorkerAvailabilityMatchesConfiguredStaticIdentity() {
         when(sqsConfig.isEnabled()).thenReturn(true);
         when(sqsConfig.pipelineId()).thenReturn(Optional.of("org.example.restaurant"));
+        when(sqsConfig.contractVersion()).thenReturn(Optional.of("sha256:bundle"));
+        when(sqsConfig.releaseVersion()).thenReturn(Optional.of("sha256:bundle"));
         when(sqsConfig.bundleVersionId()).thenReturn(Optional.of("sha256:bundle"));
 
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
             "org.example.restaurant",
+            "sha256:bundle",
+            "sha256:bundle",
             "sha256:bundle")).await().atMost(Duration.ofSeconds(2));
 
         assertTrue(result.available());

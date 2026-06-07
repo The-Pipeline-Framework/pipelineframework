@@ -2,7 +2,7 @@
 
 This page describes the current production-ish self-host shape for the durable coordinator. It is not a deployment stack or a managed service contract. It is a recipe for operators who want to run the coordinator with durable stores, explicit worker boundaries, and known manual procedures.
 
-The runnable starting point remains `examples/restaurant-approval/self-host`. That example proves the same control-plane, bundle, await, result, and failure/DLQ paths in one local process.
+The runnable starting point remains `examples/restaurant-approval/self-host`. That example proves the same control-plane, release, await, result, and failure/DLQ paths in one local process.
 
 ## Deployment Shapes
 
@@ -13,8 +13,8 @@ Use this shape for local adoption and demos.
 One packaged application process enables:
 
 1. generic control-plane API,
-2. bundle admin API,
-3. file bundle registry and artifact store,
+2. release admin API,
+3. file release registry and artifact store,
 4. local in-process transition worker,
 5. memory/event/log providers by default.
 
@@ -99,27 +99,27 @@ SQS request/reply worker protocol has one additional v1 constraint: `pipeline.or
 
 Before accepting work:
 
-1. Build the pipeline artifact and confirm it contains `META-INF/pipeline/bundle-manifest.json`.
+1. Build the pipeline artifact and confirm it contains `META-INF/pipeline/pipeline-contract.json` and `META-INF/pipeline/bundle-manifest.json`.
 2. Start durable substrates first: execution tables, await tables and indexes, work queue, DLQ queue, and any worker protocol queues.
 3. Start worker processes with the matching pipeline code and worker protocol secret.
 4. Start the coordinator with `strict-startup=true`.
-5. Register the local executable artifact JAR through the bundle admin API.
-6. Activate the bundle version for the tenant and pipeline.
+5. Produce a `pipeline-release.json` that pins the built artifacts by digest.
+6. Register and activate the release for the tenant and pipeline.
 7. Submit one canary execution and verify status, pending await interaction, completion, and result.
 
-The current coordinator does not dynamically load registered JAR code. Bundle registration validates and stores a local executable artifact, but workers must already host matching code. Worker availability checks verify `pipelineId + bundleVersionId` before hosted execution submission. The target contract/release model is described in [Pipeline Contract And Release Model](/guide/evolve/durable-coordinator/pipeline-contract-release-model).
+The current coordinator does not dynamically load registered JAR code. Release registration validates the release descriptor and, for local executable JAR artifacts, validates and stores the artifact. Workers must already host matching code. Worker availability checks verify the active release identity plus the current executable manifest identity before hosted execution submission.
 
 ## Operator Runbooks
 
 ### Register And Activate
 
-1. Register the generated artifact with `POST /tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/bundles/register`.
-2. Read the returned `bundleVersionId`.
-3. Activate with `POST /tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/bundles/{bundleVersionId}/activate`.
-4. Confirm `GET /active` returns the expected bundle id and hash.
-5. Keep workers for that bundle running before submitting executions.
+1. Register the release descriptor with `POST /tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/releases/register`.
+2. Read the returned `releaseVersion`.
+3. Activate with `POST /tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/releases/{releaseVersion}/activate`.
+4. Confirm `GET /active` returns the expected release, contract version, and artifact identity.
+5. Keep workers for that release running before submitting executions.
 
-Activation affects new executions only. Existing executions remain pinned to the bundle id stored on their execution record.
+Activation affects new executions only. Existing executions remain pinned to the contract/release identity stored on their execution record.
 
 ### Submit And Complete Await
 
@@ -154,7 +154,7 @@ There is no built-in generic DLQ replay endpoint yet. The DLQ proves durable fai
 The current safe upgrade procedure is conservative:
 
 1. Deploy workers that host the new bundle version.
-2. Register and activate the new bundle.
+2. Register and activate the new release.
 3. Submit canary executions and verify worker availability and results.
 4. Leave old workers running until executions pinned to the old bundle drain.
 5. Stop old workers only after status queries show no active executions for the old bundle.
@@ -171,7 +171,7 @@ At minimum:
 4. await pending count and oldest pending deadline,
 5. DLQ publication count and repeated failure fingerprints,
 6. worker protocol latency and transport failures,
-7. bundle activation events and active bundle id per tenant/pipeline.
+7. release activation events and active release id per tenant/pipeline.
 
 For metric names and observability surfaces, use the operations guides for [Metrics](/guide/operations/observability/metrics), [Replay & Live Topology](/guide/operations/observability/replay), and the [Operator Playbook](/guide/operations/operators-playbook).
 

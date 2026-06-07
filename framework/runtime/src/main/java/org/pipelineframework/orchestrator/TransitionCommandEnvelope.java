@@ -8,6 +8,8 @@ import java.util.Objects;
  * @param tenantId tenant identifier
  * @param executionId execution identifier
  * @param pipelineId pipeline identifier
+ * @param contractVersion semantic pipeline contract version
+ * @param releaseVersion active release version
  * @param bundleVersionId bundle/runtime version identifier
  * @param currentStepIndex step index where execution should continue
  * @param attempt current execution attempt
@@ -23,6 +25,8 @@ public record TransitionCommandEnvelope(
     String tenantId,
     String executionId,
     String pipelineId,
+    String contractVersion,
+    String releaseVersion,
     String bundleVersionId,
     int currentStepIndex,
     int attempt,
@@ -34,10 +38,49 @@ public record TransitionCommandEnvelope(
     String payloadEncoding,
     String payload
 ) {
+    public TransitionCommandEnvelope(
+        String tenantId,
+        String executionId,
+        String pipelineId,
+        String bundleVersionId,
+        int currentStepIndex,
+        int attempt,
+        ExecutionResultShape resultShape,
+        long executionVersion,
+        String transitionKey,
+        String traceId,
+        String payloadTypeId,
+        String payloadEncoding,
+        String payload
+    ) {
+        this(
+            tenantId,
+            executionId,
+            pipelineId,
+            PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
+            bundleVersionId,
+            bundleVersionId,
+            currentStepIndex,
+            attempt,
+            resultShape,
+            executionVersion,
+            transitionKey,
+            traceId,
+            payloadTypeId,
+            payloadEncoding,
+            payload);
+    }
+
     public TransitionCommandEnvelope {
         Objects.requireNonNull(tenantId, "tenantId");
         Objects.requireNonNull(executionId, "executionId");
         Objects.requireNonNull(pipelineId, "pipelineId");
+        contractVersion = contractVersion == null || contractVersion.isBlank()
+            ? PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION
+            : contractVersion;
+        releaseVersion = releaseVersion == null || releaseVersion.isBlank()
+            ? bundleVersionId
+            : releaseVersion;
         Objects.requireNonNull(bundleVersionId, "bundleVersionId");
         if (currentStepIndex < 0) {
             throw new IllegalArgumentException("currentStepIndex must be >= 0");
@@ -65,12 +108,33 @@ public record TransitionCommandEnvelope(
         String traceId,
         SerializedTransitionPayload encodedPayload
     ) {
+        return from(
+            command,
+            pipelineId,
+            PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
+            bundleVersionId,
+            bundleVersionId,
+            traceId,
+            encodedPayload);
+    }
+
+    public static TransitionCommandEnvelope from(
+        TransitionWorkerCommand command,
+        String pipelineId,
+        String contractVersion,
+        String releaseVersion,
+        String bundleVersionId,
+        String traceId,
+        SerializedTransitionPayload encodedPayload
+    ) {
         Objects.requireNonNull(command, "command");
         Objects.requireNonNull(encodedPayload, "encodedPayload");
         return new TransitionCommandEnvelope(
             command.tenantId(),
             command.executionId(),
             pipelineId,
+            contractVersion,
+            releaseVersion,
             bundleVersionId,
             command.currentStepIndex(),
             command.attempt(),

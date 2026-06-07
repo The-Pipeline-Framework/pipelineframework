@@ -2,7 +2,7 @@
 
 This directory is the local self-hosted coordinator reference path for `restaurant-approval`.
 
-The default demo runs one packaged `monolith-svc` process with the generic control-plane and bundle-admin APIs enabled. That process also uses the local in-process transition worker, so the first self-hosted run is batteries-included: one Java process owns execution state, await state, bundle activation, worker availability checks, result APIs, and restaurant-order business transitions.
+The default demo runs one packaged `monolith-svc` process with the generic control-plane and release-admin APIs enabled. That process also uses the local in-process transition worker, so the first self-hosted run is batteries-included: one Java process owns execution state, await state, release activation, worker availability checks, result APIs, and restaurant-order business transitions.
 
 The separate REST worker script remains available for protocol experiments, but it is not the default adoption path.
 
@@ -14,9 +14,9 @@ From the repository root:
 ./examples/restaurant-approval/self-host/run-self-hosted-demo.sh --ci
 ```
 
-The script packages `monolith-svc`, starts the coordinator, registers and activates the generated bundle JAR, submits accepted and declined orders through `/tpf/control-plane/...`, completes the await interaction, and verifies terminal results.
+The script packages `monolith-svc`, starts the coordinator, creates a local `pipeline-release.json`, registers and activates that release, submits accepted and declined orders through `/tpf/control-plane/...`, completes the await interaction, and verifies terminal results.
 
-The demo client submits the generated REST input DTO as a `RAW` generic control-plane payload. That matches the current executable-bundle runtime shape: the active step order is made of generated REST client steps, while the bundle manifest still records domain contract types. The strategic model is a pipeline contract; this local JAR bundle path is the current implementation form.
+The demo client submits the generated REST input DTO as a `RAW` generic control-plane payload. The release descriptor points at the local executable JAR; the JAR still carries `bundle-manifest.json` as worker identity metadata.
 
 By default it first installs the current `framework` SNAPSHOT so the example build uses the runtime code from this checkout. For faster reruns after the local SNAPSHOT is current:
 
@@ -32,7 +32,7 @@ Run the failure-visibility path:
 ./examples/restaurant-approval/self-host/run-self-hosted-incident.sh --ci
 ```
 
-This starts the same one-process coordinator, registers and activates the bundle, submits an order, waits for the restaurant approval await interaction, and then completes that interaction with a deliberately invalid but API-valid restaurant decision. The resumed execution fails through the normal queue-async path, publishes through the log DLQ provider, and prints an operator triage summary.
+This starts the same one-process coordinator, registers and activates the release, submits an order, waits for the restaurant approval await interaction, and then completes that interaction with a deliberately invalid but API-valid restaurant decision. The resumed execution fails through the normal queue-async path, publishes through the log DLQ provider, and prints an operator triage summary.
 
 The incident script sets `TPF_ORCHESTRATOR_MAX_RETRIES=0` by default so the failure reaches the terminal path immediately. Override that variable if you want to observe retry state first.
 
@@ -68,10 +68,10 @@ Start the coordinator:
 ./examples/restaurant-approval/self-host/start-coordinator.sh
 ```
 
-Register and activate the generated bundle:
+Create, register, and activate the local release descriptor:
 
 ```bash
-./examples/restaurant-approval/self-host/register-and-activate-bundle.sh
+./examples/restaurant-approval/self-host/register-and-activate-release.sh
 ```
 
 Run the accepted and declined control-plane flow:

@@ -4,9 +4,7 @@ import java.util.Objects;
 import java.util.function.LongConsumer;
 
 import org.pipelineframework.awaitable.AwaitExecutionContext;
-import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.context.PipelineContext;
-import org.pipelineframework.context.PipelineContextHolder;
 
 interface PipelineInvocationStrategy {
 
@@ -95,8 +93,6 @@ final class TransitionWorkerInvocationStrategy implements PipelineInvocationStra
 final class TransportBoundaryInvocationStrategy implements PipelineInvocationStrategy {
     private final TransportBoundaryDescriptor descriptor;
     private final TransportBoundaryDiagnostics diagnostics;
-    private final PipelineContext pipelineContext;
-    private final AwaitExecutionContext awaitContext;
 
     TransportBoundaryInvocationStrategy(TransportBoundaryInvocation boundary, TransportBoundaryDiagnostics diagnostics) {
         if (boundary == null) {
@@ -104,18 +100,16 @@ final class TransportBoundaryInvocationStrategy implements PipelineInvocationStr
         }
         this.descriptor = Objects.requireNonNull(boundary.transportBoundary(), "transport boundary must not be null");
         this.diagnostics = Objects.requireNonNull(diagnostics, "diagnostics must not be null");
-        this.pipelineContext = PipelineContextHolder.get();
-        this.awaitContext = AwaitExecutionContextHolder.get();
     }
 
     @Override
     public PipelineContext pipelineContext() {
-        return pipelineContext;
+        return null;
     }
 
     @Override
     public AwaitExecutionContext awaitContext() {
-        return awaitContext;
+        return null;
     }
 
     @Override

@@ -2,7 +2,7 @@
 
 The durable coordinator needs a versioned thing to execute, but that thing should not be a JAR. A JAR is one artifact form. The strategic unit is a pipeline contract, and each deployable version is a release that pins the artifacts satisfying that contract.
 
-This page describes the target model. Current runtime code still uses `META-INF/pipeline/bundle-manifest.json` and local executable JAR registration as the first implementation form.
+The runtime now implements the first release cutover: generated `pipeline-contract.json`, local `pipeline-release.json` registration, active release pointers, execution pinning to contract/release identity, and release-aware worker availability checks. `META-INF/pipeline/bundle-manifest.json` remains the executable-worker identity file for current JAR/local worker artifacts.
 
 ## Core Terms
 
@@ -17,9 +17,9 @@ This page describes the target model. Current runtime code still uses `META-INF/
 
 ## Contract Descriptor
 
-`pipeline-contract.json` should be the generated semantic description of the pipeline, independent of where the code is deployed.
+`META-INF/pipeline/pipeline-contract.json` is the generated semantic description of the pipeline, independent of where the code is deployed.
 
-It should include:
+It includes the current compiled metadata TPF can derive deterministically:
 
 1. pipeline id and contract version,
 2. ordered graph and step ids,
@@ -28,24 +28,25 @@ It should include:
 5. input and output type ids,
 6. mapper, boundary, and transport metadata needed for compatibility checks,
 7. await correlation and transport metadata,
-8. inter-pipeline handoff contracts when a pipeline publishes or consumes another pipeline boundary,
-9. compatibility hash over canonical contract content.
+8. compatibility hash over canonical contract content.
 
 The contract is produced from both YAML and code-derived compiler metadata. A YAML-only hash is not enough, because step types, mapper bindings, generated codecs, and await/boundary metadata can change without a visually large YAML diff.
 
+Inter-pipeline handoff contracts remain a follow-up extension.
+
 ## Release Descriptor
 
-`pipeline-release.json` should be emitted by a build or release process after artifacts are built and addressable.
+`pipeline-release.json` is emitted by a build or release process after artifacts are built and addressable.
 
-It should include:
+It includes:
 
 1. pipeline id,
 2. contract version,
 3. release version,
 4. artifact descriptors for the coordinator-facing worker or individual steps,
-5. expected worker capability identities,
-6. deployment target metadata when known,
-7. artifact digests and optional provenance, SBOM, and signature references.
+5. artifact digests.
+
+Expected worker capability identities, deployment target metadata, provenance, SBOM, and signature references remain follow-up fields.
 
 Example:
 
@@ -70,11 +71,11 @@ Example:
 }
 ```
 
-The coordinator should validate and activate releases. It should not become the deployment engine. Platform-specific tools deploy the artifacts, then the coordinator verifies that workers report matching contract/release capability before accepting work.
+The coordinator validates and activates releases. It does not become the deployment engine. Platform-specific tools deploy the artifacts, then the coordinator verifies that workers report matching contract/release capability before accepting work.
 
 ## Artifact Kinds
 
-The release model should support these artifact kinds:
+The release descriptor accepts these artifact kinds:
 
 | Kind | Example | Typical use |
 | --- | --- | --- |
@@ -86,7 +87,7 @@ The release model should support these artifact kinds:
 | `lambda-image` | `oci://ecr.example/payment-lambda@sha256:...` | AWS Lambda container image. |
 | `external-endpoint` | `https://payments.internal/step` | Pre-existing service that satisfies a step contract. |
 
-Local artifacts are valid, but they still need a digest. Production releases should prefer immutable references such as OCI digests, S3 object version plus checksum, Maven coordinate plus checksum, or a signed local manifest in air-gapped deployments.
+Local artifacts are valid, but they still need a digest. Current runtime validation is strongest for local/JAR artifacts. Container, function, and external endpoint artifacts are descriptor-level identities until platform-specific deployers and richer worker capability metadata mature. Production releases should prefer immutable references such as OCI digests, S3 object version plus checksum, Maven coordinate plus checksum, or a signed local manifest in air-gapped deployments.
 
 ## Ownership Models
 
@@ -115,7 +116,7 @@ The release model should make drift visible at several levels:
 | Deployment drift | The active release expects endpoints/images/functions that are not deployed or reachable. |
 | Runtime drift | Worker capability reports a different pipeline id, contract version, release version, or artifact digest. |
 
-The current worker capability check already proves the start of runtime drift detection through `pipelineId + bundleVersionId`. The target model should extend that to contract version, release version, and artifact identity.
+The current worker capability check verifies `pipelineId + contractVersion + releaseVersion + bundleVersionId`. Artifact digest drift is validated for local/JAR registration and activation; runtime worker-reported artifact digest remains a follow-up.
 
 ## Standards To Reuse
 
@@ -131,6 +132,6 @@ CNAB, Open Application Model, Serverless Workflow, and CDEvents are useful refer
 
 ## Relationship To Current Bundle Manifest
 
-`META-INF/pipeline/bundle-manifest.json` is the current v1 identity artifact. It gives the coordinator and worker enough identity to validate portable transition envelopes and pin executions.
+`META-INF/pipeline/bundle-manifest.json` is the current v1 executable identity artifact. It gives the coordinator and worker enough identity to validate portable transition envelopes against the code the worker actually hosts.
 
-The next runtime step should not delete that path. It should introduce release registration beside the existing local executable artifact registration, then map the current bundle manifest into the new contract/release vocabulary.
+Release registration maps the current bundle manifest into the contract/release vocabulary for JAR/local executable artifacts. The legacy `/bundles` endpoints remain compatibility helpers; new self-host flows register releases.

@@ -52,12 +52,35 @@ public class LocalPipelineControlPlane implements PipelineControlPlane {
         boolean outputStreaming,
         String pipelineId,
         String bundleVersionId) {
+        return executePipelineAsync(
+            input,
+            tenantId,
+            idempotencyKey,
+            outputStreaming,
+            pipelineId,
+            org.pipelineframework.orchestrator.PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
+            bundleVersionId,
+            bundleVersionId);
+    }
+
+    @Override
+    public Uni<RunAsyncAcceptedDto> executePipelineAsync(
+        Object input,
+        String tenantId,
+        String idempotencyKey,
+        boolean outputStreaming,
+        String pipelineId,
+        String contractVersion,
+        String releaseVersion,
+        String bundleVersionId) {
         return queueAsyncCoordinator.executePipelineAsync(
             input,
             tenantId,
             idempotencyKey,
             outputStreaming,
             pipelineId,
+            contractVersion,
+            releaseVersion,
             bundleVersionId);
     }
 
