@@ -2,7 +2,7 @@
 
 The runtime includes default-disabled local/dev APIs that prove coordinator ownership of submission, status/result lookup, await query/completion, bundle activation, and worker dispatch.
 
-They are internal runtime groundwork and self-host reference surfaces, not a public hosted service API.
+They are internal runtime groundwork and self-host reference surfaces, not a general hosted-service API.
 
 ## Control Plane
 

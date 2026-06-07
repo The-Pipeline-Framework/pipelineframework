@@ -1,6 +1,6 @@
 # Self-Hosted Milestone
 
-The near-term adoption goal is a public, self-hosted durable coordinator path that users can run and inspect without private code.
+The near-term adoption goal is a self-hosted durable coordinator path that users can run, inspect, and operate directly.
 
 The first reference is `examples/restaurant-approval/self-host`, which runs one batteries-included coordinator process from the packaged `monolith-svc` artifact. It uses the local in-process transition worker by default so users can exercise hosted-style submission, bundle activation, await completion, and result inspection without starting a second service.
 
@@ -25,7 +25,7 @@ The first reference is `examples/restaurant-approval/self-host`, which runs one 
 | Gap | Why it matters |
 | --- | --- |
 | Built-in DLQ replay | current self-host incident flow shows status, terminal error details, and DLQ publication, but re-drive remains application-owned |
-| Contract/bundle correction | the long-term concept is a pipeline contract, with executable artifacts as one implementation form |
+| Contract/release model | the long-term concept is a pipeline contract and release descriptor, with executable JAR registration as the current local implementation form |
 | Worker lifecycle | healthy, stale, draining, and unavailable states should be added only when self-host workflows require them |
 
-Until this milestone is credible, durable coordinator semantics, worker protocols, bundle/contract identity, and function-platform parity primitives should remain public and self-hostable.
+The `COMPUTE` self-host path is now credible for local adoption and operator walkthroughs. The main remaining design gap is the contract/release model that can describe container images, native binaries, function artifacts, local files, external endpoints, and independently deployed step artifacts without making JAR registration the conceptual unit.
