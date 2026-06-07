@@ -199,6 +199,7 @@ const mainSidebar = [
                     {text: 'Step-Aware Invocation Runtime', link: '/guide/evolve/durable-coordinator/boundary-invocation-model'},
                     {text: 'Bundle Contract', link: '/guide/evolve/durable-coordinator/bundle-contract'},
                     {text: 'Local APIs', link: '/guide/evolve/durable-coordinator/local-apis'},
+                    {text: 'Self-Hosted Deployment', link: '/guide/evolve/durable-coordinator/self-hosted-deployment'},
                     {text: 'Self-Hosted Milestone', link: '/guide/evolve/durable-coordinator/self-hosted-milestone'}
                 ]
             },

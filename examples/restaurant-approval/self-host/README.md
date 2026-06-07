@@ -51,6 +51,8 @@ The incident script sets `TPF_ORCHESTRATOR_MAX_RETRIES=0` by default so the fail
 
 These defaults are local/dev only. Real self-host deployments should use secret references, durable stores, and explicit operational runbooks.
 
+For the production-ish topology, durable provider choices, secret refs, and manual upgrade/drain procedure, see [Self-Hosted Deployment](/docs/guide/evolve/durable-coordinator/self-hosted-deployment.md).
+
 ## Manual Flow
 
 Package the app:

@@ -15,15 +15,16 @@ The first reference is `examples/restaurant-approval/self-host`, which runs one 
 | Worker availability check before submit | present |
 | Await pending query and completion | present |
 | Accepted/declined terminal results | present |
+| Failure/DLQ incident walkthrough | present in `restaurant-approval/self-host` |
+| Operator walkthrough | present in `restaurant-approval/self-host` |
+| Production-ish deployment recipe | present in [Self-Hosted Deployment](/guide/evolve/durable-coordinator/self-hosted-deployment) |
 | Kafka await over stream | covered separately by `csv-payments` |
 
 ## Remaining Gap
 
 | Gap | Why it matters |
 | --- | --- |
-| Operator walkthrough | users need a step-by-step runbook for status, await, result, logs, replay, and DLQ |
-| Replay/DLQ incident demo | durable orchestration needs visible recovery paths, not only happy paths |
-| Production-ish deployment recipe | self-host users need coordinator, worker, store, queue, secret, and artifact layout guidance |
+| Built-in DLQ replay | current self-host incident flow shows status, terminal error details, and DLQ publication, but re-drive remains application-owned |
 | Contract/bundle correction | the long-term concept is a pipeline contract, with executable artifacts as one implementation form |
 | Worker lifecycle | healthy, stale, draining, and unavailable states should be added only when self-host workflows require them |
 

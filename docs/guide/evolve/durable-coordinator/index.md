@@ -44,10 +44,11 @@ sequenceDiagram
 2. [Step-Aware Invocation Runtime](/guide/evolve/durable-coordinator/boundary-invocation-model) explains the shared invocation seam used by pipeline steps and transition workers.
 3. [Bundle Contract](/guide/evolve/durable-coordinator/bundle-contract) explains manifest identity, activation, pinning, and worker availability.
 4. [Local APIs](/guide/evolve/durable-coordinator/local-apis) documents the current default-disabled control-plane and admin APIs.
-5. [Self-Hosted Milestone](/guide/evolve/durable-coordinator/self-hosted-milestone) tracks what remains before the public self-host path is credible.
+5. [Self-Hosted Deployment](/guide/evolve/durable-coordinator/self-hosted-deployment) gives the production-ish self-host topology, configuration, and operator runbooks.
+6. [Self-Hosted Milestone](/guide/evolve/durable-coordinator/self-hosted-milestone) tracks what remains before the public self-host path is credible.
 
 ## Limits
 
 The current coordinator path does not dynamically load registered JAR code. Workers must already host matching pipeline code and validate `pipelineId + bundleVersionId`.
 
-The current file-backed bundle registry is single-coordinator oriented. Multi-instance registry coordination, worker lifecycle, upgrade/drain policy, and production deployment recipes remain follow-up public substrate work.
+The current file-backed bundle registry is single-coordinator oriented. Multi-instance registry coordination, built-in DLQ replay, and worker lifecycle remain follow-up public substrate work.
