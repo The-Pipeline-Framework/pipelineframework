@@ -17,7 +17,7 @@ flowchart LR
     G --> H["Compensation / terminal state"]
 ```
 
-This example proves:
+This example also demonstrates two generated interaction checkpoints (`Await Order Approval` and `Await Restaurant Acceptance`) and proves:
 
 - compile-time declaration of pipeline boundaries
 - grouped `pipeline-runtime` execution for regular steps
@@ -108,3 +108,19 @@ Run the end-to-end checkpoint suite only:
 ```
 
 For runtime semantics and limits, see [Orchestrator Runtime](/guide/development/orchestrator-runtime/).
+
+## Service introduction UI
+
+The checkout example now includes `examples/checkout/nextjs-ui` as a service-map oriented intro surface.
+It is intended to help people understand the topology and service responsibilities, while still using
+the real generated TPF gRPC endpoints:
+
+- start a sample order through the external `run-async` gRPC orchestration endpoint,
+- review checkpoint handoff progression through the execution views,
+- resume pending interactions from the human-in-loop view for both interaction checkpoints:
+  - consumer validation
+  - restaurant acceptance
+
+If you are running the example locally, use `TPF_BASE_URL` and `TPF_TENANT_ID` (and optional
+`TPF_AWAIT_STEP_ID`) to point the UI at your deployment. The UI can also be configured directly with
+`TPF_GRPC_HOST` / `TPF_GRPC_PORT` when you need to target a different gRPC endpoint.

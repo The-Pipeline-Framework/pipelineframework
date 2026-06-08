@@ -4,6 +4,14 @@ basePackage: org.pipelineframework.tpfgo.checkout
 transport: GRPC
 platform: COMPUTE
 messages:
+  OrderItem:
+    fields:
+      - number: 1
+        name: sku
+        type: string
+      - number: 2
+        name: quantity
+        type: int32
   PlaceOrderRequest:
     fields:
       - number: 1
@@ -17,7 +25,8 @@ messages:
         type: uuid
       - number: 4
         name: items
-        type: string
+        type: OrderItem
+        repeated: true
       - number: 5
         name: totalAmount
         type: decimal
@@ -37,7 +46,8 @@ messages:
         type: uuid
       - number: 4
         name: items
-        type: string
+        type: OrderItem
+        repeated: true
       - number: 5
         name: totalAmount
         type: decimal

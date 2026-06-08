@@ -63,6 +63,21 @@ steps:
     output: org.pipelineframework.tpfgo.common.domain.OrderApproved
     outputTypeName: OrderApproved
     outboundMapper: org.pipelineframework.tpfgo.consumer.validation.consumer_validate_order.service.OrderApprovedMapper
+  - name: Await Order Approval
+    kind: await
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.tpfgo.common.domain.OrderApproved
+    inputTypeName: OrderApproved
+    output: org.pipelineframework.tpfgo.common.domain.OrderApproved
+    outputTypeName: OrderApproved
+    timeout: PT30M
+    idempotencyKeyFields:
+      - orderId
+    await:
+      correlation:
+        strategy: interactionId
+      transport:
+        type: interaction-api
 input:
   subscription:
     publication: tpfgo.checkout.order-pending.v1

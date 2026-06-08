@@ -37,6 +37,7 @@
         <google-java-format.version>1.25.0</google-java-format.version>
         <lombok.version>1.18.36</lombok.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
+        <argLine />
         <surefireArgLine />
         <pipeline.generatedSourcesArg />
         <pipeline.moduleArg>-Apipeline.module=${project.artifactId}</pipeline.moduleArg>
@@ -375,6 +376,7 @@
                     <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-maven-plugin</artifactId>
                     <version>${quarkus.platform.version}</version>
+                    <extensions>true</extensions>
                     <configuration>
                         <jvmArgs>--enable-preview</jvmArgs>
                         <sourceDir>${project.build.directory}/generated-sources/annotations</sourceDir>
@@ -413,7 +415,7 @@
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         </systemPropertyVariables>
                         <!--suppress UnresolvedMavenProperty -->
-                        <argLine>${surefireArgLine} -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar --enable-preview -XX:+EnableDynamicAgentLoading</argLine>
+                        <argLine>@{argLine} ${surefireArgLine} -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar --enable-preview -XX:+EnableDynamicAgentLoading</argLine>
                     </configuration>
                 </plugin>
                 <plugin>
@@ -422,7 +424,7 @@
                     <version>3.5.1</version>
                     <configuration>
                         <!--suppress UnresolvedMavenProperty -->
-                        <argLine>${surefireArgLine} --enable-preview</argLine>
+                        <argLine>@{argLine} ${surefireArgLine} --enable-preview</argLine>
                     </configuration>
                     <executions>
                         <execution>

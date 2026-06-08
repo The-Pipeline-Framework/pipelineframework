@@ -2,12 +2,14 @@ package org.pipelineframework.tpfgo.common.e2e;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.tpfgo.common.domain.PaymentCaptured;
 import org.pipelineframework.tpfgo.common.domain.PaymentOutcome;
 import org.pipelineframework.tpfgo.common.domain.PlaceOrderRequest;
+import org.pipelineframework.tpfgo.common.domain.OrderItem;
 import org.pipelineframework.tpfgo.common.domain.TerminalOrderState;
 import org.pipelineframework.tpfgo.common.util.DeterministicIds;
 
@@ -62,7 +64,7 @@ class CanonicalTpfgoModelTest {
             DeterministicIds.uuid("request", "r1"),
             DeterministicIds.uuid("customer", "c1"),
             DeterministicIds.uuid("restaurant", "rest1"),
-            "burger x1",
+            List.of(new OrderItem("burger", 1)),
             new BigDecimal("42.50"),
             "EUR");
         PaymentCaptured captured = new PaymentCaptured(

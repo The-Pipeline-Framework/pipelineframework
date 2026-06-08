@@ -1,6 +1,7 @@
 package org.pipelineframework;
 
 import io.smallrye.mutiny.Uni;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,6 +12,8 @@ import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -87,5 +90,30 @@ class PipelineExecutionServiceTest {
             eq(item),
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void queryPendingAwaitInteractionsNormalizesBlankFilters() {
+        when(queueAsyncCoordinator.queryPendingAwaitInteractions(
+                eq("tenant-1"),
+                isNull(),
+                isNull(),
+                isNull(),
+                eq(42)))
+            .thenReturn(Uni.createFrom().item(List.of()));
+
+        service.queryPendingAwaitInteractions(
+            "tenant-1",
+            " ",
+            "",
+            "\t",
+            42).await().indefinitely();
+
+        verify(queueAsyncCoordinator).queryPendingAwaitInteractions(
+            eq("tenant-1"),
+            isNull(),
+            isNull(),
+            isNull(),
+            eq(42));
     }
 }

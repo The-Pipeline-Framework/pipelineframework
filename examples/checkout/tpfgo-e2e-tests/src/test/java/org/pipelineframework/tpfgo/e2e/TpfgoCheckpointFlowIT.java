@@ -10,10 +10,12 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
@@ -47,6 +49,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TpfgoCheckpointFlowIT {
+
+    private static final String[] PENDING_AWAIT_STATUSES = {
+        "WAITING",
+        "DISPATCHING",
+        "DISPATCHED"
+    };
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(2))
@@ -111,7 +119,66 @@ class TpfgoCheckpointFlowIT {
      * "tpfgo.compensation.terminal-state.v1", and verifies the terminal payload indicates a completed outcome with captured payment, no resolution action, and the expected deterministic orderId.
      */
     @Test
-    void executesFullCanonicalTpfgoFlowOverGrpcCheckpointHandoff() {
+    void executesFlowThroughTwoInteractionAwaitBoundaries() throws Exception {
+        String requestId = DeterministicIds.uuid("tpfgo-await", "checkout", "interaction", "request").toString();
+        String customerId = DeterministicIds.uuid("tpfgo-await", "checkout", "interaction", "customer").toString();
+        String restaurantId = DeterministicIds.uuid("tpfgo-await", "checkout", "interaction", "restaurant").toString();
+        String orderId = DeterministicIds.uuid("order", requestId, customerId, restaurantId).toString();
+
+        OrchestratorServiceGrpc.OrchestratorServiceBlockingStub checkout = app("checkout-orchestrator-svc").orchestrator();
+        var consumer = app("consumer-validation-orchestrator-svc").consumerValidationOrchestrator();
+        var restaurant = app("restaurant-acceptance-orchestrator-svc").restaurantAcceptanceOrchestrator();
+
+        Orchestrator.RunAsyncResponse accepted = checkout.runAsync(
+            Orchestrator.RunAsyncRequest.newBuilder()
+                .setInput(PipelineTypes.PlaceOrderRequest.newBuilder()
+                    .setRequestId(requestId)
+                    .setCustomerId(customerId)
+                    .setRestaurantId(restaurantId)
+                    .addItems(orderItem("burger", 1))
+                    .setTotalAmount("12.50")
+                    .setCurrency("USD")
+                    .build())
+                .setTenantId("default")
+                .setIdempotencyKey("tpfgo-await-flow")
+                .build());
+        assertFalse(accepted.getDuplicate());
+        String executionId = accepted.getExecutionId();
+        assertFalse(executionId.isBlank());
+
+        org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.AwaitInteraction firstPending =
+            awaitPendingConsumerInteraction(consumer, "OrderApproved");
+        assertTrue(isPendingAwaitStatus(firstPending.getStatus()));
+        assertEquals("interaction-api", firstPending.getTransportType());
+        consumer.completeAwait(
+            org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.CompleteAwaitRequest.newBuilder()
+                .setTenantId("default")
+                .setInteractionId(firstPending.getInteractionId())
+                .setIdempotencyKey("complete-1-" + executionId)
+                .setActor("tpfgo-e2e-test")
+                .setResponseJson(buildOrderApprovedPayload(orderId, requestId, customerId, restaurantId))
+                .build());
+
+        org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.AwaitInteraction secondPending =
+            awaitPendingRestaurantInteraction(restaurant, "OrderAcceptedByRestaurant");
+        assertTrue(isPendingAwaitStatus(secondPending.getStatus()));
+        assertEquals("interaction-api", secondPending.getTransportType());
+        restaurant.completeAwait(
+            org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.CompleteAwaitRequest.newBuilder()
+                .setTenantId("default")
+                .setInteractionId(secondPending.getInteractionId())
+                .setIdempotencyKey("complete-2-" + executionId)
+                .setActor("tpfgo-e2e-test")
+                .setResponseJson(buildOrderAcceptedByRestaurantPayload(orderId, requestId, customerId, restaurantId))
+                .build());
+
+        JsonNode finalPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
+        assertEquals("COMPLETED", finalPayload.get("outcome").asText());
+        assertEquals(orderId, finalPayload.get("orderId").asText());
+    }
+
+    @Test
+    void executesFullCanonicalTpfgoFlowOverGrpcCheckpointHandoff() throws Exception {
         warmUpFullCheckpointChain("happy-path");
         ManagedApp checkout = app("checkout-orchestrator-svc");
         Orchestrator.RunAsyncResponse accepted = checkout.orchestrator().runAsync(
@@ -120,7 +187,9 @@ class TpfgoCheckpointFlowIT {
                     .setRequestId("11111111-1111-1111-1111-111111111111")
                     .setCustomerId("22222222-2222-2222-2222-222222222222")
                     .setRestaurantId("33333333-3333-3333-3333-333333333333")
-                    .setItems("burger x1,fries x1,soda x1")
+                    .addItems(orderItem("burger", 1))
+                    .addItems(orderItem("fries", 1))
+                    .addItems(orderItem("soda", 1))
                     .setTotalAmount("42.50")
                     .setCurrency("EUR")
                     .build())
@@ -150,7 +219,7 @@ class TpfgoCheckpointFlowIT {
      * payload indicates a compensated failure with the expected payment status, failure code, and resolution action.
      */
     @Test
-    void routesPaymentFailureIntoCompensationTerminalState() {
+    void routesPaymentFailureIntoCompensationTerminalState() throws Exception {
         warmUpFullCheckpointChain("payment-failure");
         ManagedApp checkout = app("checkout-orchestrator-svc");
         checkout.orchestrator().runAsync(
@@ -159,7 +228,7 @@ class TpfgoCheckpointFlowIT {
                     .setRequestId("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
                     .setCustomerId("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
                     .setRestaurantId("cccccccc-cccc-cccc-cccc-cccccccccccc")
-                    .setItems("burger x1")
+                    .addItems(orderItem("burger", 1))
                     .setTotalAmount("0")
                     .setCurrency("EUR")
                     .build())
@@ -236,18 +305,22 @@ class TpfgoCheckpointFlowIT {
      *
      * @param scenarioKey unique suffix used to derive warm-up request identifiers
      */
-    private void warmUpFullCheckpointChain(String scenarioKey) {
+    private void warmUpFullCheckpointChain(String scenarioKey) throws IOException {
         ManagedApp checkout = app("checkout-orchestrator-svc");
+        OrchestratorServiceGrpc.OrchestratorServiceBlockingStub checkoutOrchestrator = checkout.orchestrator();
+        var consumerOrchestrator = app("consumer-validation-orchestrator-svc").consumerValidationOrchestrator();
+        var restaurantOrchestrator = app("restaurant-acceptance-orchestrator-svc").restaurantAcceptanceOrchestrator();
         String requestId = DeterministicIds.uuid("warmup-request", scenarioKey).toString();
         String customerId = DeterministicIds.uuid("warmup-customer", scenarioKey).toString();
         String restaurantId = DeterministicIds.uuid("warmup-restaurant", scenarioKey).toString();
-        Orchestrator.RunAsyncResponse accepted = checkout.orchestrator().runAsync(
+        String orderId = DeterministicIds.uuid("order", requestId, customerId, restaurantId).toString();
+        Orchestrator.RunAsyncResponse accepted = checkoutOrchestrator.runAsync(
             Orchestrator.RunAsyncRequest.newBuilder()
                 .setInput(PipelineTypes.PlaceOrderRequest.newBuilder()
                     .setRequestId(requestId)
                     .setCustomerId(customerId)
                     .setRestaurantId(restaurantId)
-                    .setItems("warmup x1")
+                    .addItems(orderItem("warmup", 1))
                     .setTotalAmount("1.00")
                     .setCurrency("EUR")
                     .build())
@@ -255,9 +328,64 @@ class TpfgoCheckpointFlowIT {
                 .setIdempotencyKey("tpfgo-warmup-" + scenarioKey)
                 .build());
         assertFalse(accepted.getDuplicate());
+
+        String executionId = accepted.getExecutionId();
+        completeConsumerCheckpointAwaitBoundary(
+            consumerOrchestrator,
+            "OrderApproved",
+            buildOrderApprovedPayload(orderId, requestId, customerId, restaurantId, "1.00", "EUR"),
+            "tpfgo-warmup-complete-1-" + scenarioKey);
+        completeRestaurantCheckpointAwaitBoundary(
+            restaurantOrchestrator,
+            "OrderAcceptedByRestaurant",
+            buildOrderAcceptedByRestaurantPayload(
+                orderId,
+                requestId,
+                customerId,
+                restaurantId,
+                "1.00",
+                "EUR"),
+            "tpfgo-warmup-complete-2-" + scenarioKey);
+
         JsonNode warmupPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
         assertNotNull(warmupPayload);
         collector.reset();
+    }
+
+    private void completeConsumerCheckpointAwaitBoundary(
+        org.pipelineframework.tpfgo.consumer.validation.grpc.OrchestratorServiceGrpc.OrchestratorServiceBlockingStub orchestrator,
+        String outputType,
+        String responsePayload,
+        String idempotencyKey
+    ) {
+        org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.AwaitInteraction interaction =
+            awaitPendingConsumerInteraction(orchestrator, outputType);
+        orchestrator.completeAwait(
+            org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.CompleteAwaitRequest.newBuilder()
+                .setTenantId("default")
+                .setInteractionId(interaction.getInteractionId())
+                .setIdempotencyKey(idempotencyKey)
+                .setActor("tpfgo-e2e-test")
+                .setResponseJson(responsePayload)
+                .build());
+    }
+
+    private void completeRestaurantCheckpointAwaitBoundary(
+        org.pipelineframework.tpfgo.restaurant.acceptance.grpc.OrchestratorServiceGrpc.OrchestratorServiceBlockingStub orchestrator,
+        String outputType,
+        String responsePayload,
+        String idempotencyKey
+    ) {
+        org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.AwaitInteraction interaction =
+            awaitPendingRestaurantInteraction(orchestrator, outputType);
+        orchestrator.completeAwait(
+            org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.CompleteAwaitRequest.newBuilder()
+                .setTenantId("default")
+                .setInteractionId(interaction.getInteractionId())
+                .setIdempotencyKey(idempotencyKey)
+                .setActor("tpfgo-e2e-test")
+                .setResponseJson(responsePayload)
+                .build());
     }
 
     private void warmUpCompensationBoundary(
@@ -288,6 +416,139 @@ class TpfgoCheckpointFlowIT {
         JsonNode terminal = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
         assertEquals("FAILED_COMPENSATED", terminal.get("outcome").asText());
         collector.reset();
+    }
+
+    private static PipelineTypes.OrderItem orderItem(String sku, int quantity) {
+        return PipelineTypes.OrderItem.newBuilder()
+            .setSku(sku)
+            .setQuantity(quantity)
+            .build();
+    }
+
+    private static String buildOrderApprovedPayload(
+        String orderId,
+        String requestId,
+        String customerId,
+        String restaurantId
+    ) throws java.io.IOException {
+        return buildOrderApprovedPayload(orderId, requestId, customerId, restaurantId, "12.50", "USD");
+    }
+
+    private static String buildOrderApprovedPayload(
+        String orderId,
+        String requestId,
+        String customerId,
+        String restaurantId,
+        String totalAmount,
+        String currency
+    ) throws java.io.IOException {
+        return PipelineJson.mapper().writeValueAsString(Map.of(
+            "orderId", orderId,
+            "requestId", requestId,
+            "customerId", customerId,
+            "restaurantId", restaurantId,
+            "totalAmount", totalAmount,
+            "currency", currency,
+            "approvedAt", Instant.now().toString(),
+            "riskBand", "standard"));
+    }
+
+    private static String buildOrderAcceptedByRestaurantPayload(
+        String orderId,
+        String requestId,
+        String customerId,
+        String restaurantId
+    ) throws java.io.IOException {
+        return buildOrderAcceptedByRestaurantPayload(
+            orderId,
+            requestId,
+            customerId,
+            restaurantId,
+            "12.50",
+            "USD");
+    }
+
+    private static String buildOrderAcceptedByRestaurantPayload(
+        String orderId,
+        String requestId,
+        String customerId,
+        String restaurantId,
+        String totalAmount,
+        String currency
+    ) throws java.io.IOException {
+        return PipelineJson.mapper().writeValueAsString(Map.of(
+            "orderId", orderId,
+            "requestId", requestId,
+            "customerId", customerId,
+            "restaurantId", restaurantId,
+            "totalAmount", totalAmount,
+            "currency", currency,
+            "acceptedAt", Instant.now().toString(),
+            "kitchenTicketId", DeterministicIds.uuid("tpfgo-await", "kitchen-ticket", orderId).toString()));
+    }
+
+    private org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.AwaitInteraction awaitPendingConsumerInteraction(
+        org.pipelineframework.tpfgo.consumer.validation.grpc.OrchestratorServiceGrpc.OrchestratorServiceBlockingStub orchestrator,
+        String outputType
+    ) {
+        return Awaitility.await()
+            .atMost(Duration.ofSeconds(90))
+            .pollInterval(Duration.ofSeconds(1))
+            .until(() -> findPendingConsumerInteraction(orchestrator, outputType), Optional::isPresent)
+            .orElseThrow();
+    }
+
+    private org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.AwaitInteraction awaitPendingRestaurantInteraction(
+        org.pipelineframework.tpfgo.restaurant.acceptance.grpc.OrchestratorServiceGrpc.OrchestratorServiceBlockingStub orchestrator,
+        String outputType
+    ) {
+        return Awaitility.await()
+            .atMost(Duration.ofSeconds(90))
+            .pollInterval(Duration.ofSeconds(1))
+            .until(() -> findPendingRestaurantInteractionByOutputType(orchestrator, outputType), Optional::isPresent)
+            .orElseThrow();
+    }
+
+    private Optional<org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.AwaitInteraction> findPendingConsumerInteraction(
+        org.pipelineframework.tpfgo.consumer.validation.grpc.OrchestratorServiceGrpc.OrchestratorServiceBlockingStub orchestrator,
+        String outputType
+    ) {
+        org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.ListPendingAwaitResponse response =
+            orchestrator.listPendingAwait(
+        org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.ListPendingAwaitRequest.newBuilder()
+                    .setTenantId("default")
+                    .setLimit(100)
+                    .build());
+        return response.getInteractionsList().stream()
+            .filter(interaction -> interaction.getStatus() != null)
+            .filter(interaction -> isPendingAwaitStatus(interaction.getStatus()))
+            .filter(interaction -> interaction.getOutputType() != null && interaction.getOutputType().endsWith(outputType))
+            .findFirst();
+    }
+
+    private Optional<org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.AwaitInteraction> findPendingRestaurantInteractionByOutputType(
+        org.pipelineframework.tpfgo.restaurant.acceptance.grpc.OrchestratorServiceGrpc.OrchestratorServiceBlockingStub orchestrator,
+        String outputType
+    ) {
+        org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.ListPendingAwaitResponse response =
+            orchestrator.listPendingAwait(
+        org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.ListPendingAwaitRequest.newBuilder()
+                    .setTenantId("default")
+                    .setLimit(100)
+                    .build());
+        return response.getInteractionsList().stream()
+            .filter(interaction -> isPendingAwaitStatus(interaction.getStatus()))
+            .filter(interaction -> interaction.getOutputType() != null && interaction.getOutputType().endsWith(outputType))
+            .findFirst();
+    }
+
+    private static boolean isPendingAwaitStatus(String status) {
+        for (String pendingStatus : PENDING_AWAIT_STATUSES) {
+            if (pendingStatus.equals(status)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean checkpointAdmissionReady(
@@ -705,8 +966,21 @@ class TpfgoCheckpointFlowIT {
             if (channel == null) {
                 throw new IllegalStateException("No orchestrator client available for module " + moduleDir);
             }
-            return OrchestratorServiceGrpc.newBlockingStub(channel)
-                .withDeadlineAfter(10, TimeUnit.SECONDS);
+            return OrchestratorServiceGrpc.newBlockingStub(channel);
+        }
+
+        org.pipelineframework.tpfgo.consumer.validation.grpc.OrchestratorServiceGrpc.OrchestratorServiceBlockingStub consumerValidationOrchestrator() {
+            if (channel == null) {
+                throw new IllegalStateException("No orchestrator client available for module " + moduleDir);
+            }
+            return org.pipelineframework.tpfgo.consumer.validation.grpc.OrchestratorServiceGrpc.newBlockingStub(channel);
+        }
+
+        org.pipelineframework.tpfgo.restaurant.acceptance.grpc.OrchestratorServiceGrpc.OrchestratorServiceBlockingStub restaurantAcceptanceOrchestrator() {
+            if (channel == null) {
+                throw new IllegalStateException("No orchestrator client available for module " + moduleDir);
+            }
+            return org.pipelineframework.tpfgo.restaurant.acceptance.grpc.OrchestratorServiceGrpc.newBlockingStub(channel);
         }
 
         /**
@@ -810,41 +1084,6 @@ class TpfgoCheckpointFlowIT {
          * @throws RuntimeException if the payload is not received within the timeout,
          *         wrapping the underlying timeout exception with per-module log tails appended to the message
          */
-        JsonNode awaitPayload(String publication, Path logDirectory, List<ManagedApp> apps) {
-            try {
-                Awaitility.await()
-                    .atMost(Duration.ofSeconds(120))
-                    .pollInterval(Duration.ofSeconds(2))
-                    .until(() -> countFor(publication), count -> count > 0);
-            } catch (Exception e) {
-                StringBuilder msg = new StringBuilder();
-                msg.append("Timed out waiting for publication '").append(publication).append("'.");
-                if (logDirectory != null && apps != null) {
-                    for (ManagedApp app : apps) {
-                        Path logFile = logDirectory.resolve(app.moduleDir() + ".log");
-                        if (Files.exists(logFile)) {
-                            try {
-                                String content = Files.readString(logFile);
-                                int tailLen = Math.min(content.length(), 2000);
-                                msg.append("\n--- ").append(app.moduleDir()).append(" log (tail) ---\n");
-                                msg.append(tailLen < content.length() ? "... [truncated] ..." : "");
-                                msg.append(content.substring(content.length() - tailLen));
-                            } catch (IOException ignored) {
-                                // skip unreadable log files
-                            }
-                        }
-                    }
-                }
-                throw new RuntimeException(msg.toString(), e);
-            }
-            return received.stream()
-                .filter(request -> Objects.equals(publication, request.getPublication()))
-                .reduce((ignored, latest) -> latest)
-                .map(this::toPayload)
-                .orElseThrow();
-        }
-
-        /**
         JsonNode awaitPayload(String publication, Path logDirectory, List<ManagedApp> apps) {
             try {
                 Awaitility.await()

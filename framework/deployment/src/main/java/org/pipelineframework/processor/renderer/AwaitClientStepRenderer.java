@@ -228,6 +228,10 @@ public class AwaitClientStepRenderer {
                 ? packageName
                 : pipelineBasePackage;
         }
+        if ((packageName.endsWith(".common.domain") || packageName.endsWith(".common.dto")) &&
+            pipelineBasePackage != null && !pipelineBasePackage.isBlank()) {
+            return pipelineBasePackage;
+        }
         if (packageName.endsWith(".common.domain")) {
             return packageName.substring(0, packageName.length() - ".common.domain".length());
         }

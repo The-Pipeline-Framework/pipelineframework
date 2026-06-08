@@ -8,10 +8,12 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.tpfgo.common.domain.PlaceOrderRequest;
+import org.pipelineframework.tpfgo.common.domain.OrderItem;
 import org.pipelineframework.tpfgo.common.domain.ValidatedOrderRequest;
 
 class ProcessCheckoutValidateRequestServiceTest {
@@ -50,7 +52,12 @@ class ProcessCheckoutValidateRequestServiceTest {
         UUID customerId = UUID.randomUUID();
         UUID restaurantId = UUID.randomUUID();
         PlaceOrderRequest request = new PlaceOrderRequest(
-            requestId, customerId, restaurantId, "burger x1", new BigDecimal("12.50"), "USD");
+            requestId,
+            customerId,
+            restaurantId,
+            List.of(new OrderItem("burger", 1)),
+            new BigDecimal("12.50"),
+            "USD");
 
         ValidatedOrderRequest validated = service.process(request).await().indefinitely();
 
@@ -58,7 +65,7 @@ class ProcessCheckoutValidateRequestServiceTest {
         assertEquals(requestId, validated.requestId());
         assertEquals(customerId, validated.customerId());
         assertEquals(restaurantId, validated.restaurantId());
-        assertEquals("burger x1", validated.items());
+        assertEquals(List.of(new OrderItem("burger", 1)), validated.items());
         assertEquals(new BigDecimal("12.50"), validated.totalAmount());
         assertEquals("USD", validated.currency());
         assertEquals(FIXED_NOW, validated.validatedAt());
@@ -87,17 +94,25 @@ class ProcessCheckoutValidateRequestServiceTest {
     @Test
     void processPreservesItemsStringExactly() {
         PlaceOrderRequest request = new PlaceOrderRequest(
-            UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-            "  item with spaces  ", new BigDecimal("1.00"), "EUR");
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            List.of(new OrderItem("  item with spaces  ", 1)),
+            new BigDecimal("1.00"),
+            "EUR");
         ValidatedOrderRequest result = service.process(request).await().indefinitely();
-        assertEquals("item with spaces", result.items());
+        assertEquals("item with spaces", result.items().getFirst().sku());
     }
 
     @Test
     void processPreservesCurrencyCode() {
         PlaceOrderRequest request = new PlaceOrderRequest(
-            UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-            "item", new BigDecimal("10.00"), "GBP");
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            List.of(new OrderItem("item", 1)),
+            new BigDecimal("10.00"),
+            "GBP");
         ValidatedOrderRequest result = service.process(request).await().indefinitely();
         assertEquals("GBP", result.currency());
     }
@@ -115,7 +130,7 @@ class ProcessCheckoutValidateRequestServiceTest {
             UUID.randomUUID(),
             UUID.randomUUID(),
             UUID.randomUUID(),
-            "test item",
+            List.of(new OrderItem("test item", 1)),
             totalAmount,
             "USD");
     }

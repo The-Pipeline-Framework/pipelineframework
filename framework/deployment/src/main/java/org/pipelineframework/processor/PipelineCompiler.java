@@ -31,6 +31,7 @@ import org.pipelineframework.annotation.PipelineStep;
     "pipeline.config", // Optional: explicit pipeline.yaml path
     "pipeline.cache.keyGenerator", // Optional: fully-qualified CacheKeyGenerator class for @CacheResult
     "pipeline.orchestrator.generate", // Optional: enable orchestrator endpoint generation
+    "pipeline.warnUnreferencedSteps", // Optional: suppress warnings for intentionally runtime-mapped step services
     "pipeline.module", // Optional: logical module name for runtime mapping
     "pipeline.moduleDir", // Optional: module directory used for config discovery fallback
     "project.basedir", // Optional: project base directory used for config discovery fallback

@@ -3,6 +3,7 @@ package org.pipelineframework.tpfgo.common.domain;
 import java.math.BigDecimal;
 import java.util.Currency;
 import java.util.Locale;
+import java.util.List;
 
 public final class CommonDomainValidation {
 
@@ -18,6 +19,28 @@ public final class CommonDomainValidation {
             throw new IllegalArgumentException(fieldName + " must not be blank");
         }
         return normalized;
+    }
+
+    static <T> List<T> requireNonEmptyList(List<T> values, String fieldName) {
+        if (values == null) {
+            throw new NullPointerException(fieldName + " must not be null");
+        }
+        if (values.isEmpty()) {
+            throw new IllegalArgumentException(fieldName + " must not be empty");
+        }
+        for (int i = 0; i < values.size(); i++) {
+            if (values.get(i) == null) {
+                throw new NullPointerException(fieldName + "[" + i + "] must not be null");
+            }
+        }
+        return values;
+    }
+
+    static int requirePositive(int value, String fieldName) {
+        if (value <= 0) {
+            throw new IllegalArgumentException(fieldName + " must be positive");
+        }
+        return value;
     }
 
     static BigDecimal requireNonNegative(BigDecimal value, String fieldName) {

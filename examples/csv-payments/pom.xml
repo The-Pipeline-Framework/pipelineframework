@@ -53,6 +53,7 @@
         <grpc.version>1.63.0</grpc.version>
         <version.jandex>3.5.0</version.jandex>
         <spotless.plugin.version>2.44.0</spotless.plugin.version>
+        <argLine />
         <surefireArgLine />
         <pipeline.generatedSourcesArg />
         <pipeline.moduleArg>-Apipeline.module=${project.artifactId}</pipeline.moduleArg>
@@ -396,6 +397,7 @@
                     <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-maven-plugin</artifactId>
                     <version>${quarkus.platform.version}</version>
+                    <extensions>true</extensions>
                     <configuration>
                         <jvmArgs>--enable-preview</jvmArgs>
                         <sourceDir>${project.build.directory}/generated-sources/annotations</sourceDir>
@@ -435,7 +437,7 @@
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         </systemPropertyVariables>
                         <!--suppress UnresolvedMavenProperty -->
-                        <argLine>${surefireArgLine} --enable-preview -XX:+EnableDynamicAgentLoading</argLine>
+                        <argLine>@{argLine} ${surefireArgLine} --enable-preview -XX:+EnableDynamicAgentLoading</argLine>
                     </configuration>
                 </plugin>
                 <plugin>

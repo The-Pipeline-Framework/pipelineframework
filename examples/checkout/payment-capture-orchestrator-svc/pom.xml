@@ -109,6 +109,7 @@
                             <compilerArgs>
                                 <arg>${pipeline.generatedSourcesArg}</arg>
                                 <arg>${pipeline.moduleArg}</arg>
+                                <arg>${pipeline.warnUnreferencedStepsArg}</arg>
                                 <arg>-Apipeline.config=${project.basedir}/pipeline.yaml</arg>
                                 <arg>${protobuf.descriptor.fileArg}</arg>
                             </compilerArgs>

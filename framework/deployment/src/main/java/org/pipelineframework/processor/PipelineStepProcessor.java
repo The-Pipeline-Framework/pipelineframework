@@ -26,6 +26,7 @@ import javax.lang.model.element.TypeElement;
     "pipeline.config", // Optional: explicit pipeline.yaml path
     "pipeline.cache.keyGenerator", // Optional: fully-qualified CacheKeyGenerator class for @CacheResult
     "pipeline.orchestrator.generate", // Optional: enable orchestrator endpoint generation
+    "pipeline.warnUnreferencedSteps", // Optional: suppress warnings for intentionally runtime-mapped step services
     "pipeline.module", // Optional: logical module name for runtime mapping
     "pipeline.moduleDir", // Optional: explicit module directory for runtime mapping/config discovery
     "pipeline.function.httpBridge", // Optional: prefer HTTP bridge over generated direct function handlers

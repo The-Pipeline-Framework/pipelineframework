@@ -273,7 +273,20 @@ public class PipelineExecutionService {
       String group,
       String stepId,
       int limit) {
-    return queueAsyncCoordinator.queryPendingAwaitInteractions(tenantId, assignee, group, stepId, limit);
+    return queueAsyncCoordinator.queryPendingAwaitInteractions(
+        tenantId,
+        normalizeBlankFilter(assignee),
+        normalizeBlankFilter(group),
+        normalizeBlankFilter(stepId),
+        limit);
+  }
+
+  private static String normalizeBlankFilter(String value) {
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : trimmed;
   }
 
   /**
