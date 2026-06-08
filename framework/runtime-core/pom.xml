@@ -21,12 +21,11 @@
     <parent>
         <groupId>org.pipelineframework</groupId>
         <artifactId>framework-parent</artifactId>
-        <version>26.5.2-SNAPSHOT</version>
+        <version>26.6.1-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>pipelineframework-runtime-core</artifactId>
-    <version>26.5.2-SNAPSHOT</version>
     <name>The Pipeline Framework Runtime Core</name>
     <description>Framework-neutral runtime abstractions used by the Pipeline runtime</description>
 
