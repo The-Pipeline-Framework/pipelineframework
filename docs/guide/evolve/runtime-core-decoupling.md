@@ -27,7 +27,7 @@ The goal is:
 
 ## Renderer profile plumbing
 
-Deployment now accepts and validates `pipeline.codegen.renderer-profile` in discovery:
+Deployment now accepts and validates `pipeline.codegen.rendererProfile` in discovery:
 
 - `quarkus` (default)
 - `spring` (currently mapped to the same renderer selection strategy as `quarkus`)

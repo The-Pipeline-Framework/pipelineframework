@@ -36,7 +36,8 @@ import org.pipelineframework.processor.parser.StepDefinitionParser;
 public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     private static final PipelineStepConfigLoader.StepConfig DEFAULT_STEP_CONFIG =
         new PipelineStepConfigLoader.StepConfig("", "GRPC", "COMPUTE", List.of(), List.of());
-    private static final String RENDERER_PROFILE_OPTION = "pipeline.codegen.renderer-profile";
+    private static final String RENDERER_PROFILE_OPTION = "pipeline.codegen.rendererProfile";
+    private static final String RENDERER_PROFILE_OPTION_LEGACY = "pipeline.codegen.renderer-profile";
     private final DiscoveryPathResolver discoveryPathResolver;
     private final DiscoveryConfigLoader discoveryConfigLoader;
     private final TransportPlatformResolver transportPlatformResolver;
@@ -195,6 +196,9 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
 
     private String parseRendererProfile(Map<String, String> options) {
         String rawValue = options.get(RENDERER_PROFILE_OPTION);
+        if ((rawValue == null || rawValue.isBlank()) && options.containsKey(RENDERER_PROFILE_OPTION_LEGACY)) {
+            rawValue = options.get(RENDERER_PROFILE_OPTION_LEGACY);
+        }
         if (rawValue == null || rawValue.isBlank()) {
             return PipelineCompilationContext.DEFAULT_RENDERER_PROFILE;
         }

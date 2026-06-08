@@ -134,7 +134,7 @@ class PipelineDiscoveryPhaseTest {
 
     @Test
     void testDiscoveryPhaseExecution_acceptsRendererProfileOption() throws Exception {
-        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.codegen.renderer-profile", "SPRING"));
+        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.codegen.rendererProfile", "SPRING"));
 
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
@@ -146,7 +146,7 @@ class PipelineDiscoveryPhaseTest {
 
     @Test
     void testDiscoveryPhaseExecution_rejectsUnknownRendererProfileOption() {
-        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.codegen.renderer-profile", "vertx"));
+        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.codegen.rendererProfile", "vertx"));
 
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
@@ -154,9 +154,21 @@ class PipelineDiscoveryPhaseTest {
         IllegalArgumentException error =
             assertThrows(IllegalArgumentException.class, () -> phase.execute(context));
 
-        assertTrue(error.getMessage().contains("pipeline.codegen.renderer-profile"));
+        assertTrue(error.getMessage().contains("pipeline.codegen.rendererProfile"));
         assertTrue(error.getMessage().contains("quarkus"));
         assertTrue(error.getMessage().contains("spring"));
+    }
+
+    @Test
+    void testDiscoveryPhaseExecution_acceptsLegacyRendererProfileOption() throws Exception {
+        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.codegen.renderer-profile", "SPRING"));
+
+        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        phase.execute(context);
+
+        assertEquals("spring", context.getRendererProfile());
     }
 
     @Test

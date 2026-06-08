@@ -141,7 +141,7 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
      * @return the handler class FQCN
      */
     public String handlerFqcn(String basePackage) {
-        return basePackage + "." + RESOURCE_CLASS + "." + HANDLER_CLASS;
+        return basePackage + "." + "orchestrator.service." + HANDLER_CLASS;
     }
 
     /**
@@ -151,7 +151,7 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
      * @return the run-async handler class FQCN
      */
     public String runAsyncHandlerFqcn(String basePackage) {
-        return basePackage + "." + RESOURCE_CLASS + "." + RUN_ASYNC_HANDLER_CLASS;
+        return basePackage + "." + "orchestrator.service." + RUN_ASYNC_HANDLER_CLASS;
     }
 
     /**
@@ -161,7 +161,7 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
      * @return the status handler class FQCN
      */
     public String statusHandlerFqcn(String basePackage) {
-        return basePackage + "." + RESOURCE_CLASS + "." + STATUS_HANDLER_CLASS;
+        return basePackage + "." + "orchestrator.service." + STATUS_HANDLER_CLASS;
     }
 
     /**
@@ -171,7 +171,7 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
      * @return the result handler class FQCN
      */
     public String resultHandlerFqcn(String basePackage) {
-        return basePackage + "." + RESOURCE_CLASS + "." + RESULT_HANDLER_CLASS;
+        return basePackage + "." + "orchestrator.service." + RESULT_HANDLER_CLASS;
     }
 
     /**

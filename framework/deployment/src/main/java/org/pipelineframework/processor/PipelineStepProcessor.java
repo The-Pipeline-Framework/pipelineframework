@@ -34,7 +34,7 @@ import javax.lang.model.element.TypeElement;
     "pipeline.rest.naming.strategy", // Optional: REST naming strategy (LEGACY|RESOURCEFUL)
     "pipeline.mapper.fallback.enabled", // Optional: enables delegated mapper fallback engine
     "pipeline.parallelism", // Optional: parallelism mode (PARALLEL|SEQUENTIAL|AUTO)
-    "pipeline.codegen.renderer-profile" // Optional: renderer profile selection (quarkus|spring)
+    "pipeline.codegen.rendererProfile" // Optional: renderer profile selection (quarkus|spring)
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
 @Deprecated(forRemoval = true)
