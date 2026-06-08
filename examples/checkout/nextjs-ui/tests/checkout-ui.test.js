@@ -29,6 +29,75 @@ test("buildCheckoutOrder uses deterministic required fields", () => {
   assert.equal(request.totalAmount, "41.50");
 });
 
+test("buildCheckoutOrder normalizes zero and negative quantities", () => {
+  const zeroQty = buildCheckoutOrder({
+    customerId: "11111111-1111-1111-1111-111111111111",
+    restaurantId: "22222222-2222-2222-2222-222222222222",
+    items: "Margherita x 0",
+    totalAmount: "12.00",
+    currency: "USD"
+  });
+  const negativeQty = buildCheckoutOrder({
+    customerId: "11111111-1111-1111-1111-111111111111",
+    restaurantId: "22222222-2222-2222-2222-222222222222",
+    items: "Pasta x -1",
+    totalAmount: "12.00",
+    currency: "USD"
+  });
+  assert.equal(zeroQty.items[0].quantity, 1);
+  assert.equal(negativeQty.items[0].sku, "Pasta x -1");
+  assert.equal(negativeQty.items[0].quantity, 1);
+});
+
+test("buildCheckoutOrder handles non-numeric and malformed separators with defaults", () => {
+  const nonNumeric = buildCheckoutOrder({
+    customerId: "11111111-1111-1111-1111-111111111111",
+    restaurantId: "22222222-2222-2222-2222-222222222222",
+    items: "Soup x abc",
+    totalAmount: "12.00",
+    currency: "USD"
+  });
+  const whitespaceName = buildCheckoutOrder({
+    customerId: "11111111-1111-1111-1111-111111111111",
+    restaurantId: "22222222-2222-2222-2222-222222222222",
+    items: "  x 2",
+    totalAmount: "12.00",
+    currency: "USD"
+  });
+  const malformedSep1 = buildCheckoutOrder({
+    customerId: "11111111-1111-1111-1111-111111111111",
+    restaurantId: "22222222-2222-2222-2222-222222222222",
+    items: "item xx 2",
+    totalAmount: "12.00",
+    currency: "USD"
+  });
+  const malformedSep2 = buildCheckoutOrder({
+    customerId: "11111111-1111-1111-1111-111111111111",
+    restaurantId: "22222222-2222-2222-2222-222222222222",
+    items: "itemx2",
+    totalAmount: "12.00",
+    currency: "USD"
+  });
+  const emptyName = buildCheckoutOrder({
+    customerId: "11111111-1111-1111-1111-111111111111",
+    restaurantId: "22222222-2222-2222-2222-222222222222",
+    items: "",
+    totalAmount: "12.00",
+    currency: "USD"
+  });
+
+  assert.equal(nonNumeric.items.length, 1);
+  assert.equal(nonNumeric.items[0].sku, "Soup x abc");
+  assert.equal(nonNumeric.items[0].quantity, 1);
+  assert.equal(whitespaceName.items[0].sku, "x 2");
+  assert.equal(whitespaceName.items[0].quantity, 2);
+  assert.equal(malformedSep1.items[0].sku, "item");
+  assert.equal(malformedSep1.items[0].quantity, 2);
+  assert.equal(malformedSep2.items[0].sku, "item");
+  assert.equal(malformedSep2.items[0].quantity, 2);
+  assert.equal(emptyName.items.length, 0);
+});
+
 test("normalizePendingInteraction handles request payloads", () => {
   const normalized = normalizePendingInteraction({
     interactionId: "interaction-1",

@@ -145,9 +145,8 @@ class TpfgoCheckpointFlowIT {
         assertFalse(accepted.getDuplicate());
         String executionId = accepted.getExecutionId();
         assertFalse(executionId.isBlank());
-
         org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.AwaitInteraction firstPending =
-            awaitPendingConsumerInteraction(consumer, "OrderApproved");
+            awaitPendingConsumerInteraction(consumer, "OrderApproved", executionId);
         assertTrue(isPendingAwaitStatus(firstPending.getStatus()));
         assertEquals("interaction-api", firstPending.getTransportType());
         consumer.completeAwait(
@@ -160,7 +159,7 @@ class TpfgoCheckpointFlowIT {
                 .build());
 
         org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.AwaitInteraction secondPending =
-            awaitPendingRestaurantInteraction(restaurant, "OrderAcceptedByRestaurant");
+            awaitPendingRestaurantInteraction(restaurant, "OrderAcceptedByRestaurant", executionId);
         assertTrue(isPendingAwaitStatus(secondPending.getStatus()));
         assertEquals("interaction-api", secondPending.getTransportType());
         restaurant.completeAwait(
@@ -202,6 +201,7 @@ class TpfgoCheckpointFlowIT {
                 .setTenantId("default")
                 .setIdempotencyKey("tpfgo-happy-1")
                 .build());
+        String executionId = accepted.getExecutionId();
         String orderId = DeterministicIds.uuid("order", requestId, customerId, restaurantId).toString();
 
         assertFalse(accepted.getDuplicate());
@@ -209,11 +209,13 @@ class TpfgoCheckpointFlowIT {
             consumerOrchestrator,
             "OrderApproved",
             buildOrderApprovedPayload(orderId, requestId, customerId, restaurantId, "42.50", "EUR"),
+            executionId,
             "tpfgo-happy-complete-1");
         completeRestaurantCheckpointAwaitBoundary(
             restaurantOrchestrator,
             "OrderAcceptedByRestaurant",
             buildOrderAcceptedByRestaurantPayload(orderId, requestId, customerId, restaurantId, "42.50", "EUR"),
+            executionId,
             "tpfgo-happy-complete-2");
 
         JsonNode finalPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
@@ -243,7 +245,7 @@ class TpfgoCheckpointFlowIT {
         String customerId = DeterministicIds.uuid("warmup-customer", "payment-failure", "failure-run").toString();
         String restaurantId = DeterministicIds.uuid("warmup-restaurant", "payment-failure", "failure-run").toString();
         String orderId = DeterministicIds.uuid("order", requestId, customerId, restaurantId).toString();
-        checkout.orchestrator().runAsync(
+        Orchestrator.RunAsyncResponse accepted = checkout.orchestrator().runAsync(
             Orchestrator.RunAsyncRequest.newBuilder()
                 .setInput(PipelineTypes.PlaceOrderRequest.newBuilder()
                     .setRequestId(requestId)
@@ -256,16 +258,19 @@ class TpfgoCheckpointFlowIT {
                 .setTenantId("default")
                 .setIdempotencyKey("tpfgo-failure-1")
                 .build());
+        String executionId = accepted.getExecutionId();
 
         completeConsumerCheckpointAwaitBoundary(
             consumerOrchestrator,
             "OrderApproved",
             buildOrderApprovedPayload(orderId, requestId, customerId, restaurantId, "0", "EUR"),
+            executionId,
             "tpfgo-failure-complete-1");
         completeRestaurantCheckpointAwaitBoundary(
             restaurantOrchestrator,
             "OrderAcceptedByRestaurant",
             buildOrderAcceptedByRestaurantPayload(orderId, requestId, customerId, restaurantId, "0", "EUR"),
+            executionId,
             "tpfgo-failure-complete-2");
 
         JsonNode finalPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
@@ -360,12 +365,12 @@ class TpfgoCheckpointFlowIT {
                 .setIdempotencyKey("tpfgo-warmup-" + scenarioKey)
                 .build());
         assertFalse(accepted.getDuplicate());
-
         String executionId = accepted.getExecutionId();
         completeConsumerCheckpointAwaitBoundary(
             consumerOrchestrator,
             "OrderApproved",
             buildOrderApprovedPayload(orderId, requestId, customerId, restaurantId, "1.00", "EUR"),
+            executionId,
             "tpfgo-warmup-complete-1-" + scenarioKey);
         completeRestaurantCheckpointAwaitBoundary(
             restaurantOrchestrator,
@@ -377,6 +382,7 @@ class TpfgoCheckpointFlowIT {
                 restaurantId,
                 "1.00",
                 "EUR"),
+            executionId,
             "tpfgo-warmup-complete-2-" + scenarioKey);
 
         JsonNode warmupPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
@@ -388,11 +394,12 @@ class TpfgoCheckpointFlowIT {
         org.pipelineframework.tpfgo.consumer.validation.grpc.OrchestratorServiceGrpc.OrchestratorServiceBlockingStub orchestrator,
         String outputType,
         String responsePayload,
+        String executionId,
         String idempotencyKey
     ) {
         org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.AwaitInteraction interaction =
-            awaitPendingConsumerInteraction(orchestrator, outputType);
-        orchestrator.completeAwait(
+            awaitPendingConsumerInteraction(orchestrator, outputType, executionId);
+        orchestrator.withDeadlineAfter(30, TimeUnit.SECONDS).completeAwait(
             org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.CompleteAwaitRequest.newBuilder()
                 .setTenantId("default")
                 .setInteractionId(interaction.getInteractionId())
@@ -406,11 +413,12 @@ class TpfgoCheckpointFlowIT {
         org.pipelineframework.tpfgo.restaurant.acceptance.grpc.OrchestratorServiceGrpc.OrchestratorServiceBlockingStub orchestrator,
         String outputType,
         String responsePayload,
+        String executionId,
         String idempotencyKey
     ) {
         org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.AwaitInteraction interaction =
-            awaitPendingRestaurantInteraction(orchestrator, outputType);
-        orchestrator.completeAwait(
+            awaitPendingRestaurantInteraction(orchestrator, outputType, executionId);
+        orchestrator.withDeadlineAfter(30, TimeUnit.SECONDS).completeAwait(
             org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.CompleteAwaitRequest.newBuilder()
                 .setTenantId("default")
                 .setInteractionId(interaction.getInteractionId())
@@ -521,32 +529,36 @@ class TpfgoCheckpointFlowIT {
 
     private org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.AwaitInteraction awaitPendingConsumerInteraction(
         org.pipelineframework.tpfgo.consumer.validation.grpc.OrchestratorServiceGrpc.OrchestratorServiceBlockingStub orchestrator,
-        String outputType
+        String outputType,
+        String executionId
     ) {
         return Awaitility.await()
             .atMost(Duration.ofSeconds(90))
             .pollInterval(Duration.ofSeconds(1))
-            .until(() -> findPendingConsumerInteraction(orchestrator, outputType), Optional::isPresent)
+            .until(() -> findPendingConsumerInteraction(orchestrator, outputType, executionId), Optional::isPresent)
             .orElseThrow();
     }
 
     private org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.AwaitInteraction awaitPendingRestaurantInteraction(
         org.pipelineframework.tpfgo.restaurant.acceptance.grpc.OrchestratorServiceGrpc.OrchestratorServiceBlockingStub orchestrator,
-        String outputType
+        String outputType,
+        String executionId
     ) {
         return Awaitility.await()
             .atMost(Duration.ofSeconds(90))
             .pollInterval(Duration.ofSeconds(1))
-            .until(() -> findPendingRestaurantInteractionByOutputType(orchestrator, outputType), Optional::isPresent)
+            .until(() -> findPendingRestaurantInteractionByOutputType(orchestrator, outputType, executionId), Optional::isPresent)
             .orElseThrow();
     }
 
     private Optional<org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.AwaitInteraction> findPendingConsumerInteraction(
         org.pipelineframework.tpfgo.consumer.validation.grpc.OrchestratorServiceGrpc.OrchestratorServiceBlockingStub orchestrator,
-        String outputType
+        String outputType,
+        String executionId
     ) {
+        String trimmedExecutionId = String.valueOf(executionId).trim();
         org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.ListPendingAwaitResponse response =
-            orchestrator.listPendingAwait(
+            orchestrator.withDeadlineAfter(30, TimeUnit.SECONDS).listPendingAwait(
         org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.ListPendingAwaitRequest.newBuilder()
                     .setTenantId("default")
                     .setLimit(100)
@@ -555,15 +567,21 @@ class TpfgoCheckpointFlowIT {
             .filter(interaction -> interaction.getStatus() != null)
             .filter(interaction -> isPendingAwaitStatus(interaction.getStatus()))
             .filter(interaction -> interaction.getOutputType() != null && interaction.getOutputType().endsWith(outputType))
+            .filter(interaction -> {
+                String interactionExecutionId = String.valueOf(interaction.getExecutionId()).trim();
+                return interactionExecutionId.equals(trimmedExecutionId);
+            })
             .findFirst();
     }
 
     private Optional<org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.AwaitInteraction> findPendingRestaurantInteractionByOutputType(
         org.pipelineframework.tpfgo.restaurant.acceptance.grpc.OrchestratorServiceGrpc.OrchestratorServiceBlockingStub orchestrator,
-        String outputType
+        String outputType,
+        String executionId
     ) {
+        String trimmedExecutionId = String.valueOf(executionId).trim();
         org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.ListPendingAwaitResponse response =
-            orchestrator.listPendingAwait(
+            orchestrator.withDeadlineAfter(30, TimeUnit.SECONDS).listPendingAwait(
         org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.ListPendingAwaitRequest.newBuilder()
                     .setTenantId("default")
                     .setLimit(100)
@@ -571,6 +589,10 @@ class TpfgoCheckpointFlowIT {
         return response.getInteractionsList().stream()
             .filter(interaction -> isPendingAwaitStatus(interaction.getStatus()))
             .filter(interaction -> interaction.getOutputType() != null && interaction.getOutputType().endsWith(outputType))
+            .filter(interaction -> {
+                String interactionExecutionId = String.valueOf(interaction.getExecutionId()).trim();
+                return interactionExecutionId.equals(trimmedExecutionId);
+            })
             .findFirst();
     }
 
@@ -998,21 +1020,25 @@ class TpfgoCheckpointFlowIT {
             if (channel == null) {
                 throw new IllegalStateException("No orchestrator client available for module " + moduleDir);
             }
-            return OrchestratorServiceGrpc.newBlockingStub(channel);
+            return OrchestratorServiceGrpc.newBlockingStub(channel).withDeadlineAfter(20, TimeUnit.SECONDS);
         }
 
         org.pipelineframework.tpfgo.consumer.validation.grpc.OrchestratorServiceGrpc.OrchestratorServiceBlockingStub consumerValidationOrchestrator() {
             if (channel == null) {
                 throw new IllegalStateException("No orchestrator client available for module " + moduleDir);
             }
-            return org.pipelineframework.tpfgo.consumer.validation.grpc.OrchestratorServiceGrpc.newBlockingStub(channel);
+            return org.pipelineframework.tpfgo.consumer.validation.grpc.OrchestratorServiceGrpc
+                .newBlockingStub(channel)
+                .withDeadlineAfter(20, TimeUnit.SECONDS);
         }
 
         org.pipelineframework.tpfgo.restaurant.acceptance.grpc.OrchestratorServiceGrpc.OrchestratorServiceBlockingStub restaurantAcceptanceOrchestrator() {
             if (channel == null) {
                 throw new IllegalStateException("No orchestrator client available for module " + moduleDir);
             }
-            return org.pipelineframework.tpfgo.restaurant.acceptance.grpc.OrchestratorServiceGrpc.newBlockingStub(channel);
+            return org.pipelineframework.tpfgo.restaurant.acceptance.grpc.OrchestratorServiceGrpc
+                .newBlockingStub(channel)
+                .withDeadlineAfter(20, TimeUnit.SECONDS);
         }
 
         /**

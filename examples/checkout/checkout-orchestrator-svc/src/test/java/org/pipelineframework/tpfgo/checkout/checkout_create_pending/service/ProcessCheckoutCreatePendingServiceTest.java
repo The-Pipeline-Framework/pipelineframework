@@ -49,6 +49,7 @@ class ProcessCheckoutCreatePendingServiceTest {
         assertEquals(new BigDecimal("25.00"), pending.totalAmount());
         assertEquals("USD", pending.currency());
         assertEquals(FIXED_NOW, pending.createdAt());
+        // OrderPending intentionally does not include line-items; only request metadata and totals are retained.
     }
 
     @Test

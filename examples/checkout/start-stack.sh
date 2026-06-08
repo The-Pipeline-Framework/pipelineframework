@@ -123,7 +123,7 @@ if [[ "$SKIP_BUILD" == "true" && "${ALLOW_STALE_ARTIFACTS:-false}" != "true" ]];
       return 0
     fi
 
-    stale_source=$(find "$module_dir" -maxdepth 3 -type f \( -name "*.java" -o -name "*.yaml" -o -name "*.yml" -o -name "pom.xml" -o -name "pipeline.yaml" \) -print0 2>/dev/null |
+    stale_source=$(find "$module_dir" -type f \( -name "*.java" -o -name "*.yaml" -o -name "*.yml" -o -name "pom.xml" -o -name "pipeline.yaml" \) -print0 2>/dev/null |
       while IFS= read -r -d '' file; do
         [[ "$file" -nt "$artifact" ]] && printf '%s' "$file"
       done | head -c 1)

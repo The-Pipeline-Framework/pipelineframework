@@ -33,7 +33,7 @@ public final class CommonDomainValidation {
                 throw new NullPointerException(fieldName + "[" + i + "] must not be null");
             }
         }
-        return values;
+        return List.copyOf(values);
     }
 
     static int requirePositive(int value, String fieldName) {

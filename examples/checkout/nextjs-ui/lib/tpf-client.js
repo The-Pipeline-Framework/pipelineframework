@@ -169,7 +169,7 @@ function normalizeInteraction(interaction, targetId) {
 
   const normalized = normalizePendingInteraction({
     ...interaction,
-    requestPayload: fallbackPayload,
+    requestPayload: interaction?.requestPayload ?? fallbackPayload,
     executionId: toExecutionId(interaction)
   });
 

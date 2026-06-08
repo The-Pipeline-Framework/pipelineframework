@@ -92,7 +92,7 @@ class ProcessCheckoutValidateRequestServiceTest {
     }
 
     @Test
-    void processPreservesItemsStringExactly() {
+    void processTrimsSkuWhitespace() {
         PlaceOrderRequest request = new PlaceOrderRequest(
             UUID.randomUUID(),
             UUID.randomUUID(),

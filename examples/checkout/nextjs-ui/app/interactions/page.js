@@ -185,9 +185,11 @@ export default async function PendingInteractionsPage() {
                         <div>
                           <dt>Execution</dt>
                           <dd>
-                            <Link href={`/executions/${interaction.executionId}`}>
-                              {interaction.executionId || "n/a"}
-                            </Link>
+                            {interaction.executionId ? (
+                              <Link href={`/executions/${interaction.executionId}`}>{interaction.executionId}</Link>
+                            ) : (
+                              <span>n/a</span>
+                            )}
                           </dd>
                         </div>
                         <div>

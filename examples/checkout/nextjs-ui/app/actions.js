@@ -18,7 +18,7 @@ function getRequiredField(formData, fieldName) {
 export async function submitCheckoutOrder(formData) {
   const customerId = getRequiredField(formData, "customerId");
   const restaurantId = getRequiredField(formData, "restaurantId");
-  const items = String(formData.get("items") || "");
+  const items = getRequiredField(formData, "items");
   const totalAmount = getRequiredField(formData, "totalAmount");
   const currency = getRequiredField(formData, "currency");
 

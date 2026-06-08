@@ -68,8 +68,8 @@ const serviceCatalog = [
 ];
 
 const examplePayload = {
-  customerId: "customer-sample-001",
-  restaurantId: "restaurant-sample-001",
+  customerId: "f6d1c5fd-8d3a-4f57-a6f3-3b6dbd7e4e7a",
+  restaurantId: "7d1fb0e2-1f67-4f74-95db-bfd2c6f84f5f",
   items: "Margherita Pizza x 1, Lemon Tart x 2",
   totalAmount: "29.75",
   currency: "USD"
