@@ -181,12 +181,18 @@ class TpfgoCheckpointFlowIT {
     void executesFullCanonicalTpfgoFlowOverGrpcCheckpointHandoff() throws Exception {
         warmUpFullCheckpointChain("happy-path");
         ManagedApp checkout = app("checkout-orchestrator-svc");
+        var consumerOrchestrator = app("consumer-validation-orchestrator-svc").consumerValidationOrchestrator();
+        var restaurantOrchestrator = app("restaurant-acceptance-orchestrator-svc").restaurantAcceptanceOrchestrator();
+
+        String requestId = DeterministicIds.uuid("warmup-request", "happy-path", "run").toString();
+        String customerId = DeterministicIds.uuid("warmup-customer", "happy-path", "run").toString();
+        String restaurantId = DeterministicIds.uuid("warmup-restaurant", "happy-path", "run").toString();
         Orchestrator.RunAsyncResponse accepted = checkout.orchestrator().runAsync(
             Orchestrator.RunAsyncRequest.newBuilder()
                 .setInput(PipelineTypes.PlaceOrderRequest.newBuilder()
-                    .setRequestId("11111111-1111-1111-1111-111111111111")
-                    .setCustomerId("22222222-2222-2222-2222-222222222222")
-                    .setRestaurantId("33333333-3333-3333-3333-333333333333")
+                    .setRequestId(requestId)
+                    .setCustomerId(customerId)
+                    .setRestaurantId(restaurantId)
                     .addItems(orderItem("burger", 1))
                     .addItems(orderItem("fries", 1))
                     .addItems(orderItem("soda", 1))
@@ -196,18 +202,26 @@ class TpfgoCheckpointFlowIT {
                 .setTenantId("default")
                 .setIdempotencyKey("tpfgo-happy-1")
                 .build());
+        String orderId = DeterministicIds.uuid("order", requestId, customerId, restaurantId).toString();
 
         assertFalse(accepted.getDuplicate());
+        completeConsumerCheckpointAwaitBoundary(
+            consumerOrchestrator,
+            "OrderApproved",
+            buildOrderApprovedPayload(orderId, requestId, customerId, restaurantId, "42.50", "EUR"),
+            "tpfgo-happy-complete-1");
+        completeRestaurantCheckpointAwaitBoundary(
+            restaurantOrchestrator,
+            "OrderAcceptedByRestaurant",
+            buildOrderAcceptedByRestaurantPayload(orderId, requestId, customerId, restaurantId, "42.50", "EUR"),
+            "tpfgo-happy-complete-2");
+
         JsonNode finalPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
         assertEquals("COMPLETED", finalPayload.get("outcome").asText());
         assertEquals("CAPTURED", finalPayload.get("paymentStatus").asText());
         assertEquals("none", finalPayload.get("resolutionAction").asText());
         assertEquals(
-            DeterministicIds.uuid(
-                "order",
-                "11111111-1111-1111-1111-111111111111",
-                "22222222-2222-2222-2222-222222222222",
-                "33333333-3333-3333-3333-333333333333").toString(),
+            orderId,
             finalPayload.get("orderId").asText());
     }
 
@@ -222,12 +236,19 @@ class TpfgoCheckpointFlowIT {
     void routesPaymentFailureIntoCompensationTerminalState() throws Exception {
         warmUpFullCheckpointChain("payment-failure");
         ManagedApp checkout = app("checkout-orchestrator-svc");
+        var consumerOrchestrator = app("consumer-validation-orchestrator-svc").consumerValidationOrchestrator();
+        var restaurantOrchestrator = app("restaurant-acceptance-orchestrator-svc").restaurantAcceptanceOrchestrator();
+
+        String requestId = DeterministicIds.uuid("warmup-request", "payment-failure", "failure-run").toString();
+        String customerId = DeterministicIds.uuid("warmup-customer", "payment-failure", "failure-run").toString();
+        String restaurantId = DeterministicIds.uuid("warmup-restaurant", "payment-failure", "failure-run").toString();
+        String orderId = DeterministicIds.uuid("order", requestId, customerId, restaurantId).toString();
         checkout.orchestrator().runAsync(
             Orchestrator.RunAsyncRequest.newBuilder()
                 .setInput(PipelineTypes.PlaceOrderRequest.newBuilder()
-                    .setRequestId("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
-                    .setCustomerId("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
-                    .setRestaurantId("cccccccc-cccc-cccc-cccc-cccccccccccc")
+                    .setRequestId(requestId)
+                    .setCustomerId(customerId)
+                    .setRestaurantId(restaurantId)
                     .addItems(orderItem("burger", 1))
                     .setTotalAmount("0")
                     .setCurrency("EUR")
@@ -235,6 +256,17 @@ class TpfgoCheckpointFlowIT {
                 .setTenantId("default")
                 .setIdempotencyKey("tpfgo-failure-1")
                 .build());
+
+        completeConsumerCheckpointAwaitBoundary(
+            consumerOrchestrator,
+            "OrderApproved",
+            buildOrderApprovedPayload(orderId, requestId, customerId, restaurantId, "0", "EUR"),
+            "tpfgo-failure-complete-1");
+        completeRestaurantCheckpointAwaitBoundary(
+            restaurantOrchestrator,
+            "OrderAcceptedByRestaurant",
+            buildOrderAcceptedByRestaurantPayload(orderId, requestId, customerId, restaurantId, "0", "EUR"),
+            "tpfgo-failure-complete-2");
 
         JsonNode finalPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
         assertEquals("FAILED_COMPENSATED", finalPayload.get("outcome").asText());
