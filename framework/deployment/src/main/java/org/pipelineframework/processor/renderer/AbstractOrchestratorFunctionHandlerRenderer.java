@@ -135,6 +135,46 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
     protected abstract String getExecutionIdExpression();
 
     /**
+     * Build the fully-qualified class name for the main orchestrator handler.
+     *
+     * @param basePackage the configured base package for generated orchestrator artifacts
+     * @return the handler class FQCN
+     */
+    public String handlerFqcn(String basePackage) {
+        return basePackage + "." + RESOURCE_CLASS + "." + HANDLER_CLASS;
+    }
+
+    /**
+     * Build the fully-qualified class name for the run-async orchestrator handler.
+     *
+     * @param basePackage the configured base package for generated orchestrator artifacts
+     * @return the run-async handler class FQCN
+     */
+    public String runAsyncHandlerFqcn(String basePackage) {
+        return basePackage + "." + RESOURCE_CLASS + "." + RUN_ASYNC_HANDLER_CLASS;
+    }
+
+    /**
+     * Build the fully-qualified class name for the execution-status handler.
+     *
+     * @param basePackage the configured base package for generated orchestrator artifacts
+     * @return the status handler class FQCN
+     */
+    public String statusHandlerFqcn(String basePackage) {
+        return basePackage + "." + RESOURCE_CLASS + "." + STATUS_HANDLER_CLASS;
+    }
+
+    /**
+     * Build the fully-qualified class name for the execution-result handler.
+     *
+     * @param basePackage the configured base package for generated orchestrator artifacts
+     * @return the result handler class FQCN
+     */
+    public String resultHandlerFqcn(String basePackage) {
+        return basePackage + "." + RESOURCE_CLASS + "." + RESULT_HANDLER_CLASS;
+    }
+
+    /**
      * Generates and writes the orchestrator REST handler class (PipelineRunFunctionHandler) and any provider-specific async handlers and DTOs based on the given binding.
      *
      * <p>Reads streaming input/output flags and base package from {@code binding}, computes DTO and transport types, builds a handler type implementing the provider-specific handler interface, writes the generated Java file to the generation context output directory, and delegates generation of async handlers to {@link #renderAsyncHandlers(OrchestratorBinding, GenerationContext, String, ClassName, ClassName, boolean, boolean)}.

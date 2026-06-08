@@ -123,6 +123,43 @@ class PipelineDiscoveryPhaseTest {
     }
 
     @Test
+    void testDiscoveryPhaseExecution_defaultsRendererProfileToQuarkus() throws Exception {
+        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        phase.execute(context);
+
+        assertEquals(PipelineCompilationContext.DEFAULT_RENDERER_PROFILE, context.getRendererProfile());
+    }
+
+    @Test
+    void testDiscoveryPhaseExecution_acceptsRendererProfileOption() throws Exception {
+        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.codegen.renderer-profile", "SPRING"));
+
+        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        phase.execute(context);
+
+        assertEquals("spring", context.getRendererProfile());
+    }
+
+    @Test
+    void testDiscoveryPhaseExecution_rejectsUnknownRendererProfileOption() {
+        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.codegen.renderer-profile", "vertx"));
+
+        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        IllegalArgumentException error =
+            assertThrows(IllegalArgumentException.class, () -> phase.execute(context));
+
+        assertTrue(error.getMessage().contains("pipeline.codegen.renderer-profile"));
+        assertTrue(error.getMessage().contains("quarkus"));
+        assertTrue(error.getMessage().contains("spring"));
+    }
+
+    @Test
     void testDiscoveryPhaseExecution_nullRoundEnv() throws Exception {
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, null);

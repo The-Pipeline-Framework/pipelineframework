@@ -203,6 +203,7 @@ const mainSidebar = [
             },
             {text: 'Annotation Processor Architecture (Compat)', link: '/guide/evolve/annotation-processor-architecture'},
             {text: 'Compiler Pipeline Architecture', link: '/guide/evolve/compiler-pipeline-architecture'},
+            {text: 'Runtime Core Decoupling', link: '/guide/evolve/runtime-core-decoupling'},
             {text: 'Operators Internals', link: '/guide/evolve/operators-internals'},
             {text: 'Data Types', link: '/guide/evolve/data-types'},
             {text: 'Typed Union Output Contracts', link: '/guide/evolve/typed-union-output-contracts'},

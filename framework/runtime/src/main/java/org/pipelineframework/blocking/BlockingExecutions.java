@@ -21,9 +21,8 @@ import java.util.function.Supplier;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
-import jakarta.enterprise.inject.Instance;
-import jakarta.enterprise.inject.spi.CDI;
 import org.pipelineframework.annotation.PipelineStep;
+import org.pipelineframework.runtime.core.RuntimeAdapters;
 
 /**
  * Runtime access helpers for blocking step default adapters.
@@ -57,11 +56,8 @@ public final class BlockingExecutions {
 
     private static BlockingExecutionSupport support() {
         try {
-            CDI<Object> cdi = CDI.current();
-            Instance<BlockingExecutionSupport> instance = cdi.select(BlockingExecutionSupport.class);
-            if (!instance.isUnsatisfied()) {
-                return instance.get();
-            }
+            return RuntimeAdapters.resolveBean(BlockingExecutionSupport.class)
+                .orElse(FALLBACK_SUPPORT);
         } catch (RuntimeException ignored) {
             // Tests and non-CDI callers fall back to the local support instance.
         }

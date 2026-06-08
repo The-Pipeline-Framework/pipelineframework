@@ -43,6 +43,8 @@ public final class FunctionHandlerRendererFactory {
     private static final String PROVIDER_AZURE = "azure";
     private static final String PROVIDER_GCP = "gcp";
     private static final String PROVIDER_DEFAULT = PROVIDER_AWS;
+    private static final String RENDERER_PROFILE_QUARKUS = "quarkus";
+    private static final String RENDERER_PROFILE_SPRING = "spring";
 
     private static final String EXTENSION_AWS = "io.quarkus.amazon.lambda.runtime.AmazonLambdaHandler";
     private static final String EXTENSION_AZURE = "io.quarkus.azure.functions.runtime.AzureFunctionsHandler";
@@ -75,6 +77,27 @@ public final class FunctionHandlerRendererFactory {
     }
 
     /**
+     * Selects a function handler renderer for the requested renderer profile.
+     *
+     * @param rendererProfile target profile such as {@code quarkus} or {@code spring}
+     * @return renderer instance for the selected profile
+     * @throws IllegalArgumentException when the profile is unknown
+     */
+    public static AbstractFunctionHandlerRenderer createRenderer(String rendererProfile) {
+        String normalizedProfile = normalizeRendererProfile(rendererProfile);
+        if (normalizedProfile == null) {
+            return createRenderer();
+        }
+
+        if (RENDERER_PROFILE_QUARKUS.equals(normalizedProfile) || RENDERER_PROFILE_SPRING.equals(normalizedProfile)) {
+            return createRenderer();
+        }
+
+        throw new IllegalArgumentException(
+            "Unsupported renderer profile: '" + rendererProfile + "'. Expected one of: quarkus, spring");
+    }
+
+    /**
      * Selects and returns an orchestrator renderer for cloud functions using explicit configuration or auto-detection.
      *
      * <p>The provider selection follows this precedence: explicit system properties (`pipeline.function.provider`,
@@ -94,6 +117,34 @@ public final class FunctionHandlerRendererFactory {
         }
 
         return createOrchestratorRendererForProvider(PROVIDER_DEFAULT);
+    }
+
+    /**
+     * Selects a function handler renderer for orchestrator execution using the requested renderer profile.
+     *
+     * @param rendererProfile target profile such as {@code quarkus} or {@code spring}
+     * @return orchestrator renderer for the selected profile
+     * @throws IllegalArgumentException when the profile is unknown
+     */
+    public static AbstractOrchestratorFunctionHandlerRenderer createOrchestratorRenderer(String rendererProfile) {
+        String normalizedProfile = normalizeRendererProfile(rendererProfile);
+        if (normalizedProfile == null) {
+            return createOrchestratorRenderer();
+        }
+
+        if (RENDERER_PROFILE_QUARKUS.equals(normalizedProfile) || RENDERER_PROFILE_SPRING.equals(normalizedProfile)) {
+            return createOrchestratorRenderer();
+        }
+
+        throw new IllegalArgumentException(
+            "Unsupported renderer profile: '" + rendererProfile + "'. Expected one of: quarkus, spring");
+    }
+
+    private static String normalizeRendererProfile(String rendererProfile) {
+        if (rendererProfile == null || rendererProfile.isBlank()) {
+            return null;
+        }
+        return rendererProfile.toLowerCase(Locale.ROOT).trim();
     }
 
     /**
