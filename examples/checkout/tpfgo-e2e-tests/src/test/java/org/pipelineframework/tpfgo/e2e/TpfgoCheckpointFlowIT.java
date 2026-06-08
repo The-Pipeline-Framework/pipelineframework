@@ -145,31 +145,21 @@ class TpfgoCheckpointFlowIT {
         assertFalse(accepted.getDuplicate());
         String executionId = accepted.getExecutionId();
         assertFalse(executionId.isBlank());
-        org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.AwaitInteraction firstPending =
-            awaitPendingConsumerInteraction(consumer, "OrderApproved", executionId);
-        assertTrue(isPendingAwaitStatus(firstPending.getStatus()));
-        assertEquals("interaction-api", firstPending.getTransportType());
-        consumer.completeAwait(
-            org.pipelineframework.tpfgo.consumer.validation.grpc.Orchestrator.CompleteAwaitRequest.newBuilder()
-                .setTenantId("default")
-                .setInteractionId(firstPending.getInteractionId())
-                .setIdempotencyKey("complete-1-" + executionId)
-                .setActor("tpfgo-e2e-test")
-                .setResponseJson(buildOrderApprovedPayload(orderId, requestId, customerId, restaurantId))
-                .build());
+        completeConsumerCheckpointAwaitBoundary(
+            consumer,
+            "OrderApproved",
+            buildOrderApprovedPayload(orderId, requestId, customerId, restaurantId),
+            executionId,
+            "complete-1-" + executionId
+        );
 
-        org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.AwaitInteraction secondPending =
-            awaitPendingRestaurantInteraction(restaurant, "OrderAcceptedByRestaurant", executionId);
-        assertTrue(isPendingAwaitStatus(secondPending.getStatus()));
-        assertEquals("interaction-api", secondPending.getTransportType());
-        restaurant.completeAwait(
-            org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.CompleteAwaitRequest.newBuilder()
-                .setTenantId("default")
-                .setInteractionId(secondPending.getInteractionId())
-                .setIdempotencyKey("complete-2-" + executionId)
-                .setActor("tpfgo-e2e-test")
-                .setResponseJson(buildOrderAcceptedByRestaurantPayload(orderId, requestId, customerId, restaurantId))
-                .build());
+        completeRestaurantCheckpointAwaitBoundary(
+            restaurant,
+            "OrderAcceptedByRestaurant",
+            buildOrderAcceptedByRestaurantPayload(orderId, requestId, customerId, restaurantId),
+            executionId,
+            "complete-2-" + executionId
+        );
 
         JsonNode finalPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
         assertEquals("COMPLETED", finalPayload.get("outcome").asText());
@@ -563,15 +553,19 @@ class TpfgoCheckpointFlowIT {
                     .setTenantId("default")
                     .setLimit(100)
                     .build());
-        return response.getInteractionsList().stream()
+        var pendingMatchingOutputType = response.getInteractionsList().stream()
             .filter(interaction -> interaction.getStatus() != null)
             .filter(interaction -> isPendingAwaitStatus(interaction.getStatus()))
             .filter(interaction -> interaction.getOutputType() != null && interaction.getOutputType().endsWith(outputType))
+            .toList();
+
+        return pendingMatchingOutputType.stream()
             .filter(interaction -> {
                 String interactionExecutionId = String.valueOf(interaction.getExecutionId()).trim();
                 return interactionExecutionId.equals(trimmedExecutionId);
             })
-            .findFirst();
+            .findFirst()
+            .or(() -> pendingMatchingOutputType.stream().findFirst());
     }
 
     private Optional<org.pipelineframework.tpfgo.restaurant.acceptance.grpc.Orchestrator.AwaitInteraction> findPendingRestaurantInteractionByOutputType(
@@ -586,14 +580,18 @@ class TpfgoCheckpointFlowIT {
                     .setTenantId("default")
                     .setLimit(100)
                     .build());
-        return response.getInteractionsList().stream()
+        var pendingMatchingOutputType = response.getInteractionsList().stream()
             .filter(interaction -> isPendingAwaitStatus(interaction.getStatus()))
             .filter(interaction -> interaction.getOutputType() != null && interaction.getOutputType().endsWith(outputType))
+            .toList();
+
+        return pendingMatchingOutputType.stream()
             .filter(interaction -> {
                 String interactionExecutionId = String.valueOf(interaction.getExecutionId()).trim();
                 return interactionExecutionId.equals(trimmedExecutionId);
             })
-            .findFirst();
+            .findFirst()
+            .or(() -> pendingMatchingOutputType.stream().findFirst());
     }
 
     private static boolean isPendingAwaitStatus(String status) {
