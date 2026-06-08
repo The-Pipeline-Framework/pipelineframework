@@ -177,6 +177,23 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Architecture', link: '/guide/evolve/architecture'},
+            {
+                text: 'Framework Portability Assessment',
+                link: '/guide/evolve/framework-portability-assessment/',
+                collapsed: true,
+                items: [
+                    {text: 'Coupling Inventory', link: '/guide/evolve/framework-portability-assessment/coupling-inventory'},
+                    {text: 'Quarkus Coupling', link: '/guide/evolve/framework-portability-assessment/quarkus-coupling'},
+                    {text: 'Vert.x Coupling', link: '/guide/evolve/framework-portability-assessment/vertx-coupling'},
+                    {text: 'Runtime Split', link: '/guide/evolve/framework-portability-assessment/runtime-split'},
+                    {text: 'Reactive Portability', link: '/guide/evolve/framework-portability-assessment/reactive-portability'},
+                    {text: 'Persistence Portability', link: '/guide/evolve/framework-portability-assessment/persistence'},
+                    {text: 'Annotation Removal', link: '/guide/evolve/framework-portability-assessment/annotation-removal'},
+                    {text: 'Code Generation Portability', link: '/guide/evolve/framework-portability-assessment/code-generation'},
+                    {text: 'Maven And Scaffolding', link: '/guide/evolve/framework-portability-assessment/maven-and-scaffolding'},
+                    {text: 'Roadmap And Guardrails', link: '/guide/evolve/framework-portability-assessment/roadmap-and-guardrails'}
+                ]
+            },
             {text: 'Orchestrator Control Plane', link: '/guide/evolve/architecture#orchestrator-control-plane-current'},
             {
                 text: 'Await Unit Runtime',
