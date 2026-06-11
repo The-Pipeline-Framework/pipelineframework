@@ -70,6 +70,7 @@
         <maven.deploy.skip>true</maven.deploy.skip>
         <skipTests>false</skipTests>
         <skipUnitTests>false</skipUnitTests>
+        <argLine />
         <surefireArgLine />
         <tpf.build.parallelism>AUTO</tpf.build.parallelism>
         <tpf.build.transport>GRPC</tpf.build.transport>
