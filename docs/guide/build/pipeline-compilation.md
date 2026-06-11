@@ -110,6 +110,13 @@ The Pipeline Framework extension processor generates several classes:
 - If `transport: REST`, REST resource adapters and REST client steps.
 - Synthetic client steps for configured plugin aspects (in a plugin host module).
 
+The processor also writes generated metadata under `META-INF/pipeline/`:
+
+- `order.json`: resolved runtime step order.
+- `telemetry.json` and `replay-topology.json`: replay and observability topology.
+- `platform.json`: platform, transport, module, and plugin-host metadata.
+- `bundle-manifest.json`: deterministic v1 bundle identity and ordered step descriptors used by queue-async transition-worker validation.
+
 ### 2.5 Scaffolding
 
 The template generator provides the necessary scaffolding for:

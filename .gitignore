@@ -90,5 +90,8 @@ pom.xml.releaseBackup
 *-cp.txt
 *deliver-cp.txt
 
+# Python cache files
+__pycache__/
+
 # Qwen Code local config
 .qwen/

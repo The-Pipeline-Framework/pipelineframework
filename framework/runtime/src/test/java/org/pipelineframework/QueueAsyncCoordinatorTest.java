@@ -16,6 +16,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.pipelineframework.orchestrator.ControlPlaneAdmissionException;
+import org.pipelineframework.orchestrator.ControlPlaneAdmissionRequest;
+import org.pipelineframework.orchestrator.ControlPlaneAdmissionOperation;
+import org.pipelineframework.orchestrator.ControlPlaneTransitionAdmission;
 import org.pipelineframework.orchestrator.CreateExecutionResult;
 import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.ExecutionInputShape;
@@ -31,7 +35,17 @@ import org.pipelineframework.orchestrator.InMemoryExecutionStateStore;
 import org.pipelineframework.orchestrator.LoggingDeadLetterPublisher;
 import org.pipelineframework.orchestrator.OrchestratorIdempotencyPolicy;
 import org.pipelineframework.orchestrator.OrchestratorMode;
+import org.pipelineframework.orchestrator.PipelineBundleIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
+import org.pipelineframework.orchestrator.LocalControlPlaneAdmissionPolicy;
+import org.pipelineframework.orchestrator.SerializedTransitionPayload;
+import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
+import org.pipelineframework.orchestrator.TransitionCommandEnvelope;
+import org.pipelineframework.orchestrator.TransitionWorkerExecutor;
+import org.pipelineframework.orchestrator.TransitionWorkerExecutionMode;
+import org.pipelineframework.orchestrator.TransitionResultEnvelope;
+import org.pipelineframework.orchestrator.TransitionWorkerOutcome;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.DynamoExecutionStateStore;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
@@ -44,6 +58,7 @@ import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.awaitable.AwaitUnitRecord;
 import org.pipelineframework.awaitable.AwaitUnitStatus;
 import org.pipelineframework.checkpoint.CheckpointPublicationService;
+import org.pipelineframework.invocation.PipelineInvocationRuntime;
 import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 
@@ -51,11 +66,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -66,9 +84,13 @@ class QueueAsyncCoordinatorTest {
     private QueueAsyncCoordinator coordinator;
     private ExecutionInputPolicy inputPolicy;
     private ExecutionFailureHandler failureHandler;
+    private JsonTransitionPayloadCodec payloadCodec;
 
     @Mock
     private PipelineOrchestratorConfig orchestratorConfig;
+
+    @Mock
+    private PipelineOrchestratorConfig.WorkerConfig workerConfig;
 
     @Mock
     private ExecutionStateStore executionStateStore;
@@ -107,6 +129,7 @@ class QueueAsyncCoordinatorTest {
 
         failureHandler = new ExecutionFailureHandler();
         failureHandler.orchestratorConfig = orchestratorConfig;
+        payloadCodec = new JsonTransitionPayloadCodec();
 
         coordinator = new QueueAsyncCoordinator();
         coordinator.orchestratorConfig = orchestratorConfig;
@@ -114,6 +137,10 @@ class QueueAsyncCoordinatorTest {
         coordinator.workDispatcher = workDispatcher;
         coordinator.deadLetterPublisher = deadLetterPublisher;
         coordinator.awaitCoordinator = awaitCoordinator;
+        coordinator.transitionWorkerExecutor = new TransitionWorkerExecutor(
+            orchestratorConfig,
+            new PipelineInvocationRuntime());
+        coordinator.transitionPayloadCodec = payloadCodec;
         coordinator.telemetry = telemetry;
         coordinator.checkpointPublicationService = checkpointPublicationService;
         coordinator.executionStateStores = executionStateStores;
@@ -122,6 +149,11 @@ class QueueAsyncCoordinatorTest {
         coordinator.executionInputPolicy = inputPolicy;
         coordinator.executionFailureHandler = failureHandler;
         coordinator.executionResultShapeResolver = executionResultShapeResolver;
+        lenient().when(orchestratorConfig.worker()).thenReturn(workerConfig);
+        lenient().when(workerConfig.executionMode()).thenReturn(TransitionWorkerExecutionMode.SAME_THREAD);
+        lenient().when(workerConfig.maxInFlight()).thenReturn(64);
+        lenient().when(workerConfig.saturatedDelay()).thenReturn(Duration.ofSeconds(1));
+        lenient().when(awaitCoordinator.importSuspension(any())).thenReturn(Uni.createFrom().voidItem());
     }
 
     @Test
@@ -217,6 +249,24 @@ class QueueAsyncCoordinatorTest {
     }
 
     @Test
+    void executePipelineAsyncRejectsDeniedTenantBeforeStoreAccess() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        PipelineOrchestratorConfig.TenancyConfig tenancy = mock(PipelineOrchestratorConfig.TenancyConfig.class);
+        when(orchestratorConfig.tenancy()).thenReturn(tenancy);
+        when(tenancy.allowedTenants()).thenReturn(List.of("tenant-allowed"));
+        when(tenancy.requireExplicitTenant()).thenReturn(false);
+        coordinator.controlPlaneAdmissionPolicy = new LocalControlPlaneAdmissionPolicy(orchestratorConfig);
+
+        Uni<?> result = coordinator.executePipelineAsync("input", "tenant-denied", null, false);
+
+        ControlPlaneAdmissionException error = assertThrows(
+            ControlPlaneAdmissionException.class,
+            () -> result.await().indefinitely());
+        assertTrue(error.getMessage().contains("TENANT_NOT_ALLOWED"));
+        verify(executionStateStore, never()).createOrGetExecution(any());
+    }
+
+    @Test
     void executePipelineAsyncPersistsMultiInputShapeForStreamingPayload() {
         configureQueueModeDefaults();
         when(executionStateStore.createOrGetExecution(any()))
@@ -253,6 +303,31 @@ class QueueAsyncCoordinatorTest {
             ArgumentCaptor.forClass(org.pipelineframework.orchestrator.ExecutionCreateCommand.class);
         verify(executionStateStore).createOrGetExecution(captor.capture());
         assertEquals(ExecutionResultShape.MATERIALIZED_MULTI, captor.getValue().resultShape());
+    }
+
+    @Test
+    void executePipelineAsyncScopesIdempotencyKeyByPipelineAndBundle() {
+        configureQueueModeDefaults();
+        PipelineBundleIdentityResolver identityResolver = mock(PipelineBundleIdentityResolver.class);
+        coordinator.bundleIdentityResolver = identityResolver;
+        when(identityResolver.pipelineId(orchestratorConfig)).thenReturn("pipeline-a", "pipeline-b");
+        when(identityResolver.bundleVersionId(orchestratorConfig)).thenReturn("bundle-1", "bundle-1");
+        when(executionStateStore.createOrGetExecution(any()))
+            .thenReturn(
+                Uni.createFrom().item(new CreateExecutionResult(createRecord("tenant-1", "exec-a", "key-a"), false)),
+                Uni.createFrom().item(new CreateExecutionResult(createRecord("tenant-1", "exec-b", "key-b"), false)));
+        when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
+
+        coordinator.executePipelineAsync("input", "tenant-1", "client-key", false).await().indefinitely();
+        coordinator.executePipelineAsync("input", "tenant-1", "client-key", false).await().indefinitely();
+
+        ArgumentCaptor<org.pipelineframework.orchestrator.ExecutionCreateCommand> captor =
+            ArgumentCaptor.forClass(org.pipelineframework.orchestrator.ExecutionCreateCommand.class);
+        verify(executionStateStore, org.mockito.Mockito.times(2)).createOrGetExecution(captor.capture());
+        List<org.pipelineframework.orchestrator.ExecutionCreateCommand> commands = captor.getAllValues();
+        assertEquals("pipeline-a", commands.get(0).pipelineId());
+        assertEquals("pipeline-b", commands.get(1).pipelineId());
+        assertNotEquals(commands.get(0).executionKey(), commands.get(1).executionKey());
     }
 
     @Test
@@ -294,11 +369,11 @@ class QueueAsyncCoordinatorTest {
 
         coordinator.processExecutionWorkItem(
                 new ExecutionWorkItem("tenant-1", "exec-await"),
-                record -> Multi.createFrom().failure(new AwaitSuspendedException(
+                command -> Uni.createFrom().item(TransitionResultEnvelope.waiting(new TransitionAwaitSuspension(
                     "tenant-1",
                     "exec-await",
                     "unit-1",
-                    0)))
+                    0))))
             .await().indefinitely();
 
         verify(executionStateStore).markWaitingExternal(
@@ -378,6 +453,8 @@ class QueueAsyncCoordinatorTest {
             .thenReturn(Uni.createFrom().item(Optional.of(waiting)));
         when(awaitCoordinator.getUnit("tenant-1", "unit-1"))
             .thenReturn(Uni.createFrom().item(awaitUnit("unit-1", AwaitUnitStatus.COMPLETED, 10, 10, true, "interaction-1")));
+        when(awaitCoordinator.suspensionSnapshot(any(AwaitSuspendedException.class)))
+            .thenReturn(Uni.createFrom().item(new TransitionAwaitSuspension("tenant-1", "exec-await", "unit-1", 2)));
         when(executionStateStore.markAwaitCompleted(
                 org.mockito.ArgumentMatchers.eq("tenant-1"),
                 org.mockito.ArgumentMatchers.eq("exec-await"),
@@ -389,7 +466,7 @@ class QueueAsyncCoordinatorTest {
 
         coordinator.processExecutionWorkItem(
                 new ExecutionWorkItem("tenant-1", "exec-await"),
-                record -> Multi.createFrom().failure(new AwaitSuspendedException(
+                command -> Uni.createFrom().failure(new AwaitSuspendedException(
                     "tenant-1",
                     "exec-await",
                     "unit-1",
@@ -427,12 +504,14 @@ class QueueAsyncCoordinatorTest {
                 org.mockito.ArgumentMatchers.eq(0),
                 org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(awaitCoordinator.suspensionSnapshot(any(AwaitSuspendedException.class)))
+            .thenReturn(Uni.createFrom().item(new TransitionAwaitSuspension("tenant-1", "exec-await", "unit-1", 0)));
         when(awaitCoordinator.getUnit("tenant-1", "unit-1"))
             .thenReturn(Uni.createFrom().item(awaitUnit("unit-1", AwaitUnitStatus.WAITING_EXTERNAL, 1, 0, false, null)));
 
         coordinator.processExecutionWorkItem(
                 new ExecutionWorkItem("tenant-1", "exec-await"),
-                record -> Multi.createFrom().failure(new IllegalStateException(
+                command -> Uni.createFrom().failure(new IllegalStateException(
                     "wrapped await failure",
                     new AwaitSuspendedException("tenant-1", "exec-await", "unit-1", 0))))
             .await().indefinitely();
@@ -479,11 +558,11 @@ class QueueAsyncCoordinatorTest {
 
         coordinator.processExecutionWorkItem(
                 new ExecutionWorkItem("tenant-1", "exec-await"),
-                record -> Multi.createFrom().failure(new AwaitSuspendedException(
+                command -> Uni.createFrom().item(TransitionResultEnvelope.waiting(new TransitionAwaitSuspension(
                     "tenant-1",
                     "exec-await",
                     "unit-1",
-                    0)))
+                    0))))
             .await().indefinitely();
 
         verify(deadLetterPublisher).publish(any());
@@ -534,7 +613,7 @@ class QueueAsyncCoordinatorTest {
 
         coordinator.processExecutionWorkItem(
                 new ExecutionWorkItem("tenant-1", "exec-stream"),
-                record -> Multi.createFrom().items("out-1", "out-2"))
+                command -> Uni.createFrom().item(TransitionResultEnvelope.completedInProcess(List.of("out-1", "out-2"))))
             .await().indefinitely();
 
         verify(executionStateStore).markSucceeded(
@@ -544,6 +623,241 @@ class QueueAsyncCoordinatorTest {
             org.mockito.ArgumentMatchers.eq("exec-stream:0:0"),
             org.mockito.ArgumentMatchers.eq(List.of("out-1", "out-2")),
             org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
+    void processExecutionWorkItemUsesStoredInputForAggregateAwaitItemContinuation() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.leaseMs()).thenReturn(1000L);
+        List<String> aggregateInput = List.of("payment-output-1", "payment-output-2");
+        ExecutionRecord<Object, Object> claimed = new ExecutionRecord<>(
+            "tenant-1",
+            "exec-aggregate",
+            "key-aggregate",
+            "local-pipeline",
+            "local-bundle",
+            ExecutionResultShape.MATERIALIZED_MULTI,
+            ExecutionStatus.QUEUED,
+            0L,
+            7,
+            0,
+            null,
+            0L,
+            0L,
+            null,
+            aggregateInput,
+            null,
+            null,
+            null,
+            null,
+            1L,
+            1L,
+            99999999L);
+        when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(checkpointPublicationService.publishIfConfigured(org.mockito.ArgumentMatchers.eq(claimed), org.mockito.ArgumentMatchers.eq("output-file")))
+            .thenReturn(Uni.createFrom().voidItem());
+        when(executionStateStore.markSucceeded(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-aggregate"),
+                org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq("exec-aggregate:7:0"),
+                org.mockito.ArgumentMatchers.eq(List.of("output-file")),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        java.util.concurrent.atomic.AtomicReference<Object> workerInput = new java.util.concurrent.atomic.AtomicReference<>();
+
+        coordinator.processExecutionWorkItem(
+                new ExecutionWorkItem("tenant-1", "exec-aggregate"),
+                envelope -> {
+                    workerInput.set(envelope.toCommand(payloadCodec).inputPayload());
+                    return Uni.createFrom().item(TransitionResultEnvelope.completedInProcess(List.of("output-file")));
+                })
+            .await().indefinitely();
+
+        assertEquals(aggregateInput, workerInput.get());
+        verify(awaitCoordinator, never()).loadResumePayload(any(), any());
+        verify(executionStateStore).markSucceeded(
+            org.mockito.ArgumentMatchers.eq("tenant-1"),
+            org.mockito.ArgumentMatchers.eq("exec-aggregate"),
+            org.mockito.ArgumentMatchers.eq(0L),
+            org.mockito.ArgumentMatchers.eq("exec-aggregate:7:0"),
+            org.mockito.ArgumentMatchers.eq(List.of("output-file")),
+            org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
+    void processExecutionWorkItemPersistsDecodedInProcessOutputWithoutSerialization() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.leaseMs()).thenReturn(1000L);
+        ExecutionRecord<Object, Object> claimed = createRecord("tenant-1", "exec-local", "key-local");
+        NonSerializableOutput output = new NonSerializableOutput(new Object());
+        when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(checkpointPublicationService.publishIfConfigured(org.mockito.ArgumentMatchers.eq(claimed), org.mockito.ArgumentMatchers.same(output)))
+            .thenReturn(Uni.createFrom().voidItem());
+        when(executionStateStore.markSucceeded(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-local"),
+                org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq("exec-local:0:0"),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+
+        coordinator.processExecutionWorkItem(
+                new ExecutionWorkItem("tenant-1", "exec-local"),
+                command -> Uni.createFrom().item(TransitionResultEnvelope.completedInProcess(List.of(output))))
+            .await().indefinitely();
+
+        ArgumentCaptor<Object> resultCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(executionStateStore).markSucceeded(
+            org.mockito.ArgumentMatchers.eq("tenant-1"),
+            org.mockito.ArgumentMatchers.eq("exec-local"),
+            org.mockito.ArgumentMatchers.eq(0L),
+            org.mockito.ArgumentMatchers.eq("exec-local:0:0"),
+            resultCaptor.capture(),
+            org.mockito.ArgumentMatchers.anyLong());
+        List<?> persisted = assertInstanceOf(List.class, resultCaptor.getValue());
+        assertEquals(output, persisted.getFirst());
+    }
+
+    @Test
+    void processExecutionWorkItemPersistsRemoteSerializedOutputWithoutDecoding() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.leaseMs()).thenReturn(1000L);
+        ExecutionRecord<Object, Object> claimed = createRecord("tenant-1", "exec-remote", "key-remote");
+        SerializedTransitionPayload serialized = new SerializedTransitionPayload(
+            "com.example.remote.NotOnCoordinatorClasspath",
+            JsonTransitionPayloadCodec.ENCODING,
+            "{\"value\":\"remote\"}");
+        when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(checkpointPublicationService.publishIfConfigured(org.mockito.ArgumentMatchers.eq(claimed), org.mockito.ArgumentMatchers.eq(serialized)))
+            .thenReturn(Uni.createFrom().voidItem());
+        when(executionStateStore.markSucceeded(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-remote"),
+                org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq("exec-remote:0:0"),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+
+        coordinator.processExecutionWorkItem(
+                new ExecutionWorkItem("tenant-1", "exec-remote"),
+                command -> Uni.createFrom().item(new TransitionResultEnvelope(
+                    TransitionWorkerOutcome.COMPLETED,
+                    List.of(serialized),
+                    null,
+                    null)))
+            .await().indefinitely();
+
+        ArgumentCaptor<Object> resultCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(executionStateStore).markSucceeded(
+            org.mockito.ArgumentMatchers.eq("tenant-1"),
+            org.mockito.ArgumentMatchers.eq("exec-remote"),
+            org.mockito.ArgumentMatchers.eq(0L),
+            org.mockito.ArgumentMatchers.eq("exec-remote:0:0"),
+            resultCaptor.capture(),
+            org.mockito.ArgumentMatchers.anyLong());
+        List<?> persisted = assertInstanceOf(List.class, resultCaptor.getValue());
+        assertEquals(serialized, persisted.getFirst());
+    }
+
+    @Test
+    void transitionCommandUsesExecutionPinnedBundleIdentity() {
+        TransitionCommandEnvelope envelope = prepareTransitionCommand(
+            createRecord(
+                "tenant-1",
+                "exec-bundle",
+                "key-bundle",
+                "org.example.pinned",
+                "sha256:pinned",
+                ExecutionResultShape.SINGLE),
+            "trace-1");
+
+        assertEquals("org.example.pinned", envelope.pipelineId());
+        assertEquals("sha256:pinned", envelope.bundleVersionId());
+        assertEquals("trace-1", envelope.traceId());
+    }
+
+    @Test
+    void processExecutionWorkItemDoesNotClaimLeaseWhenAdmissionIsSaturated() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(workerConfig.maxInFlight()).thenReturn(1);
+        when(workDispatcher.enqueueDelayed(any(), org.mockito.ArgumentMatchers.eq(Duration.ofMillis(25))))
+            .thenReturn(Uni.createFrom().voidItem());
+        when(workerConfig.saturatedDelay()).thenReturn(Duration.ofMillis(25));
+        TransitionWorkerExecutor executor = new TransitionWorkerExecutor(
+            orchestratorConfig,
+            new PipelineInvocationRuntime());
+        coordinator.transitionWorkerExecutor = executor;
+        TransitionWorkerExecutor.TransitionAdmission heldPermit = executor.tryAdmit().orElseThrow();
+
+        try {
+            coordinator.processExecutionWorkItem(
+                    new ExecutionWorkItem("tenant-1", "exec-saturated"),
+                    command -> Uni.createFrom().item(TransitionResultEnvelope.completed(payloadCodec, List.of())))
+                .await().indefinitely();
+        } finally {
+            heldPermit.close();
+        }
+
+        verify(executionStateStore, never()).claimLease(
+            any(),
+            any(),
+            any(),
+            org.mockito.ArgumentMatchers.anyLong(),
+            org.mockito.ArgumentMatchers.anyLong());
+        verify(workDispatcher).enqueueDelayed(
+            org.mockito.ArgumentMatchers.eq(new ExecutionWorkItem("tenant-1", "exec-saturated")),
+            org.mockito.ArgumentMatchers.eq(Duration.ofMillis(25)));
+    }
+
+    @Test
+    void processExecutionWorkItemDoesNotClaimLeaseWhenTenantQuotaIsSaturated() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(workerConfig.maxInFlight()).thenReturn(64);
+        when(workerConfig.saturatedDelay()).thenReturn(Duration.ofMillis(25));
+        when(workDispatcher.enqueueDelayed(any(), org.mockito.ArgumentMatchers.eq(Duration.ofMillis(25))))
+            .thenReturn(Uni.createFrom().voidItem());
+        PipelineOrchestratorConfig.TenancyConfig tenancy = mock(PipelineOrchestratorConfig.TenancyConfig.class);
+        PipelineOrchestratorConfig.QuotaConfig quotas = mock(PipelineOrchestratorConfig.QuotaConfig.class);
+        when(orchestratorConfig.tenancy()).thenReturn(tenancy);
+        when(orchestratorConfig.quotas()).thenReturn(quotas);
+        when(tenancy.allowedTenants()).thenReturn(List.of());
+        when(tenancy.requireExplicitTenant()).thenReturn(false);
+        when(quotas.maxInFlightTransitionsPerTenant()).thenReturn(1);
+        LocalControlPlaneAdmissionPolicy policy = new LocalControlPlaneAdmissionPolicy(orchestratorConfig);
+        coordinator.controlPlaneAdmissionPolicy = policy;
+        ControlPlaneTransitionAdmission held = policy.admitTransition(new ControlPlaneAdmissionRequest(
+            "tenant-1",
+            ControlPlaneAdmissionOperation.PROCESS_WORK_ITEM,
+            "local-pipeline",
+            "local-bundle",
+            "exec-held",
+            "test",
+            true));
+
+        try {
+            coordinator.processExecutionWorkItem(
+                    new ExecutionWorkItem("tenant-1", "exec-saturated"),
+                    command -> Uni.createFrom().item(TransitionResultEnvelope.completed(payloadCodec, List.of())))
+                .await().indefinitely();
+        } finally {
+            held.permit().close();
+        }
+
+        verify(executionStateStore, never()).claimLease(
+            any(),
+            any(),
+            any(),
+            org.mockito.ArgumentMatchers.anyLong(),
+            org.mockito.ArgumentMatchers.anyLong());
+        verify(workDispatcher).enqueueDelayed(
+            org.mockito.ArgumentMatchers.eq(new ExecutionWorkItem("tenant-1", "exec-saturated")),
+            org.mockito.ArgumentMatchers.eq(Duration.ofMillis(25)));
     }
 
     @Test
@@ -1085,10 +1399,28 @@ class QueueAsyncCoordinatorTest {
         String executionId,
         String executionKey,
         ExecutionResultShape resultShape) {
+        return createRecord(
+            tenantId,
+            executionId,
+            executionKey,
+            "local-pipeline",
+            "local-bundle",
+            resultShape);
+    }
+
+    private ExecutionRecord<Object, Object> createRecord(
+        String tenantId,
+        String executionId,
+        String executionKey,
+        String pipelineId,
+        String bundleVersionId,
+        ExecutionResultShape resultShape) {
         return new ExecutionRecord<>(
             tenantId,
             executionId,
             executionKey,
+            pipelineId,
+            bundleVersionId,
             resultShape,
             ExecutionStatus.QUEUED,
             0L,
@@ -1137,6 +1469,9 @@ class QueueAsyncCoordinatorTest {
             99999999L);
     }
 
+    private record NonSerializableOutput(Object writer) {
+    }
+
     @SuppressWarnings("unchecked")
     private List<?> runAsyncExecution(
         ExecutionRecord<Object, Object> record,
@@ -1145,11 +1480,55 @@ class QueueAsyncCoordinatorTest {
             Method method = QueueAsyncCoordinator.class.getDeclaredMethod(
                 "runAsyncExecution",
                 ExecutionRecord.class,
-                Function.class);
+                org.pipelineframework.orchestrator.PipelineTransitionWorker.class);
             method.setAccessible(true);
-            return ((Uni<List<?>>) method.invoke(coordinator, record, executeStreaming)).await().indefinitely();
+            return ((Uni<List<?>>) method.invoke(
+                coordinator,
+                record,
+                (org.pipelineframework.orchestrator.PipelineTransitionWorker) command ->
+                    executeStreaming.apply(new ExecutionRecord<>(
+                            command.tenantId(),
+                            command.executionId(),
+                            "key-" + command.executionId(),
+                            command.resultShape(),
+                            ExecutionStatus.RUNNING,
+                            command.executionVersion(),
+                            command.currentStepIndex(),
+                            command.attempt(),
+                            null,
+                            0L,
+                            0L,
+                            null,
+                            command.toCommand(payloadCodec).inputPayload(),
+                            null,
+                            null,
+                            null,
+                            null,
+                            1L,
+                            1L,
+                            99999999L))
+                        .collect().asList()
+                        .onItem().transform(TransitionResultEnvelope::completedInProcess)))
+                .await().indefinitely();
         } catch (ReflectiveOperationException e) {
             throw new AssertionError("Failed invoking runAsyncExecution", e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private TransitionCommandEnvelope prepareTransitionCommand(
+        ExecutionRecord<Object, Object> record,
+        String transitionKey) {
+        try {
+            Method method = QueueAsyncCoordinator.class.getDeclaredMethod(
+                "prepareTransitionCommand",
+                ExecutionRecord.class,
+                String.class);
+            method.setAccessible(true);
+            return ((Uni<TransitionCommandEnvelope>) method.invoke(coordinator, record, transitionKey))
+                .await().indefinitely();
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("Failed invoking prepareTransitionCommand", e);
         }
     }
 
@@ -1239,6 +1618,7 @@ class QueueAsyncCoordinatorTest {
             primaryInteractionId,
             expectedItemCount,
             completedItemCount,
+            java.util.Set.of(),
             dispatchComplete,
             1L,
             1L,

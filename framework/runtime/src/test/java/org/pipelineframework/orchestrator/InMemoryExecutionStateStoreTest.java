@@ -16,6 +16,8 @@ class InMemoryExecutionStateStoreTest {
         ExecutionCreateCommand command = new ExecutionCreateCommand(
             "tenant-a",
             "key-1",
+            "org.example.pipeline",
+            "sha256:bundle",
             "payload",
             ExecutionResultShape.SINGLE,
             now,
@@ -27,6 +29,8 @@ class InMemoryExecutionStateStoreTest {
         assertFalse(first.duplicate());
         assertTrue(second.duplicate());
         assertEquals(first.record().executionId(), second.record().executionId());
+        assertEquals("org.example.pipeline", first.record().pipelineId());
+        assertEquals("sha256:bundle", first.record().bundleVersionId());
     }
 
     @Test
@@ -211,6 +215,8 @@ class InMemoryExecutionStateStoreTest {
         assertEquals(ExecutionInputShape.MULTI, stored.shape());
         assertEquals(List.of("a", "b"), stored.payload());
         assertNotSame(resumeInput.payload(), stored.payload());
+        assertEquals(created.record().pipelineId(), queued.get().pipelineId());
+        assertEquals(created.record().bundleVersionId(), queued.get().bundleVersionId());
     }
 
     @Test

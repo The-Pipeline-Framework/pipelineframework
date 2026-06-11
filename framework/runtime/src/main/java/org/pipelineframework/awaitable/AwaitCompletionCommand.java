@@ -41,8 +41,8 @@ public record AwaitCompletionCommand(
         interactionId = normalizeOptionalIdentifier(interactionId);
         correlationId = normalizeOptionalIdentifier(correlationId);
         resumeToken = normalizeOptionalIdentifier(resumeToken);
-        if (interactionId == null && correlationId == null) {
-            throw new IllegalArgumentException("interactionId or correlationId must be supplied");
+        if (interactionId == null && correlationId == null && resumeToken == null) {
+            throw new IllegalArgumentException("interactionId, correlationId, or resumeToken must be supplied");
         }
         if (nowEpochMs <= 0) {
             nowEpochMs = System.currentTimeMillis();

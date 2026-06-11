@@ -16,6 +16,7 @@ import org.pipelineframework.processor.ir.*;
 import org.pipelineframework.processor.renderer.*;
 import org.pipelineframework.processor.util.OrchestratorClientPropertiesGenerator;
 import org.pipelineframework.processor.util.CheckpointHandoffMetadataGenerator;
+import org.pipelineframework.processor.util.PipelineBundleManifestMetadataGenerator;
 import org.pipelineframework.processor.util.PipelineOrderMetadataGenerator;
 import org.pipelineframework.processor.util.PipelinePlatformMetadataGenerator;
 import org.pipelineframework.processor.util.PipelineTelemetryMetadataGenerator;
@@ -287,6 +288,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             PipelineOrderMetadataGenerator orderMetadataGenerator =
                 new PipelineOrderMetadataGenerator(ctx.getProcessingEnv());
             orderMetadataGenerator.writeOrderMetadata(ctx);
+            PipelineBundleManifestMetadataGenerator bundleManifestMetadataGenerator =
+                new PipelineBundleManifestMetadataGenerator(ctx.getProcessingEnv());
+            bundleManifestMetadataGenerator.writeBundleManifest(ctx);
             if (ctx.isOrchestratorGenerated()) {
                 PipelineTelemetryMetadataGenerator telemetryMetadataGenerator =
                     new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv());

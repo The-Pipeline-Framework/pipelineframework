@@ -7,6 +7,8 @@ public record ExecutionRecord<I, R>(
     String tenantId,
     String executionId,
     String executionKey,
+    String pipelineId,
+    String bundleVersionId,
     ExecutionResultShape resultShape,
     ExecutionStatus status,
     long version,
@@ -25,6 +27,53 @@ public record ExecutionRecord<I, R>(
     long updatedAtEpochMs,
     long ttlEpochS
 ) {
+    public ExecutionRecord(
+        String tenantId,
+        String executionId,
+        String executionKey,
+        ExecutionResultShape resultShape,
+        ExecutionStatus status,
+        long version,
+        int currentStepIndex,
+        int attempt,
+        String leaseOwner,
+        long leaseExpiresEpochMs,
+        long nextDueEpochMs,
+        String lastTransitionKey,
+        I inputPayload,
+        String awaitUnitId,
+        R resultPayload,
+        String errorCode,
+        String errorMessage,
+        long createdAtEpochMs,
+        long updatedAtEpochMs,
+        long ttlEpochS
+    ) {
+        this(
+            tenantId,
+            executionId,
+            executionKey,
+            PipelineBundleManifest.DEFAULT_PIPELINE_ID,
+            PipelineBundleManifest.DEFAULT_BUNDLE_VERSION_ID,
+            resultShape,
+            status,
+            version,
+            currentStepIndex,
+            attempt,
+            leaseOwner,
+            leaseExpiresEpochMs,
+            nextDueEpochMs,
+            lastTransitionKey,
+            inputPayload,
+            awaitUnitId,
+            resultPayload,
+            errorCode,
+            errorMessage,
+            createdAtEpochMs,
+            updatedAtEpochMs,
+            ttlEpochS);
+    }
+
     /**
      * Returns a copy with a new status and timestamp.
      *
@@ -37,6 +86,8 @@ public record ExecutionRecord<I, R>(
             tenantId,
             executionId,
             executionKey,
+            pipelineId,
+            bundleVersionId,
             resultShape,
             newStatus,
             version,

@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 
 import io.quarkus.arc.Unremovable;
@@ -31,6 +32,24 @@ public interface PipelineOrchestratorConfig {
     @WithName("default-tenant")
     @WithDefault("default")
     String defaultTenant();
+
+    /**
+     * Logical pipeline identifier used in transition-worker envelopes.
+     *
+     * @return pipeline id
+     */
+    @WithName("pipeline-id")
+    @WithDefault("local-pipeline")
+    String pipelineId();
+
+    /**
+     * Bundle/runtime version identifier used in transition-worker envelopes.
+     *
+     * @return bundle version id
+     */
+    @WithName("bundle-version-id")
+    @WithDefault("local-bundle")
+    String bundleVersionId();
 
     /**
      * Execution record TTL in days.
@@ -194,6 +213,81 @@ public interface PipelineOrchestratorConfig {
     SqsConfig sqs();
 
     /**
+     * Local tenancy admission settings.
+     *
+     * @return tenancy config
+     */
+    @WithName("tenancy")
+    TenancyConfig tenancy();
+
+    /**
+     * Local quota admission settings.
+     *
+     * @return quota config
+     */
+    @WithName("quotas")
+    QuotaConfig quotas();
+
+    /**
+     * Hosted control-plane API settings.
+     *
+     * @return control-plane API config
+     */
+    @WithName("control-plane")
+    ControlPlaneConfig controlPlane();
+
+    /**
+     * Hosted bundle administration API settings.
+     *
+     * @return admin API config
+     */
+    @WithName("admin")
+    AdminConfig admin();
+
+    /**
+     * Hosted bundle registry and artifact storage settings.
+     *
+     * @return bundle config
+     */
+    @WithName("bundles")
+    BundlesConfig bundles();
+
+    /**
+     * Transition worker execution settings.
+     *
+     * @return worker config
+     */
+    @WithName("worker")
+    WorkerConfig worker();
+
+    /**
+     * REST transition worker settings.
+     *
+     * @return REST worker config
+     */
+    default RestWorkerConfig workerRest() {
+        return worker().rest();
+    }
+
+    /**
+     * gRPC transition worker settings.
+     *
+     * @return gRPC worker config
+     */
+    default GrpcWorkerConfig workerGrpc() {
+        return worker().grpc();
+    }
+
+    /**
+     * SQS transition worker settings.
+     *
+     * @return SQS worker config
+     */
+    default SqsWorkerConfig workerSqs() {
+        return worker().sqs();
+    }
+
+    /**
      * Enables strict startup guards in queue mode.
      *
      * @return true when startup should fail on invalid queue config
@@ -307,5 +401,517 @@ public interface PipelineOrchestratorConfig {
         @WithName("local-loopback")
         @WithDefault("true")
         boolean localLoopback();
+    }
+
+    /**
+     * Local control-plane tenancy settings.
+     */
+    interface TenancyConfig {
+
+        /**
+         * Allowed tenant ids. Empty means all tenants are allowed.
+         *
+         * @return allowed tenant ids
+         */
+        default List<String> allowedTenants() {
+            return allowedTenantsConfig().orElse(List.of());
+        }
+
+        /**
+         * Raw optional allowed tenant ids from runtime config.
+         *
+         * @return configured tenant ids when present
+         */
+        @WithName("allowed-tenants")
+        Optional<List<String>> allowedTenantsConfig();
+
+        /**
+         * Requires callers to provide tenant id for async submission instead of using default tenant.
+         *
+         * @return true when tenant id must be explicit for submissions
+         */
+        @WithName("require-explicit-tenant")
+        @WithDefault("false")
+        boolean requireExplicitTenant();
+    }
+
+    /**
+     * Local control-plane quota settings.
+     */
+    interface QuotaConfig {
+
+        /**
+         * Maximum active transitions per tenant in this runtime instance. Zero disables the limit.
+         *
+         * @return max in-flight transitions per tenant
+         */
+        @WithName("max-in-flight-transitions-per-tenant")
+        @WithDefault("0")
+        int maxInFlightTransitionsPerTenant();
+    }
+
+    /**
+     * Local/dev hosted control-plane API settings.
+     */
+    interface ControlPlaneConfig {
+
+        /**
+         * Enables the internal hosted control-plane REST surface.
+         *
+         * @return true when the resource should accept requests
+         */
+        @WithName("enabled")
+        @WithDefault("false")
+        boolean enabled();
+
+        /**
+         * Literal bearer token for local/dev coordinator API calls.
+         *
+         * @return admin token when configured
+         */
+        @WithName("admin-token")
+        Optional<String> adminToken();
+
+        /**
+         * Secret reference for the local/dev coordinator API bearer token.
+         *
+         * @return admin token reference when configured
+         */
+        @WithName("admin-token-ref")
+        Optional<String> adminTokenRef();
+    }
+
+    /**
+     * Local/dev hosted bundle administration API settings.
+     */
+    interface AdminConfig {
+
+        /**
+         * Enables the internal hosted bundle admin REST surface.
+         *
+         * @return true when the resource should accept requests
+         */
+        @WithName("enabled")
+        @WithDefault("false")
+        boolean enabled();
+
+        /**
+         * Literal bearer token for local/dev bundle admin calls.
+         *
+         * @return admin token when configured
+         */
+        @WithName("admin-token")
+        Optional<String> adminToken();
+
+        /**
+         * Secret reference for the local/dev bundle admin bearer token.
+         *
+         * @return admin token reference when configured
+         */
+        @WithName("admin-token-ref")
+        Optional<String> adminTokenRef();
+    }
+
+    /**
+     * Local/dev hosted bundle registry and artifact storage settings.
+     */
+    interface BundlesConfig {
+
+        /**
+         * Bundle registry metadata provider settings.
+         *
+         * @return registry config
+         */
+        @WithName("registry")
+        BundleRegistryConfig registry();
+
+        /**
+         * Bundle artifact storage settings.
+         *
+         * @return storage config
+         */
+        @WithName("storage")
+        BundleStorageConfig storage();
+    }
+
+    /**
+     * Bundle registry provider settings.
+     */
+    interface BundleRegistryConfig {
+
+        /**
+         * Registry provider name.
+         *
+         * @return memory or file
+         */
+        @WithName("provider")
+        @WithDefault("memory")
+        String provider();
+    }
+
+    /**
+     * Bundle artifact storage settings.
+     */
+    interface BundleStorageConfig {
+
+        /**
+         * Local root directory for managed bundle artifacts and file-backed registry metadata.
+         *
+         * @return storage root path
+         */
+        @WithName("root")
+        @WithDefault("target/tpf-bundles")
+        String root();
+    }
+
+    /**
+     * Transition worker execution settings, including admission limits and REST worker overrides.
+     */
+    interface WorkerConfig {
+
+        /**
+         * Execution mode for admitted transitions.
+         *
+         * @return worker execution mode
+         */
+        @WithName("execution-mode")
+        @WithDefault("SAME_THREAD")
+        TransitionWorkerExecutionMode executionMode();
+
+        /**
+         * Maximum admitted transitions per runtime instance.
+         *
+         * @return max in-flight transition count
+         */
+        @WithName("max-in-flight")
+        @WithDefault("64")
+        int maxInFlight();
+
+        /**
+         * Delay before re-enqueueing work when transition admission is saturated.
+         *
+         * @return saturated admission delay
+         */
+        @WithName("saturated-delay")
+        @WithDefault("PT1S")
+        Duration saturatedDelay();
+
+        /**
+         * Allowed Java package prefixes for application payload classes in transition envelopes.
+         *
+         * @return allowed application payload package prefixes
+         */
+        @WithName("allowed-payload-prefixes")
+        @WithDefault("org.pipelineframework.")
+        List<String> allowedPayloadPrefixes();
+
+        /**
+         * REST transition worker settings.
+         *
+         * @return REST worker config
+         */
+        @WithName("rest")
+        RestWorkerConfig rest();
+
+        /**
+         * gRPC transition worker settings.
+         *
+         * @return gRPC worker config
+         */
+        @WithName("grpc")
+        GrpcWorkerConfig grpc();
+
+        /**
+         * SQS transition worker settings.
+         *
+         * @return SQS worker config
+         */
+        @WithName("sqs")
+        SqsWorkerConfig sqs();
+    }
+
+    /**
+     * REST transition worker settings.
+     */
+    interface RestWorkerConfig {
+
+        /**
+         * Optional remote worker base URL. Presence selects the REST worker client.
+         *
+         * @return remote worker base URL when configured
+         */
+        @WithName("base-url")
+        Optional<String> baseUrl();
+
+        /**
+         * Worker execution path.
+         *
+         * @return REST worker path
+         */
+        @WithName("path")
+        @WithDefault("/pipeline/worker/transitions/execute")
+        String path();
+
+        /**
+         * Worker capability path.
+         *
+         * @return REST worker capability path
+         */
+        @WithName("capabilities-path")
+        @WithDefault("/pipeline/worker/capabilities")
+        String capabilitiesPath();
+
+        /**
+         * HTTP connect timeout.
+         *
+         * @return connect timeout
+         */
+        @WithName("connect-timeout")
+        @WithDefault("PT2S")
+        Duration connectTimeout();
+
+        /**
+         * HTTP request timeout.
+         *
+         * @return request timeout
+         */
+        @WithName("request-timeout")
+        @WithDefault("PT30S")
+        Duration requestTimeout();
+
+        /**
+         * Enables the local REST worker endpoint.
+         *
+         * @return true when the worker endpoint should accept requests
+         */
+        @WithName("server-enabled")
+        @WithDefault("false")
+        boolean serverEnabled();
+
+        /**
+         * Shared secret used to sign and verify REST transition worker requests.
+         *
+         * @return shared secret when configured
+         */
+        @WithName("shared-secret")
+        Optional<String> sharedSecret();
+
+        /**
+         * Reference to the shared secret used to sign and verify REST transition worker requests.
+         *
+         * @return shared secret reference when configured
+         */
+        @WithName("shared-secret-ref")
+        Optional<String> sharedSecretRef();
+
+        /**
+         * Maximum accepted timestamp skew for signed REST worker requests.
+         *
+         * @return signature timestamp tolerance
+         */
+        @WithName("signature-tolerance")
+        @WithDefault("PT2M")
+        Duration signatureTolerance();
+
+        /**
+         * True when a remote REST worker target is configured.
+         *
+         * @return true when REST worker client should be selected
+         */
+        default boolean isEnabled() {
+            return baseUrl().filter(value -> !value.isBlank()).isPresent();
+        }
+    }
+
+    /**
+     * gRPC transition worker settings.
+     */
+    interface GrpcWorkerConfig {
+
+        /**
+         * Optional remote worker endpoint in host:port form. Presence selects the gRPC worker client.
+         *
+         * @return gRPC endpoint when configured
+         */
+        @WithName("endpoint")
+        Optional<String> endpoint();
+
+        /**
+         * Uses plaintext gRPC channels for local/test workers.
+         *
+         * @return true when plaintext transport should be used
+         */
+        @WithName("plaintext")
+        @WithDefault("false")
+        boolean plaintext();
+
+        /**
+         * gRPC request timeout.
+         *
+         * @return request timeout
+         */
+        @WithName("request-timeout")
+        @WithDefault("PT30S")
+        Duration requestTimeout();
+
+        /**
+         * Maximum inbound gRPC worker response message size in bytes.
+         *
+         * @return max inbound message size
+         */
+        @WithName("max-inbound-message-size")
+        @WithDefault("4194304")
+        int maxInboundMessageSize();
+
+        /**
+         * Enables the local gRPC worker service.
+         *
+         * @return true when the worker service should accept requests
+         */
+        @WithName("server-enabled")
+        @WithDefault("false")
+        boolean serverEnabled();
+
+        /**
+         * Shared secret used to sign and verify gRPC transition worker requests.
+         *
+         * @return shared secret when configured
+         */
+        @WithName("shared-secret")
+        Optional<String> sharedSecret();
+
+        /**
+         * Reference to the shared secret used to sign and verify gRPC transition worker requests.
+         *
+         * @return shared secret reference when configured
+         */
+        @WithName("shared-secret-ref")
+        Optional<String> sharedSecretRef();
+
+        /**
+         * Maximum accepted timestamp skew for signed gRPC worker requests.
+         *
+         * @return signature timestamp tolerance
+         */
+        @WithName("signature-tolerance")
+        @WithDefault("PT2M")
+        Duration signatureTolerance();
+
+        /**
+         * True when a remote gRPC worker target is configured.
+         *
+         * @return true when gRPC worker client should be selected
+         */
+        default boolean isEnabled() {
+            return endpoint().filter(value -> !value.isBlank()).isPresent();
+        }
+    }
+
+    /**
+     * SQS transition worker request/reply settings.
+     */
+    interface SqsWorkerConfig {
+
+        /**
+         * Queue URL that receives transition command envelopes.
+         *
+         * @return request queue URL when configured
+         */
+        @WithName("request-queue-url")
+        Optional<String> requestQueueUrl();
+
+        /**
+         * Queue URL that receives transition result envelopes.
+         *
+         * @return response queue URL when configured
+         */
+        @WithName("response-queue-url")
+        Optional<String> responseQueueUrl();
+
+        /**
+         * Static pipeline id hosted by the configured SQS worker queue.
+         *
+         * @return pipeline id when configured
+         */
+        @WithName("pipeline-id")
+        Optional<String> pipelineId();
+
+        /**
+         * Static bundle version id hosted by the configured SQS worker queue.
+         *
+         * @return bundle version id when configured
+         */
+        @WithName("bundle-version-id")
+        Optional<String> bundleVersionId();
+
+        /**
+         * Enables the local SQS transition worker poller.
+         *
+         * @return true when the worker poller should accept requests
+         */
+        @WithName("server-enabled")
+        @WithDefault("false")
+        boolean serverEnabled();
+
+        /**
+         * SQS worker request timeout.
+         *
+         * @return request timeout
+         */
+        @WithName("request-timeout")
+        @WithDefault("PT30S")
+        Duration requestTimeout();
+
+        /**
+         * Optional delay before the SQS worker poller starts consuming requests.
+         *
+         * @return poller start delay
+         */
+        @WithName("poll-start-delay")
+        @WithDefault("PT0S")
+        Duration pollStartDelay();
+
+        /**
+         * Visibility timeout for claimed worker request and response messages.
+         *
+         * @return visibility timeout
+         */
+        @WithName("visibility-timeout")
+        @WithDefault("PT30S")
+        Duration visibilityTimeout();
+
+        /**
+         * Shared secret used to sign and verify SQS transition worker messages.
+         *
+         * @return shared secret when configured
+         */
+        @WithName("shared-secret")
+        Optional<String> sharedSecret();
+
+        /**
+         * Reference to the shared secret used to sign and verify SQS transition worker messages.
+         *
+         * @return shared secret reference when configured
+         */
+        @WithName("shared-secret-ref")
+        Optional<String> sharedSecretRef();
+
+        /**
+         * Maximum accepted timestamp skew for signed SQS worker messages.
+         *
+         * @return signature timestamp tolerance
+         */
+        @WithName("signature-tolerance")
+        @WithDefault("PT2M")
+        Duration signatureTolerance();
+
+        /**
+         * True when a remote SQS worker target is configured.
+         *
+         * @return true when SQS worker client should be selected
+         */
+        default boolean isEnabled() {
+            return requestQueueUrl().filter(value -> !value.isBlank()).isPresent();
+        }
     }
 }

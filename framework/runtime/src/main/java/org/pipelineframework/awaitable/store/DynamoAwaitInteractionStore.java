@@ -139,6 +139,40 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     }
 
     @Override
+    public Uni<AwaitInteractionRecord> importRecord(AwaitInteractionRecord record) {
+        return blocking(() -> {
+            try {
+                dynamoClient().transactWriteItems(TransactWriteItemsRequest.builder()
+                    .transactItems(
+                        TransactWriteItem.builder().put(Put.builder()
+                            .tableName(interactionTable())
+                            .item(toItem(record))
+                            .conditionExpression("attribute_not_exists(#tenant) AND attribute_not_exists(#interaction)")
+                            .expressionAttributeNames(Map.of("#tenant", TENANT_ID, "#interaction", INTERACTION_ID))
+                            .build()).build(),
+                        TransactWriteItem.builder().put(lookupPut(
+                            "idempotency",
+                            record.tenantId(),
+                            record.stepId() + ":" + record.idempotencyKey(),
+                            record.interactionId(),
+                            record.ttlEpochS())).build(),
+                        TransactWriteItem.builder().put(lookupPut(
+                            "correlation",
+                            record.tenantId(),
+                            record.correlationId(),
+                            record.interactionId(),
+                            record.ttlEpochS())).build())
+                    .build());
+                return record;
+            } catch (TransactionCanceledException | ConditionalCheckFailedException ignored) {
+                return getBlocking(record.tenantId(), record.interactionId(), System.currentTimeMillis())
+                    .orElseThrow(() -> new IllegalStateException(
+                        "Await interaction import lost race but no interaction was found"));
+            }
+        });
+    }
+
+    @Override
     public Uni<Optional<AwaitInteractionRecord>> findByCorrelation(String tenantId, String correlationId) {
         return blocking(() -> findByLookup(
             lookupKey("correlation", tenantId, correlationId),

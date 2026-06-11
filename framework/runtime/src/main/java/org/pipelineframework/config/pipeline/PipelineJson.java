@@ -17,11 +17,15 @@
 package org.pipelineframework.config.pipeline;
 
 import java.io.IOException;
+import java.nio.file.Path;
 
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.google.protobuf.MessageOrBuilder;
 import com.google.protobuf.util.JsonFormat;
@@ -53,6 +57,10 @@ public final class PipelineJson {
         SimpleModule protobufModule = new SimpleModule("pipeline-protobuf-json");
         protobufModule.addSerializer(MessageOrBuilder.class, new ProtobufJsonSerializer());
         mapper.registerModule(protobufModule);
+        SimpleModule pathModule = new SimpleModule("pipeline-path-json");
+        pathModule.addSerializer(Path.class, new PathJsonSerializer());
+        pathModule.addDeserializer(Path.class, new PathJsonDeserializer());
+        mapper.registerModule(pathModule);
         return mapper;
     }
 
@@ -77,6 +85,32 @@ public final class PipelineJson {
             } catch (Exception e) {
                 throw new IOException("Failed to serialize protobuf message as JSON", e);
             }
+        }
+    }
+
+    private static final class PathJsonSerializer extends StdSerializer<Path> {
+
+        private PathJsonSerializer() {
+            super(Path.class);
+        }
+
+        @Override
+        public void serialize(Path value, JsonGenerator generator, SerializerProvider provider)
+            throws IOException {
+            generator.writeString(value.toString());
+        }
+    }
+
+    private static final class PathJsonDeserializer extends StdDeserializer<Path> {
+
+        private PathJsonDeserializer() {
+            super(Path.class);
+        }
+
+        @Override
+        public Path deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+            String value = parser.getValueAsString();
+            return value == null || value.isBlank() ? null : Path.of(value);
         }
     }
 }

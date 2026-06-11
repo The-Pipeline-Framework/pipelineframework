@@ -7,7 +7,7 @@ import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitUnitRecord;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 
-interface AwaitItemContinuationHandler {
+public interface AwaitItemContinuationHandler {
 
     Uni<Void> continueAwaitItem(
         AwaitInteractionRecord record,

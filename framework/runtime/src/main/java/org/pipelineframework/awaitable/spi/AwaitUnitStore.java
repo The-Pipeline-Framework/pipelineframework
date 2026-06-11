@@ -24,6 +24,11 @@ public interface AwaitUnitStore {
 
     Uni<Optional<AwaitUnitRecord>> get(String tenantId, String unitId);
 
+    /**
+     * Imports a unit created by a transition worker. Existing records win so the operation is idempotent.
+     */
+    Uni<AwaitUnitRecord> importRecord(AwaitUnitRecord record);
+
     Uni<Optional<AwaitUnitRecord>> attachPrimaryInteraction(
         String tenantId,
         String unitId,

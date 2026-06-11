@@ -305,11 +305,11 @@ public class AwaitStepSupport {
                                     return Multi.createFrom().<O>iterable((Iterable<O>) payload);
                                 } else if (payload != null && payload.getClass().isArray()) {
                                     int length = Array.getLength(payload);
-                                    O[] items = (O[]) new Object[length];
+                                    List<O> items = new ArrayList<>(length);
                                     for (int i = 0; i < length; i++) {
-                                        items[i] = (O) Array.get(payload, i);
+                                        items.add((O) Array.get(payload, i));
                                     }
-                                    return Multi.createFrom().<O>items(items);
+                                    return Multi.createFrom().iterable(items);
                                 } else {
                                     return Multi.createFrom().<O>item((O) payload);
                                 }
