@@ -67,7 +67,7 @@ CDI registration
 
 ### 1. Build-Time Discovery
 
-During the Maven build process, the compiler reads `pipeline.yaml` and resolves each internal `service:` step against the declared service class. `@PipelineStep` is still supported for existing code and Java-local execution hints, but it is not required when YAML declares the step contract:
+During the Maven build process, the compiler reads `pipeline.yaml` and resolves each internal `service:` step against the declared service class. `@PipelineStep` is still supported for existing code, but it is not required when YAML declares the step contract:
 
 ```yaml
 steps:

@@ -81,8 +81,8 @@ public class PipelineCompiler extends AbstractProcessingTool {
      *
      * @param annotations the set of annotation types requested to be processed in this round
      * @param roundEnv the environment for information about the current and previous round
-     * @return `true` if this processor performed work during this round (including when a phase failed),
-     *         `false` otherwise
+     * @return always `false` so the YAML-capable wildcard trigger does not claim annotations from
+     *         other processors
      */
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
@@ -138,19 +138,20 @@ public class PipelineCompiler extends AbstractProcessingTool {
                         "Cause: " + cause.getClass().getSimpleName() + ": " + cause.getMessage());
                 }
                 compilationExecuted = true;
-                return true; // Return true to indicate processing happened (even if it failed)
+                return false;
             }
         }
 
         compilationExecuted = true;
-        return true;
+        return false;
     }
     /**
      * Detects whether a pipeline configuration signal is present for the compiler.
      *
      * Checks the explicit processor option "pipeline.config" first. If that option is not set,
      * determines a base directory from "pipeline.moduleDir", then "pipeline.generatedSourcesDir",
-     * then the system property "user.dir", and looks for a pipeline.yaml file at either
+     * then "project.basedir", then "maven.multiModuleProjectDirectory", and looks for a
+     * pipeline.yaml file at either
      * {baseDir}/pipeline.yaml or {baseDir}/src/main/resources/pipeline.yaml.
      *
      * @return `true` if the "pipeline.config" option is set or a pipeline.yaml file is found,
