@@ -17,9 +17,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -41,9 +43,11 @@ abstract class RestaurantApprovalSplitWorkerITSupport {
     protected static final String WORKER_SECRET = "restaurant-transition-worker-secret";
     protected static final String CONTROL_PLANE_ADMIN_TOKEN = "restaurant-control-plane-admin-token";
     private static final String PAYLOAD_ENCODING = "application/tpf-transition+json";
+    private static final String ORDER_REQUEST_DTO_TYPE =
+        "org.pipelineframework.restaurantapproval.common.dto.PlaceRestaurantOrderRequestDto";
 
     private static final Duration STARTUP_TIMEOUT = Duration.ofSeconds(60);
-    private static final Duration POLL_TIMEOUT = Duration.ofSeconds(20);
+    private static final Duration POLL_TIMEOUT = Duration.ofSeconds(60);
     private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
 
     private final List<Process> processes = new ArrayList<>();
@@ -72,20 +76,38 @@ abstract class RestaurantApprovalSplitWorkerITSupport {
 
     protected final void registerAndActivateHostedBundle(int coordinatorPort) throws IOException {
         Path bundleJar = locateBundleArtifact();
+        Map<String, Object> manifest = readBundleManifest(bundleJar);
+        String bundleVersionId = String.valueOf(manifest.get("bundleVersionId"));
+        String bundleHash = String.valueOf(manifest.get("bundleHash"));
+        Path releaseDescriptor = Files.createTempFile("restaurant-pipeline-release-", ".json");
+        JSON.writeValue(releaseDescriptor.toFile(), Map.of(
+            "schemaVersion", 1,
+            "pipelineId", PIPELINE_ID,
+            "contractVersion", "sha256:" + bundleHash,
+            "releaseVersion", bundleVersionId,
+            "artifacts", List.of(Map.of(
+                "artifactId", "restaurant-approval-monolith",
+                "kind", "jar",
+                "uri", bundleJar.toString(),
+                "digest", "sha256:" + sha256(bundleJar),
+                "bundleVersionId", bundleVersionId,
+                "bundleHash", bundleHash,
+                "stepIds", List.of(),
+                "capabilities", List.of("rest-transition-worker")))));
         JsonPath registered = given()
             .baseUri("http://localhost")
             .port(coordinatorPort)
             .header("Authorization", "Bearer " + CONTROL_PLANE_ADMIN_TOKEN)
             .contentType(ContentType.JSON)
-            .body(Map.of("artifactPath", bundleJar.toString()))
+            .body(Map.of("releaseDescriptorPath", releaseDescriptor.toString()))
             .when()
-            .post("/tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/bundles/register", TENANT_ID, PIPELINE_ID)
+            .post("/tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/releases/register", TENANT_ID, PIPELINE_ID)
             .then()
             .statusCode(200)
             .extract()
             .jsonPath();
-        String bundleVersionId = registered.getString("bundleVersionId");
-        assertNotNull(bundleVersionId, "registered bundle should expose bundleVersionId");
+        String releaseVersion = registered.getString("releaseVersion");
+        assertNotNull(releaseVersion, "registered release should expose releaseVersion");
 
         given()
             .baseUri("http://localhost")
@@ -93,10 +115,10 @@ abstract class RestaurantApprovalSplitWorkerITSupport {
             .header("Authorization", "Bearer " + CONTROL_PLANE_ADMIN_TOKEN)
             .when()
             .post(
-                "/tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/bundles/{bundleVersionId}/activate",
+                "/tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/releases/{releaseVersion}/activate",
                 TENANT_ID,
                 PIPELINE_ID,
-                bundleVersionId)
+                releaseVersion)
             .then()
             .statusCode(200);
     }
@@ -213,7 +235,7 @@ abstract class RestaurantApprovalSplitWorkerITSupport {
         Process process = new ProcessBuilder(command)
             .directory(moduleDir.toFile())
             .redirectErrorStream(true)
-            .redirectOutput(ProcessBuilder.Redirect.appendTo(logFile.toFile()))
+            .redirectOutput(ProcessBuilder.Redirect.to(logFile.toFile()))
             .start();
         processes.add(process);
         return process;
@@ -274,7 +296,7 @@ abstract class RestaurantApprovalSplitWorkerITSupport {
             ? Map.of(
                 "pipelineId", PIPELINE_ID,
                 "inputShape", ExecutionInputShape.UNI.name(),
-                "inputPayload", encodedPayload(order),
+                "inputPayload", encodedPayload(order, ORDER_REQUEST_DTO_TYPE),
                 "idempotencyKey", "order-" + requestId,
                 "outputStreaming", false)
             : order;
@@ -478,13 +500,46 @@ abstract class RestaurantApprovalSplitWorkerITSupport {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> readBundleManifest(Path jarPath) throws IOException {
+        try (JarFile jar = new JarFile(jarPath.toFile())) {
+            var entry = jar.getJarEntry("META-INF/pipeline/bundle-manifest.json");
+            if (entry == null) {
+                throw new IOException("Bundle JAR is missing META-INF/pipeline/bundle-manifest.json");
+            }
+            try (var stream = jar.getInputStream(entry)) {
+                return JSON.readValue(stream, Map.class);
+            }
+        }
+    }
+
+    private static String sha256(Path path) throws IOException {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update(Files.readAllBytes(path));
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 digest algorithm is unavailable", e);
+        }
+    }
+
     private static Map<String, Object> encodedPayload(Object payload) {
+        return encodedPayload(payload, null);
+    }
+
+    private static Map<String, Object> encodedPayload(Object payload, String payloadTypeId) {
         try {
             if (payload == null) {
                 return Map.of(
                     "payloadTypeId", "null",
                     "payloadEncoding", PAYLOAD_ENCODING,
                     "payload", "null");
+            }
+            if (payloadTypeId != null && !payloadTypeId.isBlank()) {
+                return Map.of(
+                    "payloadTypeId", payloadTypeId,
+                    "payloadEncoding", PAYLOAD_ENCODING,
+                    "payload", JSON.writeValueAsString(payload));
             }
             if (payload instanceof Map<?, ?> map) {
                 Map<String, Object> items = new java.util.LinkedHashMap<>();

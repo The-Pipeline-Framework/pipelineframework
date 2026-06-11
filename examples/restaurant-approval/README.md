@@ -86,7 +86,7 @@ The UI is presentation only. TPF owns orchestration, durable waiting, completion
 
 ## Self-Hosted Coordinator
 
-The self-hosted reference path runs one packaged `monolith-svc` process with the generic control-plane and bundle-admin APIs enabled. The coordinator uses the local in-process transition worker, so the first demo is batteries-included: one Java process owns durable execution state and executes the restaurant business transitions.
+The self-hosted reference path runs one packaged `monolith-svc` process with the generic control-plane and release-admin APIs enabled. The coordinator uses the local in-process transition worker, so the first demo is batteries-included: one Java process owns durable execution state and executes the restaurant business transitions.
 
 Run it from the repository root:
 
@@ -94,7 +94,7 @@ Run it from the repository root:
 ./examples/restaurant-approval/self-host/run-self-hosted-demo.sh --ci
 ```
 
-The script packages `monolith-svc`, starts the coordinator, registers and activates the generated bundle JAR, submits accepted and declined orders through `/tpf/control-plane/...`, completes the await interaction, and verifies terminal results.
+The script packages `monolith-svc`, starts the coordinator, creates a local `pipeline-release.json`, registers and activates the release, submits accepted and declined orders through `/tpf/control-plane/...`, completes the await interaction, and verifies terminal results.
 
 See [Self-Hosted Coordinator Runbook](./self-host/README.md) for manual commands, environment defaults, and the current local/dev limits.
 

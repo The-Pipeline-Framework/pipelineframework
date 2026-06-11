@@ -139,6 +139,8 @@ public class RestTransitionWorkerResource {
             PipelineWorkerCapability.PROTOCOL_VERSION,
             "rest",
             identityResolver.pipelineId(orchestratorConfig),
+            identityResolver.contractVersion(),
+            identityResolver.releaseVersion(orchestratorConfig),
             identityResolver.bundleVersionId(orchestratorConfig),
             identityResolver.bundleHash(),
             List.of(TransitionPayloadEncoding.JSON),

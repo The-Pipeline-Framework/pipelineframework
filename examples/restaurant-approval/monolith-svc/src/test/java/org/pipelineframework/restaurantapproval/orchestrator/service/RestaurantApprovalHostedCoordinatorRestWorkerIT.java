@@ -26,6 +26,7 @@ class RestaurantApprovalHostedCoordinatorRestWorkerIT extends RestaurantApproval
             "pipeline.orchestrator.bundles.storage.root", bundleStoreRoot.toString(),
             "pipeline.orchestrator.worker.rest.base-url", "http://localhost:" + workerPort,
             "pipeline.orchestrator.worker.rest.shared-secret", WORKER_SECRET,
+            "pipeline.orchestrator.worker.rest.request-timeout", "PT2M",
             "pipeline.orchestrator.strict-startup", "false"));
 
         registerAndActivateHostedBundle(coordinatorPort);
@@ -49,6 +50,7 @@ class RestaurantApprovalHostedCoordinatorRestWorkerIT extends RestaurantApproval
             "pipeline.orchestrator.bundles.storage.root", bundleStoreRoot.toString(),
             "pipeline.orchestrator.worker.rest.base-url", "http://localhost:" + workerPort,
             "pipeline.orchestrator.worker.rest.shared-secret", WORKER_SECRET,
+            "pipeline.orchestrator.worker.rest.request-timeout", "PT2M",
             "pipeline.orchestrator.strict-startup", "false"));
 
         registerAndActivateHostedBundle(coordinatorPort);

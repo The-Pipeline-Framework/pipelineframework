@@ -60,16 +60,22 @@ public class DefaultPipelineWorkerAvailability implements PipelineWorkerAvailabi
     private PipelineWorkerAvailabilityResult sqsAvailability(PipelineWorkerAvailabilityRequest request) {
         var sqs = orchestratorConfig.workerSqs();
         if (sqs.pipelineId().filter(value -> !value.isBlank()).isEmpty()
+            || sqs.contractVersion().filter(value -> !value.isBlank()).isEmpty()
+            || sqs.releaseVersion().filter(value -> !value.isBlank()).isEmpty()
             || sqs.bundleVersionId().filter(value -> !value.isBlank()).isEmpty()) {
             return PipelineWorkerAvailabilityResult.unavailable(
                 "sqs",
                 "SQS worker bundle availability requires pipeline.orchestrator.worker.sqs.pipeline-id "
+                    + "pipeline.orchestrator.worker.sqs.contract-version, "
+                    + "pipeline.orchestrator.worker.sqs.release-version, "
                     + "and pipeline.orchestrator.worker.sqs.bundle-version-id");
         }
         PipelineWorkerCapability capability = new PipelineWorkerCapability(
             PipelineWorkerCapability.PROTOCOL_VERSION,
             "sqs",
             sqs.pipelineId().orElseThrow().trim(),
+            sqs.contractVersion().orElseThrow().trim(),
+            sqs.releaseVersion().orElseThrow().trim(),
             sqs.bundleVersionId().orElseThrow().trim(),
             "",
             List.of(TransitionPayloadEncoding.JSON),
@@ -83,6 +89,8 @@ public class DefaultPipelineWorkerAvailability implements PipelineWorkerAvailabi
             PipelineWorkerCapability.PROTOCOL_VERSION,
             "local",
             identityResolver.pipelineId(orchestratorConfig),
+            identityResolver.contractVersion(),
+            identityResolver.releaseVersion(orchestratorConfig),
             identityResolver.bundleVersionId(orchestratorConfig),
             identityResolver.bundleHash(),
             List.of(TransitionPayloadEncoding.JSON),
@@ -99,19 +107,26 @@ public class DefaultPipelineWorkerAvailability implements PipelineWorkerAvailabi
                 "Worker capability protocol version is unsupported");
         }
         if (!request.pipelineId().equals(capability.pipelineId())
+            || !request.contractVersion().equals(capability.contractVersion())
+            || !request.releaseVersion().equals(capability.releaseVersion())
             || !request.bundleVersionId().equals(capability.bundleVersionId())) {
             return PipelineWorkerAvailabilityResult.unavailable(
                 providerName,
                 "Worker hosts pipelineId=" + capability.pipelineId()
+                    + ", contractVersion=" + capability.contractVersion()
+                    + ", releaseVersion=" + capability.releaseVersion()
                     + ", bundleVersionId=" + capability.bundleVersionId()
-                    + " but active bundle is pipelineId=" + request.pipelineId()
+                    + " but active release is pipelineId=" + request.pipelineId()
+                    + ", contractVersion=" + request.contractVersion()
+                    + ", releaseVersion=" + request.releaseVersion()
                     + ", bundleVersionId=" + request.bundleVersionId());
         }
         LOG.debugf(
-            "Selected %s worker is available for tenant=%s pipelineId=%s bundleVersionId=%s",
+            "Selected %s worker is available for tenant=%s pipelineId=%s releaseVersion=%s bundleVersionId=%s",
             providerName,
             request.tenantId(),
             request.pipelineId(),
+            request.releaseVersion(),
             request.bundleVersionId());
         return PipelineWorkerAvailabilityResult.available(providerName, capability);
     }

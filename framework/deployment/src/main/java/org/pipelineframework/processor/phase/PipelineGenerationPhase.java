@@ -291,6 +291,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             PipelineBundleManifestMetadataGenerator bundleManifestMetadataGenerator =
                 new PipelineBundleManifestMetadataGenerator(ctx.getProcessingEnv());
             bundleManifestMetadataGenerator.writeBundleManifest(ctx);
+            bundleManifestMetadataGenerator.writePipelineContract(ctx);
             if (ctx.isOrchestratorGenerated()) {
                 PipelineTelemetryMetadataGenerator telemetryMetadataGenerator =
                     new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv());

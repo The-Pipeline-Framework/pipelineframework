@@ -178,6 +178,8 @@ public class GrpcTransitionWorkerService
             PipelineWorkerCapability.PROTOCOL_VERSION,
             "grpc",
             identityResolver.pipelineId(orchestratorConfig),
+            identityResolver.contractVersion(),
+            identityResolver.releaseVersion(orchestratorConfig),
             identityResolver.bundleVersionId(orchestratorConfig),
             identityResolver.bundleHash(),
             List.of(TransitionPayloadEncoding.JSON),

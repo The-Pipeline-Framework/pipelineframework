@@ -238,6 +238,26 @@ class QueueAsyncCoordinator {
       boolean outputStreaming,
       String pipelineId,
       String bundleVersionId) {
+    return executePipelineAsync(
+        input,
+        tenantId,
+        idempotencyKey,
+        outputStreaming,
+        pipelineId,
+        org.pipelineframework.orchestrator.PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
+        bundleVersionId,
+        bundleVersionId);
+  }
+
+  Uni<RunAsyncAcceptedDto> executePipelineAsync(
+      Object input,
+      String tenantId,
+      String idempotencyKey,
+      boolean outputStreaming,
+      String pipelineId,
+      String contractVersion,
+      String releaseVersion,
+      String bundleVersionId) {
     if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
       return Uni.createFrom().failure(new IllegalStateException(
           "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
@@ -256,7 +276,7 @@ class QueueAsyncCoordinator {
         resolvedTenant,
         ControlPlaneAdmissionOperation.SUBMIT_EXECUTION,
         pipelineId,
-        bundleVersionId,
+        releaseVersion,
         null,
         "api",
         explicitTenant(tenantId)));
@@ -274,7 +294,7 @@ class QueueAsyncCoordinator {
               try {
                 executionKey = scopedRootExecutionKey(
                     pipelineId,
-                    bundleVersionId,
+                    releaseVersion,
                     executionInputPolicy.resolveExecutionKey(resolvedTenant, snapshot.payload(), idempotencyKey));
               } catch (IllegalArgumentException e) {
                 return Uni.createFrom().failure(new BadRequestException(e.getMessage()));
@@ -283,6 +303,8 @@ class QueueAsyncCoordinator {
               resolvedTenant,
               executionKey,
               pipelineId,
+              contractVersion,
+              releaseVersion,
               bundleVersionId,
               snapshot,
               executionResultShapeResolver.resolve(),
@@ -881,6 +903,8 @@ class QueueAsyncCoordinator {
       return TransitionCommandEnvelope.from(
           command,
           record.pipelineId(),
+          record.contractVersion(),
+          record.releaseVersion(),
           record.bundleVersionId(),
           transitionKey,
           payloadCodec().encode(payload));
@@ -1130,6 +1154,8 @@ class QueueAsyncCoordinator {
                     interaction.tenantId(),
                     childKey,
                     parentRecord.pipelineId(),
+                    parentRecord.contractVersion(),
+                    parentRecord.releaseVersion(),
                     parentRecord.bundleVersionId(),
                     normalizedInput,
                     ExecutionResultShape.MATERIALIZED_MULTI,
