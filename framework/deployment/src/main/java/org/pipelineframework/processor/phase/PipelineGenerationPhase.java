@@ -93,7 +93,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
         OrchestratorRestResourceRenderer orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
         AbstractOrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer =
-            FunctionHandlerRendererFactory.createOrchestratorRenderer();
+            FunctionHandlerRendererFactory.createOrchestratorRenderer(ctx.getRendererProfile());
         OrchestratorCliRenderer orchestratorCliRenderer = new OrchestratorCliRenderer();
         OrchestratorIngestClientRenderer orchestratorIngestClientRenderer = new OrchestratorIngestClientRenderer();
         CheckpointPublicationDescriptorRenderer checkpointPublicationDescriptorRenderer =
@@ -604,16 +604,16 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                         cacheKeyGenerator,
                         descriptorSet));
                     roleMetadataGenerator.recordClassWithRole(
-                        AwsLambdaOrchestratorRenderer.handlerFqcn(binding.basePackage()),
+                        orchestratorFunctionHandlerRenderer.handlerFqcn(binding.basePackage()),
                         role.name());
                     roleMetadataGenerator.recordClassWithRole(
-                        AwsLambdaOrchestratorRenderer.runAsyncHandlerFqcn(binding.basePackage()),
+                        orchestratorFunctionHandlerRenderer.runAsyncHandlerFqcn(binding.basePackage()),
                         role.name());
                     roleMetadataGenerator.recordClassWithRole(
-                        AwsLambdaOrchestratorRenderer.statusHandlerFqcn(binding.basePackage()),
+                        orchestratorFunctionHandlerRenderer.statusHandlerFqcn(binding.basePackage()),
                         role.name());
                     roleMetadataGenerator.recordClassWithRole(
-                        AwsLambdaOrchestratorRenderer.resultHandlerFqcn(binding.basePackage()),
+                        orchestratorFunctionHandlerRenderer.resultHandlerFqcn(binding.basePackage()),
                         role.name());
                 }
             } else if (!local) {

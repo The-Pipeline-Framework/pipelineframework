@@ -23,13 +23,49 @@
                   <div id="playbackText" class="playback-time">0.00s / 0.10s</div>
                 </div>
 
+                <div id="playerTitle" class="player-title">Replay viewer ready</div>
+
                 <div class="player-controls-bar">
                   <div class="player-controls-transport">
-                    <button id="playPauseButton" class="icon-button icon-button--transport" type="button" aria-label="Play replay" title="Play replay">▶</button>
-                    <button id="stopButton" class="icon-button icon-button--transport" type="button" aria-label="Stop replay" title="Stop replay">⏹</button>
-                    <button id="restartButton" class="icon-button icon-button--transport" type="button" aria-label="Restart replay" title="Restart replay">↺</button>
-                    <button id="stepBackButton" class="icon-button icon-button--transport" type="button" aria-label="Step to previous event" title="Step to previous event">⏮</button>
-                    <button id="stepButton" class="icon-button icon-button--transport" type="button" aria-label="Step to next event" title="Step to next event">⏭</button>
+                    <button id="loadReplayButton" class="icon-button icon-button--transport" type="button" aria-haspopup="dialog" aria-controls="sourceModal" aria-label="Load replay" title="Load replay">
+                      <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 4l6 8H6l6-8z" />
+                        <path d="M6 17h12" />
+                      </svg>
+                    </button>
+                    <button id="playPauseButton" class="icon-button icon-button--transport" type="button" aria-label="Play replay" title="Play replay" data-playing="false">
+                      <svg class="control-icon control-icon--play" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M8 5v14l11-7-11-7z" />
+                      </svg>
+                      <svg class="control-icon control-icon--pause" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M8 5v14" />
+                        <path d="M16 5v14" />
+                      </svg>
+                    </button>
+                    <button id="stopButton" class="icon-button icon-button--transport" type="button" aria-label="Stop replay" title="Stop replay">
+                      <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M7 7h10v10H7z" />
+                      </svg>
+                    </button>
+                    <button id="restartButton" class="icon-button icon-button--transport" type="button" aria-label="Restart replay" title="Restart replay">
+                      <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M7 7h6a5 5 0 1 1-4.4 7.4" />
+                        <path d="M7 7V3" />
+                        <path d="M7 7h4" />
+                      </svg>
+                    </button>
+                    <button id="stepBackButton" class="icon-button icon-button--transport" type="button" aria-label="Step to previous event" title="Step to previous event">
+                      <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M6 5v14" />
+                        <path d="M18 6l-9 6 9 6V6z" />
+                      </svg>
+                    </button>
+                    <button id="stepButton" class="icon-button icon-button--transport" type="button" aria-label="Step to next event" title="Step to next event">
+                      <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M18 5v14" />
+                        <path d="M6 6l9 6-9 6V6z" />
+                      </svg>
+                    </button>
                     <fieldset class="speed-group speed-group--inline" aria-label="Replay speed">
                       <label><input type="radio" name="speed" value="0.25" /> 0.25x</label>
                       <label><input type="radio" name="speed" value="0.5" checked /> 0.5x</label>
@@ -40,8 +76,36 @@
                   </div>
 
                   <div class="player-controls-utility">
-                    <button id="infoButton" class="icon-button" type="button" aria-haspopup="dialog" aria-controls="infoModal" aria-label="Replay info" title="Replay info">ⓘ</button>
-                    <button id="fullscreenButton" class="icon-button" type="button" aria-label="Full screen" title="Full screen">⛶</button>
+                    <button id="resetLayoutButton" class="icon-button" type="button" aria-label="Reset layout" title="Reset layout" disabled>
+                      <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 4v4" />
+                        <path d="M12 16v4" />
+                        <path d="M4 12h4" />
+                        <path d="M16 12h4" />
+                        <circle cx="12" cy="12" r="4" />
+                      </svg>
+                    </button>
+                    <button id="infoButton" class="icon-button" type="button" aria-haspopup="dialog" aria-controls="infoModal" aria-label="Replay info" title="Replay info">
+                      <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="12" cy="12" r="8" />
+                        <path d="M12 11v5" />
+                        <path d="M12 8h.01" />
+                      </svg>
+                    </button>
+                    <button id="fullscreenButton" class="icon-button" type="button" aria-label="Full screen" title="Full screen" data-fullscreen="false">
+                      <svg class="control-icon control-icon--enter-fullscreen" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M8 4H4v4" />
+                        <path d="M16 4h4v4" />
+                        <path d="M20 16v4h-4" />
+                        <path d="M8 20H4v-4" />
+                      </svg>
+                      <svg class="control-icon control-icon--exit-fullscreen" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M9 4v5H4" />
+                        <path d="M15 4v5h5" />
+                        <path d="M20 15h-5v5" />
+                        <path d="M4 15h5v5" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
 
@@ -55,39 +119,50 @@
               </div>
             </div>
           </section>
-
-          <section class="metadata-strip" aria-label="Replay metadata">
-            <div class="metadata-heading">
-              <div id="datasetName" class="headline">Replay viewer ready</div>
-              <div class="source-controls" aria-label="Replay source controls">
-                <label class="source-control">
-                  <span>Replay source</span>
-                  <select id="datasetSelect" aria-label="Select replay source">
-                    <option value="none" selected>Choose replay...</option>
-                    <option value="csv-payments">CSV Payments built-in</option>
-                    <option value="search-warm-cache">Search built-in pre-warm</option>
-                    <option value="search-cache-hit">Search built-in</option>
-                    <option value="custom">Custom replay</option>
-                  </select>
-                </label>
-                <label id="customReplayInputWrap" class="source-control source-control--file" hidden aria-hidden="true">
-                  <span>Replay JSON</span>
-                  <span class="file-input-button">Choose file</span>
-                  <input id="replayFileInput" type="file" accept="application/json,.json" />
-                </label>
-                <button id="sourceApplyButton" class="source-action" type="button">Load</button>
-                <button id="resetLayoutButton" class="source-action source-action--secondary" type="button" disabled>Reset layout</button>
-              </div>
-            </div>
-            <div class="metadata-lines">
-              <div id="pipelineName" class="meta-line">Choose a replay to begin.</div>
-              <div id="durationText" class="meta-line"></div>
-              <div id="topologyText" class="meta-line"></div>
-              <div id="eventCountText" class="meta-line"></div>
-            </div>
-          </section>
         </section>
       </main>
+    </div>
+
+    <div id="sourceModal" class="info-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="sourceModalTitle">
+      <div class="info-modal-backdrop" data-close-modal="source"></div>
+      <div class="info-modal-panel info-modal-panel--compact source-modal-panel">
+        <div class="info-modal-header">
+          <div>
+            <h2 id="sourceModalTitle">Load replay</h2>
+            <p id="sourceModalDescription" class="modal-description">Choose a captured built-in replay or upload a replay JSON. The viewer plays real event timing, counters, and topology without synthetic flows.</p>
+          </div>
+          <button id="sourceCloseButton" class="icon-button icon-button--close" type="button" aria-label="Close load replay" title="Close load replay">
+            <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12" />
+              <path d="M18 6L6 18" />
+            </svg>
+          </button>
+        </div>
+        <div class="info-modal-body info-modal-body--compact source-modal-body">
+          <div class="source-controls source-controls--modal" aria-label="Replay source controls">
+            <label class="source-control">
+              <span>Replay source</span>
+              <select id="datasetSelect" aria-label="Select replay source">
+                <option value="none" selected>Choose replay...</option>
+                <option value="csv-payments">CSV Payments built-in</option>
+                <option value="search-warm-cache">Search built-in pre-warm</option>
+                <option value="search-cache-hit">Search built-in</option>
+                <option value="custom">Custom replay</option>
+              </select>
+            </label>
+            <label id="customReplayInputWrap" class="source-control source-control--file" hidden aria-hidden="true">
+              <span>Replay JSON</span>
+              <span class="file-input-button">Choose file</span>
+              <input id="replayFileInput" type="file" accept="application/json,.json" />
+            </label>
+            <div id="sourceModalStatus" class="source-modal-status" role="status" aria-live="polite">CSV Payments will load automatically on your first visit.</div>
+            <div class="source-modal-actions">
+              <button id="sourceApplyButton" class="source-action" type="button">Load</button>
+              <button id="sourceCancelButton" class="source-action source-action--secondary" type="button">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="infoModal" class="info-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="infoModalTitle">
@@ -95,9 +170,39 @@
       <div class="info-modal-panel">
         <div class="info-modal-header">
           <h2 id="infoModalTitle">Replay info</h2>
-          <button id="infoCloseButton" class="icon-button icon-button--close" type="button" aria-label="Close replay info" title="Close replay info">✕</button>
+          <button id="infoCloseButton" class="icon-button icon-button--close" type="button" aria-label="Close replay info" title="Close replay info">
+            <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12" />
+              <path d="M18 6L6 18" />
+            </svg>
+          </button>
         </div>
         <div class="info-modal-body">
+          <section class="info-section info-section--replay-summary">
+            <h3>Replay summary</h3>
+            <div class="replay-summary">
+              <div class="replay-summary-entry">
+                <span>Dataset</span>
+                <strong id="summaryDatasetName">Replay viewer ready</strong>
+              </div>
+              <div class="replay-summary-entry">
+                <span>Pipeline</span>
+                <strong id="summaryPipelineName">Choose a replay to begin.</strong>
+              </div>
+              <div class="replay-summary-entry">
+                <span>Duration</span>
+                <strong id="summaryDurationText">-</strong>
+              </div>
+              <div class="replay-summary-entry">
+                <span>Topology</span>
+                <strong id="summaryTopologyText">-</strong>
+              </div>
+              <div class="replay-summary-entry">
+                <span>Events</span>
+                <strong id="summaryEventCountText">-</strong>
+              </div>
+            </div>
+          </section>
           <section class="info-section info-section--run-parameters">
             <h3>Run parameters</h3>
             <div id="runParametersContent" class="run-parameters"></div>
@@ -105,14 +210,55 @@
           <section class="info-section info-section--aux">
             <div class="info-section-legend">
               <h3>Legend</h3>
+              <h4>Throughput counters</h4>
+              <div class="legend-list">
+                <div class="legend-item legend-item--throughput">
+                  <span class="legend-counter-sample" aria-hidden="true">
+                    <span class="legend-pressure-ring"></span>
+                    <span class="legend-counter-text">1000|1</span>
+                  </span>
+                  <span>received | sent; ring shows queued pressure waiting at the node</span>
+                </div>
+              </div>
+              <h4>Event motion</h4>
               <div class="legend-list">
                 <div class="legend-item"><span class="legend-swatch legend-swatch--start"></span><span>start / success transit</span></div>
                 <div class="legend-item"><span class="legend-swatch legend-swatch--emit"></span><span>emit / fan-out</span></div>
                 <div class="legend-item"><span class="legend-swatch legend-swatch--emit"></span><span>cache hit</span></div>
                 <div class="legend-item"><span class="legend-swatch legend-swatch--retry"></span><span>retry loop</span></div>
                 <div class="legend-item"><span class="legend-swatch legend-swatch--error"></span><span>error burst</span></div>
-                <div class="legend-item"><span class="legend-swatch legend-swatch--branch"></span><span>DB node</span></div>
-                <div class="legend-item"><span class="legend-swatch legend-swatch--branch legend-swatch--cache"></span><span>Cache node</span></div>
+                <div class="legend-item"><span class="legend-swatch legend-swatch--branch"></span><span>DB/store transit</span></div>
+              </div>
+              <h4>Support actors</h4>
+              <div class="legend-list legend-list--support">
+                <div class="legend-item">
+                  <span class="legend-actor legend-actor--store" aria-hidden="true"><span class="legend-icon legend-icon--database"></span></span>
+                  <span>DB/store side-effect actor</span>
+                </div>
+                <div class="legend-item">
+                  <span class="legend-actor legend-actor--cache" aria-hidden="true"><span class="legend-icon legend-icon--cache"></span></span>
+                  <span>Cache read/write actor</span>
+                </div>
+                <div class="legend-item">
+                  <span class="legend-actor legend-actor--cache-invalidate" aria-hidden="true"><span class="legend-icon legend-icon--cache"></span><span class="legend-actor-badge">!</span></span>
+                  <span>Cache invalidate: one cache scope</span>
+                </div>
+                <div class="legend-item">
+                  <span class="legend-actor legend-actor--cache-invalidate-all" aria-hidden="true"><span class="legend-icon legend-icon--cache"></span><span class="legend-actor-badge">×</span></span>
+                  <span>Cache invalidate all: broader cache scope</span>
+                </div>
+                <div class="legend-item">
+                  <span class="legend-actor legend-actor--broker" aria-hidden="true"><span class="legend-icon legend-icon--broker"></span></span>
+                  <span>Broker support actor</span>
+                </div>
+                <div class="legend-item">
+                  <span class="legend-actor legend-actor--provider" aria-hidden="true"><span class="legend-icon legend-icon--provider"></span></span>
+                  <span>External provider actor</span>
+                </div>
+                <div class="legend-item" data-support-kind="reject" hidden>
+                  <span class="legend-actor legend-actor--reject" aria-hidden="true"><span class="legend-icon legend-icon--reject"></span></span>
+                  <span>Reject queue actor</span>
+                </div>
               </div>
             </div>
           </section>

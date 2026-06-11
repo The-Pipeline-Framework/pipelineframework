@@ -20,10 +20,6 @@ import java.util.List;
 import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
-import jakarta.enterprise.context.ContextNotActiveException;
-import jakarta.enterprise.inject.CreationException;
-import jakarta.enterprise.inject.Instance;
-import jakarta.enterprise.inject.spi.CDI;
 import org.jboss.logging.Logger;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
@@ -31,6 +27,7 @@ import org.pipelineframework.context.TransportDispatchMetadata;
 import org.pipelineframework.context.TransportDispatchMetadataHolder;
 import org.pipelineframework.reject.ItemRejectRouter;
 import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.runtime.core.RuntimeAdapters;
 
 /**
  * Support for step-level reject-and-continue behaviour.
@@ -142,31 +139,10 @@ public interface ItemRejectable<I, O> {
     }
 
     private Optional<ItemRejectRouter> resolveRouter() {
-        CDI<Object> cdi;
         try {
-            cdi = CDI.current();
-        } catch (IllegalStateException unavailable) {
-            return Optional.empty();
-        }
-
-        Instance<ItemRejectRouter> instance;
-        try {
-            instance = cdi.select(ItemRejectRouter.class);
+            return RuntimeAdapters.resolveBean(ItemRejectRouter.class);
         } catch (RuntimeException selectionFailure) {
-            LOG.warnf(selectionFailure, "Failed selecting ItemRejectRouter from CDI.");
-            return Optional.empty();
-        }
-        if (instance.isUnsatisfied()) {
-            return Optional.empty();
-        }
-
-        try {
-            return Optional.of(instance.get());
-        } catch (ContextNotActiveException | CreationException creationFailure) {
-            LOG.warnf(creationFailure, "Item reject sink unavailable because ItemRejectRouter is not active.");
-            return Optional.empty();
-        } catch (RuntimeException creationFailure) {
-            LOG.warnf(creationFailure, "Failed to create ItemRejectRouter for item reject handling.");
+            LOG.warnf(selectionFailure, "Failed resolving ItemRejectRouter from runtime adapters.");
             return Optional.empty();
         }
     }

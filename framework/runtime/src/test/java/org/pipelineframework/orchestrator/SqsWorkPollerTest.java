@@ -140,7 +140,7 @@ class SqsWorkPollerTest {
     }
 
     @Test
-    void pollOnceProcessesMultipleMessagesAndDeletesOnlyHandledOnes() {
+    void pollOnceProcessesValidAndMalformedMessagesAndDeletesHandledAndMalformed() {
         SqsClient client = mock(SqsClient.class);
         PipelineExecutionService pipelineExecutionService = mock(PipelineExecutionService.class);
         Message first = validMessage("receipt-4", "exec-4");
