@@ -241,7 +241,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
             ensureKafkaTopics();
             Startables.deepStart(Stream.of(
                     getPersistenceService(),
-                    getPaymentsProcessingService(),
                     getPipelineRuntimeService())).join();
             return;
         }

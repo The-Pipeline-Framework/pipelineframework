@@ -1,4 +1,4 @@
-package org.pipelineframework.orchestrator;
+package org.pipelineframework.orchestrator.release;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -18,7 +18,10 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
-import org.pipelineframework.orchestrator.dto.HostedReleaseRegisterRequest;
+import org.pipelineframework.orchestrator.ControlPlaneSecretResolver;
+import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.WorkerSecretSupport;
+import org.pipelineframework.orchestrator.release.dto.HostedReleaseRegisterRequest;
 
 /**
  * Default-disabled local/dev admin API for registering and activating pipeline releases.

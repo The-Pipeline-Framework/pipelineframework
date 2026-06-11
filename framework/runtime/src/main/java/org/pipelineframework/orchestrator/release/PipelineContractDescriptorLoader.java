@@ -1,5 +1,6 @@
-package org.pipelineframework.orchestrator;
+package org.pipelineframework.orchestrator.release;
 
+import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Optional;

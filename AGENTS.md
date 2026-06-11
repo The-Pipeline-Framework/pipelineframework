@@ -132,6 +132,8 @@ Transport and platform are orthogonal dimensions; avoid coupling operator catego
 - Mapper inference/selection should remain pair-accurate (`Domain` + `External`) and deterministic in ambiguity diagnostics.
 - Split/merge lineage IDs and ordering must be deterministic and replay-safe across runtime adapters.
 - FUNCTION vs COMPUTE/REST paths should preserve equivalent behavior for cardinality and failure semantics unless explicitly documented.
+- New TPF control-plane storage should prefer immutable internal records. For new Dynamo-backed coordinator stores, avoid `UpdateItem`/upsert semantics; prefer conditional writes, immutable records, and append-only event records. Existing execution/await stores are legacy exceptions until explicitly redesigned.
+- New code should not use `return null`; use `Optional`, empty collections, explicit result records, or exceptions. Existing legacy/null-heavy code is not a precedent for new work.
 
 ## Persistence Plugin Notes
 

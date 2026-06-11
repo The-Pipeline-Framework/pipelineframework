@@ -1,5 +1,12 @@
 package org.pipelineframework.orchestrator;
 
+import org.pipelineframework.orchestrator.release.InMemoryPipelineReleaseRegistry;
+import org.pipelineframework.orchestrator.release.PipelineReleaseRecord;
+import org.pipelineframework.orchestrator.release.PipelineReleaseRegistrar;
+import org.pipelineframework.orchestrator.release.PipelineReleaseRegistry;
+import org.pipelineframework.orchestrator.worker.DefaultPipelineWorkerAvailability;
+import org.pipelineframework.orchestrator.worker.PipelineWorkerAvailability;
+import org.pipelineframework.orchestrator.worker.PipelineWorkerAvailabilityRequest;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;

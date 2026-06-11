@@ -11,7 +11,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.Multi;
@@ -102,11 +101,11 @@ class PipelineInvocationRuntimeTest {
     }
 
     @Test
-    void transportMultiCancellationDoesNotChangeStreamBehavior() {
-        AtomicBoolean cancelled = new AtomicBoolean();
+    void transportMultiCancellationDoesNotChangeStreamBehavior() throws InterruptedException {
+        CountDownLatch cancelled = new CountDownLatch(1);
         Multi<String> stream = Multi.createFrom().emitter(emitter -> {
             emitter.emit("first");
-            emitter.onTermination(() -> cancelled.set(true));
+            emitter.onTermination(cancelled::countDown);
         });
 
         AssertSubscriber<String> subscriber = runtime.invokeTransportMulti(boundary, () -> stream)
@@ -116,7 +115,7 @@ class PipelineInvocationRuntimeTest {
         subscriber.assertItems("first");
         subscriber.cancel();
 
-        assertTrue(cancelled.get());
+        assertTrue(cancelled.await(2, TimeUnit.SECONDS));
     }
 
     @Test

@@ -1,5 +1,6 @@
 package org.pipelineframework;
 
+import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import java.util.List;
 
 import jakarta.annotation.PostConstruct;
@@ -58,7 +59,7 @@ public class LocalPipelineControlPlane implements PipelineControlPlane {
             idempotencyKey,
             outputStreaming,
             pipelineId,
-            org.pipelineframework.orchestrator.PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
+            org.pipelineframework.orchestrator.release.PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
             bundleVersionId,
             bundleVersionId);
     }

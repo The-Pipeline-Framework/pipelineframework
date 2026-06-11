@@ -1,4 +1,4 @@
-package org.pipelineframework.orchestrator;
+package org.pipelineframework.orchestrator.release;
 
 /**
  * Local release registration state.

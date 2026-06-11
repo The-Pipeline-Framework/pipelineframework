@@ -1,5 +1,9 @@
 package org.pipelineframework.orchestrator;
 
+import org.pipelineframework.orchestrator.release.FileBackedPipelineReleaseRegistry;
+import org.pipelineframework.orchestrator.release.DynamoPipelineReleaseRegistry;
+import org.pipelineframework.orchestrator.release.InMemoryPipelineReleaseRegistry;
+import org.pipelineframework.orchestrator.release.PipelineReleaseRegistry;
 import java.nio.file.Path;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -12,7 +16,7 @@ import jakarta.inject.Inject;
 @ApplicationScoped
 public class PipelineBundleRuntimeBeans {
 
-    static final String DEFAULT_BUNDLE_STORAGE_ROOT = "target/tpf-bundles";
+    public static final String DEFAULT_BUNDLE_STORAGE_ROOT = "target/tpf-bundles";
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
@@ -58,11 +62,14 @@ public class PipelineBundleRuntimeBeans {
         if ("file".equalsIgnoreCase(provider)) {
             return new FileBackedPipelineReleaseRegistry(storageRoot());
         }
+        if ("dynamo".equalsIgnoreCase(provider)) {
+            return new DynamoPipelineReleaseRegistry(orchestratorConfig);
+        }
         throw new IllegalStateException(
             "Unsupported pipeline.orchestrator.bundles.registry.provider '" + provider + "'");
     }
 
-    static Path storageRoot(PipelineOrchestratorConfig orchestratorConfig) {
+    public static Path storageRoot(PipelineOrchestratorConfig orchestratorConfig) {
         String configured = orchestratorConfig == null
             || orchestratorConfig.bundles() == null
             || orchestratorConfig.bundles().storage() == null

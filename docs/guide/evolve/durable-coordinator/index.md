@@ -45,12 +45,13 @@ sequenceDiagram
 2. [Step-Aware Invocation Runtime](/guide/evolve/durable-coordinator/boundary-invocation-model) explains the shared invocation seam used by pipeline steps and transition workers.
 3. [Bundle Contract](/guide/evolve/durable-coordinator/bundle-contract) explains the current manifest identity used by executable workers.
 4. [Pipeline Contract And Release Model](/guide/evolve/durable-coordinator/pipeline-contract-release-model) describes contract/release descriptors, artifacts, deployment plans, and drift detection.
-5. [Local APIs](/guide/evolve/durable-coordinator/local-apis) documents the current default-disabled control-plane and admin APIs.
-6. [Self-Hosted Deployment](/guide/evolve/durable-coordinator/self-hosted-deployment) gives the production-ish self-host topology, configuration, and operator runbooks.
-7. [Self-Hosted Milestone](/guide/evolve/durable-coordinator/self-hosted-milestone) tracks what remains after the current self-host proof.
+5. [Runtime Boundaries And Performance](/guide/evolve/durable-coordinator/runtime-boundaries-performance) explains runtime mapping, patterns, package boundaries, and hot-path guardrails.
+6. [Local APIs](/guide/evolve/durable-coordinator/local-apis) documents the current default-disabled control-plane and admin APIs.
+7. [Self-Hosted Deployment](/guide/evolve/durable-coordinator/self-hosted-deployment) gives the production-ish self-host topology, configuration, and operator runbooks.
+8. [Self-Hosted Milestone](/guide/evolve/durable-coordinator/self-hosted-milestone) tracks what remains after the current self-host proof.
 
 ## Limits
 
 The current coordinator path does not dynamically load registered JAR code. Workers must already host matching pipeline code and validate active release identity plus `pipelineId + bundleVersionId` executable identity.
 
-The current file-backed bundle registry is single-coordinator oriented. Multi-instance registry coordination, built-in DLQ replay, and worker lifecycle remain follow-up runtime substrate work.
+The Dynamo release registry provides multi-coordinator release metadata, while the file-backed registry remains local/dev oriented. Built-in DLQ replay, worker lifecycle, and append-only execution/await state remain follow-up runtime substrate work.

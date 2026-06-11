@@ -5,12 +5,12 @@ import java.util.Optional;
 /**
  * Shared validation and lookup for transition-worker signing secrets.
  */
-final class WorkerSecretSupport {
+public final class WorkerSecretSupport {
 
     private WorkerSecretSupport() {
     }
 
-    static Optional<String> validationError(
+    public static Optional<String> validationError(
         String literalSecret,
         String secretRef,
         String literalConfigKey,
@@ -30,7 +30,7 @@ final class WorkerSecretSupport {
         return Optional.empty();
     }
 
-    static String resolve(
+    public static String resolve(
         String literalSecret,
         String secretRef,
         ControlPlaneSecretResolver resolver,
@@ -55,7 +55,7 @@ final class WorkerSecretSupport {
         return activeResolver.resolve(secretRef);
     }
 
-    static Optional<String> validationError(
+    public static Optional<String> validationError(
         Optional<String> literalSecret,
         Optional<String> secretRef,
         String literalConfigKey,
@@ -70,7 +70,7 @@ final class WorkerSecretSupport {
             enabledDescription);
     }
 
-    static String resolve(
+    public static String resolve(
         Optional<String> literalSecret,
         Optional<String> secretRef,
         ControlPlaneSecretResolver resolver,

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
@@ -85,6 +86,23 @@ class PipelineRuntimeTopologyTest {
             assertNotEquals(pipelinePorts, pluginPorts,
                     "Pipeline-runtime and plugin-runtime clients should not share the same endpoint");
         }
+    }
+
+    @Test
+    void orchestratorArtifactDoesNotOwnPaymentProviderMockChannels() {
+        String layout = System.getProperty("csv.runtime.layout", System.getenv("CSV_RUNTIME_LAYOUT"));
+        assumeTrue(layout != null && "pipeline-runtime".equalsIgnoreCase(layout.trim()),
+                "Test applies only to pipeline-runtime layout.");
+
+        ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        assertNull(
+                loader.getResource("org/pipelineframework/csv/service/PaymentProviderKafkaAwaitMock.class"),
+                "Pipeline-runtime orchestrator must not contain the payment-provider Kafka mock; "
+                        + "the grouped runtime host owns those channels.");
+        assertNull(
+                loader.getResource("org/pipelineframework/csv/service/PaymentProviderServiceMock.class"),
+                "Pipeline-runtime orchestrator must not contain the payment-provider service mock; "
+                        + "the grouped runtime host owns provider behavior.");
     }
 
     private static boolean isPipelineRuntimeMappingActive() {

@@ -1,5 +1,8 @@
-package org.pipelineframework.orchestrator;
+package org.pipelineframework.orchestrator.release;
 
+import org.pipelineframework.orchestrator.release.PipelineReleaseRecord;
+import org.pipelineframework.orchestrator.release.PipelineReleaseRegistry;
+import org.pipelineframework.orchestrator.release.PipelineReleaseStatus;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;

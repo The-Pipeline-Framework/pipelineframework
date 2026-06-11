@@ -1,5 +1,7 @@
-package org.pipelineframework.orchestrator;
+package org.pipelineframework.orchestrator.worker;
 
+import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
+import org.pipelineframework.orchestrator.worker.PipelineWorkerAvailability;
 import java.util.Objects;
 
 /**

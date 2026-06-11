@@ -1,4 +1,4 @@
-package org.pipelineframework.orchestrator;
+package org.pipelineframework.orchestrator.worker;
 
 import java.util.List;
 
@@ -7,6 +7,12 @@ import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
+import org.pipelineframework.orchestrator.GrpcPipelineTransitionWorker;
+import org.pipelineframework.orchestrator.PipelineBundleCapabilities;
+import org.pipelineframework.orchestrator.PipelineBundleIdentityResolver;
+import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.RestPipelineTransitionWorker;
+import org.pipelineframework.orchestrator.TransitionPayloadEncoding;
 
 /**
  * Checks bundle availability on the worker selected by runtime configuration.

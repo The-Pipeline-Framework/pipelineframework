@@ -1,5 +1,6 @@
 package org.pipelineframework;
 
+import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -244,7 +245,7 @@ class QueueAsyncCoordinator {
         idempotencyKey,
         outputStreaming,
         pipelineId,
-        org.pipelineframework.orchestrator.PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
+        org.pipelineframework.orchestrator.release.PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
         bundleVersionId,
         bundleVersionId);
   }

@@ -1,5 +1,14 @@
 package org.pipelineframework.orchestrator;
 
+import org.pipelineframework.orchestrator.release.PipelineReleaseArtifactDescriptor;
+import org.pipelineframework.orchestrator.release.PipelineReleaseDescriptor;
+import org.pipelineframework.orchestrator.release.PipelineReleaseRecord;
+import org.pipelineframework.orchestrator.release.PipelineReleaseRegistrar;
+import org.pipelineframework.orchestrator.release.PipelineReleaseRegistry;
+import org.pipelineframework.orchestrator.release.PipelineReleaseStatus;
+import org.pipelineframework.orchestrator.worker.PipelineWorkerAvailability;
+import org.pipelineframework.orchestrator.worker.PipelineWorkerAvailabilityResult;
+import org.pipelineframework.orchestrator.worker.PipelineWorkerCapability;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;

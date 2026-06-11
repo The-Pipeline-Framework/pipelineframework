@@ -37,15 +37,19 @@ final class TransportBoundaryFailureClassifier {
         if (failure == null) {
             return TransportBoundaryFailureCategory.NONE;
         }
-        ArrayDeque<Throwable> queue = new ArrayDeque<>();
         Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        return classify(failure, seen);
+    }
+
+    private TransportBoundaryFailureCategory classify(Throwable failure, Set<Throwable> seen) {
+        ArrayDeque<Throwable> queue = new ArrayDeque<>();
         queue.add(failure);
         while (!queue.isEmpty()) {
             Throwable current = queue.removeFirst();
             if (current == null || !seen.add(current)) {
                 continue;
             }
-            TransportBoundaryFailureCategory direct = classifyDirect(current);
+            TransportBoundaryFailureCategory direct = classifyDirect(current, seen);
             if (direct != null) {
                 return direct;
             }
@@ -59,7 +63,7 @@ final class TransportBoundaryFailureClassifier {
         return TransportBoundaryFailureCategory.UNEXPECTED;
     }
 
-    private TransportBoundaryFailureCategory classifyDirect(Throwable failure) {
+    private TransportBoundaryFailureCategory classifyDirect(Throwable failure, Set<Throwable> seen) {
         if (failure instanceof CancellationException) {
             return TransportBoundaryFailureCategory.CANCELLED;
         }
@@ -80,7 +84,7 @@ final class TransportBoundaryFailureClassifier {
             return TransportBoundaryFailureCategory.MALFORMED;
         }
         if (failure instanceof ProcessingException processingFailure) {
-            return classifyProcessingException(processingFailure);
+            return classifyProcessingException(processingFailure, seen);
         }
         if (failure instanceof ConnectException || failure instanceof UnknownHostException
             || failure instanceof NoRouteToHostException) {
@@ -121,12 +125,12 @@ final class TransportBoundaryFailureClassifier {
         return TransportBoundaryFailureCategory.UNEXPECTED;
     }
 
-    private TransportBoundaryFailureCategory classifyProcessingException(ProcessingException failure) {
+    private TransportBoundaryFailureCategory classifyProcessingException(ProcessingException failure, Set<Throwable> seen) {
         Throwable cause = failure.getCause();
         if (cause == null) {
             return TransportBoundaryFailureCategory.UNAVAILABLE;
         }
-        TransportBoundaryFailureCategory causeCategory = classify(cause, false);
+        TransportBoundaryFailureCategory causeCategory = classify(cause, seen);
         return causeCategory == TransportBoundaryFailureCategory.UNEXPECTED
             ? TransportBoundaryFailureCategory.UNAVAILABLE
             : causeCategory;

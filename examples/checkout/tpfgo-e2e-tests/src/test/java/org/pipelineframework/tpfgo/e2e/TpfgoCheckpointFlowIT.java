@@ -71,17 +71,21 @@ class TpfgoCheckpointFlowIT {
         logDirectory = Path.of("target", "failsafe-reports", "tpfgo-checkpoint-flow");
         Files.createDirectories(logDirectory);
         ServerSocket collectorSocket = reservePort();
+        List<AppSpec> specs = List.of();
         try {
             int collectorPort = collectorSocket.getLocalPort();
             collectorSocket.close();
             collector = new FinalCollector(collectorPort);
             collector.start();
 
-            List<AppSpec> specs = specs(collector.port());
+            specs = specs(collector.port());
             for (AppSpec spec : specs) {
                 apps.add(ManagedApp.start(spec, logDirectory));
             }
         } catch (Exception e) {
+            for (AppSpec spec : specs) {
+                spec.closeReservations();
+            }
             collectorSocket.close();
             throw e;
         }
@@ -405,13 +409,18 @@ class TpfgoCheckpointFlowIT {
      */
     private AppSpec runtimeSpec(String moduleDir, Set<Integer> assignedPorts) throws IOException {
         ServerSocket socket = reserveUnusedPort(assignedPorts);
-        try {
-            int httpPort = socket.getLocalPort();
-            int grpcPort = httpPort;
-            return new AppSpec(moduleDir, httpPort, grpcPort, false, null, 0, List.of(), new ArrayList<>());
-        } finally {
-            socket.close();
-        }
+        int httpPort = socket.getLocalPort();
+        int grpcPort = httpPort;
+        return new AppSpec(
+            moduleDir,
+            httpPort,
+            grpcPort,
+            false,
+            null,
+            0,
+            List.of(),
+            new ArrayList<>(),
+            List.of(socket));
     }
 
     /**
@@ -433,22 +442,18 @@ class TpfgoCheckpointFlowIT {
     ) throws IOException {
         ServerSocket httpSocket = reserveUnusedPort(assignedPorts);
         ServerSocket grpcSocket = reserveUnusedPort(assignedPorts);
-        try {
-            int httpPort = httpSocket.getLocalPort();
-            int grpcPort = grpcSocket.getLocalPort();
-            return new AppSpec(
-                moduleDir,
-                httpPort,
-                grpcPort,
-                true,
-                publication,
-                internalGrpcTargetPort,
-                internalGrpcClients,
-                new ArrayList<>());
-        } finally {
-            httpSocket.close();
-            grpcSocket.close();
-        }
+        int httpPort = httpSocket.getLocalPort();
+        int grpcPort = grpcSocket.getLocalPort();
+        return new AppSpec(
+            moduleDir,
+            httpPort,
+            grpcPort,
+            true,
+            publication,
+            internalGrpcTargetPort,
+            internalGrpcClients,
+            new ArrayList<>(),
+            List.of(httpSocket, grpcSocket));
     }
 
     /**
@@ -475,8 +480,8 @@ class TpfgoCheckpointFlowIT {
      */
     private static ServerSocket reservePort() throws IOException {
         ServerSocket socket = new ServerSocket();
-        socket.bind(new InetSocketAddress("127.0.0.1", 0));
         socket.setReuseAddress(true);
+        socket.bind(new InetSocketAddress("127.0.0.1", 0));
         return socket;
     }
 
@@ -500,8 +505,30 @@ class TpfgoCheckpointFlowIT {
         String publication,
         int internalGrpcTargetPort,
         List<String> internalGrpcClients,
-        List<String> bindingLines
+        List<String> bindingLines,
+        List<ServerSocket> portReservations
     ) {
+        private void closeReservations() throws IOException {
+            IOException failure = null;
+            for (ServerSocket reservation : portReservations) {
+                if (reservation.isClosed()) {
+                    continue;
+                }
+                try {
+                    reservation.close();
+                } catch (IOException e) {
+                    if (failure == null) {
+                        failure = e;
+                    } else {
+                        failure.addSuppressed(e);
+                    }
+                }
+            }
+            if (failure != null) {
+                throw failure;
+            }
+        }
+
         /**
          * Adds configuration property lines that bind this AppSpec's publication to a gRPC target at the given port.
          *
@@ -594,6 +621,7 @@ class TpfgoCheckpointFlowIT {
             builder.redirectErrorStream(true);
             builder.redirectOutput(logFile.toFile());
             builder.environment().put("QUARKUS_CONFIG_LOCATIONS", configFile.toAbsolutePath().toString());
+            spec.closeReservations();
             Process process = builder.start();
             try {
                 waitForHealth(spec.httpPort(), process);

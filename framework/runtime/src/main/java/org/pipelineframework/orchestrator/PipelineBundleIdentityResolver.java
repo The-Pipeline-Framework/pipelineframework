@@ -1,5 +1,7 @@
 package org.pipelineframework.orchestrator;
 
+import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
+import org.pipelineframework.orchestrator.release.PipelineContractDescriptorLoader;
 import java.util.Objects;
 import java.util.Optional;
 

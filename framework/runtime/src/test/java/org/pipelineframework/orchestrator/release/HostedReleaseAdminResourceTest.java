@@ -1,4 +1,4 @@
-package org.pipelineframework.orchestrator;
+package org.pipelineframework.orchestrator.release;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -20,7 +20,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.config.pipeline.PipelineJson;
-import org.pipelineframework.orchestrator.dto.HostedReleaseRegisterRequest;
+import org.pipelineframework.orchestrator.LocalControlPlaneSecretResolver;
+import org.pipelineframework.orchestrator.LocalPipelineBundleArtifactStore;
+import org.pipelineframework.orchestrator.PipelineBundleCapabilities;
+import org.pipelineframework.orchestrator.PipelineBundleManifest;
+import org.pipelineframework.orchestrator.PipelineBundleManifestLoader;
+import org.pipelineframework.orchestrator.PipelineBundleStepDescriptor;
+import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.release.dto.HostedReleaseRegisterRequest;
 
 class HostedReleaseAdminResourceTest {
 
