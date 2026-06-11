@@ -32,7 +32,11 @@ Deployment now accepts and validates `pipeline.codegen.rendererProfile` in disco
 - `quarkus` (default)
 - `spring` (currently mapped to the same renderer selection strategy as `quarkus`)
 
-`FunctionHandlerRendererFactory` now has profile-aware factory methods used by generation.
+For the surrounding configuration model, see [build configuration](/guide/build/configuration/) and
+[application configuration](/guide/application/configuration).
+
+`FunctionHandlerRendererFactory` now has profile-aware factory methods used by generation. The generation phase context is described in
+[annotation processor generation and rendering](/guide/evolve/annotation-processor/generation-and-rendering).
 
 `PipelineGenerationPhase` passes the profile through and uses renderer-instance FQCN helpers when recording role metadata for orchestrator function handlers. That avoids hard-coding a provider class name at generation time.
 
@@ -40,8 +44,8 @@ Deployment now accepts and validates `pipeline.codegen.rendererProfile` in disco
 
 The important seam for future portability is where Vert.x is used:
 
-- `Framework/runtime-core`: no direct `io.quarkus` / `io.vertx` references.
-- `Framework/runtime`: `io.vertx.core` remains in `RuntimeAdapterBootstrap` for context capture.
+- `framework/runtime-core`: no direct `io.quarkus` / `io.vertx` references.
+- `framework/runtime`: `io.vertx.core` remains in `RuntimeAdapterBootstrap` for context capture.
 
 To make this explicit and enforceable, this slice adds dependency-seam tests:
 

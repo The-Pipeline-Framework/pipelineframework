@@ -45,8 +45,11 @@ case "$(uname -m)" in
     ;;
 esac
 IMAGE_PLATFORMS="${CSV_E2E_IMAGE_PLATFORMS:-$DEFAULT_IMAGE_PLATFORMS}"
+MAVEN_IMAGE_THREADS="${CSV_E2E_IMAGE_MAVEN_THREADS:-1}"
 
-./mvnw -f examples/csv-payments/pom.xml -DskipTests clean package \
+# Jib writes shared cache metadata during image packaging; keep this reactor serialized
+# unless a caller explicitly opts into parallelism.
+./mvnw -T "$MAVEN_IMAGE_THREADS" -f examples/csv-payments/pom.xml -DskipTests clean package \
   -Dtpf.build.transport=GRPC \
   -Dquarkus.container-image.tag="${IMAGE_TAG}" \
   -Dquarkus.container-image.platforms="${IMAGE_PLATFORMS}" \

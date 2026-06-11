@@ -31,8 +31,8 @@ class RuntimeAdapterSeamTest {
                             violations.add(path + ":" + lineNo);
                         }
                     }
-                } catch (IOException ignored) {
-                    // Ignore transient read issues while scanning source files.
+                } catch (IOException e) {
+                    violations.add("Unable to read " + path + ": " + e.getMessage());
                 }
             });
         } catch (IOException e) {

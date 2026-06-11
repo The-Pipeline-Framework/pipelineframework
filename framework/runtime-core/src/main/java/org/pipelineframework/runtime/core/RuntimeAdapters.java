@@ -133,6 +133,8 @@ public final class RuntimeAdapters {
     }
 
     public static void resetForTests() {
+        executionContextCarrier.clear();
+        ThreadLocalExecutionContextCarrier.INSTANCE.clear();
         registerBeanLookup(new NoopBeanLookup());
         registerConfigProvider(new NoopConfigProvider());
         registerExecutionContextCarrier(ThreadLocalExecutionContextCarrier.INSTANCE);

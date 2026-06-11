@@ -36,10 +36,11 @@ class RuntimeCoreDependencyGuardTest {
         try {
             Path sourceRoot = Path.of("src/main/java");
             if (!Files.isDirectory(sourceRoot)) {
-                return Collections.emptyList();
+                return List.of("Unable to scan runtime-core sources: missing directory " + sourceRoot);
             }
 
             Map<Path, List<Integer>> matches = new HashMap<>();
+            List<String> scanErrors = new ArrayList<>();
             try (var stream = Files.walk(sourceRoot)) {
                 stream.filter(path -> path.toString().endsWith(".java")).forEach(path -> {
                     try {
@@ -49,8 +50,8 @@ class RuntimeCoreDependencyGuardTest {
                                 matches.computeIfAbsent(path, ignored -> new ArrayList<>()).add(lineNo);
                             }
                         }
-                    } catch (IOException ignored) {
-                        // Best effort: ignore ephemeral file access issues during test execution.
+                    } catch (IOException e) {
+                        scanErrors.add("Unable to read " + path + ": " + e.getMessage());
                     }
                 });
             }
@@ -61,6 +62,7 @@ class RuntimeCoreDependencyGuardTest {
                     violations.add(path + ":" + lineNo);
                 }
             });
+            violations.addAll(scanErrors);
             Collections.sort(violations);
             return violations;
         } catch (IOException e) {

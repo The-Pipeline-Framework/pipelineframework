@@ -41,6 +41,16 @@ class FunctionHandlerRendererFactoryTest {
     }
 
     @Test
+    void createRendererNormalizesProfileInput() {
+        AbstractFunctionHandlerRenderer renderer = FunctionHandlerRendererFactory.createRenderer("  QuArKuS  ");
+        AbstractOrchestratorFunctionHandlerRenderer orchestratorRenderer =
+            FunctionHandlerRendererFactory.createOrchestratorRenderer("  SpRiNg  ");
+
+        assertNotNull(renderer);
+        assertNotNull(orchestratorRenderer);
+    }
+
+    @Test
     void createRendererRejectsUnsupportedProfile() {
         assertThrows(IllegalArgumentException.class, () -> FunctionHandlerRendererFactory.createRenderer("reactive"));
         assertThrows(IllegalArgumentException.class,

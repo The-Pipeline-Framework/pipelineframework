@@ -17,9 +17,11 @@
 package org.pipelineframework.runtime;
 
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -129,6 +131,7 @@ public class RuntimeAdapterBootstrap {
     private final class QuarkusExecutionContextCarrier implements ExecutionContextCarrier {
         private static final ThreadLocal<java.util.Map<String, Object>> FALLBACK =
             ThreadLocal.withInitial(java.util.HashMap::new);
+        private final Set<String> trackedKeys = ConcurrentHashMap.newKeySet();
 
         @Override
         public <T> T get(String key, Class<T> type) {
@@ -160,8 +163,10 @@ public class RuntimeAdapterBootstrap {
                 try {
                     if (value == null) {
                         context.removeLocal(key);
+                        trackedKeys.remove(key);
                     } else {
                         context.putLocal(key, value);
+                        trackedKeys.add(key);
                     }
                     return;
                 } catch (UnsupportedOperationException ignored) {
@@ -170,8 +175,10 @@ public class RuntimeAdapterBootstrap {
             }
             if (value == null) {
                 FALLBACK.get().remove(key);
+                trackedKeys.remove(key);
             } else {
                 FALLBACK.get().put(key, value);
+                trackedKeys.add(key);
             }
         }
 
@@ -184,12 +191,14 @@ public class RuntimeAdapterBootstrap {
             if (context != null) {
                 try {
                     context.removeLocal(key);
+                    trackedKeys.remove(key);
                     return;
                 } catch (UnsupportedOperationException ignored) {
                     // Fall back to thread-local cache.
                 }
             }
             FALLBACK.get().remove(key);
+            trackedKeys.remove(key);
         }
 
         @Override
@@ -197,13 +206,15 @@ public class RuntimeAdapterBootstrap {
             Context context = Vertx.currentContext();
             if (context != null) {
                 try {
-                    // Vert.x contexts are per-thread; remove known execution keys to avoid leaking values.
-                    context.removeLocal(PipelineContext.class.getName());
+                    for (String key : trackedKeys) {
+                        context.removeLocal(key);
+                    }
                 } catch (UnsupportedOperationException ignored) {
                     // Fall back to thread-local cache cleanup below.
                 }
             }
             FALLBACK.remove();
+            trackedKeys.clear();
         }
     }
 
