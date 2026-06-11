@@ -39,7 +39,10 @@ flowchart LR
 
 Internal `service:` steps can now be authored against reactive service interfaces, materialising blocking service interfaces, or the incremental blocking iterator service interface.
 
+- YAML is the authoritative binding surface for declared internal steps. `@PipelineStep` remains backward-compatible, but it is no longer required when YAML names the service class.
+- The processor advertises a broad annotation trigger so YAML-only modules still enter compilation, then exits early when no pipeline configuration signal is present.
 - Model extraction classifies the authored service contract family and validates YAML cardinality against it.
+- When YAML and deprecated `@PipelineStep` contract metadata both exist, model extraction uses YAML and emits a warning instead of failing on annotation/YAML disagreement.
 - Model extraction emits build-time warnings for materialising blocking streaming contracts and points users toward `BlockingIteratorService` for incremental `1 -> N` cases.
 - Target resolution adds a generated reactive bridge target for blocking-authored internal services.
 - Transport renderers still target reactive service contracts. They inject the generated bridge instead of the authored blocking service directly.

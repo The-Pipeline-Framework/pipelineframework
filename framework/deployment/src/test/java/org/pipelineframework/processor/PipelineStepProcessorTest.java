@@ -343,11 +343,11 @@ class PipelineStepProcessorTest {
 
         localProcessor.init(localProcessingEnv);
 
-        // When annotations are present (i.e., @PipelineStep), processing should occur and return
-        // true
+        // Processing occurs, but the wildcard YAML trigger must not claim annotations from
+        // other processors.
         boolean result = localProcessor.process(annotations, roundEnv);
 
-        assertTrue(result);
+        assertFalse(result);
     }
 
     @SuppressWarnings({ "unchecked", "rawtypes" })
@@ -472,11 +472,11 @@ class PipelineStepProcessorTest {
 
         localProcessor.init(localProcessingEnv);
 
-        // When annotations are present (i.e., @PipelineStep), processing should occur and return
-        // true
+        // Processing occurs, but the wildcard YAML trigger must not claim annotations from
+        // other processors.
         boolean result = localProcessor.process(annotations, roundEnv);
 
-        assertTrue(result);
+        assertFalse(result);
     }
 
     @SuppressWarnings({ "unchecked", "rawtypes" })

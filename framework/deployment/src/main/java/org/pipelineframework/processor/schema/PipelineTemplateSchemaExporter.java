@@ -822,7 +822,7 @@ public final class PipelineTemplateSchemaExporter {
         },
         "service": {
           "type": "string",
-          "description": "Fully qualified class name of the internal service annotated with @PipelineStep",
+          "description": "Fully qualified class name of the YAML-declared internal service",
           "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
         },
         "operator": {
