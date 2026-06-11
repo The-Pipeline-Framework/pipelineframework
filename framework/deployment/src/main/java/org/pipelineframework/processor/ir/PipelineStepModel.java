@@ -10,8 +10,8 @@ import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 
 /**
- * Contains only semantic information derived from @PipelineStep annotations. This class captures all the essential
- * information needed to generate pipeline artifacts.
+ * Contains semantic information derived from YAML step definitions or legacy {@code @PipelineStep} annotations.
+ * This class captures all the essential information needed to generate pipeline artifacts.
  *
  * @param serviceName Gets the name of the service.
  * @param generatedName Gets the generated class name base for the service.

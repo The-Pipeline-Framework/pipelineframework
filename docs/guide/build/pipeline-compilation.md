@@ -31,7 +31,7 @@ The Pipeline Framework uses YAML-first compilation to automatically generate the
 For internal `service:` steps:
 
 1. `pipeline.yaml` declares the service class, cardinality, domain input/output types, and optional inbound/outbound mappers
-2. `@PipelineStep` marks the Java service class, so the compiler can discover it
+2. The Java service implements one supported TPF service contract
 3. The compiler validates the YAML contract against the implemented reactive service interface
 4. It generates transport adapters and client steps for the configured transport (gRPC or REST)
 5. It expands configured aspects into synthetic side effect steps when a plugin host is present
@@ -67,7 +67,7 @@ CDI registration
 
 ### 1. Build-Time Discovery
 
-During the Maven build process, the compiler reads `pipeline.yaml` and resolves each internal `service:` step against a class annotated with `@PipelineStep`:
+During the Maven build process, the compiler reads `pipeline.yaml` and resolves each internal `service:` step against the declared service class. `@PipelineStep` is still supported for existing code and Java-local execution hints, but it is not required when YAML declares the step contract:
 
 ```yaml
 steps:
@@ -81,7 +81,6 @@ steps:
 ```
 
 ```java
-@PipelineStep
 @ApplicationScoped
 public class ProcessPaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
     @Override
@@ -91,7 +90,7 @@ public class ProcessPaymentService implements ReactiveService<PaymentRecord, Pay
 }
 ```
 
-The annotation is the marker plus Java-local execution hints. Current internal-step contract metadata belongs in YAML.
+YAML is the authoritative source for the step contract. If YAML and deprecated `@PipelineStep` contract metadata are both present, the compiler uses YAML and emits a warning.
 
 ### 1.1 Orchestrator and Plugin Annotations
 
@@ -274,8 +273,8 @@ The annotation processor runs during the `compile` phase:
 ```bash
 # During mvn compile
 [INFO] --- quarkus:3.28.0.CR1:generate-code (default) @ service-module ---
-[INFO] [org.pipelineframework.processor.PipelineStepProcessor] Generating adapters for annotated services
-[INFO] [org.pipelineframework.processor.PipelineStepProcessor] Found 3 @PipelineStep annotated services
+[INFO] [org.pipelineframework.processor.PipelineStepProcessor] Loading pipeline.yaml
+[INFO] [org.pipelineframework.processor.PipelineStepProcessor] Resolving YAML-declared services and operators
 [INFO] [org.pipelineframework.processor.PipelineStepProcessor] Generated ProcessPaymentServiceGrpcService
 [INFO] [org.pipelineframework.processor.PipelineStepProcessor] Generated ProcessPaymentGrpcClientStep
 [INFO] [org.pipelineframework.processor.PipelineStepProcessor] Generated SendPaymentServiceGrpcService

@@ -19,6 +19,7 @@ import org.pipelineframework.annotation.PipelineStep;
  * with a phased compilation approach.
  */
 @SupportedAnnotationTypes({
+    "*",
     "org.pipelineframework.annotation.PipelineStep",
     "org.pipelineframework.annotation.PipelinePlugin",
     "org.pipelineframework.annotation.PipelineOrchestrator"
