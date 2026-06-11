@@ -76,6 +76,7 @@
     </properties>
 
     <modules>
+        <module>runtime-core</module>
         <module>runtime</module>
         <module>deployment</module>
     </modules>

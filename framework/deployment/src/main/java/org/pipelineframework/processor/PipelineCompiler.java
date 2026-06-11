@@ -38,7 +38,8 @@ import org.pipelineframework.annotation.PipelineStep;
     "pipeline.transport", // Optional: transport mode (GRPC|REST|LOCAL)
     "pipeline.rest.naming.strategy", // Optional: REST naming strategy (LEGACY|RESOURCEFUL)
     "pipeline.mapper.fallback.enabled", // Optional: enables delegated mapper fallback engine
-    "pipeline.parallelism" // Optional: parallelism mode (PARALLEL|SEQUENTIAL|AUTO)
+    "pipeline.parallelism", // Optional: parallelism mode (PARALLEL|SEQUENTIAL|AUTO)
+    "pipeline.codegen.rendererProfile" // Optional: renderer profile selection (quarkus|spring)
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
 public class PipelineCompiler extends AbstractProcessingTool {

@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+
 import jakarta.enterprise.context.ApplicationScoped;
+import org.pipelineframework.runtime.core.RuntimeAdapters;
 
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.PipelineStepConfig;
@@ -120,9 +122,9 @@ class PipelineStepResolver {
       if (stepClass == null) {
         throw new ClassNotFoundException(stepClassName);
       }
-      io.quarkus.arc.InstanceHandle<?> handle = io.quarkus.arc.Arc.container().instance(stepClass);
-      if (!handle.isAvailable()) {
-        int beanCount = io.quarkus.arc.Arc.container().beanManager().getBeans(stepClass).size();
+      var bean = RuntimeAdapters.resolveBean(stepClass);
+      if (bean.isEmpty()) {
+        int beanCount = 0;
         ClassLoader loader = stepClass.getClassLoader();
         LOG.errorf("No CDI bean available for pipeline step %s (beans=%d, loader=%s)",
             stepClassName,
@@ -130,7 +132,7 @@ class PipelineStepResolver {
             loader);
         return null;
       }
-      return handle.get();
+      return bean.get();
     } catch (Exception e) {
       LOG.errorf(e, "Failed to instantiate pipeline step: %s, error: %s", stepClassName, e.getMessage());
       return null;
