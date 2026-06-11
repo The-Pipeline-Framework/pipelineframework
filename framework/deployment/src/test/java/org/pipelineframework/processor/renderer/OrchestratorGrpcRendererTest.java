@@ -54,6 +54,7 @@ class OrchestratorGrpcRendererTest {
         assertTrue(source.contains("executionId is required"));
         assertTrue(source.contains("public Multi<OutputType> ingest(Multi<InputType> input)"));
         assertTrue(source.contains("public Multi<OutputType> subscribe("));
+        assertTrue(source.contains("setRequestPayloadJson(toJson(record.requestPayload()))"));
         assertTrue(source.contains("pipelineOutputBus"));
     }
 

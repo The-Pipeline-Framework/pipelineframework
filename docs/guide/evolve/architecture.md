@@ -38,11 +38,39 @@ graph TD
     I["Due sweeper"] --> C
 ```
 
+Current worker seam:
+
+```mermaid
+sequenceDiagram
+    participant App as "Generated app endpoint"
+    participant CP as "PipelineControlPlane"
+    participant Q as "QueueAsyncCoordinator"
+    participant W as "PipelineTransitionWorker"
+    participant State as "ExecutionStateStore"
+
+    App->>CP: submit async execution
+    CP->>Q: create execution + enqueue work
+    Q->>State: claimLease(executionId)
+    Q->>W: executeTransition(TransitionCommandEnvelope)
+    alt local worker
+        W-->>Q: COMPLETED / WAITING_EXTERNAL / FAILED
+    else REST/gRPC worker selected
+        W->>W: signed TransitionCommandEnvelope over configured protocol
+        W-->>Q: TransitionResultEnvelope
+    end
+    Q->>State: commit success, await wait, or retry/DLQ failure
+```
+
+Remote worker paths are selected only by configured worker targets. REST is selected by `pipeline.orchestrator.worker.rest.base-url`; gRPC is selected by `pipeline.orchestrator.worker.grpc.endpoint`; SQS is selected by `pipeline.orchestrator.worker.sqs.request-queue-url`. If more than one remote target is configured, startup fails as ambiguous. `pipeline.platform` stays orthogonal: `COMPUTE` and `FUNCTION` are platform modes, while LOCAL, REST, gRPC, and SQS are worker invocation protocols. Provider-specific function handlers such as AWS Lambda are generated artifacts of the `FUNCTION` platform; they are not worker transports by themselves.
+
+The first split-process proofs use `examples/restaurant-approval`: one local process runs the coordinator API while another local process exposes a default-disabled REST or gRPC transition worker endpoint. SQS has protocol-level unit coverage using mocked AWS clients; broker E2E is deferred until local SQS infrastructure is standardized for this worker protocol. These proofs exercise the signed protocol boundary for submit, await suspension, pending interaction import, completion, and resume without changing the product boundary. They are not a managed coordinator service or a complete remote-worker security model.
+
 Explicit non-goals in this milestone:
 
 1. no distributed transactions across state commit and external side effects,
 2. no framework-managed saga compensation,
 3. no full event-sourced journal as the execution engine of record.
+4. no managed coordinator service or multi-tenant remote-worker security model.
 
 ## Core Concepts
 

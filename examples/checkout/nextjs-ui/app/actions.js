@@ -37,11 +37,20 @@ export async function submitCheckoutOrder(formData) {
 }
 
 export async function completeCheckoutInteraction(formData) {
-  const executionId = getRequiredField(formData, "executionId");
   const interactionId = getRequiredField(formData, "interactionId");
   const targetId = String(formData.get("targetId") || "").trim();
+  const stageId = String(formData.get("stageId") || "").trim();
   const payload = String(formData.get("payload") || "").trim();
-  await completeInteraction({ interactionId, payload, targetId });
+  let destination;
+  try {
+    const completed = await completeInteraction({ interactionId, payload, targetId });
+    const completedInteractionId = String(completed?.interactionId || interactionId);
+    const completedStage = stageId ? `&completedStage=${encodeURIComponent(stageId)}` : "";
+    destination = `/interactions?completed=${encodeURIComponent(completedInteractionId)}${completedStage}`;
+  } catch (error) {
+    const message = String(error?.message || "Interaction completion failed.").slice(0, 600);
+    destination = `/interactions?error=${encodeURIComponent(message)}`;
+  }
   revalidatePath("/interactions");
-  redirect(`/executions/${encodeURIComponent(executionId)}`);
+  redirect(destination);
 }

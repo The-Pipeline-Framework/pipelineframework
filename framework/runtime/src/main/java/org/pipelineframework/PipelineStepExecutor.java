@@ -31,11 +31,11 @@ import org.pipelineframework.cache.CachePolicyViolation;
 import org.pipelineframework.cache.CacheReadBypass;
 import org.pipelineframework.cache.CacheStatus;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
-import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.AwaitStreamOneToOneStep;
 import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.invocation.PipelineInvocationRuntime;
 import org.pipelineframework.step.StepManyToMany;
 import org.pipelineframework.step.StepOneToMany;
 import org.pipelineframework.step.StepOneToOne;
@@ -47,6 +47,7 @@ import org.pipelineframework.telemetry.PipelineTelemetry;
 class PipelineStepExecutor {
 
     private static final Logger logger = Logger.getLogger(PipelineStepExecutor.class);
+    private static final PipelineInvocationRuntime DEFAULT_INVOCATION_RUNTIME = new PipelineInvocationRuntime();
 
     Object applyStep(
         Object step,
@@ -383,40 +384,12 @@ class PipelineStepExecutor {
         }
     }
 
-    private static ExecutionContextScope installExecutionContexts(
-        PipelineContext context,
-        AwaitExecutionContext awaitContext
-    ) {
-        PipelineContext previousPipeline = PipelineContextHolder.get();
-        AwaitExecutionContext previousAwait = AwaitExecutionContextHolder.get();
-        if (context != null) {
-            PipelineContextHolder.set(context);
-        } else {
-            PipelineContextHolder.clear();
-        }
-        if (awaitContext != null) {
-            AwaitExecutionContextHolder.set(awaitContext);
-        } else {
-            AwaitExecutionContextHolder.clear();
-        }
-        return new ExecutionContextScope(previousPipeline, previousAwait);
-    }
-
     static <T> Uni<T> withStepExecutionUni(
         PipelineContext context,
         AwaitExecutionContext awaitContext,
         Supplier<Uni<T>> supplier
     ) {
-        return Uni.createFrom().deferred(() -> {
-            ExecutionContextScope scope = installExecutionContexts(context, awaitContext);
-            try {
-                return supplier.get()
-                    .onTermination().invoke(scope::close);
-            } catch (Throwable failure) {
-                scope.close();
-                return Uni.createFrom().failure(failure);
-            }
-        });
+        return DEFAULT_INVOCATION_RUNTIME.invokeStepUni(context, awaitContext, supplier);
     }
 
     static <T> Multi<T> withStepExecutionMulti(
@@ -424,40 +397,7 @@ class PipelineStepExecutor {
         AwaitExecutionContext awaitContext,
         Supplier<Multi<T>> supplier
     ) {
-        return Multi.createFrom().deferred(() -> {
-            ExecutionContextScope scope = installExecutionContexts(context, awaitContext);
-            try {
-                return supplier.get()
-                    .onTermination().invoke((failure, cancelled) -> scope.close());
-            } catch (Throwable failure) {
-                scope.close();
-                return Multi.createFrom().failure(failure);
-            }
-        });
-    }
-
-    private static final class ExecutionContextScope implements AutoCloseable {
-        private final PipelineContext previousPipeline;
-        private final AwaitExecutionContext previousAwait;
-
-        private ExecutionContextScope(PipelineContext previousPipeline, AwaitExecutionContext previousAwait) {
-            this.previousPipeline = previousPipeline;
-            this.previousAwait = previousAwait;
-        }
-
-        @Override
-        public void close() {
-            if (previousAwait != null) {
-                AwaitExecutionContextHolder.set(previousAwait);
-            } else {
-                AwaitExecutionContextHolder.clear();
-            }
-            if (previousPipeline != null) {
-                PipelineContextHolder.set(previousPipeline);
-            } else {
-                PipelineContextHolder.clear();
-            }
-        }
+        return DEFAULT_INVOCATION_RUNTIME.invokeStepMulti(context, awaitContext, supplier);
     }
 
     @SuppressWarnings("unchecked")

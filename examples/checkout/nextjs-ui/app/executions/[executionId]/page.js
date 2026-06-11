@@ -1,86 +1,103 @@
 import Link from "next/link";
-import { fetchExecutionResult, fetchExecutionStatus } from "../../../lib/tpf-client.js";
+import { Activity, Inbox, RotateCw } from "lucide-react";
 
-function statusClass(status) {
+import { fetchExecutionResult, fetchExecutionStatus } from "../../../lib/tpf-client.js";
+import ExecutionTimeline from "../../components/ExecutionTimeline.js";
+import StatusNotice from "../../components/StatusNotice.js";
+
+function statusTone(status) {
   if (status === "SUCCEEDED") {
-    return "status done";
+    return "success";
   }
   if (status === "FAILED" || status === "DLQ") {
-    return "status failed";
+    return "error";
   }
-  return "status waiting";
+  return "info";
 }
 
 function statusGuidance(status) {
   if (status === "WAITING_EXTERNAL") {
-    return "Execution is waiting for an external resume interaction. Check the inbox for a pending checkpoint interaction.";
-  }
-  if (status === "WAITING") {
-    return "Execution status is waiting for an external decision at the active await step. The inbox shows its non-terminal await states (WAITING/DISPATCHING/DISPATCHED).";
-  }
-  if (status === "WAIT_RETRY") {
-    return "Execution failed temporarily and will retry automatically according to orchestration settings.";
+    return "The execution is paused at an approval step. Continue it from the approval desk.";
   }
   if (status === "QUEUED" || status === "RUNNING") {
-    return "Execution is in queue/processing and is being worked by backend workers. In this phase, the inbox is expected to be empty.";
+    return "The backend worker is advancing this execution. Refresh for the next state.";
   }
-  return "Execution has not reached a terminal success state yet. Refresh this page for the latest status.";
+  if (status === "WAIT_RETRY") {
+    return "The execution will retry according to the orchestrator schedule.";
+  }
+  if (status === "SUCCEEDED") {
+    return "The execution reached a terminal successful state.";
+  }
+  return "The execution has not reached a terminal success state yet.";
 }
 
-export default async function ExecutionPage({ params }) {
+export default async function ExecutionPage({ params, searchParams }) {
   const { executionId } = await params;
+  const resolvedSearchParams = await Promise.resolve(searchParams || {});
+  const targetId = String(resolvedSearchParams?.target || "").trim();
   let status = null;
   let result = null;
   let errorMessage = null;
 
   try {
-    status = await fetchExecutionStatus(executionId);
-    result = status.status === "SUCCEEDED" ? await fetchExecutionResult(executionId) : null;
+    status = await fetchExecutionStatus(executionId, targetId);
+    result = status.status === "SUCCEEDED" ? await fetchExecutionResult(executionId, targetId) : null;
   } catch (error) {
     errorMessage = error?.message || "Unable to load execution data.";
   }
 
   return (
-    <main className="shell">
-      <section className="hero">
-        <p className="eyebrow">Execution status</p>
-        <h1>Track the checkout execution</h1>
-        <p>
-          This page reads the generated runtime gRPC status APIs. If the order is waiting externally,
-          complete the interaction from the inbox and refresh. If it is queued or running, the flow is still
-          processing and no inbox entry is expected yet.
-        </p>
-        <div className="actions">
-          <Link className="link-chip" href="/interactions">
-            Go to pending inbox
-          </Link>
-          <Link className="link-chip" href={`/executions/${executionId}`}>
-            Refresh status
-          </Link>
+    <main className="app-shell">
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">Execution</p>
+          <h1>Run status</h1>
         </div>
-      </section>
+        <nav className="topbar-actions" aria-label="Execution actions">
+          <Link className="button ghost" href="/interactions">
+            <Inbox aria-hidden="true" size={16} />
+            Approval desk
+          </Link>
+          <Link className="button ghost" href={`/executions/${executionId}${targetId ? `?target=${encodeURIComponent(targetId)}` : ""}`}>
+            <RotateCw aria-hidden="true" size={16} />
+            Refresh
+          </Link>
+        </nav>
+      </header>
 
-      <section className="section">
-        {errorMessage ? (
-          <div className="card">
-            <h2>TPF API unavailable</h2>
-            <p className="muted">Execution detail could not be loaded.</p>
-            <p className="muted">
-              <code>{errorMessage}</code>
-            </p>
-          </div>
-        ) : (
-          <>
-                <div className="card stack">
-                  <h2>Execution</h2>
-                  <p className={statusClass(status.status)}>{status.status}</p>
-                  <dl className="meta">
+      {errorMessage ? (
+        <StatusNotice tone="error" title="Execution detail could not be loaded">
+          <p><code>{errorMessage}</code></p>
+        </StatusNotice>
+      ) : (
+        <section className="execution-grid">
+          <section className="panel">
+            <div className="panel-heading">
+              <Activity aria-hidden="true" size={20} />
+              <div>
+                <p className="eyebrow">Lifecycle</p>
+                <h2>{status.status}</h2>
+              </div>
+            </div>
+            <p className="lead">{statusGuidance(status.status)}</p>
+            {status.status === "WAITING_EXTERNAL" ? (
+              <Link className="button primary" href="/interactions">
+                <Inbox aria-hidden="true" size={16} />
+                Continue from approval desk
+              </Link>
+            ) : null}
+            <ExecutionTimeline status={status} />
+          </section>
+
+          <aside className="panel">
+            <StatusNotice tone={statusTone(status.status)} title="Current runtime state">
+              <dl className="definition-list">
                 <div>
                   <dt>Execution ID</dt>
                   <dd>{status.executionId}</dd>
                 </div>
                 <div>
-                  <dt>Current step index</dt>
+                  <dt>Step index</dt>
                   <dd>{status.stepIndex}</dd>
                 </div>
                 <div>
@@ -92,33 +109,16 @@ export default async function ExecutionPage({ params }) {
                   <dd>{status.errorCode || status.errorMessage || "none"}</dd>
                 </div>
               </dl>
-            </div>
-
+            </StatusNotice>
             {result ? (
-              <div className="card stack">
-                <h2>Terminal order state</h2>
-                <dl className="meta">
-                  <div>
-                    <dt>Outcome</dt>
-                    <dd>{String(result.outcome || result.status || "done")}</dd>
-                  </div>
-                  <div>
-                    <dt>Resolved</dt>
-                    <dd>{result.resolvedAt || status.completedAt || "n/a"}</dd>
-                  </div>
-                </dl>
-                <h3>Raw payload</h3>
+              <details className="payload-details" open>
+                <summary>Terminal payload</summary>
                 <pre className="raw-json">{JSON.stringify(result, null, 2)}</pre>
-              </div>
-            ) : (
-              <div className="card">
-                <h2>Result not available yet</h2>
-                <p className="muted">{statusGuidance(status.status)}</p>
-              </div>
-            )}
-          </>
-        )}
-      </section>
+              </details>
+            ) : null}
+          </aside>
+        </section>
+      )}
     </main>
   );
 }

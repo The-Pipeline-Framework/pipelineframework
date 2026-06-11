@@ -5,11 +5,22 @@ import {
   buildCheckoutOrder,
   normalizeAwaitStatus,
   describeAwaitStatus,
+  inferInteractionTargetId,
+  interactionActionLabel,
+  nextCheckpointLabelAfterOutputType,
+  reviewStatusLabel,
   shouldAllowAwaitCompletion,
+  stageIdForOutputType,
   awaitStatusGuidance,
   normalizePendingInteraction
 } from "../lib/checkout-ui.js";
-import { buildListPendingRequest } from "../lib/tpf-client.js";
+import { buildListPendingRequest, normalizeGrpcAwaitInteraction } from "../lib/tpf-client.js";
+import {
+  CHECKOUT_FLOW_STAGES,
+  REVIEW_CHECKPOINTS,
+  nextReviewCheckpointAfterOutputType,
+  stageForOutputType
+} from "../lib/checkout-flow.js";
 
 test("buildCheckoutOrder uses deterministic required fields", () => {
   const request = buildCheckoutOrder({
@@ -121,6 +132,102 @@ test("normalizePendingInteraction handles request payloads", () => {
   assert.equal(normalized.itemCount, 1);
 });
 
+test("normalizePendingInteraction tolerates alternate payload keys and missing orderId", () => {
+  const normalized = normalizePendingInteraction({
+    interactionId: "interaction-2",
+    executionId: "execution-2",
+    status: "WAITING",
+    requestPayload: {
+      order_id: "order-2",
+      request_id: "request-2",
+      customer_id: "33333333-3333-3333-3333-333333333333",
+      restaurant_id: "44444444-4444-4444-4444-444444444444",
+      total_amount: "17.50",
+      currency: "EUR",
+      itemList: [{ sku: "Pasta", quantity: 3 }]
+    },
+    transportType: "interaction-api"
+  });
+
+  assert.equal(normalized.orderId, "order-2");
+  assert.equal(normalized.requestId, "request-2");
+  assert.equal(normalized.itemCount, 1);
+});
+
+test("normalizeGrpcAwaitInteraction maps snake_case grpc fields", () => {
+  const normalized = normalizeGrpcAwaitInteraction(
+    {
+      interaction_id: "interaction-3",
+      correlation_id: "correlation-3",
+      execution_id: "execution-3",
+      step_id: "Await Order Approval",
+      step_index: 1,
+      output_type: "org.pipelineframework.tpfgo.common.domain.OrderApproved",
+      status: "DISPATCHED",
+      transport_type: "interaction-api",
+      deadline_epoch_ms: "1800000000000",
+      created_at_epoch_ms: "1700000000000",
+      updated_at_epoch_ms: "1700000000100",
+      request_payload_json: JSON.stringify({
+        orderId: "order-3",
+        requestId: "request-3",
+        customerId: "55555555-5555-5555-5555-555555555555",
+        restaurantId: "66666666-6666-6666-6666-666666666666",
+        totalAmount: "29.75",
+        currency: "USD",
+        items: [{ sku: "Margherita Pizza", quantity: 1 }]
+      })
+    },
+    "consumer-validation-orchestrator-svc"
+  );
+
+  assert.equal(normalized.interactionId, "interaction-3");
+  assert.equal(normalized.executionId, "execution-3");
+  assert.equal(normalized.stepId, "Await Order Approval");
+  assert.equal(normalized.stepIndex, 1);
+  assert.equal(normalized.outputType, "org.pipelineframework.tpfgo.common.domain.OrderApproved");
+  assert.equal(normalized.transportType, "interaction-api");
+  assert.equal(normalized.deadlineEpochMs, 1800000000000);
+  assert.equal(normalized.itemCount, 1);
+  assert.equal(inferInteractionTargetId(normalized), "consumer-validation-orchestrator-svc");
+  assert.equal(shouldAllowAwaitCompletion(normalized.status, normalized.transportType), true);
+});
+
+test("interaction helpers classify checkout await stages", () => {
+  const consumer = {
+    outputType: "org.pipelineframework.tpfgo.common.domain.OrderApproved",
+    transportType: "interaction-api",
+    status: "DISPATCHED"
+  };
+  const restaurant = {
+    outputType: "org.pipelineframework.tpfgo.common.domain.OrderAcceptedByRestaurant",
+    transportType: "interaction-api",
+    status: "DISPATCHED"
+  };
+
+  assert.equal(inferInteractionTargetId(consumer), "consumer-validation-orchestrator-svc");
+  assert.equal(inferInteractionTargetId(restaurant), "restaurant-acceptance-orchestrator-svc");
+  assert.equal(interactionActionLabel(consumer), "Complete consumer approval");
+  assert.equal(interactionActionLabel(restaurant), "Complete restaurant acceptance");
+  assert.equal(stageIdForOutputType(consumer.outputType), "consumer-approval");
+  assert.equal(stageIdForOutputType(restaurant.outputType), "restaurant-acceptance");
+});
+
+test("checkout flow metadata contains ordered approval checkpoints", () => {
+  assert.equal(CHECKOUT_FLOW_STAGES.length, 8);
+  assert.deepEqual(REVIEW_CHECKPOINTS.map((stage) => stage.id), [
+    "consumer-approval",
+    "restaurant-acceptance"
+  ]);
+  assert.equal(stageForOutputType("com.example.OrderApproved").serviceId, "consumer-validation-orchestrator-svc");
+  assert.equal(
+    nextReviewCheckpointAfterOutputType("com.example.OrderApproved").id,
+    "restaurant-acceptance"
+  );
+  assert.equal(nextReviewCheckpointAfterOutputType("com.example.OrderAcceptedByRestaurant"), null);
+  assert.equal(nextCheckpointLabelAfterOutputType("com.example.OrderAcceptedByRestaurant"), "Downstream automatic flow");
+});
+
 test("buildCheckoutCompletionPayload enforces JSON", () => {
   const parsed = buildCheckoutCompletionPayload('{"accepted":true}');
   assert.deepEqual(parsed, { accepted: true });
@@ -148,8 +255,15 @@ test("buildListPendingRequest omits empty step filter", () => {
 
 test("await status helpers classify actionable state", () => {
   assert.equal(normalizeAwaitStatus(" waiting "), "WAITING");
-  assert.equal(describeAwaitStatus("WAITING"), "Awaiting human input");
+  assert.equal(describeAwaitStatus("WAITING"), "Awaiting review");
   assert.equal(shouldAllowAwaitCompletion("WAITING"), true);
   assert.equal(shouldAllowAwaitCompletion("DISPATCHED"), false);
+  assert.equal(shouldAllowAwaitCompletion("DISPATCHED", "interaction-api"), true);
+  assert.equal(shouldAllowAwaitCompletion("DISPATCHED", "kafka"), false);
+  assert.equal(shouldAllowAwaitCompletion("DISPATCHED", "webhook"), false);
+  assert.equal(shouldAllowAwaitCompletion("DISPATCHING", "interaction-api"), false);
+  assert.equal(reviewStatusLabel("DISPATCHED", "interaction-api"), "Ready for review");
+  assert.equal(reviewStatusLabel("DISPATCHING", "interaction-api"), "Preparing inbox item");
+  assert.equal(reviewStatusLabel("WAITING", "interaction-api"), "Waiting for completion");
   assert.equal(awaitStatusGuidance("DISPATCHED"), "Await payload was dispatched; refresh shortly. It is usually ready for completion once transport confirmation is complete.");
 });

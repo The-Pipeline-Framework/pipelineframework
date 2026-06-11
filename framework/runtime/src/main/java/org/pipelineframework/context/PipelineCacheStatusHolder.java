@@ -16,9 +16,8 @@
 
 package org.pipelineframework.context;
 
-import io.vertx.core.Context;
-import io.vertx.core.Vertx;
 import org.pipelineframework.cache.CacheStatus;
+import org.pipelineframework.runtime.core.RuntimeAdapters;
 
 /**
  * Holds cache status reported by cache plugin steps for the current request.
@@ -26,7 +25,6 @@ import org.pipelineframework.cache.CacheStatus;
 public final class PipelineCacheStatusHolder {
 
     private static final String CONTEXT_KEY = PipelineCacheStatusHolder.class.getName() + ".status";
-    private static final ThreadLocal<CacheStatus> THREAD_LOCAL = new ThreadLocal<>();
 
     private PipelineCacheStatusHolder() {
     }
@@ -37,18 +35,11 @@ public final class PipelineCacheStatusHolder {
      * @return the cache status, or null if none is set
      */
     public static CacheStatus get() {
-        Context context = Vertx.currentContext();
-        if (context != null) {
-            try {
-                Object stored = context.getLocal(CONTEXT_KEY);
-                if (stored instanceof CacheStatus status) {
-                    return status;
-                }
-            } catch (UnsupportedOperationException ignored) {
-                // Root contexts forbid locals; fall back to thread-local storage.
-            }
+        Object value = RuntimeAdapters.executionContext(CONTEXT_KEY, Object.class);
+        if (value instanceof CacheStatus status) {
+            return status;
         }
-        return THREAD_LOCAL.get();
+        return null;
     }
 
     /**
@@ -68,38 +59,17 @@ public final class PipelineCacheStatusHolder {
      * @param status the cache status to store
      */
     public static void set(CacheStatus status) {
-        Context context = Vertx.currentContext();
-        if (context != null) {
-            try {
-                if (status == null) {
-                    context.removeLocal(CONTEXT_KEY);
-                } else {
-                    context.putLocal(CONTEXT_KEY, status);
-                }
-                return;
-            } catch (UnsupportedOperationException ignored) {
-                // Root contexts forbid locals; fall back to thread-local storage.
-            }
-        }
         if (status == null) {
-            THREAD_LOCAL.remove();
-        } else {
-            THREAD_LOCAL.set(status);
+            RuntimeAdapters.clearExecutionContext(CONTEXT_KEY);
+            return;
         }
+        RuntimeAdapters.setExecutionContext(CONTEXT_KEY, status);
     }
 
     /**
      * Clears the cache status from the current request context.
      */
     public static void clear() {
-        Context context = Vertx.currentContext();
-        if (context != null) {
-            try {
-                context.removeLocal(CONTEXT_KEY);
-            } catch (UnsupportedOperationException ignored) {
-                // Root contexts forbid locals; fall back to thread-local storage.
-            }
-        }
-        THREAD_LOCAL.remove();
+        RuntimeAdapters.clearExecutionContext(CONTEXT_KEY);
     }
 }

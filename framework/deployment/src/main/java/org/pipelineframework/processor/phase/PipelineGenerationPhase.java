@@ -16,6 +16,7 @@ import org.pipelineframework.processor.ir.*;
 import org.pipelineframework.processor.renderer.*;
 import org.pipelineframework.processor.util.OrchestratorClientPropertiesGenerator;
 import org.pipelineframework.processor.util.CheckpointHandoffMetadataGenerator;
+import org.pipelineframework.processor.util.PipelineBundleManifestMetadataGenerator;
 import org.pipelineframework.processor.util.PipelineOrderMetadataGenerator;
 import org.pipelineframework.processor.util.PipelinePlatformMetadataGenerator;
 import org.pipelineframework.processor.util.PipelineTelemetryMetadataGenerator;
@@ -92,7 +93,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
         OrchestratorRestResourceRenderer orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
         AbstractOrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer =
-            FunctionHandlerRendererFactory.createOrchestratorRenderer();
+            FunctionHandlerRendererFactory.createOrchestratorRenderer(ctx.getRendererProfile());
         OrchestratorCliRenderer orchestratorCliRenderer = new OrchestratorCliRenderer();
         OrchestratorIngestClientRenderer orchestratorIngestClientRenderer = new OrchestratorIngestClientRenderer();
         CheckpointPublicationDescriptorRenderer checkpointPublicationDescriptorRenderer =
@@ -287,6 +288,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             PipelineOrderMetadataGenerator orderMetadataGenerator =
                 new PipelineOrderMetadataGenerator(ctx.getProcessingEnv());
             orderMetadataGenerator.writeOrderMetadata(ctx);
+            PipelineBundleManifestMetadataGenerator bundleManifestMetadataGenerator =
+                new PipelineBundleManifestMetadataGenerator(ctx.getProcessingEnv());
+            bundleManifestMetadataGenerator.writeBundleManifest(ctx);
             if (ctx.isOrchestratorGenerated()) {
                 PipelineTelemetryMetadataGenerator telemetryMetadataGenerator =
                     new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv());
@@ -599,16 +603,16 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                         cacheKeyGenerator,
                         descriptorSet));
                     roleMetadataGenerator.recordClassWithRole(
-                        AwsLambdaOrchestratorRenderer.handlerFqcn(binding.basePackage()),
+                        orchestratorFunctionHandlerRenderer.handlerFqcn(binding.basePackage()),
                         role.name());
                     roleMetadataGenerator.recordClassWithRole(
-                        AwsLambdaOrchestratorRenderer.runAsyncHandlerFqcn(binding.basePackage()),
+                        orchestratorFunctionHandlerRenderer.runAsyncHandlerFqcn(binding.basePackage()),
                         role.name());
                     roleMetadataGenerator.recordClassWithRole(
-                        AwsLambdaOrchestratorRenderer.statusHandlerFqcn(binding.basePackage()),
+                        orchestratorFunctionHandlerRenderer.statusHandlerFqcn(binding.basePackage()),
                         role.name());
                     roleMetadataGenerator.recordClassWithRole(
-                        AwsLambdaOrchestratorRenderer.resultHandlerFqcn(binding.basePackage()),
+                        orchestratorFunctionHandlerRenderer.resultHandlerFqcn(binding.basePackage()),
                         role.name());
                 }
             } else if (!local) {

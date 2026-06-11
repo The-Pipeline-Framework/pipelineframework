@@ -200,7 +200,8 @@
                         <quarkus.generate-code.grpc.descriptor-set.generate>true</quarkus.generate-code.grpc.descriptor-set.generate>
                     </properties>
                 </configuration>
-            </plugin>
+                        <extensions>true</extensions>
+</plugin>
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>

@@ -1,5 +1,7 @@
 package org.pipelineframework.awaitable;
 
+import java.util.Set;
+
 /**
  * Durable orchestration record for one authored await unit.
  *
@@ -14,6 +16,7 @@ package org.pipelineframework.awaitable;
  * @param primaryInteractionId primary externally visible interaction identifier
  * @param expectedItemCount expected item count for multi-item units, when known
  * @param completedItemCount admitted completed item count
+ * @param completedItemKeys idempotency keys for admitted item completions
  * @param dispatchComplete whether dispatch has finished for the unit
  * @param createdAtEpochMs creation time in epoch milliseconds
  * @param updatedAtEpochMs last update time in epoch milliseconds
@@ -31,6 +34,7 @@ public record AwaitUnitRecord(
     String primaryInteractionId,
     Integer expectedItemCount,
     int completedItemCount,
+    Set<String> completedItemKeys,
     boolean dispatchComplete,
     long createdAtEpochMs,
     long updatedAtEpochMs,
@@ -66,6 +70,10 @@ public record AwaitUnitRecord(
         }
         if (expectedItemCount != null && completedItemCount > expectedItemCount) {
             throw new IllegalArgumentException("completedItemCount must not exceed expectedItemCount");
+        }
+        completedItemKeys = completedItemKeys == null ? Set.of() : Set.copyOf(completedItemKeys);
+        if (!completedItemKeys.isEmpty() && completedItemKeys.size() != completedItemCount) {
+            throw new IllegalArgumentException("completedItemKeys size must match completedItemCount");
         }
     }
 }

@@ -81,7 +81,7 @@ Operational meaning:
 Business meaning:
 
 1. Main workflows can complete, but rejected records accumulate unresolved business exceptions.
-2. SLA risk is often on data completeness/quality rather than total platform availability.
+2. Availability risk is often on data completeness/quality rather than total platform uptime.
 
 Immediate operator actions:
 

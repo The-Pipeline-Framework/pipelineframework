@@ -51,6 +51,11 @@ public interface AwaitInteractionStore {
     Uni<Optional<AwaitInteractionRecord>> get(String tenantId, String interactionId);
 
     /**
+     * Imports an interaction created by a transition worker. Existing records win so the operation is idempotent.
+     */
+    Uni<AwaitInteractionRecord> importRecord(AwaitInteractionRecord record);
+
+    /**
      * Fetches one interaction by tenant and correlation id.
      *
      * @param tenantId tenant id

@@ -107,6 +107,8 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
                             ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role"),
                             role.name())
                 .build());
+        clientStepBuilder.addSuperinterface(
+            ClassName.get("org.pipelineframework.invocation", "TransportBoundaryInvocation"));
         if (model.sideEffect()) {
             clientStepBuilder.addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheReadBypass"));
         }
@@ -125,11 +127,20 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
 
             clientStepBuilder.addField(grpcClientField);
         }
+        FieldSpec invocationRuntimeField = FieldSpec.builder(
+                ClassName.get("org.pipelineframework.invocation", "PipelineInvocationRuntime"),
+                "invocationRuntime")
+            .addAnnotation(AnnotationSpec.builder(
+                    ClassName.get("jakarta.inject", "Inject"))
+                .build())
+            .build();
+        clientStepBuilder.addField(invocationRuntimeField);
         // Add default constructor
         MethodSpec constructor = MethodSpec.constructorBuilder()
                 .addModifiers(Modifier.PUBLIC)
                 .build();
         clientStepBuilder.addMethod(constructor);
+        clientStepBuilder.addMethod(transportBoundaryMethod("grpc", model.serviceName() + ".remoteProcess"));
 
         // Extend ConfigurableStep and implement the pipeline step interface based on streaming shape
         ClassName configurableStep = ClassName.get("org.pipelineframework.step", "ConfigurableStep");
@@ -187,7 +198,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
                             .returns(ParameterizedTypeName.get(ClassName.get(Multi.class),
                                     outputGrpcType))
                             .addParameter(inputGrpcType, "input")
-                            .addStatement("return $T.traceMulti($S, $S, this.grpcClient.remoteProcess(input))",
+                            .addStatement("return this.invocationRuntime.invokeTransportMulti(this, () -> $T.traceMulti($S, $S, this.grpcClient.remoteProcess(input)))",
                                 grpcClientTracing, rpcServiceName, rpcMethodName)
                             .build();
                     clientStepBuilder.addMethod(applyOneToManyMethod);
@@ -201,7 +212,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
                                     outputGrpcType))
                             .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class),
                                     inputGrpcType), "inputs")
-                            .addStatement("return $T.traceUnaryFromStream($S, $S, inputs, this.grpcClient::remoteProcess)",
+                            .addStatement("return this.invocationRuntime.invokeTransportUni(this, () -> $T.traceUnaryFromStream($S, $S, inputs, this.grpcClient::remoteProcess))",
                                 grpcClientTracing, rpcServiceName, rpcMethodName)
                             .build();
                     clientStepBuilder.addMethod(applyReduceMethod);
@@ -215,7 +226,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
                                     outputGrpcType))
                             .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class),
                                     inputGrpcType), "inputs")
-                            .addStatement("return $T.traceMultiFromStream($S, $S, inputs, this.grpcClient::remoteProcess)",
+                            .addStatement("return this.invocationRuntime.invokeTransportMulti(this, () -> $T.traceMultiFromStream($S, $S, inputs, this.grpcClient::remoteProcess))",
                                 grpcClientTracing, rpcServiceName, rpcMethodName)
                             .build();
                     clientStepBuilder.addMethod(applyTransformMethod);
@@ -229,7 +240,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
                             .returns(ParameterizedTypeName.get(ClassName.get(Uni.class),
                                     outputGrpcType))
                             .addParameter(inputGrpcType, "input");
-                    applyOneToOneMethod.addStatement("return $T.traceUnary($S, $S, this.grpcClient.remoteProcess(input))",
+                    applyOneToOneMethod.addStatement("return this.invocationRuntime.invokeTransportUni(this, () -> $T.traceUnary($S, $S, this.grpcClient.remoteProcess(input)))",
                         grpcClientTracing, rpcServiceName, rpcMethodName);
                     clientStepBuilder.addMethod(applyOneToOneMethod.build());
                     break;
@@ -237,6 +248,18 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
         }
 
         return clientStepBuilder.build();
+    }
+
+    private MethodSpec transportBoundaryMethod(String protocol, String target) {
+        return MethodSpec.methodBuilder("transportBoundary")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ClassName.get("org.pipelineframework.invocation", "TransportBoundaryDescriptor"))
+            .addStatement("return new $T($S, $S)",
+                ClassName.get("org.pipelineframework.invocation", "TransportBoundaryDescriptor"),
+                protocol,
+                target)
+            .build();
     }
 
     /**

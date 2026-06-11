@@ -306,7 +306,8 @@
                         <quarkus.generate-code.grpc.descriptor-set.generate>true</quarkus.generate-code.grpc.descriptor-set.generate>
                     </properties>
                 </configuration>
-            </plugin>
+                        <extensions>true</extensions>
+</plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-antrun-plugin</artifactId>

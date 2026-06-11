@@ -2,19 +2,14 @@ package org.pipelineframework;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
@@ -22,7 +17,6 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 
-import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
@@ -34,8 +28,14 @@ import org.pipelineframework.awaitable.AwaitCompletionTenantMismatchException;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCoordinator;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
-import org.pipelineframework.awaitable.AwaitSuspendedException;
+import org.pipelineframework.awaitable.AwaitThrowableSupport;
 import org.pipelineframework.awaitable.AwaitUnitStatus;
+import org.pipelineframework.orchestrator.ControlPlaneAdmissionDecision;
+import org.pipelineframework.orchestrator.ControlPlaneAdmissionException;
+import org.pipelineframework.orchestrator.ControlPlaneAdmissionOperation;
+import org.pipelineframework.orchestrator.ControlPlaneAdmissionPolicy;
+import org.pipelineframework.orchestrator.ControlPlaneAdmissionRequest;
+import org.pipelineframework.orchestrator.ControlPlaneTransitionAdmission;
 import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 import org.pipelineframework.orchestrator.CreateExecutionResult;
@@ -51,7 +51,18 @@ import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.OrchestratorIdempotencyPolicy;
 import org.pipelineframework.orchestrator.OrchestratorMode;
+import org.pipelineframework.orchestrator.PipelineBundleIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.PipelineTransitionWorker;
+import org.pipelineframework.orchestrator.SerializedTransitionPayload;
+import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
+import org.pipelineframework.orchestrator.TransitionCommandEnvelope;
+import org.pipelineframework.orchestrator.TransitionPayloadCodec;
+import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
+import org.pipelineframework.orchestrator.TransitionResultEnvelope;
+import org.pipelineframework.orchestrator.TransitionWorkerExecutor;
+import org.pipelineframework.orchestrator.TransitionWorkerCommand;
+import org.pipelineframework.orchestrator.TransitionWorkerOutcome;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
@@ -116,6 +127,22 @@ class QueueAsyncCoordinator {
   AwaitCoordinator awaitCoordinator;
 
   @Inject
+  TransitionWorkerExecutor transitionWorkerExecutor;
+
+  @Inject
+  TransitionPayloadCodec transitionPayloadCodec;
+
+  @Inject
+  PipelineBundleIdentityResolver bundleIdentityResolver;
+
+  @Inject
+  ControlPlaneAdmissionPolicy controlPlaneAdmissionPolicy;
+
+  private volatile TransitionPayloadCodec fallbackTransitionPayloadCodec;
+  private volatile PipelineBundleIdentityResolver fallbackBundleIdentityResolver;
+  private volatile ControlPlaneAdmissionPolicy fallbackAdmissionPolicy;
+
+  @Inject
   PipelineTelemetry telemetry;
 
   private final ScheduledExecutorService queueSweepExecutor = Executors.newSingleThreadScheduledExecutor(
@@ -131,8 +158,13 @@ class QueueAsyncCoordinator {
   volatile DeadLetterPublisher deadLetterPublisher;
   private final String queueWorkerId = "worker-" + UUID.randomUUID();
 
-  void initializeQueueMode() {
+  private volatile boolean queueModeInitialized;
+
+  synchronized void initializeQueueMode() {
     if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
+      return;
+    }
+    if (queueModeInitialized) {
       return;
     }
     executionStateStore = selectExecutionStateStore(orchestratorConfig.stateProvider());
@@ -170,6 +202,7 @@ class QueueAsyncCoordinator {
         intervalMs,
         intervalMs,
         TimeUnit.MILLISECONDS);
+    queueModeInitialized = true;
     LOG.infof("Queue async mode enabled: stateProvider=%s dispatcherProvider=%s dlqProvider=%s",
         executionStateStore.providerName(),
         workDispatcher.providerName(),
@@ -189,6 +222,22 @@ class QueueAsyncCoordinator {
       String tenantId,
       String idempotencyKey,
       boolean outputStreaming) {
+    return executePipelineAsync(
+        input,
+        tenantId,
+        idempotencyKey,
+        outputStreaming,
+        pipelineId(),
+        bundleVersionId());
+  }
+
+  Uni<RunAsyncAcceptedDto> executePipelineAsync(
+      Object input,
+      String tenantId,
+      String idempotencyKey,
+      boolean outputStreaming,
+      String pipelineId,
+      String bundleVersionId) {
     if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
       return Uni.createFrom().failure(new IllegalStateException(
           "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
@@ -203,6 +252,17 @@ class QueueAsyncCoordinator {
       return Uni.createFrom().failure(inputFailure);
     }
     String resolvedTenant = executionInputPolicy.normalizeTenant(tenantId);
+    RuntimeException admissionFailure = admissionFailure(admissionRequest(
+        resolvedTenant,
+        ControlPlaneAdmissionOperation.SUBMIT_EXECUTION,
+        pipelineId,
+        bundleVersionId,
+        null,
+        "api",
+        explicitTenant(tenantId)));
+    if (admissionFailure != null) {
+      return Uni.createFrom().failure(admissionFailure);
+    }
     long now = System.currentTimeMillis();
     long ttlEpochS = Instant.ofEpochMilli(now)
         .plus(Duration.ofDays(Math.max(1, orchestratorConfig.executionTtlDays())))
@@ -210,15 +270,20 @@ class QueueAsyncCoordinator {
 
     return executionInputPolicy.resolveExecutionInputPayload(executionInput)
         .onItem().transformToUni(snapshot -> {
-          String executionKey;
-          try {
-            executionKey = executionInputPolicy.resolveExecutionKey(resolvedTenant, snapshot.payload(), idempotencyKey);
-          } catch (IllegalArgumentException e) {
-            return Uni.createFrom().failure(new BadRequestException(e.getMessage()));
-          }
+              String executionKey;
+              try {
+                executionKey = scopedRootExecutionKey(
+                    pipelineId,
+                    bundleVersionId,
+                    executionInputPolicy.resolveExecutionKey(resolvedTenant, snapshot.payload(), idempotencyKey));
+              } catch (IllegalArgumentException e) {
+                return Uni.createFrom().failure(new BadRequestException(e.getMessage()));
+              }
           ExecutionCreateCommand command = new ExecutionCreateCommand(
               resolvedTenant,
               executionKey,
+              pipelineId,
+              bundleVersionId,
               snapshot,
               executionResultShapeResolver.resolve(),
               now,
@@ -241,6 +306,15 @@ class QueueAsyncCoordinator {
           "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
     }
     String resolvedTenant = executionInputPolicy.normalizeTenant(tenantId);
+    RuntimeException admissionFailure = admissionFailure(admissionRequest(
+        resolvedTenant,
+        ControlPlaneAdmissionOperation.GET_EXECUTION_STATUS,
+        executionId,
+        "api",
+        explicitTenant(tenantId)));
+    if (admissionFailure != null) {
+      return Uni.createFrom().failure(admissionFailure);
+    }
     return executionStateStore.getExecution(resolvedTenant, executionId)
         .onItem().transform(optional -> optional
             .map(QueueAsyncCoordinator::toStatusDto)
@@ -254,6 +328,15 @@ class QueueAsyncCoordinator {
           "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
     }
     String resolvedTenant = executionInputPolicy.normalizeTenant(tenantId);
+    RuntimeException admissionFailure = admissionFailure(admissionRequest(
+        resolvedTenant,
+        ControlPlaneAdmissionOperation.GET_EXECUTION_RESULT,
+        executionId,
+        "api",
+        explicitTenant(tenantId)));
+    if (admissionFailure != null) {
+      return Uni.createFrom().failure(admissionFailure);
+    }
     return executionStateStore.getExecution(resolvedTenant, executionId)
         .onItem().transform(optional -> optional.orElseThrow(
             () -> new NotFoundException("Execution not found: " + executionId)))
@@ -274,17 +357,13 @@ class QueueAsyncCoordinator {
               if (items.isEmpty()) {
                 return null;
               }
-              Object first = items.getFirst();
-              if (outputType != null && first != null && !outputType.isInstance(first)) {
-                throw new IllegalStateException("Stored result type mismatch for execution " + executionId);
-              }
-              return (T) first;
+              return (T) coerceStoredResult(items.getFirst(), outputType);
             }
             if (!outputStreaming) {
               throw new IllegalStateException(
                   "Execution " + executionId + " produced a materialized multi result. Request list retrieval instead.");
             }
-            return (T) List.copyOf(items);
+            return (T) coerceStoredResults(items, outputType);
           }
           if (record.status().terminal()) {
             throw new IllegalStateException("Execution finished without a successful result: " + record.status());
@@ -293,15 +372,81 @@ class QueueAsyncCoordinator {
         });
   }
 
-  Uni<Void> processExecutionWorkItem(ExecutionWorkItem workItem, Function<ExecutionRecord<Object, Object>, Multi<?>> executeStreaming) {
-    return processExecutionWorkItem(workItem, executeStreaming, NOOP_ITEM_CONTINUATION_HANDLER);
+  Uni<Object> getExecutionResultPayload(String tenantId, String executionId) {
+    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
+      return Uni.createFrom().failure(new IllegalStateException(
+          "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
+    }
+    String resolvedTenant = executionInputPolicy.normalizeTenant(tenantId);
+    RuntimeException admissionFailure = admissionFailure(admissionRequest(
+        resolvedTenant,
+        ControlPlaneAdmissionOperation.GET_EXECUTION_RESULT,
+        executionId,
+        "api",
+        explicitTenant(tenantId)));
+    if (admissionFailure != null) {
+      return Uni.createFrom().failure(admissionFailure);
+    }
+    return executionStateStore.getExecution(resolvedTenant, executionId)
+        .onItem().transform(optional -> optional.orElseThrow(
+            () -> new NotFoundException("Execution not found: " + executionId)))
+        .onItem().transform(record -> {
+          if (record.status() == ExecutionStatus.SUCCEEDED) {
+            if (record.resultPayload() == null) {
+              return null;
+            }
+            List<?> items = (List<?>) record.resultPayload();
+            if (record.resultShape() == ExecutionResultShape.SINGLE) {
+              if (items.size() > 1) {
+                throw new IllegalStateException(
+                    "Execution " + executionId + " stored multiple terminal items for SINGLE result shape");
+              }
+              return items.isEmpty() ? null : items.getFirst();
+            }
+            return List.copyOf(items);
+          }
+          if (record.status().terminal()) {
+            throw new IllegalStateException("Execution finished without a successful result: " + record.status());
+          }
+          throw new IllegalStateException("Execution is not complete yet: " + record.status());
+        });
+  }
+
+  Uni<Void> processExecutionWorkItem(ExecutionWorkItem workItem, PipelineTransitionWorker worker) {
+    return processExecutionWorkItem(workItem, worker, NOOP_ITEM_CONTINUATION_HANDLER);
   }
 
   Uni<Void> processExecutionWorkItem(
       ExecutionWorkItem workItem,
-      Function<ExecutionRecord<Object, Object>, Multi<?>> executeStreaming,
+      PipelineTransitionWorker worker,
       AwaitItemContinuationHandler itemContinuationHandler) {
     if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC || workItem == null) {
+      return Uni.createFrom().voidItem();
+    }
+    if (worker == null) {
+      return Uni.createFrom().failure(new IllegalArgumentException("PipelineTransitionWorker must not be null"));
+    }
+    Optional<TransitionWorkerExecutor.TransitionAdmission> admission = transitionWorkerExecutor.tryAdmit();
+    if (admission.isEmpty()) {
+      return workDispatcher.enqueueDelayed(workItem, saturatedDelay());
+    }
+    TransitionWorkerExecutor.TransitionAdmission permit = admission.get();
+    ControlPlaneTransitionAdmission tenantAdmission = admissionPolicy().admitTransition(admissionRequest(
+        workItem.tenantId(),
+        ControlPlaneAdmissionOperation.PROCESS_WORK_ITEM,
+        workItem.executionId(),
+        "worker-dispatch",
+        true));
+    if (!tenantAdmission.decision().allowed()) {
+      permit.close();
+      if (ControlPlaneAdmissionDecision.TENANT_TRANSITION_QUOTA_SATURATED.equals(tenantAdmission.decision().errorCode())) {
+        return workDispatcher.enqueueDelayed(workItem, saturatedDelay());
+      }
+      LOG.warnf(
+          "Skipping async execution work item tenant=%s executionId=%s: %s",
+          workItem.tenantId(),
+          workItem.executionId(),
+          tenantAdmission.decision().reason());
       return Uni.createFrom().voidItem();
     }
     long now = System.currentTimeMillis();
@@ -325,24 +470,13 @@ class QueueAsyncCoordinator {
               record.resultShape(),
               record.awaitUnitId() == null ? "<none>" : record.awaitUnitId());
           String transitionKey = transitionKey(record.executionId(), record.currentStepIndex(), record.attempt());
-          return runAsyncExecution(record, executeStreaming)
-              .onItem().transformToUni(resultPayload -> checkpointPublicationService
-                  .publishIfConfigured(record, singleResult(resultPayload))
-                  .replaceWith(resultPayload))
-              .onItem().transformToUni(resultPayload -> executionStateStore.markSucceeded(
-                      record.tenantId(),
-                      record.executionId(),
-                      record.version(),
-                      transitionKey,
-                      resultPayload,
-                      System.currentTimeMillis()))
-              .onItem().transformToUni(updated -> Uni.createFrom().voidItem())
-              .onFailure(this::containsAwaitSuspension).recoverWithUni(
-                  failure -> markWaitingExternal(
-                      record,
-                      extractAwaitSuspension(failure),
-                      transitionKey,
-                      itemContinuationHandler))
+          return prepareTransitionCommand(record, transitionKey)
+              .onItem().transformToUni(command -> transitionWorkerExecutor.execute(worker, command))
+              .onItem().transformToUni(result -> handleTransitionResult(record, transitionKey, result, itemContinuationHandler))
+              .onFailure(AwaitThrowableSupport::containsAwaitSuspension).recoverWithUni(failure ->
+                  awaitCoordinator.suspensionSnapshot(AwaitThrowableSupport.extractAwaitSuspension(failure))
+                      .onItem().transformToUni(suspension ->
+                          markWaitingExternal(record, suspension, transitionKey, itemContinuationHandler)))
               .onFailure().recoverWithUni(
                   failure -> executionFailureHandler.handleExecutionFailure(
                       record,
@@ -351,6 +485,10 @@ class QueueAsyncCoordinator {
                       executionStateStore,
                       workDispatcher,
                       deadLetterPublisher));
+        })
+        .onTermination().invoke(() -> {
+          permit.close();
+          tenantAdmission.permit().close();
         });
   }
 
@@ -401,6 +539,15 @@ class QueueAsyncCoordinator {
         command.responsePayload(),
         command.actor(),
         command.nowEpochMs());
+    RuntimeException admissionFailure = admissionFailure(admissionRequest(
+        normalized.tenantId(),
+        ControlPlaneAdmissionOperation.COMPLETE_AWAIT,
+        null,
+        "api",
+        explicitTenant(command.tenantId())));
+    if (admissionFailure != null) {
+      return Uni.createFrom().failure(admissionFailure);
+    }
     return awaitCoordinator.complete(normalized)
         .onFailure(failure -> !AwaitCompletionAdmissionFailures.isDeterministic(failure))
         .transform(failure -> new IllegalStateException(
@@ -541,16 +688,79 @@ class QueueAsyncCoordinator {
           "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
     }
     String resolvedTenant = executionInputPolicy.normalizeTenant(tenantId);
+    RuntimeException admissionFailure = admissionFailure(admissionRequest(
+        resolvedTenant,
+        ControlPlaneAdmissionOperation.QUERY_PENDING_AWAIT,
+        null,
+        "api",
+        explicitTenant(tenantId)));
+    if (admissionFailure != null) {
+      return Uni.createFrom().failure(admissionFailure);
+    }
     return awaitCoordinator.queryPending(resolvedTenant, assignee, group, stepId, limit <= 0 ? 100 : limit);
+  }
+
+  private Uni<Void> handleTransitionResult(
+      ExecutionRecord<Object, Object> record,
+      String transitionKey,
+      TransitionResultEnvelope result,
+      AwaitItemContinuationHandler itemContinuationHandler) {
+    if (result == null) {
+      return executionFailureHandler.handleExecutionFailure(
+          record,
+          transitionKey,
+          new IllegalStateException("PipelineTransitionWorker returned null result"),
+          executionStateStore,
+          workDispatcher,
+          deadLetterPublisher);
+    }
+    if (result.outcome() == TransitionWorkerOutcome.COMPLETED) {
+      return handleCompletedTransition(record, transitionKey, result.coordinatorOutputItems());
+    }
+    if (result.outcome() == TransitionWorkerOutcome.WAITING_EXTERNAL) {
+      return markWaitingExternal(record, result.awaitSuspension(), transitionKey, itemContinuationHandler);
+    }
+    return executionFailureHandler.handleExecutionFailure(
+        record,
+        transitionKey,
+        result.failure().toException(),
+        executionStateStore,
+        workDispatcher,
+        deadLetterPublisher);
+  }
+
+  private Uni<Void> handleCompletedTransition(
+      ExecutionRecord<Object, Object> record,
+      String transitionKey,
+      List<?> outputItems) {
+    if (record.resultShape() == ExecutionResultShape.SINGLE && outputItems.size() > 1) {
+      return Uni.createFrom().failure(new IllegalStateException(
+          "Async queue execution " + record.executionId()
+              + " produced " + outputItems.size()
+              + " terminal items for SINGLE result shape"));
+    }
+    return checkpointPublicationService
+        .publishIfConfigured(record, singleResult(outputItems))
+        .replaceWith(outputItems)
+        .onItem().transformToUni(payload -> executionStateStore.markSucceeded(
+            record.tenantId(),
+            record.executionId(),
+            record.version(),
+            transitionKey,
+            payload,
+            System.currentTimeMillis()))
+        .replaceWithVoid();
   }
 
   private Uni<Void> markWaitingExternal(
       ExecutionRecord<Object, Object> record,
-      AwaitSuspendedException suspended,
+      TransitionAwaitSuspension suspended,
       String transitionKey,
       AwaitItemContinuationHandler itemContinuationHandler) {
-    long nowEpochMs = System.currentTimeMillis();
-    return executionStateStore.markWaitingExternal(
+    return awaitCoordinator.importSuspension(suspended)
+        .onItem().transformToUni(ignored -> {
+          long nowEpochMs = System.currentTimeMillis();
+          return executionStateStore.markWaitingExternal(
             record.tenantId(),
             record.executionId(),
             record.version(),
@@ -558,39 +768,41 @@ class QueueAsyncCoordinator {
             suspended.unitId(),
             suspended.stepIndex(),
             nowEpochMs)
-        .onItem().transformToUni(updated -> {
-          if (updated.isPresent()) {
-            LOG.infof(
-                "Execution %s persisted WAITING_EXTERNAL at stepIndex=%d awaitUnitId=%s",
-                record.executionId(),
-                suspended.stepIndex(),
-                suspended.unitId());
-            recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
-                AwaitReplayLifecycleEvent.EXECUTION_WAITING,
-                record.executionId(),
-                suspended.unitId(),
-                null,
-                suspended.stepIndex(),
-                ExecutionStatus.WAITING_EXTERNAL.name(),
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null));
-            return releaseAlreadyCompletedAwaitUnit(record, suspended, nowEpochMs, itemContinuationHandler);
-          }
-          return Uni.createFrom().failure(new IllegalStateException(
-              "Failed to persist WAITING_EXTERNAL state for execution "
-                  + record.executionId()
-                  + " at step "
-                  + suspended.stepIndex()
-                  + " (expectedVersion="
-                  + record.version()
-                  + ", awaitUnitId="
-                  + suspended.unitId()
-                  + ")"));
+              .onItem().transformToUni(updated -> {
+                if (updated.isPresent()) {
+                  LOG.infof(
+                      "Execution %s persisted WAITING_EXTERNAL at stepIndex=%d awaitUnitId=%s awaitInteractions=%d",
+                      record.executionId(),
+                      suspended.stepIndex(),
+                      suspended.unitId(),
+                      suspended.interactions().size());
+                  recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
+                      AwaitReplayLifecycleEvent.EXECUTION_WAITING,
+                      record.executionId(),
+                      suspended.unitId(),
+                      null,
+                      suspended.stepIndex(),
+                      ExecutionStatus.WAITING_EXTERNAL.name(),
+                      null,
+                      null,
+                      null,
+                      null,
+                      null,
+                      null,
+                      null));
+                  return releaseAlreadyCompletedAwaitUnit(record, suspended, nowEpochMs, itemContinuationHandler);
+                }
+                return Uni.createFrom().failure(new IllegalStateException(
+                    "Failed to persist WAITING_EXTERNAL state for execution "
+                        + record.executionId()
+                        + " at step "
+                        + suspended.stepIndex()
+                        + " (expectedVersion="
+                        + record.version()
+                        + ", awaitUnitId="
+                        + suspended.unitId()
+                        + ")"));
+              });
         });
   }
 
@@ -631,11 +843,15 @@ class QueueAsyncCoordinator {
 
   private Uni<List<?>> runAsyncExecution(
       ExecutionRecord<Object, Object> record,
-      Function<ExecutionRecord<Object, Object>, Multi<?>> executeStreaming) {
-    return executeStreaming.apply(record)
-        .collect().asList()
-        .onItem().transform(items -> {
-          List<?> copied = List.copyOf(items);
+      PipelineTransitionWorker worker) {
+    String transitionKey = transitionKey(record.executionId(), record.currentStepIndex(), record.attempt());
+    return prepareTransitionCommand(record, transitionKey)
+        .onItem().transformToUni(command -> transitionWorkerExecutor.execute(worker, command))
+        .onItem().transform(result -> {
+          if (result.outcome() != TransitionWorkerOutcome.COMPLETED) {
+            throw new IllegalStateException("Transition did not complete: " + result.outcome());
+          }
+          List<?> copied = result.coordinatorOutputItems();
           if (record.resultShape() == ExecutionResultShape.SINGLE && copied.size() > 1) {
             throw new IllegalStateException(
                 "Async queue execution " + record.executionId()
@@ -646,6 +862,71 @@ class QueueAsyncCoordinator {
         });
   }
 
+  private Uni<TransitionCommandEnvelope> prepareTransitionCommand(
+      ExecutionRecord<Object, Object> record,
+      String transitionKey) {
+    Uni<Object> inputPayload = record.currentStepIndex() > 0 && hasAwaitUnitId(record)
+        ? loadAwaitResumePayload(record)
+        : Uni.createFrom().item(record.inputPayload());
+    return inputPayload.onItem().transform(payload -> {
+      TransitionWorkerCommand command = new TransitionWorkerCommand(
+          record.tenantId(),
+          record.executionId(),
+          record.currentStepIndex(),
+          record.attempt(),
+          record.resultShape(),
+          record.version(),
+          transitionKey,
+          payload);
+      return TransitionCommandEnvelope.from(
+          command,
+          record.pipelineId(),
+          record.bundleVersionId(),
+          transitionKey,
+          payloadCodec().encode(payload));
+    });
+  }
+
+  private static boolean hasAwaitUnitId(ExecutionRecord<Object, Object> record) {
+    return record.awaitUnitId() != null && !record.awaitUnitId().isBlank();
+  }
+
+  private static String scopedRootExecutionKey(String pipelineId, String bundleVersionId, String executionKey) {
+    return compositeScopedKey("pipelineId", pipelineId, "bundleVersionId", bundleVersionId)
+        + ":executionKey:"
+        + requireScopedValue("executionKey", executionKey);
+  }
+
+  private static String compositeScopedKey(String leftName, String left, String rightName, String right) {
+    String safeLeft = requireScopedValue(leftName, left);
+    String safeRight = requireScopedValue(rightName, right);
+    return safeLeft.length() + ":" + safeLeft + ":" + safeRight.length() + ":" + safeRight;
+  }
+
+  private static String requireScopedValue(String name, String value) {
+    if (value == null || value.isBlank()) {
+      throw new IllegalArgumentException(name + " must not be blank");
+    }
+    return value;
+  }
+
+  private Uni<Object> loadAwaitResumePayload(ExecutionRecord<Object, Object> record) {
+    if (record.awaitUnitId() == null || record.awaitUnitId().isBlank()) {
+      return Uni.createFrom().failure(new IllegalStateException(
+          "Execution " + record.executionId() + " is resuming from step "
+              + record.currentStepIndex() + " without awaitUnitId"));
+    }
+    return awaitCoordinator.loadResumePayload(record.tenantId(), record.awaitUnitId());
+  }
+
+  private Duration saturatedDelay() {
+    PipelineOrchestratorConfig.WorkerConfig workerConfig = orchestratorConfig.worker();
+    if (workerConfig == null || workerConfig.saturatedDelay() == null) {
+      return Duration.ofSeconds(1);
+    }
+    return workerConfig.saturatedDelay();
+  }
+
   private Object singleResult(List<?> items) {
     if (items == null || items.isEmpty()) {
       return null;
@@ -653,9 +934,139 @@ class QueueAsyncCoordinator {
     return items.getFirst();
   }
 
+  private Object coerceStoredResult(Object result, Class<?> outputType) {
+    if (result instanceof SerializedTransitionPayload serialized) {
+      return coerceStoredResult(payloadCodec().decode(serialized), outputType);
+    }
+    if (result == null || outputType == null || outputType.isInstance(result)) {
+      return result;
+    }
+    try {
+      return PipelineJson.mapper().convertValue(result, outputType);
+    } catch (IllegalArgumentException e) {
+      throw new IllegalStateException(
+          "Failed to coerce stored result from "
+              + result.getClass().getName()
+              + " to "
+              + outputType.getName(),
+          e);
+    }
+  }
+
+  private List<?> coerceStoredResults(List<?> results, Class<?> outputType) {
+    if (outputType == null) {
+      return List.copyOf(results);
+    }
+    return results.stream()
+        .map(result -> coerceStoredResult(result, outputType))
+        .toList();
+  }
+
+  private TransitionPayloadCodec payloadCodec() {
+    if (transitionPayloadCodec != null) {
+      return transitionPayloadCodec;
+    }
+    TransitionPayloadCodec fallback = fallbackTransitionPayloadCodec;
+    if (fallback == null) {
+      synchronized (this) {
+        fallback = fallbackTransitionPayloadCodec;
+        if (fallback == null) {
+          fallback = new JsonTransitionPayloadCodec();
+          fallbackTransitionPayloadCodec = fallback;
+        }
+      }
+    }
+    return fallback;
+  }
+
+  private String pipelineId() {
+    return bundleIdentityResolver().pipelineId(orchestratorConfig);
+  }
+
+  private String bundleVersionId() {
+    return bundleIdentityResolver().bundleVersionId(orchestratorConfig);
+  }
+
+  private PipelineBundleIdentityResolver bundleIdentityResolver() {
+    if (bundleIdentityResolver != null) {
+      return bundleIdentityResolver;
+    }
+    PipelineBundleIdentityResolver fallback = fallbackBundleIdentityResolver;
+    if (fallback == null) {
+      synchronized (this) {
+        fallback = fallbackBundleIdentityResolver;
+        if (fallback == null) {
+          fallback = new PipelineBundleIdentityResolver();
+          fallbackBundleIdentityResolver = fallback;
+        }
+      }
+    }
+    return fallback;
+  }
+
+  private ControlPlaneAdmissionPolicy admissionPolicy() {
+    if (controlPlaneAdmissionPolicy != null) {
+      return controlPlaneAdmissionPolicy;
+    }
+    ControlPlaneAdmissionPolicy fallback = fallbackAdmissionPolicy;
+    if (fallback == null) {
+      synchronized (this) {
+        fallback = fallbackAdmissionPolicy;
+        if (fallback == null) {
+          fallback = new org.pipelineframework.orchestrator.LocalControlPlaneAdmissionPolicy(orchestratorConfig);
+          fallbackAdmissionPolicy = fallback;
+        }
+      }
+    }
+    return fallback;
+  }
+
+  private RuntimeException admissionFailure(ControlPlaneAdmissionRequest request) {
+    ControlPlaneAdmissionDecision decision = admissionPolicy().admit(request);
+    return decision.allowed() ? null : new ControlPlaneAdmissionException(decision);
+  }
+
+  private ControlPlaneAdmissionRequest admissionRequest(
+      String tenantId,
+      ControlPlaneAdmissionOperation operation,
+      String executionId,
+      String source,
+      boolean explicitTenant) {
+    return new ControlPlaneAdmissionRequest(
+        tenantId,
+        operation,
+        pipelineId(),
+        bundleVersionId(),
+        executionId,
+        source,
+        explicitTenant);
+  }
+
+  private ControlPlaneAdmissionRequest admissionRequest(
+      String tenantId,
+      ControlPlaneAdmissionOperation operation,
+      String pipelineId,
+      String bundleVersionId,
+      String executionId,
+      String source,
+      boolean explicitTenant) {
+    return new ControlPlaneAdmissionRequest(
+        tenantId,
+        operation,
+        pipelineId,
+        bundleVersionId,
+        executionId,
+        source,
+        explicitTenant);
+  }
+
+  private static boolean explicitTenant(String tenantId) {
+    return tenantId != null && !tenantId.isBlank();
+  }
+
   private Uni<Void> releaseAlreadyCompletedAwaitUnit(
       ExecutionRecord<Object, Object> record,
-      AwaitSuspendedException suspended,
+      TransitionAwaitSuspension suspended,
       long nowEpochMs,
       AwaitItemContinuationHandler itemContinuationHandler) {
     return awaitCoordinator.getUnit(record.tenantId(), suspended.unitId())
@@ -718,6 +1129,8 @@ class QueueAsyncCoordinator {
                 ExecutionCreateCommand create = new ExecutionCreateCommand(
                     interaction.tenantId(),
                     childKey,
+                    parentRecord.pipelineId(),
+                    parentRecord.bundleVersionId(),
                     normalizedInput,
                     ExecutionResultShape.MATERIALIZED_MULTI,
                     nowEpochMs,
@@ -986,43 +1399,4 @@ class QueueAsyncCoordinator {
     return executionId + ":" + stepIndex + ":" + attempt;
   }
 
-  private boolean containsAwaitSuspension(Throwable failure) {
-    return findThrowable(failure, AwaitSuspendedException.class) != null;
-  }
-
-  private AwaitSuspendedException extractAwaitSuspension(Throwable failure) {
-    AwaitSuspendedException suspended = findThrowable(failure, AwaitSuspendedException.class);
-    if (suspended == null) {
-      throw new IllegalStateException("Await suspension failure not found in cause chain", failure);
-    }
-    return suspended;
-  }
-
-  private static <T extends Throwable> T findThrowable(Throwable failure, Class<T> targetType) {
-    if (failure == null || targetType == null) {
-      return null;
-    }
-    ArrayDeque<Throwable> queue = new ArrayDeque<>();
-    Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-    queue.add(failure);
-    while (!queue.isEmpty()) {
-      Throwable current = queue.removeFirst();
-      if (!seen.add(current)) {
-        continue;
-      }
-      if (targetType.isInstance(current)) {
-        return targetType.cast(current);
-      }
-      Throwable cause = current.getCause();
-      if (cause != null && cause != current) {
-        queue.addLast(cause);
-      }
-      for (Throwable suppressed : current.getSuppressed()) {
-        if (suppressed != null && suppressed != current) {
-          queue.addLast(suppressed);
-        }
-      }
-    }
-    return null;
-  }
 }

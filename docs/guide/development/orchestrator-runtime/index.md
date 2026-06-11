@@ -2,6 +2,8 @@
 
 The orchestrator runtime is the generated part of a TPF application that starts the pipeline, calls each step in order, tracks execution state when configured, and exposes generated REST, gRPC, LOCAL, or FUNCTION-platform entry points.
 
+Current applications host their own generated orchestrator. For implementation notes on separating orchestration from worker execution, see [Durable Coordinator](/guide/evolve/durable-coordinator/).
+
 ## Guide Pages
 
 1. [Overview](/guide/development/orchestrator-runtime/) covers runtime modes, generated entry points, and generated structure.

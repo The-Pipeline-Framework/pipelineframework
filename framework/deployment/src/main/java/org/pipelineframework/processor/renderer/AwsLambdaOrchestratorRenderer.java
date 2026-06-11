@@ -48,8 +48,8 @@ public class AwsLambdaOrchestratorRenderer extends AbstractOrchestratorFunctionH
      * @param basePackage the base Java package to use as the prefix
      * @return the fully-qualified class name of the main handler
      */
-    public static String handlerFqcn(String basePackage) {
-        return basePackage + ".orchestrator.service." + HANDLER_CLASS;
+    public static String handlerFqcnStatic(String basePackage) {
+        return new AwsLambdaOrchestratorRenderer().handlerFqcn(basePackage);
     }
 
     /**
@@ -58,8 +58,8 @@ public class AwsLambdaOrchestratorRenderer extends AbstractOrchestratorFunctionH
      * @param basePackage the root package to which the orchestrator service package will be appended
      * @return the fully qualified class name of the run-async handler
      */
-    public static String runAsyncHandlerFqcn(String basePackage) {
-        return basePackage + ".orchestrator.service." + RUN_ASYNC_HANDLER_CLASS;
+    public static String runAsyncHandlerFqcnStatic(String basePackage) {
+        return new AwsLambdaOrchestratorRenderer().runAsyncHandlerFqcn(basePackage);
     }
 
     /**
@@ -68,8 +68,8 @@ public class AwsLambdaOrchestratorRenderer extends AbstractOrchestratorFunctionH
      * @param basePackage the root package to prepend (e.g., "com.example")
      * @return the fully qualified class name of the status handler
      */
-    public static String statusHandlerFqcn(String basePackage) {
-        return basePackage + ".orchestrator.service." + STATUS_HANDLER_CLASS;
+    public static String statusHandlerFqcnStatic(String basePackage) {
+        return new AwsLambdaOrchestratorRenderer().statusHandlerFqcn(basePackage);
     }
 
     /**
@@ -78,8 +78,8 @@ public class AwsLambdaOrchestratorRenderer extends AbstractOrchestratorFunctionH
      * @param basePackage the root package to which the orchestrator service package is appended
      * @return the fully-qualified class name of the result handler
      */
-    public static String resultHandlerFqcn(String basePackage) {
-        return basePackage + ".orchestrator.service." + RESULT_HANDLER_CLASS;
+    public static String resultHandlerFqcnStatic(String basePackage) {
+        return new AwsLambdaOrchestratorRenderer().resultHandlerFqcn(basePackage);
     }
 
     /**

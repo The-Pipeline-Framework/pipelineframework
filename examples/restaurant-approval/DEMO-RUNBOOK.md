@@ -2,6 +2,8 @@
 
 Use this runbook for the live human-in-the-loop await demo.
 
+For the separate self-hosted coordinator + worker reference path, use [Self-Hosted Coordinator Runbook](./self-host/README.md). This page stays focused on the UI demo.
+
 ## Story
 
 Restaurant Approval shows the interaction API path for an await step:

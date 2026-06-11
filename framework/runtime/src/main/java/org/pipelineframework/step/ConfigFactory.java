@@ -17,12 +17,12 @@
 package org.pipelineframework.step;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Inject;
 
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.PipelineStepConfig;
 import org.pipelineframework.config.StepConfig;
+import org.pipelineframework.runtime.core.RuntimeAdapters;
 
 /**
  * A factory class for building configuration for pipeline steps.
@@ -52,9 +52,11 @@ public class ConfigFactory {
      */
     public StepConfig buildConfig(Class<?> stepClass, PipelineConfig pipelineConfig) {
 
-        // Get the new Quarkus configuration
-        PipelineStepConfig pipelineStepConfig = CDI.current()
-            .select(PipelineStepConfig.class).get();
+        PipelineStepConfig pipelineStepConfig = RuntimeAdapters.resolveConfig(PipelineStepConfig.class)
+            .orElse(null);
+        if (pipelineStepConfig == null) {
+            return pipelineConfig.newStepConfig();
+        }
 
         // Get config for the specific class if available
         String className = stepClass.getName();

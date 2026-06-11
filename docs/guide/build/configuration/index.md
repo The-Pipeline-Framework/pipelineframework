@@ -226,6 +226,9 @@ Prefix: `pipeline.orchestrator`
 | `pipeline.orchestrator.dlq-url` | string | none | Dead-letter queue URL when `dlq-provider=sqs`. |
 | `pipeline.orchestrator.queue-url` | string | none | Queue URL for external dispatcher providers. |
 | `pipeline.orchestrator.resume-token-secret` | string | none | HMAC secret used to sign and verify await resume tokens for webhook-based await steps. Required when using the webhook transport adapter for await boundary steps. Use a high-entropy value, preferably at least 32 random bytes encoded as base64 or hex. If this property is missing, the orchestrator fails with a clear error when webhook dispatch attempts to generate a token. See [Await Boundaries](/guide/development/orchestrator-runtime/await). |
+| `pipeline.orchestrator.control-plane.enabled` | boolean | `false` | Enables the internal hosted-control-plane REST surface under `/tpf/control-plane/tenants/{tenantId}` for local/dev coordinator proofs. |
+| `pipeline.orchestrator.control-plane.admin-token` | string | none | Bearer token accepted by the hosted-control-plane REST surface. Configure exactly one of `admin-token` or `admin-token-ref` when the surface is enabled. |
+| `pipeline.orchestrator.control-plane.admin-token-ref` | string | none | Local secret reference for the hosted-control-plane bearer token. Supports `env:NAME`, `sys:property.name`, and `config:some.config.key`. |
 | `pipeline.orchestrator.dynamo.execution-table` | string | `tpf_execution` | DynamoDB table used for execution state rows. |
 | `pipeline.orchestrator.dynamo.execution-key-table` | string | `tpf_execution_key` | DynamoDB table used for submit dedupe keys. |
 | `pipeline.orchestrator.dynamo.await-interaction-table` | string | `tpf_await_interaction` | DynamoDB table used for durable await interaction rows. |
@@ -235,6 +238,34 @@ Prefix: `pipeline.orchestrator`
 | `pipeline.orchestrator.sqs.region` | string | none | Optional SQS region override. |
 | `pipeline.orchestrator.sqs.endpoint-override` | string | none | Optional SQS endpoint override (local/dev). |
 | `pipeline.orchestrator.sqs.local-loopback` | boolean | `true` | Also fire in-process work event after SQS enqueue (dev convenience). |
+| `pipeline.orchestrator.worker.max-in-flight` | int | `64` | Maximum admitted transition work items per runtime instance. |
+| `pipeline.orchestrator.worker.saturated-delay` | duration | `PT1S` | Delay before re-enqueueing work when transition admission is saturated. |
+| `pipeline.orchestrator.worker.execution-mode` | enum | `same-thread` | Transition execution mode: `same-thread` or `virtual-thread`. |
+| `pipeline.orchestrator.worker.rest.base-url` | string | none | Optional remote REST transition worker base URL. When set, transition work is routed to the REST worker client instead of the local in-process worker. |
+| `pipeline.orchestrator.worker.rest.path` | string | `/pipeline/worker/transitions/execute` | REST transition worker execution path. |
+| `pipeline.orchestrator.worker.rest.connect-timeout` | duration | `PT2S` | REST transition worker connection timeout. |
+| `pipeline.orchestrator.worker.rest.request-timeout` | duration | `PT30S` | REST transition worker request timeout. |
+| `pipeline.orchestrator.worker.rest.server-enabled` | boolean | `false` | Enables the local REST transition worker endpoint. Disabled by default because this endpoint is an internal runtime protocol surface. |
+| `pipeline.orchestrator.worker.rest.shared-secret` | string | none | HMAC secret used to sign and verify REST transition worker requests. Required when `rest.base-url` or `rest.server-enabled=true` is used. |
+| `pipeline.orchestrator.worker.rest.shared-secret-ref` | string | none | Local secret reference for the REST transition worker signing secret. Supports `env:NAME`, `sys:property.name`, and `config:some.config.key`. Configure exactly one of `shared-secret` or `shared-secret-ref`. |
+| `pipeline.orchestrator.worker.rest.signature-tolerance` | duration | `PT2M` | Maximum timestamp skew accepted for signed REST transition worker requests. |
+| `pipeline.orchestrator.worker.allowed-payload-prefixes` | list | `org.pipelineframework.` | Java package prefixes accepted by the JSON transition payload codec for application payload classes across local, REST, gRPC, and SQS workers. |
+| `pipeline.orchestrator.worker.grpc.endpoint` | string | none | Optional remote gRPC transition worker endpoint in `host:port` form. When set, transition work is routed to the gRPC worker client instead of the local in-process worker. |
+| `pipeline.orchestrator.worker.grpc.plaintext` | boolean | `false` | Uses plaintext gRPC channels for local/test worker processes. |
+| `pipeline.orchestrator.worker.grpc.request-timeout` | duration | `PT30S` | gRPC transition worker request timeout. |
+| `pipeline.orchestrator.worker.grpc.server-enabled` | boolean | `false` | Enables the local gRPC transition worker service. Disabled by default because this service is an internal runtime protocol surface. |
+| `pipeline.orchestrator.worker.grpc.shared-secret` | string | none | HMAC secret used to sign and verify gRPC transition worker requests. Required when `grpc.endpoint` or `grpc.server-enabled=true` is used. |
+| `pipeline.orchestrator.worker.grpc.shared-secret-ref` | string | none | Local secret reference for the gRPC transition worker signing secret. Supports `env:NAME`, `sys:property.name`, and `config:some.config.key`. Configure exactly one of `shared-secret` or `shared-secret-ref`. |
+| `pipeline.orchestrator.worker.grpc.signature-tolerance` | duration | `PT2M` | Maximum timestamp skew accepted for signed gRPC transition worker requests. |
+| `pipeline.orchestrator.worker.sqs.request-queue-url` | string | none | Optional SQS request queue URL. When set, transition work is routed to the SQS request/reply worker client instead of the local in-process worker. |
+| `pipeline.orchestrator.worker.sqs.response-queue-url` | string | none | SQS response queue URL used by the coordinator to receive worker result envelopes. In v1 this must be dedicated per coordinator instance or shard, for example `tpf-worker-responses-shard-a`; shared response queues can deliver responses to the wrong process because v1 has no demultiplexing. |
+| `pipeline.orchestrator.worker.sqs.server-enabled` | boolean | `false` | Enables the local SQS transition worker poller. Disabled by default because this poller consumes an internal runtime protocol queue. |
+| `pipeline.orchestrator.worker.sqs.request-timeout` | duration | `PT30S` | Timeout while waiting for the matching SQS worker response. |
+| `pipeline.orchestrator.worker.sqs.poll-start-delay` | duration | `PT0S` | Optional delay before the SQS transition worker poller starts consuming requests. |
+| `pipeline.orchestrator.worker.sqs.visibility-timeout` | duration | `PT30S` | Visibility timeout for claimed SQS transition worker request/response messages. |
+| `pipeline.orchestrator.worker.sqs.shared-secret` | string | none | HMAC secret used to sign and verify SQS transition worker request and response messages. Required when `sqs.request-queue-url` or `sqs.server-enabled=true` is used. |
+| `pipeline.orchestrator.worker.sqs.shared-secret-ref` | string | none | Local secret reference for the SQS transition worker signing secret. Supports `env:NAME`, `sys:property.name`, and `config:some.config.key`. Configure exactly one of `shared-secret` or `shared-secret-ref`. |
+| `pipeline.orchestrator.worker.sqs.signature-tolerance` | duration | `PT2M` | Maximum timestamp skew accepted for signed SQS transition worker messages. |
 | `pipeline.orchestrator.strict-startup` | boolean | `true` | Fail startup if queue mode prerequisites are invalid. |
 
 Background execution notes:
@@ -245,7 +276,13 @@ Background execution notes:
 4. In-memory providers are for local/dev only; use providers backed by external storage/queues for crash recovery.
 5. For dead-letter handling that survives restarts, set both `pipeline.orchestrator.dlq-provider=sqs` and `pipeline.orchestrator.dlq-url`.
 6. For webhook await steps using signed resume tokens, configure a stable `pipeline.orchestrator.resume-token-secret`; rotating it invalidates outstanding resume tokens.
-7. When `pipeline.orchestrator.dynamo.await-interaction-table` is used, provision ALL-projected GSIs named `await-interaction-by-unit`, `await-interaction-pending-by-tenant`, `await-interaction-pending-by-assignee`, `await-interaction-pending-by-group`, `await-interaction-pending-by-step`, and `await-interaction-pending-by-deadline`. These indexes back await unit lookup, pending interaction listing, and timeout selection without full-table scans.
+7. Remote transition worker selection is inferred from configured targets: REST uses `pipeline.orchestrator.worker.rest.base-url`, gRPC uses `pipeline.orchestrator.worker.grpc.endpoint`, SQS uses `pipeline.orchestrator.worker.sqs.request-queue-url`, and no remote target uses the local in-process worker.
+8. Configure at most one remote worker target. Multiple remote targets fail startup as ambiguous; there is no `worker.provider` selector.
+9. `pipeline.platform` remains orthogonal and does not select worker invocation.
+10. REST, gRPC, and SQS transition workers require their matching signing secret on both coordinator and worker processes. Configure exactly one of `shared-secret` or `shared-secret-ref` for each enabled protocol.
+11. SQS transition worker `response-queue-url` must be dedicated per coordinator shard/process in v1. Shared response queues can cause dropped or misrouted responses and extra latency because v1 has no response demultiplexing.
+12. The local control-plane REST surface is internal groundwork. It requires an explicit tenant path and bearer token, but it is not a managed service API.
+13. When `pipeline.orchestrator.dynamo.await-interaction-table` is used, provision ALL-projected GSIs named `await-interaction-by-unit`, `await-interaction-pending-by-tenant`, `await-interaction-pending-by-assignee`, `await-interaction-pending-by-group`, `await-interaction-pending-by-step`, and `await-interaction-pending-by-deadline`. These indexes back await unit lookup, pending interaction listing, and timeout selection without full-table scans.
 
 Example crash-recovery provider configuration:
 

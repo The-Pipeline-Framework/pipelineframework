@@ -126,6 +126,7 @@ class PipelineProtoGeneratorTest {
         assertTrue(orchestratorProto.contains("message CompleteAwaitResponse {"));
         assertTrue(orchestratorProto.contains("message ListPendingAwaitRequest"));
         assertTrue(orchestratorProto.contains("message ListPendingAwaitResponse {"));
+        assertTrue(orchestratorProto.contains("string request_payload_json = 12;"));
         assertTrue(orchestratorProto.contains("rpc RunAsync (RunAsyncRequest) returns (RunAsyncResponse);"));
         assertTrue(orchestratorProto.contains(
             "rpc GetExecutionStatus (GetExecutionStatusRequest) returns (GetExecutionStatusResponse);"));

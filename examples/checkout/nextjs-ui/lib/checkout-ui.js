@@ -1,6 +1,29 @@
+import {
+  nextReviewCheckpointAfterOutputType,
+  stageForInteraction,
+  stageForOutputType,
+  stageForServiceId
+} from "./checkout-flow.js";
+
 function normalizeId(rawValue, fallback) {
   const trimmed = String(rawValue || "").trim();
   return trimmed || fallback;
+}
+
+function getFieldValue(container, ...keys) {
+  for (const key of keys) {
+    const value = container?.[key];
+    if (value !== undefined && value !== null) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+export function outputTypeName(interaction) {
+  const outputType = String(interaction?.outputType || "").trim();
+  const segments = outputType.split(/[.$/]+/u).filter(Boolean);
+  return segments.at(-1) || outputType;
 }
 
 function parseItemLine(rawLine, defaultIndex) {
@@ -45,8 +68,15 @@ export function buildCheckoutOrder(form) {
 
 export function normalizePendingInteraction(interaction) {
   const requestPayload = interaction?.requestPayload ?? {};
+  const requestPayloadRequestId = String(getFieldValue(requestPayload, "requestId", "request_id") || interaction?.requestId || "");
+  const requestPayloadOrderId = getFieldValue(requestPayload, "orderId", "order_id");
+  const requestPayloadCustomerId = getFieldValue(requestPayload, "customerId", "customer_id");
+  const requestPayloadRestaurantId = getFieldValue(requestPayload, "restaurantId", "restaurant_id");
+  const requestPayloadTotalAmount = getFieldValue(requestPayload, "totalAmount", "total_amount");
+  const requestPayloadCurrency = getFieldValue(requestPayload, "currency", "currencyCode", "currency_code");
+  const itemList = getFieldValue(requestPayload, "items", "itemList");
   const deadlineEpochMs = Number(interaction?.deadlineEpochMs ?? 0);
-  const itemCount = Array.isArray(requestPayload.items) ? requestPayload.items.length : 0;
+  const itemCount = Array.isArray(itemList) ? itemList.length : 0;
 
   return {
     interactionId: String(interaction?.interactionId ?? ""),
@@ -55,17 +85,17 @@ export function normalizePendingInteraction(interaction) {
     status: String(interaction?.status ?? ""),
     transportType: String(interaction?.transportType ?? ""),
     deadlineEpochMs: Number.isFinite(deadlineEpochMs) ? deadlineEpochMs : 0,
-    orderId: String(requestPayload.orderId ?? ""),
-    requestId: String(requestPayload.requestId ?? ""),
-    customerId: String(requestPayload.customerId ?? ""),
+    orderId: String(requestPayloadOrderId ?? requestPayloadRequestId),
+    requestId: requestPayloadRequestId,
+    customerId: String(requestPayloadCustomerId ?? ""),
     requestPayload: requestPayload,
     outputType: String(interaction?.outputType ?? ""),
-    totalAmount: String(requestPayload.totalAmount ?? ""),
-    currency: String(requestPayload.currency ?? ""),
+    totalAmount: String(requestPayloadTotalAmount ?? ""),
+    currency: String(requestPayloadCurrency ?? ""),
     itemCount,
-    restaurantId: String(requestPayload.restaurantId ?? ""),
-    payloadPreview: Array.isArray(requestPayload.items)
-      ? requestPayload.items
+    restaurantId: String(requestPayloadRestaurantId ?? ""),
+    payloadPreview: Array.isArray(itemList)
+      ? itemList
           .slice(0, 3)
           .map((item) => `${item.sku} x ${item.quantity}`)
           .join(", ")
@@ -73,8 +103,60 @@ export function normalizePendingInteraction(interaction) {
   };
 }
 
+export function inferInteractionTargetId(interaction) {
+  const explicitTarget = String(interaction?.targetId || "").trim();
+  if (explicitTarget) {
+    return explicitTarget;
+  }
+  return stageForInteraction(interaction)?.serviceId || "checkout-orchestrator-svc";
+}
+
+export function interactionActionLabel(interaction) {
+  return stageForInteraction(interaction)?.actionLabel || "Complete interaction";
+}
+
+export function reviewStatusLabel(status, transportType = "") {
+  const normalizedStatus = normalizeAwaitStatus(status);
+  const normalizedTransportType = String(transportType || "").toLowerCase();
+  if (normalizedStatus === "DISPATCHED" && normalizedTransportType === "interaction-api") {
+    return "Ready for review";
+  }
+  if (normalizedStatus === "DISPATCHING") {
+    return "Preparing inbox item";
+  }
+  if (normalizedStatus === "WAITING") {
+    return "Waiting for completion";
+  }
+  return describeAwaitStatus(status);
+}
+
+export function stageIdForInteraction(interaction) {
+  return stageForInteraction(interaction)?.id || "";
+}
+
+export function stageIdForOutputType(outputType) {
+  return stageForOutputType(outputType)?.id || "";
+}
+
+export function serviceLabelForTarget(targetId) {
+  return stageForServiceId(targetId)?.title || String(targetId || "Checkout service");
+}
+
+export function nextCheckpointLabelAfterOutputType(outputType) {
+  return nextReviewCheckpointAfterOutputType(outputType)?.title || "Downstream automatic flow";
+}
+
+export function isTerminalAwaitStatus(status) {
+  const normalized = normalizeAwaitStatus(status);
+  return normalized === "COMPLETED"
+    || normalized === "FAILED"
+    || normalized === "TIMED_OUT"
+    || normalized === "CANCELLED"
+    || normalized === "EXPIRED";
+}
+
 const AWAIT_STATUS_LABELS = new Map([
-  ["WAITING", "Awaiting human input"],
+  ["WAITING", "Awaiting review"],
   ["DISPATCHING", "Dispatching await payload"],
   ["DISPATCHED", "Await dispatched to transport"],
   ["FAILED", "Await failed"],
@@ -87,7 +169,7 @@ const AWAIT_STATUS_LABELS = new Map([
 const AWAIT_STATUS_GUIDANCE = new Map([
   [
     "WAITING",
-    "This step is paused on a human decision point and can be resumed from the interaction inbox."
+    "This step is paused for approval and can be resumed from the review desk."
   ],
   [
     "DISPATCHING",
@@ -112,8 +194,11 @@ export function describeAwaitStatus(status) {
   return AWAIT_STATUS_LABELS.get(normalized) || `Await status ${normalized || "unknown"}`;
 }
 
-export function shouldAllowAwaitCompletion(status) {
-  return normalizeAwaitStatus(status) === "WAITING";
+export function shouldAllowAwaitCompletion(status, transportType = "") {
+  const normalizedStatus = normalizeAwaitStatus(status);
+  const normalizedTransportType = String(transportType || "").toLowerCase();
+  return normalizedStatus === "WAITING"
+    || (normalizedTransportType === "interaction-api" && normalizedStatus === "DISPATCHED");
 }
 
 export function awaitStatusGuidance(status) {

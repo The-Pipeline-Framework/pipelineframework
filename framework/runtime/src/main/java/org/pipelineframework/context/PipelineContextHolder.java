@@ -16,17 +16,14 @@
 
 package org.pipelineframework.context;
 
-import io.vertx.core.Context;
-import io.vertx.core.Vertx;
+import org.pipelineframework.runtime.core.RuntimeAdapters;
 
 /**
- * Holds the current PipelineContext using Vert.x context when available, and
- * falls back to a ThreadLocal otherwise.
+ * Holds the current PipelineContext through a runtime adapter-backed execution context carrier.
  */
 public final class PipelineContextHolder {
 
     private static final String CONTEXT_KEY = PipelineContextHolder.class.getName() + ".context";
-    private static final ThreadLocal<PipelineContext> THREAD_LOCAL = new ThreadLocal<>();
 
     private PipelineContextHolder() {
     }
@@ -37,18 +34,7 @@ public final class PipelineContextHolder {
      * @return the pipeline context, or null if none is set
      */
     public static PipelineContext get() {
-        Context context = Vertx.currentContext();
-        if (context != null) {
-            try {
-                Object stored = context.getLocal(CONTEXT_KEY);
-                if (stored instanceof PipelineContext pipelineContext) {
-                    return pipelineContext;
-                }
-            } catch (UnsupportedOperationException ignored) {
-                // Root contexts forbid locals; fall back to thread-local storage.
-            }
-        }
-        return THREAD_LOCAL.get();
+        return RuntimeAdapters.executionContext(CONTEXT_KEY, PipelineContext.class);
     }
 
     /**
@@ -57,30 +43,17 @@ public final class PipelineContextHolder {
      * @param pipelineContext the context to store
      */
     public static void set(PipelineContext pipelineContext) {
-        Context context = Vertx.currentContext();
-        if (context != null) {
-            try {
-                context.putLocal(CONTEXT_KEY, pipelineContext);
-                return;
-            } catch (UnsupportedOperationException ignored) {
-                // Root contexts forbid locals; fall back to thread-local storage.
-            }
+        if (pipelineContext == null) {
+            RuntimeAdapters.clearExecutionContext(CONTEXT_KEY);
+            return;
         }
-        THREAD_LOCAL.set(pipelineContext);
+        RuntimeAdapters.setExecutionContext(CONTEXT_KEY, pipelineContext);
     }
 
     /**
      * Clears the current pipeline context.
      */
     public static void clear() {
-        Context context = Vertx.currentContext();
-        if (context != null) {
-            try {
-                context.removeLocal(CONTEXT_KEY);
-            } catch (UnsupportedOperationException ignored) {
-                // Root contexts forbid locals; fall back to thread-local storage.
-            }
-        }
-        THREAD_LOCAL.remove();
+        RuntimeAdapters.clearExecutionContext(CONTEXT_KEY);
     }
 }

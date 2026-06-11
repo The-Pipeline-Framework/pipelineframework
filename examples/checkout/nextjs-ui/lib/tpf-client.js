@@ -7,6 +7,7 @@ import { getAwaitOrchestratorTargets, getUiConfig } from "./config.js";
 import {
   buildCheckoutCompletionPayload,
   buildCheckoutOrder,
+  isTerminalAwaitStatus,
   normalizePendingInteraction
 } from "./checkout-ui.js";
 
@@ -37,6 +38,20 @@ function toNumber(value, fallback = 0) {
   }
 
   return fallback;
+}
+
+function fieldValue(container, ...keys) {
+  for (const key of keys) {
+    const value = container?.[key];
+    if (value !== undefined && value !== null) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function toText(value) {
+  return value === null || value === undefined ? "" : String(value);
 }
 
 function parseAddressFromHostPort(host, grpcPort) {
@@ -72,7 +87,8 @@ function getServiceNamespace(packageObject, packageName) {
 }
 
 function getTargetClient(target) {
-  const key = `${parseAddressFromHostPort(target.grpcHost, target.grpcPort)}|${target.moduleDir || "checkout-orchestrator-svc"}|${target.packageName}`;
+  const host = String(target.grpcHost || target.host || "127.0.0.1").trim();
+  const key = `${parseAddressFromHostPort(host, target.grpcPort)}|${target.moduleDir || "checkout-orchestrator-svc"}|${target.packageName}`;
   if (orchestratorServiceCache.has(key)) {
     return orchestratorServiceCache.get(key);
   }
@@ -98,7 +114,7 @@ function getTargetClient(target) {
   }
 
   const client = new serviceCtor(
-    parseAddressFromHostPort(target.grpcHost, target.grpcPort),
+    parseAddressFromHostPort(host, target.grpcPort),
     grpc.credentials.createInsecure()
   );
   orchestratorServiceCache.set(key, client);
@@ -111,15 +127,11 @@ function runGrpcUnaryToTarget(target, methodName, request) {
     throw new Error(`TPF gRPC client does not expose ${methodName} on OrchestratorService`);
   }
 
-  const endpoint = parseAddressFromHostPort(target.grpcHost, target.grpcPort);
+  const endpoint = parseAddressFromHostPort(target.grpcHost || target.host || "127.0.0.1", target.grpcPort);
   return new Promise((resolve, reject) => {
     client[methodName](request, (error, response) => {
       if (error) {
-        reject(
-          new Error(
-            `TPF gRPC request failed (${methodName}) for ${endpoint}: ${error.message || "unknown error"}`
-          )
-        );
+        reject(error);
       } else {
         resolve(response);
       }
@@ -127,9 +139,82 @@ function runGrpcUnaryToTarget(target, methodName, request) {
   });
 }
 
-function runGrpcUnary(methodName, request) {
+function isExecutionNotFoundError(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    error?.code === 5 ||
+    message.includes("execution not found") ||
+    message.includes("not found") ||
+    message.includes("jakarta.ws.rs.notfoundexception")
+  );
+}
+
+function getOrderedTargets(preferredTargetId) {
+  const normalized = String(preferredTargetId || "").trim();
+  if (!normalized) {
+    return getAwaitOrchestratorTargets();
+  }
+
+  const targets = getAwaitOrchestratorTargets();
+  const preferred = getTarget(normalized);
+  if (!preferred) {
+    return targets;
+  }
+  const ordered = [];
+  const targetId = String(preferred.id || "").trim();
+  for (const target of targets) {
+    if (String(target.id || "").trim() === targetId) {
+      ordered.unshift(target);
+    } else {
+      ordered.push(target);
+    }
+  }
+  return ordered;
+}
+
+function wrapGrpcError(error, methodName, endpoint) {
+  const details = String(error?.message || "unknown error");
+  const errorCode = error && typeof error === "object" && "code" in error ? ` (${error.code})` : "";
+  return new Error(`TPF gRPC request failed (${methodName}) for ${endpoint}: ${details}${errorCode}`);
+}
+
+async function runGrpcUnary(methodName, request) {
   const [defaultTarget] = getAwaitOrchestratorTargets();
   return runGrpcUnaryToTarget(defaultTarget, methodName, request);
+}
+
+async function runGrpcUnaryAcrossTargets(
+  methodName,
+  request,
+  preferredTargetId = "",
+  allowExecutionNotFoundFallback = false
+) {
+  const targets = getOrderedTargets(preferredTargetId);
+  const errors = [];
+  for (const target of targets) {
+    try {
+      return {
+        response: await runGrpcUnaryToTarget(target, methodName, request),
+        target
+      };
+    } catch (error) {
+      const endpoint = parseAddressFromHostPort(target.grpcHost || target.host || "127.0.0.1", target.grpcPort);
+      const wrapped = wrapGrpcError(error, methodName, endpoint);
+      if (!allowExecutionNotFoundFallback || !isExecutionNotFoundError(error)) {
+        errors.push(wrapped);
+        continue;
+      }
+
+      if (targets.length === 1) {
+        throw wrapped;
+      }
+
+      errors.push(wrapped);
+    }
+  }
+
+  const endpointErrors = errors.length ? errors.map((error) => error.message).join(" | ") : "";
+  throw new Error(endpointErrors || `TPF gRPC request failed (${methodName}) for all configured execution services`);
 }
 
 function toExecutionStatus(response) {
@@ -152,30 +237,74 @@ function toExecutionResult(response) {
   };
 }
 
-function toExecutionId(interaction) {
-  return String(interaction?.execution_id || "");
+function parseRequestPayload(interaction, fallbackPayload) {
+  const requestPayload = fieldValue(interaction, "requestPayload", "request_payload");
+  if (requestPayload !== null && requestPayload !== undefined) {
+    if (typeof requestPayload === "string") {
+      try {
+        return JSON.parse(requestPayload);
+      } catch (_error) {
+        return fallbackPayload;
+      }
+    }
+    return requestPayload;
+  }
+
+  const rawPayload = fieldValue(interaction, "requestPayloadJson", "request_payload_json") || "";
+  if (typeof rawPayload !== "string" || rawPayload.length === 0) {
+    return fallbackPayload;
+  }
+
+  try {
+    return JSON.parse(rawPayload);
+  } catch (_error) {
+    return fallbackPayload;
+  }
 }
 
-function normalizeInteraction(interaction, targetId) {
+export function normalizeGrpcAwaitInteraction(interaction, targetId) {
+  const requestId = toText(fieldValue(
+    interaction,
+    "requestId",
+    "request_id",
+    "correlationId",
+    "correlation_id"
+  ));
   const fallbackPayload = {
-    requestId: interaction?.correlation_id ? String(interaction.correlation_id) : "",
-    orderId: "",
+    requestId,
+    orderId: requestId,
     customerId: "",
     restaurantId: "",
     items: [],
     totalAmount: "",
     currency: ""
   };
+  const requestPayload = parseRequestPayload(interaction, fallbackPayload);
+  const normalizedInteraction = {
+    interactionId: toText(fieldValue(interaction, "interactionId", "interaction_id")),
+    correlationId: toText(fieldValue(interaction, "correlationId", "correlation_id")),
+    executionId: toText(fieldValue(interaction, "executionId", "execution_id")),
+    stepId: toText(fieldValue(interaction, "stepId", "step_id")),
+    stepIndex: toNumber(fieldValue(interaction, "stepIndex", "step_index"), 0),
+    outputType: toText(fieldValue(interaction, "outputType", "output_type")),
+    status: toText(fieldValue(interaction, "status")),
+    transportType: toText(fieldValue(interaction, "transportType", "transport_type")),
+    deadlineEpochMs: toNumber(fieldValue(interaction, "deadlineEpochMs", "deadline_epoch_ms"), 0),
+    createdAtEpochMs: toNumber(fieldValue(interaction, "createdAtEpochMs", "created_at_epoch_ms"), 0),
+    updatedAtEpochMs: toNumber(fieldValue(interaction, "updatedAtEpochMs", "updated_at_epoch_ms"), 0),
+    requestPayload
+  };
 
   const normalized = normalizePendingInteraction({
-    ...interaction,
-    requestPayload: interaction?.requestPayload ?? fallbackPayload,
-    executionId: toExecutionId(interaction)
+    ...normalizedInteraction
   });
 
   return {
     ...normalized,
-    executionId: toExecutionId(interaction),
+    correlationId: normalizedInteraction.correlationId,
+    stepIndex: normalizedInteraction.stepIndex,
+    createdAtEpochMs: normalizedInteraction.createdAtEpochMs,
+    updatedAtEpochMs: normalizedInteraction.updatedAtEpochMs,
     targetId: String(targetId || "")
   };
 }
@@ -221,22 +350,34 @@ export async function submitOrder(form) {
   };
 }
 
-export async function fetchRunStatus(executionId) {
+export async function fetchRunStatus(executionId, preferredTargetId = "") {
   const config = getUiConfig();
-  const response = await runGrpcUnary("GetExecutionStatus", {
+  const result = await runGrpcUnaryAcrossTargets(
+    "GetExecutionStatus",
+    {
     tenant_id: String(config.tenantId || "default"),
     execution_id: String(executionId)
-  });
-  return toExecutionStatus(response);
+    },
+    preferredTargetId,
+    true
+  );
+  const status = toExecutionStatus(result.response);
+  status.targetId = String(result.target?.id || "");
+  return status;
 }
 
-export async function fetchRunResult(executionId) {
+export async function fetchRunResult(executionId, preferredTargetId = "") {
   const config = getUiConfig();
-  const response = await runGrpcUnary("GetExecutionResult", {
+  const result = await runGrpcUnaryAcrossTargets(
+    "GetExecutionResult",
+    {
     tenant_id: String(config.tenantId || "default"),
     execution_id: String(executionId)
-  });
-  return toExecutionResult(response);
+    },
+    preferredTargetId,
+    true
+  );
+  return toExecutionResult(result.response);
 }
 
 export function buildListPendingRequest() {
@@ -264,11 +405,10 @@ async function queryPendingInteractions(targets, request) {
     if (result.status === "fulfilled") {
       const items = result.value?.interactions || [];
       for (const interaction of items) {
-        interactions.push({
-          ...normalizeInteraction(interaction || {}, target.id),
-          status: String(interaction?.status || ""),
-          deadlineEpochMs: toNumber(interaction?.deadline_epoch_ms, 0)
-        });
+        const normalized = normalizeGrpcAwaitInteraction(interaction || {}, target.id);
+        if (!isTerminalAwaitStatus(normalized.status)) {
+          interactions.push(normalized);
+        }
       }
     } else {
       failedTargets.push(target.id);
@@ -305,15 +445,23 @@ export async function fetchPendingInteractions() {
 
 export async function completeInteraction({ interactionId, payload, targetId }) {
   const completionPayload = buildCheckoutCompletionPayload(payload);
-  const target = getTarget(targetId);
   const config = getUiConfig();
-  const response = await runGrpcUnaryToTarget(target, "CompleteAwait", {
+  const preferredTarget = getTarget(targetId);
+  const completionRequest = {
     tenant_id: String(config.tenantId || "default"),
     interaction_id: String(interactionId || ""),
     idempotency_key: `complete-${interactionId}-manual`,
     actor: "tpfgo-checkout-ui",
     response_json: JSON.stringify(completionPayload)
-  });
+  };
+
+  const result = await runGrpcUnaryAcrossTargets(
+    "CompleteAwait",
+    completionRequest,
+    preferredTarget?.id || "",
+    true
+  );
+  const response = result.response;
 
   return {
     interactionId: String(response?.interaction_id || ""),
@@ -321,16 +469,16 @@ export async function completeInteraction({ interactionId, payload, targetId }) 
     stepId: String(response?.step_id || ""),
     status: String(response?.status || ""),
     duplicate: Boolean(response?.duplicate),
-    targetId: String(target.id || "")
+    targetId: String(result.target?.id || "")
   };
 }
 
-export async function fetchExecutionStatus(executionId) {
-  return fetchRunStatus(executionId);
+export async function fetchExecutionStatus(executionId, targetId = "") {
+  return fetchRunStatus(executionId, targetId);
 }
 
-export async function fetchExecutionResult(executionId) {
-  return fetchRunResult(executionId);
+export async function fetchExecutionResult(executionId, targetId = "") {
+  return fetchRunResult(executionId, targetId);
 }
 
 export function getAvailableAwaitTargets() {
