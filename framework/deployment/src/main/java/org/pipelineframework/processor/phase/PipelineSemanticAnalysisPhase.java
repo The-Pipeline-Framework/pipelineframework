@@ -461,7 +461,6 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                 var typeUtils = ctx.getProcessingEnv().getTypeUtils();
                 boolean isValidReactiveService = implementsAnyReactiveService(
                     delegateElement,
-                    elementUtils,
                     typeUtils);
 
                 if (!isValidReactiveService) {
@@ -493,9 +492,10 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                         continue;
                     }
 
-                    boolean implementsExternalMapper =
-                        typeUtils.isAssignable(externalMapperElement.asType(), externalMapperInterfaceElement.asType());
-                    if (!implementsExternalMapper) {
+                    if (findReactiveSupertype(
+                            typeUtils,
+                            externalMapperElement.asType(),
+                            "org.pipelineframework.mapper.ExternalMapper") == null) {
                         messager.printMessage(
                             Diagnostic.Kind.ERROR,
                             "Operator mapper '" + model.externalMapper().canonicalName() + 
@@ -594,11 +594,9 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
      */
     private boolean implementsAnyReactiveService(
             TypeElement delegateElement,
-            javax.lang.model.util.Elements elementUtils,
             Types typeUtils) {
         for (String interfaceName : REACTIVE_SERVICE_INTERFACE_NAMES) {
-            TypeElement interfaceElement = elementUtils.getTypeElement(interfaceName);
-            if (interfaceElement != null && typeUtils.isAssignable(delegateElement.asType(), interfaceElement.asType())) {
+            if (findReactiveSupertype(typeUtils, delegateElement.asType(), interfaceName) != null) {
                 return true;
             }
         }

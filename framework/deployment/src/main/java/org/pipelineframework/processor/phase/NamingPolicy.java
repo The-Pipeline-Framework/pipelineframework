@@ -55,7 +55,7 @@ class NamingPolicy {
         if (input == null || input.isBlank()) {
             return "";
         }
-        String[] parts = input.split(" ");
+        String[] parts = input.split("[^a-zA-Z0-9]+");
         StringBuilder builder = new StringBuilder();
         for (String part : parts) {
             if (part == null || part.isBlank()) {

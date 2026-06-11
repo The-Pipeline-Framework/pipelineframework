@@ -37,8 +37,7 @@ import org.pipelineframework.processor.ir.TypeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 
 /**
- * Extracts semantic models from annotated elements.
- * This phase discovers and extracts PipelineStepModel instances from @PipelineStep annotated classes.
+ * Extracts semantic models from YAML step definitions and legacy {@code @PipelineStep} annotations.
  */
 public class ModelExtractionPhase implements PipelineCompilationPhase {
     public static final String NO_YAML_DEFINITIONS_MESSAGE =
@@ -152,7 +151,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Fallback extraction path for annotation-driven internal steps.
+     * Fallback extraction path for legacy annotation-driven internal steps.
      *
      * @param ctx the compilation context containing the current round environment
      * @return list of extracted step models from @PipelineStep-annotated classes
@@ -179,9 +178,10 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     /**
      * Builds a PipelineStepModel that represents the provided StepDefinition.
      *
-     * For INTERNAL steps, verifies the referenced service class exists and is annotated with
-     * @PipelineStep, extracts semantic information from the class, and applies the YAML-derived
-     * identity. For DELEGATED steps, constructs a delegated model via createDelegatedStepModel.
+     * For INTERNAL steps, verifies the referenced service class exists, extracts the implemented
+     * service contract, and applies YAML-derived identity and mappings. {@code @PipelineStep}
+     * metadata remains a compatibility source when present, but YAML is authoritative.
+     * For DELEGATED steps, constructs a delegated model via createDelegatedStepModel.
      * For REMOTE steps, constructs a generated remote-adapter model from template contract metadata.
      *
      * @param ctx the compilation context
@@ -327,20 +327,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return null;
         }
 
-        if (serviceClass.getAnnotation(PipelineStep.class) == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
-                "Internal step service class '" + stepDef.executionClass().canonicalName() +
-                    "' must be annotated with @PipelineStep for step '" + stepDef.name() + "'");
-            return null;
-        }
-
-        var extracted = irExtractor.extract(serviceClass);
-        if (extracted == null) {
-            return null;
-        }
-        PipelineStepModel extractedModel = extracted.model();
-
         SupportedServiceSignature serviceSignature = resolveSupportedInternalSignature(
             serviceClass,
             ctx.getProcessingEnv().getTypeUtils(),
@@ -350,6 +336,11 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Internal step service '" + stepDef.executionClass().canonicalName()
                     + "' must implement exactly one supported service interface for step '" + stepDef.name() + "'");
+            return null;
+        }
+
+        PipelineStepModel extractedModel = createYamlInternalBaseModel(ctx, serviceClass, serviceSignature, irExtractor);
+        if (extractedModel == null) {
             return null;
         }
 
@@ -412,6 +403,52 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .inputMapping(new TypeMapping(inputType, inboundMapper, inboundMapper != null, inputType))
             .outputMapping(new TypeMapping(outputType, outboundMapper, outboundMapper != null, outputType))
             .streamingShape(serviceSignature.shape())
+            .serviceApiKind(serviceSignature.apiKind())
+            .build();
+    }
+
+    private PipelineStepModel createYamlInternalBaseModel(
+            PipelineCompilationContext ctx,
+            TypeElement serviceClass,
+            SupportedServiceSignature serviceSignature,
+            PipelineStepIRExtractor irExtractor) {
+        if (serviceClass.getAnnotation(PipelineStep.class) != null) {
+            var extracted = irExtractor.extract(serviceClass);
+            return extracted == null ? null : extracted.model();
+        }
+
+        String qualifiedServiceName = serviceClass.getQualifiedName().toString();
+        ClassName serviceClassName = null;
+        try {
+            serviceClassName = ClassName.get(serviceClass);
+        } catch (Exception e) {
+            if (qualifiedServiceName != null && !qualifiedServiceName.isBlank()) {
+                serviceClassName = ClassName.bestGuess(qualifiedServiceName);
+            }
+        }
+        if (serviceClassName == null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Could not resolve service class name for YAML internal step service '"
+                    + qualifiedServiceName + "'");
+            return null;
+        }
+
+        return new PipelineStepModel.Builder()
+            .serviceName(serviceClass.getSimpleName().toString())
+            .generatedName(serviceClass.getSimpleName().toString())
+            .servicePackage(ctx.getProcessingEnv().getElementUtils().getPackageOf(serviceClass).getQualifiedName().toString())
+            .serviceClassName(serviceClassName)
+            .inputMapping(new TypeMapping(serviceSignature.inputType(), null, false, serviceSignature.inputType()))
+            .outputMapping(new TypeMapping(serviceSignature.outputType(), null, false, serviceSignature.outputType()))
+            .streamingShape(serviceSignature.shape())
+            .enabledTargets(EnumSet.of(GenerationTarget.GRPC_SERVICE, GenerationTarget.CLIENT_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .orderingRequirement(OrderingRequirement.RELAXED)
+            .threadSafety(ThreadSafety.SAFE)
+            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+            .sideEffect(false)
+            .cacheKeyGenerator(null)
             .serviceApiKind(serviceSignature.apiKind())
             .build();
     }
@@ -1148,12 +1185,19 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             TypeName annotationType,
             TypeName reactiveType) {
         if (yamlType != null) {
-            if (annotationType != null && !yamlType.equals(annotationType)) {
+            if (reactiveType != null && !yamlType.equals(reactiveType)) {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.ERROR,
                     "Internal step '" + stepName + "' declares " + direction + " type '" + yamlType
-                        + "' in YAML, but deprecated @PipelineStep metadata still declares '" + annotationType + "'.");
+                        + "' in YAML, but service implementation declares '" + reactiveType + "'.");
                 return null;
+            }
+            if (annotationType != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.WARNING,
+                    "Internal step '" + stepName + "' declares " + direction + " type '" + yamlType
+                        + "' in YAML and deprecated @PipelineStep metadata declares '" + annotationType
+                        + "'. YAML is authoritative.");
             }
             return yamlType;
         }
@@ -1178,13 +1222,12 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ClassName yamlMapper,
             ClassName annotationMapper,
             TypeName expectedDomainType) {
-        if (yamlMapper != null && annotationMapper != null && !yamlMapper.equals(annotationMapper)) {
+        if (yamlMapper != null && annotationMapper != null) {
             ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+                javax.tools.Diagnostic.Kind.WARNING,
                 "Internal step '" + stepName + "' declares " + fieldName + " '" + yamlMapper.canonicalName()
-                    + "' in YAML, but deprecated @PipelineStep metadata still declares '"
-                    + annotationMapper.canonicalName() + "'.");
-            return INVALID_CLASS_NAME;
+                    + "' in YAML and deprecated @PipelineStep metadata declares '"
+                    + annotationMapper.canonicalName() + "'. YAML is authoritative.");
         }
         ClassName effective = yamlMapper != null ? yamlMapper : annotationMapper;
         if (effective == null) {

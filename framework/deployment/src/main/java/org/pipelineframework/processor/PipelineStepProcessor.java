@@ -8,12 +8,13 @@ import javax.lang.model.element.TypeElement;
 
 /**
  * Java annotation processor that generates both gRPC client and server step implementations
- * based on @PipelineStep annotated service classes.
+ * from YAML-declared pipeline steps and legacy @PipelineStep annotated service classes.
  * <p>
  * This class now serves as a facade that delegates to the phased compiler architecture.
  */
 @SuppressWarnings("unused")
 @SupportedAnnotationTypes({
+    "*",
     "org.pipelineframework.annotation.PipelineStep",
     "org.pipelineframework.annotation.PipelinePlugin",
     "org.pipelineframework.annotation.PipelineOrchestrator"
@@ -105,7 +106,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
      *
      * @param annotations the annotation types requested to be processed in this round
      * @param roundEnv the environment for information about the current and prior round
-     * @return {@code true} if at least one annotation was processed, {@code false} when no annotations were present
+     * @return {@code true} if pipeline compilation work was performed, {@code false} otherwise
      */
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
