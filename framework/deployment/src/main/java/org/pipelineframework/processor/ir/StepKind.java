@@ -22,7 +22,7 @@ package org.pipelineframework.processor.ir;
 public enum StepKind {
     /**
      * An internal step where the execution service is implemented within the application
-     * and annotated with @PipelineStep.
+     * and bound from YAML or legacy @PipelineStep metadata.
      */
     INTERNAL,
     

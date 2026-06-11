@@ -183,15 +183,81 @@ class YamlDrivenStepGenerationTest {
             triggerSource, delegateSource, libInput, libOutput, appInput, appOutput,
             externalMapperContract, reactiveServiceContract, mapperSource));
 
-        assertFalse(result.success(), "Expected deterministic contract validation failure in this harness");
-        String errors = result.errorSummary();
-        assertTrue(errors.contains("Delegate service 'com.example.lib.EmbeddingService'"),
-            "Expected delegated-service validation diagnostic: " + errors);
+        assertTrue(result.success(), "Expected delegated YAML step with explicit mapper to compile: " + result.errorSummary());
     }
 
     @Test
-    void failsYamlInternalStepWhenServiceIsNotAnnotated() throws IOException {
-        Path yamlFile = tempDir.resolve("pipeline-invalid-internal.yaml");
+    void generatesYamlInternalStepWithoutPipelineStepAnnotation() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-yaml-only.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+            import org.pipelineframework.service.ReactiveService;
+
+            public class PaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
+                @Override
+                public Uni<PaymentStatus> process(PaymentRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path uniStub = writeUniStub();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, paymentStatus, uniStub));
+        assertTrue(result.success(), "Expected annotation-free YAML internal service compilation to succeed: " + result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenServiceClassIsMissing() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-missing-internal.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.MissingPaymentService"
+            """);
+
+        Path markerSource = writeSource("MarkerMissingService.java", """
+            package com.example.app;
+
+            public class MarkerMissingService {
+            }
+            """);
+
+        CompilationResult result = compile(yamlFile, List.of(markerSource));
+        assertFalse(result.success(), "Expected missing YAML internal service class to fail");
+        assertTrue(result.errorSummary().contains("not found for step 'pay'"), result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenServiceDoesNotImplementSupportedContract() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-bad-internal-shape.yaml");
         Files.writeString(yamlFile, """
             appName: "Test App"
             basePackage: "com.example"
@@ -201,26 +267,21 @@ class YamlDrivenStepGenerationTest {
                 service: "com.example.app.PaymentService"
             """);
 
-        Path triggerSource = writeSource("TriggerStep2.java", """
-            package com.example.app;
-
-            import org.pipelineframework.annotation.PipelineStep;
-
-            @PipelineStep(inputType = String.class, outputType = String.class)
-            public class TriggerStep2 {
-            }
-            """);
-        Path nonAnnotatedService = writeSource("PaymentService.java", """
+        Path nonService = writeSource("PaymentService.java", """
             package com.example.app;
 
             public class PaymentService {
+                public String process(String input) {
+                    return input;
+                }
             }
             """);
 
-        CompilationResult result = compile(yamlFile, List.of(triggerSource, nonAnnotatedService));
-        assertFalse(result.success(), "Expected failure when YAML internal service lacks @PipelineStep");
-        String errors = result.errorSummary().toLowerCase(Locale.ROOT);
-        assertTrue(errors.contains("must be annotated with @pipelinestep"), result.errorSummary());
+        CompilationResult result = compile(yamlFile, List.of(nonService));
+        assertFalse(result.success(), "Expected unsupported internal service contract to fail");
+        assertTrue(
+            result.errorSummary().contains("must implement exactly one supported service interface"),
+            result.errorSummary());
     }
 
     @Test
@@ -244,10 +305,8 @@ class YamlDrivenStepGenerationTest {
             package com.example.app;
 
             import io.smallrye.mutiny.Uni;
-            import org.pipelineframework.annotation.PipelineStep;
             import org.pipelineframework.service.ReactiveService;
 
-            @PipelineStep
             public class PaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
                 @Override
                 public Uni<PaymentStatus> process(PaymentRecord input) {
@@ -340,10 +399,8 @@ class YamlDrivenStepGenerationTest {
             package com.example.app;
 
             import io.smallrye.mutiny.Uni;
-            import org.pipelineframework.annotation.PipelineStep;
             import org.pipelineframework.service.ReactiveService;
 
-            @PipelineStep
             public class PaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
                 @Override
                 public Uni<PaymentStatus> process(PaymentRecord input) {
@@ -392,10 +449,8 @@ class YamlDrivenStepGenerationTest {
             package com.example.app;
 
             import io.smallrye.mutiny.Uni;
-            import org.pipelineframework.annotation.PipelineStep;
             import org.pipelineframework.service.ReactiveService;
 
-            @PipelineStep
             public class PaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
                 @Override
                 public Uni<PaymentStatus> process(PaymentRecord input) {
@@ -453,6 +508,109 @@ class YamlDrivenStepGenerationTest {
         assertTrue(
             result.errorSummary().contains("must declare Mapper<"),
             "Expected mapper mismatch diagnostic: " + result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenYamlTypesConflictWithServiceContract() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-bad-type.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+            import org.pipelineframework.service.ReactiveService;
+
+            public class PaymentService implements ReactiveService<WrongRecord, PaymentStatus> {
+                @Override
+                public Uni<PaymentStatus> process(WrongRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path wrongRecord = writeSource("WrongRecord.java", """
+            package com.example.app;
+
+            public class WrongRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path uniStub = writeUniStub();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, wrongRecord, paymentStatus, uniStub));
+        assertFalse(result.success(), "Expected YAML/code type mismatch to fail");
+        assertTrue(
+            result.errorSummary().contains("declares input type 'com.example.app.PaymentRecord' in YAML"),
+            "Expected YAML/code type mismatch diagnostic: " + result.errorSummary());
+    }
+
+    @Test
+    void warnsWhenYamlOverridesDeprecatedPipelineStepMetadata() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-annotation-secondary.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+            import org.pipelineframework.annotation.PipelineStep;
+            import org.pipelineframework.service.ReactiveService;
+
+            @PipelineStep(inputType = String.class, outputType = String.class)
+            public class PaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
+                @Override
+                public Uni<PaymentStatus> process(PaymentRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path uniStub = writeUniStub();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, paymentStatus, uniStub));
+        assertTrue(result.success(), "Expected YAML to override annotation metadata without failing: " + result.errorSummary());
+        String warnings = result.messagesOfKind(Diagnostic.Kind.WARNING);
+        assertTrue(warnings.contains("YAML is authoritative"), "Expected YAML-authoritative warning: " + warnings);
     }
 
     @Test
