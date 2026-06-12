@@ -74,7 +74,10 @@ abstract class RestaurantApprovalSplitWorkerITSupport {
             .statusCode(statusCode);
     }
 
-    protected final void registerAndActivateHostedBundle(int coordinatorPort) throws IOException {
+    protected final void registerAndActivateHostedBundle(
+        int coordinatorPort,
+        String workerProtocol,
+        String workerEndpoint) throws IOException {
         Path releaseJar = locateReleaseArtifact();
         Map<String, Object> contract = readPipelineContract(releaseJar);
         String contractVersion = String.valueOf(contract.get("contractVersion"));
@@ -105,6 +108,9 @@ abstract class RestaurantApprovalSplitWorkerITSupport {
             .jsonPath();
         String releaseVersion = registered.getString("releaseVersion");
         assertNotNull(releaseVersion, "registered release should expose releaseVersion");
+        String registeredContractVersion = registered.getString("contractVersion");
+        String primaryArtifactId = registered.getString("primaryArtifactId");
+        String primaryArtifactDigest = registered.getString("primaryArtifactDigest");
 
         given()
             .baseUri("http://localhost")
@@ -116,6 +122,24 @@ abstract class RestaurantApprovalSplitWorkerITSupport {
                 TENANT_ID,
                 PIPELINE_ID,
                 releaseVersion)
+            .then()
+            .statusCode(200);
+
+        given()
+            .baseUri("http://localhost")
+            .port(coordinatorPort)
+            .header("Authorization", "Bearer " + CONTROL_PLANE_ADMIN_TOKEN)
+            .contentType(ContentType.JSON)
+            .body(Map.of(
+                "workerId", workerProtocol + "-worker",
+                "contractVersion", registeredContractVersion,
+                "releaseVersion", releaseVersion,
+                "protocol", workerProtocol,
+                "endpoint", workerEndpoint,
+                "artifactId", primaryArtifactId,
+                "artifactDigest", primaryArtifactDigest))
+            .when()
+            .post("/tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/workers/register", TENANT_ID, PIPELINE_ID)
             .then()
             .statusCode(200);
     }

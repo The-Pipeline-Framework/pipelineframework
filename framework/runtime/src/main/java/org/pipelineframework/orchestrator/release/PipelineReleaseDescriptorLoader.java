@@ -1,6 +1,5 @@
 package org.pipelineframework.orchestrator.release;
 
-import org.pipelineframework.orchestrator.release.PipelineReleaseDescriptor;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;

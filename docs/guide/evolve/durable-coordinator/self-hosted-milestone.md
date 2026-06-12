@@ -16,18 +16,19 @@ The first reference is `examples/restaurant-approval/self-host`, which runs one 
 | Await pending query and completion | present |
 | Accepted/declined terminal results | present |
 | Failure/DLQ incident walkthrough | present in `restaurant-approval/self-host` |
+| Single-execution operator re-drive | present for terminal `DLQ` and explicit `FAILED` executions |
 | Operator walkthrough | present in `restaurant-approval/self-host` |
 | Production-ish deployment recipe | present in [Self-Hosted Deployment](/guide/evolve/durable-coordinator/self-hosted-deployment) |
 | Durable release metadata | Dynamo registry with immutable release records and append-only activation events |
+| Shared/replicated artifact storage | local filesystem or S3-compatible blob store for coordinator-managed artifacts; OCI/Maven-style repositories remain preferred for native artifact forms |
+| Minimal worker lifecycle | registration, heartbeat, drain, stale detection, and submit-time healthy-worker gate |
 | Kafka await over stream | covered separately by `csv-payments` |
 
 ## Remaining Gap
 
 | Gap | Why it matters |
 | --- | --- |
-| Built-in DLQ replay | current self-host incident flow shows status, terminal error details, and DLQ publication, but re-drive remains application-owned |
-| Shared/replicated artifact storage | Dynamo release metadata is durable, but local artifact storage remains deployment-owned |
+| Bulk DLQ replay campaigns | single-execution re-drive exists, but there is no DLQ-message consumer or batch replay surface |
 | Append-only execution/await stores | existing Dynamo execution and await stores still use conditional updates for leases and state transitions |
-| Worker lifecycle | healthy, stale, draining, and unavailable states should be added only when self-host workflows require them |
 
-The `COMPUTE` self-host path is now credible for local adoption and operator walkthroughs. The main remaining HA gap is not the release metadata model; it is making the rest of the coordinator state, worker lifecycle, and artifact availability operationally credible across multiple coordinator instances.
+The `COMPUTE` self-host path is now credible for local adoption and operator walkthroughs. The main remaining HA gap is not the release metadata model, the minimum worker lifecycle gate, or single-execution re-drive; it is making execution/await state fully append-only and deciding whether bulk replay belongs in the framework or in operator/application runbooks.

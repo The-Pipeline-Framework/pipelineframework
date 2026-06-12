@@ -354,7 +354,7 @@ class HostedPipelineControlPlaneResourceTest {
         PipelineReleaseRecord release = releaseRecord();
         when(releaseRegistry.active("tenant-1", "org.example.restaurant"))
             .thenReturn(Uni.createFrom().item(Optional.of(release)));
-        doThrow(new IllegalStateException("Stored bundle artifact is missing or unreadable"))
+        doThrow(new IllegalStateException("Stored release artifact is missing or unreadable"))
             .when(releaseRegistrar).verify(release);
         HostedExecutionSubmitRequest request = new HostedExecutionSubmitRequest(
             "org.example.restaurant",

@@ -5,12 +5,12 @@ import org.pipelineframework.orchestrator.worker.PipelineWorkerAvailabilityResul
 import io.smallrye.mutiny.Uni;
 
 /**
- * Checks whether the selected transition worker can execute a pinned bundle.
+ * Checks whether the selected transition worker can execute a pinned release.
  */
 public interface PipelineWorkerAvailability {
 
     /**
-     * Checks selected worker availability for a hosted bundle.
+     * Checks selected worker availability for a hosted release.
      *
      * @param request availability request
      * @return availability result

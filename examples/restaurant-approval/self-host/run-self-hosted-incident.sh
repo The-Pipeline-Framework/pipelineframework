@@ -85,6 +85,7 @@ python3 "${SCRIPT_DIR}/demo-client.py" run-incident \
   --pipeline-id "${TPF_PIPELINE_ID}" \
   --await-step-id "${TPF_AWAIT_STEP_ID}" \
   --control-plane-token "${TPF_CONTROL_PLANE_TOKEN}" \
+  --admin-token "${TPF_ADMIN_TOKEN}" \
   --log-file "${TPF_LOG_DIR}/coordinator.log"
 
 if [[ "${CI_MODE}" == "true" ]]; then

@@ -11,6 +11,7 @@ import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
+import org.pipelineframework.orchestrator.ExecutionRedriveResult;
 import org.pipelineframework.orchestrator.PipelineControlPlane;
 import org.pipelineframework.orchestrator.PipelineTransitionWorker;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
@@ -76,6 +77,16 @@ public class LocalPipelineControlPlane implements PipelineControlPlane {
     @Override
     public Uni<Object> getExecutionResultPayload(String tenantId, String executionId) {
         return queueAsyncCoordinator.getExecutionResultPayload(tenantId, executionId);
+    }
+
+    @Override
+    public Uni<ExecutionRedriveResult> redriveExecution(
+        String tenantId,
+        String executionId,
+        Long expectedVersion,
+        boolean allowFailed,
+        String reason) {
+        return queueAsyncCoordinator.redriveExecution(tenantId, executionId, expectedVersion, allowFailed, reason);
     }
 
     @Override

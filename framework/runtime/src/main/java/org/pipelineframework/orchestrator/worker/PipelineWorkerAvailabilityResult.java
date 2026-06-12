@@ -6,9 +6,9 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Selected worker availability for a pinned bundle.
+ * Selected worker availability for a pinned release.
  *
- * @param available true when the worker can execute the requested bundle
+ * @param available true when the worker can execute the requested release
  * @param providerName selected worker provider
  * @param capability worker capability when available
  * @param message diagnostic message

@@ -19,7 +19,7 @@ The self-host release path has three runtime pieces:
 
 1. `PipelineReleaseRegistry` stores release records and activation history for each tenant and pipeline.
 2. `PipelineReleaseRegistrar` validates `pipeline-release.json` and verifies artifact identity.
-3. `PipelineReleaseArtifactStore` stores local executable artifacts in a coordinator-owned content-addressed store where applicable.
+3. `PipelineReleaseArtifactStore` stores executable artifacts in a coordinator-owned content-addressed store where applicable.
 
 Hosted-style execution submission requires `pipelineId`. The coordinator resolves the active release, verifies the stored artifact, verifies worker availability, and stores `pipelineId + contractVersion + releaseVersion` on the `ExecutionRecord`.
 
@@ -29,4 +29,4 @@ Existing executions, retries, await resumes, and result reads stay pinned to the
 
 Workers must already host matching code. The coordinator validates, activates, pins, and dispatches releases; it does not dynamically load registered artifacts into a worker runtime.
 
-Local artifact storage is still local to the coordinator host. Multi-host artifact replication remains deployment-owned until a shared artifact-store provider exists.
+Local artifact storage is still local to the coordinator host. Multi-coordinator self-host deployments should use the S3-compatible artifact store only for coordinator-managed blob artifacts. Container images should stay in OCI registries and be referenced by digest from the release descriptor.

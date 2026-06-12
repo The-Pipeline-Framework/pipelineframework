@@ -71,6 +71,7 @@ class ExecutionStateStoreTest {
         assertNotNull(store.markAwaitItemContinuationsCompleted("tenant1", "exec1", "unit1", 2, "input", now));
         assertNotNull(store.scheduleRetry("tenant1", "exec1", 1L, 2, now + 5000, "key1", "Error", "msg", now));
         assertNotNull(store.markTerminalFailure("tenant1", "exec1", 1L, ExecutionStatus.FAILED, "key1", "Error", "msg", now));
+        assertNotNull(store.redriveTerminalExecution("tenant1", "exec1", 1L, true, "redrive", now));
         assertNotNull(store.findDueExecutions(now, 10));
     }
 
@@ -134,6 +135,13 @@ class ExecutionStateStoreTest {
         public Uni<Optional<ExecutionRecord<Object, Object>>> markTerminalFailure(
             String tenantId, String executionId, long expectedVersion, ExecutionStatus finalStatus,
             String transitionKey, String errorCode, String errorMessage, long nowEpochMs) {
+            return Uni.createFrom().item(Optional.of(createTestRecord()));
+        }
+
+        @Override
+        public Uni<Optional<ExecutionRecord<Object, Object>>> redriveTerminalExecution(
+            String tenantId, String executionId, long expectedVersion, boolean allowFailed,
+            String transitionKey, long nowEpochMs) {
             return Uni.createFrom().item(Optional.of(createTestRecord()));
         }
 

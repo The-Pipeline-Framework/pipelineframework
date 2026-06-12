@@ -225,6 +225,25 @@ public interface ExecutionStateStore {
         long nowEpochMs);
 
     /**
+     * Re-queues a terminal execution for operator-controlled re-drive.
+     *
+     * @param tenantId tenant identifier
+     * @param executionId execution identifier
+     * @param expectedVersion expected record version
+     * @param allowFailed whether FAILED executions can be re-driven in addition to DLQ
+     * @param transitionKey operator re-drive transition marker
+     * @param nowEpochMs current timestamp
+     * @return updated queued execution when the transition wins optimistic concurrency
+     */
+    Uni<Optional<ExecutionRecord<Object, Object>>> redriveTerminalExecution(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        boolean allowFailed,
+        String transitionKey,
+        long nowEpochMs);
+
+    /**
      * Finds executions due for dispatch.
      *
      * @param nowEpochMs current timestamp

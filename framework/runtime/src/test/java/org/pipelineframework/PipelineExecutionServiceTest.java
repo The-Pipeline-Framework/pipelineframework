@@ -129,12 +129,12 @@ class PipelineExecutionServiceTest {
             "application/tpf-transition+json",
             "{not-json");
         when(releaseIdentityResolver.validateCommandIdentity(command, null))
-            .thenReturn(Optional.of("bundle mismatch"));
+            .thenReturn(Optional.of("identity mismatch sentinel"));
 
         TransitionResultEnvelope result = service.executeTransition(command).await().indefinitely();
 
         assertEquals(TransitionWorkerOutcome.FAILED, result.outcome());
-        assertTrue(result.failure().message().contains("bundle mismatch"));
+        assertTrue(result.failure().message().contains("identity mismatch sentinel"));
     }
 
     @Test
@@ -156,7 +156,7 @@ class PipelineExecutionServiceTest {
         TransitionResultEnvelope result = service.executeTransition(command).await().indefinitely();
 
         assertEquals(TransitionWorkerOutcome.FAILED, result.outcome());
-        assertFalse(result.failure().message().contains("bundle mismatch"));
+        assertFalse(result.failure().message().contains("identity mismatch sentinel"));
         verify(releaseIdentityResolver, never()).validateCommandIdentity(command, null);
     }
 
@@ -177,11 +177,11 @@ class PipelineExecutionServiceTest {
             "application/tpf-transition+json",
             "\"input\"");
         when(releaseIdentityResolver.validateCommandIdentity(command, null))
-            .thenReturn(Optional.of("bundle mismatch"));
+            .thenReturn(Optional.of("identity mismatch sentinel"));
 
         TransitionResultEnvelope result = service.executePortableTransition(command).await().indefinitely();
 
         assertEquals(TransitionWorkerOutcome.FAILED, result.outcome());
-        assertTrue(result.failure().message().contains("bundle mismatch"));
+        assertTrue(result.failure().message().contains("identity mismatch sentinel"));
     }
 }

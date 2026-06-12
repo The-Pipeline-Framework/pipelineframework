@@ -29,7 +29,7 @@ class RestaurantApprovalHostedCoordinatorRestWorkerIT extends RestaurantApproval
             "pipeline.orchestrator.worker.rest.request-timeout", "PT2M",
             "pipeline.orchestrator.strict-startup", "false"));
 
-        registerAndActivateHostedBundle(coordinatorPort);
+        registerAndActivateHostedBundle(coordinatorPort, "rest", "http://localhost:" + workerPort);
         assertHostedAcceptedAndDeclinedFlows(coordinatorPort);
     }
 
@@ -53,7 +53,7 @@ class RestaurantApprovalHostedCoordinatorRestWorkerIT extends RestaurantApproval
             "pipeline.orchestrator.worker.rest.request-timeout", "PT2M",
             "pipeline.orchestrator.strict-startup", "false"));
 
-        registerAndActivateHostedBundle(coordinatorPort);
+        registerAndActivateHostedBundle(coordinatorPort, "rest", "http://localhost:" + workerPort);
         assertHostedSubmitStatus(coordinatorPort, 503);
     }
 }

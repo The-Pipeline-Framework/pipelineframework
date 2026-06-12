@@ -26,7 +26,7 @@ public class InMemoryPipelineReleaseRegistry implements PipelineReleaseRegistry 
                 String key = key(record.tenantId(), record.pipelineId(), record.releaseVersion());
                 PipelineReleaseRecord existing = releasesByKey.get(key);
                 if (existing != null) {
-                    if (!sameMetadata(existing, record)) {
+                    if (!PipelineReleaseRecordMetadata.sameImmutableMetadata(existing, record)) {
                         throw new IllegalStateException(
                             "Release version is already registered with different metadata");
                     }
@@ -105,10 +105,4 @@ public class InMemoryPipelineReleaseRegistry implements PipelineReleaseRegistry 
         return tenantId + "\u001f" + pipelineId + "\u001f" + releaseVersion;
     }
 
-    private static boolean sameMetadata(PipelineReleaseRecord left, PipelineReleaseRecord right) {
-        return left.contractVersion().equals(right.contractVersion())
-            && left.primaryArtifactPath().equals(right.primaryArtifactPath())
-            && left.primaryArtifactSizeBytes() == right.primaryArtifactSizeBytes()
-            && left.primaryArtifactChecksum().equals(right.primaryArtifactChecksum());
-    }
 }

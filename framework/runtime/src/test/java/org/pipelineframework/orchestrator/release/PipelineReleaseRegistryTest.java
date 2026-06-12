@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator.release;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -12,7 +13,9 @@ import static org.mockito.Mockito.when;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.net.URI;
 import java.security.MessageDigest;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -59,7 +62,7 @@ class PipelineReleaseRegistryTest {
         assertEquals("sha256:contract", record.contractVersion());
         assertEquals("restaurant", record.primaryArtifactId());
         assertEquals("sha256:" + sha256(jar), record.primaryArtifactDigest());
-        assertTrue(Files.isRegularFile(Path.of(record.primaryArtifactPath())));
+        assertTrue(Files.isRegularFile(Path.of(URI.create(record.primaryArtifactUri()))));
         registrar.verify(record);
     }
 
@@ -94,6 +97,45 @@ class PipelineReleaseRegistryTest {
         assertEquals("sha256:contract", active.releaseVersion());
         assertEquals(PipelineReleaseStatus.ACTIVE, active.status());
         assertEquals(2000L, active.activatedAtEpochMs());
+    }
+
+    @Test
+    void localArtifactStoreRejectsRemoteArtifactUri() {
+        LocalPipelineReleaseArtifactStore store = new LocalPipelineReleaseArtifactStore(tempDir);
+        PipelineReleaseRecord record = withArtifactUri(releaseRecord(), "s3://bucket/releases/app.jar");
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> store.verify(record));
+
+        assertTrue(error.getMessage().contains("Unsupported release artifact URI scheme"));
+    }
+
+    @Test
+    void memoryAndFileRegistriesRejectDuplicateReleaseWithDifferentImmutableMetadata() {
+        PipelineReleaseRecord existing = releaseRecord();
+        PipelineReleaseRecord conflicting = new PipelineReleaseRecord(
+            existing.tenantId(),
+            existing.pipelineId(),
+            existing.contractVersion(),
+            existing.releaseVersion(),
+            existing.status(),
+            existing.descriptor(),
+            existing.primaryArtifactId(),
+            "sha256:different-artifact",
+            existing.primaryArtifactUri(),
+            existing.primaryArtifactSizeBytes(),
+            existing.primaryArtifactChecksum(),
+            existing.contract(),
+            existing.createdAtEpochMs(),
+            existing.updatedAtEpochMs(),
+            existing.activatedAtEpochMs());
+
+        PipelineReleaseRegistry memory = new InMemoryPipelineReleaseRegistry();
+        memory.register(existing).await().indefinitely();
+        assertThrows(IllegalStateException.class, () -> memory.register(conflicting).await().indefinitely());
+
+        PipelineReleaseRegistry file = new FileBackedPipelineReleaseRegistry(tempDir.resolve("file-registry"));
+        file.register(existing).await().indefinitely();
+        assertThrows(IllegalStateException.class, () -> file.register(conflicting).await().indefinitely());
     }
 
     @Test
@@ -133,6 +175,23 @@ class PipelineReleaseRegistryTest {
     }
 
     @Test
+    void dynamoRegistryReadsLegacyPrimaryArtifactPathRows() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineReleaseRecord record = releaseRecord();
+        PipelineReleaseRegistry registry = new DynamoPipelineReleaseRegistry(client, dynamoConfig());
+        when(client.query(any(QueryRequest.class)))
+            .thenReturn(QueryResponse.builder().items(List.of()).build());
+        when(client.getItem(any(GetItemRequest.class)))
+            .thenReturn(GetItemResponse.builder().item(legacyDynamoReleaseItem(record)).build());
+
+        PipelineReleaseRecord read = registry.get(record.tenantId(), record.pipelineId(), record.releaseVersion())
+            .await().indefinitely()
+            .orElseThrow();
+
+        assertEquals(record.primaryArtifactUri(), read.primaryArtifactUri());
+    }
+
+    @Test
     void dynamoRegistryRejectsDuplicateRegistrationWithDifferentMetadata() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         PipelineReleaseRecord existing = releaseRecord();
@@ -145,7 +204,7 @@ class PipelineReleaseRegistryTest {
             existing.descriptor(),
             existing.primaryArtifactId(),
             existing.primaryArtifactDigest(),
-            existing.primaryArtifactPath(),
+            existing.primaryArtifactUri(),
             existing.primaryArtifactSizeBytes(),
             "different-checksum",
             existing.contract(),
@@ -218,9 +277,9 @@ class PipelineReleaseRegistryTest {
             .resolve("src/main/java/org/pipelineframework/orchestrator/release/DynamoPipelineReleaseRegistry.java");
         String content = Files.readString(source);
 
-        assertTrue(!content.contains("UpdateItemRequest"), "Dynamo release registry must not use UpdateItemRequest");
-        assertTrue(!content.contains(".updateItem("), "Dynamo release registry must not call updateItem");
-        assertTrue(!content.contains("return null"), "Dynamo release registry must not return null");
+        assertFalse(content.contains("UpdateItemRequest"), "Dynamo release registry must not use UpdateItemRequest");
+        assertFalse(content.contains(".updateItem("), "Dynamo release registry must not call updateItem");
+        assertFalse(content.contains("return null"), "Dynamo release registry must not return null");
     }
 
     private PipelineReleaseRegistrar registrar() {
@@ -243,13 +302,32 @@ class PipelineReleaseRegistryTest {
             descriptor,
             "restaurant",
             "sha256:artifact",
-            "/tmp/restaurant.jar",
+            Path.of("/tmp/restaurant.jar").toUri().toString(),
             100L,
             "artifact",
             contract,
             1000L,
             1000L,
             0L);
+    }
+
+    private PipelineReleaseRecord withArtifactUri(PipelineReleaseRecord record, String artifactUri) {
+        return new PipelineReleaseRecord(
+            record.tenantId(),
+            record.pipelineId(),
+            record.contractVersion(),
+            record.releaseVersion(),
+            record.status(),
+            record.descriptor(),
+            record.primaryArtifactId(),
+            record.primaryArtifactDigest(),
+            artifactUri,
+            record.primaryArtifactSizeBytes(),
+            record.primaryArtifactChecksum(),
+            record.contract(),
+            record.createdAtEpochMs(),
+            record.updatedAtEpochMs(),
+            record.activatedAtEpochMs());
     }
 
     private PipelineOrchestratorConfig dynamoConfig() {
@@ -273,7 +351,7 @@ class PipelineReleaseRegistryTest {
             Map.entry("release_version", avS(record.releaseVersion())),
             Map.entry("primary_artifact_id", avS(record.primaryArtifactId())),
             Map.entry("primary_artifact_digest", avS(record.primaryArtifactDigest())),
-            Map.entry("primary_artifact_path", avS(record.primaryArtifactPath())),
+            Map.entry("primary_artifact_uri", avS(record.primaryArtifactUri())),
             Map.entry("primary_artifact_size_bytes", avN(record.primaryArtifactSizeBytes())),
             Map.entry("primary_artifact_checksum", avS(record.primaryArtifactChecksum())),
             Map.entry("descriptor_json", avS(writeJson(record.descriptor()))),
@@ -281,6 +359,13 @@ class PipelineReleaseRegistryTest {
             Map.entry("created_at_epoch_ms", avN(record.createdAtEpochMs())),
             Map.entry("updated_at_epoch_ms", avN(record.updatedAtEpochMs())),
             Map.entry("activated_at_epoch_ms", avN(record.activatedAtEpochMs())));
+    }
+
+    private Map<String, AttributeValue> legacyDynamoReleaseItem(PipelineReleaseRecord record) {
+        Map<String, AttributeValue> item = new HashMap<>(dynamoReleaseItem(record));
+        item.remove("primary_artifact_uri");
+        item.put("primary_artifact_path", avS(record.primaryArtifactUri()));
+        return item;
     }
 
     private Map<String, AttributeValue> dynamoActivationItem(PipelineReleaseRecord record, long activatedAtEpochMs) {
