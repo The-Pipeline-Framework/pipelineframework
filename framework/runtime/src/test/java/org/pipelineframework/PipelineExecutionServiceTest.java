@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -142,7 +143,7 @@ class PipelineExecutionServiceTest {
             "tenant-1",
             "exec-6",
             "local-pipeline",
-            "local-bundle",
+            "local-contract",
             0,
             0,
             ExecutionResultShape.SINGLE,
@@ -152,13 +153,11 @@ class PipelineExecutionServiceTest {
             "java.lang.String",
             "application/tpf-transition+json",
             "\"input\"");
-        when(releaseIdentityResolver.validateCommandIdentity(command, null))
-            .thenReturn(Optional.of("bundle mismatch"));
-
         TransitionResultEnvelope result = service.executeTransition(command).await().indefinitely();
 
         assertEquals(TransitionWorkerOutcome.FAILED, result.outcome());
         assertFalse(result.failure().message().contains("bundle mismatch"));
+        verify(releaseIdentityResolver, never()).validateCommandIdentity(command, null);
     }
 
     @Test
@@ -167,7 +166,7 @@ class PipelineExecutionServiceTest {
             "tenant-1",
             "exec-7",
             "local-pipeline",
-            "local-bundle",
+            "local-contract",
             0,
             0,
             ExecutionResultShape.SINGLE,
