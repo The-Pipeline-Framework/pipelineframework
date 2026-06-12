@@ -32,10 +32,6 @@ public class S3PipelineReleaseArtifactStore implements PipelineReleaseArtifactSt
     private final String bucket;
     private final String prefix;
 
-    public S3PipelineReleaseArtifactStore(PipelineOrchestratorConfig config) {
-        this(newClient(config), bucket(config), prefix(config));
-    }
-
     S3PipelineReleaseArtifactStore(S3Client client, String bucket, String prefix) {
         if (client == null) {
             throw new IllegalArgumentException("S3 client is required");
@@ -123,7 +119,7 @@ public class S3PipelineReleaseArtifactStore implements PipelineReleaseArtifactSt
         return prefix.isBlank() ? key : prefix + "/" + key;
     }
 
-    private static S3Client newClient(PipelineOrchestratorConfig config) {
+    static S3Client newClient(PipelineOrchestratorConfig config) {
         PipelineOrchestratorConfig.ReleaseStorageS3Config s3 = s3Config(config);
         var builder = S3Client.builder()
             .httpClientBuilder(UrlConnectionHttpClient.builder())
@@ -139,14 +135,14 @@ public class S3PipelineReleaseArtifactStore implements PipelineReleaseArtifactSt
         return builder.build();
     }
 
-    private static String bucket(PipelineOrchestratorConfig config) {
+    static String bucket(PipelineOrchestratorConfig config) {
         return s3Config(config).bucket()
             .filter(value -> !value.isBlank())
             .orElseThrow(() -> new IllegalStateException(
                 "pipeline.orchestrator.releases.storage.s3.bucket must not be blank"));
     }
 
-    private static String prefix(PipelineOrchestratorConfig config) {
+    static String prefix(PipelineOrchestratorConfig config) {
         return s3Config(config).prefix();
     }
 
