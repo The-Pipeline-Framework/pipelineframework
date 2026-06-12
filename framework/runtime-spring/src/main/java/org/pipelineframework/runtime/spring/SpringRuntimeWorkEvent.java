@@ -16,10 +16,15 @@
 
 package org.pipelineframework.runtime.spring;
 
+import java.util.Objects;
+
 /**
  * Spring application event emitted by the TPF runtime-core work dispatcher.
  *
  * @param work dispatched work payload
  */
 public record SpringRuntimeWorkEvent(Object work) {
+    public SpringRuntimeWorkEvent {
+        Objects.requireNonNull(work, "work must not be null");
+    }
 }

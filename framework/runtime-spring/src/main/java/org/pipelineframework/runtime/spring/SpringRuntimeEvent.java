@@ -23,4 +23,10 @@ package org.pipelineframework.runtime.spring;
  * @param payload event payload
  */
 public record SpringRuntimeEvent(String address, Object payload) {
+    public SpringRuntimeEvent {
+        if (address == null || address.isBlank()) {
+            throw new IllegalArgumentException("Spring runtime event address must not be blank");
+        }
+        address = address.trim();
+    }
 }

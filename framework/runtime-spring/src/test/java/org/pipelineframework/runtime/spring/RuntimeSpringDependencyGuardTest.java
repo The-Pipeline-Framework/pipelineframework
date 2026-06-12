@@ -45,7 +45,7 @@ class RuntimeSpringDependencyGuardTest {
     }
 
     @Test
-    void runtimeSpringDoesNotDependOnQuarkusRuntimeArtifact() throws Exception {
+    void runtimeSpringDoesNotDependOnQuarkusRuntimeArtifact() throws IOException {
         String pom = Files.readString(Path.of("pom.xml"));
 
         assertFalse(pom.contains("<artifactId>pipelineframework</artifactId>"),
