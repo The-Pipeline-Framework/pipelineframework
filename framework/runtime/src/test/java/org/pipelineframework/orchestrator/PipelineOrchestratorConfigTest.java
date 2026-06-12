@@ -485,6 +485,172 @@ class PipelineOrchestratorConfigTest {
         assertEquals(500, config.sweepLimit());
     }
 
+    // --- Release storage provider config (new in this PR) ---
+
+    @Test
+    void releasesStorageProviderDefaultsToLocal() {
+        PipelineOrchestratorConfig config = buildConfig(Map.of());
+
+        assertEquals("local", config.releases().storage().provider());
+    }
+
+    @Test
+    void releasesStorageRootDefaultsToTargetDirectory() {
+        PipelineOrchestratorConfig config = buildConfig(Map.of());
+
+        assertEquals("target/tpf-releases", config.releases().storage().root());
+    }
+
+    @Test
+    void releasesStorageProviderCanBeSetToS3() {
+        PipelineOrchestratorConfig config = buildConfig(
+            Map.of("pipeline.orchestrator.releases.storage.provider", "s3"));
+
+        assertEquals("s3", config.releases().storage().provider());
+    }
+
+    @Test
+    void releasesStorageRootCanBeOverridden() {
+        PipelineOrchestratorConfig config = buildConfig(
+            Map.of("pipeline.orchestrator.releases.storage.root", "/var/lib/tpf/releases"));
+
+        assertEquals("/var/lib/tpf/releases", config.releases().storage().root());
+    }
+
+    @Test
+    void releasesRegistryProviderDefaultsToMemory() {
+        PipelineOrchestratorConfig config = buildConfig(Map.of());
+
+        assertEquals("memory", config.releases().registry().provider());
+    }
+
+    @Test
+    void releasesRegistryProviderCanBeSetToDynamo() {
+        PipelineOrchestratorConfig config = buildConfig(
+            Map.of("pipeline.orchestrator.releases.registry.provider", "dynamo"));
+
+        assertEquals("dynamo", config.releases().registry().provider());
+    }
+
+    // --- S3 storage sub-config defaults ---
+
+    @Test
+    void s3StorageConfigDefaultsToNoBucket() {
+        PipelineOrchestratorConfig config = buildConfig(Map.of());
+
+        assertFalse(config.releases().storage().s3().bucket().isPresent());
+    }
+
+    @Test
+    void s3StorageConfigDefaultPrefix() {
+        PipelineOrchestratorConfig config = buildConfig(Map.of());
+
+        assertEquals("tpf/releases", config.releases().storage().s3().prefix());
+    }
+
+    @Test
+    void s3StorageConfigDefaultNoRegion() {
+        PipelineOrchestratorConfig config = buildConfig(Map.of());
+
+        assertFalse(config.releases().storage().s3().region().isPresent());
+    }
+
+    @Test
+    void s3StorageConfigDefaultNoEndpointOverride() {
+        PipelineOrchestratorConfig config = buildConfig(Map.of());
+
+        assertFalse(config.releases().storage().s3().endpointOverride().isPresent());
+    }
+
+    @Test
+    void s3StorageConfigDefaultPathStyleAccessFalse() {
+        PipelineOrchestratorConfig config = buildConfig(Map.of());
+
+        assertFalse(config.releases().storage().s3().pathStyleAccess());
+    }
+
+    // --- S3 storage sub-config overrides ---
+
+    @Test
+    void s3StorageConfigBucketCanBeSet() {
+        PipelineOrchestratorConfig config = buildConfig(
+            Map.of("pipeline.orchestrator.releases.storage.s3.bucket", "tpf-release-artifacts"));
+
+        Optional<String> bucket = config.releases().storage().s3().bucket();
+        assertTrue(bucket.isPresent());
+        assertEquals("tpf-release-artifacts", bucket.get());
+    }
+
+    @Test
+    void s3StorageConfigPrefixCanBeOverridden() {
+        PipelineOrchestratorConfig config = buildConfig(
+            Map.of("pipeline.orchestrator.releases.storage.s3.prefix", "custom/prefix"));
+
+        assertEquals("custom/prefix", config.releases().storage().s3().prefix());
+    }
+
+    @Test
+    void s3StorageConfigRegionCanBeSet() {
+        PipelineOrchestratorConfig config = buildConfig(
+            Map.of("pipeline.orchestrator.releases.storage.s3.region", "eu-west-1"));
+
+        Optional<String> region = config.releases().storage().s3().region();
+        assertTrue(region.isPresent());
+        assertEquals("eu-west-1", region.get());
+    }
+
+    @Test
+    void s3StorageConfigEndpointOverrideCanBeSetForMinIO() {
+        PipelineOrchestratorConfig config = buildConfig(
+            Map.of("pipeline.orchestrator.releases.storage.s3.endpoint-override", "http://localhost:9000"));
+
+        Optional<String> endpoint = config.releases().storage().s3().endpointOverride();
+        assertTrue(endpoint.isPresent());
+        assertEquals("http://localhost:9000", endpoint.get());
+    }
+
+    @Test
+    void s3StorageConfigPathStyleAccessCanBeEnabled() {
+        PipelineOrchestratorConfig config = buildConfig(
+            Map.of("pipeline.orchestrator.releases.storage.s3.path-style-access", "true"));
+
+        assertTrue(config.releases().storage().s3().pathStyleAccess());
+    }
+
+    @Test
+    void s3StorageConfigSupportsMultiCoordinatorDeployment() {
+        Map<String, String> props = new HashMap<>();
+        props.put("pipeline.orchestrator.releases.storage.provider", "s3");
+        props.put("pipeline.orchestrator.releases.storage.s3.bucket", "tpf-release-artifacts");
+        props.put("pipeline.orchestrator.releases.storage.s3.prefix", "tpf/releases");
+        props.put("pipeline.orchestrator.releases.storage.s3.region", "eu-west-1");
+        props.put("pipeline.orchestrator.releases.registry.provider", "dynamo");
+
+        PipelineOrchestratorConfig config = buildConfig(props);
+
+        assertEquals("s3", config.releases().storage().provider());
+        assertEquals("tpf-release-artifacts", config.releases().storage().s3().bucket().orElseThrow());
+        assertEquals("tpf/releases", config.releases().storage().s3().prefix());
+        assertEquals("eu-west-1", config.releases().storage().s3().region().orElseThrow());
+        assertEquals("dynamo", config.releases().registry().provider());
+    }
+
+    @Test
+    void s3StorageConfigSupportsLocalStackDevelopment() {
+        Map<String, String> props = new HashMap<>();
+        props.put("pipeline.orchestrator.releases.storage.provider", "s3");
+        props.put("pipeline.orchestrator.releases.storage.s3.bucket", "local-releases");
+        props.put("pipeline.orchestrator.releases.storage.s3.endpoint-override", "http://localhost:4566");
+        props.put("pipeline.orchestrator.releases.storage.s3.path-style-access", "true");
+
+        PipelineOrchestratorConfig config = buildConfig(props);
+
+        assertEquals("s3", config.releases().storage().provider());
+        assertEquals("local-releases", config.releases().storage().s3().bucket().orElseThrow());
+        assertEquals("http://localhost:4566", config.releases().storage().s3().endpointOverride().orElseThrow());
+        assertTrue(config.releases().storage().s3().pathStyleAccess());
+    }
+
     private PipelineOrchestratorConfig buildConfig(Map<String, String> properties) {
         SmallRyeConfigBuilder builder = new SmallRyeConfigBuilder();
         builder.withMapping(PipelineOrchestratorConfig.class);
