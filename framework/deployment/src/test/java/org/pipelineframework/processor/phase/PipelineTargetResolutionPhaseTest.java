@@ -77,6 +77,21 @@ class PipelineTargetResolutionPhaseTest {
     }
 
     @Test
+    void springProfileResolvesLocalServerStepToLocalClientStep() throws Exception {
+        PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        context.setRendererProfile("spring");
+        context.setTransportMode(PipelineTransport.LOCAL);
+        context.setStepModels(List.of(step("SpringLocalStep", DeploymentRole.PIPELINE_SERVER)));
+
+        phase.execute(context);
+
+        PipelineStepModel updated = context.getStepModels().getFirst();
+        assertEquals(Set.of(GenerationTarget.LOCAL_CLIENT_STEP), updated.enabledTargets());
+        assertEquals(Set.of(GenerationTarget.LOCAL_CLIENT_STEP), context.getResolvedTargets());
+    }
+
+    @Test
     void defaultsToGrpcWhenTransportModeIsNull() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(null, null);
