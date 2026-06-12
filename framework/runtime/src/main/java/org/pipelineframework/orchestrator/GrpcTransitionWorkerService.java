@@ -39,7 +39,7 @@ public class GrpcTransitionWorkerService
     PipelineExecutionService executionService;
 
     @Inject
-    PipelineBundleIdentityResolver identityResolver;
+    PipelineReleaseIdentityResolver identityResolver;
 
     @Inject
     ControlPlaneSecretResolver secretResolver;
@@ -181,8 +181,8 @@ public class GrpcTransitionWorkerService
             identityResolver.pipelineId(orchestratorConfig),
             identityResolver.contractVersion(),
             identityResolver.releaseVersion(orchestratorConfig),
-            identityResolver.bundleVersionId(orchestratorConfig),
-            identityResolver.bundleHash(),
+            identityResolver.artifactId(orchestratorConfig),
+            identityResolver.artifactDigest(orchestratorConfig),
             List.of(TransitionPayloadEncoding.JSON),
             capabilities.transitionWorkerProtocols());
     }

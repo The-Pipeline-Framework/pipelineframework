@@ -9,8 +9,8 @@ import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.orchestrator.GrpcPipelineTransitionWorker;
 import org.pipelineframework.orchestrator.PipelineBundleCapabilities;
-import org.pipelineframework.orchestrator.PipelineBundleIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.PipelineReleaseIdentityResolver;
 import org.pipelineframework.orchestrator.RestPipelineTransitionWorker;
 import org.pipelineframework.orchestrator.TransitionPayloadEncoding;
 
@@ -26,7 +26,7 @@ public class DefaultPipelineWorkerAvailability implements PipelineWorkerAvailabi
     PipelineOrchestratorConfig orchestratorConfig;
 
     @Inject
-    PipelineBundleIdentityResolver identityResolver;
+    PipelineReleaseIdentityResolver identityResolver;
 
     @Inject
     RestPipelineTransitionWorker restWorker;
@@ -67,14 +67,12 @@ public class DefaultPipelineWorkerAvailability implements PipelineWorkerAvailabi
         var sqs = orchestratorConfig.workerSqs();
         if (sqs.pipelineId().filter(value -> !value.isBlank()).isEmpty()
             || sqs.contractVersion().filter(value -> !value.isBlank()).isEmpty()
-            || sqs.releaseVersion().filter(value -> !value.isBlank()).isEmpty()
-            || sqs.bundleVersionId().filter(value -> !value.isBlank()).isEmpty()) {
+            || sqs.releaseVersion().filter(value -> !value.isBlank()).isEmpty()) {
             return PipelineWorkerAvailabilityResult.unavailable(
                 "sqs",
-                "SQS worker bundle availability requires pipeline.orchestrator.worker.sqs.pipeline-id "
+                "SQS worker release availability requires pipeline.orchestrator.worker.sqs.pipeline-id "
                     + "pipeline.orchestrator.worker.sqs.contract-version, "
-                    + "pipeline.orchestrator.worker.sqs.release-version, "
-                    + "and pipeline.orchestrator.worker.sqs.bundle-version-id");
+                    + "and pipeline.orchestrator.worker.sqs.release-version");
         }
         PipelineWorkerCapability capability = new PipelineWorkerCapability(
             PipelineWorkerCapability.PROTOCOL_VERSION,
@@ -82,8 +80,8 @@ public class DefaultPipelineWorkerAvailability implements PipelineWorkerAvailabi
             sqs.pipelineId().orElseThrow().trim(),
             sqs.contractVersion().orElseThrow().trim(),
             sqs.releaseVersion().orElseThrow().trim(),
-            sqs.bundleVersionId().orElseThrow().trim(),
-            "",
+            sqs.artifactId().orElse("").trim(),
+            sqs.artifactDigest().orElse("").trim(),
             List.of(TransitionPayloadEncoding.JSON),
             List.of("sqs"));
         return match("sqs", capability, request);
@@ -97,8 +95,8 @@ public class DefaultPipelineWorkerAvailability implements PipelineWorkerAvailabi
             identityResolver.pipelineId(orchestratorConfig),
             identityResolver.contractVersion(),
             identityResolver.releaseVersion(orchestratorConfig),
-            identityResolver.bundleVersionId(orchestratorConfig),
-            identityResolver.bundleHash(),
+            identityResolver.artifactId(orchestratorConfig),
+            identityResolver.artifactDigest(orchestratorConfig),
             List.of(TransitionPayloadEncoding.JSON),
             capabilities.transitionWorkerProtocols());
     }
@@ -114,26 +112,38 @@ public class DefaultPipelineWorkerAvailability implements PipelineWorkerAvailabi
         }
         if (!request.pipelineId().equals(capability.pipelineId())
             || !request.contractVersion().equals(capability.contractVersion())
-            || !request.releaseVersion().equals(capability.releaseVersion())
-            || !request.bundleVersionId().equals(capability.bundleVersionId())) {
+            || !request.releaseVersion().equals(capability.releaseVersion())) {
             return PipelineWorkerAvailabilityResult.unavailable(
                 providerName,
                 "Worker hosts pipelineId=" + capability.pipelineId()
                     + ", contractVersion=" + capability.contractVersion()
                     + ", releaseVersion=" + capability.releaseVersion()
-                    + ", bundleVersionId=" + capability.bundleVersionId()
                     + " but active release is pipelineId=" + request.pipelineId()
                     + ", contractVersion=" + request.contractVersion()
-                    + ", releaseVersion=" + request.releaseVersion()
-                    + ", bundleVersionId=" + request.bundleVersionId());
+                    + ", releaseVersion=" + request.releaseVersion());
+        }
+        if (!request.artifactDigest().isBlank()
+            && !capability.artifactDigest().isBlank()
+            && !request.artifactDigest().equals(capability.artifactDigest())) {
+            return PipelineWorkerAvailabilityResult.unavailable(
+                providerName,
+                "Worker artifact digest " + capability.artifactDigest()
+                    + " does not match active release artifact digest " + request.artifactDigest());
+        }
+        if (!request.artifactId().isBlank()
+            && !capability.artifactId().isBlank()
+            && !request.artifactId().equals(capability.artifactId())) {
+            return PipelineWorkerAvailabilityResult.unavailable(
+                providerName,
+                "Worker artifact id " + capability.artifactId()
+                    + " does not match active release artifact id " + request.artifactId());
         }
         LOG.debugf(
-            "Selected %s worker is available for tenant=%s pipelineId=%s releaseVersion=%s bundleVersionId=%s",
+            "Selected %s worker is available for tenant=%s pipelineId=%s releaseVersion=%s",
             providerName,
             request.tenantId(),
             request.pipelineId(),
-            request.releaseVersion(),
-            request.bundleVersionId());
+            request.releaseVersion());
         return PipelineWorkerAvailabilityResult.available(providerName, capability);
     }
 }

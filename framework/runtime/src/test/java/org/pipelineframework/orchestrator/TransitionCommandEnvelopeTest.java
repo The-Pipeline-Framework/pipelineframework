@@ -26,7 +26,8 @@ class TransitionCommandEnvelopeTest {
         TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
             command,
             "pipeline-1",
-            "bundle-1",
+            "contract-1",
+            "release-1",
             "trace-1",
             payloadCodec.encode(command.inputPayload()));
         TransitionWorkerCommand decoded = envelope.toCommand(payloadCodec);
@@ -34,7 +35,8 @@ class TransitionCommandEnvelopeTest {
         assertEquals("tenant-1", envelope.tenantId());
         assertEquals("exec-1", envelope.executionId());
         assertEquals("pipeline-1", envelope.pipelineId());
-        assertEquals("bundle-1", envelope.bundleVersionId());
+        assertEquals("contract-1", envelope.contractVersion());
+        assertEquals("release-1", envelope.releaseVersion());
         assertEquals("trace-1", envelope.traceId());
         ExecutionInputSnapshot snapshot = assertInstanceOf(ExecutionInputSnapshot.class, decoded.inputPayload());
         SamplePayload decodedPayload = assertInstanceOf(SamplePayload.class, snapshot.payload());

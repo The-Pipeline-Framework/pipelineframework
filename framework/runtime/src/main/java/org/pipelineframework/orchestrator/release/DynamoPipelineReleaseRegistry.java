@@ -12,7 +12,6 @@ import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.pipeline.PipelineJson;
-import org.pipelineframework.orchestrator.PipelineBundleManifest;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
@@ -47,13 +46,13 @@ public class DynamoPipelineReleaseRegistry implements PipelineReleaseRegistry {
     private static final String PIPELINE_ID = "pipeline_id";
     private static final String CONTRACT_VERSION = "contract_version";
     private static final String RELEASE_VERSION = "release_version";
-    private static final String BUNDLE_VERSION_ID = "bundle_version_id";
-    private static final String BUNDLE_HASH = "bundle_hash";
+    private static final String PRIMARY_ARTIFACT_ID = "primary_artifact_id";
+    private static final String PRIMARY_ARTIFACT_DIGEST = "primary_artifact_digest";
     private static final String PRIMARY_ARTIFACT_PATH = "primary_artifact_path";
     private static final String PRIMARY_ARTIFACT_SIZE_BYTES = "primary_artifact_size_bytes";
     private static final String PRIMARY_ARTIFACT_CHECKSUM = "primary_artifact_checksum";
     private static final String DESCRIPTOR_JSON = "descriptor_json";
-    private static final String MANIFEST_JSON = "manifest_json";
+    private static final String CONTRACT_JSON = "contract_json";
     private static final String CREATED_AT_EPOCH_MS = "created_at_epoch_ms";
     private static final String UPDATED_AT_EPOCH_MS = "updated_at_epoch_ms";
     private static final String ACTIVATED_AT_EPOCH_MS = "activated_at_epoch_ms";
@@ -270,12 +269,12 @@ public class DynamoPipelineReleaseRegistry implements PipelineReleaseRegistry {
             releaseVersion,
             status,
             fromJson(stringValue(item, DESCRIPTOR_JSON), PipelineReleaseDescriptor.class),
-            stringValue(item, BUNDLE_VERSION_ID),
-            stringValue(item, BUNDLE_HASH),
+            stringValue(item, PRIMARY_ARTIFACT_ID),
+            stringValue(item, PRIMARY_ARTIFACT_DIGEST),
             stringValue(item, PRIMARY_ARTIFACT_PATH),
             longValue(item, PRIMARY_ARTIFACT_SIZE_BYTES),
             stringValue(item, PRIMARY_ARTIFACT_CHECKSUM),
-            fromJson(stringValue(item, MANIFEST_JSON), PipelineBundleManifest.class),
+            fromJson(stringValue(item, CONTRACT_JSON), PipelineContractDescriptor.class),
             longValue(item, CREATED_AT_EPOCH_MS),
             longValue(item, UPDATED_AT_EPOCH_MS),
             activatedAt);
@@ -290,13 +289,13 @@ public class DynamoPipelineReleaseRegistry implements PipelineReleaseRegistry {
             Map.entry(PIPELINE_ID, avS(record.pipelineId())),
             Map.entry(CONTRACT_VERSION, avS(record.contractVersion())),
             Map.entry(RELEASE_VERSION, avS(record.releaseVersion())),
-            Map.entry(BUNDLE_VERSION_ID, avS(record.bundleVersionId())),
-            Map.entry(BUNDLE_HASH, avS(record.bundleHash())),
+            Map.entry(PRIMARY_ARTIFACT_ID, avS(record.primaryArtifactId())),
+            Map.entry(PRIMARY_ARTIFACT_DIGEST, avS(record.primaryArtifactDigest())),
             Map.entry(PRIMARY_ARTIFACT_PATH, avS(record.primaryArtifactPath())),
             Map.entry(PRIMARY_ARTIFACT_SIZE_BYTES, avN(record.primaryArtifactSizeBytes())),
             Map.entry(PRIMARY_ARTIFACT_CHECKSUM, avS(record.primaryArtifactChecksum())),
             Map.entry(DESCRIPTOR_JSON, avS(toJson(record.descriptor()))),
-            Map.entry(MANIFEST_JSON, avS(toJson(record.manifest()))),
+            Map.entry(CONTRACT_JSON, avS(toJson(record.contract()))),
             Map.entry(CREATED_AT_EPOCH_MS, avN(record.createdAtEpochMs())),
             Map.entry(UPDATED_AT_EPOCH_MS, avN(record.updatedAtEpochMs())),
             Map.entry(ACTIVATED_AT_EPOCH_MS, avN(record.activatedAtEpochMs())));
@@ -428,13 +427,13 @@ public class DynamoPipelineReleaseRegistry implements PipelineReleaseRegistry {
     private static boolean sameImmutableMetadata(PipelineReleaseRecord left, PipelineReleaseRecord right) {
         return left.contractVersion().equals(right.contractVersion())
             && left.releaseVersion().equals(right.releaseVersion())
-            && left.bundleVersionId().equals(right.bundleVersionId())
-            && left.bundleHash().equals(right.bundleHash())
+            && left.primaryArtifactId().equals(right.primaryArtifactId())
+            && left.primaryArtifactDigest().equals(right.primaryArtifactDigest())
             && left.primaryArtifactPath().equals(right.primaryArtifactPath())
             && left.primaryArtifactSizeBytes() == right.primaryArtifactSizeBytes()
             && left.primaryArtifactChecksum().equals(right.primaryArtifactChecksum())
             && toJson(left.descriptor()).equals(toJson(right.descriptor()))
-            && toJson(left.manifest()).equals(toJson(right.manifest()));
+            && toJson(left.contract()).equals(toJson(right.contract()));
     }
 
     private static <T> Uni<T> blocking(java.util.function.Supplier<T> supplier) {

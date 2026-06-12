@@ -15,15 +15,12 @@ import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import org.pipelineframework.orchestrator.PipelineBundleArtifactStore;
-import org.pipelineframework.orchestrator.PipelineBundleManifest;
-import org.pipelineframework.orchestrator.PipelineBundleManifestLoader;
-import org.pipelineframework.orchestrator.PipelineBundleRecord;
-import org.pipelineframework.orchestrator.PipelineBundleRuntimeBeans;
-import org.pipelineframework.orchestrator.PipelineBundleStatus;
-import org.pipelineframework.orchestrator.PipelineBundleStoredArtifact;
-import org.pipelineframework.orchestrator.LocalPipelineBundleArtifactStore;
+
+import org.pipelineframework.orchestrator.LocalPipelineReleaseArtifactStore;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.PipelineReleaseArtifactStore;
+import org.pipelineframework.orchestrator.PipelineReleaseStoredArtifact;
+import org.pipelineframework.orchestrator.PipelineReleaseRuntimeBeans;
 
 /**
  * Validates build-produced release descriptors before local/dev registration.
@@ -44,10 +41,10 @@ public class PipelineReleaseRegistrar {
     PipelineReleaseDescriptorLoader descriptorLoader;
 
     @Inject
-    PipelineBundleManifestLoader manifestLoader;
+    PipelineContractDescriptorLoader contractLoader;
 
     @Inject
-    PipelineBundleArtifactStore artifactStore;
+    PipelineReleaseArtifactStore artifactStore;
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
@@ -74,12 +71,12 @@ public class PipelineReleaseRegistrar {
             descriptor.releaseVersion(),
             PipelineReleaseStatus.REGISTERED,
             descriptor,
-            primary.bundleVersionId(),
-            primary.bundleHash(),
+            primary.artifactId(),
+            primary.artifactDigest(),
             primary.artifactPath(),
             primary.artifactSizeBytes(),
             primary.artifactChecksum(),
-            primary.manifest().orElse(null),
+            primary.contract().orElse(null),
             nowEpochMs,
             nowEpochMs,
             0L);
@@ -99,17 +96,7 @@ public class PipelineReleaseRegistrar {
             throw new IllegalArgumentException("Release record is required");
         }
         if (record.primaryArtifactPath() != null && !record.primaryArtifactPath().isBlank()) {
-            Path artifactPath = Path.of(record.primaryArtifactPath());
-            if (!Files.isRegularFile(artifactPath) || !Files.isReadable(artifactPath)) {
-                throw new IllegalStateException("Active release artifact is missing or unreadable");
-            }
-            String checksum = "sha256:" + sha256(artifactPath);
-            if (!checksum.equals(record.primaryArtifactChecksum())) {
-                throw new IllegalStateException("Active release artifact checksum does not match registered metadata");
-            }
-            if (record.manifest() != null) {
-                artifactStore().verify(toBundleRecord(record));
-            }
+            artifactStore().verify(record);
         }
     }
 
@@ -130,15 +117,15 @@ public class PipelineReleaseRegistrar {
             validateArtifactDescriptor(artifact);
             ValidatedArtifact validated = switch (artifact.kind().toLowerCase(Locale.ROOT)) {
                 case "jar" -> validateJarArtifact(descriptor, artifact);
-                case "local-file", "native-binary", "lambda-zip" -> validateLocalFileArtifact(artifact);
-                case "container-image", "lambda-image", "external-endpoint" -> ValidatedArtifact.remote();
+                case "local-file", "native-binary", "lambda-zip" -> validateLocalFileArtifact(descriptor, artifact);
+                case "container-image", "lambda-image", "external-endpoint" -> ValidatedArtifact.remote(artifact);
                 default -> throw new IllegalArgumentException("Unsupported release artifact kind " + artifact.kind());
             };
-            if (primary == null || validated.manifest().isPresent()) {
+            if (primary == null || validated.contract().isPresent()) {
                 primary = validated;
             }
         }
-        return primary == null ? ValidatedArtifact.remote() : primary;
+        return primary == null ? ValidatedArtifact.empty() : primary;
     }
 
     private void validateArtifactDescriptor(PipelineReleaseArtifactDescriptor artifact) {
@@ -157,72 +144,64 @@ public class PipelineReleaseRegistrar {
     private ValidatedArtifact validateJarArtifact(
         PipelineReleaseDescriptor descriptor,
         PipelineReleaseArtifactDescriptor artifact) {
-        Path artifactPath = localPath(artifact.uri());
-        if (!Files.isRegularFile(artifactPath) || !Files.isReadable(artifactPath)) {
-            throw new IllegalArgumentException("Release JAR artifact must point to a readable local file");
-        }
+        Path artifactPath = readableLocalPath(artifact, "Release JAR artifact must point to a readable local file");
         String checksum = validateDigest(artifact, artifactPath);
-        PipelineBundleManifest manifest = loadManifestIfPresent(artifactPath)
+        PipelineContractDescriptor contract = loadContractFromJar(artifactPath)
             .orElseThrow(() -> new IllegalArgumentException(
-                "Release JAR artifact is missing " + PipelineBundleManifest.RESOURCE_PATH));
-        validateManifestCompatibility(descriptor, artifact, manifest);
-        PipelineBundleStoredArtifact stored = artifactStore().store(artifactPath, manifest);
+                "Release JAR artifact is missing " + PipelineContractDescriptor.RESOURCE_PATH));
+        validateContractCompatibility(descriptor, contract);
+        PipelineReleaseStoredArtifact stored = artifactStore().store(artifactPath);
         return new ValidatedArtifact(
+            artifact.artifactId(),
+            artifact.digest(),
             stored.artifactPath(),
             stored.artifactSizeBytes(),
             stored.artifactChecksum(),
-            manifest.bundleVersionId(),
-            manifest.bundleHash(),
-            Optional.of(manifest));
+            Optional.of(contract));
     }
 
-    private ValidatedArtifact validateLocalFileArtifact(PipelineReleaseArtifactDescriptor artifact) {
-        Path artifactPath = localPath(artifact.uri());
-        if (!Files.isRegularFile(artifactPath) || !Files.isReadable(artifactPath)) {
-            throw new IllegalArgumentException("Release local artifact must point to a readable file");
-        }
+    private ValidatedArtifact validateLocalFileArtifact(
+        PipelineReleaseDescriptor descriptor,
+        PipelineReleaseArtifactDescriptor artifact) {
+        Path artifactPath = readableLocalPath(artifact, "Release local artifact must point to a readable file");
         String checksum = validateDigest(artifact, artifactPath);
+        Optional<PipelineContractDescriptor> contract = loadContractFromJar(artifactPath);
+        contract.ifPresent(value -> validateContractCompatibility(descriptor, value));
         return new ValidatedArtifact(
+            artifact.artifactId(),
+            artifact.digest(),
             artifactPath.toAbsolutePath().normalize().toString(),
             size(artifactPath),
             "sha256:" + checksum,
-            artifact.bundleVersionId(),
-            artifact.bundleHash(),
-            Optional.empty());
+            contract);
     }
 
-    private Optional<PipelineBundleManifest> loadManifestIfPresent(Path path) {
+    private Optional<PipelineContractDescriptor> loadContractFromJar(Path path) {
         try (JarFile jar = new JarFile(path.toFile())) {
-            var entry = jar.getJarEntry(PipelineBundleManifest.RESOURCE_PATH);
+            var entry = jar.getJarEntry(PipelineContractDescriptor.RESOURCE_PATH);
             if (entry == null) {
                 return Optional.empty();
             }
             try (InputStream stream = jar.getInputStream(entry)) {
-                return Optional.of(manifestLoader().load(stream));
+                return Optional.of(contractLoader().load(stream));
             }
+        } catch (java.util.zip.ZipException e) {
+            return Optional.empty();
         } catch (IllegalArgumentException | IllegalStateException e) {
             throw e;
         } catch (Exception e) {
-            throw new IllegalArgumentException("Failed to inspect release JAR artifact: " + e.getMessage(), e);
+            throw new IllegalArgumentException("Failed to inspect release artifact: " + e.getMessage(), e);
         }
     }
 
-    private void validateManifestCompatibility(
+    private void validateContractCompatibility(
         PipelineReleaseDescriptor descriptor,
-        PipelineReleaseArtifactDescriptor artifact,
-        PipelineBundleManifest manifest) {
-        if (!descriptor.pipelineId().equals(manifest.pipelineId())) {
-            throw new IllegalArgumentException("Release artifact manifest pipelineId does not match release descriptor");
+        PipelineContractDescriptor contract) {
+        if (!descriptor.pipelineId().equals(contract.pipelineId())) {
+            throw new IllegalArgumentException("Release artifact contract pipelineId does not match release descriptor");
         }
-        if (!artifact.bundleVersionId().isBlank() && !artifact.bundleVersionId().equals(manifest.bundleVersionId())) {
-            throw new IllegalArgumentException("Release artifact bundleVersionId does not match manifest");
-        }
-        if (!artifact.bundleHash().isBlank() && !artifact.bundleHash().equals(manifest.bundleHash())) {
-            throw new IllegalArgumentException("Release artifact bundleHash does not match manifest");
-        }
-        if (!descriptor.contractVersion().equals("sha256:" + manifest.bundleHash())) {
-            throw new IllegalArgumentException(
-                "Release contractVersion is incompatible with the JAR manifest identity");
+        if (!descriptor.contractVersion().equals(contract.contractVersion())) {
+            throw new IllegalArgumentException("Release artifact contractVersion does not match release descriptor");
         }
     }
 
@@ -234,22 +213,12 @@ public class PipelineReleaseRegistrar {
         return checksum;
     }
 
-    private PipelineBundleRecord toBundleRecord(PipelineReleaseRecord record) {
-        return new PipelineBundleRecord(
-            record.tenantId(),
-            record.pipelineId(),
-            record.bundleVersionId(),
-            record.bundleHash(),
-            record.primaryArtifactPath(),
-            record.primaryArtifactSizeBytes(),
-            record.primaryArtifactChecksum(),
-            record.status() == PipelineReleaseStatus.ACTIVE
-                ? PipelineBundleStatus.ACTIVE
-                : PipelineBundleStatus.REGISTERED,
-            record.manifest(),
-            record.createdAtEpochMs(),
-            record.updatedAtEpochMs(),
-            record.activatedAtEpochMs());
+    private static Path readableLocalPath(PipelineReleaseArtifactDescriptor artifact, String message) {
+        Path artifactPath = localPath(artifact.uri());
+        if (!Files.isRegularFile(artifactPath) || !Files.isReadable(artifactPath)) {
+            throw new IllegalArgumentException(message);
+        }
+        return artifactPath;
     }
 
     private static Path localPath(String uri) {
@@ -291,13 +260,13 @@ public class PipelineReleaseRegistrar {
         return descriptorLoader == null ? new PipelineReleaseDescriptorLoader() : descriptorLoader;
     }
 
-    private PipelineBundleManifestLoader manifestLoader() {
-        return manifestLoader == null ? new PipelineBundleManifestLoader() : manifestLoader;
+    private PipelineContractDescriptorLoader contractLoader() {
+        return contractLoader == null ? new PipelineContractDescriptorLoader() : contractLoader;
     }
 
-    private PipelineBundleArtifactStore artifactStore() {
+    private PipelineReleaseArtifactStore artifactStore() {
         return artifactStore == null
-            ? new LocalPipelineBundleArtifactStore(PipelineBundleRuntimeBeans.storageRoot(orchestratorConfig), manifestLoader())
+            ? new LocalPipelineReleaseArtifactStore(PipelineReleaseRuntimeBeans.storageRoot(orchestratorConfig))
             : artifactStore;
     }
 
@@ -308,15 +277,25 @@ public class PipelineReleaseRegistrar {
     }
 
     private record ValidatedArtifact(
+        String artifactId,
+        String artifactDigest,
         String artifactPath,
         long artifactSizeBytes,
         String artifactChecksum,
-        String bundleVersionId,
-        String bundleHash,
-        Optional<PipelineBundleManifest> manifest
+        Optional<PipelineContractDescriptor> contract
     ) {
-        static ValidatedArtifact remote() {
-            return new ValidatedArtifact("", 0L, "", "", "", Optional.empty());
+        static ValidatedArtifact remote(PipelineReleaseArtifactDescriptor artifact) {
+            return new ValidatedArtifact(
+                artifact.artifactId(),
+                artifact.digest(),
+                "",
+                0L,
+                "",
+                Optional.empty());
+        }
+
+        static ValidatedArtifact empty() {
+            return new ValidatedArtifact("", "", "", 0L, "", Optional.empty());
         }
     }
 }

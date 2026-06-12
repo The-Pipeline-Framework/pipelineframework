@@ -2,6 +2,7 @@ package org.pipelineframework.orchestrator.release;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.Optional;
 
 import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Uni;
@@ -75,9 +76,9 @@ public class HostedReleaseAdminResource {
         @PathParam("pipelineId") String pipelineId,
         @HeaderParam(AUTHORIZATION_HEADER) String authorization,
         HostedReleaseRegisterRequest request) {
-        Response guard = guard(tenantId, pipelineId, authorization);
-        if (guard != null) {
-            return Uni.createFrom().item(guard);
+        Optional<Response> guard = guard(tenantId, pipelineId, authorization);
+        if (guard.isPresent()) {
+            return Uni.createFrom().item(guard.get());
         }
         if (request == null || request.releaseDescriptorPath() == null || request.releaseDescriptorPath().isBlank()) {
             return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
@@ -100,9 +101,9 @@ public class HostedReleaseAdminResource {
         @PathParam("tenantId") String tenantId,
         @PathParam("pipelineId") String pipelineId,
         @HeaderParam(AUTHORIZATION_HEADER) String authorization) {
-        Response guard = guard(tenantId, pipelineId, authorization);
-        if (guard != null) {
-            return Uni.createFrom().item(guard);
+        Optional<Response> guard = guard(tenantId, pipelineId, authorization);
+        if (guard.isPresent()) {
+            return Uni.createFrom().item(guard.get());
         }
         return registry().list(tenantId, pipelineId)
             .onItem().transform(records -> Response.ok(records).build());
@@ -115,9 +116,9 @@ public class HostedReleaseAdminResource {
         @PathParam("tenantId") String tenantId,
         @PathParam("pipelineId") String pipelineId,
         @HeaderParam(AUTHORIZATION_HEADER) String authorization) {
-        Response guard = guard(tenantId, pipelineId, authorization);
-        if (guard != null) {
-            return Uni.createFrom().item(guard);
+        Optional<Response> guard = guard(tenantId, pipelineId, authorization);
+        if (guard.isPresent()) {
+            return Uni.createFrom().item(guard.get());
         }
         return registry().active(tenantId, pipelineId)
             .onItem().transform(record -> record
@@ -133,9 +134,9 @@ public class HostedReleaseAdminResource {
         @PathParam("pipelineId") String pipelineId,
         @PathParam("releaseVersion") String releaseVersion,
         @HeaderParam(AUTHORIZATION_HEADER) String authorization) {
-        Response guard = guard(tenantId, pipelineId, authorization);
-        if (guard != null) {
-            return Uni.createFrom().item(guard);
+        Optional<Response> guard = guard(tenantId, pipelineId, authorization);
+        if (guard.isPresent()) {
+            return Uni.createFrom().item(guard.get());
         }
         return registry().get(tenantId, pipelineId, releaseVersion)
             .onItem().transform(record -> record
@@ -151,9 +152,9 @@ public class HostedReleaseAdminResource {
         @PathParam("pipelineId") String pipelineId,
         @PathParam("releaseVersion") String releaseVersion,
         @HeaderParam(AUTHORIZATION_HEADER) String authorization) {
-        Response guard = guard(tenantId, pipelineId, authorization);
-        if (guard != null) {
-            return Uni.createFrom().item(guard);
+        Optional<Response> guard = guard(tenantId, pipelineId, authorization);
+        if (guard.isPresent()) {
+            return Uni.createFrom().item(guard.get());
         }
         return registry().get(tenantId, pipelineId, releaseVersion)
             .onItem().transformToUni(record -> {
@@ -178,26 +179,26 @@ public class HostedReleaseAdminResource {
         return Uni.createFrom().failure(new InvalidReleaseRegistrationException(failure.getMessage(), failure));
     }
 
-    private Response guard(String tenantId, String pipelineId, String authorization) {
+    private Optional<Response> guard(String tenantId, String pipelineId, String authorization) {
         if (!enabled()) {
-            return Response.status(Response.Status.NOT_FOUND).build();
+            return Optional.of(Response.status(Response.Status.NOT_FOUND).build());
         }
         if (tenantId == null || tenantId.isBlank()) {
-            return Response.status(Response.Status.BAD_REQUEST).entity("tenantId is required").build();
+            return Optional.of(Response.status(Response.Status.BAD_REQUEST).entity("tenantId is required").build());
         }
         if (pipelineId == null || pipelineId.isBlank()) {
-            return Response.status(Response.Status.BAD_REQUEST).entity("pipelineId is required").build();
+            return Optional.of(Response.status(Response.Status.BAD_REQUEST).entity("pipelineId is required").build());
         }
         return authenticate(authorization);
     }
 
-    private Response authenticate(String authorization) {
+    private Optional<Response> authenticate(String authorization) {
         if (authorization == null || !authorization.startsWith(BEARER_PREFIX)) {
-            return Response.status(Response.Status.UNAUTHORIZED).build();
+            return Optional.of(Response.status(Response.Status.UNAUTHORIZED).build());
         }
         String presented = authorization.substring(BEARER_PREFIX.length()).trim();
         if (presented.isBlank()) {
-            return Response.status(Response.Status.UNAUTHORIZED).build();
+            return Optional.of(Response.status(Response.Status.UNAUTHORIZED).build());
         }
         String expected;
         try {
@@ -208,15 +209,15 @@ public class HostedReleaseAdminResource {
                 "pipeline.orchestrator.admin.admin-token",
                 "pipeline.orchestrator.admin.admin-token-ref");
         } catch (RuntimeException e) {
-            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
-                .entity("Release admin token is unavailable").build();
+            return Optional.of(Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                .entity("Release admin token is unavailable").build());
         }
         if (!MessageDigest.isEqual(
             expected.getBytes(StandardCharsets.UTF_8),
             presented.getBytes(StandardCharsets.UTF_8))) {
-            return Response.status(Response.Status.UNAUTHORIZED).build();
+            return Optional.of(Response.status(Response.Status.UNAUTHORIZED).build());
         }
-        return null;
+        return Optional.empty();
     }
 
     private boolean enabled() {

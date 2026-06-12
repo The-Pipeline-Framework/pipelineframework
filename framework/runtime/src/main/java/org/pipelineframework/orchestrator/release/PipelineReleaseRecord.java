@@ -1,6 +1,5 @@
 package org.pipelineframework.orchestrator.release;
 
-import org.pipelineframework.orchestrator.PipelineBundleManifest;
 import java.util.Objects;
 
 /**
@@ -13,12 +12,12 @@ public record PipelineReleaseRecord(
     String releaseVersion,
     PipelineReleaseStatus status,
     PipelineReleaseDescriptor descriptor,
-    String bundleVersionId,
-    String bundleHash,
+    String primaryArtifactId,
+    String primaryArtifactDigest,
     String primaryArtifactPath,
     long primaryArtifactSizeBytes,
     String primaryArtifactChecksum,
-    PipelineBundleManifest manifest,
+    PipelineContractDescriptor contract,
     long createdAtEpochMs,
     long updatedAtEpochMs,
     long activatedAtEpochMs
@@ -30,8 +29,8 @@ public record PipelineReleaseRecord(
         Objects.requireNonNull(releaseVersion, "releaseVersion");
         Objects.requireNonNull(status, "status");
         Objects.requireNonNull(descriptor, "descriptor");
-        bundleVersionId = bundleVersionId == null ? "" : bundleVersionId;
-        bundleHash = bundleHash == null ? "" : bundleHash;
+        primaryArtifactId = primaryArtifactId == null ? "" : primaryArtifactId;
+        primaryArtifactDigest = primaryArtifactDigest == null ? "" : primaryArtifactDigest;
         primaryArtifactPath = primaryArtifactPath == null ? "" : primaryArtifactPath;
         primaryArtifactChecksum = primaryArtifactChecksum == null ? "" : primaryArtifactChecksum;
     }
@@ -44,12 +43,12 @@ public record PipelineReleaseRecord(
             releaseVersion,
             newStatus,
             descriptor,
-            bundleVersionId,
-            bundleHash,
+            primaryArtifactId,
+            primaryArtifactDigest,
             primaryArtifactPath,
             primaryArtifactSizeBytes,
             primaryArtifactChecksum,
-            manifest,
+            contract,
             createdAtEpochMs,
             nowEpochMs,
             newStatus == PipelineReleaseStatus.ACTIVE ? nowEpochMs : activatedAtEpochMs);

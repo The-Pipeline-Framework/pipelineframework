@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import org.pipelineframework.orchestrator.release.PipelineReleaseArtifactDescriptor;
+import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import org.pipelineframework.orchestrator.release.PipelineReleaseDescriptor;
 import org.pipelineframework.orchestrator.release.PipelineReleaseRecord;
 import org.pipelineframework.orchestrator.release.PipelineReleaseRegistrar;
@@ -151,8 +152,8 @@ class HostedPipelineControlPlaneResourceTest {
                     "org.example.restaurant",
                     "sha256:bundle",
                     "sha256:bundle",
-                    "sha256:bundle",
-                    "bundle",
+                    "restaurant",
+                    "sha256:artifact",
                     List.of("application/tpf-transition-envelope+json"),
                     List.of("rest")))));
         when(controlPlane.executePipelineAsync(
@@ -161,7 +162,6 @@ class HostedPipelineControlPlaneResourceTest {
                 eq("idem-1"),
                 eq(false),
                 eq("org.example.restaurant"),
-                eq("sha256:bundle"),
                 eq("sha256:bundle"),
                 eq("sha256:bundle")))
             .thenReturn(Uni.createFrom().item(accepted));
@@ -182,7 +182,8 @@ class HostedPipelineControlPlaneResourceTest {
                 && "org.example.restaurant".equals(availabilityRequest.pipelineId())
                 && "sha256:bundle".equals(availabilityRequest.contractVersion())
                 && "sha256:bundle".equals(availabilityRequest.releaseVersion())
-                && "sha256:bundle".equals(availabilityRequest.bundleVersionId())));
+                && "restaurant".equals(availabilityRequest.artifactId())
+                && "sha256:artifact".equals(availabilityRequest.artifactDigest())));
         verify(controlPlane).executePipelineAsync(
             argThat(input -> input instanceof Uni<?>),
             eq("tenant-1"),
@@ -190,12 +191,11 @@ class HostedPipelineControlPlaneResourceTest {
             eq(false),
             eq("org.example.restaurant"),
             eq("sha256:bundle"),
-            eq("sha256:bundle"),
             eq("sha256:bundle"));
     }
 
     @Test
-    void submitExecutionCoercesInputUsingActiveBundleManifest() {
+    void submitExecutionCoercesInputUsingActiveContract() {
         when(controlPlaneConfig.enabled()).thenReturn(true);
         RunAsyncAcceptedDto accepted = new RunAsyncAcceptedDto("exec-1", false, "/pipeline/executions/exec-1", 1L);
         PipelineReleaseRecord release = releaseRecord(TestIngress.class.getName());
@@ -210,8 +210,8 @@ class HostedPipelineControlPlaneResourceTest {
                     "org.example.restaurant",
                     "sha256:bundle",
                     "sha256:bundle",
-                    "sha256:bundle",
-                    "bundle",
+                    "restaurant",
+                    "sha256:artifact",
                     List.of("application/tpf-transition-envelope+json"),
                     List.of("rest")))));
         when(controlPlane.executePipelineAsync(
@@ -220,7 +220,6 @@ class HostedPipelineControlPlaneResourceTest {
                 eq("idem-1"),
                 eq(false),
                 eq("org.example.restaurant"),
-                eq("sha256:bundle"),
                 eq("sha256:bundle"),
                 eq("sha256:bundle")))
             .thenReturn(Uni.createFrom().item(accepted));
@@ -244,9 +243,8 @@ class HostedPipelineControlPlaneResourceTest {
             eq("idem-1"),
             eq(false),
             eq("org.example.restaurant"),
-            eq("sha256:bundle"),
-            eq("sha256:bundle"),
-            eq("sha256:bundle"));
+                eq("sha256:bundle"),
+                eq("sha256:bundle"));
         Object item = assertInstanceOf(Uni.class, capturedInput.get()).await().indefinitely();
         TestIngress ingress = assertInstanceOf(TestIngress.class, item);
         assertEquals(42, ingress.value());
@@ -268,8 +266,8 @@ class HostedPipelineControlPlaneResourceTest {
                     "org.example.restaurant",
                     "sha256:bundle",
                     "sha256:bundle",
-                    "sha256:bundle",
-                    "bundle",
+                    "restaurant",
+                    "sha256:artifact",
                     List.of("application/tpf-transition-envelope+json"),
                     List.of("rest")))));
         when(controlPlane.executePipelineAsync(
@@ -278,7 +276,6 @@ class HostedPipelineControlPlaneResourceTest {
                 eq("idem-1"),
                 eq(false),
                 eq("org.example.restaurant"),
-                eq("sha256:bundle"),
                 eq("sha256:bundle"),
                 eq("sha256:bundle")))
             .thenReturn(Uni.createFrom().item(accepted));
@@ -302,9 +299,8 @@ class HostedPipelineControlPlaneResourceTest {
             eq("idem-1"),
             eq(false),
             eq("org.example.restaurant"),
-            eq("sha256:bundle"),
-            eq("sha256:bundle"),
-            eq("sha256:bundle"));
+                eq("sha256:bundle"),
+                eq("sha256:bundle"));
         Object item = assertInstanceOf(Uni.class, capturedInput.get()).await().indefinitely();
         assertEquals("42", item);
     }
@@ -334,7 +330,7 @@ class HostedPipelineControlPlaneResourceTest {
     }
 
     @Test
-    void submitExecutionFailsWhenPipelineHasNoActiveBundle() {
+    void submitExecutionFailsWhenPipelineHasNoActiveRelease() {
         when(controlPlaneConfig.enabled()).thenReturn(true);
         when(releaseRegistry.active("tenant-1", "org.example.restaurant"))
             .thenReturn(Uni.createFrom().item(Optional.empty()));
@@ -349,11 +345,11 @@ class HostedPipelineControlPlaneResourceTest {
 
         assertEquals(409, response.getStatus());
         verify(controlPlane, never()).executePipelineAsync(
-            any(), anyString(), anyString(), eq(false), anyString(), anyString(), anyString(), anyString());
+            any(), anyString(), anyString(), eq(false), anyString(), anyString(), anyString());
     }
 
     @Test
-    void submitExecutionFailsWhenActiveBundleArtifactIsUnavailable() {
+    void submitExecutionFailsWhenActiveReleaseArtifactIsUnavailable() {
         when(controlPlaneConfig.enabled()).thenReturn(true);
         PipelineReleaseRecord release = releaseRecord();
         when(releaseRegistry.active("tenant-1", "org.example.restaurant"))
@@ -371,11 +367,11 @@ class HostedPipelineControlPlaneResourceTest {
 
         assertEquals(409, response.getStatus());
         verify(controlPlane, never()).executePipelineAsync(
-            any(), anyString(), anyString(), eq(false), anyString(), anyString(), anyString(), anyString());
+            any(), anyString(), anyString(), eq(false), anyString(), anyString(), anyString());
     }
 
     @Test
-    void submitExecutionFailsWhenNoWorkerHostsActiveBundle() {
+    void submitExecutionFailsWhenNoWorkerHostsActiveRelease() {
         when(controlPlaneConfig.enabled()).thenReturn(true);
         PipelineReleaseRecord release = releaseRecord();
         when(releaseRegistry.active("tenant-1", "org.example.restaurant"))
@@ -383,7 +379,7 @@ class HostedPipelineControlPlaneResourceTest {
         when(workerAvailability.check(any()))
             .thenReturn(Uni.createFrom().item(PipelineWorkerAvailabilityResult.unavailable(
                 "rest",
-                "Worker hosts a different bundle")));
+                "Worker hosts a different release")));
         HostedExecutionSubmitRequest request = new HostedExecutionSubmitRequest(
             "org.example.restaurant",
             ExecutionInputShape.UNI,
@@ -395,7 +391,7 @@ class HostedPipelineControlPlaneResourceTest {
 
         assertEquals(503, response.getStatus());
         verify(controlPlane, never()).executePipelineAsync(
-            any(), anyString(), anyString(), eq(false), anyString(), anyString(), anyString(), anyString());
+            any(), anyString(), anyString(), eq(false), anyString(), anyString(), anyString());
     }
 
     @Test
@@ -524,8 +520,8 @@ class HostedPipelineControlPlaneResourceTest {
     }
 
     private static PipelineReleaseRecord releaseRecord(String inputTypeId) {
-        PipelineBundleManifest manifest = new PipelineBundleManifest(
-            PipelineBundleManifest.CURRENT_SCHEMA_VERSION,
+        PipelineContractDescriptor contract = new PipelineContractDescriptor(
+            PipelineContractDescriptor.CURRENT_SCHEMA_VERSION,
             "org.example.restaurant",
             "sha256:bundle",
             "bundle",
@@ -555,8 +551,6 @@ class HostedPipelineControlPlaneResourceTest {
                 "jar",
                 "/tmp/bundle.jar",
                 "sha256:artifact",
-                "sha256:bundle",
-                "bundle",
                 List.of("Validate"),
                 List.of("rest"))));
         return new PipelineReleaseRecord(
@@ -566,12 +560,12 @@ class HostedPipelineControlPlaneResourceTest {
             "sha256:bundle",
             PipelineReleaseStatus.ACTIVE,
             descriptor,
-            "sha256:bundle",
-            "bundle",
+            "restaurant",
+            "sha256:artifact",
             "/tmp/bundle.jar",
             123L,
             "sha256:artifact",
-            manifest,
+            contract,
             1L,
             1L,
             1L);

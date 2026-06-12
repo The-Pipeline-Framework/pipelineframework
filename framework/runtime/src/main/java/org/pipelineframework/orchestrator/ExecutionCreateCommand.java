@@ -18,7 +18,6 @@ public record ExecutionCreateCommand(
     String pipelineId,
     String contractVersion,
     String releaseVersion,
-    String bundleVersionId,
     Object inputPayload,
     ExecutionResultShape resultShape,
     long nowEpochMs,
@@ -28,7 +27,7 @@ public record ExecutionCreateCommand(
         String tenantId,
         String executionKey,
         String pipelineId,
-        String bundleVersionId,
+        String releaseVersion,
         Object inputPayload,
         ExecutionResultShape resultShape,
         long nowEpochMs,
@@ -39,8 +38,7 @@ public record ExecutionCreateCommand(
             executionKey,
             pipelineId,
             PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
-            bundleVersionId,
-            bundleVersionId,
+            releaseVersion,
             inputPayload,
             resultShape,
             nowEpochMs,
@@ -58,10 +56,9 @@ public record ExecutionCreateCommand(
         this(
             tenantId,
             executionKey,
-            PipelineBundleManifest.DEFAULT_PIPELINE_ID,
+            PipelineContractDescriptor.DEFAULT_PIPELINE_ID,
             PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
-            PipelineBundleManifest.DEFAULT_BUNDLE_VERSION_ID,
-            PipelineBundleManifest.DEFAULT_BUNDLE_VERSION_ID,
+            PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
             inputPayload,
             resultShape,
             nowEpochMs,
@@ -74,7 +71,6 @@ public record ExecutionCreateCommand(
         Objects.requireNonNull(pipelineId, "ExecutionCreateCommand.pipelineId must not be null");
         Objects.requireNonNull(contractVersion, "ExecutionCreateCommand.contractVersion must not be null");
         Objects.requireNonNull(releaseVersion, "ExecutionCreateCommand.releaseVersion must not be null");
-        Objects.requireNonNull(bundleVersionId, "ExecutionCreateCommand.bundleVersionId must not be null");
         Objects.requireNonNull(resultShape, "ExecutionCreateCommand.resultShape must not be null");
     }
 }

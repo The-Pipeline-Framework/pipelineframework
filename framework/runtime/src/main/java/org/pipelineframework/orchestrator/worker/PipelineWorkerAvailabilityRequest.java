@@ -1,36 +1,38 @@
 package org.pipelineframework.orchestrator.worker;
 
 import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
-import org.pipelineframework.orchestrator.worker.PipelineWorkerAvailability;
 import java.util.Objects;
 
 /**
- * Bundle identity a hosted coordinator needs from the selected worker.
+ * Release identity a hosted coordinator needs from the selected worker.
  *
  * @param tenantId tenant id
  * @param pipelineId pinned pipeline id
  * @param contractVersion pinned contract version
  * @param releaseVersion pinned release version
- * @param bundleVersionId pinned bundle version id
+ * @param artifactId pinned artifact id, when known
+ * @param artifactDigest pinned artifact digest, when known
  */
 public record PipelineWorkerAvailabilityRequest(
     String tenantId,
     String pipelineId,
     String contractVersion,
     String releaseVersion,
-    String bundleVersionId
+    String artifactId,
+    String artifactDigest
 ) {
     public PipelineWorkerAvailabilityRequest(
         String tenantId,
         String pipelineId,
-        String bundleVersionId
+        String releaseVersion
     ) {
         this(
             tenantId,
             pipelineId,
             PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
-            bundleVersionId,
-            bundleVersionId);
+            releaseVersion,
+            "",
+            "");
     }
 
     public PipelineWorkerAvailabilityRequest {
@@ -40,8 +42,9 @@ public record PipelineWorkerAvailabilityRequest(
             ? PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION
             : contractVersion;
         releaseVersion = releaseVersion == null || releaseVersion.isBlank()
-            ? bundleVersionId
+            ? contractVersion
             : releaseVersion;
-        Objects.requireNonNull(bundleVersionId, "bundleVersionId");
+        artifactId = artifactId == null ? "" : artifactId;
+        artifactDigest = artifactDigest == null ? "" : artifactDigest;
     }
 }

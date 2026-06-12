@@ -35,7 +35,7 @@ import org.pipelineframework.orchestrator.InMemoryExecutionStateStore;
 import org.pipelineframework.orchestrator.LoggingDeadLetterPublisher;
 import org.pipelineframework.orchestrator.OrchestratorIdempotencyPolicy;
 import org.pipelineframework.orchestrator.OrchestratorMode;
-import org.pipelineframework.orchestrator.PipelineBundleIdentityResolver;
+import org.pipelineframework.orchestrator.PipelineReleaseIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
 import org.pipelineframework.orchestrator.LocalControlPlaneAdmissionPolicy;
@@ -306,12 +306,13 @@ class QueueAsyncCoordinatorTest {
     }
 
     @Test
-    void executePipelineAsyncScopesIdempotencyKeyByPipelineAndBundle() {
+    void executePipelineAsyncScopesIdempotencyKeyByPipelineAndRelease() {
         configureQueueModeDefaults();
-        PipelineBundleIdentityResolver identityResolver = mock(PipelineBundleIdentityResolver.class);
-        coordinator.bundleIdentityResolver = identityResolver;
+        PipelineReleaseIdentityResolver identityResolver = mock(PipelineReleaseIdentityResolver.class);
+        coordinator.releaseIdentityResolver = identityResolver;
         when(identityResolver.pipelineId(orchestratorConfig)).thenReturn("pipeline-a", "pipeline-b");
-        when(identityResolver.bundleVersionId(orchestratorConfig)).thenReturn("bundle-1", "bundle-1");
+        when(identityResolver.contractVersion()).thenReturn("contract-1", "contract-1");
+        when(identityResolver.releaseVersion(orchestratorConfig)).thenReturn("release-1", "release-1");
         when(executionStateStore.createOrGetExecution(any()))
             .thenReturn(
                 Uni.createFrom().item(new CreateExecutionResult(createRecord("tenant-1", "exec-a", "key-a"), false)),
@@ -766,19 +767,21 @@ class QueueAsyncCoordinatorTest {
     }
 
     @Test
-    void transitionCommandUsesExecutionPinnedBundleIdentity() {
+    void transitionCommandUsesExecutionPinnedReleaseIdentity() {
         TransitionCommandEnvelope envelope = prepareTransitionCommand(
             createRecord(
                 "tenant-1",
                 "exec-bundle",
                 "key-bundle",
                 "org.example.pinned",
-                "sha256:pinned",
+                "sha256:contract",
+                "sha256:release",
                 ExecutionResultShape.SINGLE),
             "trace-1");
 
         assertEquals("org.example.pinned", envelope.pipelineId());
-        assertEquals("sha256:pinned", envelope.bundleVersionId());
+        assertEquals("sha256:contract", envelope.contractVersion());
+        assertEquals("sha256:release", envelope.releaseVersion());
         assertEquals("trace-1", envelope.traceId());
     }
 
@@ -1404,7 +1407,8 @@ class QueueAsyncCoordinatorTest {
             executionId,
             executionKey,
             "local-pipeline",
-            "local-bundle",
+            "local-contract",
+            "local-contract",
             resultShape);
     }
 
@@ -1413,14 +1417,16 @@ class QueueAsyncCoordinatorTest {
         String executionId,
         String executionKey,
         String pipelineId,
-        String bundleVersionId,
+        String contractVersion,
+        String releaseVersion,
         ExecutionResultShape resultShape) {
         return new ExecutionRecord<>(
             tenantId,
             executionId,
             executionKey,
             pipelineId,
-            bundleVersionId,
+            contractVersion,
+            releaseVersion,
             resultShape,
             ExecutionStatus.QUEUED,
             0L,

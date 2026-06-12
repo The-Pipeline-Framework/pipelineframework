@@ -2,7 +2,7 @@
 
 The durable coordinator needs a versioned thing to execute, but that thing should not be a JAR. A JAR is one artifact form. The strategic unit is a pipeline contract, and each deployable version is a release that pins the artifacts satisfying that contract.
 
-The runtime now implements the first release cutover: generated `pipeline-contract.json`, local `pipeline-release.json` registration, active release pointers, execution pinning to contract/release identity, and release-aware worker availability checks. `META-INF/pipeline/bundle-manifest.json` remains the executable-worker identity file for current JAR/local worker artifacts.
+The runtime uses generated `pipeline-contract.json`, local `pipeline-release.json` registration, active release pointers, execution pinning to contract/release identity, and release-aware worker availability checks. Release identity is the coordinator and worker compatibility model.
 
 ## Core Terms
 
@@ -116,7 +116,7 @@ The release model should make drift visible at several levels:
 | Deployment drift | The active release expects endpoints/images/functions that are not deployed or reachable. |
 | Runtime drift | Worker capability reports a different pipeline id, contract version, release version, or artifact digest. |
 
-The current worker capability check verifies `pipelineId + contractVersion + releaseVersion + bundleVersionId`. Artifact digest drift is validated for local/JAR registration and activation; runtime worker-reported artifact digest remains a follow-up.
+The current worker capability check verifies `pipelineId + contractVersion + releaseVersion`. Artifact digest drift is validated for local/JAR registration and activation, and worker-reported artifact id/digest are matched when both release and worker provide them.
 
 ## Standards To Reuse
 
@@ -130,8 +130,8 @@ TPF should define only the pipeline-specific contract and release semantics. The
 
 CNAB, Open Application Model, Serverless Workflow, and CDEvents are useful references, but they should not replace TPF's typed compiled pipeline contract.
 
-## Relationship To Current Bundle Manifest
+## Relationship To Current Runtime
 
-`META-INF/pipeline/bundle-manifest.json` is the current v1 executable identity artifact. It gives the coordinator and worker enough identity to validate portable transition envelopes against the code the worker actually hosts.
+The current self-host runtime registers releases directly. For local/JAR artifacts, registration can inspect embedded `META-INF/pipeline/pipeline-contract.json` and rejects artifacts whose contract identity does not match the release descriptor.
 
-Release registration maps the current bundle manifest into the contract/release vocabulary for JAR/local executable artifacts. The legacy `/bundles` endpoints remain compatibility helpers; new self-host flows register releases.
+The coordinator validates, activates, pins, and dispatches releases. Platform-specific tools still deploy artifacts outside TPF.

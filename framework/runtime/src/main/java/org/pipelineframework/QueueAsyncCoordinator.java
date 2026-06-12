@@ -52,8 +52,8 @@ import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.OrchestratorIdempotencyPolicy;
 import org.pipelineframework.orchestrator.OrchestratorMode;
-import org.pipelineframework.orchestrator.PipelineBundleIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.PipelineReleaseIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineTransitionWorker;
 import org.pipelineframework.orchestrator.SerializedTransitionPayload;
 import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
@@ -134,13 +134,13 @@ class QueueAsyncCoordinator {
   TransitionPayloadCodec transitionPayloadCodec;
 
   @Inject
-  PipelineBundleIdentityResolver bundleIdentityResolver;
+  PipelineReleaseIdentityResolver releaseIdentityResolver;
 
   @Inject
   ControlPlaneAdmissionPolicy controlPlaneAdmissionPolicy;
 
   private volatile TransitionPayloadCodec fallbackTransitionPayloadCodec;
-  private volatile PipelineBundleIdentityResolver fallbackBundleIdentityResolver;
+  private volatile PipelineReleaseIdentityResolver fallbackReleaseIdentityResolver;
   private volatile ControlPlaneAdmissionPolicy fallbackAdmissionPolicy;
 
   @Inject
@@ -229,25 +229,8 @@ class QueueAsyncCoordinator {
         idempotencyKey,
         outputStreaming,
         pipelineId(),
-        bundleVersionId());
-  }
-
-  Uni<RunAsyncAcceptedDto> executePipelineAsync(
-      Object input,
-      String tenantId,
-      String idempotencyKey,
-      boolean outputStreaming,
-      String pipelineId,
-      String bundleVersionId) {
-    return executePipelineAsync(
-        input,
-        tenantId,
-        idempotencyKey,
-        outputStreaming,
-        pipelineId,
-        org.pipelineframework.orchestrator.release.PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
-        bundleVersionId,
-        bundleVersionId);
+        contractVersion(),
+        releaseVersion());
   }
 
   Uni<RunAsyncAcceptedDto> executePipelineAsync(
@@ -257,8 +240,7 @@ class QueueAsyncCoordinator {
       boolean outputStreaming,
       String pipelineId,
       String contractVersion,
-      String releaseVersion,
-      String bundleVersionId) {
+      String releaseVersion) {
     if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
       return Uni.createFrom().failure(new IllegalStateException(
           "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
@@ -306,7 +288,6 @@ class QueueAsyncCoordinator {
               pipelineId,
               contractVersion,
               releaseVersion,
-              bundleVersionId,
               snapshot,
               executionResultShapeResolver.resolve(),
               now,
@@ -906,7 +887,6 @@ class QueueAsyncCoordinator {
           record.pipelineId(),
           record.contractVersion(),
           record.releaseVersion(),
-          record.bundleVersionId(),
           transitionKey,
           payloadCodec().encode(payload));
     });
@@ -916,8 +896,8 @@ class QueueAsyncCoordinator {
     return record.awaitUnitId() != null && !record.awaitUnitId().isBlank();
   }
 
-  private static String scopedRootExecutionKey(String pipelineId, String bundleVersionId, String executionKey) {
-    return compositeScopedKey("pipelineId", pipelineId, "bundleVersionId", bundleVersionId)
+  private static String scopedRootExecutionKey(String pipelineId, String releaseVersion, String executionKey) {
+    return compositeScopedKey("pipelineId", pipelineId, "releaseVersion", releaseVersion)
         + ":executionKey:"
         + requireScopedValue("executionKey", executionKey);
   }
@@ -1005,24 +985,28 @@ class QueueAsyncCoordinator {
   }
 
   private String pipelineId() {
-    return bundleIdentityResolver().pipelineId(orchestratorConfig);
+    return releaseIdentityResolver().pipelineId(orchestratorConfig);
   }
 
-  private String bundleVersionId() {
-    return bundleIdentityResolver().bundleVersionId(orchestratorConfig);
+  private String contractVersion() {
+    return releaseIdentityResolver().contractVersion();
   }
 
-  private PipelineBundleIdentityResolver bundleIdentityResolver() {
-    if (bundleIdentityResolver != null) {
-      return bundleIdentityResolver;
+  private String releaseVersion() {
+    return releaseIdentityResolver().releaseVersion(orchestratorConfig);
+  }
+
+  private PipelineReleaseIdentityResolver releaseIdentityResolver() {
+    if (releaseIdentityResolver != null) {
+      return releaseIdentityResolver;
     }
-    PipelineBundleIdentityResolver fallback = fallbackBundleIdentityResolver;
+    PipelineReleaseIdentityResolver fallback = fallbackReleaseIdentityResolver;
     if (fallback == null) {
       synchronized (this) {
-        fallback = fallbackBundleIdentityResolver;
+        fallback = fallbackReleaseIdentityResolver;
         if (fallback == null) {
-          fallback = new PipelineBundleIdentityResolver();
-          fallbackBundleIdentityResolver = fallback;
+          fallback = new PipelineReleaseIdentityResolver();
+          fallbackReleaseIdentityResolver = fallback;
         }
       }
     }
@@ -1061,7 +1045,7 @@ class QueueAsyncCoordinator {
         tenantId,
         operation,
         pipelineId(),
-        bundleVersionId(),
+        releaseVersion(),
         executionId,
         source,
         explicitTenant);
@@ -1071,7 +1055,7 @@ class QueueAsyncCoordinator {
       String tenantId,
       ControlPlaneAdmissionOperation operation,
       String pipelineId,
-      String bundleVersionId,
+      String releaseVersion,
       String executionId,
       String source,
       boolean explicitTenant) {
@@ -1079,7 +1063,7 @@ class QueueAsyncCoordinator {
         tenantId,
         operation,
         pipelineId,
-        bundleVersionId,
+        releaseVersion,
         executionId,
         source,
         explicitTenant);
@@ -1157,7 +1141,6 @@ class QueueAsyncCoordinator {
                     parentRecord.pipelineId(),
                     parentRecord.contractVersion(),
                     parentRecord.releaseVersion(),
-                    parentRecord.bundleVersionId(),
                     normalizedInput,
                     ExecutionResultShape.MATERIALIZED_MULTI,
                     nowEpochMs,

@@ -8,7 +8,7 @@ import java.util.Objects;
  * @param tenantId normalized tenant id
  * @param operation operation being attempted
  * @param pipelineId effective pipeline id
- * @param bundleVersionId effective bundle version id
+ * @param releaseVersion effective release version
  * @param executionId execution id when known
  * @param source source/protocol metadata, for example api or worker-dispatch
  * @param explicitTenant whether the caller supplied a tenant before defaulting
@@ -17,7 +17,7 @@ public record ControlPlaneAdmissionRequest(
     String tenantId,
     ControlPlaneAdmissionOperation operation,
     String pipelineId,
-    String bundleVersionId,
+    String releaseVersion,
     String executionId,
     String source,
     boolean explicitTenant

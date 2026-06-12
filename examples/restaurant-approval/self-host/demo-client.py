@@ -61,9 +61,9 @@ def locate_bundle(args):
             continue
         try:
             with zipfile.ZipFile(candidate) as jar:
-                with jar.open("META-INF/pipeline/bundle-manifest.json") as manifest_file:
-                    manifest = json.load(manifest_file)
-                    if manifest.get("pipelineId") == args.pipeline_id:
+                with jar.open("META-INF/pipeline/pipeline-contract.json") as contract_file:
+                    contract = json.load(contract_file)
+                    if contract.get("pipelineId") == args.pipeline_id:
                         matches.append(candidate)
         except (zipfile.BadZipFile, KeyError, json.JSONDecodeError):
             continue
@@ -71,7 +71,7 @@ def locate_bundle(args):
         selected = max(matches, key=lambda path: path.stat().st_mtime)
         print(selected.resolve())
         return
-    raise RuntimeError(f"No bundle JAR with pipelineId={args.pipeline_id} found under {target_dir}")
+    raise RuntimeError(f"No JAR with pipelineId={args.pipeline_id} contract found under {target_dir}")
 
 
 def create_release(args):
@@ -80,14 +80,14 @@ def create_release(args):
     if not artifact_path.is_file():
         raise RuntimeError(f"Release artifact not found: {artifact_path}")
     with zipfile.ZipFile(artifact_path) as jar:
-        with jar.open("META-INF/pipeline/bundle-manifest.json") as manifest_file:
-            manifest = json.load(manifest_file)
-    if manifest.get("pipelineId") != args.pipeline_id:
+        with jar.open("META-INF/pipeline/pipeline-contract.json") as contract_file:
+            contract = json.load(contract_file)
+    if contract.get("pipelineId") != args.pipeline_id:
         raise RuntimeError(
-            f"Artifact pipelineId={manifest.get('pipelineId')} does not match {args.pipeline_id}")
+            f"Artifact pipelineId={contract.get('pipelineId')} does not match {args.pipeline_id}")
     digest = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
-    contract_version = manifest.get("contractVersion") or f"sha256:{manifest['bundleHash']}"
-    release_version = args.release_version or manifest["bundleVersionId"]
+    contract_version = contract["contractVersion"]
+    release_version = args.release_version or contract_version
     descriptor = {
         "schemaVersion": 1,
         "pipelineId": args.pipeline_id,
@@ -99,9 +99,7 @@ def create_release(args):
                 "kind": "jar",
                 "uri": str(artifact_path),
                 "digest": f"sha256:{digest}",
-                "bundleVersionId": manifest["bundleVersionId"],
-                "bundleHash": manifest["bundleHash"],
-                "stepIds": [step.get("authoredName") for step in manifest.get("steps", [])],
+                "stepIds": [step.get("authoredName") for step in contract.get("steps", [])],
                 "capabilities": ["local-transition-execution", "rest-transition-worker"],
             }
         ],

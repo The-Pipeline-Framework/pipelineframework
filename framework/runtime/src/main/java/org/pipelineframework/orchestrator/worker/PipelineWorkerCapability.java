@@ -12,8 +12,8 @@ import java.util.Objects;
  * @param pipelineId hosted pipeline id
  * @param contractVersion hosted contract version
  * @param releaseVersion hosted release version
- * @param bundleVersionId hosted bundle version id
- * @param bundleHash generated bundle hash when available
+ * @param artifactId hosted deployable artifact id, when configured
+ * @param artifactDigest hosted deployable artifact digest, when configured
  * @param payloadEncodings supported transition payload encodings
  * @param workerProtocols supported transition worker protocols
  */
@@ -23,8 +23,8 @@ public record PipelineWorkerCapability(
     String pipelineId,
     String contractVersion,
     String releaseVersion,
-    String bundleVersionId,
-    String bundleHash,
+    String artifactId,
+    String artifactDigest,
     List<String> payloadEncodings,
     List<String> workerProtocols
 ) {
@@ -34,8 +34,8 @@ public record PipelineWorkerCapability(
         String protocolVersion,
         String providerName,
         String pipelineId,
-        String bundleVersionId,
-        String bundleHash,
+        String releaseVersion,
+        String artifactDigest,
         List<String> payloadEncodings,
         List<String> workerProtocols
     ) {
@@ -44,9 +44,9 @@ public record PipelineWorkerCapability(
             providerName,
             pipelineId,
             PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
-            bundleVersionId,
-            bundleVersionId,
-            bundleHash,
+            releaseVersion,
+            "",
+            artifactDigest,
             payloadEncodings,
             workerProtocols);
     }
@@ -59,10 +59,10 @@ public record PipelineWorkerCapability(
             ? PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION
             : contractVersion;
         releaseVersion = releaseVersion == null || releaseVersion.isBlank()
-            ? bundleVersionId
+            ? contractVersion
             : releaseVersion;
-        Objects.requireNonNull(bundleVersionId, "bundleVersionId");
-        bundleHash = bundleHash == null ? "" : bundleHash;
+        artifactId = artifactId == null ? "" : artifactId;
+        artifactDigest = artifactDigest == null ? "" : artifactDigest;
         payloadEncodings = payloadEncodings == null ? List.of() : List.copyOf(payloadEncodings);
         workerProtocols = workerProtocols == null ? List.of() : List.copyOf(workerProtocols);
     }

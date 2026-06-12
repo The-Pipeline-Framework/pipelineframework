@@ -33,13 +33,12 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 
 /**
- * Generates deterministic versioned bundle metadata for transition-worker validation.
+ * Generates deterministic semantic pipeline contract metadata for coordinator/worker validation.
  */
-public class PipelineBundleManifestMetadataGenerator {
+public class PipelineContractMetadataGenerator {
 
-    private static final String RESOURCE_PATH = "META-INF/pipeline/bundle-manifest.json";
     private static final String CONTRACT_RESOURCE_PATH = "META-INF/pipeline/pipeline-contract.json";
-    private static final Logger LOGGER = Logger.getLogger(PipelineBundleManifestMetadataGenerator.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(PipelineContractMetadataGenerator.class.getName());
     private static final Gson CANONICAL_GSON = new GsonBuilder().disableHtmlEscaping().create();
     private static final Gson PRETTY_GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
 
@@ -50,58 +49,8 @@ public class PipelineBundleManifestMetadataGenerator {
      *
      * @param processingEnv processing environment
      */
-    public PipelineBundleManifestMetadataGenerator(ProcessingEnvironment processingEnv) {
+    public PipelineContractMetadataGenerator(ProcessingEnvironment processingEnv) {
         this.processingEnv = processingEnv;
-    }
-
-    /**
-     * Writes META-INF/pipeline/bundle-manifest.json when pipeline steps are available.
-     *
-     * @param ctx compilation context
-     * @throws IOException when writing fails
-     */
-    public void writeBundleManifest(PipelineCompilationContext ctx) throws IOException {
-        if (ctx == null || ctx.getStepModels() == null || ctx.getStepModels().isEmpty()) {
-            return;
-        }
-        List<Map<String, Object>> steps = stepDescriptors(ctx);
-        if (steps.isEmpty()) {
-            return;
-        }
-
-        String pipelineId = resolvePipelineId(ctx);
-        Map<String, Object> manifestWithoutHash = new LinkedHashMap<>();
-        manifestWithoutHash.put("schemaVersion", 1);
-        manifestWithoutHash.put("pipelineId", pipelineId);
-        manifestWithoutHash.put("platform", ctx.getPlatformMode() == null ? "COMPUTE" : ctx.getPlatformMode().name());
-        manifestWithoutHash.put("transport", ctx.getTransportMode() == null ? "GRPC" : ctx.getTransportMode().name());
-        manifestWithoutHash.put("module", blankToNull(ctx.getModuleName()));
-        manifestWithoutHash.put("pluginHost", ctx.isPluginHost());
-        manifestWithoutHash.put("runtimeLayout", ctx.getRuntimeMapping() == null ? null : ctx.getRuntimeMapping().layout().name());
-        manifestWithoutHash.put("steps", steps);
-        manifestWithoutHash.put("capabilities", capabilities());
-
-        String bundleHash = sha256(CANONICAL_GSON.toJson(manifestWithoutHash));
-        Map<String, Object> finalManifest = new LinkedHashMap<>();
-        finalManifest.put("schemaVersion", 1);
-        finalManifest.put("pipelineId", pipelineId);
-        finalManifest.put("bundleVersionId", "sha256:" + bundleHash);
-        finalManifest.put("bundleHash", bundleHash);
-        finalManifest.put("platform", manifestWithoutHash.get("platform"));
-        finalManifest.put("transport", manifestWithoutHash.get("transport"));
-        finalManifest.put("module", manifestWithoutHash.get("module"));
-        finalManifest.put("pluginHost", manifestWithoutHash.get("pluginHost"));
-        finalManifest.put("runtimeLayout", manifestWithoutHash.get("runtimeLayout"));
-        finalManifest.put("steps", steps);
-        finalManifest.put("capabilities", manifestWithoutHash.get("capabilities"));
-
-        if (processingEnv != null) {
-            javax.tools.FileObject resourceFile = processingEnv.getFiler()
-                .createResource(StandardLocation.CLASS_OUTPUT, "", RESOURCE_PATH);
-            try (var writer = resourceFile.openWriter()) {
-                writer.write(PRETTY_GSON.toJson(finalManifest));
-            }
-        }
     }
 
     /**

@@ -75,23 +75,20 @@ abstract class RestaurantApprovalSplitWorkerITSupport {
     }
 
     protected final void registerAndActivateHostedBundle(int coordinatorPort) throws IOException {
-        Path bundleJar = locateBundleArtifact();
-        Map<String, Object> manifest = readBundleManifest(bundleJar);
-        String bundleVersionId = String.valueOf(manifest.get("bundleVersionId"));
-        String bundleHash = String.valueOf(manifest.get("bundleHash"));
+        Path releaseJar = locateReleaseArtifact();
+        Map<String, Object> contract = readPipelineContract(releaseJar);
+        String contractVersion = String.valueOf(contract.get("contractVersion"));
         Path releaseDescriptor = Files.createTempFile("restaurant-pipeline-release-", ".json");
         JSON.writeValue(releaseDescriptor.toFile(), Map.of(
             "schemaVersion", 1,
             "pipelineId", PIPELINE_ID,
-            "contractVersion", "sha256:" + bundleHash,
-            "releaseVersion", bundleVersionId,
+            "contractVersion", contractVersion,
+            "releaseVersion", contractVersion,
             "artifacts", List.of(Map.of(
                 "artifactId", "restaurant-approval-monolith",
                 "kind", "jar",
-                "uri", bundleJar.toString(),
-                "digest", "sha256:" + sha256(bundleJar),
-                "bundleVersionId", bundleVersionId,
-                "bundleHash", bundleHash,
+                "uri", releaseJar.toString(),
+                "digest", "sha256:" + sha256(releaseJar),
                 "stepIds", List.of(),
                 "capabilities", List.of("rest-transition-worker")))));
         JsonPath registered = given()
@@ -450,30 +447,30 @@ abstract class RestaurantApprovalSplitWorkerITSupport {
         return hosted ? "/tpf/control-plane/tenants/" + TENANT_ID + hostedPath : generatedPath;
     }
 
-    private static Path locateBundleArtifact() throws IOException {
+    private static Path locateReleaseArtifact() throws IOException {
         Path moduleDir = Path.of(System.getProperty("user.dir")).toAbsolutePath();
         Path target = moduleDir.resolve("target");
         try (var candidates = Files.walk(target)) {
-            List<Path> bundleJars = candidates
+            List<Path> releaseJars = candidates
                 .filter(Files::isRegularFile)
                 .filter(path -> path.getFileName().toString().endsWith(".jar"))
                 .filter(path -> !path.startsWith(target.resolve("transition-worker-split-it")))
                 .filter(path -> !path.startsWith(target.resolve("tpf-self-host")))
-                .filter(RestaurantApprovalSplitWorkerITSupport::containsMatchingBundleManifest)
-                .sorted(RestaurantApprovalSplitWorkerITSupport::compareBundleArtifactPreference)
+                .filter(RestaurantApprovalSplitWorkerITSupport::containsMatchingPipelineContract)
+                .sorted(RestaurantApprovalSplitWorkerITSupport::compareReleaseArtifactPreference)
                 .toList();
-            if (bundleJars.isEmpty()) {
-                throw new AssertionError("No built bundle JAR with pipeline manifest found under " + target);
+            if (releaseJars.isEmpty()) {
+                throw new AssertionError("No built JAR with pipeline contract found under " + target);
             }
-            return bundleJars.get(0);
+            return releaseJars.get(0);
         }
     }
 
-    private static int compareBundleArtifactPreference(Path left, Path right) {
-        return Integer.compare(bundleArtifactPreference(left), bundleArtifactPreference(right));
+    private static int compareReleaseArtifactPreference(Path left, Path right) {
+        return Integer.compare(releaseArtifactPreference(left), releaseArtifactPreference(right));
     }
 
-    private static int bundleArtifactPreference(Path path) {
+    private static int releaseArtifactPreference(Path path) {
         Path moduleTarget = Path.of(System.getProperty("user.dir")).toAbsolutePath().resolve("target");
         if (path.startsWith(moduleTarget.resolve("quarkus-app").resolve("app"))) {
             return 0;
@@ -486,9 +483,9 @@ abstract class RestaurantApprovalSplitWorkerITSupport {
         return 2;
     }
 
-    private static boolean containsMatchingBundleManifest(Path jarPath) {
+    private static boolean containsMatchingPipelineContract(Path jarPath) {
         try (JarFile jar = new JarFile(jarPath.toFile())) {
-            var entry = jar.getJarEntry("META-INF/pipeline/bundle-manifest.json");
+            var entry = jar.getJarEntry("META-INF/pipeline/pipeline-contract.json");
             if (entry == null) {
                 return false;
             }
@@ -501,11 +498,11 @@ abstract class RestaurantApprovalSplitWorkerITSupport {
     }
 
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> readBundleManifest(Path jarPath) throws IOException {
+    private static Map<String, Object> readPipelineContract(Path jarPath) throws IOException {
         try (JarFile jar = new JarFile(jarPath.toFile())) {
-            var entry = jar.getJarEntry("META-INF/pipeline/bundle-manifest.json");
+            var entry = jar.getJarEntry("META-INF/pipeline/pipeline-contract.json");
             if (entry == null) {
-                throw new IOException("Bundle JAR is missing META-INF/pipeline/bundle-manifest.json");
+                throw new IOException("JAR is missing META-INF/pipeline/pipeline-contract.json");
             }
             try (var stream = jar.getInputStream(entry)) {
                 return JSON.readValue(stream, Map.class);

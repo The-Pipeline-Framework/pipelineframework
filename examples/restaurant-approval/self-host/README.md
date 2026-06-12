@@ -16,7 +16,7 @@ From the repository root:
 
 The script packages `monolith-svc`, starts the coordinator, creates a local `pipeline-release.json`, registers and activates that release, submits accepted and declined orders through `/tpf/control-plane/...`, completes the await interaction, and verifies terminal results.
 
-The demo client submits the generated REST input DTO as a `RAW` generic control-plane payload. The release descriptor points at the local executable JAR; the JAR still carries `bundle-manifest.json` as worker identity metadata.
+The demo client submits the generated REST input DTO as a `RAW` generic control-plane payload. The release descriptor points at the local executable JAR, and the JAR carries `pipeline-contract.json` as the worker compatibility metadata.
 
 By default it first installs the current `framework` SNAPSHOT so the example build uses the runtime code from this checkout. For faster reruns after the local SNAPSHOT is current:
 
@@ -47,7 +47,7 @@ The incident script sets `TPF_ORCHESTRATOR_MAX_RETRIES=0` by default so the fail
 | `TPF_WORKER_PORT` | `8181` |
 | `TPF_CONTROL_PLANE_TOKEN` | `restaurant-control-plane-admin-token` |
 | `TPF_ADMIN_TOKEN` | `restaurant-control-plane-admin-token` |
-| `TPF_BUNDLE_STORE_ROOT` | `examples/restaurant-approval/monolith-svc/target/tpf-self-host/bundles` |
+| `TPF_RELEASE_STORE_ROOT` | `examples/restaurant-approval/monolith-svc/target/tpf-self-host/releases` |
 
 These defaults are local/dev only. Real self-host deployments should use secret references, durable stores, and explicit operational runbooks.
 

@@ -21,10 +21,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.orchestrator.LocalControlPlaneSecretResolver;
-import org.pipelineframework.orchestrator.LocalPipelineBundleArtifactStore;
+import org.pipelineframework.orchestrator.LocalPipelineReleaseArtifactStore;
 import org.pipelineframework.orchestrator.PipelineBundleCapabilities;
-import org.pipelineframework.orchestrator.PipelineBundleManifest;
-import org.pipelineframework.orchestrator.PipelineBundleManifestLoader;
 import org.pipelineframework.orchestrator.PipelineBundleStepDescriptor;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.release.dto.HostedReleaseRegisterRequest;
@@ -52,8 +50,8 @@ class HostedReleaseAdminResourceTest {
         resource.releaseRegistry = new InMemoryPipelineReleaseRegistry();
         PipelineReleaseRegistrar registrar = new PipelineReleaseRegistrar();
         registrar.descriptorLoader = new PipelineReleaseDescriptorLoader();
-        registrar.manifestLoader = new PipelineBundleManifestLoader();
-        registrar.artifactStore = new LocalPipelineBundleArtifactStore(tempDir.resolve("store"), registrar.manifestLoader);
+        registrar.contractLoader = new PipelineContractDescriptorLoader();
+        registrar.artifactStore = new LocalPipelineReleaseArtifactStore(tempDir.resolve("store"));
         resource.releaseRegistrar = registrar;
         resource.secretResolver = new LocalControlPlaneSecretResolver();
         when(config.admin()).thenReturn(adminConfig);
@@ -75,7 +73,7 @@ class HostedReleaseAdminResourceTest {
 
         assertEquals(200, register.getStatus());
         PipelineReleaseRecord registered = assertInstanceOf(PipelineReleaseRecord.class, register.getEntity());
-        assertEquals("sha256:bundle", registered.releaseVersion());
+        assertEquals("sha256:contract", registered.releaseVersion());
 
         Response list = resource.list(TENANT_ID, PIPELINE_ID, AUTH).await().indefinitely();
         assertEquals(200, list.getStatus());
@@ -112,37 +110,35 @@ class HostedReleaseAdminResourceTest {
     }
 
     private Path releaseDescriptor() throws Exception {
-        PipelineBundleManifest manifest = manifest();
+        PipelineContractDescriptor contract = contract();
         Path jar = tempDir.resolve("restaurant.jar");
         try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(jar))) {
-            output.putNextEntry(new JarEntry(PipelineBundleManifest.RESOURCE_PATH));
-            output.write(PipelineJson.mapper().writeValueAsBytes(manifest));
+            output.putNextEntry(new JarEntry(PipelineContractDescriptor.RESOURCE_PATH));
+            output.write(PipelineJson.mapper().writeValueAsBytes(contract));
             output.closeEntry();
         }
         Path descriptor = tempDir.resolve("pipeline-release.json");
         PipelineJson.mapper().writerWithDefaultPrettyPrinter().writeValue(descriptor.toFile(), Map.of(
             "schemaVersion", 1,
             "pipelineId", PIPELINE_ID,
-            "contractVersion", "sha256:bundle",
-            "releaseVersion", "sha256:bundle",
+            "contractVersion", "sha256:contract",
+            "releaseVersion", "sha256:contract",
             "artifacts", List.of(Map.of(
                 "artifactId", "restaurant",
                 "kind", "jar",
                 "uri", jar.toString(),
                 "digest", "sha256:" + sha256(jar),
-                "bundleVersionId", "sha256:bundle",
-                "bundleHash", "bundle",
                 "stepIds", List.of("Validate"),
                 "capabilities", List.of("rest")))));
         return descriptor;
     }
 
-    private static PipelineBundleManifest manifest() {
-        return new PipelineBundleManifest(
-            PipelineBundleManifest.CURRENT_SCHEMA_VERSION,
+    private static PipelineContractDescriptor contract() {
+        return new PipelineContractDescriptor(
+            PipelineContractDescriptor.CURRENT_SCHEMA_VERSION,
             PIPELINE_ID,
-            "sha256:bundle",
-            "bundle",
+            "sha256:contract",
+            "contract",
             "COMPUTE",
             "REST",
             "monolith-svc",

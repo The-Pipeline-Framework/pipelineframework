@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.Objects;
 
 import org.pipelineframework.orchestrator.PipelineBundleCapabilities;
-import org.pipelineframework.orchestrator.PipelineBundleManifest;
 import org.pipelineframework.orchestrator.PipelineBundleStepDescriptor;
 
 /**
@@ -25,6 +24,7 @@ public record PipelineContractDescriptor(
 ) {
     public static final int CURRENT_SCHEMA_VERSION = 1;
     public static final String RESOURCE_PATH = "META-INF/pipeline/pipeline-contract.json";
+    public static final String DEFAULT_PIPELINE_ID = "local-pipeline";
     public static final String DEFAULT_CONTRACT_VERSION = "local-contract";
     public static final String DEFAULT_CONTRACT_HASH = "local-contract-hash";
 
@@ -42,7 +42,7 @@ public record PipelineContractDescriptor(
     public static PipelineContractDescriptor localFallback() {
         return new PipelineContractDescriptor(
             CURRENT_SCHEMA_VERSION,
-            PipelineBundleManifest.DEFAULT_PIPELINE_ID,
+            DEFAULT_PIPELINE_ID,
             DEFAULT_CONTRACT_VERSION,
             DEFAULT_CONTRACT_HASH,
             null,
@@ -52,21 +52,5 @@ public record PipelineContractDescriptor(
             null,
             List.of(),
             PipelineBundleCapabilities.defaults());
-    }
-
-    public static PipelineContractDescriptor fromManifest(PipelineBundleManifest manifest) {
-        Objects.requireNonNull(manifest, "manifest");
-        return new PipelineContractDescriptor(
-            CURRENT_SCHEMA_VERSION,
-            manifest.pipelineId(),
-            "sha256:" + manifest.bundleHash(),
-            manifest.bundleHash(),
-            manifest.platform(),
-            manifest.transport(),
-            manifest.module(),
-            manifest.pluginHost(),
-            manifest.runtimeLayout(),
-            manifest.steps(),
-            manifest.capabilities());
     }
 }

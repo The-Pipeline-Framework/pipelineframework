@@ -137,7 +137,8 @@ class GrpcPipelineTransitionWorkerTest {
 
         assertEquals("grpc", capability.providerName());
         assertEquals("org.example.restaurant", capability.pipelineId());
-        assertEquals("sha256:bundle", capability.bundleVersionId());
+        assertEquals("sha256:contract", capability.contractVersion());
+        assertEquals("sha256:release", capability.releaseVersion());
         assertTrue(captured.get().getSignature() != null && !captured.get().getSignature().isBlank());
     }
 
@@ -239,8 +240,10 @@ class GrpcPipelineTransitionWorkerTest {
                 PipelineWorkerCapability.PROTOCOL_VERSION,
                 "grpc",
                 "org.example.restaurant",
-                "sha256:bundle",
-                "bundle",
+                "sha256:contract",
+                "sha256:release",
+                "restaurant-approval-monolith",
+                "sha256:artifact",
                 List.of("application/tpf-transition-envelope+json"),
                 List.of("grpc"));
             return TransitionWorkerCapabilitiesResponse.newBuilder()
