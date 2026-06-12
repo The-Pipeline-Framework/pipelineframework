@@ -24,6 +24,19 @@ The goal is:
 - `RuntimeAdapters`
 
 `framework/runtime` remains Quarkus-first today and registers concrete implementations in `RuntimeAdapterBootstrap`.
+`framework/runtime-spring` provides the first Spring Boot adapter for these same contracts without depending on the
+Quarkus runtime artifact.
+
+The Spring adapter currently proves host integration only:
+
+- Spring bean and config lookup through `ApplicationContext`.
+- Thread-local execution context propagation.
+- Spring task execution and Java virtual-thread blocking offload.
+- Optional Spring transaction manager integration.
+- Spring application-event publishing for event and work dispatch seams.
+
+It does not yet provide generated Spring pipeline execution, WebFlux resources, Reactor context propagation, persistence
+providers, broker integration, or REST/gRPC transport parity.
 
 ## Renderer profile plumbing
 
@@ -57,6 +70,7 @@ To make this explicit and enforceable, this slice adds dependency-seam tests:
 - Quarkus pipeline generation and execution paths remain unchanged.
 - Renderer-profile is now a compile-time configuration surface in deployment.
 - The core/runtime split becomes the stable seam for subsequent Spring adapter work.
+- Spring Boot can now host the neutral adapter registry without importing the Quarkus runtime module.
 
 ## Notes
 
