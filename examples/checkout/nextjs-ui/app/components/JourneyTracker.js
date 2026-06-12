@@ -17,6 +17,18 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function timeLabel(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
+
 function eventKey(event) {
   return [
     event.type || "",
@@ -31,16 +43,18 @@ function readJourney() {
     const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "{}");
     return {
       rootExecutionId: String(parsed.rootExecutionId || ""),
+      lastUpdatedAt: String(parsed.lastUpdatedAt || ""),
       events: Array.isArray(parsed.events) ? parsed.events : []
     };
   } catch (_error) {
-    return { rootExecutionId: "", events: [] };
+    return { rootExecutionId: "", lastUpdatedAt: "", events: [] };
   }
 }
 
 function writeJourney(journey) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
     rootExecutionId: journey.rootExecutionId || "",
+    lastUpdatedAt: journey.lastUpdatedAt || nowIso(),
     events: journey.events.slice(-24)
   }));
 }
@@ -53,6 +67,11 @@ function mergeEvents(existing, additions) {
     if (!seen.has(key)) {
       seen.add(key);
       merged.push(event);
+    } else {
+      const index = merged.findIndex((candidate) => eventKey(candidate) === key);
+      if (index >= 0 && !merged[index].at && event.at) {
+        merged[index] = { ...merged[index], at: event.at };
+      }
     }
   }
   return merged;
@@ -69,7 +88,7 @@ function stageState(stage, events, activeStageId) {
     return "complete";
   }
   if (stage.mode === "automatic" && events.some((event) => event.type === "completed" && event.stageId === "restaurant-acceptance")) {
-    return stage.order >= 4 ? "released" : "pending";
+    return stage.order >= 4 ? "continuing" : "pending";
   }
   return "pending";
 }
@@ -78,7 +97,7 @@ function StateIcon({ state }) {
   if (state === "complete") {
     return <CircleCheck aria-hidden="true" size={15} />;
   }
-  if (state === "active" || state === "released") {
+  if (state === "active" || state === "continuing") {
     return <CircleDashed aria-hidden="true" size={15} />;
   }
   return <Circle aria-hidden="true" size={15} />;
@@ -105,7 +124,7 @@ export default function JourneyTracker({
   interactions = [],
   startedExecutionId = ""
 }) {
-  const [journey, setJourney] = useState({ rootExecutionId: "", events: [] });
+  const [journey, setJourney] = useState({ rootExecutionId: "", lastUpdatedAt: "", events: [] });
 
   const signals = useMemo(() => {
     const additions = [];
@@ -151,11 +170,17 @@ export default function JourneyTracker({
   useEffect(() => {
     const stored = readJourney();
     const started = String(startedExecutionId || "").trim();
+    if (!started && signals.length === 0) {
+      setJourney(stored);
+      return;
+    }
+
     const base = started && started !== stored.rootExecutionId
       ? { rootExecutionId: started, events: [] }
       : stored;
     const next = {
       rootExecutionId: base.rootExecutionId || started,
+      lastUpdatedAt: signals.length > 0 ? nowIso() : base.lastUpdatedAt,
       events: mergeEvents(base.events, signals)
     };
     writeJourney(next);
@@ -167,7 +192,7 @@ export default function JourneyTracker({
   const hasEvents = journey.events.length > 0;
 
   function clearJourney() {
-    const empty = { rootExecutionId: "", events: [] };
+    const empty = { rootExecutionId: "", lastUpdatedAt: "", events: [] };
     writeJourney(empty);
     setJourney(empty);
   }
@@ -178,6 +203,7 @@ export default function JourneyTracker({
         <div>
           <p className="eyebrow">Order journey</p>
           <h3>{journey.rootExecutionId ? `Run ${shortIdentifier(journey.rootExecutionId)}` : "No order tracked"}</h3>
+          {journey.lastUpdatedAt ? <span className="journey-time">Last update {timeLabel(journey.lastUpdatedAt)}</span> : null}
         </div>
         {hasEvents ? (
           <button className="icon-button" type="button" onClick={clearJourney} aria-label="Clear tracked journey">
@@ -199,8 +225,8 @@ export default function JourneyTracker({
                     ? "Observed"
                     : state === "active"
                       ? "Waiting for review"
-                      : state === "released"
-                        ? "Released downstream"
+                      : state === "continuing"
+                        ? "Continuing automatically"
                         : stage.mode === "human"
                           ? "Not reached yet"
                           : "Automatic"}
@@ -216,6 +242,7 @@ export default function JourneyTracker({
           <div key={eventKey(event)}>
             <strong>{eventLabel(event)}</strong>
             <span>
+              {event.at ? `${timeLabel(event.at)} · ` : ""}
               {event.executionId ? `Run ${shortIdentifier(event.executionId)}` : "Await state observed"}
               {event.interactionId ? ` · Task ${shortIdentifier(event.interactionId)}` : ""}
             </span>
@@ -226,7 +253,7 @@ export default function JourneyTracker({
       </div>
 
       <p className="field-help">
-        The approval desk observes the two review boundaries directly. After restaurant acceptance, the remaining modules continue automatically.
+        The approval desk observes the two review boundaries directly. After restaurant acceptance, kitchen, dispatch, delivery, payment, and terminal handling continue automatically.
       </p>
     </section>
   );

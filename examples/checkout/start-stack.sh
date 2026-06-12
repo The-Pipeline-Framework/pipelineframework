@@ -297,6 +297,7 @@ write_service_props() {
       echo "pipeline.orchestrator.state-provider=memory"
       echo "pipeline.orchestrator.dispatcher-provider=event"
       echo "pipeline.orchestrator.dlq-provider=log"
+      echo "pipeline.orchestrator.sweep-interval=PT1S"
 
       for client in $(internal_clients "$module"); do
         echo "quarkus.grpc.clients.${client}.host=127.0.0.1"

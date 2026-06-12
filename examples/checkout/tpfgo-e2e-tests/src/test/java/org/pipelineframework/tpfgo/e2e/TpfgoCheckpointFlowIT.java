@@ -920,6 +920,7 @@ class TpfgoCheckpointFlowIT {
                 lines.add("pipeline.orchestrator.state-provider=memory");
                 lines.add("pipeline.orchestrator.dispatcher-provider=event");
                 lines.add("pipeline.orchestrator.dlq-provider=log");
+                lines.add("pipeline.orchestrator.sweep-interval=PT1S");
             }
             lines.addAll(spec.internalGrpcClientLines());
             lines.addAll(spec.bindingLines());

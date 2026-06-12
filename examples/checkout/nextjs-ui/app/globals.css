@@ -499,6 +499,13 @@ button:disabled {
   font-size: 1rem;
 }
 
+.journey-time {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .journey-stages {
   display: grid;
   gap: 0.45rem;
@@ -524,7 +531,7 @@ button:disabled {
 }
 
 .journey-stages li.active,
-.journey-stages li.released {
+.journey-stages li.continuing {
   border-color: rgb(37 99 235 / 32%);
   background: #eff6ff;
 }
