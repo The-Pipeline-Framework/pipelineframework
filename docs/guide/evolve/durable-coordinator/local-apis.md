@@ -31,10 +31,11 @@ Enable the local release admin resource:
 pipeline.orchestrator.admin.enabled=true
 pipeline.orchestrator.admin.admin-token=local-admin-token
 pipeline.orchestrator.releases.registry.provider=file
+pipeline.orchestrator.releases.storage.provider=local
 pipeline.orchestrator.releases.storage.root=target/tpf-releases
 ```
 
-Use `pipeline.orchestrator.releases.registry.provider=dynamo` plus `pipeline.orchestrator.dynamo.release-table` when the release metadata must survive multiple coordinator instances. The Dynamo registry stores immutable release records and append-only activation events.
+Use `pipeline.orchestrator.releases.registry.provider=dynamo` plus `pipeline.orchestrator.dynamo.release-table` when the release metadata must survive multiple coordinator instances. Pair it with `pipeline.orchestrator.releases.storage.provider=s3` for shared artifact storage. The Dynamo registry stores immutable release records and append-only activation events.
 
 Main endpoints:
 
@@ -44,4 +45,4 @@ Main endpoints:
 4. `GET /tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/releases/{releaseVersion}`
 5. `POST /tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/releases/{releaseVersion}/activate`
 
-The registration API accepts an absolute local `pipeline-release.json` path. The release descriptor pins one or more artifacts by kind and digest. For executable local JAR artifacts, the registrar validates embedded `META-INF/pipeline/pipeline-contract.json`, copies the JAR into the local store, records size/checksum metadata, and stores the managed artifact path.
+The registration API accepts an absolute local `pipeline-release.json` path. The release descriptor pins one or more artifacts by kind and digest. For executable local artifacts, the registrar validates embedded `META-INF/pipeline/pipeline-contract.json` when present, copies the artifact into the configured release artifact store, records size/checksum metadata, and stores the managed artifact URI.

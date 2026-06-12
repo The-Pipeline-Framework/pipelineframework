@@ -43,8 +43,8 @@ The relevant cost boundary is not class count. It is where work runs.
 
 | Path | Work performed | Performance expectation |
 | --- | --- | --- |
-| Admin registration | parse release descriptor, inspect local/JAR artifact, compute checksum, copy managed artifact | off hot path; can perform blocking file work |
-| Activation | update active release pointer and validate stored artifact identity | operator path; not per transition |
+| Admin registration | parse release descriptor, inspect local/JAR artifact, compute checksum, copy or upload managed artifact | off hot path; can perform blocking file/network work |
+| Activation | append activation metadata and validate stored artifact identity | operator path; not per transition |
 | Hosted submit | read active release, verify stored artifact metadata, check worker capability, create execution | one-time admission cost per execution |
 | Transition dispatch | claim lease, build pinned transition envelope, invoke selected worker, commit outcome | hot path; must not hash artifacts or scan registries |
 | Await resume | use release identity pinned on the execution record | hot path; independent of the currently active release |
@@ -70,4 +70,5 @@ This split is intentionally bounded. It does not move the transition worker prot
 1. The one-process monolith remains valid for local/dev proof, not as the recommended separated deployment.
 2. Worker lifecycle, heartbeat, drain, and stale-worker state are still outside this slice.
 3. File-backed release registry is still local/single-coordinator oriented; Dynamo release metadata is the HA path.
-4. Runtime worker-reported artifact digest drift remains a follow-up; current capability checks cover pipeline, contract, release, and executable bundle identity.
+4. Local release artifact storage is still local/single-coordinator oriented; S3-compatible release artifact storage is the multi-coordinator path.
+5. Runtime worker-reported artifact digest drift remains a follow-up; current capability checks cover pipeline, contract, release, and configured artifact identity.

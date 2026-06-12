@@ -128,12 +128,12 @@ class PipelineExecutionServiceTest {
             "application/tpf-transition+json",
             "{not-json");
         when(releaseIdentityResolver.validateCommandIdentity(command, null))
-            .thenReturn(Optional.of("bundle mismatch"));
+            .thenReturn(Optional.of("identity mismatch sentinel"));
 
         TransitionResultEnvelope result = service.executeTransition(command).await().indefinitely();
 
         assertEquals(TransitionWorkerOutcome.FAILED, result.outcome());
-        assertTrue(result.failure().message().contains("bundle mismatch"));
+        assertTrue(result.failure().message().contains("identity mismatch sentinel"));
     }
 
     @Test
@@ -142,7 +142,7 @@ class PipelineExecutionServiceTest {
             "tenant-1",
             "exec-6",
             "local-pipeline",
-            "local-bundle",
+            "local-contract",
             0,
             0,
             ExecutionResultShape.SINGLE,
@@ -152,13 +152,10 @@ class PipelineExecutionServiceTest {
             "java.lang.String",
             "application/tpf-transition+json",
             "\"input\"");
-        when(releaseIdentityResolver.validateCommandIdentity(command, null))
-            .thenReturn(Optional.of("bundle mismatch"));
-
         TransitionResultEnvelope result = service.executeTransition(command).await().indefinitely();
 
         assertEquals(TransitionWorkerOutcome.FAILED, result.outcome());
-        assertFalse(result.failure().message().contains("bundle mismatch"));
+        assertFalse(result.failure().message().contains("identity mismatch sentinel"));
     }
 
     @Test
@@ -167,7 +164,7 @@ class PipelineExecutionServiceTest {
             "tenant-1",
             "exec-7",
             "local-pipeline",
-            "local-bundle",
+            "local-contract",
             0,
             0,
             ExecutionResultShape.SINGLE,
@@ -178,11 +175,11 @@ class PipelineExecutionServiceTest {
             "application/tpf-transition+json",
             "\"input\"");
         when(releaseIdentityResolver.validateCommandIdentity(command, null))
-            .thenReturn(Optional.of("bundle mismatch"));
+            .thenReturn(Optional.of("identity mismatch sentinel"));
 
         TransitionResultEnvelope result = service.executePortableTransition(command).await().indefinitely();
 
         assertEquals(TransitionWorkerOutcome.FAILED, result.outcome());
-        assertTrue(result.failure().message().contains("bundle mismatch"));
+        assertTrue(result.failure().message().contains("identity mismatch sentinel"));
     }
 }

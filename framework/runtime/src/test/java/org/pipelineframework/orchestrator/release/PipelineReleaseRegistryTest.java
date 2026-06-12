@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.net.URI;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
@@ -59,7 +60,7 @@ class PipelineReleaseRegistryTest {
         assertEquals("sha256:contract", record.contractVersion());
         assertEquals("restaurant", record.primaryArtifactId());
         assertEquals("sha256:" + sha256(jar), record.primaryArtifactDigest());
-        assertTrue(Files.isRegularFile(Path.of(record.primaryArtifactPath())));
+        assertTrue(Files.isRegularFile(Path.of(URI.create(record.primaryArtifactUri()))));
         registrar.verify(record);
     }
 
@@ -145,7 +146,7 @@ class PipelineReleaseRegistryTest {
             existing.descriptor(),
             existing.primaryArtifactId(),
             existing.primaryArtifactDigest(),
-            existing.primaryArtifactPath(),
+            existing.primaryArtifactUri(),
             existing.primaryArtifactSizeBytes(),
             "different-checksum",
             existing.contract(),
@@ -243,7 +244,7 @@ class PipelineReleaseRegistryTest {
             descriptor,
             "restaurant",
             "sha256:artifact",
-            "/tmp/restaurant.jar",
+            Path.of("/tmp/restaurant.jar").toUri().toString(),
             100L,
             "artifact",
             contract,
@@ -273,7 +274,7 @@ class PipelineReleaseRegistryTest {
             Map.entry("release_version", avS(record.releaseVersion())),
             Map.entry("primary_artifact_id", avS(record.primaryArtifactId())),
             Map.entry("primary_artifact_digest", avS(record.primaryArtifactDigest())),
-            Map.entry("primary_artifact_path", avS(record.primaryArtifactPath())),
+            Map.entry("primary_artifact_uri", avS(record.primaryArtifactUri())),
             Map.entry("primary_artifact_size_bytes", avN(record.primaryArtifactSizeBytes())),
             Map.entry("primary_artifact_checksum", avS(record.primaryArtifactChecksum())),
             Map.entry("descriptor_json", avS(writeJson(record.descriptor()))),

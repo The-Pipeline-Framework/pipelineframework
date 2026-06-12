@@ -130,7 +130,7 @@ public record TransitionResultEnvelope(
      * Returns output items in the representation the coordinator should persist.
      * In-process workers can carry decoded Java objects. Remote workers return
      * portable payload envelopes, which the coordinator must not eagerly decode
-     * when it may not own the application bundle classes.
+     * when it may not own the application classes.
      *
      * @return decoded local outputs or serialized remote outputs
      */

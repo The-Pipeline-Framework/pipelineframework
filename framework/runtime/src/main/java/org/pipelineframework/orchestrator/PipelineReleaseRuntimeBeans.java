@@ -24,7 +24,19 @@ public class PipelineReleaseRuntimeBeans {
     @Produces
     @ApplicationScoped
     PipelineReleaseArtifactStore pipelineReleaseArtifactStore() {
-        return new LocalPipelineReleaseArtifactStore(storageRoot());
+        String provider = orchestratorConfig == null
+            || orchestratorConfig.releases() == null
+            || orchestratorConfig.releases().storage() == null
+                ? "local"
+                : orchestratorConfig.releases().storage().provider();
+        if (provider == null || provider.isBlank() || "local".equalsIgnoreCase(provider)) {
+            return new LocalPipelineReleaseArtifactStore(storageRoot());
+        }
+        if ("s3".equalsIgnoreCase(provider)) {
+            return new S3PipelineReleaseArtifactStore(orchestratorConfig);
+        }
+        throw new IllegalStateException(
+            "Unsupported pipeline.orchestrator.releases.storage.provider '" + provider + "'");
     }
 
     @Produces

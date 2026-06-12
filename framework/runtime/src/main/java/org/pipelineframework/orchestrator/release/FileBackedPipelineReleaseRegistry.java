@@ -170,7 +170,7 @@ public class FileBackedPipelineReleaseRegistry implements PipelineReleaseRegistr
 
     private static boolean sameMetadata(PipelineReleaseRecord left, PipelineReleaseRecord right) {
         return left.contractVersion().equals(right.contractVersion())
-            && left.primaryArtifactPath().equals(right.primaryArtifactPath())
+            && left.primaryArtifactUri().equals(right.primaryArtifactUri())
             && left.primaryArtifactSizeBytes() == right.primaryArtifactSizeBytes()
             && left.primaryArtifactChecksum().equals(right.primaryArtifactChecksum());
     }

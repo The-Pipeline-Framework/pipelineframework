@@ -152,7 +152,7 @@ Current recovery boundary: this self-host reference exposes status, terminal err
 ## What This Proves
 
 1. A coordinator process can submit and inspect executions without using generated `/pipeline/*` app routes.
-2. Bundle registration, activation, artifact storage, execution pinning, and worker availability checks are exercised.
+2. Release registration, activation, artifact storage, execution pinning, and worker availability checks are exercised.
 3. Local transition execution works without configuring a remote worker target.
 4. Await suspension and completion happen through the hosted control-plane API.
 5. Terminal failure and DLQ publication are visible in the self-host operator flow.

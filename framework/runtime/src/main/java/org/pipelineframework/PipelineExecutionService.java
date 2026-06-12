@@ -60,6 +60,7 @@ import org.pipelineframework.orchestrator.TransitionCommandEnvelope;
 import org.pipelineframework.orchestrator.TransitionPayloadCodec;
 import org.pipelineframework.orchestrator.TransitionResultEnvelope;
 import org.pipelineframework.orchestrator.TransitionWorkerCommand;
+import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import org.pipelineframework.step.StepManyToMany;
 import org.pipelineframework.step.functional.ManyToOne;
 
@@ -381,6 +382,12 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
   private java.util.Optional<String> validateCommandIdentity(
       TransitionCommandEnvelope command,
       boolean allowLocalFallbackIdentity) {
+    if (allowLocalFallbackIdentity
+        && PipelineContractDescriptor.DEFAULT_PIPELINE_ID.equals(command.pipelineId())
+        && PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION.equals(command.contractVersion())
+        && PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION.equals(command.releaseVersion())) {
+      return java.util.Optional.empty();
+    }
     return releaseIdentityResolver().validateCommandIdentity(command, orchestratorConfig);
   }
 

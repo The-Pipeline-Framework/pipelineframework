@@ -73,7 +73,7 @@ public class PipelineReleaseRegistrar {
             descriptor,
             primary.artifactId(),
             primary.artifactDigest(),
-            primary.artifactPath(),
+            primary.artifactUri(),
             primary.artifactSizeBytes(),
             primary.artifactChecksum(),
             primary.contract().orElse(null),
@@ -95,7 +95,7 @@ public class PipelineReleaseRegistrar {
         if (record == null) {
             throw new IllegalArgumentException("Release record is required");
         }
-        if (record.primaryArtifactPath() != null && !record.primaryArtifactPath().isBlank()) {
+        if (record.primaryArtifactUri() != null && !record.primaryArtifactUri().isBlank()) {
             artifactStore().verify(record);
         }
     }
@@ -154,7 +154,7 @@ public class PipelineReleaseRegistrar {
         return new ValidatedArtifact(
             artifact.artifactId(),
             artifact.digest(),
-            stored.artifactPath(),
+            stored.artifactUri(),
             stored.artifactSizeBytes(),
             stored.artifactChecksum(),
             Optional.of(contract));
@@ -164,15 +164,16 @@ public class PipelineReleaseRegistrar {
         PipelineReleaseDescriptor descriptor,
         PipelineReleaseArtifactDescriptor artifact) {
         Path artifactPath = readableLocalPath(artifact, "Release local artifact must point to a readable file");
-        String checksum = validateDigest(artifact, artifactPath);
+        validateDigest(artifact, artifactPath);
         Optional<PipelineContractDescriptor> contract = loadContractFromJar(artifactPath);
         contract.ifPresent(value -> validateContractCompatibility(descriptor, value));
+        PipelineReleaseStoredArtifact stored = artifactStore().store(artifactPath);
         return new ValidatedArtifact(
             artifact.artifactId(),
             artifact.digest(),
-            artifactPath.toAbsolutePath().normalize().toString(),
-            size(artifactPath),
-            "sha256:" + checksum,
+            stored.artifactUri(),
+            stored.artifactSizeBytes(),
+            stored.artifactChecksum(),
             contract);
     }
 
@@ -228,14 +229,6 @@ public class PipelineReleaseRegistrar {
         return Path.of(uri).toAbsolutePath().normalize();
     }
 
-    private static long size(Path path) {
-        try {
-            return Files.size(path);
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Failed to read artifact size: " + e.getMessage(), e);
-        }
-    }
-
     private static String sha256(Path path) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -279,7 +272,7 @@ public class PipelineReleaseRegistrar {
     private record ValidatedArtifact(
         String artifactId,
         String artifactDigest,
-        String artifactPath,
+        String artifactUri,
         long artifactSizeBytes,
         String artifactChecksum,
         Optional<PipelineContractDescriptor> contract

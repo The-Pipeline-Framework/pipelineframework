@@ -15,7 +15,7 @@ import org.pipelineframework.orchestrator.RestPipelineTransitionWorker;
 import org.pipelineframework.orchestrator.TransitionPayloadEncoding;
 
 /**
- * Checks bundle availability on the worker selected by runtime configuration.
+ * Checks release availability on the worker selected by runtime configuration.
  */
 @ApplicationScoped
 public class DefaultPipelineWorkerAvailability implements PipelineWorkerAvailability {

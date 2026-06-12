@@ -48,7 +48,7 @@ public class DynamoPipelineReleaseRegistry implements PipelineReleaseRegistry {
     private static final String RELEASE_VERSION = "release_version";
     private static final String PRIMARY_ARTIFACT_ID = "primary_artifact_id";
     private static final String PRIMARY_ARTIFACT_DIGEST = "primary_artifact_digest";
-    private static final String PRIMARY_ARTIFACT_PATH = "primary_artifact_path";
+    private static final String PRIMARY_ARTIFACT_URI = "primary_artifact_uri";
     private static final String PRIMARY_ARTIFACT_SIZE_BYTES = "primary_artifact_size_bytes";
     private static final String PRIMARY_ARTIFACT_CHECKSUM = "primary_artifact_checksum";
     private static final String DESCRIPTOR_JSON = "descriptor_json";
@@ -271,7 +271,7 @@ public class DynamoPipelineReleaseRegistry implements PipelineReleaseRegistry {
             fromJson(stringValue(item, DESCRIPTOR_JSON), PipelineReleaseDescriptor.class),
             stringValue(item, PRIMARY_ARTIFACT_ID),
             stringValue(item, PRIMARY_ARTIFACT_DIGEST),
-            stringValue(item, PRIMARY_ARTIFACT_PATH),
+            stringValue(item, PRIMARY_ARTIFACT_URI),
             longValue(item, PRIMARY_ARTIFACT_SIZE_BYTES),
             stringValue(item, PRIMARY_ARTIFACT_CHECKSUM),
             fromJson(stringValue(item, CONTRACT_JSON), PipelineContractDescriptor.class),
@@ -291,7 +291,7 @@ public class DynamoPipelineReleaseRegistry implements PipelineReleaseRegistry {
             Map.entry(RELEASE_VERSION, avS(record.releaseVersion())),
             Map.entry(PRIMARY_ARTIFACT_ID, avS(record.primaryArtifactId())),
             Map.entry(PRIMARY_ARTIFACT_DIGEST, avS(record.primaryArtifactDigest())),
-            Map.entry(PRIMARY_ARTIFACT_PATH, avS(record.primaryArtifactPath())),
+            Map.entry(PRIMARY_ARTIFACT_URI, avS(record.primaryArtifactUri())),
             Map.entry(PRIMARY_ARTIFACT_SIZE_BYTES, avN(record.primaryArtifactSizeBytes())),
             Map.entry(PRIMARY_ARTIFACT_CHECKSUM, avS(record.primaryArtifactChecksum())),
             Map.entry(DESCRIPTOR_JSON, avS(toJson(record.descriptor()))),
@@ -429,7 +429,7 @@ public class DynamoPipelineReleaseRegistry implements PipelineReleaseRegistry {
             && left.releaseVersion().equals(right.releaseVersion())
             && left.primaryArtifactId().equals(right.primaryArtifactId())
             && left.primaryArtifactDigest().equals(right.primaryArtifactDigest())
-            && left.primaryArtifactPath().equals(right.primaryArtifactPath())
+            && left.primaryArtifactUri().equals(right.primaryArtifactUri())
             && left.primaryArtifactSizeBytes() == right.primaryArtifactSizeBytes()
             && left.primaryArtifactChecksum().equals(right.primaryArtifactChecksum())
             && toJson(left.descriptor()).equals(toJson(right.descriptor()))

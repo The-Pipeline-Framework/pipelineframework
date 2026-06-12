@@ -24,7 +24,7 @@ This is the fastest way to prove the model, but it is not crash-surviving HA. If
 
 Use this shape when you want a real control-plane/data-plane boundary.
 
-The coordinator process enables the control-plane and admin APIs, owns execution/await state, and selects a remote transition worker through configured REST or gRPC target properties. Worker processes host the same pipeline bundle code and expose the default-disabled worker endpoint or service.
+The coordinator process enables the control-plane and admin APIs, owns execution/await state, and selects a remote transition worker through configured REST or gRPC target properties. Worker processes host the same pipeline release code and expose the default-disabled worker endpoint or service.
 
 REST worker selection example:
 
@@ -83,7 +83,10 @@ pipeline.orchestrator.admin.enabled=true
 pipeline.orchestrator.admin.admin-token-ref=env:TPF_ADMIN_TOKEN
 
 pipeline.orchestrator.releases.registry.provider=dynamo
-pipeline.orchestrator.releases.storage.root=/var/lib/tpf/releases
+pipeline.orchestrator.releases.storage.provider=s3
+pipeline.orchestrator.releases.storage.s3.bucket=tpf-release-artifacts
+pipeline.orchestrator.releases.storage.s3.prefix=tpf/releases
+pipeline.orchestrator.releases.storage.s3.region=eu-west-1
 ```
 
 The await interaction table must provide these ALL-projected GSIs:
@@ -99,6 +102,8 @@ SQS request/reply worker protocol has one additional v1 constraint: `pipeline.or
 
 The Dynamo release registry stores immutable release records plus append-only activation events. Active release lookup reads the latest activation event for the tenant and pipeline; it does not update a mutable active pointer. New coordinator metadata stores should follow this rule. Existing execution and await Dynamo stores still use conditional updates for leases and state transitions until that storage model is redesigned.
 
+For one-process local development, use `pipeline.orchestrator.releases.storage.provider=local` with `pipeline.orchestrator.releases.storage.root=/var/lib/tpf/releases`. For multi-coordinator self-host deployments, prefer the S3-compatible provider so every coordinator verifies the same managed artifact object. AWS S3, MinIO, and LocalStack-style endpoints fit this model; use `endpoint-override` and `path-style-access=true` for non-AWS S3-compatible stores.
+
 ## Startup Checklist
 
 Before accepting work:
@@ -111,7 +116,7 @@ Before accepting work:
 6. Register and activate the release for the tenant and pipeline.
 7. Submit one canary execution and verify status, pending await interaction, completion, and result.
 
-The current coordinator does not dynamically load registered JAR code. Release registration validates the release descriptor and, for local executable JAR artifacts, validates and stores the artifact. Workers must already host matching code. Worker availability checks verify the active contract/release identity before hosted execution submission, and artifact id/digest when both sides provide it.
+The current coordinator does not dynamically load registered JAR code. Release registration validates the release descriptor and, for local executable artifacts, validates and stores the artifact in the configured release artifact store. Workers must already host matching code. Worker availability checks verify the active contract/release identity before hosted execution submission, and artifact id/digest when both sides provide it.
 
 `pipeline.orchestrator.control-plane.require-remote-worker=true` is recommended for separated self-host deployments. It prevents a coordinator process from silently falling back to the local in-process worker when no REST, gRPC, or SQS worker target is configured. Leave it disabled for the one-process local demo. See [Runtime Boundaries And Performance](/guide/evolve/durable-coordinator/runtime-boundaries-performance).
 
@@ -159,11 +164,11 @@ There is no built-in generic DLQ replay endpoint yet. The DLQ proves durable fai
 
 The current safe upgrade procedure is conservative:
 
-1. Deploy workers that host the new bundle version.
+1. Deploy workers that host the new release version.
 2. Register and activate the new release.
 3. Submit canary executions and verify worker availability and results.
-4. Leave old workers running until executions pinned to the old bundle drain.
-5. Stop old workers only after status queries show no active executions for the old bundle.
+4. Leave old workers running until executions pinned to the old release drain.
+5. Stop old workers only after status queries show no active executions for the old release.
 
 There is no worker lifecycle registry yet. Operators must track healthy, stale, draining, and unavailable worker states outside the framework for now.
 
@@ -192,4 +197,4 @@ This recipe intentionally does not include:
 5. worker registration, heartbeat, or drain state,
 6. production tenancy, RBAC, or org/principal management.
 
-The file-backed bundle registry is suitable for local/dev and single-coordinator self-host pilots. Use the Dynamo release registry for multi-coordinator release metadata. Artifact storage is still local filesystem based in this recipe; shared or replicated artifact storage remains deployment-owned.
+The file-backed release registry is suitable for local/dev and single-coordinator self-host pilots. Use the Dynamo release registry for multi-coordinator release metadata. Use the S3-compatible release artifact store for shared artifact objects across coordinator instances.

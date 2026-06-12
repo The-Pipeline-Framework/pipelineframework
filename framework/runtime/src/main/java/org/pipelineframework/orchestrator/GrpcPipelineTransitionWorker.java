@@ -83,7 +83,7 @@ public class GrpcPipelineTransitionWorker implements PipelineTransitionWorker, T
     }
 
     /**
-     * Fetches worker bundle capabilities from the gRPC worker.
+     * Fetches worker release capabilities from the gRPC worker.
      *
      * @return remote worker capabilities
      */

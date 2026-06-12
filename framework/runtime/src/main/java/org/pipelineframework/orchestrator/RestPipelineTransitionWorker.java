@@ -79,7 +79,7 @@ public class RestPipelineTransitionWorker implements PipelineTransitionWorker, T
     }
 
     /**
-     * Fetches worker bundle capabilities from the REST worker.
+     * Fetches worker release capabilities from the REST worker.
      *
      * @return remote worker capabilities
      */
