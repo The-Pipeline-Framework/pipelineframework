@@ -11,7 +11,6 @@ import java.util.Objects;
  * @param pipelineId pipeline identifier
  * @param contractVersion semantic pipeline contract version
  * @param releaseVersion active release version
- * @param bundleVersionId bundle/runtime version identifier
  * @param currentStepIndex step index where execution should continue
  * @param attempt current execution attempt
  * @param resultShape expected materialized result shape
@@ -28,7 +27,6 @@ public record TransitionCommandEnvelope(
     String pipelineId,
     String contractVersion,
     String releaseVersion,
-    String bundleVersionId,
     int currentStepIndex,
     int attempt,
     ExecutionResultShape resultShape,
@@ -43,7 +41,7 @@ public record TransitionCommandEnvelope(
         String tenantId,
         String executionId,
         String pipelineId,
-        String bundleVersionId,
+        String releaseVersion,
         int currentStepIndex,
         int attempt,
         ExecutionResultShape resultShape,
@@ -59,8 +57,7 @@ public record TransitionCommandEnvelope(
             executionId,
             pipelineId,
             PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
-            bundleVersionId,
-            bundleVersionId,
+            releaseVersion,
             currentStepIndex,
             attempt,
             resultShape,
@@ -80,9 +77,8 @@ public record TransitionCommandEnvelope(
             ? PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION
             : contractVersion;
         releaseVersion = releaseVersion == null || releaseVersion.isBlank()
-            ? bundleVersionId
+            ? contractVersion
             : releaseVersion;
-        Objects.requireNonNull(bundleVersionId, "bundleVersionId");
         if (currentStepIndex < 0) {
             throw new IllegalArgumentException("currentStepIndex must be >= 0");
         }
@@ -105,7 +101,7 @@ public record TransitionCommandEnvelope(
     public static TransitionCommandEnvelope from(
         TransitionWorkerCommand command,
         String pipelineId,
-        String bundleVersionId,
+        String releaseVersion,
         String traceId,
         SerializedTransitionPayload encodedPayload
     ) {
@@ -113,8 +109,7 @@ public record TransitionCommandEnvelope(
             command,
             pipelineId,
             PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
-            bundleVersionId,
-            bundleVersionId,
+            releaseVersion,
             traceId,
             encodedPayload);
     }
@@ -124,7 +119,6 @@ public record TransitionCommandEnvelope(
         String pipelineId,
         String contractVersion,
         String releaseVersion,
-        String bundleVersionId,
         String traceId,
         SerializedTransitionPayload encodedPayload
     ) {
@@ -136,7 +130,6 @@ public record TransitionCommandEnvelope(
             pipelineId,
             contractVersion,
             releaseVersion,
-            bundleVersionId,
             command.currentStepIndex(),
             command.attempt(),
             command.resultShape(),

@@ -31,11 +31,11 @@ The release runtime uses a small set of explicit patterns:
 | Release registry | stores release records and activation history per tenant and pipeline |
 | Activation and pinning | new executions use the active release; existing executions keep their recorded release identity |
 | Artifact descriptor | records immutable artifact identity without making the coordinator a deployer |
-| Capability gate | verifies the selected worker reports compatible pipeline, contract, release, and executable identity |
+| Capability gate | verifies the selected worker reports compatible pipeline, contract, release, and optional artifact identity |
 | Control-plane facade | keeps submission, status, await, result, lease, retry, and DLQ ownership on the coordinator side |
 | Worker protocol adapter | local, REST, gRPC, and SQS workers execute the same portable transition envelope contract |
 
-The old `bundle-manifest.json` remains the executable-worker identity file for current local/JAR workers. The admin concept is now the active release.
+`pipeline-contract.json` plus the active release is the worker compatibility identity. Optional artifact id/digest checks tighten the match when the release descriptor and worker both expose artifact identity.
 
 ## Performance Posture
 

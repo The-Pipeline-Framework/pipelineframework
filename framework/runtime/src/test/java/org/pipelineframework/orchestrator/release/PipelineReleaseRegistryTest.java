@@ -22,10 +22,8 @@ import java.util.jar.JarOutputStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.config.pipeline.PipelineJson;
-import org.pipelineframework.orchestrator.LocalPipelineBundleArtifactStore;
+import org.pipelineframework.orchestrator.LocalPipelineReleaseArtifactStore;
 import org.pipelineframework.orchestrator.PipelineBundleCapabilities;
-import org.pipelineframework.orchestrator.PipelineBundleManifest;
-import org.pipelineframework.orchestrator.PipelineBundleManifestLoader;
 import org.pipelineframework.orchestrator.PipelineBundleStepDescriptor;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
@@ -46,9 +44,9 @@ class PipelineReleaseRegistryTest {
 
     @Test
     void registrarValidatesJarReleaseAndStoresExecutableArtifact() throws Exception {
-        PipelineBundleManifest manifest = manifest();
-        Path jar = jar(manifest);
-        Path descriptor = releaseDescriptor(jar, manifest, "sha256:" + sha256(jar));
+        PipelineContractDescriptor contract = contract();
+        Path jar = jar(contract);
+        Path descriptor = releaseDescriptor(jar, contract, "sha256:" + sha256(jar));
         PipelineReleaseRegistrar registrar = registrar();
 
         PipelineReleaseRecord record = registrar.validate(
@@ -57,18 +55,19 @@ class PipelineReleaseRegistryTest {
             descriptor.toString(),
             1000L);
 
-        assertEquals("sha256:bundle", record.releaseVersion());
-        assertEquals("sha256:bundle", record.contractVersion());
-        assertEquals("sha256:bundle", record.bundleVersionId());
+        assertEquals("sha256:contract", record.releaseVersion());
+        assertEquals("sha256:contract", record.contractVersion());
+        assertEquals("restaurant", record.primaryArtifactId());
+        assertEquals("sha256:" + sha256(jar), record.primaryArtifactDigest());
         assertTrue(Files.isRegularFile(Path.of(record.primaryArtifactPath())));
         registrar.verify(record);
     }
 
     @Test
     void registrarRejectsMismatchedArtifactDigest() throws Exception {
-        PipelineBundleManifest manifest = manifest();
-        Path jar = jar(manifest);
-        Path descriptor = releaseDescriptor(jar, manifest, "sha256:deadbeef");
+        PipelineContractDescriptor contract = contract();
+        Path jar = jar(contract);
+        Path descriptor = releaseDescriptor(jar, contract, "sha256:deadbeef");
         PipelineReleaseRegistrar registrar = registrar();
 
         assertThrows(IllegalArgumentException.class, () -> registrar.validate(
@@ -84,7 +83,7 @@ class PipelineReleaseRegistryTest {
         PipelineReleaseRegistry registry = new FileBackedPipelineReleaseRegistry(tempDir);
 
         registry.register(record).await().indefinitely();
-        registry.activate("tenant-1", "org.example.restaurant", "sha256:bundle", 2000L)
+        registry.activate("tenant-1", "org.example.restaurant", "sha256:contract", 2000L)
             .await().indefinitely();
 
         PipelineReleaseRegistry reloaded = new FileBackedPipelineReleaseRegistry(tempDir);
@@ -92,7 +91,7 @@ class PipelineReleaseRegistryTest {
             .await().indefinitely()
             .orElseThrow();
 
-        assertEquals("sha256:bundle", active.releaseVersion());
+        assertEquals("sha256:contract", active.releaseVersion());
         assertEquals(PipelineReleaseStatus.ACTIVE, active.status());
         assertEquals(2000L, active.activatedAtEpochMs());
     }
@@ -144,12 +143,12 @@ class PipelineReleaseRegistryTest {
             existing.releaseVersion(),
             existing.status(),
             existing.descriptor(),
-            existing.bundleVersionId(),
-            existing.bundleHash(),
+            existing.primaryArtifactId(),
+            existing.primaryArtifactDigest(),
             existing.primaryArtifactPath(),
             existing.primaryArtifactSizeBytes(),
             "different-checksum",
-            existing.manifest(),
+            existing.contract(),
             existing.createdAtEpochMs(),
             existing.updatedAtEpochMs(),
             existing.activatedAtEpochMs());
@@ -227,27 +226,27 @@ class PipelineReleaseRegistryTest {
     private PipelineReleaseRegistrar registrar() {
         PipelineReleaseRegistrar registrar = new PipelineReleaseRegistrar();
         registrar.descriptorLoader = new PipelineReleaseDescriptorLoader();
-        registrar.manifestLoader = new PipelineBundleManifestLoader();
-        registrar.artifactStore = new LocalPipelineBundleArtifactStore(tempDir.resolve("store"), registrar.manifestLoader);
+        registrar.contractLoader = new PipelineContractDescriptorLoader();
+        registrar.artifactStore = new LocalPipelineReleaseArtifactStore(tempDir.resolve("store"));
         return registrar;
     }
 
     private PipelineReleaseRecord releaseRecord() {
-        PipelineBundleManifest manifest = manifest();
-        PipelineReleaseDescriptor descriptor = descriptor("/tmp/restaurant.jar", "sha256:artifact", manifest);
+        PipelineContractDescriptor contract = contract();
+        PipelineReleaseDescriptor descriptor = descriptor("/tmp/restaurant.jar", "sha256:artifact", contract);
         return new PipelineReleaseRecord(
             "tenant-1",
             "org.example.restaurant",
-            "sha256:bundle",
-            "sha256:bundle",
+            "sha256:contract",
+            "sha256:contract",
             PipelineReleaseStatus.REGISTERED,
             descriptor,
-            "sha256:bundle",
-            "bundle",
+            "restaurant",
+            "sha256:artifact",
             "/tmp/restaurant.jar",
             100L,
             "artifact",
-            manifest,
+            contract,
             1000L,
             1000L,
             0L);
@@ -272,13 +271,13 @@ class PipelineReleaseRegistryTest {
             Map.entry("pipeline_id", avS(record.pipelineId())),
             Map.entry("contract_version", avS(record.contractVersion())),
             Map.entry("release_version", avS(record.releaseVersion())),
-            Map.entry("bundle_version_id", avS(record.bundleVersionId())),
-            Map.entry("bundle_hash", avS(record.bundleHash())),
+            Map.entry("primary_artifact_id", avS(record.primaryArtifactId())),
+            Map.entry("primary_artifact_digest", avS(record.primaryArtifactDigest())),
             Map.entry("primary_artifact_path", avS(record.primaryArtifactPath())),
             Map.entry("primary_artifact_size_bytes", avN(record.primaryArtifactSizeBytes())),
             Map.entry("primary_artifact_checksum", avS(record.primaryArtifactChecksum())),
             Map.entry("descriptor_json", avS(writeJson(record.descriptor()))),
-            Map.entry("manifest_json", avS(writeJson(record.manifest()))),
+            Map.entry("contract_json", avS(writeJson(record.contract()))),
             Map.entry("created_at_epoch_ms", avN(record.createdAtEpochMs())),
             Map.entry("updated_at_epoch_ms", avN(record.updatedAtEpochMs())),
             Map.entry("activated_at_epoch_ms", avN(record.activatedAtEpochMs())));
@@ -311,46 +310,44 @@ class PipelineReleaseRegistryTest {
         }
     }
 
-    private Path releaseDescriptor(Path jar, PipelineBundleManifest manifest, String digest) throws Exception {
+    private Path releaseDescriptor(Path jar, PipelineContractDescriptor contract, String digest) throws Exception {
         Path descriptorPath = tempDir.resolve("pipeline-release.json");
         PipelineJson.mapper().writerWithDefaultPrettyPrinter()
-            .writeValue(descriptorPath.toFile(), descriptor(jar.toString(), digest, manifest));
+            .writeValue(descriptorPath.toFile(), descriptor(jar.toString(), digest, contract));
         return descriptorPath;
     }
 
-    private PipelineReleaseDescriptor descriptor(String uri, String digest, PipelineBundleManifest manifest) {
+    private PipelineReleaseDescriptor descriptor(String uri, String digest, PipelineContractDescriptor contract) {
         return new PipelineReleaseDescriptor(
             PipelineReleaseDescriptor.CURRENT_SCHEMA_VERSION,
-            manifest.pipelineId(),
-            "sha256:" + manifest.bundleHash(),
-            manifest.bundleVersionId(),
+            contract.pipelineId(),
+            contract.contractVersion(),
+            contract.contractVersion(),
             List.of(new PipelineReleaseArtifactDescriptor(
                 "restaurant",
                 "jar",
                 uri,
                 digest,
-                manifest.bundleVersionId(),
-                manifest.bundleHash(),
                 List.of("Validate"),
                 List.of("rest"))));
     }
 
-    private Path jar(PipelineBundleManifest manifest) throws Exception {
+    private Path jar(PipelineContractDescriptor contract) throws Exception {
         Path jar = tempDir.resolve("restaurant.jar");
         try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(jar))) {
-            output.putNextEntry(new JarEntry(PipelineBundleManifest.RESOURCE_PATH));
-            output.write(PipelineJson.mapper().writeValueAsBytes(manifest));
+            output.putNextEntry(new JarEntry(PipelineContractDescriptor.RESOURCE_PATH));
+            output.write(PipelineJson.mapper().writeValueAsBytes(contract));
             output.closeEntry();
         }
         return jar;
     }
 
-    private PipelineBundleManifest manifest() {
-        return new PipelineBundleManifest(
-            PipelineBundleManifest.CURRENT_SCHEMA_VERSION,
+    private PipelineContractDescriptor contract() {
+        return new PipelineContractDescriptor(
+            PipelineContractDescriptor.CURRENT_SCHEMA_VERSION,
             "org.example.restaurant",
-            "sha256:bundle",
-            "bundle",
+            "sha256:contract",
+            "contract",
             "COMPUTE",
             "REST",
             "monolith-svc",

@@ -33,7 +33,7 @@ class GrpcTransitionWorkerServiceTest {
     private PipelineOrchestratorConfig config;
     private PipelineOrchestratorConfig.GrpcWorkerConfig grpcConfig;
     private PipelineExecutionService executionService;
-    private PipelineBundleIdentityResolver identityResolver;
+    private PipelineReleaseIdentityResolver identityResolver;
 
     @BeforeEach
     void setUp() {
@@ -41,7 +41,7 @@ class GrpcTransitionWorkerServiceTest {
         config = mock(PipelineOrchestratorConfig.class);
         grpcConfig = mock(PipelineOrchestratorConfig.GrpcWorkerConfig.class);
         executionService = mock(PipelineExecutionService.class);
-        identityResolver = mock(PipelineBundleIdentityResolver.class);
+        identityResolver = mock(PipelineReleaseIdentityResolver.class);
         service.orchestratorConfig = config;
         service.executionService = executionService;
         service.identityResolver = identityResolver;
@@ -50,8 +50,10 @@ class GrpcTransitionWorkerServiceTest {
         when(grpcConfig.sharedSecretRef()).thenReturn(Optional.empty());
         when(grpcConfig.signatureTolerance()).thenReturn(Duration.ofMinutes(2));
         when(identityResolver.pipelineId(config)).thenReturn("org.example.restaurant");
-        when(identityResolver.bundleVersionId(config)).thenReturn("sha256:bundle");
-        when(identityResolver.bundleHash()).thenReturn("bundle");
+        when(identityResolver.contractVersion()).thenReturn("sha256:contract");
+        when(identityResolver.releaseVersion(config)).thenReturn("sha256:bundle");
+        when(identityResolver.artifactId(config)).thenReturn("restaurant-approval-monolith");
+        when(identityResolver.artifactDigest(config)).thenReturn("sha256:artifact");
         when(identityResolver.capabilities()).thenReturn(PipelineBundleCapabilities.defaults());
     }
 
@@ -128,7 +130,10 @@ class GrpcTransitionWorkerServiceTest {
 
         assertEquals("grpc", capability.providerName());
         assertEquals("org.example.restaurant", capability.pipelineId());
-        assertEquals("sha256:bundle", capability.bundleVersionId());
+        assertEquals("sha256:contract", capability.contractVersion());
+        assertEquals("sha256:bundle", capability.releaseVersion());
+        assertEquals("restaurant-approval-monolith", capability.artifactId());
+        assertEquals("sha256:artifact", capability.artifactDigest());
     }
 
     @Test

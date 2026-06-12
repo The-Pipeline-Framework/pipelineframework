@@ -82,8 +82,8 @@ pipeline.orchestrator.control-plane.require-remote-worker=true
 pipeline.orchestrator.admin.enabled=true
 pipeline.orchestrator.admin.admin-token-ref=env:TPF_ADMIN_TOKEN
 
-pipeline.orchestrator.bundles.registry.provider=dynamo
-pipeline.orchestrator.bundles.storage.root=/var/lib/tpf/bundles
+pipeline.orchestrator.releases.registry.provider=dynamo
+pipeline.orchestrator.releases.storage.root=/var/lib/tpf/releases
 ```
 
 The await interaction table must provide these ALL-projected GSIs:
@@ -103,7 +103,7 @@ The Dynamo release registry stores immutable release records plus append-only ac
 
 Before accepting work:
 
-1. Build the pipeline artifact and confirm it contains `META-INF/pipeline/pipeline-contract.json` and `META-INF/pipeline/bundle-manifest.json`.
+1. Build the pipeline artifact and confirm it contains `META-INF/pipeline/pipeline-contract.json`.
 2. Start durable substrates first: execution tables, await tables and indexes, work queue, DLQ queue, and any worker protocol queues.
 3. Start worker processes with the matching pipeline code and worker protocol secret.
 4. Start the coordinator with `strict-startup=true`.
@@ -111,7 +111,7 @@ Before accepting work:
 6. Register and activate the release for the tenant and pipeline.
 7. Submit one canary execution and verify status, pending await interaction, completion, and result.
 
-The current coordinator does not dynamically load registered JAR code. Release registration validates the release descriptor and, for local executable JAR artifacts, validates and stores the artifact. Workers must already host matching code. Worker availability checks verify the active release identity plus the current executable manifest identity before hosted execution submission.
+The current coordinator does not dynamically load registered JAR code. Release registration validates the release descriptor and, for local executable JAR artifacts, validates and stores the artifact. Workers must already host matching code. Worker availability checks verify the active contract/release identity before hosted execution submission, and artifact id/digest when both sides provide it.
 
 `pipeline.orchestrator.control-plane.require-remote-worker=true` is recommended for separated self-host deployments. It prevents a coordinator process from silently falling back to the local in-process worker when no REST, gRPC, or SQS worker target is configured. Leave it disabled for the one-process local demo. See [Runtime Boundaries And Performance](/guide/evolve/durable-coordinator/runtime-boundaries-performance).
 

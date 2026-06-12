@@ -30,11 +30,11 @@ Enable the local release admin resource:
 ```properties
 pipeline.orchestrator.admin.enabled=true
 pipeline.orchestrator.admin.admin-token=local-admin-token
-pipeline.orchestrator.bundles.registry.provider=file
-pipeline.orchestrator.bundles.storage.root=target/tpf-bundles
+pipeline.orchestrator.releases.registry.provider=file
+pipeline.orchestrator.releases.storage.root=target/tpf-releases
 ```
 
-Use `pipeline.orchestrator.bundles.registry.provider=dynamo` plus `pipeline.orchestrator.dynamo.release-table` when the release metadata must survive multiple coordinator instances. The Dynamo registry stores immutable release records and append-only activation events.
+Use `pipeline.orchestrator.releases.registry.provider=dynamo` plus `pipeline.orchestrator.dynamo.release-table` when the release metadata must survive multiple coordinator instances. The Dynamo registry stores immutable release records and append-only activation events.
 
 Main endpoints:
 
@@ -44,6 +44,4 @@ Main endpoints:
 4. `GET /tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/releases/{releaseVersion}`
 5. `POST /tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/releases/{releaseVersion}/activate`
 
-The registration API accepts an absolute local `pipeline-release.json` path. The release descriptor pins one or more artifacts by kind and digest. For executable local JAR artifacts, the registrar validates `META-INF/pipeline/bundle-manifest.json`, copies the JAR into the local store, records size/checksum metadata, and stores the managed artifact path.
-
-The older `/bundles` endpoints remain local compatibility helpers. New self-host flows should register and activate releases.
+The registration API accepts an absolute local `pipeline-release.json` path. The release descriptor pins one or more artifacts by kind and digest. For executable local JAR artifacts, the registrar validates embedded `META-INF/pipeline/pipeline-contract.json`, copies the JAR into the local store, records size/checksum metadata, and stores the managed artifact path.

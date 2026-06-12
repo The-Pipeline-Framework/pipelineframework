@@ -17,7 +17,8 @@ class InMemoryExecutionStateStoreTest {
             "tenant-a",
             "key-1",
             "org.example.pipeline",
-            "sha256:bundle",
+            "sha256:contract",
+            "sha256:release",
             "payload",
             ExecutionResultShape.SINGLE,
             now,
@@ -30,7 +31,8 @@ class InMemoryExecutionStateStoreTest {
         assertTrue(second.duplicate());
         assertEquals(first.record().executionId(), second.record().executionId());
         assertEquals("org.example.pipeline", first.record().pipelineId());
-        assertEquals("sha256:bundle", first.record().bundleVersionId());
+        assertEquals("sha256:contract", first.record().contractVersion());
+        assertEquals("sha256:release", first.record().releaseVersion());
     }
 
     @Test
@@ -216,7 +218,8 @@ class InMemoryExecutionStateStoreTest {
         assertEquals(List.of("a", "b"), stored.payload());
         assertNotSame(resumeInput.payload(), stored.payload());
         assertEquals(created.record().pipelineId(), queued.get().pipelineId());
-        assertEquals(created.record().bundleVersionId(), queued.get().bundleVersionId());
+        assertEquals(created.record().contractVersion(), queued.get().contractVersion());
+        assertEquals(created.record().releaseVersion(), queued.get().releaseVersion());
     }
 
     @Test

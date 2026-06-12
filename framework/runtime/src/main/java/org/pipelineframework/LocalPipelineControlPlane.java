@@ -1,6 +1,5 @@
 package org.pipelineframework;
 
-import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import java.util.List;
 
 import jakarta.annotation.PostConstruct;
@@ -52,28 +51,8 @@ public class LocalPipelineControlPlane implements PipelineControlPlane {
         String idempotencyKey,
         boolean outputStreaming,
         String pipelineId,
-        String bundleVersionId) {
-        return executePipelineAsync(
-            input,
-            tenantId,
-            idempotencyKey,
-            outputStreaming,
-            pipelineId,
-            org.pipelineframework.orchestrator.release.PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
-            bundleVersionId,
-            bundleVersionId);
-    }
-
-    @Override
-    public Uni<RunAsyncAcceptedDto> executePipelineAsync(
-        Object input,
-        String tenantId,
-        String idempotencyKey,
-        boolean outputStreaming,
-        String pipelineId,
         String contractVersion,
-        String releaseVersion,
-        String bundleVersionId) {
+        String releaseVersion) {
         return queueAsyncCoordinator.executePipelineAsync(
             input,
             tenantId,
@@ -81,8 +60,7 @@ public class LocalPipelineControlPlane implements PipelineControlPlane {
             outputStreaming,
             pipelineId,
             contractVersion,
-            releaseVersion,
-            bundleVersionId);
+            releaseVersion);
     }
 
     @Override

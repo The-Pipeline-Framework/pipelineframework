@@ -81,7 +81,8 @@ class DynamoExecutionStateStoreTest {
             "tenant-a",
             "key-1",
             "org.example.pipeline",
-            "sha256:bundle",
+            "sha256:contract",
+            "sha256:release",
             "payload",
             ExecutionResultShape.SINGLE,
             now,
@@ -99,7 +100,8 @@ class DynamoExecutionStateStoreTest {
         assertTrue(result.duplicate());
         assertEquals("exec-1", result.record().executionId());
         assertEquals("org.example.pipeline", result.record().pipelineId());
-        assertEquals("sha256:bundle", result.record().bundleVersionId());
+        assertEquals("sha256:contract", result.record().contractVersion());
+        assertEquals("sha256:release", result.record().releaseVersion());
         verify(client, never()).transactWriteItems(any(TransactWriteItemsRequest.class));
     }
 
@@ -216,7 +218,8 @@ class DynamoExecutionStateStoreTest {
             Map.entry("execution_id", AttributeValue.builder().s(executionId).build()),
             Map.entry("execution_key", AttributeValue.builder().s(executionKey).build()),
             Map.entry("pipeline_id", AttributeValue.builder().s("org.example.pipeline").build()),
-            Map.entry("bundle_version_id", AttributeValue.builder().s("sha256:bundle").build()),
+            Map.entry("contract_version", AttributeValue.builder().s("sha256:contract").build()),
+            Map.entry("release_version", AttributeValue.builder().s("sha256:release").build()),
             Map.entry("status", AttributeValue.builder().s(status.name()).build()),
             Map.entry("version", AttributeValue.builder().n("0").build()),
             Map.entry("current_step_index", AttributeValue.builder().n("0").build()),

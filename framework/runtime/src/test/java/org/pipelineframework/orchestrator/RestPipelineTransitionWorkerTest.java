@@ -128,8 +128,10 @@ class RestPipelineTransitionWorkerTest {
                 PipelineWorkerCapability.PROTOCOL_VERSION,
                 "rest",
                 "org.example.restaurant",
-                "sha256:bundle",
-                "bundle",
+                "sha256:contract",
+                "sha256:release",
+                "restaurant-approval-monolith",
+                "sha256:artifact",
                 List.of("application/tpf-transition-envelope+json"),
                 List.of("rest")));
             exchange.sendResponseHeaders(200, response.length);
@@ -142,7 +144,8 @@ class RestPipelineTransitionWorkerTest {
 
         assertEquals("rest", capability.providerName());
         assertEquals("org.example.restaurant", capability.pipelineId());
-        assertEquals("sha256:bundle", capability.bundleVersionId());
+        assertEquals("sha256:contract", capability.contractVersion());
+        assertEquals("sha256:release", capability.releaseVersion());
         assertTrue(signature.get() != null && !signature.get().isBlank());
     }
 

@@ -14,7 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.orchestrator.GrpcPipelineTransitionWorker;
 import org.pipelineframework.orchestrator.PipelineBundleCapabilities;
-import org.pipelineframework.orchestrator.PipelineBundleIdentityResolver;
+import org.pipelineframework.orchestrator.PipelineReleaseIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.RestPipelineTransitionWorker;
 import org.pipelineframework.orchestrator.TransitionPayloadEncoding;
@@ -26,7 +26,7 @@ class DefaultPipelineWorkerAvailabilityTest {
     private PipelineOrchestratorConfig.RestWorkerConfig restConfig;
     private PipelineOrchestratorConfig.GrpcWorkerConfig grpcConfig;
     private PipelineOrchestratorConfig.SqsWorkerConfig sqsConfig;
-    private PipelineBundleIdentityResolver identityResolver;
+    private PipelineReleaseIdentityResolver identityResolver;
     private RestPipelineTransitionWorker restWorker;
     private GrpcPipelineTransitionWorker grpcWorker;
 
@@ -37,7 +37,7 @@ class DefaultPipelineWorkerAvailabilityTest {
         restConfig = mock(PipelineOrchestratorConfig.RestWorkerConfig.class);
         grpcConfig = mock(PipelineOrchestratorConfig.GrpcWorkerConfig.class);
         sqsConfig = mock(PipelineOrchestratorConfig.SqsWorkerConfig.class);
-        identityResolver = mock(PipelineBundleIdentityResolver.class);
+        identityResolver = mock(PipelineReleaseIdentityResolver.class);
         restWorker = mock(RestPipelineTransitionWorker.class);
         grpcWorker = mock(GrpcPipelineTransitionWorker.class);
         availability.orchestratorConfig = config;
@@ -53,12 +53,13 @@ class DefaultPipelineWorkerAvailabilityTest {
         when(sqsConfig.pipelineId()).thenReturn(Optional.empty());
         when(sqsConfig.contractVersion()).thenReturn(Optional.empty());
         when(sqsConfig.releaseVersion()).thenReturn(Optional.empty());
-        when(sqsConfig.bundleVersionId()).thenReturn(Optional.empty());
+        when(sqsConfig.artifactId()).thenReturn(Optional.empty());
+        when(sqsConfig.artifactDigest()).thenReturn(Optional.empty());
         when(identityResolver.pipelineId(config)).thenReturn("org.example.restaurant");
-        when(identityResolver.contractVersion()).thenReturn("sha256:bundle");
-        when(identityResolver.releaseVersion(config)).thenReturn("sha256:bundle");
-        when(identityResolver.bundleVersionId(config)).thenReturn("sha256:bundle");
-        when(identityResolver.bundleHash()).thenReturn("bundle");
+        when(identityResolver.contractVersion()).thenReturn("sha256:contract");
+        when(identityResolver.releaseVersion(config)).thenReturn("sha256:release");
+        when(identityResolver.artifactId(config)).thenReturn("restaurant-approval-monolith");
+        when(identityResolver.artifactDigest(config)).thenReturn("sha256:artifact");
         when(identityResolver.capabilities()).thenReturn(PipelineBundleCapabilities.defaults());
     }
 
@@ -67,19 +68,23 @@ class DefaultPipelineWorkerAvailabilityTest {
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
             "org.example.restaurant",
-            "sha256:bundle",
-            "sha256:bundle",
-            "sha256:bundle")).await().atMost(Duration.ofSeconds(2));
+            "sha256:contract",
+            "sha256:release",
+            "restaurant-approval-monolith",
+            "sha256:artifact")).await().atMost(Duration.ofSeconds(2));
 
         assertTrue(result.available());
     }
 
     @Test
-    void localWorkerAvailabilityRejectsMismatchedBundle() {
+    void localWorkerAvailabilityRejectsMismatchedRelease() {
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
             "org.example.restaurant",
-            "sha256:other")).await().atMost(Duration.ofSeconds(2));
+            "sha256:contract",
+            "sha256:other",
+            "restaurant-approval-monolith",
+            "sha256:artifact")).await().atMost(Duration.ofSeconds(2));
 
         assertFalse(result.available());
     }
@@ -90,14 +95,16 @@ class DefaultPipelineWorkerAvailabilityTest {
         when(sqsConfig.pipelineId()).thenReturn(Optional.empty());
         when(sqsConfig.contractVersion()).thenReturn(Optional.empty());
         when(sqsConfig.releaseVersion()).thenReturn(Optional.empty());
-        when(sqsConfig.bundleVersionId()).thenReturn(Optional.empty());
+        when(sqsConfig.artifactId()).thenReturn(Optional.empty());
+        when(sqsConfig.artifactDigest()).thenReturn(Optional.empty());
 
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
             "org.example.restaurant",
-            "sha256:bundle",
-            "sha256:bundle",
-            "sha256:bundle")).await().atMost(Duration.ofSeconds(2));
+            "sha256:contract",
+            "sha256:release",
+            "restaurant-approval-monolith",
+            "sha256:artifact")).await().atMost(Duration.ofSeconds(2));
 
         assertFalse(result.available());
     }
@@ -106,16 +113,18 @@ class DefaultPipelineWorkerAvailabilityTest {
     void sqsWorkerAvailabilityMatchesConfiguredStaticIdentity() {
         when(sqsConfig.isEnabled()).thenReturn(true);
         when(sqsConfig.pipelineId()).thenReturn(Optional.of("org.example.restaurant"));
-        when(sqsConfig.contractVersion()).thenReturn(Optional.of("sha256:bundle"));
-        when(sqsConfig.releaseVersion()).thenReturn(Optional.of("sha256:bundle"));
-        when(sqsConfig.bundleVersionId()).thenReturn(Optional.of("sha256:bundle"));
+        when(sqsConfig.contractVersion()).thenReturn(Optional.of("sha256:contract"));
+        when(sqsConfig.releaseVersion()).thenReturn(Optional.of("sha256:release"));
+        when(sqsConfig.artifactId()).thenReturn(Optional.of("restaurant-approval-monolith"));
+        when(sqsConfig.artifactDigest()).thenReturn(Optional.of("sha256:artifact"));
 
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
             "org.example.restaurant",
-            "sha256:bundle",
-            "sha256:bundle",
-            "sha256:bundle")).await().atMost(Duration.ofSeconds(2));
+            "sha256:contract",
+            "sha256:release",
+            "restaurant-approval-monolith",
+            "sha256:artifact")).await().atMost(Duration.ofSeconds(2));
 
         assertTrue(result.available());
     }
@@ -123,12 +132,15 @@ class DefaultPipelineWorkerAvailabilityTest {
     @Test
     void restWorkerAvailabilityMatchesRemoteCapability() {
         when(restConfig.isEnabled()).thenReturn(true);
-        when(restWorker.capabilities()).thenReturn(Uni.createFrom().item(capability("rest", "sha256:bundle")));
+        when(restWorker.capabilities()).thenReturn(Uni.createFrom().item(capability("rest", "sha256:release")));
 
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
             "org.example.restaurant",
-            "sha256:bundle")).await().atMost(Duration.ofSeconds(2));
+            "sha256:contract",
+            "sha256:release",
+            "",
+            "")).await().atMost(Duration.ofSeconds(2));
 
         assertTrue(result.available());
     }
@@ -141,7 +153,10 @@ class DefaultPipelineWorkerAvailabilityTest {
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
             "org.example.restaurant",
-            "sha256:bundle")).await().atMost(Duration.ofSeconds(2));
+            "sha256:contract",
+            "sha256:release",
+            "",
+            "")).await().atMost(Duration.ofSeconds(2));
 
         assertFalse(result.available());
     }
@@ -149,12 +164,15 @@ class DefaultPipelineWorkerAvailabilityTest {
     @Test
     void grpcWorkerAvailabilityMatchesRemoteCapability() {
         when(grpcConfig.isEnabled()).thenReturn(true);
-        when(grpcWorker.capabilities()).thenReturn(Uni.createFrom().item(capability("grpc", "sha256:bundle")));
+        when(grpcWorker.capabilities()).thenReturn(Uni.createFrom().item(capability("grpc", "sha256:release")));
 
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
             "org.example.restaurant",
-            "sha256:bundle")).await().atMost(Duration.ofSeconds(2));
+            "sha256:contract",
+            "sha256:release",
+            "",
+            "")).await().atMost(Duration.ofSeconds(2));
 
         assertTrue(result.available());
     }
@@ -167,18 +185,23 @@ class DefaultPipelineWorkerAvailabilityTest {
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
             "org.example.restaurant",
-            "sha256:bundle")).await().atMost(Duration.ofSeconds(2));
+            "sha256:contract",
+            "sha256:release",
+            "",
+            "")).await().atMost(Duration.ofSeconds(2));
 
         assertFalse(result.available());
     }
 
-    private static PipelineWorkerCapability capability(String providerName, String bundleVersionId) {
+    private static PipelineWorkerCapability capability(String providerName, String releaseVersion) {
         return new PipelineWorkerCapability(
             PipelineWorkerCapability.PROTOCOL_VERSION,
             providerName,
             "org.example.restaurant",
-            bundleVersionId,
-            "bundle",
+            "sha256:contract",
+            releaseVersion,
+            "",
+            "",
             List.of(TransitionPayloadEncoding.JSON),
             List.of(providerName));
     }

@@ -32,17 +32,8 @@ public interface PipelineControlPlane {
         String idempotencyKey,
         boolean outputStreaming,
         String pipelineId,
-        String bundleVersionId);
-
-    Uni<RunAsyncAcceptedDto> executePipelineAsync(
-        Object input,
-        String tenantId,
-        String idempotencyKey,
-        boolean outputStreaming,
-        String pipelineId,
         String contractVersion,
-        String releaseVersion,
-        String bundleVersionId);
+        String releaseVersion);
 
     Uni<ExecutionStatusDto> getExecutionStatus(String tenantId, String executionId);
 

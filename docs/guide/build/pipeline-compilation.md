@@ -114,7 +114,7 @@ The processor also writes generated metadata under `META-INF/pipeline/`:
 - `order.json`: resolved runtime step order.
 - `telemetry.json` and `replay-topology.json`: replay and observability topology.
 - `platform.json`: platform, transport, module, and plugin-host metadata.
-- `bundle-manifest.json`: deterministic v1 bundle identity and ordered step descriptors used by queue-async transition-worker validation.
+- `pipeline-contract.json`: deterministic semantic contract and ordered step descriptors used by release validation and queue-async transition-worker validation.
 
 ### 2.5 Scaffolding
 

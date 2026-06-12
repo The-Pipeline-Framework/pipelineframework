@@ -41,13 +41,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-class PipelineBundleManifestMetadataGeneratorTest {
+class PipelineContractMetadataGeneratorTest {
 
     @TempDir
     Path tempDir;
 
     @Test
-    void writesDeterministicManifestWithOrderedStepsAndAwaitTransport() throws IOException {
+    void writesDeterministicContractWithOrderedStepsAndAwaitTransport() throws IOException {
         Path pipelineYaml = writePipelineYaml();
         Path firstOutput = tempDir.resolve("first");
         Path secondOutput = tempDir.resolve("second");
@@ -55,24 +55,18 @@ class PipelineBundleManifestMetadataGeneratorTest {
         writeMetadata(pipelineYaml, firstOutput);
         writeMetadata(pipelineYaml, secondOutput);
 
-        JsonObject first = readManifest(firstOutput);
-        JsonObject second = readManifest(secondOutput);
-        JsonObject firstContract = readContract(firstOutput);
-        JsonObject secondContract = readContract(secondOutput);
-        assertEquals(first.get("bundleHash").getAsString(), second.get("bundleHash").getAsString());
-        assertEquals(first.get("bundleVersionId").getAsString(), second.get("bundleVersionId").getAsString());
-        assertEquals(firstContract.get("contractHash").getAsString(), secondContract.get("contractHash").getAsString());
-        assertEquals(firstContract.get("contractVersion").getAsString(), secondContract.get("contractVersion").getAsString());
+        JsonObject first = readContract(firstOutput);
+        JsonObject second = readContract(secondOutput);
+        assertEquals(first.get("contractHash").getAsString(), second.get("contractHash").getAsString());
+        assertEquals(first.get("contractVersion").getAsString(), second.get("contractVersion").getAsString());
         assertEquals(1, first.get("schemaVersion").getAsInt());
         assertEquals("org.example.restaurant", first.get("pipelineId").getAsString());
-        assertEquals("org.example.restaurant", firstContract.get("pipelineId").getAsString());
-        assertEquals(first.get("bundleHash").getAsString(), firstContract.get("contractHash").getAsString());
-        assertEquals(first.get("bundleVersionId").getAsString(), firstContract.get("contractVersion").getAsString());
         assertEquals("COMPUTE", first.get("platform").getAsString());
         assertEquals("REST", first.get("transport").getAsString());
         assertEquals("orchestrator-svc", first.get("module").getAsString());
         assertEquals("MONOLITH", first.get("runtimeLayout").getAsString());
-        assertTrue(first.get("bundleVersionId").getAsString().startsWith("sha256:"));
+        assertTrue(first.get("contractVersion").getAsString().startsWith("sha256:"));
+        assertFalse(Files.exists(firstOutput.resolve(Path.of("META-INF", "pipeline", "bundle" + "-manifest.json"))));
 
         JsonArray steps = first.getAsJsonArray("steps");
         assertEquals(2, steps.size());
@@ -90,16 +84,14 @@ class PipelineBundleManifestMetadataGeneratorTest {
     }
 
     @Test
-    void skipsManifestWhenNoPipelineModelExists() throws IOException {
+    void skipsContractWhenNoPipelineModelExists() throws IOException {
         ProcessingEnvironment processingEnv = processingEnv(tempDir.resolve("empty"), Map.of());
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
         PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
 
-        PipelineBundleManifestMetadataGenerator generator = new PipelineBundleManifestMetadataGenerator(processingEnv);
-        generator.writeBundleManifest(ctx);
+        PipelineContractMetadataGenerator generator = new PipelineContractMetadataGenerator(processingEnv);
         generator.writePipelineContract(ctx);
 
-        assertFalse(Files.exists(tempDir.resolve("empty").resolve("META-INF/pipeline/bundle-manifest.json")));
         assertFalse(Files.exists(tempDir.resolve("empty").resolve("META-INF/pipeline/pipeline-contract.json")));
     }
 
@@ -134,20 +126,17 @@ class PipelineBundleManifestMetadataGeneratorTest {
             step("ProcessAwaitRestaurantDecisionService", "PendingRestaurantApproval", "RestaurantDecision",
                 StreamingShape.UNARY_UNARY, Set.of(GenerationTarget.AWAIT_CLIENT_STEP))));
 
-        PipelineBundleManifestMetadataGenerator generator = new PipelineBundleManifestMetadataGenerator(processingEnv);
-        generator.writeBundleManifest(ctx);
+        PipelineContractMetadataGenerator generator = new PipelineContractMetadataGenerator(processingEnv);
         generator.writePipelineContract(ctx);
 
-        JsonArray manifestSteps = readManifest(output).getAsJsonArray("steps");
         JsonArray contractSteps = readContract(output).getAsJsonArray("steps");
-        assertEquals(2, manifestSteps.size());
         assertEquals(2, contractSteps.size());
         assertEquals(
             "org.example.restaurant.pipeline.ProcessValidateOrderRequestRestClientStep",
-            manifestSteps.get(0).getAsJsonObject().get("clientClass").getAsString());
+            contractSteps.get(0).getAsJsonObject().get("clientClass").getAsString());
         assertEquals(
             "org.example.restaurant.pipeline.ProcessAwaitRestaurantDecisionAwaitClientStep",
-            manifestSteps.get(1).getAsJsonObject().get("clientClass").getAsString());
+            contractSteps.get(1).getAsJsonObject().get("clientClass").getAsString());
     }
 
     private void writeMetadata(Path pipelineYaml, Path outputDir) throws IOException {
@@ -171,8 +160,7 @@ class PipelineBundleManifestMetadataGeneratorTest {
             step("ProcessAwaitRestaurantDecisionService", "PendingRestaurantApproval", "RestaurantDecision",
                 StreamingShape.UNARY_UNARY, Set.of(GenerationTarget.AWAIT_CLIENT_STEP))));
 
-        PipelineBundleManifestMetadataGenerator generator = new PipelineBundleManifestMetadataGenerator(processingEnv);
-        generator.writeBundleManifest(ctx);
+        PipelineContractMetadataGenerator generator = new PipelineContractMetadataGenerator(processingEnv);
         generator.writePipelineContract(ctx);
     }
 
@@ -222,11 +210,6 @@ class PipelineBundleManifestMetadataGeneratorTest {
                     type: interaction-api
             """);
         return yaml;
-    }
-
-    private JsonObject readManifest(Path outputDir) throws IOException {
-        Path manifest = outputDir.resolve("META-INF/pipeline/bundle-manifest.json");
-        return new Gson().fromJson(Files.readString(manifest), JsonObject.class);
     }
 
     private JsonObject readContract(Path outputDir) throws IOException {

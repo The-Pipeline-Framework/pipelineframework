@@ -13,8 +13,7 @@ This section is implementation-facing. Application usage remains in [Orchestrato
 | Execution state | `ExecutionRecord` with leases, attempts, status, result, pinned pipeline/contract/release identity |
 | Await state | `AwaitUnitRecord` plus pending/completion interaction records |
 | Worker boundary | portable command/result envelopes over local, REST, gRPC, or SQS |
-| Contract/release identity | generated `META-INF/pipeline/pipeline-contract.json`, release descriptor registration, activation, and execution pinning |
-| Worker artifact identity | generated `META-INF/pipeline/bundle-manifest.json` and strict worker identity validation |
+| Contract/release identity | generated `META-INF/pipeline/pipeline-contract.json`, release descriptor registration, activation, execution pinning, and worker identity validation |
 | Self-host path | batteries-included local coordinator using the restaurant approval example |
 
 ```mermaid
@@ -43,7 +42,7 @@ sequenceDiagram
 
 1. [Worker Protocols](/guide/evolve/durable-coordinator/worker-protocols) explains local, REST, gRPC, and SQS transition workers.
 2. [Step-Aware Invocation Runtime](/guide/evolve/durable-coordinator/boundary-invocation-model) explains the shared invocation seam used by pipeline steps and transition workers.
-3. [Bundle Contract](/guide/evolve/durable-coordinator/bundle-contract) explains the current manifest identity used by executable workers.
+3. [Contract And Release Identity](/guide/evolve/durable-coordinator/bundle-contract) explains generated contracts, release activation, and execution pinning.
 4. [Pipeline Contract And Release Model](/guide/evolve/durable-coordinator/pipeline-contract-release-model) describes contract/release descriptors, artifacts, deployment plans, and drift detection.
 5. [Runtime Boundaries And Performance](/guide/evolve/durable-coordinator/runtime-boundaries-performance) explains runtime mapping, patterns, package boundaries, and hot-path guardrails.
 6. [Local APIs](/guide/evolve/durable-coordinator/local-apis) documents the current default-disabled control-plane and admin APIs.
@@ -52,6 +51,6 @@ sequenceDiagram
 
 ## Limits
 
-The current coordinator path does not dynamically load registered JAR code. Workers must already host matching pipeline code and validate active release identity plus `pipelineId + bundleVersionId` executable identity.
+The current coordinator path does not dynamically load registered JAR code. Workers must already host matching pipeline code and validate active `pipelineId + contractVersion + releaseVersion` identity.
 
 The Dynamo release registry provides multi-coordinator release metadata, while the file-backed registry remains local/dev oriented. Built-in DLQ replay, worker lifecycle, and append-only execution/await state remain follow-up runtime substrate work.

@@ -154,7 +154,8 @@ public class HostedPipelineControlPlaneResource {
                         release.pipelineId(),
                         release.contractVersion(),
                         release.releaseVersion(),
-                        release.bundleVersionId()))
+                        release.primaryArtifactId(),
+                        release.primaryArtifactDigest()))
                     .onItem().transformToUni(availability -> {
                         if (!availability.available()) {
                             LOG.warnf(
@@ -174,8 +175,7 @@ public class HostedPipelineControlPlaneResource {
                                 request.outputStreaming(),
                                 release.pipelineId(),
                                 release.contractVersion(),
-                                release.releaseVersion(),
-                                release.bundleVersionId())
+                                release.releaseVersion())
                             .onItem().transform(accepted -> Response.ok(accepted).build());
                     });
             });
@@ -358,10 +358,10 @@ public class HostedPipelineControlPlaneResource {
 
     private Class<?> ingressPayloadType(PipelineReleaseRecord release) {
         try {
-            if (release == null || release.manifest() == null || release.manifest().steps().isEmpty()) {
+            if (release == null || release.contract() == null || release.contract().steps().isEmpty()) {
                 return null;
             }
-            String inputTypeId = release.manifest().steps().getFirst().inputTypeId();
+            String inputTypeId = release.contract().steps().getFirst().inputTypeId();
             if (inputTypeId == null || inputTypeId.isBlank()) {
                 return null;
             }
