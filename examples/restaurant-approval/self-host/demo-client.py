@@ -120,6 +120,26 @@ def register_activate(args):
     release_version = registered["releaseVersion"]
     request("POST", f"{base}/{release_version}/activate", token=args.admin_token)
     print(f"Registered and activated release {release_version}")
+    if args.worker_id:
+        register_worker_from_release(args, registered)
+
+
+def register_worker_from_release(args, release):
+    base = f"{args.base_url}/tpf/admin/tenants/{args.tenant_id}/pipelines/{args.pipeline_id}/workers"
+    body = {
+        "workerId": args.worker_id,
+        "contractVersion": release["contractVersion"],
+        "releaseVersion": release["releaseVersion"],
+        "protocol": args.worker_protocol,
+        "endpoint": args.worker_endpoint,
+        "artifactId": release.get("primaryArtifactId", ""),
+        "artifactDigest": release.get("primaryArtifactDigest", ""),
+    }
+    registered = request("POST", f"{base}/register", token=args.admin_token, body=body)
+    print(
+        "Registered worker "
+        f"{registered['workerId']} ({registered['protocol']}) for release {registered['releaseVersion']}"
+    )
 
 
 def encoded_payload(payload, payload_type=None):
@@ -421,6 +441,9 @@ def main():
     reg.add_argument("--pipeline-id", required=True)
     reg.add_argument("--admin-token", required=True)
     reg.add_argument("--release-descriptor-path", required=True)
+    reg.add_argument("--worker-id")
+    reg.add_argument("--worker-protocol", default="local")
+    reg.add_argument("--worker-endpoint", default="in-process")
     reg.set_defaults(func=register_activate)
 
     release = sub.add_parser("create-release")

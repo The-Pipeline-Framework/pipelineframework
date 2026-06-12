@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator.worker;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -10,6 +11,7 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.orchestrator.GrpcPipelineTransitionWorker;
 import org.pipelineframework.orchestrator.PipelineBundleCapabilities;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.PipelineReleaseRuntimeBeans;
 import org.pipelineframework.orchestrator.PipelineReleaseIdentityResolver;
 import org.pipelineframework.orchestrator.RestPipelineTransitionWorker;
 import org.pipelineframework.orchestrator.TransitionPayloadEncoding;
@@ -34,11 +36,16 @@ public class DefaultPipelineWorkerAvailability implements PipelineWorkerAvailabi
     @Inject
     GrpcPipelineTransitionWorker grpcWorker;
 
+    @Inject
+    PipelineWorkerRegistry workerRegistry;
+
+    private volatile PipelineWorkerRegistry fallbackWorkerRegistry;
+
     @Override
     public Uni<PipelineWorkerAvailabilityResult> check(PipelineWorkerAvailabilityRequest request) {
         if (orchestratorConfig.workerRest().isEnabled()) {
             return restWorker.capabilities()
-                .onItem().transform(capability -> match("rest", capability, request))
+                .onItem().transformToUni(capability -> matchWithLifecycle("rest", capability, request))
                 .onFailure().recoverWithItem(failure ->
                     PipelineWorkerAvailabilityResult.unavailable(
                         "rest",
@@ -46,33 +53,33 @@ public class DefaultPipelineWorkerAvailability implements PipelineWorkerAvailabi
         }
         if (orchestratorConfig.workerGrpc().isEnabled()) {
             return grpcWorker.capabilities()
-                .onItem().transform(capability -> match("grpc", capability, request))
+                .onItem().transformToUni(capability -> matchWithLifecycle("grpc", capability, request))
                 .onFailure().recoverWithItem(failure ->
                     PipelineWorkerAvailabilityResult.unavailable(
                         "grpc",
                         "gRPC transition worker capability check failed: " + failure.getMessage()));
         }
         if (orchestratorConfig.workerSqs().isEnabled()) {
-            return Uni.createFrom().item(() -> sqsAvailability(request));
+            return sqsAvailability(request);
         }
-        return Uni.createFrom().item(() -> localAvailability(request));
+        return localAvailability(request);
     }
 
-    private PipelineWorkerAvailabilityResult localAvailability(PipelineWorkerAvailabilityRequest request) {
+    private Uni<PipelineWorkerAvailabilityResult> localAvailability(PipelineWorkerAvailabilityRequest request) {
         PipelineWorkerCapability capability = localCapability();
-        return match("local", capability, request);
+        return matchWithLifecycle("local", capability, request);
     }
 
-    private PipelineWorkerAvailabilityResult sqsAvailability(PipelineWorkerAvailabilityRequest request) {
+    private Uni<PipelineWorkerAvailabilityResult> sqsAvailability(PipelineWorkerAvailabilityRequest request) {
         var sqs = orchestratorConfig.workerSqs();
         if (sqs.pipelineId().filter(value -> !value.isBlank()).isEmpty()
             || sqs.contractVersion().filter(value -> !value.isBlank()).isEmpty()
             || sqs.releaseVersion().filter(value -> !value.isBlank()).isEmpty()) {
-            return PipelineWorkerAvailabilityResult.unavailable(
+            return Uni.createFrom().item(PipelineWorkerAvailabilityResult.unavailable(
                 "sqs",
                 "SQS worker release availability requires pipeline.orchestrator.worker.sqs.pipeline-id "
                     + "pipeline.orchestrator.worker.sqs.contract-version, "
-                    + "and pipeline.orchestrator.worker.sqs.release-version");
+                    + "and pipeline.orchestrator.worker.sqs.release-version"));
         }
         PipelineWorkerCapability capability = new PipelineWorkerCapability(
             PipelineWorkerCapability.PROTOCOL_VERSION,
@@ -84,7 +91,7 @@ public class DefaultPipelineWorkerAvailability implements PipelineWorkerAvailabi
             sqs.artifactDigest().orElse("").trim(),
             List.of(TransitionPayloadEncoding.JSON),
             List.of("sqs"));
-        return match("sqs", capability, request);
+        return matchWithLifecycle("sqs", capability, request);
     }
 
     private PipelineWorkerCapability localCapability() {
@@ -99,6 +106,62 @@ public class DefaultPipelineWorkerAvailability implements PipelineWorkerAvailabi
             identityResolver.artifactDigest(orchestratorConfig),
             List.of(TransitionPayloadEncoding.JSON),
             capabilities.transitionWorkerProtocols());
+    }
+
+    private Uni<PipelineWorkerAvailabilityResult> matchWithLifecycle(
+        String providerName,
+        PipelineWorkerCapability capability,
+        PipelineWorkerAvailabilityRequest request) {
+        PipelineWorkerAvailabilityResult capabilityResult = match(providerName, capability, request);
+        if (!capabilityResult.available()) {
+            return Uni.createFrom().item(capabilityResult);
+        }
+        long now = System.currentTimeMillis();
+        return workerRegistry().matching(
+                request,
+                providerName,
+                now,
+                PipelineReleaseRuntimeBeans.workerStaleAfter(orchestratorConfig))
+            .onItem().transform(records -> lifecycleResult(providerName, capability, request, records));
+    }
+
+    private PipelineWorkerAvailabilityResult lifecycleResult(
+        String providerName,
+        PipelineWorkerCapability capability,
+        PipelineWorkerAvailabilityRequest request,
+        List<PipelineWorkerRecord> records) {
+        boolean hasMatchingHealthy = records.stream()
+            .anyMatch(record -> record.state() == PipelineWorkerState.HEALTHY
+                && record.matches(request, providerName));
+        if (hasMatchingHealthy) {
+            LOG.debugf(
+                "Selected %s worker is healthy for tenant=%s pipelineId=%s releaseVersion=%s",
+                providerName,
+                request.tenantId(),
+                request.pipelineId(),
+                request.releaseVersion());
+            return PipelineWorkerAvailabilityResult.available(providerName, capability);
+        }
+        boolean hasArtifactMismatch = records.stream()
+            .anyMatch(record -> record.hasArtifactMismatch(request, providerName));
+        if (hasArtifactMismatch) {
+            return PipelineWorkerAvailabilityResult.unavailable(
+                providerName,
+                "Registered worker artifact identity does not match active release");
+        }
+        if (!records.isEmpty()) {
+            String states = records.stream()
+                .map(record -> record.workerId() + "=" + record.state())
+                .sorted()
+                .collect(Collectors.joining(", "));
+            return PipelineWorkerAvailabilityResult.unavailable(
+                providerName,
+                "No healthy " + providerName + " worker lifecycle record for active release; current states: "
+                    + states);
+        }
+        return PipelineWorkerAvailabilityResult.unavailable(
+            providerName,
+            "No worker lifecycle record for active release");
     }
 
     private PipelineWorkerAvailabilityResult match(
@@ -138,12 +201,23 @@ public class DefaultPipelineWorkerAvailability implements PipelineWorkerAvailabi
                 "Worker artifact id " + capability.artifactId()
                     + " does not match active release artifact id " + request.artifactId());
         }
-        LOG.debugf(
-            "Selected %s worker is available for tenant=%s pipelineId=%s releaseVersion=%s",
-            providerName,
-            request.tenantId(),
-            request.pipelineId(),
-            request.releaseVersion());
         return PipelineWorkerAvailabilityResult.available(providerName, capability);
+    }
+
+    private PipelineWorkerRegistry workerRegistry() {
+        if (workerRegistry != null) {
+            return workerRegistry;
+        }
+        PipelineWorkerRegistry fallback = fallbackWorkerRegistry;
+        if (fallback == null) {
+            synchronized (this) {
+                fallback = fallbackWorkerRegistry;
+                if (fallback == null) {
+                    fallback = new InMemoryPipelineWorkerRegistry();
+                    fallbackWorkerRegistry = fallback;
+                }
+            }
+        }
+        return fallback;
     }
 }

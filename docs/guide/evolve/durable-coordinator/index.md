@@ -53,4 +53,4 @@ sequenceDiagram
 
 The current coordinator path does not dynamically load registered JAR code. Workers must already host matching pipeline code and validate active `pipelineId + contractVersion + releaseVersion` identity.
 
-The Dynamo release registry provides multi-coordinator release metadata, while the file-backed registry remains local/dev oriented. Built-in DLQ replay, worker lifecycle, and append-only execution/await state remain follow-up runtime substrate work.
+The Dynamo release registry provides multi-coordinator release metadata, while the file-backed registry remains local/dev oriented. Minimal worker lifecycle now gates new hosted submissions. Built-in DLQ replay and append-only execution/await state remain follow-up runtime substrate work.

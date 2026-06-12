@@ -356,6 +356,15 @@ public interface PipelineOrchestratorConfig {
         String releaseTable();
 
         /**
+         * Worker lifecycle metadata table name.
+         *
+         * @return worker lifecycle table name
+         */
+        @WithName("worker-table")
+        @WithDefault("tpf_worker_registry")
+        String workerTable();
+
+        /**
          * Optional region override.
          *
          * @return region when configured
@@ -727,6 +736,38 @@ public interface PipelineOrchestratorConfig {
          */
         @WithName("sqs")
         SqsWorkerConfig sqs();
+
+        /**
+         * Worker lifecycle registry settings.
+         *
+         * @return lifecycle config
+         */
+        @WithName("lifecycle")
+        WorkerLifecycleConfig lifecycle();
+    }
+
+    /**
+     * Worker lifecycle registry settings.
+     */
+    interface WorkerLifecycleConfig {
+
+        /**
+         * Worker lifecycle provider name.
+         *
+         * @return memory or dynamo
+         */
+        @WithName("provider")
+        @WithDefault("memory")
+        String provider();
+
+        /**
+         * Maximum age since last heartbeat before a worker is considered stale.
+         *
+         * @return stale heartbeat duration
+         */
+        @WithName("stale-after")
+        @WithDefault("PT2M")
+        Duration staleAfter();
     }
 
     /**

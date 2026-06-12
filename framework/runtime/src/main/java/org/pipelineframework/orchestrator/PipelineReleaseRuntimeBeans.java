@@ -4,7 +4,11 @@ import org.pipelineframework.orchestrator.release.FileBackedPipelineReleaseRegis
 import org.pipelineframework.orchestrator.release.DynamoPipelineReleaseRegistry;
 import org.pipelineframework.orchestrator.release.InMemoryPipelineReleaseRegistry;
 import org.pipelineframework.orchestrator.release.PipelineReleaseRegistry;
+import org.pipelineframework.orchestrator.worker.DynamoPipelineWorkerRegistry;
+import org.pipelineframework.orchestrator.worker.InMemoryPipelineWorkerRegistry;
+import org.pipelineframework.orchestrator.worker.PipelineWorkerRegistry;
 import java.nio.file.Path;
+import java.time.Duration;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
@@ -58,6 +62,34 @@ public class PipelineReleaseRuntimeBeans {
         }
         throw new IllegalStateException(
             "Unsupported pipeline.orchestrator.releases.registry.provider '" + provider + "'");
+    }
+
+    @Produces
+    @ApplicationScoped
+    PipelineWorkerRegistry pipelineWorkerRegistry() {
+        String provider = orchestratorConfig == null
+            || orchestratorConfig.worker() == null
+            || orchestratorConfig.worker().lifecycle() == null
+                ? "memory"
+                : orchestratorConfig.worker().lifecycle().provider();
+        if (provider == null || provider.isBlank() || "memory".equalsIgnoreCase(provider)) {
+            return new InMemoryPipelineWorkerRegistry();
+        }
+        if ("dynamo".equalsIgnoreCase(provider)) {
+            return new DynamoPipelineWorkerRegistry(orchestratorConfig);
+        }
+        throw new IllegalStateException(
+            "Unsupported pipeline.orchestrator.worker.lifecycle.provider '" + provider + "'");
+    }
+
+    public static Duration workerStaleAfter(PipelineOrchestratorConfig orchestratorConfig) {
+        if (orchestratorConfig == null
+            || orchestratorConfig.worker() == null
+            || orchestratorConfig.worker().lifecycle() == null
+            || orchestratorConfig.worker().lifecycle().staleAfter() == null) {
+            return Duration.ofMinutes(2);
+        }
+        return orchestratorConfig.worker().lifecycle().staleAfter();
     }
 
     public static Path storageRoot(PipelineOrchestratorConfig orchestratorConfig) {

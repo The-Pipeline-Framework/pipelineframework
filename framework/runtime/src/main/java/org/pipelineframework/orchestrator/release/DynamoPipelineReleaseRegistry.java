@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import jakarta.annotation.PreDestroy;
 
@@ -432,8 +433,8 @@ public class DynamoPipelineReleaseRegistry implements PipelineReleaseRegistry {
             && left.primaryArtifactUri().equals(right.primaryArtifactUri())
             && left.primaryArtifactSizeBytes() == right.primaryArtifactSizeBytes()
             && left.primaryArtifactChecksum().equals(right.primaryArtifactChecksum())
-            && toJson(left.descriptor()).equals(toJson(right.descriptor()))
-            && toJson(left.contract()).equals(toJson(right.contract()));
+            && Objects.equals(left.descriptor(), right.descriptor())
+            && Objects.equals(left.contract(), right.contract());
     }
 
     private static <T> Uni<T> blocking(java.util.function.Supplier<T> supplier) {

@@ -73,6 +73,7 @@ pipeline.orchestrator.dynamo.execution-key-table=tpf_execution_key
 pipeline.orchestrator.dynamo.await-interaction-table=tpf_await_interaction
 pipeline.orchestrator.dynamo.await-interaction-key-table=tpf_await_interaction_key
 pipeline.orchestrator.dynamo.release-table=tpf_release_registry
+pipeline.orchestrator.dynamo.worker-table=tpf_worker_registry
 pipeline.orchestrator.dynamo.region=eu-west-1
 pipeline.orchestrator.sqs.region=eu-west-1
 
@@ -87,6 +88,9 @@ pipeline.orchestrator.releases.storage.provider=s3
 pipeline.orchestrator.releases.storage.s3.bucket=tpf-release-artifacts
 pipeline.orchestrator.releases.storage.s3.prefix=tpf/releases
 pipeline.orchestrator.releases.storage.s3.region=eu-west-1
+
+pipeline.orchestrator.worker.lifecycle.provider=dynamo
+pipeline.orchestrator.worker.lifecycle.stale-after=PT2M
 ```
 
 The await interaction table must provide these ALL-projected GSIs:
@@ -100,7 +104,7 @@ The await interaction table must provide these ALL-projected GSIs:
 
 SQS request/reply worker protocol has one additional v1 constraint: `pipeline.orchestrator.worker.sqs.response-queue-url` must be dedicated per coordinator instance or shard. Shared response queues can route a worker response to the wrong process because response demultiplexing is not implemented.
 
-The Dynamo release registry stores immutable release records plus append-only activation events. Active release lookup reads the latest activation event for the tenant and pipeline; it does not update a mutable active pointer. New coordinator metadata stores should follow this rule. Existing execution and await Dynamo stores still use conditional updates for leases and state transitions until that storage model is redesigned.
+The Dynamo release registry stores immutable release records plus append-only activation events. Active release lookup reads the latest activation event for the tenant and pipeline; it does not update a mutable active pointer. The Dynamo worker lifecycle registry follows the same rule with append-only registration, heartbeat, and drain events. Existing execution and await Dynamo stores still use conditional updates for leases and state transitions until that storage model is redesigned.
 
 For one-process local development, use `pipeline.orchestrator.releases.storage.provider=local` with `pipeline.orchestrator.releases.storage.root=/var/lib/tpf/releases`.
 
@@ -127,9 +131,10 @@ Before accepting work:
 4. Start the coordinator with `strict-startup=true`.
 5. Produce a `pipeline-release.json` that pins the built artifacts by digest.
 6. Register and activate the release for the tenant and pipeline.
-7. Submit one canary execution and verify status, pending await interaction, completion, and result.
+7. Register or heartbeat at least one worker for the active contract/release identity.
+8. Submit one canary execution and verify status, pending await interaction, completion, and result.
 
-The current coordinator does not dynamically load registered code. Release registration validates the release descriptor and, for local executable artifacts, validates and stores the artifact in the configured release artifact store. Container images remain in the OCI registry; the coordinator records their immutable reference and uses worker capability checks to verify that deployed workers host the active release. Workers must already host matching code. Worker availability checks verify the active contract/release identity before hosted execution submission, and artifact id/digest when both sides provide it.
+The current coordinator does not dynamically load registered code. Release registration validates the release descriptor and, for local executable artifacts, validates and stores the artifact in the configured release artifact store. Container images remain in the OCI registry; the coordinator records their immutable reference and uses worker capability checks to verify that deployed workers host the active release. Workers must already host matching code. Worker availability checks verify the active contract/release identity before hosted execution submission, artifact id/digest when both sides provide it, and a matching `HEALTHY` worker lifecycle record. Stale, draining, and unavailable workers reject new hosted submissions with `503`.
 
 `pipeline.orchestrator.control-plane.require-remote-worker=true` is recommended for separated self-host deployments. It prevents a coordinator process from silently falling back to the local in-process worker when no REST, gRPC, or SQS worker target is configured. Leave it disabled for the one-process local demo. See [Runtime Boundaries And Performance](/guide/evolve/durable-coordinator/runtime-boundaries-performance).
 
@@ -141,7 +146,8 @@ The current coordinator does not dynamically load registered code. Release regis
 2. Read the returned `releaseVersion`.
 3. Activate with `POST /tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/releases/{releaseVersion}/activate`.
 4. Confirm `GET /active` returns the expected release, contract version, and artifact identity.
-5. Keep workers for that release running before submitting executions.
+5. Register or heartbeat a worker with `POST /tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/workers/register`.
+6. Keep workers for that release healthy before submitting executions.
 
 Activation affects new executions only. Existing executions remain pinned to the contract/release identity stored on their execution record.
 
@@ -178,12 +184,14 @@ There is no built-in generic DLQ replay endpoint yet. The DLQ proves durable fai
 The current safe upgrade procedure is conservative:
 
 1. Deploy workers that host the new release version.
-2. Register and activate the new release.
-3. Submit canary executions and verify worker availability and results.
-4. Leave old workers running until executions pinned to the old release drain.
-5. Stop old workers only after status queries show no active executions for the old release.
+2. Register or heartbeat the new workers for the new release.
+3. Register and activate the new release.
+4. Submit canary executions and verify worker availability and results.
+5. Mark old workers draining when they should stop accepting new hosted submissions.
+6. Leave old workers running until executions pinned to the old release drain.
+7. Stop old workers only after status queries show no active executions for the old release.
 
-There is no worker lifecycle registry yet. Operators must track healthy, stale, draining, and unavailable worker states outside the framework for now.
+The lifecycle model is intentionally small. It records `HEALTHY`, `STALE`, `DRAINING`, and `UNAVAILABLE` views for submit admission. It does not autoscale workers, choose among worker pools, manage Kubernetes deployments, or move in-flight executions between workers.
 
 ## What To Monitor
 
@@ -195,7 +203,8 @@ At minimum:
 4. await pending count and oldest pending deadline,
 5. DLQ publication count and repeated failure fingerprints,
 6. worker protocol latency and transport failures,
-7. release activation events and active release id per tenant/pipeline.
+7. release activation events and active release id per tenant/pipeline,
+8. worker lifecycle records by tenant, pipeline, release, and state.
 
 For metric names and observability surfaces, use the operations guides for [Metrics](/guide/operations/observability/metrics), [Replay & Live Topology](/guide/operations/observability/replay), and the [Operator Playbook](/guide/operations/operators-playbook).
 
@@ -207,7 +216,7 @@ This recipe intentionally does not include:
 2. dynamic JAR loading in the coordinator,
 3. append-only execution/await state storage,
 4. built-in generic DLQ replay,
-5. worker registration, heartbeat, or drain state,
+5. worker autoscaling, fleet routing, or deployment orchestration,
 6. production tenancy, RBAC, or org/principal management.
 
 The file-backed release registry is suitable for local/dev and single-coordinator self-host pilots. Use the Dynamo release registry for multi-coordinator release metadata. Use the S3-compatible release artifact store only for artifacts that should be coordinator-managed blobs; use OCI or Maven-style repositories for artifacts that already have native repository semantics.

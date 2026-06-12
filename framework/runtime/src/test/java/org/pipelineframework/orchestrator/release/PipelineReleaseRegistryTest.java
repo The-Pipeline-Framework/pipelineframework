@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator.release;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -219,9 +220,9 @@ class PipelineReleaseRegistryTest {
             .resolve("src/main/java/org/pipelineframework/orchestrator/release/DynamoPipelineReleaseRegistry.java");
         String content = Files.readString(source);
 
-        assertTrue(!content.contains("UpdateItemRequest"), "Dynamo release registry must not use UpdateItemRequest");
-        assertTrue(!content.contains(".updateItem("), "Dynamo release registry must not call updateItem");
-        assertTrue(!content.contains("return null"), "Dynamo release registry must not return null");
+        assertFalse(content.contains("UpdateItemRequest"), "Dynamo release registry must not use UpdateItemRequest");
+        assertFalse(content.contains(".updateItem("), "Dynamo release registry must not call updateItem");
+        assertFalse(content.contains("return null"), "Dynamo release registry must not return null");
     }
 
     private PipelineReleaseRegistrar registrar() {
