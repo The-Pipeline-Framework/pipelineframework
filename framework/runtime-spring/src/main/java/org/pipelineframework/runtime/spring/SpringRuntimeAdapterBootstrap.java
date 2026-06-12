@@ -16,6 +16,8 @@
 
 package org.pipelineframework.runtime.spring;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -51,12 +53,15 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 public class SpringRuntimeAdapterBootstrap implements InitializingBean, DisposableBean {
     private static final String EXECUTOR_THREAD_NAME = "tpf-spring-runtime-";
+    private static final Object REGISTRATION_LOCK = new Object();
+    private static final Deque<SpringAdapterRegistration> ACTIVE_REGISTRATIONS = new ArrayDeque<>();
 
     private final ApplicationContext applicationContext;
     private final ApplicationEventPublisher eventPublisher;
     private final Executor executor;
     private final PlatformTransactionManager transactionManager;
     private final ExecutorService ownedVirtualThreadExecutor;
+    private SpringAdapterRegistration registration;
 
     public SpringRuntimeAdapterBootstrap(
         ApplicationContext applicationContext,
@@ -75,14 +80,24 @@ public class SpringRuntimeAdapterBootstrap implements InitializingBean, Disposab
     @Override
     public void afterPropertiesSet() {
         SpringBeanLookup beanLookup = new SpringBeanLookup(applicationContext);
-        RuntimeAdapters.registerBeanLookup(beanLookup);
-        RuntimeAdapters.registerConfigProvider(new SpringConfigProvider(beanLookup));
-        RuntimeAdapters.registerExecutionContextCarrier(new SpringExecutionContextCarrier());
-        RuntimeAdapters.registerReactiveRuntime(new SpringReactiveRuntime(executor, ownedVirtualThreadExecutor));
-        RuntimeAdapters.registerSchedulerBoundary(new SpringSchedulerBoundary(executor));
-        RuntimeAdapters.registerTransactionBoundary(new SpringTransactionBoundary(transactionManager));
-        RuntimeAdapters.registerEventBusBridge(new SpringEventBusBridge(eventPublisher));
-        RuntimeAdapters.registerWorkDispatcher(new SpringWorkDispatcher(eventPublisher));
+        SpringAdapterRegistration nextRegistration = new SpringAdapterRegistration(
+            beanLookup,
+            new SpringConfigProvider(beanLookup),
+            new SpringExecutionContextCarrier(),
+            new SpringReactiveRuntime(executor, ownedVirtualThreadExecutor),
+            new SpringSchedulerBoundary(executor),
+            new SpringTransactionBoundary(transactionManager),
+            new SpringEventBusBridge(eventPublisher),
+            new SpringWorkDispatcher(eventPublisher));
+
+        synchronized (REGISTRATION_LOCK) {
+            if (registration != null) {
+                ACTIVE_REGISTRATIONS.remove(registration);
+            }
+            registration = nextRegistration;
+            ACTIVE_REGISTRATIONS.addLast(nextRegistration);
+            nextRegistration.install();
+        }
     }
 
     @Override
@@ -90,7 +105,41 @@ public class SpringRuntimeAdapterBootstrap implements InitializingBean, Disposab
         try {
             ownedVirtualThreadExecutor.close();
         } finally {
-            RuntimeAdapters.resetForTests();
+            synchronized (REGISTRATION_LOCK) {
+                if (registration == null) {
+                    return;
+                }
+                ACTIVE_REGISTRATIONS.remove(registration);
+                registration = null;
+                SpringAdapterRegistration activeRegistration = ACTIVE_REGISTRATIONS.peekLast();
+                if (activeRegistration == null) {
+                    RuntimeAdapters.resetForTests();
+                } else {
+                    activeRegistration.install();
+                }
+            }
+        }
+    }
+
+    private record SpringAdapterRegistration(
+        BeanLookup beanLookup,
+        ConfigProvider configProvider,
+        ExecutionContextCarrier executionContextCarrier,
+        ReactiveRuntime reactiveRuntime,
+        SchedulerBoundary schedulerBoundary,
+        TransactionBoundary transactionBoundary,
+        EventBusBridge eventBusBridge,
+        WorkDispatcher workDispatcher
+    ) {
+        private void install() {
+            RuntimeAdapters.registerBeanLookup(beanLookup);
+            RuntimeAdapters.registerConfigProvider(configProvider);
+            RuntimeAdapters.registerExecutionContextCarrier(executionContextCarrier);
+            RuntimeAdapters.registerReactiveRuntime(reactiveRuntime);
+            RuntimeAdapters.registerSchedulerBoundary(schedulerBoundary);
+            RuntimeAdapters.registerTransactionBoundary(transactionBoundary);
+            RuntimeAdapters.registerEventBusBridge(eventBusBridge);
+            RuntimeAdapters.registerWorkDispatcher(workDispatcher);
         }
     }
 

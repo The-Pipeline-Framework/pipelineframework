@@ -50,7 +50,8 @@ class RuntimeSpringDependencyGuardTest {
 
         assertFalse(pom.contains("<artifactId>pipelineframework</artifactId>"),
             "runtime-spring must depend on runtime-core, not the Quarkus runtime artifact");
-        assertTrue(pom.contains("<artifactId>pipelineframework-runtime-core</artifactId>"));
+        assertTrue(pom.contains("<artifactId>pipelineframework-runtime-core</artifactId>"),
+            "runtime-spring must depend on runtime-core");
     }
 
     private void assertNoForbiddenMainSourceToken(String forbiddenToken) {

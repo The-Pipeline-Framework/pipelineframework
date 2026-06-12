@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.runtime.core.RuntimeAdapters;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -133,6 +134,41 @@ class SpringRuntimeAdaptersAutoConfigurationTest {
             .run(context -> assertTrue(RuntimeAdapters.resolveBean(SampleService.class).isPresent()));
 
         assertTrue(RuntimeAdapters.resolveBean(SampleService.class).isEmpty());
+    }
+
+    @Test
+    void closingLatestContextRestoresPreviousRuntimeAdapters() {
+        AnnotationConfigApplicationContext firstContext = springContextWithService("first");
+        AnnotationConfigApplicationContext secondContext = springContextWithService("second");
+        SpringRuntimeAdapterBootstrap firstBootstrap = new SpringRuntimeAdapterBootstrap(firstContext, firstContext, null, null);
+        SpringRuntimeAdapterBootstrap secondBootstrap = new SpringRuntimeAdapterBootstrap(secondContext, secondContext, null, null);
+
+        try {
+            firstBootstrap.afterPropertiesSet();
+            assertEquals("first", RuntimeAdapters.resolveBean(SampleService.class).orElseThrow().name());
+
+            secondBootstrap.afterPropertiesSet();
+            assertEquals("second", RuntimeAdapters.resolveBean(SampleService.class).orElseThrow().name());
+
+            secondBootstrap.destroy();
+            secondContext.close();
+
+            assertEquals("first", RuntimeAdapters.resolveBean(SampleService.class).orElseThrow().name());
+        } finally {
+            secondBootstrap.destroy();
+            secondContext.close();
+            firstBootstrap.destroy();
+            firstContext.close();
+        }
+
+        assertTrue(RuntimeAdapters.resolveBean(SampleService.class).isEmpty());
+    }
+
+    private AnnotationConfigApplicationContext springContextWithService(String name) {
+        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
+        context.registerBean(SampleService.class, () -> new SampleService(name));
+        context.refresh();
+        return context;
     }
 
     record SampleService(String name) {
