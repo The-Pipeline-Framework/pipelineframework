@@ -33,7 +33,8 @@ export async function submitCheckoutOrder(formData) {
   if (!executionId) {
     throw new Error("Checkout request accepted but no execution id was returned from TPF.");
   }
-  redirect(`/executions/${encodeURIComponent(executionId)}`);
+  revalidatePath("/interactions");
+  redirect(`/interactions?started=${encodeURIComponent(executionId)}`);
 }
 
 export async function completeCheckoutInteraction(formData) {
@@ -46,7 +47,8 @@ export async function completeCheckoutInteraction(formData) {
     const completed = await completeInteraction({ interactionId, payload, targetId });
     const completedInteractionId = String(completed?.interactionId || interactionId);
     const completedStage = stageId ? `&completedStage=${encodeURIComponent(stageId)}` : "";
-    destination = `/interactions?completed=${encodeURIComponent(completedInteractionId)}${completedStage}`;
+    const target = targetId ? `&target=${encodeURIComponent(targetId)}` : "";
+    destination = `/interactions?completed=${encodeURIComponent(completedInteractionId)}${completedStage}${target}`;
   } catch (error) {
     const message = String(error?.message || "Interaction completion failed.").slice(0, 600);
     destination = `/interactions?error=${encodeURIComponent(message)}`;

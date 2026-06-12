@@ -1,5 +1,12 @@
 package org.pipelineframework.orchestrator;
 
+import org.pipelineframework.orchestrator.release.InMemoryPipelineReleaseRegistry;
+import org.pipelineframework.orchestrator.release.PipelineReleaseRecord;
+import org.pipelineframework.orchestrator.release.PipelineReleaseRegistrar;
+import org.pipelineframework.orchestrator.release.PipelineReleaseRegistry;
+import org.pipelineframework.orchestrator.worker.DefaultPipelineWorkerAvailability;
+import org.pipelineframework.orchestrator.worker.PipelineWorkerAvailability;
+import org.pipelineframework.orchestrator.worker.PipelineWorkerAvailabilityRequest;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -58,10 +65,10 @@ public class HostedPipelineControlPlaneResource {
     PipelineExecutionService executionService;
 
     @Inject
-    PipelineBundleRegistry bundleRegistry;
+    PipelineReleaseRegistry releaseRegistry;
 
     @Inject
-    PipelineBundleArtifactStore bundleArtifactStore;
+    PipelineReleaseRegistrar releaseRegistrar;
 
     @Inject
     PipelineWorkerAvailability workerAvailability;
@@ -72,8 +79,8 @@ public class HostedPipelineControlPlaneResource {
     @Inject
     ControlPlaneSecretResolver secretResolver;
 
-    private volatile PipelineBundleRegistry fallbackRegistry;
-    private volatile PipelineBundleArtifactStore fallbackArtifactStore;
+    private volatile PipelineReleaseRegistry fallbackRegistry;
+    private volatile PipelineReleaseRegistrar fallbackRegistrar;
     private volatile PipelineWorkerAvailability fallbackWorkerAvailability;
 
     @PostConstruct
@@ -120,19 +127,19 @@ public class HostedPipelineControlPlaneResource {
             .onItem().transformToUni(active -> {
                 if (active.isEmpty()) {
                     return Uni.createFrom().item(Response.status(Response.Status.CONFLICT)
-                        .entity("No active bundle is registered for the requested pipeline").build());
+                        .entity("No active release is registered for the requested pipeline").build());
                 }
-                PipelineBundleRecord bundle = active.get();
+                PipelineReleaseRecord release = active.get();
                 try {
-                    artifactStore().verify(bundle);
+                    registrar().verify(release);
                 } catch (IllegalArgumentException | IllegalStateException e) {
-                    LOG.warnf("Active hosted bundle is unavailable: %s", e.getMessage());
+                    LOG.warnf("Active hosted release is unavailable: %s", e.getMessage());
                     return Uni.createFrom().item(Response.status(Response.Status.CONFLICT)
                         .entity(e.getMessage()).build());
                 }
                 Object input;
                 try {
-                    input = executionInput(request, bundle);
+                    input = executionInput(request, release);
                 } catch (IngressPayloadTypeResolutionException e) {
                     LOG.errorf(e, "Failed resolving hosted control-plane ingress payload type");
                     return Uni.createFrom().item(Response.status(Response.Status.SERVICE_UNAVAILABLE)
@@ -144,27 +151,31 @@ public class HostedPipelineControlPlaneResource {
                 }
                 return availability().check(new PipelineWorkerAvailabilityRequest(
                         tenantId,
-                        bundle.pipelineId(),
-                        bundle.bundleVersionId()))
+                        release.pipelineId(),
+                        release.contractVersion(),
+                        release.releaseVersion(),
+                        release.primaryArtifactId(),
+                        release.primaryArtifactDigest()))
                     .onItem().transformToUni(availability -> {
                         if (!availability.available()) {
                             LOG.warnf(
-                                "No %s transition worker is available for tenant=%s pipelineId=%s bundleVersionId=%s: %s",
+                                "No %s transition worker is available for tenant=%s pipelineId=%s releaseVersion=%s: %s",
                                 availability.providerName(),
                                 tenantId,
-                                bundle.pipelineId(),
-                                bundle.bundleVersionId(),
+                                release.pipelineId(),
+                                release.releaseVersion(),
                                 availability.message());
                             return Uni.createFrom().item(Response.status(Response.Status.SERVICE_UNAVAILABLE)
-                                .entity("No worker available for active bundle: " + availability.message()).build());
+                                .entity("No worker available for active release: " + availability.message()).build());
                         }
                         return controlPlane.executePipelineAsync(
                                 input,
                                 tenantId,
                                 request.idempotencyKey(),
                                 request.outputStreaming(),
-                                bundle.pipelineId(),
-                                bundle.bundleVersionId())
+                                release.pipelineId(),
+                                release.contractVersion(),
+                                release.releaseVersion())
                             .onItem().transform(accepted -> Response.ok(accepted).build());
                     });
             });
@@ -286,7 +297,7 @@ public class HostedPipelineControlPlaneResource {
             .onItem().transform(result -> Response.ok(AwaitDtoMapper.toCompletionResponse(result)).build());
     }
 
-    private Object executionInput(HostedExecutionSubmitRequest request, PipelineBundleRecord bundle) {
+    private Object executionInput(HostedExecutionSubmitRequest request, PipelineReleaseRecord release) {
         if (request == null) {
             throw new IllegalArgumentException("Execution submit request is required");
         }
@@ -298,8 +309,8 @@ public class HostedPipelineControlPlaneResource {
         }
         Object payload = payloadCodec.decode(request.inputPayload());
         return switch (request.inputShape()) {
-            case UNI -> toUni(coerceIngressPayload(payload, bundle));
-            case MULTI -> toMulti(payload, bundle);
+            case UNI -> toUni(coerceIngressPayload(payload, request.inputPayload(), release));
+            case MULTI -> toMulti(payload, release);
             case RAW -> payload;
         };
     }
@@ -308,32 +319,49 @@ public class HostedPipelineControlPlaneResource {
         return payload == null ? Uni.createFrom().nullItem() : Uni.createFrom().item(payload);
     }
 
-    private Multi<?> toMulti(Object payload, PipelineBundleRecord bundle) {
+    private Multi<?> toMulti(Object payload, PipelineReleaseRecord release) {
         if (payload == null) {
             return Multi.createFrom().empty();
         }
         if (payload instanceof Iterable<?> iterable) {
             List<Object> coerced = new ArrayList<>();
-            iterable.forEach(item -> coerced.add(coerceIngressPayload(item, bundle)));
+            iterable.forEach(item -> coerced.add(coerceIngressPayload(item, null, release)));
             return Multi.createFrom().iterable(coerced);
         }
         throw new IllegalArgumentException("MULTI input payload must decode to an iterable value");
     }
 
-    private Object coerceIngressPayload(Object payload, PipelineBundleRecord bundle) {
-        Class<?> target = ingressPayloadType(bundle);
+    private Object coerceIngressPayload(
+        Object payload,
+        SerializedTransitionPayload serializedPayload,
+        PipelineReleaseRecord release
+    ) {
+        if (hasExplicitConcretePayloadType(serializedPayload)) {
+            return payload;
+        }
+        Class<?> target = ingressPayloadType(release);
         if (target == null || payload == null || target.isInstance(payload)) {
             return payload;
         }
         return PipelineJson.mapper().convertValue(payload, target);
     }
 
-    private Class<?> ingressPayloadType(PipelineBundleRecord bundle) {
+    private boolean hasExplicitConcretePayloadType(SerializedTransitionPayload serializedPayload) {
+        if (serializedPayload == null || serializedPayload.payloadTypeId() == null) {
+            return false;
+        }
+        return switch (serializedPayload.payloadTypeId()) {
+            case "null", "java.util.Map", "java.util.List", "java.util.Set" -> false;
+            default -> true;
+        };
+    }
+
+    private Class<?> ingressPayloadType(PipelineReleaseRecord release) {
         try {
-            if (bundle == null || bundle.manifest() == null || bundle.manifest().steps().isEmpty()) {
+            if (release == null || release.contract() == null || release.contract().steps().isEmpty()) {
                 return null;
             }
-            String inputTypeId = bundle.manifest().steps().getFirst().inputTypeId();
+            String inputTypeId = release.contract().steps().getFirst().inputTypeId();
             if (inputTypeId == null || inputTypeId.isBlank()) {
                 return null;
             }
@@ -365,16 +393,16 @@ public class HostedPipelineControlPlaneResource {
         return authenticate(authorization);
     }
 
-    private PipelineBundleRegistry registry() {
-        if (bundleRegistry != null) {
-            return bundleRegistry;
+    private PipelineReleaseRegistry registry() {
+        if (releaseRegistry != null) {
+            return releaseRegistry;
         }
-        PipelineBundleRegistry fallback = fallbackRegistry;
+        PipelineReleaseRegistry fallback = fallbackRegistry;
         if (fallback == null) {
             synchronized (this) {
                 fallback = fallbackRegistry;
                 if (fallback == null) {
-                    fallback = new InMemoryPipelineBundleRegistry();
+                    fallback = new InMemoryPipelineReleaseRegistry();
                     fallbackRegistry = fallback;
                 }
             }
@@ -382,19 +410,17 @@ public class HostedPipelineControlPlaneResource {
         return fallback;
     }
 
-    private PipelineBundleArtifactStore artifactStore() {
-        if (bundleArtifactStore != null) {
-            return bundleArtifactStore;
+    private PipelineReleaseRegistrar registrar() {
+        if (releaseRegistrar != null) {
+            return releaseRegistrar;
         }
-        PipelineBundleArtifactStore fallback = fallbackArtifactStore;
+        PipelineReleaseRegistrar fallback = fallbackRegistrar;
         if (fallback == null) {
             synchronized (this) {
-                fallback = fallbackArtifactStore;
+                fallback = fallbackRegistrar;
                 if (fallback == null) {
-                    fallback = new LocalPipelineBundleArtifactStore(
-                        PipelineBundleRuntimeBeans.storageRoot(orchestratorConfig),
-                        new PipelineBundleManifestLoader());
-                    fallbackArtifactStore = fallback;
+                    fallback = new PipelineReleaseRegistrar();
+                    fallbackRegistrar = fallback;
                 }
             }
         }

@@ -1,5 +1,6 @@
 package org.pipelineframework.orchestrator;
 
+import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import java.util.Objects;
 
 /**
@@ -15,12 +16,35 @@ public record ExecutionCreateCommand(
     String tenantId,
     String executionKey,
     String pipelineId,
-    String bundleVersionId,
+    String contractVersion,
+    String releaseVersion,
     Object inputPayload,
     ExecutionResultShape resultShape,
     long nowEpochMs,
     long ttlEpochS
 ) {
+    public ExecutionCreateCommand(
+        String tenantId,
+        String executionKey,
+        String pipelineId,
+        String releaseVersion,
+        Object inputPayload,
+        ExecutionResultShape resultShape,
+        long nowEpochMs,
+        long ttlEpochS
+    ) {
+        this(
+            tenantId,
+            executionKey,
+            pipelineId,
+            PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
+            releaseVersion,
+            inputPayload,
+            resultShape,
+            nowEpochMs,
+            ttlEpochS);
+    }
+
     public ExecutionCreateCommand(
         String tenantId,
         String executionKey,
@@ -32,8 +56,9 @@ public record ExecutionCreateCommand(
         this(
             tenantId,
             executionKey,
-            PipelineBundleManifest.DEFAULT_PIPELINE_ID,
-            PipelineBundleManifest.DEFAULT_BUNDLE_VERSION_ID,
+            PipelineContractDescriptor.DEFAULT_PIPELINE_ID,
+            PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
+            PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
             inputPayload,
             resultShape,
             nowEpochMs,
@@ -44,7 +69,8 @@ public record ExecutionCreateCommand(
         Objects.requireNonNull(tenantId, "ExecutionCreateCommand.tenantId must not be null");
         Objects.requireNonNull(executionKey, "ExecutionCreateCommand.executionKey must not be null");
         Objects.requireNonNull(pipelineId, "ExecutionCreateCommand.pipelineId must not be null");
-        Objects.requireNonNull(bundleVersionId, "ExecutionCreateCommand.bundleVersionId must not be null");
+        Objects.requireNonNull(contractVersion, "ExecutionCreateCommand.contractVersion must not be null");
+        Objects.requireNonNull(releaseVersion, "ExecutionCreateCommand.releaseVersion must not be null");
         Objects.requireNonNull(resultShape, "ExecutionCreateCommand.resultShape must not be null");
     }
 }

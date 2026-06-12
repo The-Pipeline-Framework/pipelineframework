@@ -1,5 +1,6 @@
 package org.pipelineframework.orchestrator;
 
+import org.pipelineframework.orchestrator.worker.PipelineWorkerCapability;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;

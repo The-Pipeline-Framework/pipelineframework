@@ -1,5 +1,6 @@
 package org.pipelineframework;
 
+import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -51,8 +52,8 @@ import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.OrchestratorIdempotencyPolicy;
 import org.pipelineframework.orchestrator.OrchestratorMode;
-import org.pipelineframework.orchestrator.PipelineBundleIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.PipelineReleaseIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineTransitionWorker;
 import org.pipelineframework.orchestrator.SerializedTransitionPayload;
 import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
@@ -133,13 +134,13 @@ class QueueAsyncCoordinator {
   TransitionPayloadCodec transitionPayloadCodec;
 
   @Inject
-  PipelineBundleIdentityResolver bundleIdentityResolver;
+  PipelineReleaseIdentityResolver releaseIdentityResolver;
 
   @Inject
   ControlPlaneAdmissionPolicy controlPlaneAdmissionPolicy;
 
   private volatile TransitionPayloadCodec fallbackTransitionPayloadCodec;
-  private volatile PipelineBundleIdentityResolver fallbackBundleIdentityResolver;
+  private volatile PipelineReleaseIdentityResolver fallbackReleaseIdentityResolver;
   private volatile ControlPlaneAdmissionPolicy fallbackAdmissionPolicy;
 
   @Inject
@@ -228,7 +229,8 @@ class QueueAsyncCoordinator {
         idempotencyKey,
         outputStreaming,
         pipelineId(),
-        bundleVersionId());
+        contractVersion(),
+        releaseVersion());
   }
 
   Uni<RunAsyncAcceptedDto> executePipelineAsync(
@@ -237,7 +239,8 @@ class QueueAsyncCoordinator {
       String idempotencyKey,
       boolean outputStreaming,
       String pipelineId,
-      String bundleVersionId) {
+      String contractVersion,
+      String releaseVersion) {
     if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
       return Uni.createFrom().failure(new IllegalStateException(
           "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
@@ -256,7 +259,7 @@ class QueueAsyncCoordinator {
         resolvedTenant,
         ControlPlaneAdmissionOperation.SUBMIT_EXECUTION,
         pipelineId,
-        bundleVersionId,
+        releaseVersion,
         null,
         "api",
         explicitTenant(tenantId)));
@@ -274,7 +277,7 @@ class QueueAsyncCoordinator {
               try {
                 executionKey = scopedRootExecutionKey(
                     pipelineId,
-                    bundleVersionId,
+                    releaseVersion,
                     executionInputPolicy.resolveExecutionKey(resolvedTenant, snapshot.payload(), idempotencyKey));
               } catch (IllegalArgumentException e) {
                 return Uni.createFrom().failure(new BadRequestException(e.getMessage()));
@@ -283,7 +286,8 @@ class QueueAsyncCoordinator {
               resolvedTenant,
               executionKey,
               pipelineId,
-              bundleVersionId,
+              contractVersion,
+              releaseVersion,
               snapshot,
               executionResultShapeResolver.resolve(),
               now,
@@ -881,7 +885,8 @@ class QueueAsyncCoordinator {
       return TransitionCommandEnvelope.from(
           command,
           record.pipelineId(),
-          record.bundleVersionId(),
+          record.contractVersion(),
+          record.releaseVersion(),
           transitionKey,
           payloadCodec().encode(payload));
     });
@@ -891,8 +896,8 @@ class QueueAsyncCoordinator {
     return record.awaitUnitId() != null && !record.awaitUnitId().isBlank();
   }
 
-  private static String scopedRootExecutionKey(String pipelineId, String bundleVersionId, String executionKey) {
-    return compositeScopedKey("pipelineId", pipelineId, "bundleVersionId", bundleVersionId)
+  private static String scopedRootExecutionKey(String pipelineId, String releaseVersion, String executionKey) {
+    return compositeScopedKey("pipelineId", pipelineId, "releaseVersion", releaseVersion)
         + ":executionKey:"
         + requireScopedValue("executionKey", executionKey);
   }
@@ -980,24 +985,28 @@ class QueueAsyncCoordinator {
   }
 
   private String pipelineId() {
-    return bundleIdentityResolver().pipelineId(orchestratorConfig);
+    return releaseIdentityResolver().pipelineId(orchestratorConfig);
   }
 
-  private String bundleVersionId() {
-    return bundleIdentityResolver().bundleVersionId(orchestratorConfig);
+  private String contractVersion() {
+    return releaseIdentityResolver().contractVersion();
   }
 
-  private PipelineBundleIdentityResolver bundleIdentityResolver() {
-    if (bundleIdentityResolver != null) {
-      return bundleIdentityResolver;
+  private String releaseVersion() {
+    return releaseIdentityResolver().releaseVersion(orchestratorConfig);
+  }
+
+  private PipelineReleaseIdentityResolver releaseIdentityResolver() {
+    if (releaseIdentityResolver != null) {
+      return releaseIdentityResolver;
     }
-    PipelineBundleIdentityResolver fallback = fallbackBundleIdentityResolver;
+    PipelineReleaseIdentityResolver fallback = fallbackReleaseIdentityResolver;
     if (fallback == null) {
       synchronized (this) {
-        fallback = fallbackBundleIdentityResolver;
+        fallback = fallbackReleaseIdentityResolver;
         if (fallback == null) {
-          fallback = new PipelineBundleIdentityResolver();
-          fallbackBundleIdentityResolver = fallback;
+          fallback = new PipelineReleaseIdentityResolver();
+          fallbackReleaseIdentityResolver = fallback;
         }
       }
     }
@@ -1036,7 +1045,7 @@ class QueueAsyncCoordinator {
         tenantId,
         operation,
         pipelineId(),
-        bundleVersionId(),
+        releaseVersion(),
         executionId,
         source,
         explicitTenant);
@@ -1046,7 +1055,7 @@ class QueueAsyncCoordinator {
       String tenantId,
       ControlPlaneAdmissionOperation operation,
       String pipelineId,
-      String bundleVersionId,
+      String releaseVersion,
       String executionId,
       String source,
       boolean explicitTenant) {
@@ -1054,7 +1063,7 @@ class QueueAsyncCoordinator {
         tenantId,
         operation,
         pipelineId,
-        bundleVersionId,
+        releaseVersion,
         executionId,
         source,
         explicitTenant);
@@ -1130,7 +1139,8 @@ class QueueAsyncCoordinator {
                     interaction.tenantId(),
                     childKey,
                     parentRecord.pipelineId(),
-                    parentRecord.bundleVersionId(),
+                    parentRecord.contractVersion(),
+                    parentRecord.releaseVersion(),
                     normalizedInput,
                     ExecutionResultShape.MATERIALIZED_MULTI,
                     nowEpochMs,

@@ -1,5 +1,6 @@
 package org.pipelineframework.orchestrator;
 
+import org.pipelineframework.orchestrator.worker.PipelineWorkerCapability;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -23,7 +24,7 @@ class RestTransitionWorkerResourceTest {
     private PipelineOrchestratorConfig config;
     private PipelineOrchestratorConfig.RestWorkerConfig restConfig;
     private PipelineExecutionService executionService;
-    private PipelineBundleIdentityResolver identityResolver;
+    private PipelineReleaseIdentityResolver identityResolver;
 
     @BeforeEach
     void setUp() {
@@ -31,7 +32,7 @@ class RestTransitionWorkerResourceTest {
         config = mock(PipelineOrchestratorConfig.class);
         restConfig = mock(PipelineOrchestratorConfig.RestWorkerConfig.class);
         executionService = mock(PipelineExecutionService.class);
-        identityResolver = mock(PipelineBundleIdentityResolver.class);
+        identityResolver = mock(PipelineReleaseIdentityResolver.class);
         resource.orchestratorConfig = config;
         resource.executionService = executionService;
         resource.identityResolver = identityResolver;
@@ -42,8 +43,10 @@ class RestTransitionWorkerResourceTest {
         when(restConfig.sharedSecretRef()).thenReturn(java.util.Optional.empty());
         when(restConfig.signatureTolerance()).thenReturn(Duration.ofMinutes(2));
         when(identityResolver.pipelineId(config)).thenReturn("org.example.restaurant");
-        when(identityResolver.bundleVersionId(config)).thenReturn("sha256:bundle");
-        when(identityResolver.bundleHash()).thenReturn("bundle");
+        when(identityResolver.contractVersion()).thenReturn("sha256:contract");
+        when(identityResolver.releaseVersion(config)).thenReturn("sha256:bundle");
+        when(identityResolver.artifactId(config)).thenReturn("restaurant-approval-monolith");
+        when(identityResolver.artifactDigest(config)).thenReturn("sha256:artifact");
         when(identityResolver.capabilities()).thenReturn(PipelineBundleCapabilities.defaults());
     }
 
@@ -136,7 +139,10 @@ class RestTransitionWorkerResourceTest {
         PipelineWorkerCapability capability = (PipelineWorkerCapability) response.getEntity();
         assertEquals("rest", capability.providerName());
         assertEquals("org.example.restaurant", capability.pipelineId());
-        assertEquals("sha256:bundle", capability.bundleVersionId());
+        assertEquals("sha256:contract", capability.contractVersion());
+        assertEquals("sha256:bundle", capability.releaseVersion());
+        assertEquals("restaurant-approval-monolith", capability.artifactId());
+        assertEquals("sha256:artifact", capability.artifactDigest());
     }
 
     @Test

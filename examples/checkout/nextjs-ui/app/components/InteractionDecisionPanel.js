@@ -7,6 +7,7 @@ import {
   interactionActionLabel,
   reviewStatusLabel,
   shouldAllowAwaitCompletion,
+  shortIdentifier,
   stageIdForInteraction
 } from "../../lib/checkout-ui.js";
 import { nextReviewCheckpointAfterStage, stageForInteraction } from "../../lib/checkout-flow.js";
@@ -67,6 +68,7 @@ export default function InteractionDecisionPanel({ interaction }) {
   const targetId = inferInteractionTargetId(interaction);
   const transportType = String(interaction.transportType || "").trim();
   const canComplete = shouldAllowAwaitCompletion(interaction.status, transportType);
+  const displayOrderId = interaction.orderId || interaction.requestId;
 
   return (
     <article className="decision-panel">
@@ -79,10 +81,14 @@ export default function InteractionDecisionPanel({ interaction }) {
           </div>
         </div>
         <p className="lead">{stage?.responsibility || "Resume the paused checkout flow."}</p>
+        <div className="order-summary">
+          <strong>Order {shortIdentifier(displayOrderId)}</strong>
+          <span>{interaction.payloadPreview || `${interaction.itemCount || 0} item(s)`}</span>
+        </div>
         <dl className="metric-grid">
           <div>
             <dt>Order</dt>
-            <dd>{interaction.orderId || interaction.requestId || "n/a"}</dd>
+            <dd>{shortIdentifier(displayOrderId, "n/a")}</dd>
           </div>
           <div>
             <dt>Amount</dt>
@@ -98,10 +104,27 @@ export default function InteractionDecisionPanel({ interaction }) {
           </div>
         </dl>
         <div className="handoff-card">
-          <span>{targetId}</span>
+          <span>{stage?.title || targetId}</span>
           <ArrowRight aria-hidden="true" size={16} />
-          <strong>{stage?.publication || interaction.outputType || "await completion"}</strong>
+          <strong>{nextStage?.title || "Automatic downstream flow"}</strong>
         </div>
+        <details className="identity-details">
+          <summary>Technical identifiers</summary>
+          <dl className="definition-list">
+            <div>
+              <dt>Interaction</dt>
+              <dd>{interaction.interactionId || "n/a"}</dd>
+            </div>
+            <div>
+              <dt>Execution</dt>
+              <dd>{interaction.executionId || "n/a"}</dd>
+            </div>
+            <div>
+              <dt>Service</dt>
+              <dd>{targetId}</dd>
+            </div>
+          </dl>
+        </details>
       </div>
 
       <form action={completeCheckoutInteraction} className="decision-action">

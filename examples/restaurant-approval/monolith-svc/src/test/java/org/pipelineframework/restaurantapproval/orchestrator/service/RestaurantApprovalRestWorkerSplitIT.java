@@ -15,6 +15,7 @@ class RestaurantApprovalRestWorkerSplitIT extends RestaurantApprovalSplitWorkerI
         int coordinatorPort = startApp("rest-coordinator", Map.of(
             "pipeline.orchestrator.worker.rest.base-url", "http://localhost:" + workerPort,
             "pipeline.orchestrator.worker.rest.shared-secret", WORKER_SECRET,
+            "pipeline.orchestrator.worker.rest.request-timeout", "PT2M",
             "pipeline.orchestrator.strict-startup", "false"));
 
         assertAcceptedAndDeclinedFlows(coordinatorPort);

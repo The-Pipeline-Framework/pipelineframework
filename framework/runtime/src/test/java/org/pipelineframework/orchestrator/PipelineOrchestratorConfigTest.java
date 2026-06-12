@@ -88,6 +88,7 @@ class PipelineOrchestratorConfigTest {
         assertNotNull(dynamoConfig);
         assertEquals("tpf_execution", dynamoConfig.executionTable());
         assertEquals("tpf_execution_key", dynamoConfig.executionKeyTable());
+        assertEquals("tpf_release_registry", dynamoConfig.releaseTable());
         assertFalse(dynamoConfig.region().isPresent());
         assertFalse(dynamoConfig.endpointOverride().isPresent());
     }
@@ -210,6 +211,11 @@ class PipelineOrchestratorConfigTest {
                 "true",
                 (Consumer<PipelineOrchestratorConfig>) config ->
                     assertTrue(config.controlPlane().enabled())),
+            Arguments.of(
+                "pipeline.orchestrator.control-plane.require-remote-worker",
+                "true",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertTrue(config.controlPlane().requireRemoteWorker())),
             Arguments.of(
                 "pipeline.orchestrator.control-plane.admin-token",
                 "admin-secret",
@@ -335,6 +341,11 @@ class PipelineOrchestratorConfigTest {
                 "custom_execution_key",
                 (Consumer<PipelineOrchestratorConfig>) config ->
                     assertEquals("custom_execution_key", config.dynamo().executionKeyTable())),
+            Arguments.of(
+                "pipeline.orchestrator.dynamo.release-table",
+                "custom_release_registry",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("custom_release_registry", config.dynamo().releaseTable())),
             Arguments.of(
                 "pipeline.orchestrator.dynamo.region",
                 "us-west-2",

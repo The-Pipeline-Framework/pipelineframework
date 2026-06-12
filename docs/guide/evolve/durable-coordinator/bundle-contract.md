@@ -1,30 +1,32 @@
-# Bundle Contract
+# Contract And Release Identity
 
-A pipeline bundle is best understood as a versioned orchestration contract: pipeline intent, step graph, type ids, codecs, mapper metadata, await metadata, runtime mapping, and compatibility identity.
+The durable coordinator uses two identities:
 
-An executable bundle is one implementation form of that contract: the contract plus step code/runtime packaged as a JAR, image, or deployable artifact. Current local JAR registration proves the executable-bundle path for local/dev and self-host experiments; it is not the only intended product model.
+1. `pipeline-contract.json` describes the semantic pipeline contract produced by compilation.
+2. `pipeline-release.json` pins the deployable artifacts that satisfy that contract.
 
-## Manifest
+The release is the coordinator admin concept. New executions are pinned to the active `pipelineId + contractVersion + releaseVersion`, and retries, await resumes, and result reads keep that pinned identity.
 
-Generated builds emit `META-INF/pipeline/bundle-manifest.json`.
+## Generated Contract
 
-Manifest v1 records pipeline id, bundle version id, bundle hash, runtime metadata, ordered step descriptors, await transport metadata, and declared worker capabilities.
+Generated builds emit `META-INF/pipeline/pipeline-contract.json`.
 
-Workers validate command envelope identity before decoding payloads or executing business code. A command targeting another `pipelineId` or `bundleVersionId` returns a failed transition result.
+The contract records pipeline id, contract version/hash, runtime metadata, ordered step descriptors, await transport metadata, and declared worker capabilities. Workers validate command envelope identity before decoding payloads or executing business code.
 
-## Registry And Pinning
+## Release Registry And Pinning
 
-The local executable-bundle path has two public pieces:
+The self-host release path has three runtime pieces:
 
-1. `PipelineBundleRegistry` stores bundle records and the active bundle pointer for each tenant and pipeline.
-2. `PipelineBundleArtifactStore` copies validated executable JARs into a coordinator-owned content-addressed store and verifies size/checksum/manifest integrity.
+1. `PipelineReleaseRegistry` stores release records and activation history for each tenant and pipeline.
+2. `PipelineReleaseRegistrar` validates `pipeline-release.json` and verifies artifact identity.
+3. `PipelineReleaseArtifactStore` stores local executable artifacts in a coordinator-owned content-addressed store where applicable.
 
-Hosted-style execution submission requires `pipelineId`. The coordinator resolves the active bundle, verifies the stored artifact, verifies worker availability, and stores `pipelineId + bundleVersionId` on the `ExecutionRecord`.
+Hosted-style execution submission requires `pipelineId`. The coordinator resolves the active release, verifies the stored artifact, verifies worker availability, and stores `pipelineId + contractVersion + releaseVersion` on the `ExecutionRecord`.
 
-Existing executions, retries, await resumes, and result reads stay pinned to the bundle version stored on the execution record even if an administrator activates a newer bundle later.
+Existing executions, retries, await resumes, and result reads stay pinned to the release identity stored on the execution record even if an administrator activates a newer release later.
 
 ## Current Limits
 
-Workers must already host matching code. The coordinator does not load registered artifacts into a worker runtime.
+Workers must already host matching code. The coordinator validates, activates, pins, and dispatches releases; it does not dynamically load registered artifacts into a worker runtime.
 
-Future contract-only and hybrid execution should allow independently deployed services or functions to implement the same contract without requiring every path to be an executable JAR.
+Local artifact storage is still local to the coordinator host. Multi-host artifact replication remains deployment-owned until a shared artifact-store provider exists.

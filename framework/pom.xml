@@ -77,6 +77,7 @@
 
     <modules>
         <module>runtime-core</module>
+        <module>runtime-spring</module>
         <module>runtime</module>
         <module>deployment</module>
     </modules>

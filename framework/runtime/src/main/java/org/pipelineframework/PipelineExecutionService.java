@@ -51,16 +51,16 @@ import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
-import org.pipelineframework.orchestrator.PipelineBundleManifest;
-import org.pipelineframework.orchestrator.PipelineBundleIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineControlPlane;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.PipelineReleaseIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineTransitionWorker;
 import org.pipelineframework.orchestrator.PipelineTransitionWorkerSelector;
 import org.pipelineframework.orchestrator.TransitionCommandEnvelope;
 import org.pipelineframework.orchestrator.TransitionPayloadCodec;
 import org.pipelineframework.orchestrator.TransitionResultEnvelope;
 import org.pipelineframework.orchestrator.TransitionWorkerCommand;
+import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import org.pipelineframework.step.StepManyToMany;
 import org.pipelineframework.step.functional.ManyToOne;
 
@@ -117,10 +117,10 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
   TransitionPayloadCodec transitionPayloadCodec;
 
   @Inject
-  PipelineBundleIdentityResolver bundleIdentityResolver;
+  PipelineReleaseIdentityResolver releaseIdentityResolver;
 
   private volatile TransitionPayloadCodec fallbackPayloadCodec;
-  private volatile PipelineBundleIdentityResolver fallbackBundleIdentityResolver;
+  private volatile PipelineReleaseIdentityResolver fallbackReleaseIdentityResolver;
 
   private final java.util.concurrent.atomic.AtomicReference<StartupHealthState> startupHealthState =
       new java.util.concurrent.atomic.AtomicReference<>(StartupHealthState.PENDING);
@@ -395,14 +395,13 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
   private java.util.Optional<String> validateCommandIdentity(
       TransitionCommandEnvelope command,
       boolean allowLocalFallbackIdentity) {
-    java.util.Optional<String> identityMismatch = bundleIdentityResolver().validateCommandIdentity(command, orchestratorConfig);
-    if (identityMismatch.isPresent()
-        && allowLocalFallbackIdentity
-        && PipelineBundleManifest.DEFAULT_PIPELINE_ID.equals(command.pipelineId())
-        && PipelineBundleManifest.DEFAULT_BUNDLE_VERSION_ID.equals(command.bundleVersionId())) {
+    if (allowLocalFallbackIdentity
+        && PipelineContractDescriptor.DEFAULT_PIPELINE_ID.equals(command.pipelineId())
+        && PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION.equals(command.contractVersion())
+        && PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION.equals(command.releaseVersion())) {
       return java.util.Optional.empty();
     }
-    return identityMismatch;
+    return releaseIdentityResolver().validateCommandIdentity(command, orchestratorConfig);
   }
 
   /**
@@ -525,17 +524,17 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     return fallback;
   }
 
-  private PipelineBundleIdentityResolver bundleIdentityResolver() {
-    if (bundleIdentityResolver != null) {
-      return bundleIdentityResolver;
+  private PipelineReleaseIdentityResolver releaseIdentityResolver() {
+    if (releaseIdentityResolver != null) {
+      return releaseIdentityResolver;
     }
-    PipelineBundleIdentityResolver fallback = fallbackBundleIdentityResolver;
+    PipelineReleaseIdentityResolver fallback = fallbackReleaseIdentityResolver;
     if (fallback == null) {
       synchronized (this) {
-        fallback = fallbackBundleIdentityResolver;
+        fallback = fallbackReleaseIdentityResolver;
         if (fallback == null) {
-          fallback = new PipelineBundleIdentityResolver();
-          fallbackBundleIdentityResolver = fallback;
+          fallback = new PipelineReleaseIdentityResolver();
+          fallbackReleaseIdentityResolver = fallback;
         }
       }
     }

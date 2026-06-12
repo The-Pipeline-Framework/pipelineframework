@@ -51,14 +51,16 @@ public class LocalPipelineControlPlane implements PipelineControlPlane {
         String idempotencyKey,
         boolean outputStreaming,
         String pipelineId,
-        String bundleVersionId) {
+        String contractVersion,
+        String releaseVersion) {
         return queueAsyncCoordinator.executePipelineAsync(
             input,
             tenantId,
             idempotencyKey,
             outputStreaming,
             pipelineId,
-            bundleVersionId);
+            contractVersion,
+            releaseVersion);
     }
 
     @Override

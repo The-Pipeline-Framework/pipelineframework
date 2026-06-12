@@ -26,6 +26,17 @@ export function outputTypeName(interaction) {
   return segments.at(-1) || outputType;
 }
 
+export function shortIdentifier(value, fallback = "pending") {
+  const text = String(value || "").trim();
+  if (!text) {
+    return fallback;
+  }
+  if (text.length <= 12) {
+    return text;
+  }
+  return `${text.slice(0, 8)}...${text.slice(-4)}`;
+}
+
 function parseItemLine(rawLine, defaultIndex) {
   const line = String(rawLine || "").trim();
   if (!line) {
@@ -68,13 +79,14 @@ export function buildCheckoutOrder(form) {
 
 export function normalizePendingInteraction(interaction) {
   const requestPayload = interaction?.requestPayload ?? {};
-  const requestPayloadRequestId = String(getFieldValue(requestPayload, "requestId", "request_id") || interaction?.requestId || "");
-  const requestPayloadOrderId = getFieldValue(requestPayload, "orderId", "order_id");
-  const requestPayloadCustomerId = getFieldValue(requestPayload, "customerId", "customer_id");
-  const requestPayloadRestaurantId = getFieldValue(requestPayload, "restaurantId", "restaurant_id");
-  const requestPayloadTotalAmount = getFieldValue(requestPayload, "totalAmount", "total_amount");
-  const requestPayloadCurrency = getFieldValue(requestPayload, "currency", "currencyCode", "currency_code");
-  const itemList = getFieldValue(requestPayload, "items", "itemList");
+  const orderPayload = getFieldValue(requestPayload, "order", "orderRequest", "order_request") || requestPayload;
+  const requestPayloadRequestId = String(getFieldValue(orderPayload, "requestId", "request_id") || interaction?.requestId || "");
+  const requestPayloadOrderId = getFieldValue(orderPayload, "orderId", "order_id");
+  const requestPayloadCustomerId = getFieldValue(orderPayload, "customerId", "customer_id");
+  const requestPayloadRestaurantId = getFieldValue(orderPayload, "restaurantId", "restaurant_id");
+  const requestPayloadTotalAmount = getFieldValue(orderPayload, "totalAmount", "total_amount");
+  const requestPayloadCurrency = getFieldValue(orderPayload, "currency", "currencyCode", "currency_code");
+  const itemList = getFieldValue(orderPayload, "items", "itemList", "item_list", "lineItems", "line_items");
   const deadlineEpochMs = Number(interaction?.deadlineEpochMs ?? 0);
   const itemCount = Array.isArray(itemList) ? itemList.length : 0;
 
@@ -97,7 +109,11 @@ export function normalizePendingInteraction(interaction) {
     payloadPreview: Array.isArray(itemList)
       ? itemList
           .slice(0, 3)
-          .map((item) => `${item.sku} x ${item.quantity}`)
+          .map((item) => {
+            const sku = getFieldValue(item, "sku", "itemSku", "item_sku") || "item";
+            const quantity = getFieldValue(item, "quantity", "qty") || 1;
+            return `${sku} x ${quantity}`;
+          })
           .join(", ")
       : ""
   };

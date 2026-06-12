@@ -1,5 +1,6 @@
 package org.pipelineframework.orchestrator;
 
+import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import java.net.URI;
 import java.lang.reflect.Method;
 import java.time.Instant;
@@ -53,7 +54,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private static final String EXECUTION_ID = "execution_id";
     private static final String EXECUTION_KEY = "execution_key";
     private static final String PIPELINE_ID = "pipeline_id";
-    private static final String BUNDLE_VERSION_ID = "bundle_version_id";
+    private static final String CONTRACT_VERSION = "contract_version";
+    private static final String RELEASE_VERSION = "release_version";
     private static final String RESULT_SHAPE = "result_shape";
     private static final String TENANT_EXECUTION_KEY = "tenant_execution_key";
     private static final String STATUS = "status";
@@ -279,7 +281,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             executionId,
             command.executionKey(),
             command.pipelineId(),
-            command.bundleVersionId(),
+            command.contractVersion(),
+            command.releaseVersion(),
             command.resultShape(),
             ExecutionStatus.QUEUED,
             0L,
@@ -947,7 +950,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         item.put(EXECUTION_ID, avS(record.executionId()));
         item.put(EXECUTION_KEY, avS(record.executionKey()));
         item.put(PIPELINE_ID, avS(record.pipelineId()));
-        item.put(BUNDLE_VERSION_ID, avS(record.bundleVersionId()));
+        item.put(CONTRACT_VERSION, avS(record.contractVersion()));
+        item.put(RELEASE_VERSION, avS(record.releaseVersion()));
         item.put(RESULT_SHAPE, avS(record.resultShape().name()));
         item.put(STATUS, avS(record.status().name()));
         item.put(VERSION, avN(record.version()));
@@ -992,7 +996,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         String executionId = readString(item, EXECUTION_ID);
         String executionKey = readString(item, EXECUTION_KEY);
         String pipelineId = readString(item, PIPELINE_ID);
-        String bundleVersionId = readString(item, BUNDLE_VERSION_ID);
+        String contractVersion = readString(item, CONTRACT_VERSION);
+        String releaseVersion = readString(item, RELEASE_VERSION);
         String resultShapeValue = readString(item, RESULT_SHAPE);
         ExecutionResultShape resultShape;
         if (resultShapeValue == null || resultShapeValue.isBlank()) {
@@ -1027,11 +1032,14 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             executionId,
             executionKey,
             pipelineId == null || pipelineId.isBlank()
-                ? PipelineBundleManifest.DEFAULT_PIPELINE_ID
+                ? PipelineContractDescriptor.DEFAULT_PIPELINE_ID
                 : pipelineId,
-            bundleVersionId == null || bundleVersionId.isBlank()
-                ? PipelineBundleManifest.DEFAULT_BUNDLE_VERSION_ID
-                : bundleVersionId,
+            contractVersion == null || contractVersion.isBlank()
+                ? PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION
+                : contractVersion,
+            releaseVersion == null || releaseVersion.isBlank()
+                ? PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION
+                : releaseVersion,
             resultShape,
             status,
             version,

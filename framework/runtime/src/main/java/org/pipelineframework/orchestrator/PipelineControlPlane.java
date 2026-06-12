@@ -32,7 +32,8 @@ public interface PipelineControlPlane {
         String idempotencyKey,
         boolean outputStreaming,
         String pipelineId,
-        String bundleVersionId);
+        String contractVersion,
+        String releaseVersion);
 
     Uni<ExecutionStatusDto> getExecutionStatus(String tenantId, String executionId);
 

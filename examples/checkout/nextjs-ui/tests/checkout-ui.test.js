@@ -10,6 +10,7 @@ import {
   nextCheckpointLabelAfterOutputType,
   reviewStatusLabel,
   shouldAllowAwaitCompletion,
+  shortIdentifier,
   stageIdForOutputType,
   awaitStatusGuidance,
   normalizePendingInteraction
@@ -18,6 +19,7 @@ import { buildListPendingRequest, normalizeGrpcAwaitInteraction } from "../lib/t
 import {
   CHECKOUT_FLOW_STAGES,
   REVIEW_CHECKPOINTS,
+  checkpointProgress,
   nextReviewCheckpointAfterOutputType,
   stageForOutputType
 } from "../lib/checkout-flow.js";
@@ -226,6 +228,14 @@ test("checkout flow metadata contains ordered approval checkpoints", () => {
   );
   assert.equal(nextReviewCheckpointAfterOutputType("com.example.OrderAcceptedByRestaurant"), null);
   assert.equal(nextCheckpointLabelAfterOutputType("com.example.OrderAcceptedByRestaurant"), "Downstream automatic flow");
+  assert.equal(checkpointProgress("").next.id, "consumer-approval");
+  assert.equal(checkpointProgress("consumer-approval").next.id, "restaurant-acceptance");
+});
+
+test("shortIdentifier keeps UUIDs readable", () => {
+  assert.equal(shortIdentifier(""), "pending");
+  assert.equal(shortIdentifier("abc123"), "abc123");
+  assert.equal(shortIdentifier("7d1fb0e2-1f67-4f74-95db-bfd2c6f84f5f"), "7d1fb0e2...4f5f");
 });
 
 test("buildCheckoutCompletionPayload enforces JSON", () => {

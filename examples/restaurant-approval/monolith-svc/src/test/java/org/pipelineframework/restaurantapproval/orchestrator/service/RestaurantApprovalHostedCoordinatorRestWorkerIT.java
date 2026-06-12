@@ -22,10 +22,11 @@ class RestaurantApprovalHostedCoordinatorRestWorkerIT extends RestaurantApproval
             "pipeline.orchestrator.control-plane.admin-token", CONTROL_PLANE_ADMIN_TOKEN,
             "pipeline.orchestrator.admin.enabled", "true",
             "pipeline.orchestrator.admin.admin-token", CONTROL_PLANE_ADMIN_TOKEN,
-            "pipeline.orchestrator.bundles.registry.provider", "file",
-            "pipeline.orchestrator.bundles.storage.root", bundleStoreRoot.toString(),
+            "pipeline.orchestrator.releases.registry.provider", "file",
+            "pipeline.orchestrator.releases.storage.root", bundleStoreRoot.toString(),
             "pipeline.orchestrator.worker.rest.base-url", "http://localhost:" + workerPort,
             "pipeline.orchestrator.worker.rest.shared-secret", WORKER_SECRET,
+            "pipeline.orchestrator.worker.rest.request-timeout", "PT2M",
             "pipeline.orchestrator.strict-startup", "false"));
 
         registerAndActivateHostedBundle(coordinatorPort);
@@ -33,9 +34,9 @@ class RestaurantApprovalHostedCoordinatorRestWorkerIT extends RestaurantApproval
     }
 
     @Test
-    void hostedCoordinatorRejectsSubmitWhenRestWorkerHostsDifferentBundle() throws Exception {
+    void hostedCoordinatorRejectsSubmitWhenRestWorkerHostsDifferentRelease() throws Exception {
         int workerPort = startApp("hosted-rest-worker-mismatch", Map.of(
-            "pipeline.orchestrator.bundle-version-id", "sha256:mismatched-worker-bundle",
+            "pipeline.orchestrator.release-version", "sha256:mismatched-worker-release",
             "pipeline.orchestrator.worker.rest.server-enabled", "true",
             "pipeline.orchestrator.worker.rest.shared-secret", WORKER_SECRET,
             "pipeline.orchestrator.strict-startup", "false"));
@@ -45,10 +46,11 @@ class RestaurantApprovalHostedCoordinatorRestWorkerIT extends RestaurantApproval
             "pipeline.orchestrator.control-plane.admin-token", CONTROL_PLANE_ADMIN_TOKEN,
             "pipeline.orchestrator.admin.enabled", "true",
             "pipeline.orchestrator.admin.admin-token", CONTROL_PLANE_ADMIN_TOKEN,
-            "pipeline.orchestrator.bundles.registry.provider", "file",
-            "pipeline.orchestrator.bundles.storage.root", bundleStoreRoot.toString(),
+            "pipeline.orchestrator.releases.registry.provider", "file",
+            "pipeline.orchestrator.releases.storage.root", bundleStoreRoot.toString(),
             "pipeline.orchestrator.worker.rest.base-url", "http://localhost:" + workerPort,
             "pipeline.orchestrator.worker.rest.shared-secret", WORKER_SECRET,
+            "pipeline.orchestrator.worker.rest.request-timeout", "PT2M",
             "pipeline.orchestrator.strict-startup", "false"));
 
         registerAndActivateHostedBundle(coordinatorPort);

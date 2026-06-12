@@ -6,8 +6,10 @@ import { getUiConfig } from "../../lib/config.js";
 import { checkpointProgress } from "../../lib/checkout-flow.js";
 import { stageIdForInteraction } from "../../lib/checkout-ui.js";
 import { ApprovalCheckpointRail } from "../components/FlowRail.js";
+import AutoRefresh from "../components/AutoRefresh.js";
 import InteractionDecisionPanel from "../components/InteractionDecisionPanel.js";
 import StatusNotice from "../components/StatusNotice.js";
+import { shortIdentifier } from "../../lib/checkout-ui.js";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,7 @@ export default async function PendingInteractionsPage({ searchParams }) {
   const completedInteractionId = String(resolvedSearchParams.completed || "").trim();
   const completedStageId = String(resolvedSearchParams.completedStage || "").trim();
   const completionError = String(resolvedSearchParams.error || "").trim();
+  const startedExecutionId = String(resolvedSearchParams.started || "").trim();
   const progress = checkpointProgress(completedStageId);
   let interactions = [];
   let errorMessage = null;
@@ -37,6 +40,7 @@ export default async function PendingInteractionsPage({ searchParams }) {
 
   return (
     <main className="app-shell">
+      {startedExecutionId || completedInteractionId ? <AutoRefresh /> : null}
       <header className="topbar">
         <div>
           <p className="eyebrow">Approval desk</p>
@@ -74,11 +78,22 @@ export default async function PendingInteractionsPage({ searchParams }) {
               <p>
                 {progress.completed?.title || "The interaction"} was completed.{" "}
                 {progress.next
-                  ? `${progress.next.title} is the next approval step.`
+                  ? `${progress.next.title} should appear here when the service handoff reaches the next await boundary.`
                   : "No approval steps remain; downstream services continue automatically."}
               </p>
               <p className="muted">
-                Interaction <code>{completedInteractionId}</code>
+                Refreshing briefly while the next service catches up. Interaction <code>{shortIdentifier(completedInteractionId)}</code>
+              </p>
+            </StatusNotice>
+          ) : null}
+
+          {startedExecutionId ? (
+            <StatusNotice tone="info" title="Checkout started">
+              <p>
+                The order is moving through checkout intake and consumer validation. The first approval task will appear here shortly.
+              </p>
+              <p className="muted">
+                Tracking run <code>{shortIdentifier(startedExecutionId)}</code>; this page refreshes briefly while the backend reaches the first checkpoint.
               </p>
             </StatusNotice>
           ) : null}
@@ -99,7 +114,7 @@ export default async function PendingInteractionsPage({ searchParams }) {
               <Inbox aria-hidden="true" size={28} />
               <h2>No active approval</h2>
               <p>
-                Submit an order, then refresh here when consumer validation reaches the first await boundary.
+                Submit an order and this desk will update when consumer validation reaches the first approval step.
                 {awaitedStepId ? ` Filtering is constrained to TPF_AWAIT_STEP_ID=${awaitedStepId}.` : ""}
               </p>
               <div className="actions">

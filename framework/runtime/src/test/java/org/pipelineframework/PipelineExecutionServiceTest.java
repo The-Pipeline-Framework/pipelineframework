@@ -11,7 +11,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
-import org.pipelineframework.orchestrator.PipelineBundleIdentityResolver;
+import org.pipelineframework.orchestrator.PipelineReleaseIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineControlPlane;
 import org.pipelineframework.orchestrator.PipelineTransitionWorker;
 import org.pipelineframework.orchestrator.PipelineTransitionWorkerSelector;
@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -41,14 +42,14 @@ class PipelineExecutionServiceTest {
     private PipelineTransitionWorkerSelector transitionWorkerSelector;
 
     @Mock
-    private PipelineBundleIdentityResolver bundleIdentityResolver;
+    private PipelineReleaseIdentityResolver releaseIdentityResolver;
 
     @BeforeEach
     void setUp() {
         service = new PipelineExecutionService();
         service.controlPlane = controlPlane;
         service.transitionWorkerSelector = transitionWorkerSelector;
-        service.bundleIdentityResolver = bundleIdentityResolver;
+        service.releaseIdentityResolver = releaseIdentityResolver;
     }
 
     @Test
@@ -139,7 +140,7 @@ class PipelineExecutionServiceTest {
     }
 
     @Test
-    void executeTransitionRejectsMismatchedBundleIdentityBeforePayloadDecode() {
+    void executeTransitionRejectsMismatchedReleaseIdentityBeforePayloadDecode() {
         TransitionCommandEnvelope command = new TransitionCommandEnvelope(
             "tenant-1",
             "exec-5",
@@ -154,7 +155,7 @@ class PipelineExecutionServiceTest {
             "java.io.File",
             "application/tpf-transition+json",
             "{not-json");
-        when(bundleIdentityResolver.validateCommandIdentity(command, null))
+        when(releaseIdentityResolver.validateCommandIdentity(command, null))
             .thenReturn(Optional.of("bundle mismatch"));
 
         TransitionResultEnvelope result = service.executeTransition(command).await().indefinitely();
@@ -169,7 +170,7 @@ class PipelineExecutionServiceTest {
             "tenant-1",
             "exec-6",
             "local-pipeline",
-            "local-bundle",
+            "local-contract",
             0,
             0,
             ExecutionResultShape.SINGLE,
@@ -179,13 +180,11 @@ class PipelineExecutionServiceTest {
             "java.lang.String",
             "application/tpf-transition+json",
             "\"input\"");
-        when(bundleIdentityResolver.validateCommandIdentity(command, null))
-            .thenReturn(Optional.of("bundle mismatch"));
-
         TransitionResultEnvelope result = service.executeTransition(command).await().indefinitely();
 
         assertEquals(TransitionWorkerOutcome.FAILED, result.outcome());
         assertFalse(result.failure().message().contains("bundle mismatch"));
+        verify(releaseIdentityResolver, never()).validateCommandIdentity(command, null);
     }
 
     @Test
@@ -194,7 +193,7 @@ class PipelineExecutionServiceTest {
             "tenant-1",
             "exec-7",
             "local-pipeline",
-            "local-bundle",
+            "local-contract",
             0,
             0,
             ExecutionResultShape.SINGLE,
@@ -204,7 +203,7 @@ class PipelineExecutionServiceTest {
             "java.lang.String",
             "application/tpf-transition+json",
             "\"input\"");
-        when(bundleIdentityResolver.validateCommandIdentity(command, null))
+        when(releaseIdentityResolver.validateCommandIdentity(command, null))
             .thenReturn(Optional.of("bundle mismatch"));
 
         TransitionResultEnvelope result = service.executePortableTransition(command).await().indefinitely();

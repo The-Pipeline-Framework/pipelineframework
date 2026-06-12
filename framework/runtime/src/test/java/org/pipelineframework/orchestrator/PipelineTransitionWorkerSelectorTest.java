@@ -17,6 +17,7 @@ class PipelineTransitionWorkerSelectorTest {
     private PipelineOrchestratorConfig.RestWorkerConfig restConfig;
     private PipelineOrchestratorConfig.GrpcWorkerConfig grpcConfig;
     private PipelineOrchestratorConfig.SqsWorkerConfig sqsConfig;
+    private PipelineOrchestratorConfig.ControlPlaneConfig controlPlaneConfig;
     private RestPipelineTransitionWorker restWorker;
     private GrpcPipelineTransitionWorker grpcWorker;
     private SqsPipelineTransitionWorker sqsWorker;
@@ -29,6 +30,7 @@ class PipelineTransitionWorkerSelectorTest {
         restConfig = mock(PipelineOrchestratorConfig.RestWorkerConfig.class);
         grpcConfig = mock(PipelineOrchestratorConfig.GrpcWorkerConfig.class);
         sqsConfig = mock(PipelineOrchestratorConfig.SqsWorkerConfig.class);
+        controlPlaneConfig = mock(PipelineOrchestratorConfig.ControlPlaneConfig.class);
         restWorker = mock(RestPipelineTransitionWorker.class);
         grpcWorker = mock(GrpcPipelineTransitionWorker.class);
         sqsWorker = mock(SqsPipelineTransitionWorker.class);
@@ -42,6 +44,7 @@ class PipelineTransitionWorkerSelectorTest {
         when(config.workerRest()).thenReturn(restConfig);
         when(config.workerGrpc()).thenReturn(grpcConfig);
         when(config.workerSqs()).thenReturn(sqsConfig);
+        when(config.controlPlane()).thenReturn(controlPlaneConfig);
     }
 
     @Test
@@ -53,6 +56,41 @@ class PipelineTransitionWorkerSelectorTest {
         PipelineTransitionWorker selected = selector.select(localWorker);
 
         assertSame(localWorker, selected);
+    }
+
+    @Test
+    void startupAllowsLocalWorkerFallbackByDefault() {
+        when(restConfig.isEnabled()).thenReturn(false);
+        when(grpcConfig.isEnabled()).thenReturn(false);
+        when(sqsConfig.isEnabled()).thenReturn(false);
+        when(controlPlaneConfig.enabled()).thenReturn(true);
+        when(controlPlaneConfig.requireRemoteWorker()).thenReturn(false);
+
+        selector.validateConfiguredTargets();
+    }
+
+    @Test
+    void startupRejectsMissingRemoteWorkerWhenControlPlaneRequiresOne() {
+        when(restConfig.isEnabled()).thenReturn(false);
+        when(grpcConfig.isEnabled()).thenReturn(false);
+        when(sqsConfig.isEnabled()).thenReturn(false);
+        when(controlPlaneConfig.enabled()).thenReturn(true);
+        when(controlPlaneConfig.requireRemoteWorker()).thenReturn(true);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, selector::validateConfiguredTargets);
+
+        assertTrue(error.getMessage().contains("pipeline.orchestrator.control-plane.require-remote-worker=true"));
+    }
+
+    @Test
+    void startupAcceptsRemoteWorkerWhenControlPlaneRequiresOne() {
+        when(restConfig.isEnabled()).thenReturn(true);
+        when(grpcConfig.isEnabled()).thenReturn(false);
+        when(sqsConfig.isEnabled()).thenReturn(false);
+        when(controlPlaneConfig.enabled()).thenReturn(true);
+        when(controlPlaneConfig.requireRemoteWorker()).thenReturn(true);
+
+        selector.validateConfiguredTargets();
     }
 
     @Test

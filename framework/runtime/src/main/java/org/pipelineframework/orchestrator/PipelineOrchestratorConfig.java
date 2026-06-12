@@ -43,13 +43,13 @@ public interface PipelineOrchestratorConfig {
     String pipelineId();
 
     /**
-     * Bundle/runtime version identifier used in transition-worker envelopes.
+     * Release version identifier used in transition-worker envelopes.
      *
-     * @return bundle version id
+     * @return release version
      */
-    @WithName("bundle-version-id")
-    @WithDefault("local-bundle")
-    String bundleVersionId();
+    @WithName("release-version")
+    @WithDefault("local-contract")
+    String releaseVersion();
 
     /**
      * Execution record TTL in days.
@@ -237,7 +237,7 @@ public interface PipelineOrchestratorConfig {
     ControlPlaneConfig controlPlane();
 
     /**
-     * Hosted bundle administration API settings.
+     * Local/dev administration API settings.
      *
      * @return admin API config
      */
@@ -245,12 +245,12 @@ public interface PipelineOrchestratorConfig {
     AdminConfig admin();
 
     /**
-     * Hosted bundle registry and artifact storage settings.
+     * Hosted release registry and artifact storage settings.
      *
-     * @return bundle config
+     * @return release config
      */
-    @WithName("bundles")
-    BundlesConfig bundles();
+    @WithName("releases")
+    ReleasesConfig releases();
 
     /**
      * Transition worker execution settings.
@@ -345,6 +345,15 @@ public interface PipelineOrchestratorConfig {
         @WithName("await-unit-table")
         @WithDefault("tpf_await_unit")
         String awaitUnitTable();
+
+        /**
+         * Release registry metadata table name.
+         *
+         * @return release registry table name
+         */
+        @WithName("release-table")
+        @WithDefault("tpf_release_registry")
+        String releaseTable();
 
         /**
          * Optional region override.
@@ -465,6 +474,15 @@ public interface PipelineOrchestratorConfig {
         boolean enabled();
 
         /**
+         * Requires the hosted control-plane runtime to dispatch to a configured remote transition worker.
+         *
+         * @return true when local in-process worker fallback should fail startup
+         */
+        @WithName("require-remote-worker")
+        @WithDefault("false")
+        boolean requireRemoteWorker();
+
+        /**
          * Literal bearer token for local/dev coordinator API calls.
          *
          * @return admin token when configured
@@ -482,12 +500,12 @@ public interface PipelineOrchestratorConfig {
     }
 
     /**
-     * Local/dev hosted bundle administration API settings.
+     * Local/dev administration API settings.
      */
     interface AdminConfig {
 
         /**
-         * Enables the internal hosted bundle admin REST surface.
+         * Enables the internal admin REST surface.
          *
          * @return true when the resource should accept requests
          */
@@ -496,7 +514,7 @@ public interface PipelineOrchestratorConfig {
         boolean enabled();
 
         /**
-         * Literal bearer token for local/dev bundle admin calls.
+         * Literal bearer token for local/dev admin calls.
          *
          * @return admin token when configured
          */
@@ -504,7 +522,7 @@ public interface PipelineOrchestratorConfig {
         Optional<String> adminToken();
 
         /**
-         * Secret reference for the local/dev bundle admin bearer token.
+         * Secret reference for the local/dev admin bearer token.
          *
          * @return admin token reference when configured
          */
@@ -515,7 +533,7 @@ public interface PipelineOrchestratorConfig {
     /**
      * Local/dev hosted bundle registry and artifact storage settings.
      */
-    interface BundlesConfig {
+    interface ReleasesConfig {
 
         /**
          * Bundle registry metadata provider settings.
@@ -523,7 +541,7 @@ public interface PipelineOrchestratorConfig {
          * @return registry config
          */
         @WithName("registry")
-        BundleRegistryConfig registry();
+        ReleaseRegistryConfig registry();
 
         /**
          * Bundle artifact storage settings.
@@ -531,18 +549,18 @@ public interface PipelineOrchestratorConfig {
          * @return storage config
          */
         @WithName("storage")
-        BundleStorageConfig storage();
+        ReleaseStorageConfig storage();
     }
 
     /**
      * Bundle registry provider settings.
      */
-    interface BundleRegistryConfig {
+    interface ReleaseRegistryConfig {
 
         /**
          * Registry provider name.
          *
-         * @return memory or file
+         * @return memory, file, or dynamo
          */
         @WithName("provider")
         @WithDefault("memory")
@@ -550,17 +568,17 @@ public interface PipelineOrchestratorConfig {
     }
 
     /**
-     * Bundle artifact storage settings.
+     * Release artifact storage settings.
      */
-    interface BundleStorageConfig {
+    interface ReleaseStorageConfig {
 
         /**
-         * Local root directory for managed bundle artifacts and file-backed registry metadata.
+         * Local root directory for managed release artifacts and file-backed registry metadata.
          *
          * @return storage root path
          */
         @WithName("root")
-        @WithDefault("target/tpf-bundles")
+        @WithDefault("target/tpf-releases")
         String root();
     }
 
@@ -604,6 +622,22 @@ public interface PipelineOrchestratorConfig {
         @WithName("allowed-payload-prefixes")
         @WithDefault("org.pipelineframework.")
         List<String> allowedPayloadPrefixes();
+
+        /**
+         * Optional deployable artifact id hosted by this worker runtime.
+         *
+         * @return artifact id when configured
+         */
+        @WithName("artifact-id")
+        Optional<String> artifactId();
+
+        /**
+         * Optional deployable artifact digest hosted by this worker runtime.
+         *
+         * @return artifact digest when configured
+         */
+        @WithName("artifact-digest")
+        Optional<String> artifactDigest();
 
         /**
          * REST transition worker settings.
@@ -837,12 +871,36 @@ public interface PipelineOrchestratorConfig {
         Optional<String> pipelineId();
 
         /**
-         * Static bundle version id hosted by the configured SQS worker queue.
+         * Static contract version hosted by the configured SQS worker queue.
          *
-         * @return bundle version id when configured
+         * @return contract version when configured
          */
-        @WithName("bundle-version-id")
-        Optional<String> bundleVersionId();
+        @WithName("contract-version")
+        Optional<String> contractVersion();
+
+        /**
+         * Static release version hosted by the configured SQS worker queue.
+         *
+         * @return release version when configured
+         */
+        @WithName("release-version")
+        Optional<String> releaseVersion();
+
+        /**
+         * Static artifact id hosted by the configured SQS worker queue.
+         *
+         * @return artifact id when configured
+         */
+        @WithName("artifact-id")
+        Optional<String> artifactId();
+
+        /**
+         * Static artifact digest hosted by the configured SQS worker queue.
+         *
+         * @return artifact digest when configured
+         */
+        @WithName("artifact-digest")
+        Optional<String> artifactDigest();
 
         /**
          * Enables the local SQS transition worker poller.

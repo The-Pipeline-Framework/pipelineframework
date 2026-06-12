@@ -1,5 +1,6 @@
 package org.pipelineframework.orchestrator;
 
+import org.pipelineframework.orchestrator.worker.PipelineWorkerCapability;
 import java.io.IOException;
 import java.util.List;
 import jakarta.annotation.PostConstruct;
@@ -38,7 +39,7 @@ public class GrpcTransitionWorkerService
     PipelineExecutionService executionService;
 
     @Inject
-    PipelineBundleIdentityResolver identityResolver;
+    PipelineReleaseIdentityResolver identityResolver;
 
     @Inject
     ControlPlaneSecretResolver secretResolver;
@@ -178,8 +179,10 @@ public class GrpcTransitionWorkerService
             PipelineWorkerCapability.PROTOCOL_VERSION,
             "grpc",
             identityResolver.pipelineId(orchestratorConfig),
-            identityResolver.bundleVersionId(orchestratorConfig),
-            identityResolver.bundleHash(),
+            identityResolver.contractVersion(),
+            identityResolver.releaseVersion(orchestratorConfig),
+            identityResolver.artifactId(orchestratorConfig),
+            identityResolver.artifactDigest(orchestratorConfig),
             List.of(TransitionPayloadEncoding.JSON),
             capabilities.transitionWorkerProtocols());
     }

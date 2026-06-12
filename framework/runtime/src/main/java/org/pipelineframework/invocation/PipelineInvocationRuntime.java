@@ -54,14 +54,14 @@ public class PipelineInvocationRuntime {
         TransportBoundaryInvocation boundary,
         Supplier<Uni<T>> supplier
     ) {
-        return invokeUni(new TransportBoundaryInvocationStrategy(boundary, transportBoundaryDiagnostics), supplier);
+        return invokeTransportUni(new TransportBoundaryInvocationStrategy(boundary, transportBoundaryDiagnostics), supplier);
     }
 
     public <T> Multi<T> invokeTransportMulti(
         TransportBoundaryInvocation boundary,
         Supplier<Multi<T>> supplier
     ) {
-        return invokeMulti(new TransportBoundaryInvocationStrategy(boundary, transportBoundaryDiagnostics), supplier);
+        return invokeTransportMulti(new TransportBoundaryInvocationStrategy(boundary, transportBoundaryDiagnostics), supplier);
     }
 
     private <T> Uni<T> invokeUni(PipelineInvocationStrategy strategy, Supplier<Uni<T>> supplier) {
@@ -101,6 +101,54 @@ public class PipelineInvocationRuntime {
                     return Multi.createFrom().failure(failure);
                 }
                 return new ContextualMulti<>(result, context, strategy, startNanos);
+            } catch (Throwable failure) {
+                strategy.recordTermination(startNanos, failure, false);
+                return Multi.createFrom().failure(failure);
+            }
+        });
+    }
+
+    private <T> Uni<T> invokeTransportUni(
+        TransportBoundaryInvocationStrategy strategy,
+        Supplier<Uni<T>> supplier
+    ) {
+        Objects.requireNonNull(strategy, "strategy must not be null");
+        Objects.requireNonNull(supplier, "supplier must not be null");
+        return Uni.createFrom().deferred(() -> {
+            long startNanos = System.nanoTime();
+            try {
+                Uni<T> result = supplier.get();
+                if (result == null) {
+                    IllegalStateException failure = new IllegalStateException(strategy.nullUniMessage());
+                    strategy.recordTermination(startNanos, failure, false);
+                    return Uni.createFrom().failure(failure);
+                }
+                return result.onTermination().invoke((item, failure, cancelled) ->
+                    strategy.recordTermination(startNanos, failure, cancelled));
+            } catch (Throwable failure) {
+                strategy.recordTermination(startNanos, failure, false);
+                return Uni.createFrom().failure(failure);
+            }
+        });
+    }
+
+    private <T> Multi<T> invokeTransportMulti(
+        TransportBoundaryInvocationStrategy strategy,
+        Supplier<Multi<T>> supplier
+    ) {
+        Objects.requireNonNull(strategy, "strategy must not be null");
+        Objects.requireNonNull(supplier, "supplier must not be null");
+        return Multi.createFrom().deferred(() -> {
+            long startNanos = System.nanoTime();
+            try {
+                Multi<T> result = supplier.get();
+                if (result == null) {
+                    IllegalStateException failure = new IllegalStateException(strategy.nullMultiMessage());
+                    strategy.recordTermination(startNanos, failure, false);
+                    return Multi.createFrom().failure(failure);
+                }
+                return result.onTermination().invoke((failure, cancelled) ->
+                    strategy.recordTermination(startNanos, failure, cancelled));
             } catch (Throwable failure) {
                 strategy.recordTermination(startNanos, failure, false);
                 return Multi.createFrom().failure(failure);

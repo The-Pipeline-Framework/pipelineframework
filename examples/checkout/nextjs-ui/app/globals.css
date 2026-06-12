@@ -392,6 +392,37 @@ button:disabled {
   color: var(--ink);
 }
 
+.order-summary {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  border: 1px solid rgb(37 99 235 / 24%);
+  border-radius: 8px;
+  background: #eff6ff;
+}
+
+.order-summary strong {
+  font-size: 1rem;
+}
+
+.order-summary span {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.identity-details {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.65rem;
+  background: var(--surface-muted);
+}
+
+.identity-details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .next-panel {
   margin-top: 1rem;
 }

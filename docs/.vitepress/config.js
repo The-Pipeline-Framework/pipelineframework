@@ -215,7 +215,10 @@ const mainSidebar = [
                     {text: 'Worker Protocols', link: '/guide/evolve/durable-coordinator/worker-protocols'},
                     {text: 'Step-Aware Invocation Runtime', link: '/guide/evolve/durable-coordinator/boundary-invocation-model'},
                     {text: 'Bundle Contract', link: '/guide/evolve/durable-coordinator/bundle-contract'},
+                    {text: 'Pipeline Contract And Release Model', link: '/guide/evolve/durable-coordinator/pipeline-contract-release-model'},
+                    {text: 'Runtime Boundaries And Performance', link: '/guide/evolve/durable-coordinator/runtime-boundaries-performance'},
                     {text: 'Local APIs', link: '/guide/evolve/durable-coordinator/local-apis'},
+                    {text: 'Self-Hosted Deployment', link: '/guide/evolve/durable-coordinator/self-hosted-deployment'},
                     {text: 'Self-Hosted Milestone', link: '/guide/evolve/durable-coordinator/self-hosted-milestone'}
                 ]
             },

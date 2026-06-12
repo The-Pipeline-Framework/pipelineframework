@@ -157,7 +157,7 @@ export function nextReviewCheckpointAfterOutputType(outputType) {
 export function checkpointProgress(completedStageId) {
   const completed = stageById(completedStageId);
   if (!completed) {
-    return { completed: null, next: HUMAN_CHECKPOINTS[0] || null };
+    return { completed: null, next: REVIEW_CHECKPOINTS[0] || null };
   }
   return {
     completed,
