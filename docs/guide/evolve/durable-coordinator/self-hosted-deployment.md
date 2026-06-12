@@ -174,10 +174,11 @@ For real incidents:
 1. Check execution status and read `errorCode`, `errorMessage`, `attempt`, and `stepIndex`.
 2. Confirm whether the execution is retrying, failed, or terminally DLQ'd.
 3. Inspect coordinator logs or the configured execution DLQ for the matching execution id.
-4. Confirm downstream idempotency before any manual re-drive.
-5. Re-submit or re-drive through an application-owned procedure with stable business idempotency keys.
+4. Correct the downstream dependency or input path that caused the failure.
+5. Confirm downstream idempotency before any re-drive.
+6. Re-drive a terminal execution with `POST /tpf/admin/tenants/{tenantId}/executions/{executionId}/redrive`.
 
-There is no built-in generic DLQ replay endpoint yet. The DLQ proves durable failure publication; replay ownership remains application/operator-owned.
+Re-drive reads the durable execution record and re-enqueues the original execution id. The DLQ message is evidence for triage and alerting; it is not consumed as the replay source. `FAILED` execution re-drive is opt-in (`allowFailed=true`) because those failures may not have exhausted the DLQ path.
 
 ### Manual Upgrade And Drain
 
@@ -215,7 +216,7 @@ This recipe intentionally does not include:
 1. Kubernetes manifests or Docker Compose files,
 2. dynamic JAR loading in the coordinator,
 3. append-only execution/await state storage,
-4. built-in generic DLQ replay,
+4. bulk DLQ-message consumers or automated replay campaigns,
 5. worker autoscaling, fleet routing, or deployment orchestration,
 6. production tenancy, RBAC, or org/principal management.
 

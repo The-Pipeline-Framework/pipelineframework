@@ -34,6 +34,8 @@ Run the failure-visibility path:
 
 This starts the same one-process coordinator, registers and activates the release, submits an order, waits for the restaurant approval await interaction, and then completes that interaction with a deliberately invalid but API-valid restaurant decision. The resumed execution fails through the normal queue-async path, publishes through the log DLQ provider, and prints an operator triage summary.
 
+The script also calls the admin re-drive endpoint for the failed execution. Because the demo intentionally re-drives the same invalid payload, it fails again. That is deliberate: the command proves the built-in operator control exists without pretending an unrecoverable bad payload can heal itself.
+
 The incident script sets `TPF_ORCHESTRATOR_MAX_RETRIES=0` by default so the failure reaches the terminal path immediately. Override that variable if you want to observe retry state first.
 
 ## Local Defaults
@@ -146,8 +148,9 @@ For the incident flow:
 3. Poll status until `FAILED`.
 4. Inspect `errorCode`, `errorMessage`, `attempt`, and `stepIndex` from the status response.
 5. Inspect `coordinator.log` for `Execution moved to DLQ` and the matching execution id.
+6. Re-drive the failed execution through `/tpf/admin/tenants/{tenantId}/executions/{executionId}/redrive` after validating downstream idempotency.
 
-Current recovery boundary: this self-host reference exposes status, terminal error details, and DLQ publication evidence. It does not provide a built-in generic DLQ replay endpoint yet. Correct the business input or downstream dependency, then re-submit/re-drive through an application-owned procedure with stable idempotency keys.
+Current recovery boundary: single-execution re-drive reads the durable execution record and re-enqueues the same execution id. DLQ messages are triage evidence, not the replay source, and there is no built-in bulk DLQ-message consumer. Correct the business input or downstream dependency before re-driving, and keep downstream side effects idempotent.
 
 ## What This Proves
 

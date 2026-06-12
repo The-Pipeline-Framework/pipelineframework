@@ -44,6 +44,7 @@ import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.ExecutionCreateCommand;
 import org.pipelineframework.orchestrator.ExecutionInputShape;
 import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
+import org.pipelineframework.orchestrator.ExecutionRedriveResult;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionResultShapeResolver;
@@ -373,6 +374,73 @@ class QueueAsyncCoordinator {
             throw new IllegalStateException("Execution finished without a successful result: " + record.status());
           }
           throw new IllegalStateException("Execution is not complete yet: " + record.status());
+        });
+  }
+
+  Uni<ExecutionRedriveResult> redriveExecution(
+      String tenantId,
+      String executionId,
+      Long expectedVersion,
+      boolean allowFailed,
+      String reason) {
+    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
+      return Uni.createFrom().failure(new IllegalStateException(
+          "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
+    }
+    String resolvedTenant = executionInputPolicy.normalizeTenant(tenantId);
+    RuntimeException admissionFailure = admissionFailure(admissionRequest(
+        resolvedTenant,
+        ControlPlaneAdmissionOperation.REDRIVE_EXECUTION,
+        executionId,
+        "api",
+        explicitTenant(tenantId)));
+    if (admissionFailure != null) {
+      return Uni.createFrom().failure(admissionFailure);
+    }
+    long now = System.currentTimeMillis();
+    return executionStateStore.getExecution(resolvedTenant, executionId)
+        .onItem().transformToUni(optional -> {
+          if (optional.isEmpty()) {
+            return Uni.createFrom().failure(new NotFoundException("Execution not found: " + executionId));
+          }
+          ExecutionRecord<Object, Object> previous = optional.get();
+          if (!redrivable(previous.status(), allowFailed)) {
+            return Uni.createFrom().failure(new IllegalStateException(
+                "Execution " + executionId + " cannot be re-driven from status " + previous.status()));
+          }
+          long version = expectedVersion == null ? previous.version() : expectedVersion;
+          if (version != previous.version()) {
+            return Uni.createFrom().failure(new IllegalStateException(
+                "Execution " + executionId + " version mismatch: expected " + version
+                    + " but current version is " + previous.version()));
+          }
+          String transitionKey = redriveTransitionKey(previous, reason);
+          return executionStateStore.redriveTerminalExecution(
+                  resolvedTenant,
+                  executionId,
+                  version,
+                  allowFailed,
+                  transitionKey,
+                  now)
+              .onItem().transformToUni(redriven -> {
+                if (redriven.isEmpty()) {
+                  return Uni.createFrom().failure(new IllegalStateException(
+                      "Execution " + executionId + " changed before re-drive could be admitted"));
+                }
+                ExecutionRecord<Object, Object> record = redriven.get();
+                return workDispatcher.enqueueNow(new ExecutionWorkItem(record.tenantId(), record.executionId()))
+                    .onItem().transform(ignored -> {
+                      LOG.infof(
+                          "Re-drove execution tenant=%s executionId=%s previousStatus=%s stepIndex=%d attempt=%d reason=%s",
+                          record.tenantId(),
+                          record.executionId(),
+                          previous.status(),
+                          record.currentStepIndex(),
+                          record.attempt(),
+                          normalizeReason(reason));
+                      return ExecutionRedriveResult.from(previous, record);
+                    });
+              });
         });
   }
 
@@ -894,6 +962,22 @@ class QueueAsyncCoordinator {
 
   private static boolean hasAwaitUnitId(ExecutionRecord<Object, Object> record) {
     return record.awaitUnitId() != null && !record.awaitUnitId().isBlank();
+  }
+
+  private static boolean redrivable(ExecutionStatus status, boolean allowFailed) {
+    return status == ExecutionStatus.DLQ || (allowFailed && status == ExecutionStatus.FAILED);
+  }
+
+  private static String redriveTransitionKey(ExecutionRecord<Object, Object> record, String reason) {
+    return "redrive:" + record.executionId() + ":" + record.version() + ":" + normalizeReason(reason);
+  }
+
+  private static String normalizeReason(String reason) {
+    if (reason == null || reason.isBlank()) {
+      return "operator";
+    }
+    String trimmed = reason.trim();
+    return trimmed.length() <= 80 ? trimmed : trimmed.substring(0, 80);
   }
 
   private static String scopedRootExecutionKey(String pipelineId, String releaseVersion, String executionKey) {

@@ -16,6 +16,7 @@ The first reference is `examples/restaurant-approval/self-host`, which runs one 
 | Await pending query and completion | present |
 | Accepted/declined terminal results | present |
 | Failure/DLQ incident walkthrough | present in `restaurant-approval/self-host` |
+| Single-execution operator re-drive | present for terminal `DLQ` and explicit `FAILED` executions |
 | Operator walkthrough | present in `restaurant-approval/self-host` |
 | Production-ish deployment recipe | present in [Self-Hosted Deployment](/guide/evolve/durable-coordinator/self-hosted-deployment) |
 | Durable release metadata | Dynamo registry with immutable release records and append-only activation events |
@@ -27,7 +28,7 @@ The first reference is `examples/restaurant-approval/self-host`, which runs one 
 
 | Gap | Why it matters |
 | --- | --- |
-| Built-in DLQ replay | current self-host incident flow shows status, terminal error details, and DLQ publication, but re-drive remains application-owned |
+| Bulk DLQ replay campaigns | single-execution re-drive exists, but there is no DLQ-message consumer or batch replay surface |
 | Append-only execution/await stores | existing Dynamo execution and await stores still use conditional updates for leases and state transitions |
 
-The `COMPUTE` self-host path is now credible for local adoption and operator walkthroughs. The main remaining HA gap is not the release metadata model or the minimum worker lifecycle gate; it is making execution/await state fully append-only and adding operator-owned replay/re-drive support.
+The `COMPUTE` self-host path is now credible for local adoption and operator walkthroughs. The main remaining HA gap is not the release metadata model, the minimum worker lifecycle gate, or single-execution re-drive; it is making execution/await state fully append-only and deciding whether bulk replay belongs in the framework or in operator/application runbooks.
