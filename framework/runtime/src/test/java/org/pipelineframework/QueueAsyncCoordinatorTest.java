@@ -25,6 +25,7 @@ import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.ExecutionInputShape;
 import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRecord;
+import org.pipelineframework.orchestrator.ExecutionRedriveResult;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionResultShapeResolver;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
@@ -224,6 +225,101 @@ class QueueAsyncCoordinatorTest {
         assertEquals("exec-1", dto.executionId());
         assertEquals(ExecutionStatus.RUNNING, dto.status());
         verify(executionStateStore).getExecution("tenant-1", "exec-1");
+    }
+
+    @Test
+    void redriveExecutionQueuesTerminalDlqWithOriginalExecutionId() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        ExecutionRecord<Object, Object> terminal = recordWithStatus(
+            createRecord(
+                "tenant-1",
+                "exec-redrive",
+                "key-redrive",
+                "pipeline-a",
+                "contract-a",
+                "release-a",
+                ExecutionResultShape.SINGLE),
+            ExecutionStatus.DLQ,
+            4L,
+            2);
+        ExecutionRecord<Object, Object> redriven = recordWithStatus(terminal, ExecutionStatus.QUEUED, 5L, 3);
+
+        when(executionStateStore.getExecution("tenant-1", "exec-redrive"))
+            .thenReturn(Uni.createFrom().item(Optional.of(terminal)));
+        when(executionStateStore.redriveTerminalExecution(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-redrive"),
+                org.mockito.ArgumentMatchers.eq(4L),
+                org.mockito.ArgumentMatchers.eq(false),
+                org.mockito.ArgumentMatchers.startsWith("redrive:"),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(redriven)));
+        when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
+
+        ExecutionRedriveResult result = coordinator.redriveExecution(
+                "tenant-1",
+                "exec-redrive",
+                null,
+                false,
+                "operator checked downstream idempotency")
+            .await().indefinitely();
+
+        assertEquals("exec-redrive", result.executionId());
+        assertEquals(ExecutionStatus.DLQ, result.previousStatus());
+        assertEquals(ExecutionStatus.QUEUED, result.status());
+        assertEquals("pipeline-a", result.pipelineId());
+        assertEquals("contract-a", result.contractVersion());
+        assertEquals("release-a", result.releaseVersion());
+        assertEquals(3, result.attempt());
+        verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-1", "exec-redrive"));
+    }
+
+    @Test
+    void redriveExecutionRejectsFailedWithoutExplicitAllowFlag() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        ExecutionRecord<Object, Object> failed = recordWithStatus(
+            createRecord("tenant-1", "exec-failed", "key-failed"),
+            ExecutionStatus.FAILED,
+            2L,
+            1);
+        when(executionStateStore.getExecution("tenant-1", "exec-failed"))
+            .thenReturn(Uni.createFrom().item(Optional.of(failed)));
+
+        assertThrows(IllegalStateException.class, () -> coordinator.redriveExecution(
+                "tenant-1",
+                "exec-failed",
+                null,
+                false,
+                "operator retry")
+            .await().indefinitely());
+
+        verify(executionStateStore, never()).redriveTerminalExecution(
+            any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyBoolean(), any(), org.mockito.ArgumentMatchers.anyLong());
+        verify(workDispatcher, never()).enqueueNow(any());
+    }
+
+    @Test
+    void redriveExecutionRejectsStaleExpectedVersion() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        ExecutionRecord<Object, Object> terminal = recordWithStatus(
+            createRecord("tenant-1", "exec-stale", "key-stale"),
+            ExecutionStatus.DLQ,
+            7L,
+            1);
+        when(executionStateStore.getExecution("tenant-1", "exec-stale"))
+            .thenReturn(Uni.createFrom().item(Optional.of(terminal)));
+
+        assertThrows(IllegalStateException.class, () -> coordinator.redriveExecution(
+                "tenant-1",
+                "exec-stale",
+                6L,
+                false,
+                "operator retry")
+            .await().indefinitely());
+
+        verify(executionStateStore, never()).redriveTerminalExecution(
+            any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyBoolean(), any(), org.mockito.ArgumentMatchers.anyLong());
+        verify(workDispatcher, never()).enqueueNow(any());
     }
 
     @Test
@@ -1395,6 +1491,37 @@ class QueueAsyncCoordinatorTest {
 
     private ExecutionRecord<Object, Object> createRecord(String tenantId, String executionId, String executionKey) {
         return createRecord(tenantId, executionId, executionKey, ExecutionResultShape.SINGLE);
+    }
+
+    private ExecutionRecord<Object, Object> recordWithStatus(
+        ExecutionRecord<Object, Object> source,
+        ExecutionStatus status,
+        long version,
+        int attempt) {
+        return new ExecutionRecord<>(
+            source.tenantId(),
+            source.executionId(),
+            source.executionKey(),
+            source.pipelineId(),
+            source.contractVersion(),
+            source.releaseVersion(),
+            source.resultShape(),
+            status,
+            version,
+            source.currentStepIndex(),
+            attempt,
+            source.leaseOwner(),
+            source.leaseExpiresEpochMs(),
+            source.nextDueEpochMs(),
+            source.lastTransitionKey(),
+            source.inputPayload(),
+            source.awaitUnitId(),
+            source.resultPayload(),
+            source.errorCode(),
+            source.errorMessage(),
+            source.createdAtEpochMs(),
+            source.updatedAtEpochMs(),
+            source.ttlEpochS());
     }
 
     private ExecutionRecord<Object, Object> createRecord(

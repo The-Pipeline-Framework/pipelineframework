@@ -117,6 +117,192 @@ class InMemoryExecutionStateStoreTest {
     }
 
     @Test
+    void redriveTerminalExecutionQueuesDlqAndPreservesPinnedIdentity() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult created = store.createOrGetExecution(
+                new ExecutionCreateCommand(
+                    "tenant-a",
+                    "key-redrive",
+                    "org.example.pipeline",
+                    "sha256:contract",
+                    "sha256:release",
+                    "payload",
+                    ExecutionResultShape.SINGLE,
+                    now,
+                    now / 1000 + 60))
+            .await().indefinitely();
+        Optional<ExecutionRecord<Object, Object>> terminal = store.markTerminalFailure(
+                "tenant-a",
+                created.record().executionId(),
+                created.record().version(),
+                ExecutionStatus.DLQ,
+                "transition",
+                "ERR",
+                "failure",
+                now + 1)
+            .await().indefinitely();
+
+        assertTrue(terminal.isPresent());
+        Optional<ExecutionRecord<Object, Object>> redriven = store.redriveTerminalExecution(
+                "tenant-a",
+                created.record().executionId(),
+                terminal.get().version(),
+                false,
+                "redrive",
+                now + 2)
+            .await().indefinitely();
+
+        assertTrue(redriven.isPresent());
+        ExecutionRecord<Object, Object> record = redriven.get();
+        assertEquals(ExecutionStatus.QUEUED, record.status());
+        assertEquals("org.example.pipeline", record.pipelineId());
+        assertEquals("sha256:contract", record.contractVersion());
+        assertEquals("sha256:release", record.releaseVersion());
+        assertEquals(terminal.get().attempt() + 1, record.attempt());
+        assertNull(record.leaseOwner());
+        assertEquals(0L, record.leaseExpiresEpochMs());
+        assertEquals(now + 2, record.nextDueEpochMs());
+        assertNull(record.awaitUnitId());
+        assertNull(record.resultPayload());
+        assertNull(record.errorCode());
+        assertNull(record.errorMessage());
+    }
+
+    @Test
+    void redriveTerminalExecutionRequiresAllowFailedForFailedStatus() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult created = store.createOrGetExecution(
+                new ExecutionCreateCommand("tenant-a", "key-redrive-failed", "payload", ExecutionResultShape.SINGLE, now, now / 1000 + 60))
+            .await().indefinitely();
+        Optional<ExecutionRecord<Object, Object>> terminal = store.markTerminalFailure(
+                "tenant-a",
+                created.record().executionId(),
+                created.record().version(),
+                ExecutionStatus.FAILED,
+                "transition",
+                "ERR",
+                "failure",
+                now + 1)
+            .await().indefinitely();
+
+        assertTrue(terminal.isPresent());
+        assertTrue(store.redriveTerminalExecution(
+                "tenant-a",
+                created.record().executionId(),
+                terminal.get().version(),
+                false,
+                "redrive",
+                now + 2)
+            .await().indefinitely().isEmpty());
+        assertTrue(store.redriveTerminalExecution(
+                "tenant-a",
+                created.record().executionId(),
+                terminal.get().version(),
+                true,
+                "redrive",
+                now + 3)
+            .await().indefinitely().isPresent());
+    }
+
+    @Test
+    void redriveTerminalExecutionRejectsStaleVersionAndNonTerminalStatus() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult created = store.createOrGetExecution(
+                new ExecutionCreateCommand("tenant-a", "key-redrive-stale", "payload", ExecutionResultShape.SINGLE, now, now / 1000 + 60))
+            .await().indefinitely();
+
+        assertTrue(store.redriveTerminalExecution(
+                "tenant-a",
+                created.record().executionId(),
+                created.record().version(),
+                true,
+                "redrive",
+                now + 1)
+            .await().indefinitely().isEmpty());
+        Optional<ExecutionRecord<Object, Object>> terminal = store.markTerminalFailure(
+                "tenant-a",
+                created.record().executionId(),
+                created.record().version(),
+                ExecutionStatus.DLQ,
+                "transition",
+                "ERR",
+                "failure",
+                now + 2)
+            .await().indefinitely();
+        assertTrue(terminal.isPresent());
+
+        assertTrue(store.redriveTerminalExecution(
+                "tenant-a",
+                created.record().executionId(),
+                terminal.get().version() - 1,
+                false,
+                "redrive",
+                now + 3)
+            .await().indefinitely().isEmpty());
+    }
+
+    @Test
+    void redriveTerminalExecutionPreservesAwaitResumePointer() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult created = store.createOrGetExecution(
+                new ExecutionCreateCommand(
+                    "tenant-a",
+                    "key-redrive-await",
+                    "payload",
+                    ExecutionResultShape.SINGLE,
+                    now,
+                    now / 1000 + 60))
+            .await().indefinitely();
+
+        Optional<ExecutionRecord<Object, Object>> waiting = store.markWaitingExternal(
+                "tenant-a",
+                created.record().executionId(),
+                created.record().version(),
+                "transition-await",
+                "unit-1",
+                2,
+                now + 1)
+            .await().indefinitely();
+        assertTrue(waiting.isPresent());
+        Optional<ExecutionRecord<Object, Object>> queued = store.markAwaitCompleted(
+                "tenant-a",
+                created.record().executionId(),
+                "unit-1",
+                3,
+                now + 2)
+            .await().indefinitely();
+        assertTrue(queued.isPresent());
+        Optional<ExecutionRecord<Object, Object>> terminal = store.markTerminalFailure(
+                "tenant-a",
+                created.record().executionId(),
+                queued.get().version(),
+                ExecutionStatus.FAILED,
+                "transition-failed-after-await",
+                "ERR",
+                "failure",
+                now + 3)
+            .await().indefinitely();
+        assertTrue(terminal.isPresent());
+
+        Optional<ExecutionRecord<Object, Object>> redriven = store.redriveTerminalExecution(
+                "tenant-a",
+                created.record().executionId(),
+                terminal.get().version(),
+                true,
+                "redrive",
+                now + 4)
+            .await().indefinitely();
+
+        assertTrue(redriven.isPresent());
+        assertEquals("unit-1", redriven.get().awaitUnitId());
+        assertEquals(3, redriven.get().currentStepIndex());
+    }
+
+    @Test
     void retryAfterAwaitResumePreservesAwaitUnitId() {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();

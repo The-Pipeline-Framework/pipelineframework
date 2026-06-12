@@ -33,6 +33,22 @@ pipeline.orchestrator.dlq-url=https://sqs.eu-west-1.amazonaws.com/123456789012/t
 Execution DLQ applies to terminal execution failures only. A DLQ is a dead-letter channel for failed executions that need investigation or replay.
 It does not replace item-level rejection flows.
 
+Execution re-drive is controlled from the admin API:
+
+```http
+POST /tpf/admin/tenants/{tenantId}/executions/{executionId}/redrive
+Authorization: Bearer <admin-token>
+Content-Type: application/json
+
+{
+  "expectedVersion": 12,
+  "reason": "dependency restored",
+  "allowFailed": false
+}
+```
+
+The operation re-queues the durable `ExecutionRecord` for the same execution id. It does not consume, delete, or replay from DLQ messages. DLQ messages remain triage and audit evidence.
+
 ## Execution DLQ Envelope (Terminal Details)
 
 Execution DLQ entries include standard fields for triage across REST, gRPC, local, and function-style execution:
@@ -86,6 +102,6 @@ For at-least-once boundaries (queue delivery, operator invocation, re-drive), en
 4. They are not execution DLQ events, and they do not use Item Reject Sink by default.
 5. For item reject incidents, check fingerprint concentration and dominant error classes; route to business-data remediation and selective re-drive.
 6. Treat item reject re-drive as application-owned: default reject envelopes are metadata-only, so replay payload reconstruction is not provided by framework runtime.
-7. For execution DLQ incidents, triage terminal execution causes (`FAILED` vs `DLQ`) and validate idempotency before replay.
+7. For execution DLQ incidents, triage terminal execution causes (`FAILED` vs `DLQ`) and validate idempotency before re-drive.
 8. If due executions stall, verify sweeper health and dispatcher lag.
 9. Re-drive in bounded batches and monitor duplicate suppression plus retry saturation (retry attempts approaching the configured retry limit).

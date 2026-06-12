@@ -235,6 +235,24 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> redriveTerminalExecution(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        boolean allowFailed,
+        String transitionKey,
+        long nowEpochMs
+    ) {
+        return blocking(() -> redriveTerminalExecutionBlocking(
+            tenantId,
+            executionId,
+            expectedVersion,
+            allowFailed,
+            transitionKey,
+            nowEpochMs));
+    }
+
+    @Override
     public Uni<List<ExecutionRecord<Object, Object>>> findDueExecutions(long nowEpochMs, int limit) {
         if (limit <= 0) {
             return Uni.createFrom().item(List.of());
@@ -701,7 +719,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             Map.entry("#errorCode", ERROR_CODE),
             Map.entry("#errorMessage", ERROR_MESSAGE),
             Map.entry("#result", RESULT_PAYLOAD_JSON),
-            Map.entry("#awaitUnit", AWAIT_UNIT_ID),
             Map.entry("#leaseOwner", LEASE_OWNER),
             Map.entry("#leaseExpires", LEASE_EXPIRES_EPOCH_MS),
             Map.entry("#updated", UPDATED_AT_EPOCH_MS),
@@ -783,6 +800,69 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
                 "SET #status = :finalStatus, #version = #version + :one, #nextDue = :now, #transition = :transition, " +
                     "#errorCode = :errorCode, #errorMessage = :errorMessage, #leaseExpires = :zero, #updated = :now " +
                     "REMOVE #result, #leaseOwner")
+            .expressionAttributeNames(names)
+            .expressionAttributeValues(values)
+            .returnValues(ReturnValue.ALL_NEW)
+            .build();
+        try {
+            Map<String, AttributeValue> attributes = dynamoClient().updateItem(request).attributes();
+            if (attributes == null || attributes.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(toRecord(attributes));
+        } catch (ConditionalCheckFailedException ignored) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<ExecutionRecord<Object, Object>> redriveTerminalExecutionBlocking(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        boolean allowFailed,
+        String transitionKey,
+        long nowEpochMs
+    ) {
+        Map<String, String> names = Map.ofEntries(
+            Map.entry("#status", STATUS),
+            Map.entry("#version", VERSION),
+            Map.entry("#attempt", ATTEMPT),
+            Map.entry("#nextDue", NEXT_DUE_EPOCH_MS),
+            Map.entry("#transition", LAST_TRANSITION_KEY),
+            Map.entry("#errorCode", ERROR_CODE),
+            Map.entry("#errorMessage", ERROR_MESSAGE),
+            Map.entry("#result", RESULT_PAYLOAD_JSON),
+            Map.entry("#leaseOwner", LEASE_OWNER),
+            Map.entry("#leaseExpires", LEASE_EXPIRES_EPOCH_MS),
+            Map.entry("#updated", UPDATED_AT_EPOCH_MS),
+            Map.entry("#ttl", TTL_EPOCH_S));
+        Map<String, AttributeValue> values = new HashMap<>();
+        values.put(":expected", avN(expectedVersion));
+        values.put(":queued", avS(ExecutionStatus.QUEUED.name()));
+        values.put(":dlq", avS(ExecutionStatus.DLQ.name()));
+        values.put(":transition", avS(transitionKey == null ? "" : transitionKey));
+        values.put(":zero", avN(0));
+        values.put(":now", avN(nowEpochMs));
+        values.put(":one", avN(1));
+        values.put(":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond()));
+        if (allowFailed) {
+            values.put(":failed", avS(ExecutionStatus.FAILED.name()));
+        }
+
+        String statusCondition = allowFailed
+            ? "(#status = :dlq OR #status = :failed)"
+            : "#status = :dlq";
+        UpdateItemRequest request = UpdateItemRequest.builder()
+            .tableName(executionTable())
+            .key(executionPrimaryKey(tenantId, executionId))
+            .conditionExpression(
+                "#version = :expected AND "
+                    + statusCondition
+                    + " AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
+            .updateExpression(
+                "SET #status = :queued, #version = #version + :one, #attempt = #attempt + :one, " +
+                    "#nextDue = :now, #transition = :transition, #leaseExpires = :zero, #updated = :now " +
+                    "REMOVE #result, #errorCode, #errorMessage, #leaseOwner")
             .expressionAttributeNames(names)
             .expressionAttributeValues(values)
             .returnValues(ReturnValue.ALL_NEW)
