@@ -18,6 +18,7 @@ The first reference is `examples/restaurant-approval/self-host`, which runs one 
 | Failure/DLQ incident walkthrough | present in `restaurant-approval/self-host` |
 | Operator walkthrough | present in `restaurant-approval/self-host` |
 | Production-ish deployment recipe | present in [Self-Hosted Deployment](/guide/evolve/durable-coordinator/self-hosted-deployment) |
+| Durable release metadata | Dynamo registry with immutable release records and append-only activation events |
 | Kafka await over stream | covered separately by `csv-payments` |
 
 ## Remaining Gap
@@ -25,7 +26,8 @@ The first reference is `examples/restaurant-approval/self-host`, which runs one 
 | Gap | Why it matters |
 | --- | --- |
 | Built-in DLQ replay | current self-host incident flow shows status, terminal error details, and DLQ publication, but re-drive remains application-owned |
-| Contract/release model | the long-term concept is a pipeline contract and release descriptor, with executable JAR registration as the current local implementation form |
+| Shared/replicated artifact storage | Dynamo release metadata is durable, but local artifact storage remains deployment-owned |
+| Append-only execution/await stores | existing Dynamo execution and await stores still use conditional updates for leases and state transitions |
 | Worker lifecycle | healthy, stale, draining, and unavailable states should be added only when self-host workflows require them |
 
-The `COMPUTE` self-host path is now credible for local adoption and operator walkthroughs. The main remaining design gap is the contract/release model that can describe container images, native binaries, function artifacts, local files, external endpoints, and independently deployed step artifacts without making JAR registration the conceptual unit.
+The `COMPUTE` self-host path is now credible for local adoption and operator walkthroughs. The main remaining HA gap is not the release metadata model; it is making the rest of the coordinator state, worker lifecycle, and artifact availability operationally credible across multiple coordinator instances.

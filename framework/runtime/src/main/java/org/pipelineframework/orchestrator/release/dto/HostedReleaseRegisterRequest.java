@@ -1,4 +1,4 @@
-package org.pipelineframework.orchestrator.dto;
+package org.pipelineframework.orchestrator.release.dto;
 
 /**
  * Local/dev release registration request.

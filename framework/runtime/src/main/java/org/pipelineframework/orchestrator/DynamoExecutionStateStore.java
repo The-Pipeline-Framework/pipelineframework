@@ -1,5 +1,6 @@
 package org.pipelineframework.orchestrator;
 
+import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import java.net.URI;
 import java.lang.reflect.Method;
 import java.time.Instant;

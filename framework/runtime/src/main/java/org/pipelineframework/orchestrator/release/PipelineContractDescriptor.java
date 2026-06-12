@@ -1,7 +1,11 @@
-package org.pipelineframework.orchestrator;
+package org.pipelineframework.orchestrator.release;
 
 import java.util.List;
 import java.util.Objects;
+
+import org.pipelineframework.orchestrator.PipelineBundleCapabilities;
+import org.pipelineframework.orchestrator.PipelineBundleManifest;
+import org.pipelineframework.orchestrator.PipelineBundleStepDescriptor;
 
 /**
  * Generated semantic pipeline contract emitted at build time.

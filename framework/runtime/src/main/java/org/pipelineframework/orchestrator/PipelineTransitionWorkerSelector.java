@@ -27,7 +27,8 @@ public class PipelineTransitionWorkerSelector {
         boolean restEnabled = orchestratorConfig.workerRest().isEnabled();
         boolean grpcEnabled = orchestratorConfig.workerGrpc().isEnabled();
         boolean sqsEnabled = orchestratorConfig.workerSqs().isEnabled();
-        remoteTargetCount(restEnabled, grpcEnabled, sqsEnabled);
+        int remoteTargets = remoteTargetCount(restEnabled, grpcEnabled, sqsEnabled);
+        validateRemoteWorkerRequirement(remoteTargets);
         validateStartup(restEnabled, grpcEnabled, sqsEnabled);
     }
 
@@ -68,6 +69,18 @@ public class PipelineTransitionWorkerSelector {
         validateIfEnabled(restEnabled, restWorker);
         validateIfEnabled(grpcEnabled, grpcWorker);
         validateIfEnabled(sqsEnabled, sqsWorker);
+    }
+
+    private void validateRemoteWorkerRequirement(int remoteTargets) {
+        PipelineOrchestratorConfig.ControlPlaneConfig controlPlane = orchestratorConfig.controlPlane();
+        if (controlPlane == null || !controlPlane.enabled() || !controlPlane.requireRemoteWorker()) {
+            return;
+        }
+        if (remoteTargets == 0) {
+            throw new IllegalStateException("pipeline.orchestrator.control-plane.require-remote-worker=true requires "
+                + "one configured transition worker target: pipeline.orchestrator.worker.rest.base-url, "
+                + "pipeline.orchestrator.worker.grpc.endpoint, or pipeline.orchestrator.worker.sqs.request-queue-url");
+        }
     }
 
     private void validateIfEnabled(boolean enabled, PipelineTransitionWorker worker) {

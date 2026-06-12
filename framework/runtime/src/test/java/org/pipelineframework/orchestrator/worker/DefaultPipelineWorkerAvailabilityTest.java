@@ -1,4 +1,4 @@
-package org.pipelineframework.orchestrator;
+package org.pipelineframework.orchestrator.worker;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -12,6 +12,12 @@ import java.util.Optional;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.orchestrator.GrpcPipelineTransitionWorker;
+import org.pipelineframework.orchestrator.PipelineBundleCapabilities;
+import org.pipelineframework.orchestrator.PipelineBundleIdentityResolver;
+import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.RestPipelineTransitionWorker;
+import org.pipelineframework.orchestrator.TransitionPayloadEncoding;
 
 class DefaultPipelineWorkerAvailabilityTest {
 

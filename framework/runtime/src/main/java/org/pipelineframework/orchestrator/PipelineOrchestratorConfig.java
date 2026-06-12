@@ -347,6 +347,15 @@ public interface PipelineOrchestratorConfig {
         String awaitUnitTable();
 
         /**
+         * Release registry metadata table name.
+         *
+         * @return release registry table name
+         */
+        @WithName("release-table")
+        @WithDefault("tpf_release_registry")
+        String releaseTable();
+
+        /**
          * Optional region override.
          *
          * @return region when configured
@@ -465,6 +474,15 @@ public interface PipelineOrchestratorConfig {
         boolean enabled();
 
         /**
+         * Requires the hosted control-plane runtime to dispatch to a configured remote transition worker.
+         *
+         * @return true when local in-process worker fallback should fail startup
+         */
+        @WithName("require-remote-worker")
+        @WithDefault("false")
+        boolean requireRemoteWorker();
+
+        /**
          * Literal bearer token for local/dev coordinator API calls.
          *
          * @return admin token when configured
@@ -542,7 +560,7 @@ public interface PipelineOrchestratorConfig {
         /**
          * Registry provider name.
          *
-         * @return memory or file
+         * @return memory, file, or dynamo
          */
         @WithName("provider")
         @WithDefault("memory")

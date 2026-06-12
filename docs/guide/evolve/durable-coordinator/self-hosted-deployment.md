@@ -72,15 +72,17 @@ pipeline.orchestrator.dynamo.execution-table=tpf_execution
 pipeline.orchestrator.dynamo.execution-key-table=tpf_execution_key
 pipeline.orchestrator.dynamo.await-interaction-table=tpf_await_interaction
 pipeline.orchestrator.dynamo.await-interaction-key-table=tpf_await_interaction_key
+pipeline.orchestrator.dynamo.release-table=tpf_release_registry
 pipeline.orchestrator.dynamo.region=eu-west-1
 pipeline.orchestrator.sqs.region=eu-west-1
 
 pipeline.orchestrator.control-plane.enabled=true
 pipeline.orchestrator.control-plane.admin-token-ref=env:TPF_CONTROL_PLANE_TOKEN
+pipeline.orchestrator.control-plane.require-remote-worker=true
 pipeline.orchestrator.admin.enabled=true
 pipeline.orchestrator.admin.admin-token-ref=env:TPF_ADMIN_TOKEN
 
-pipeline.orchestrator.bundles.registry.provider=file
+pipeline.orchestrator.bundles.registry.provider=dynamo
 pipeline.orchestrator.bundles.storage.root=/var/lib/tpf/bundles
 ```
 
@@ -95,6 +97,8 @@ The await interaction table must provide these ALL-projected GSIs:
 
 SQS request/reply worker protocol has one additional v1 constraint: `pipeline.orchestrator.worker.sqs.response-queue-url` must be dedicated per coordinator instance or shard. Shared response queues can route a worker response to the wrong process because response demultiplexing is not implemented.
 
+The Dynamo release registry stores immutable release records plus append-only activation events. Active release lookup reads the latest activation event for the tenant and pipeline; it does not update a mutable active pointer. New coordinator metadata stores should follow this rule. Existing execution and await Dynamo stores still use conditional updates for leases and state transitions until that storage model is redesigned.
+
 ## Startup Checklist
 
 Before accepting work:
@@ -108,6 +112,8 @@ Before accepting work:
 7. Submit one canary execution and verify status, pending await interaction, completion, and result.
 
 The current coordinator does not dynamically load registered JAR code. Release registration validates the release descriptor and, for local executable JAR artifacts, validates and stores the artifact. Workers must already host matching code. Worker availability checks verify the active release identity plus the current executable manifest identity before hosted execution submission.
+
+`pipeline.orchestrator.control-plane.require-remote-worker=true` is recommended for separated self-host deployments. It prevents a coordinator process from silently falling back to the local in-process worker when no REST, gRPC, or SQS worker target is configured. Leave it disabled for the one-process local demo. See [Runtime Boundaries And Performance](/guide/evolve/durable-coordinator/runtime-boundaries-performance).
 
 ## Operator Runbooks
 
@@ -181,9 +187,9 @@ This recipe intentionally does not include:
 
 1. Kubernetes manifests or Docker Compose files,
 2. dynamic JAR loading in the coordinator,
-3. multi-instance HA bundle registry metadata,
+3. append-only execution/await state storage,
 4. built-in generic DLQ replay,
 5. worker registration, heartbeat, or drain state,
 6. production tenancy, RBAC, or org/principal management.
 
-The file-backed bundle registry is suitable for local/dev and single-coordinator self-host pilots. A serious multi-coordinator deployment still needs a durable registry metadata store before the file registry can be considered HA-ready.
+The file-backed bundle registry is suitable for local/dev and single-coordinator self-host pilots. Use the Dynamo release registry for multi-coordinator release metadata. Artifact storage is still local filesystem based in this recipe; shared or replicated artifact storage remains deployment-owned.

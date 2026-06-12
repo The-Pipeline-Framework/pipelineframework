@@ -1,5 +1,6 @@
 package org.pipelineframework.orchestrator;
 
+import org.pipelineframework.orchestrator.worker.PipelineWorkerCapability;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;

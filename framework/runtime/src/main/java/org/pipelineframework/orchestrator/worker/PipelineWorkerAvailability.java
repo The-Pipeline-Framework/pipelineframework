@@ -1,5 +1,7 @@
-package org.pipelineframework.orchestrator;
+package org.pipelineframework.orchestrator.worker;
 
+import org.pipelineframework.orchestrator.worker.PipelineWorkerAvailabilityRequest;
+import org.pipelineframework.orchestrator.worker.PipelineWorkerAvailabilityResult;
 import io.smallrye.mutiny.Uni;
 
 /**

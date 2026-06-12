@@ -48,6 +48,15 @@ class TransportBoundaryFailureClassifierTest {
     }
 
     @Test
+    void classifiesProcessingExceptionCyclesWithoutRevisitingSeenCauses() {
+        RuntimeException inner = new RuntimeException("inner");
+        ProcessingException outer = new ProcessingException(inner);
+        inner.initCause(outer);
+
+        assertEquals(TransportBoundaryFailureCategory.UNAVAILABLE, classify(outer, false));
+    }
+
+    @Test
     void classifiesGrpcFailures() {
         assertEquals(TransportBoundaryFailureCategory.TIMEOUT, classify(grpc(Status.DEADLINE_EXCEEDED), false));
         assertEquals(TransportBoundaryFailureCategory.AUTH, classify(grpc(Status.UNAUTHENTICATED), false));

@@ -1,5 +1,6 @@
-package org.pipelineframework.orchestrator;
+package org.pipelineframework.orchestrator.release;
 
+import org.pipelineframework.orchestrator.PipelineBundleManifest;
 import java.util.Objects;
 
 /**

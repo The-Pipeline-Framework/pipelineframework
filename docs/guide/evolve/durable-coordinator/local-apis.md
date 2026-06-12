@@ -34,6 +34,8 @@ pipeline.orchestrator.bundles.registry.provider=file
 pipeline.orchestrator.bundles.storage.root=target/tpf-bundles
 ```
 
+Use `pipeline.orchestrator.bundles.registry.provider=dynamo` plus `pipeline.orchestrator.dynamo.release-table` when the release metadata must survive multiple coordinator instances. The Dynamo registry stores immutable release records and append-only activation events.
+
 Main endpoints:
 
 1. `POST /tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/releases/register`

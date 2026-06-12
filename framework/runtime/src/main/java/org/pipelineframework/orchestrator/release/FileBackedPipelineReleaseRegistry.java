@@ -1,5 +1,8 @@
-package org.pipelineframework.orchestrator;
+package org.pipelineframework.orchestrator.release;
 
+import org.pipelineframework.orchestrator.release.PipelineReleaseRecord;
+import org.pipelineframework.orchestrator.release.PipelineReleaseRegistry;
+import org.pipelineframework.orchestrator.release.PipelineReleaseStatus;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
