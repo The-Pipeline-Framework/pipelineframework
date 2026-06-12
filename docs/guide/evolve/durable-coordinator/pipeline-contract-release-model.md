@@ -36,7 +36,7 @@ Inter-pipeline handoff contracts remain a follow-up extension.
 
 ## Release Descriptor
 
-`pipeline-release.json` is emitted by a build or release process after artifacts are built and addressable.
+`pipeline-release.json` is emitted by a build or release process after artifacts are built and addressable in the system that naturally owns that artifact form. TPF should not force every artifact through one store.
 
 It includes:
 
@@ -73,21 +73,31 @@ Example:
 
 The coordinator validates and activates releases. It does not become the deployment engine. Platform-specific tools deploy the artifacts, then the coordinator verifies that workers report matching contract/release capability before accepting work.
 
-## Artifact Kinds
+## Artifact Form Factors
 
 The release descriptor accepts these artifact kinds:
 
-| Kind | Example | Typical use |
+| Kind | Example | Primary backing system | Typical use |
 | --- | --- | --- |
-| `local-file` | `/var/lib/tpf/artifacts/worker.jar` | Local/self-host pilots and air-gapped installs. |
-| `jar` | `file:///opt/tpf/restaurant-worker.jar` or Maven coordinates plus checksum | JVM worker process. |
-| `native-binary` | `/opt/tpf/workers/payment-worker` | Quarkus native worker. |
-| `container-image` | `oci://ecr.example/payments/worker@sha256:...` | Kubernetes, ECS, and production container platforms. |
-| `lambda-zip` | `s3://bucket/payment-worker.zip#sha256:...` | AWS Lambda zip deployment. |
-| `lambda-image` | `oci://ecr.example/payment-lambda@sha256:...` | AWS Lambda container image. |
-| `external-endpoint` | `https://payments.internal/step` | Pre-existing service that satisfies a step contract. |
+| `local-file` | `/var/lib/tpf/artifacts/worker.jar` | local filesystem or managed blob store | Local/self-host pilots and air-gapped installs. |
+| `jar` | Maven coordinate plus checksum or `file:///opt/tpf/restaurant-worker.jar` | Maven repository, JFrog Artifactory, Nexus, or managed blob store | JVM worker process. |
+| `native-binary` | `/opt/tpf/workers/payment-worker` | local filesystem, generic OCI artifact, or managed blob store | Quarkus native worker. |
+| `container-image` | `oci://ecr.example/payments/worker@sha256:...` | OCI registry: ECR, GHCR, JFrog, Harbor, Docker registry | Kubernetes, ECS, and production container platforms. |
+| `lambda-zip` | `s3://bucket/payment-worker.zip#sha256:...` | S3 or S3-compatible object store | AWS Lambda zip deployment. |
+| `lambda-image` | `oci://ecr.example/payment-lambda@sha256:...` | OCI registry, usually ECR for AWS Lambda | AWS Lambda container image. |
+| `external-endpoint` | `https://payments.internal/step` | existing service deployment and service discovery | Pre-existing service that satisfies a step contract. |
 
-Local artifacts are valid, but they still need a digest. Current runtime validation is strongest for local/JAR artifacts. Container, function, and external endpoint artifacts are descriptor-level identities until platform-specific deployers and richer worker capability metadata mature. Production releases should prefer immutable references such as OCI digests, S3 object version plus checksum, Maven coordinate plus checksum, or a signed local manifest in air-gapped deployments.
+Local artifacts are valid, but they still need a digest. Current runtime validation is strongest for local/JAR artifacts. Container, function, and external endpoint artifacts are descriptor-level identities until platform-specific deployers and richer worker capability metadata mature.
+
+Production releases should prefer immutable references in the artifact's native repository: OCI digests for images, Maven coordinates plus checksum for JVM artifacts, S3 object version plus checksum for ZIP/blob artifacts, or a signed local manifest in air-gapped deployments.
+
+### S3 Is A Blob Store, Not The Artifact Repository Strategy
+
+The S3-compatible release artifact store exists so a self-hosted coordinator can copy and verify blob-like artifacts that do not already live in a better artifact repository. Good fits are local/JAR/native artifacts in small self-host installs, Lambda ZIP packages, release descriptor blobs, provenance attachments, and MinIO/LocalStack development setups.
+
+It is not the preferred target for container images. Tools such as Jib produce OCI images; those should be pushed to an OCI registry and referenced from `pipeline-release.json` by immutable digest. TPF should not copy those images into S3.
+
+The release descriptor is the integration point across repositories. A single release can pin a Jib-produced image in ECR, a JVM helper artifact in JFrog, and a Lambda ZIP in S3, while the coordinator validates the contract/release identity and worker capability reports.
 
 ## Ownership Models
 
@@ -132,6 +142,6 @@ CNAB, Open Application Model, Serverless Workflow, and CDEvents are useful refer
 
 ## Relationship To Current Runtime
 
-The current self-host runtime registers releases directly. For local/JAR artifacts, registration can inspect embedded `META-INF/pipeline/pipeline-contract.json` and rejects artifacts whose contract identity does not match the release descriptor.
+The current self-host runtime registers releases directly. For local/JAR artifacts, registration can inspect embedded `META-INF/pipeline/pipeline-contract.json` and rejects artifacts whose contract identity does not match the release descriptor. For container images, the runtime treats the digest as release identity and relies on platform deployment plus worker capability checks; it does not pull, unpack, or copy image layers.
 
 The coordinator validates, activates, pins, and dispatches releases. Platform-specific tools still deploy artifacts outside TPF.

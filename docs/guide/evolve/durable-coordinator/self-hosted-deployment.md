@@ -102,7 +102,20 @@ SQS request/reply worker protocol has one additional v1 constraint: `pipeline.or
 
 The Dynamo release registry stores immutable release records plus append-only activation events. Active release lookup reads the latest activation event for the tenant and pipeline; it does not update a mutable active pointer. New coordinator metadata stores should follow this rule. Existing execution and await Dynamo stores still use conditional updates for leases and state transitions until that storage model is redesigned.
 
-For one-process local development, use `pipeline.orchestrator.releases.storage.provider=local` with `pipeline.orchestrator.releases.storage.root=/var/lib/tpf/releases`. For multi-coordinator self-host deployments, prefer the S3-compatible provider so every coordinator verifies the same managed artifact object. AWS S3, MinIO, and LocalStack-style endpoints fit this model; use `endpoint-override` and `path-style-access=true` for non-AWS S3-compatible stores.
+For one-process local development, use `pipeline.orchestrator.releases.storage.provider=local` with `pipeline.orchestrator.releases.storage.root=/var/lib/tpf/releases`.
+
+For multi-coordinator self-host deployments, choose the artifact backing system by artifact form:
+
+| Artifact form | Recommended backing system |
+| --- | --- |
+| Container worker image, including Jib output | OCI registry such as ECR, GHCR, JFrog, Harbor, or Docker registry. Reference by digest in `pipeline-release.json`; do not copy image layers into the coordinator artifact store. |
+| JVM JAR | Maven/JFrog/Nexus when it is a published JVM artifact, or S3-compatible blob storage when the coordinator must manage the blob directly. |
+| Native binary | OCI generic artifact, local managed filesystem for single-host, or S3-compatible blob storage for shared self-host access. |
+| Lambda ZIP | S3 or S3-compatible object storage. |
+| Lambda container image | OCI registry, usually ECR on AWS. |
+| External endpoint | Existing deployment/service discovery; the descriptor pins endpoint identity and digest/provenance metadata where available. |
+
+The S3-compatible provider is therefore a shared blob-store option, not the default artifact repository strategy. AWS S3, MinIO, and LocalStack-style endpoints fit this model; use `endpoint-override` and `path-style-access=true` for non-AWS S3-compatible stores.
 
 ## Startup Checklist
 
@@ -116,7 +129,7 @@ Before accepting work:
 6. Register and activate the release for the tenant and pipeline.
 7. Submit one canary execution and verify status, pending await interaction, completion, and result.
 
-The current coordinator does not dynamically load registered JAR code. Release registration validates the release descriptor and, for local executable artifacts, validates and stores the artifact in the configured release artifact store. Workers must already host matching code. Worker availability checks verify the active contract/release identity before hosted execution submission, and artifact id/digest when both sides provide it.
+The current coordinator does not dynamically load registered code. Release registration validates the release descriptor and, for local executable artifacts, validates and stores the artifact in the configured release artifact store. Container images remain in the OCI registry; the coordinator records their immutable reference and uses worker capability checks to verify that deployed workers host the active release. Workers must already host matching code. Worker availability checks verify the active contract/release identity before hosted execution submission, and artifact id/digest when both sides provide it.
 
 `pipeline.orchestrator.control-plane.require-remote-worker=true` is recommended for separated self-host deployments. It prevents a coordinator process from silently falling back to the local in-process worker when no REST, gRPC, or SQS worker target is configured. Leave it disabled for the one-process local demo. See [Runtime Boundaries And Performance](/guide/evolve/durable-coordinator/runtime-boundaries-performance).
 
@@ -197,4 +210,4 @@ This recipe intentionally does not include:
 5. worker registration, heartbeat, or drain state,
 6. production tenancy, RBAC, or org/principal management.
 
-The file-backed release registry is suitable for local/dev and single-coordinator self-host pilots. Use the Dynamo release registry for multi-coordinator release metadata. Use the S3-compatible release artifact store for shared artifact objects across coordinator instances.
+The file-backed release registry is suitable for local/dev and single-coordinator self-host pilots. Use the Dynamo release registry for multi-coordinator release metadata. Use the S3-compatible release artifact store only for artifacts that should be coordinator-managed blobs; use OCI or Maven-style repositories for artifacts that already have native repository semantics.

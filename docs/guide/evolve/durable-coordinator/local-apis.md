@@ -35,7 +35,7 @@ pipeline.orchestrator.releases.storage.provider=local
 pipeline.orchestrator.releases.storage.root=target/tpf-releases
 ```
 
-Use `pipeline.orchestrator.releases.registry.provider=dynamo` plus `pipeline.orchestrator.dynamo.release-table` when the release metadata must survive multiple coordinator instances. Pair it with `pipeline.orchestrator.releases.storage.provider=s3` for shared artifact storage. The Dynamo registry stores immutable release records and append-only activation events.
+Use `pipeline.orchestrator.releases.registry.provider=dynamo` plus `pipeline.orchestrator.dynamo.release-table` when the release metadata must survive multiple coordinator instances. Pair it with `pipeline.orchestrator.releases.storage.provider=s3` only for artifacts that should be coordinator-managed blobs. Container images should stay in OCI registries and be referenced by digest. The Dynamo registry stores immutable release records and append-only activation events.
 
 Main endpoints:
 
@@ -45,4 +45,4 @@ Main endpoints:
 4. `GET /tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/releases/{releaseVersion}`
 5. `POST /tpf/admin/tenants/{tenantId}/pipelines/{pipelineId}/releases/{releaseVersion}/activate`
 
-The registration API accepts an absolute local `pipeline-release.json` path. The release descriptor pins one or more artifacts by kind and digest. For executable local artifacts, the registrar validates embedded `META-INF/pipeline/pipeline-contract.json` when present, copies the artifact into the configured release artifact store, records size/checksum metadata, and stores the managed artifact URI.
+The registration API accepts an absolute local `pipeline-release.json` path. The release descriptor pins one or more artifacts by kind and digest. For executable local artifacts, the registrar validates embedded `META-INF/pipeline/pipeline-contract.json` when present, copies the artifact into the configured release artifact store, records size/checksum metadata, and stores the managed artifact URI. For container-image artifacts, registration records the immutable OCI reference; platform deployment and worker capability checks prove the running worker identity.

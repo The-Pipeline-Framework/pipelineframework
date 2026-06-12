@@ -29,4 +29,4 @@ Existing executions, retries, await resumes, and result reads stay pinned to the
 
 Workers must already host matching code. The coordinator validates, activates, pins, and dispatches releases; it does not dynamically load registered artifacts into a worker runtime.
 
-Local artifact storage is still local to the coordinator host. Multi-coordinator self-host deployments should use the S3-compatible artifact store so every coordinator validates the same managed artifact object.
+Local artifact storage is still local to the coordinator host. Multi-coordinator self-host deployments should use the S3-compatible artifact store only for coordinator-managed blob artifacts. Container images should stay in OCI registries and be referenced by digest from the release descriptor.
