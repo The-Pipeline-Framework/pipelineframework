@@ -95,10 +95,20 @@ public class LocalPipelineReleaseArtifactStore implements PipelineReleaseArtifac
         if (artifactUri == null || artifactUri.isBlank()) {
             throw new IllegalArgumentException("Release artifact URI is required");
         }
-        if (artifactUri.startsWith("file:")) {
-            return Path.of(URI.create(artifactUri));
+        URI uri;
+        try {
+            uri = URI.create(artifactUri);
+        } catch (IllegalArgumentException ignored) {
+            return Path.of(artifactUri);
         }
-        return Path.of(artifactUri);
+        if (uri.getScheme() == null) {
+            return Path.of(artifactUri);
+        }
+        if ("file".equalsIgnoreCase(uri.getScheme())) {
+            return Path.of(uri);
+        }
+        throw new IllegalArgumentException(
+            "Unsupported release artifact URI scheme for local artifact store: " + uri.getScheme());
     }
 
     private Path artifactPath(String checksum, Path sourcePath) {

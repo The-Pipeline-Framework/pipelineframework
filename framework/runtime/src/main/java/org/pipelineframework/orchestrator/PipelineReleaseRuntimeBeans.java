@@ -11,8 +11,11 @@ import java.nio.file.Path;
 import java.time.Duration;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Disposes;
+import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;
+import software.amazon.awssdk.services.s3.S3Client;
 
 /**
  * Selects local/dev release runtime collaborators from orchestrator config.
@@ -24,6 +27,9 @@ public class PipelineReleaseRuntimeBeans {
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
+
+    @Inject
+    Instance<S3Client> s3Clients;
 
     @Produces
     @ApplicationScoped
@@ -37,10 +43,25 @@ public class PipelineReleaseRuntimeBeans {
             return new LocalPipelineReleaseArtifactStore(storageRoot());
         }
         if ("s3".equalsIgnoreCase(provider)) {
-            return new S3PipelineReleaseArtifactStore(orchestratorConfig);
+            return new S3PipelineReleaseArtifactStore(
+                s3Clients.get(),
+                S3PipelineReleaseArtifactStore.bucket(orchestratorConfig),
+                S3PipelineReleaseArtifactStore.prefix(orchestratorConfig));
         }
         throw new IllegalStateException(
             "Unsupported pipeline.orchestrator.releases.storage.provider '" + provider + "'");
+    }
+
+    @Produces
+    @ApplicationScoped
+    S3Client s3Client() {
+        return S3PipelineReleaseArtifactStore.newClient(orchestratorConfig);
+    }
+
+    void closeS3Client(@Disposes S3Client client) {
+        if (client != null) {
+            client.close();
+        }
     }
 
     @Produces

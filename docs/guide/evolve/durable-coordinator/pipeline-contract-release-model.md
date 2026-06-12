@@ -87,7 +87,7 @@ The release descriptor accepts these artifact kinds:
 | `lambda-image` | `oci://ecr.example/payment-lambda@sha256:...` | OCI registry, usually ECR for AWS Lambda | AWS Lambda container image. |
 | `external-endpoint` | `https://payments.internal/step` | existing service deployment and service discovery | Pre-existing service that satisfies a step contract. |
 
-Local artifacts are valid, but they still need a digest. Current runtime validation is strongest for local/JAR artifacts. Container, function, and external endpoint artifacts are descriptor-level identities until platform-specific deployers and richer worker capability metadata mature.
+Local artifacts are valid, but they still need a digest. Current runtime validation is strongest for local/JAR artifacts. Container images are already treated as digest-backed release identities and remain in OCI registries. Function and external endpoint artifacts are descriptor-level identities until platform-specific deployers and richer worker capability metadata mature.
 
 Production releases should prefer immutable references in the artifact's native repository: OCI digests for images, Maven coordinates plus checksum for JVM artifacts, S3 object version plus checksum for ZIP/blob artifacts, or a signed local manifest in air-gapped deployments.
 

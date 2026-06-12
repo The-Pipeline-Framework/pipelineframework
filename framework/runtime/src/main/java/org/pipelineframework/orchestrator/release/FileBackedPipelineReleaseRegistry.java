@@ -45,7 +45,7 @@ public class FileBackedPipelineReleaseRegistry implements PipelineReleaseRegistr
                     .findFirst();
                 if (existing.isPresent()) {
                     PipelineReleaseRecord value = existing.get();
-                    if (!sameMetadata(value, record)) {
+                    if (!PipelineReleaseRecordMetadata.sameImmutableMetadata(value, record)) {
                         throw new IllegalStateException(
                             "Release version is already registered with different metadata");
                     }
@@ -168,10 +168,4 @@ public class FileBackedPipelineReleaseRegistry implements PipelineReleaseRegistr
             && record.releaseVersion().equals(releaseVersion);
     }
 
-    private static boolean sameMetadata(PipelineReleaseRecord left, PipelineReleaseRecord right) {
-        return left.contractVersion().equals(right.contractVersion())
-            && left.primaryArtifactUri().equals(right.primaryArtifactUri())
-            && left.primaryArtifactSizeBytes() == right.primaryArtifactSizeBytes()
-            && left.primaryArtifactChecksum().equals(right.primaryArtifactChecksum());
-    }
 }
