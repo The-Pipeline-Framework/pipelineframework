@@ -142,6 +142,8 @@ class SpringRuntimeAdaptersAutoConfigurationTest {
         AnnotationConfigApplicationContext secondContext = springContextWithService("second");
         SpringRuntimeAdapterBootstrap firstBootstrap = new SpringRuntimeAdapterBootstrap(firstContext, firstContext, null, null);
         SpringRuntimeAdapterBootstrap secondBootstrap = new SpringRuntimeAdapterBootstrap(secondContext, secondContext, null, null);
+        boolean firstCleaned = false;
+        boolean secondCleaned = false;
 
         try {
             firstBootstrap.afterPropertiesSet();
@@ -152,13 +154,19 @@ class SpringRuntimeAdaptersAutoConfigurationTest {
 
             secondBootstrap.destroy();
             secondContext.close();
+            secondCleaned = true;
 
             assertEquals("first", RuntimeAdapters.resolveBean(SampleService.class).orElseThrow().name());
         } finally {
-            secondBootstrap.destroy();
-            secondContext.close();
-            firstBootstrap.destroy();
-            firstContext.close();
+            if (!secondCleaned) {
+                secondBootstrap.destroy();
+                secondContext.close();
+            }
+            if (!firstCleaned) {
+                firstBootstrap.destroy();
+                firstContext.close();
+                firstCleaned = true;
+            }
         }
 
         assertTrue(RuntimeAdapters.resolveBean(SampleService.class).isEmpty());

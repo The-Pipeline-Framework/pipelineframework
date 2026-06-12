@@ -106,16 +106,15 @@ public class SpringRuntimeAdapterBootstrap implements InitializingBean, Disposab
             ownedVirtualThreadExecutor.close();
         } finally {
             synchronized (REGISTRATION_LOCK) {
-                if (registration == null) {
-                    return;
-                }
-                ACTIVE_REGISTRATIONS.remove(registration);
-                registration = null;
-                SpringAdapterRegistration activeRegistration = ACTIVE_REGISTRATIONS.peekLast();
-                if (activeRegistration == null) {
-                    RuntimeAdapters.resetForTests();
-                } else {
-                    activeRegistration.install();
+                if (registration != null) {
+                    ACTIVE_REGISTRATIONS.remove(registration);
+                    registration = null;
+                    SpringAdapterRegistration activeRegistration = ACTIVE_REGISTRATIONS.peekLast();
+                    if (activeRegistration == null) {
+                        RuntimeAdapters.resetForTests();
+                    } else {
+                        activeRegistration.install();
+                    }
                 }
             }
         }
