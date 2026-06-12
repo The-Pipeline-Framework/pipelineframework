@@ -46,9 +46,11 @@ export async function completeCheckoutInteraction(formData) {
   try {
     const completed = await completeInteraction({ interactionId, payload, targetId });
     const completedInteractionId = String(completed?.interactionId || interactionId);
+    const completedExecutionId = String(completed?.executionId || "").trim();
     const completedStage = stageId ? `&completedStage=${encodeURIComponent(stageId)}` : "";
     const target = targetId ? `&target=${encodeURIComponent(targetId)}` : "";
-    destination = `/interactions?completed=${encodeURIComponent(completedInteractionId)}${completedStage}${target}`;
+    const execution = completedExecutionId ? `&execution=${encodeURIComponent(completedExecutionId)}` : "";
+    destination = `/interactions?completed=${encodeURIComponent(completedInteractionId)}${completedStage}${target}${execution}`;
   } catch (error) {
     const message = String(error?.message || "Interaction completion failed.").slice(0, 600);
     destination = `/interactions?error=${encodeURIComponent(message)}`;

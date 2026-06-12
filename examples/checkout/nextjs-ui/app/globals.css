@@ -123,6 +123,18 @@ button:disabled {
   text-decoration: none;
 }
 
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
 .button.primary {
   border-color: var(--primary);
   background: var(--primary);
@@ -465,6 +477,96 @@ button:disabled {
 .checkpoint-rail {
   display: grid;
   gap: 0.65rem;
+}
+
+.journey-tracker {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.journey-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.journey-heading h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.journey-stages {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.journey-stages li {
+  display: grid;
+  grid-template-columns: 1.75rem 1fr;
+  gap: 0.55rem;
+  align-items: start;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.journey-stages li.complete {
+  border-color: rgb(21 128 61 / 28%);
+  background: #f0fdf4;
+}
+
+.journey-stages li.active,
+.journey-stages li.released {
+  border-color: rgb(37 99 235 / 32%);
+  background: #eff6ff;
+}
+
+.journey-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--primary);
+}
+
+.journey-stages strong,
+.journey-events strong {
+  display: block;
+}
+
+.journey-stages span,
+.journey-events span,
+.journey-events p {
+  display: block;
+  margin: 0.12rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.journey-events {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.journey-events div,
+.journey-events p {
+  margin: 0;
+  padding: 0.55rem;
+  border-radius: 8px;
+  background: var(--surface-muted);
 }
 
 .checkpoint-rail li {

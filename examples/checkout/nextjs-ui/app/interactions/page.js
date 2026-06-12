@@ -8,6 +8,7 @@ import { stageIdForInteraction } from "../../lib/checkout-ui.js";
 import { ApprovalCheckpointRail } from "../components/FlowRail.js";
 import AutoRefresh from "../components/AutoRefresh.js";
 import InteractionDecisionPanel from "../components/InteractionDecisionPanel.js";
+import JourneyTracker from "../components/JourneyTracker.js";
 import StatusNotice from "../components/StatusNotice.js";
 import { shortIdentifier } from "../../lib/checkout-ui.js";
 
@@ -27,6 +28,7 @@ export default async function PendingInteractionsPage({ searchParams }) {
   const completedStageId = String(resolvedSearchParams.completedStage || "").trim();
   const completionError = String(resolvedSearchParams.error || "").trim();
   const startedExecutionId = String(resolvedSearchParams.started || "").trim();
+  const completedExecutionId = String(resolvedSearchParams.execution || "").trim();
   const progress = checkpointProgress(completedStageId);
   let interactions = [];
   let errorMessage = null;
@@ -40,7 +42,7 @@ export default async function PendingInteractionsPage({ searchParams }) {
 
   return (
     <main className="app-shell">
-      {startedExecutionId || completedInteractionId ? <AutoRefresh /> : null}
+      {startedExecutionId || completedInteractionId ? <AutoRefresh attempts={40} intervalMs={1500} /> : null}
       <header className="topbar">
         <div>
           <p className="eyebrow">Approval desk</p>
@@ -69,6 +71,13 @@ export default async function PendingInteractionsPage({ searchParams }) {
           <ApprovalCheckpointRail
             activeStageId={activeStageId(interactions, completedStageId)}
             activeLabel={interactions.length > 0 ? "Current approval task" : "Expected next approval"}
+          />
+          <JourneyTracker
+            completedExecutionId={completedExecutionId}
+            completedInteractionId={completedInteractionId}
+            completedStageId={completedStageId}
+            interactions={interactions}
+            startedExecutionId={startedExecutionId}
           />
         </aside>
 

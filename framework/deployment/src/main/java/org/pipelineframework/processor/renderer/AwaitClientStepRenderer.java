@@ -170,13 +170,10 @@ public class AwaitClientStepRenderer {
     }
 
     private PipelineConfigHints resolveConfigHints(GenerationContext ctx) {
-        if (ctx.transportMode() != null && ctx.pipelineBasePackage() != null && !ctx.pipelineBasePackage().isBlank()) {
-            return new PipelineConfigHints(ctx.transportMode(), ctx.pipelineBasePackage());
-        }
         Map<String, String> options = ctx.processingEnv() == null ? Map.of() : ctx.processingEnv().getOptions();
         PipelineTransport configuredTransport = PipelineTransport.fromStringOptional(
             options == null ? null : options.get("pipeline.transport")).orElse(null);
-        String basePackage = null;
+        String basePackage = ctx.pipelineBasePackage();
         if (options != null) {
             String configPath = options.get("pipeline.config");
             if (configPath != null && !configPath.isBlank()) {
@@ -185,12 +182,14 @@ public class AwaitClientStepRenderer {
                     if (configuredTransport == null) {
                         configuredTransport = PipelineTransport.fromString(config.transport());
                     }
-                    basePackage = config.basePackage();
+                    if (config.basePackage() != null && !config.basePackage().isBlank()) {
+                        basePackage = config.basePackage();
+                    }
                 }
             }
         }
         if (configuredTransport == null) {
-            configuredTransport = PipelineTransport.GRPC;
+            configuredTransport = ctx.transportMode() == null ? PipelineTransport.GRPC : ctx.transportMode();
         }
         return new PipelineConfigHints(configuredTransport, basePackage);
     }
