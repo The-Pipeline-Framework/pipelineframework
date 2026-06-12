@@ -5,7 +5,6 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import jakarta.annotation.PreDestroy;
 
@@ -50,6 +49,7 @@ public class DynamoPipelineReleaseRegistry implements PipelineReleaseRegistry {
     private static final String PRIMARY_ARTIFACT_ID = "primary_artifact_id";
     private static final String PRIMARY_ARTIFACT_DIGEST = "primary_artifact_digest";
     private static final String PRIMARY_ARTIFACT_URI = "primary_artifact_uri";
+    private static final String LEGACY_PRIMARY_ARTIFACT_PATH = "primary_artifact_path";
     private static final String PRIMARY_ARTIFACT_SIZE_BYTES = "primary_artifact_size_bytes";
     private static final String PRIMARY_ARTIFACT_CHECKSUM = "primary_artifact_checksum";
     private static final String DESCRIPTOR_JSON = "descriptor_json";
@@ -134,7 +134,7 @@ public class DynamoPipelineReleaseRegistry implements PipelineReleaseRegistry {
             record.releaseVersion());
         if (existing.isPresent()) {
             PipelineReleaseRecord current = existing.get();
-            if (!sameImmutableMetadata(current, record)) {
+            if (!PipelineReleaseRecordMetadata.sameImmutableMetadata(current, record)) {
                 throw new IllegalStateException("Release version is already registered with different metadata");
             }
             return current;
@@ -150,7 +150,7 @@ public class DynamoPipelineReleaseRegistry implements PipelineReleaseRegistry {
         } catch (ConditionalCheckFailedException ignored) {
             PipelineReleaseRecord current = getBlocking(record.tenantId(), record.pipelineId(), record.releaseVersion())
                 .orElseThrow(() -> new IllegalStateException("Release registration lost race but no record was found"));
-            if (!sameImmutableMetadata(current, record)) {
+            if (!PipelineReleaseRecordMetadata.sameImmutableMetadata(current, record)) {
                 throw new IllegalStateException("Release version is already registered with different metadata");
             }
             return current;
@@ -272,7 +272,7 @@ public class DynamoPipelineReleaseRegistry implements PipelineReleaseRegistry {
             fromJson(stringValue(item, DESCRIPTOR_JSON), PipelineReleaseDescriptor.class),
             stringValue(item, PRIMARY_ARTIFACT_ID),
             stringValue(item, PRIMARY_ARTIFACT_DIGEST),
-            stringValue(item, PRIMARY_ARTIFACT_URI),
+            artifactUriValue(item),
             longValue(item, PRIMARY_ARTIFACT_SIZE_BYTES),
             stringValue(item, PRIMARY_ARTIFACT_CHECKSUM),
             fromJson(stringValue(item, CONTRACT_JSON), PipelineContractDescriptor.class),
@@ -401,6 +401,19 @@ public class DynamoPipelineReleaseRegistry implements PipelineReleaseRegistry {
         return value.s();
     }
 
+    private static String artifactUriValue(Map<String, AttributeValue> item) {
+        AttributeValue current = item.get(PRIMARY_ARTIFACT_URI);
+        if (current != null && current.s() != null && !current.s().isBlank()) {
+            return current.s();
+        }
+        AttributeValue legacy = item.get(LEGACY_PRIMARY_ARTIFACT_PATH);
+        if (legacy != null && legacy.s() != null && !legacy.s().isBlank()) {
+            return legacy.s();
+        }
+        throw new IllegalStateException(
+            "Dynamo release registry record is missing string attribute " + PRIMARY_ARTIFACT_URI);
+    }
+
     private static long longValue(Map<String, AttributeValue> item, String name) {
         AttributeValue value = item.get(name);
         if (value == null || value.n() == null) {
@@ -423,18 +436,6 @@ public class DynamoPipelineReleaseRegistry implements PipelineReleaseRegistry {
         } catch (Exception e) {
             throw new IllegalStateException("Failed deserializing release registry value " + type.getName(), e);
         }
-    }
-
-    private static boolean sameImmutableMetadata(PipelineReleaseRecord left, PipelineReleaseRecord right) {
-        return left.contractVersion().equals(right.contractVersion())
-            && left.releaseVersion().equals(right.releaseVersion())
-            && left.primaryArtifactId().equals(right.primaryArtifactId())
-            && left.primaryArtifactDigest().equals(right.primaryArtifactDigest())
-            && left.primaryArtifactUri().equals(right.primaryArtifactUri())
-            && left.primaryArtifactSizeBytes() == right.primaryArtifactSizeBytes()
-            && left.primaryArtifactChecksum().equals(right.primaryArtifactChecksum())
-            && Objects.equals(left.descriptor(), right.descriptor())
-            && Objects.equals(left.contract(), right.contract());
     }
 
     private static <T> Uni<T> blocking(java.util.function.Supplier<T> supplier) {
