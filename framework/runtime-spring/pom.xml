@@ -29,6 +29,22 @@
     <name>The Pipeline Framework Runtime Spring</name>
     <description>Spring Boot adapter for Pipeline Framework runtime-core contracts</description>
 
+    <properties>
+        <spring.boot.version>4.0.7</spring.boot.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring.boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <dependency>
             <groupId>org.pipelineframework</groupId>
