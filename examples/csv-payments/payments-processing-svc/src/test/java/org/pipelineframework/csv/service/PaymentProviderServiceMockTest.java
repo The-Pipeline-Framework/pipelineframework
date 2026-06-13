@@ -118,6 +118,11 @@ class PaymentProviderServiceMockTest {
     public double providerRejectProbability() {
       return 0.0;
     }
+
+    @Override
+    public long responseDelayMillis() {
+      return 0L;
+    }
   }
 
   private static final class NegativeTimeoutPaymentProviderConfig extends FakePaymentProviderConfig {

@@ -663,6 +663,15 @@ class QueueAsyncCoordinator {
       AwaitItemContinuationHandler itemContinuationHandler,
       long nowEpochMs,
       int attempt) {
+    Optional<TransitionWorkerExecutor.TransitionAdmission> admission = transitionWorkerExecutor.tryAdmit();
+    if (admission.isEmpty()) {
+      queueSweepExecutor.schedule(
+          () -> dispatchAwaitItemContinuationAttempt(record, unit, itemContinuationHandler, nowEpochMs, attempt),
+          saturatedDelay().toMillis(),
+          TimeUnit.MILLISECONDS);
+      return;
+    }
+    TransitionWorkerExecutor.TransitionAdmission permit = admission.get();
     Infrastructure.getDefaultExecutor().execute(() ->
         executionStateStore
             .getExecution(record.tenantId(), record.executionId())
@@ -674,8 +683,10 @@ class QueueAsyncCoordinator {
                 nowEpochMs))
             .subscribe().with(
                 ignored -> {
+                  permit.close();
                 },
                 failure -> {
+                  permit.close();
                   if (attempt < AWAIT_ITEM_CONTINUATION_MAX_ATTEMPTS) {
                     long retryDelayMs = awaitItemContinuationRetryDelayMs(attempt);
                     LOG.warnf(

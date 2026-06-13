@@ -51,6 +51,16 @@ csv-payments.payment.requests
 csv-payments.payment.results
 ```
 
+## Containerized Self-Hosted HA Reference
+
+For a compute-first self-hosted HA reference with a durable coordinator, REST transition worker, Kafka await completions, Postgres persistence, and LocalStack-backed DynamoDB/SQS/S3-compatible coordinator stores:
+
+```bash
+./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
+```
+
+This is the advanced Kafka/stream-await reference. The smaller human-await reference remains `examples/restaurant-approval/self-host/container`.
+
 ## Running End-to-End Tests
 
 To run the end-to-end integration test that starts all services and processes a sample CSV file:

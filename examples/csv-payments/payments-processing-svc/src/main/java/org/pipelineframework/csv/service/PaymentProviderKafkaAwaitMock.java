@@ -16,6 +16,7 @@
 
 package org.pipelineframework.csv.service;
 
+import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.CompletionStage;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -48,6 +49,9 @@ public class PaymentProviderKafkaAwaitMock {
   PaymentProviderServiceMock paymentProvider;
 
   @Inject
+  PaymentProviderConfig paymentProviderConfig;
+
+  @Inject
   @Channel(RESULT_CHANNEL)
   MutinyEmitter<String> results;
 
@@ -57,6 +61,7 @@ public class PaymentProviderKafkaAwaitMock {
     return Uni.createFrom().item(() -> parseDispatch(message.getPayload()))
         .runSubscriptionOn(Infrastructure.getDefaultExecutor())
         .onItem().transform(this::handle)
+        .onItem().transformToUni(this::delayCompletion)
         .onItem().transformToUni(completion -> results.send(serialize(completion)))
         .replaceWithVoid()
         .subscribeAsCompletionStage()
@@ -79,6 +84,15 @@ public class PaymentProviderKafkaAwaitMock {
         dispatch.interactionId(),
         status,
         "csv-payments-mock-provider");
+  }
+
+  private Uni<KafkaAwaitCompletionEnvelope> delayCompletion(KafkaAwaitCompletionEnvelope completion) {
+    long delayMillis = paymentProviderConfig.responseDelayMillis();
+    Uni<KafkaAwaitCompletionEnvelope> completionUni = Uni.createFrom().item(completion);
+    if (delayMillis <= 0) {
+      return completionUni;
+    }
+    return completionUni.onItem().delayIt().by(Duration.ofMillis(delayMillis));
   }
 
   private static void validatePaymentRecord(PaymentRecord paymentRecord) {

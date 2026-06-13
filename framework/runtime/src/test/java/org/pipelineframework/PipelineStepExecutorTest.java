@@ -22,6 +22,8 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import io.quarkus.arc.ClientProxy;
+import io.quarkus.arc.InjectableBean;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
@@ -31,6 +33,9 @@ import org.pipelineframework.awaitable.AwaitStreamOneToOneStep;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
+import org.pipelineframework.service.ReactiveService;
+import org.pipelineframework.service.ReactiveStreamingService;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepManyToMany;
 import org.pipelineframework.step.StepOneToMany;
@@ -74,6 +79,78 @@ class PipelineStepExecutorTest {
             null);
 
         assertEquals(List.of("a-done", "b-done"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void applyStepUnwrapsArcClientProxyBeforeDispatch() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+
+        Object result = executor.applyStep(
+            new ArcProxyOnlyStep(new SuffixOneToOneStep("-done")),
+            Uni.createFrom().item("a"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null);
+
+        assertEquals("a-done", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void applyStepExecutesReactiveServiceContract() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+
+        Object result = executor.applyStep(
+            (ReactiveService<String, String>) input -> Uni.createFrom().item(input + "-service"),
+            Uni.createFrom().item("a"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null);
+
+        assertEquals("a-service", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void applyStepExecutesReactiveStreamingServiceContract() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+
+        Object result = executor.applyStep(
+            (ReactiveStreamingService<String, String>) input -> Multi.createFrom().items(input + "-1", input + "-2"),
+            Uni.createFrom().item("a"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null);
+
+        assertEquals(List.of("a-1", "a-2"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void applyStepExecutesReactiveBidirectionalStreamingServiceContract() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+
+        Object result = executor.applyStep(
+            (ReactiveBidirectionalStreamingService<String, String>) input -> input.map(item -> item + "-mapped"),
+            Multi.createFrom().items("a", "b"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null);
+
+        assertEquals(List.of("a-mapped", "b-mapped"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
     }
 
     @Test
@@ -300,6 +377,24 @@ class PipelineStepExecutorTest {
         @Override
         public Uni<String> applyOneToOne(String input) {
             return Uni.createFrom().item(input + suffix);
+        }
+    }
+
+    static final class ArcProxyOnlyStep implements ClientProxy {
+        private final Object delegate;
+
+        ArcProxyOnlyStep(Object delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public Object arc_contextualInstance() {
+            return delegate;
+        }
+
+        @Override
+        public InjectableBean<?> arc_bean() {
+            throw new UnsupportedOperationException("arc_bean is not used by this test proxy");
         }
     }
 

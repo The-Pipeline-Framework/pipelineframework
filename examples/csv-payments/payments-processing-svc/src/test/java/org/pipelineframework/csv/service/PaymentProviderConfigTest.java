@@ -48,6 +48,11 @@ class PaymentProviderConfigTest {
                     public double providerRejectProbability() {
                         return 0.0;
                     }
+
+                    @Override
+                    public long responseDelayMillis() {
+                        return 0L;
+                    }
                 };
     }
 
@@ -69,5 +74,10 @@ class PaymentProviderConfigTest {
     @Test
     void testDefaultProviderRejectProbability() {
         assertThat(config.providerRejectProbability()).isEqualTo(0.0);
+    }
+
+    @Test
+    void testDefaultResponseDelayMillis() {
+        assertThat(config.responseDelayMillis()).isZero();
     }
 }
