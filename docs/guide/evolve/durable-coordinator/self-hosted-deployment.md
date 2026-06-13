@@ -1,8 +1,8 @@
 # Self-Hosted Deployment Recipe
 
-This page describes the current production-ish self-host shape for the durable coordinator. It is not a deployment stack or a managed service contract. It is a recipe for operators who want to run the coordinator with durable stores, explicit worker boundaries, and known manual procedures.
+This page describes the current production-ish self-host shape for the durable coordinator. It is not a deployment stack or a managed service contract. It is a recipe for operators who want to run a compute-first coordinator with durable stores, explicit worker boundaries, and known manual procedures.
 
-The runnable starting point remains `examples/restaurant-approval/self-host`. That example proves the same control-plane, release, await, result, and failure/DLQ paths in one local process.
+The runnable starting point remains `examples/restaurant-approval/self-host`. That example proves the same control-plane, release, await, result, and failure/DLQ paths in one local process. The containerized HA reference in `examples/restaurant-approval/self-host/container` runs the same flow with a coordinator container, REST worker container, and LocalStack-backed DynamoDB/SQS/S3-compatible services.
 
 ## Deployment Shapes
 
@@ -47,6 +47,8 @@ gRPC follows the same model with `pipeline.orchestrator.worker.grpc.endpoint`, `
 Use this shape for production-style recovery tests and self-host pilots.
 
 The coordinator persists execution and await state in DynamoDB-style tables, dispatches work through SQS-style queues, and publishes terminal execution failures to a durable DLQ. Workers can still be local, REST, gRPC, or SQS request/reply workers, but a separated REST or gRPC worker is the clearer operational boundary.
+
+This is the TPF-owned HA path. Current `FUNCTION` builds are serverless invocation artifacts; they do not own durable execution records, await units, leases, DLQ/re-drive, or release pinning inside the function runtime. An all-serverless durable coordinator would require a different architecture backed by durable services such as DynamoDB, SQS, and EventBridge-style scheduling.
 
 Minimum coordinator configuration:
 
@@ -121,6 +123,14 @@ For multi-coordinator self-host deployments, choose the artifact backing system 
 
 The S3-compatible provider is therefore a shared blob-store option, not the default artifact repository strategy. AWS S3, MinIO, and LocalStack-style endpoints fit this model; use `endpoint-override` and `path-style-access=true` for non-AWS S3-compatible stores.
 
+The restaurant container reference demonstrates this baseline locally:
+
+```bash
+./examples/restaurant-approval/self-host/container/run-container-ha-demo.sh --ci
+```
+
+It uses LocalStack to create the required DynamoDB tables, SQS work/DLQ queues, and S3-compatible release artifact bucket. Treat that as local verification of the topology, not production AWS provisioning.
+
 ## Startup Checklist
 
 Before accepting work:
@@ -161,12 +171,20 @@ Activation affects new executions only. Existing executions remain pinned to the
 
 The restaurant self-host client demonstrates this flow through `run-self-hosted-demo.sh --ci`.
 
+The containerized HA reference demonstrates the same flow through `self-host/container/run-container-ha-demo.sh --ci`.
+
 ### Incident Triage
 
 Use the restaurant incident demo as the current failure-visibility proof:
 
 ```bash
 ./examples/restaurant-approval/self-host/run-self-hosted-incident.sh --ci
+```
+
+For the containerized HA reference:
+
+```bash
+./examples/restaurant-approval/self-host/container/run-container-ha-incident.sh --ci
 ```
 
 For real incidents:

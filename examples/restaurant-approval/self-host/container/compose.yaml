@@ -1,0 +1,139 @@
+name: restaurant-self-host-ha
+
+services:
+  localstack:
+    image: localstack/localstack:3.8
+    ports:
+      - "${TPF_LOCALSTACK_PORT:-4566}:4566"
+    environment:
+      SERVICES: dynamodb,sqs,s3
+      AWS_DEFAULT_REGION: "${AWS_REGION:-us-east-1}"
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      SQS_ENDPOINT_STRATEGY: path
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  worker:
+    image: "${TPF_RESTAURANT_IMAGE:-localhost/restaurant-approval/monolith-svc:latest}"
+    depends_on:
+      localstack:
+        condition: service_healthy
+    ports:
+      - "${TPF_WORKER_PORT:-8181}:8181"
+    volumes:
+      - "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}:${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}:ro"
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: "${AWS_REGION:-us-east-1}"
+      CLIENT_TRUSTSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/restaurant-approval/target/dev-certs/orchestrator-svc/client-truststore.jks"
+      SERVER_KEYSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/restaurant-approval/target/dev-certs/monolith-svc/server-keystore.p12"
+      PIPELINE_CONFIG: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/restaurant-approval/config/pipeline.yaml"
+      TPF_WORKER_SECRET: "${TPF_WORKER_SECRET:-restaurant-transition-worker-secret}"
+      JAVA_OPTS_APPEND: >-
+        --enable-preview
+        -Dquarkus.http.host=0.0.0.0
+        -Dquarkus.http.port=8181
+        -Dquarkus.http.ssl-port=0
+        -Dquarkus.http.insecure-requests=enabled
+        -Dquarkus.grpc.server.use-separate-server=false
+        -Dquarkus.grpc.server.plain-text=true
+        -Dpipeline.module.monolith-svc.host=localhost
+        -Dpipeline.module.monolith-svc.port=8181
+        -Dquarkus.rest-client.process-validate-order-request.url=http://localhost:8181
+        -Dquarkus.rest-client.process-create-pending-approval.url=http://localhost:8181
+        -Dquarkus.rest-client.process-finalize-restaurant-decision.url=http://localhost:8181
+        -Dquarkus.otel.enabled=false
+        -Dquarkus.otel.sdk.disabled=true
+        -Dquarkus.micrometer.export.prometheus.enabled=false
+        -Dquarkus.micrometer.binder.http-server.enabled=false
+        -Dquarkus.micrometer.binder.http-client.enabled=false
+        -Dquarkus.micrometer.binder.netty.enabled=false
+        -Dpipeline.orchestrator.mode=QUEUE_ASYNC
+        -Dpipeline.orchestrator.worker.rest.server-enabled=true
+        -Dpipeline.orchestrator.worker.rest.shared-secret-ref=env:TPF_WORKER_SECRET
+        -Dpipeline.orchestrator.strict-startup=false
+
+  coordinator:
+    image: "${TPF_RESTAURANT_IMAGE:-localhost/restaurant-approval/monolith-svc:latest}"
+    depends_on:
+      localstack:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    ports:
+      - "${TPF_COORDINATOR_PORT:-8081}:8081"
+    volumes:
+      - "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}:${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}:ro"
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: "${AWS_REGION:-us-east-1}"
+      CLIENT_TRUSTSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/restaurant-approval/target/dev-certs/orchestrator-svc/client-truststore.jks"
+      SERVER_KEYSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/restaurant-approval/target/dev-certs/monolith-svc/server-keystore.p12"
+      PIPELINE_CONFIG: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/restaurant-approval/config/pipeline.yaml"
+      TPF_CONTROL_PLANE_TOKEN: "${TPF_CONTROL_PLANE_TOKEN:-restaurant-control-plane-admin-token}"
+      TPF_ADMIN_TOKEN: "${TPF_ADMIN_TOKEN:-restaurant-control-plane-admin-token}"
+      TPF_WORKER_SECRET: "${TPF_WORKER_SECRET:-restaurant-transition-worker-secret}"
+      JAVA_OPTS_APPEND: >-
+        --enable-preview
+        -Dquarkus.http.host=0.0.0.0
+        -Dquarkus.http.port=8081
+        -Dquarkus.http.ssl-port=0
+        -Dquarkus.http.insecure-requests=enabled
+        -Dquarkus.grpc.server.use-separate-server=false
+        -Dquarkus.grpc.server.plain-text=true
+        -Dpipeline.module.monolith-svc.host=localhost
+        -Dpipeline.module.monolith-svc.port=8081
+        -Dquarkus.rest-client.process-validate-order-request.url=http://localhost:8081
+        -Dquarkus.rest-client.process-create-pending-approval.url=http://localhost:8081
+        -Dquarkus.rest-client.process-finalize-restaurant-decision.url=http://localhost:8081
+        -Dquarkus.otel.enabled=false
+        -Dquarkus.otel.sdk.disabled=true
+        -Dquarkus.micrometer.export.prometheus.enabled=false
+        -Dquarkus.micrometer.binder.http-server.enabled=false
+        -Dquarkus.micrometer.binder.http-client.enabled=false
+        -Dquarkus.micrometer.binder.netty.enabled=false
+        -Dpipeline.orchestrator.mode=QUEUE_ASYNC
+        -Dpipeline.orchestrator.strict-startup=true
+        -Dpipeline.orchestrator.idempotency-policy=CLIENT_KEY_REQUIRED
+        -Dpipeline.orchestrator.state-provider=dynamo
+        -Dpipeline.orchestrator.dispatcher-provider=sqs
+        -Dpipeline.orchestrator.dlq-provider=sqs
+        -Dpipeline.orchestrator.queue-url=http://localstack:4566/000000000000/tpf-work
+        -Dpipeline.orchestrator.dlq-url=http://localstack:4566/000000000000/tpf-execution-dlq
+        -Dpipeline.orchestrator.max-retries=${TPF_ORCHESTRATOR_MAX_RETRIES:-3}
+        -Dpipeline.orchestrator.retry-delay=${TPF_ORCHESTRATOR_RETRY_DELAY:-PT1S}
+        -Dpipeline.orchestrator.sqs.local-loopback=false
+        -Dpipeline.orchestrator.sqs.region=${AWS_REGION:-us-east-1}
+        -Dpipeline.orchestrator.sqs.endpoint-override=http://localstack:4566
+        -Dpipeline.orchestrator.dynamo.region=${AWS_REGION:-us-east-1}
+        -Dpipeline.orchestrator.dynamo.endpoint-override=http://localstack:4566
+        -Dpipeline.orchestrator.dynamo.execution-table=tpf_execution
+        -Dpipeline.orchestrator.dynamo.execution-key-table=tpf_execution_key
+        -Dpipeline.orchestrator.dynamo.await-unit-table=tpf_await_unit
+        -Dpipeline.orchestrator.dynamo.await-interaction-table=tpf_await_interaction
+        -Dpipeline.orchestrator.dynamo.await-interaction-key-table=tpf_await_interaction_key
+        -Dpipeline.orchestrator.dynamo.release-table=tpf_release_registry
+        -Dpipeline.orchestrator.dynamo.worker-table=tpf_worker_registry
+        -Dpipeline.orchestrator.control-plane.enabled=true
+        -Dpipeline.orchestrator.control-plane.admin-token-ref=env:TPF_CONTROL_PLANE_TOKEN
+        -Dpipeline.orchestrator.control-plane.require-remote-worker=true
+        -Dpipeline.orchestrator.admin.enabled=true
+        -Dpipeline.orchestrator.admin.admin-token-ref=env:TPF_ADMIN_TOKEN
+        -Dpipeline.orchestrator.releases.registry.provider=dynamo
+        -Dpipeline.orchestrator.releases.storage.provider=s3
+        -Dpipeline.orchestrator.releases.storage.s3.bucket=tpf-release-artifacts
+        -Dpipeline.orchestrator.releases.storage.s3.prefix=restaurant/releases
+        -Dpipeline.orchestrator.releases.storage.s3.region=${AWS_REGION:-us-east-1}
+        -Dpipeline.orchestrator.releases.storage.s3.endpoint-override=http://localstack:4566
+        -Dpipeline.orchestrator.releases.storage.s3.path-style-access=true
+        -Dpipeline.orchestrator.worker.lifecycle.provider=dynamo
+        -Dpipeline.orchestrator.worker.lifecycle.stale-after=PT2M
+        -Dpipeline.orchestrator.worker.rest.base-url=http://worker:8181
+        -Dpipeline.orchestrator.worker.rest.request-timeout=${TPF_WORKER_REQUEST_TIMEOUT:-PT120S}
+        -Dpipeline.orchestrator.worker.rest.shared-secret-ref=env:TPF_WORKER_SECRET

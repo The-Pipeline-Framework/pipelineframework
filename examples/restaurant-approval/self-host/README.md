@@ -6,6 +6,8 @@ The default demo runs one packaged `monolith-svc` process with the generic contr
 
 The separate REST worker script remains available for protocol experiments, but it is not the default adoption path.
 
+For a compute-first HA-shaped reference with containers, DynamoDB/SQS-compatible backing services, S3-compatible release artifact storage, and a separate REST worker, use [container/](./container/README.md).
+
 ## Quick Start
 
 From the repository root:
@@ -54,6 +56,14 @@ The incident script sets `TPF_ORCHESTRATOR_MAX_RETRIES=0` by default so the fail
 These defaults are local/dev only. Real self-host deployments should use secret references, durable stores, and explicit operational runbooks.
 
 For the production-ish topology, durable provider choices, secret refs, and manual upgrade/drain procedure, see [Self-Hosted Deployment](/guide/evolve/durable-coordinator/self-hosted-deployment).
+
+For the local containerized HA reference:
+
+```bash
+./examples/restaurant-approval/self-host/container/run-container-ha-demo.sh --ci
+```
+
+The container reference keeps the same restaurant flow, but runs the coordinator and REST worker as separate containers and uses LocalStack for DynamoDB, SQS, and S3-compatible services.
 
 ## Manual Flow
 
@@ -162,4 +172,6 @@ Current recovery boundary: single-execution re-drive reads the durable execution
 
 To prove the REST worker protocol separately, start `start-worker.sh`, configure `pipeline.orchestrator.worker.rest.base-url` and `pipeline.orchestrator.worker.rest.shared-secret` on a coordinator process, and run the same control-plane client. The automated split-process IT covers that protocol path.
 
-This is not a managed service, dynamic JAR loading, worker fleet lifecycle, or production tenancy. It is the public self-host adoption path for the current runtime seams.
+For a production-ish local stack using containers and AWS-compatible substrates, use the container reference in this directory.
+
+This is not a managed service, dynamic JAR loading, worker fleet orchestration, or production tenancy. It is the public self-host adoption path for the current runtime seams.
