@@ -6,6 +6,11 @@ EXAMPLE_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 REPO_ROOT="$(cd "${EXAMPLE_DIR}/../.." && pwd)"
 MVN_BIN="${MVN_BIN:-${REPO_ROOT}/mvnw}"
 
+if [[ ! -x "${MVN_BIN}" ]]; then
+  echo "ERROR: Maven wrapper not found or not executable at ${MVN_BIN}" >&2
+  exit 1
+fi
+
 TPF_RESTAURANT_IMAGE="${TPF_RESTAURANT_IMAGE:-localhost/restaurant-approval/monolith-svc:latest}"
 TPF_SKIP_FRAMEWORK_INSTALL="${TPF_SKIP_FRAMEWORK_INSTALL:-false}"
 TPF_CONTAINER_STEP_TRANSPORT="${TPF_CONTAINER_STEP_TRANSPORT:-REST}"

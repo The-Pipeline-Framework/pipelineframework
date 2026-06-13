@@ -115,6 +115,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         this.client = client;
         this.orchestratorConfig = orchestratorConfig;
         this.protobufMessageParsers = protobufMessageParsers;
+        this.transitionPayloadCodec = new JsonTransitionPayloadCodec();
     }
 
     @Override

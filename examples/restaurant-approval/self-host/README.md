@@ -174,4 +174,4 @@ To prove the REST worker protocol separately, start `start-worker.sh`, configure
 
 For a production-ish local stack using containers and AWS-compatible substrates, use the container reference in this directory.
 
-This is not a managed service, dynamic JAR loading, worker fleet orchestration, or production tenancy. It is the public self-host adoption path for the current runtime seams.
+This is not a managed service, dynamic JAR loading, worker fleet orchestration, or production tenancy. It is the reference self-host setup for the current release.
