@@ -12,7 +12,7 @@ TPF_CONTAINER_STEP_TRANSPORT="${TPF_CONTAINER_STEP_TRANSPORT:-REST}"
 
 if [[ "${TPF_SKIP_FRAMEWORK_INSTALL}" != "true" ]]; then
   echo "Installing current framework SNAPSHOT for the example build..."
-  "${MVN_BIN}" -f "${REPO_ROOT}/framework/pom.xml" -pl runtime,deployment -am -DskipTests install
+  "${MVN_BIN}" -f "${REPO_ROOT}/framework/pom.xml" -pl runtime,deployment -am -DskipTests clean install
 fi
 
 echo "Building restaurant approval monolith container image ${TPF_RESTAURANT_IMAGE}..."
@@ -24,6 +24,6 @@ echo "Building restaurant approval monolith container image ${TPF_RESTAURANT_IMA
   -Dquarkus.container-image.build=true \
   -Dquarkus.container-image.push=false \
   -Dquarkus.container-image.image="${TPF_RESTAURANT_IMAGE}" \
-  package
+  clean package
 
 echo "Built ${TPF_RESTAURANT_IMAGE}"

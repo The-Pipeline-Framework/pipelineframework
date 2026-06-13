@@ -1226,6 +1226,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             || !(payload instanceof String serialized)) {
             return Optional.empty();
         }
+        // Keep remote-worker outputs serialized; future coordinator-only runtimes may not own app classes.
         return Optional.of(new SerializedTransitionPayload(typeId, encoding, serialized));
     }
 
