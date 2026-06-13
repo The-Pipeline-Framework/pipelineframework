@@ -11,7 +11,7 @@
 | Convert store SPIs to neutral async types | Medium | High | Enables non-Mutiny providers |
 | Add renderer-profile registry | Medium | Medium | Keeps semantic model stable while adding Spring generation |
 | Add Spring Boot runtime adapter skeleton | Medium | Medium | Proves Spring can host runtime-core seams without Quarkus runtime dependencies |
-| Build minimal Spring Boot unary/local REST pipeline | High | High | First portability proof |
+| Build minimal Spring Boot unary/local pipeline | Medium | High | First generated Spring local unary proof |
 | Add full Spring WebFlux/Reactor/gRPC/await/checkpoint parity | High | High | Production-capable portability |
 
 First portability PR gates:

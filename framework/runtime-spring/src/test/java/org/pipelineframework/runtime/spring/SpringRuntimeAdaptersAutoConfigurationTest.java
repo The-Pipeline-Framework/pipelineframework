@@ -17,12 +17,14 @@
 package org.pipelineframework.runtime.spring;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.runtime.core.PipelineUnaryStep;
 import org.pipelineframework.runtime.core.RuntimeAdapters;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -124,6 +126,18 @@ class SpringRuntimeAdaptersAutoConfigurationTest {
 
                 assertEquals(List.of(new SpringRuntimeEvent("orders.ready", "payload")), events.runtimeEvents);
                 assertEquals(List.of(new SpringRuntimeWorkEvent("work-item")), events.workEvents);
+            });
+    }
+
+    @Test
+    void unaryPipelineRunnerExecutesSpringStepBeans() {
+        contextRunner
+            .withUserConfiguration(UnaryStepConfig.class)
+            .run(context -> {
+                SpringUnaryPipelineRunner runner = context.getBean(SpringUnaryPipelineRunner.class);
+
+                assertEquals(2, runner.stepCount());
+                assertEquals("HELLO!", runner.run("hello").toCompletableFuture().get(5, TimeUnit.SECONDS));
             });
     }
 
@@ -262,6 +276,19 @@ class SpringRuntimeAdaptersAutoConfigurationTest {
         @EventListener
         void onWorkEvent(SpringRuntimeWorkEvent event) {
             workEvents.add(event);
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class UnaryStepConfig {
+        @Bean
+        PipelineUnaryStep<String, String> uppercaseStep() {
+            return input -> CompletableFuture.completedFuture(input.toUpperCase());
+        }
+
+        @Bean
+        PipelineUnaryStep<String, String> suffixStep() {
+            return input -> CompletableFuture.completedFuture(input + "!");
         }
     }
 }

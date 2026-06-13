@@ -17,7 +17,9 @@
 package org.pipelineframework.runtime.spring;
 
 import java.util.concurrent.Executor;
+import java.util.List;
 
+import org.pipelineframework.runtime.core.PipelineUnaryStep;
 import org.pipelineframework.runtime.core.RuntimeAdapters;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -50,5 +52,11 @@ public class SpringRuntimeAdaptersAutoConfiguration {
             eventPublisher,
             executor,
             transactionManager.getIfAvailable());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public SpringUnaryPipelineRunner springUnaryPipelineRunner(List<PipelineUnaryStep<?, ?>> pipelineSteps) {
+        return new SpringUnaryPipelineRunner(pipelineSteps);
     }
 }

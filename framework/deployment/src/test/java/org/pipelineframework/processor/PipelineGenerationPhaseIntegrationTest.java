@@ -176,6 +176,95 @@ class PipelineGenerationPhaseIntegrationTest {
     }
 
     @Test
+    void springProfileGeneratesYamlOnlyLocalUnaryClientStep() throws IOException {
+        Path projectRoot = tempDir;
+        Files.writeString(projectRoot.resolve("pom.xml"), """
+            <project>
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>spring-smoke</artifactId>
+              <version>1.0.0</version>
+              <packaging>pom</packaging>
+            </project>
+            """);
+
+        Path moduleDir = projectRoot.resolve("spring-smoke");
+        Path generatedSourcesDir = moduleDir.resolve("target/generated-sources/pipeline");
+        Files.createDirectories(generatedSourcesDir);
+
+        Path pipelineConfig = projectRoot.resolve("pipeline.spring.yaml");
+        Files.writeString(pipelineConfig, """
+            appName: "Spring Smoke"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            platform: "COMPUTE"
+            steps:
+              - name: "payment"
+                service: "com.example.service.PaymentService"
+                input: "com.example.service.PaymentRecord"
+                output: "com.example.service.PaymentStatus"
+            """);
+
+        Compilation compilation = Compiler.javac()
+            .withProcessors(new PipelineStepProcessor())
+            .withOptions(
+                "-Apipeline.generatedSourcesDir=" + generatedSourcesDir.toString().replace('\\', '/'),
+                "-Apipeline.config=" + pipelineConfig.toString().replace('\\', '/'),
+                "-Apipeline.transport=LOCAL",
+                "-Apipeline.platform=COMPUTE",
+                "-Apipeline.codegen.rendererProfile=spring")
+            .compile(
+                JavaFileObjects.forSourceString(
+                    "com.example.service.PaymentService",
+                    """
+                        package com.example.service;
+
+                        import io.smallrye.mutiny.Uni;
+                        import org.pipelineframework.service.ReactiveService;
+
+                        public class PaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
+                            @Override
+                            public Uni<PaymentStatus> process(PaymentRecord input) {
+                                return Uni.createFrom().item(new PaymentStatus());
+                            }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.service.PaymentRecord",
+                    """
+                        package com.example.service;
+
+                        public class PaymentRecord {
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.service.PaymentStatus",
+                    """
+                        package com.example.service;
+
+                        public class PaymentStatus {
+                        }
+                        """));
+
+        assertThat(compilation).succeeded();
+
+        Path springClientStep = findGeneratedClass(generatedSourcesDir, "ProcessPaymentLocalClientStep");
+        assertTrue(
+            Files.exists(springClientStep),
+            "Expected Spring local client step source to be generated under "
+                + generatedSourcesDir
+                + "; found "
+                + generatedJavaFiles(generatedSourcesDir));
+        String source = Files.readString(springClientStep);
+        assertTrue(source.contains("import org.pipelineframework.runtime.core.PipelineUnaryStep;"));
+        assertTrue(source.contains("import org.springframework.stereotype.Component;"));
+        assertFalse(source.contains("io.quarkus."));
+        assertFalse(source.contains("jakarta.enterprise."));
+        assertFalse(source.contains("io.vertx."));
+        assertTrue(compilation.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/pipeline", "roles.json").isPresent());
+    }
+
+    @Test
     void generatesRestServerArtifactsForRuntimeMappedModularFunctionStepModule() throws IOException {
         Path projectRoot = tempDir;
         Files.writeString(projectRoot.resolve("pom.xml"), """
@@ -354,13 +443,33 @@ class PipelineGenerationPhaseIntegrationTest {
     }
 
     private boolean hasGeneratedClass(Path rootDir, String className) throws IOException {
+        return Files.exists(findGeneratedClass(rootDir, className));
+    }
+
+    private Path findGeneratedClass(Path rootDir, String className) throws IOException {
         if (!Files.exists(rootDir)) {
-            return false;
+            return rootDir.resolve(className + ".java");
         }
         try (var stream = Files.walk(rootDir)) {
             return stream.filter(path -> path.toString().endsWith(".java"))
-                .anyMatch(path -> path.getFileName() != null
-                    && path.getFileName().toString().equals(className + ".java"));
+                .filter(path -> path.getFileName() != null
+                    && path.getFileName().toString().equals(className + ".java"))
+                .findFirst()
+                .orElse(rootDir.resolve(className + ".java"));
+        }
+    }
+
+    private String generatedJavaFiles(Path rootDir) throws IOException {
+        if (!Files.exists(rootDir)) {
+            return "[]";
+        }
+        try (var stream = Files.walk(rootDir)) {
+            return stream.filter(path -> path.toString().endsWith(".java"))
+                .map(rootDir::relativize)
+                .map(Path::toString)
+                .sorted()
+                .toList()
+                .toString();
         }
     }
 }
