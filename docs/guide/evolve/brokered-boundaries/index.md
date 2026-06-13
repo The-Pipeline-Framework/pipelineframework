@@ -6,7 +6,7 @@ This implementation-facing guide explains where Kafka-style brokerage fits in TP
 
 Do not introduce a general "Kafka mode" for TPF.
 
-Kafka, SQS, REST, gRPC, and local execution should be implementation choices under TPF-owned runtime boundaries. TPF must still own step identity, cardinality, lineage, replay metadata, retry/reject meaning, and typed or declared envelope contracts.
+Kafka, SQS, REST, gRPC, and local execution should be implementation choices under TPF-owned runtime boundaries. TPF must still own step identity, cardinality, lineage, replay metadata, retry/reject meaning, and declared DTO/envelope contracts.
 
 ```mermaid
 flowchart LR

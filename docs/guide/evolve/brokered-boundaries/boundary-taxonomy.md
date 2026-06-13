@@ -24,12 +24,14 @@ Kafka replay means re-reading records from a log. TPF replay means re-running or
 | TPF boundary | Meaning | Broker fit |
 | --- | --- | --- |
 | Local step boundary | Same process, direct invocation | Usually no |
-| Remote operator boundary | Immediate request/response external step host | Usually HTTP/gRPC/protobuf first |
+| Remote operator boundary | Immediate request/response external step host | Usually REST/gRPC/LOCAL transport first |
 | Await boundary | Execution parks and resumes after correlated completion | Strong fit for request/response topics |
 | Checkpoint handoff | One pipeline publishes work to another owner | Strong fit for publication/subscription |
 | Transition-worker boundary | Durable coordinator dispatches one bounded continuation | Possible dispatcher provider |
 | Brokered step-host boundary | A step is executed by a scaled step-host group | Future design candidate |
 | Envelope compatibility boundary | Step host receives a generic envelope rather than a strong DTO | Possible across any dispatch substrate |
+
+Serialization choices such as protobuf, JSON, bytes, or payload references belong to payload policy, not broker fit. See [Envelope And Data Policy](/guide/evolve/brokered-boundaries/envelope-and-data-policy).
 
 ```mermaid
 flowchart TB
@@ -61,7 +63,7 @@ TPF should own:
 3. cardinality and fan-out/fan-in semantics,
 4. lineage, item identity, and parent-child relationships,
 5. retry, reject, and replay metadata,
-6. typed DTO contracts or declared envelope contracts,
+6. declared DTO/envelope contracts,
 7. replay topology and viewer interpretation.
 
 The dispatch substrate should own:

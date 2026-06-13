@@ -36,6 +36,8 @@ checkpoint:
       kind: kafka
 ```
 
+The checkpoint snippet is illustrative only. Current supported checkpoint handoff target configuration uses `pipeline.handoff.bindings.<publication>.targets.<target>.*`, and broker-backed `KAFKA` publication targets are not supported yet.
+
 ```properties
 pipeline.orchestrator.dispatcher-provider=kafka
 ```
