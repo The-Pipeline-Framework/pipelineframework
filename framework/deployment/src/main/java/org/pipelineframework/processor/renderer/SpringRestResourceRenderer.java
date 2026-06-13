@@ -61,8 +61,8 @@ public class SpringRestResourceRenderer implements PipelineRenderer<RestBinding>
 
     private TypeSpec buildResourceClass(RestBinding binding, GenerationContext ctx) {
         PipelineStepModel model = binding.model();
-        TypeName inputDomainType = resolveDomainType(model.inboundDomainType());
-        TypeName outputDomainType = resolveDomainType(model.outboundDomainType());
+        TypeName inputDomainType = model.inboundDomainType();
+        TypeName outputDomainType = model.outboundDomainType();
         TypeName inputDtoType = DtoTypeUtils.toDtoType(inputDomainType);
         TypeName outputDtoType = DtoTypeUtils.toDtoType(outputDomainType);
         String servicePath = binding.restPathOverride() != null
@@ -186,9 +186,5 @@ public class SpringRestResourceRenderer implements PipelineRenderer<RestBinding>
 
     private String resourceClassName(PipelineStepModel model) {
         return ResourceNameUtils.normalizeBaseName(model.generatedName()) + PipelineStepProcessor.REST_RESOURCE_SUFFIX;
-    }
-
-    private TypeName resolveDomainType(TypeName type) {
-        return type != null ? type : ClassName.OBJECT;
     }
 }

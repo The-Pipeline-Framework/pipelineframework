@@ -412,6 +412,16 @@ class PipelineGenerationPhaseIntegrationTest {
         assertFalse(resourceSource.contains("io.vertx."));
         assertFalse(resourceSource.contains("org.jboss.resteasy."));
         assertFalse(resourceSource.contains("jakarta.ws.rs."));
+
+        String clientStepSource = Files.readString(springClientStep);
+        assertTrue(clientStepSource.contains("import org.springframework.stereotype.Component;"));
+        assertTrue(clientStepSource.contains("import java.util.concurrent.CompletionStage;"));
+        assertTrue(clientStepSource.contains("implements PipelineUnaryStep<PaymentRecord, PaymentStatus>"));
+        assertFalse(clientStepSource.contains("io.quarkus."));
+        assertFalse(clientStepSource.contains("jakarta.enterprise."));
+        assertFalse(clientStepSource.contains("io.vertx."));
+        assertFalse(clientStepSource.contains("org.jboss.resteasy."));
+        assertFalse(clientStepSource.contains("jakarta.ws.rs."));
         assertTrue(compilation.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/pipeline", "roles.json").isPresent());
     }
 
