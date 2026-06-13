@@ -47,7 +47,8 @@ sequenceDiagram
 5. [Runtime Boundaries And Performance](/guide/evolve/durable-coordinator/runtime-boundaries-performance) explains runtime mapping, patterns, package boundaries, and hot-path guardrails.
 6. [Local APIs](/guide/evolve/durable-coordinator/local-apis) documents the current default-disabled control-plane and admin APIs.
 7. [Self-Hosted Deployment](/guide/evolve/durable-coordinator/self-hosted-deployment) gives the production-ish self-host topology, configuration, and operator runbooks.
-8. [Self-Hosted Milestone](/guide/evolve/durable-coordinator/self-hosted-milestone) tracks what remains after the current self-host proof.
+8. [Self-Hosted HA Roadmap](/guide/evolve/durable-coordinator/self-hosted-ha-roadmap) tracks the hardening work left after the container reference.
+9. [Self-Hosted Milestone](/guide/evolve/durable-coordinator/self-hosted-milestone) tracks what remains after the current self-host proof.
 
 ## Limits
 

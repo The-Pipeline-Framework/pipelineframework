@@ -11,6 +11,17 @@ This page is the canonical The Pipeline Framework (TPF) guide for `FUNCTION` pla
 
 `FUNCTION` does not currently support `gRPC` transport. If you select `FUNCTION`, the generated runtime must use `REST`.
 
+## Durability Scope
+
+`FUNCTION` is a serverless invocation and packaging path. It is not the TPF durable orchestration path.
+
+| Path | Current support |
+| --- | --- |
+| `COMPUTE` + `QUEUE_ASYNC` | TPF-owned execution records, leases, await units, retry/DLQ, re-drive, release pinning, and worker lifecycle. |
+| `FUNCTION` | Generated Azure Functions handlers and REST adapters. Azure may retry invocations depending on trigger configuration, but TPF does not own durable coordinator state inside the function runtime. |
+
+Use Azure Functions mode for stateless or caller-retried function invocations. Use the durable coordinator path when the application requires TPF-owned recovery, await resume, DLQ/re-drive, or checkpoint handoff.
+
 ## What this path covers
 
 TPF keeps the typed Java business flow unchanged while generating Azure-specific entry points around it.

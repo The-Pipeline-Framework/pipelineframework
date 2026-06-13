@@ -10,6 +10,17 @@ This page is the canonical TPF guide for `FUNCTION` platform builds that target 
 
 `FUNCTION` does not currently support `gRPC` transport. If you select `FUNCTION`, the generated runtime must use `REST`.
 
+## Durability Scope
+
+`FUNCTION` is a serverless invocation and packaging path. It is not the TPF durable orchestration path.
+
+| Path | Current support |
+| --- | --- |
+| `COMPUTE` + `QUEUE_ASYNC` | TPF-owned execution records, leases, await units, retry/DLQ, re-drive, release pinning, and worker lifecycle. |
+| `FUNCTION` | Generated Lambda handlers and adapters for supported REST-backed pipeline or step invocations. The function platform may retry invocations, but TPF does not own durable coordinator state inside Lambda. |
+
+Use Lambda mode for stateless or caller-retried function invocations. Use the durable coordinator path when the application requires TPF-owned recovery, await resume, DLQ/re-drive, or checkpoint handoff.
+
 Supported FUNCTION step shapes today:
 
 | Step shape | Status in FUNCTION mode | Notes |
@@ -53,7 +64,7 @@ Current scope notes:
 
 1. The Google function path is best described today as Cloud Run functions; the current repo implementation still uses the Quarkus Google Cloud Functions extension.
 2. Azure Durable Functions are not a separate TPF platform mode and do not change TPF runtime semantics.
-3. Queue-backed HA and checkpoint handoff remain part of the `COMPUTE` + `QUEUE_ASYNC` orchestrator path rather than the `FUNCTION` path.
+3. Queue-backed HA and checkpoint handoff remain part of the `COMPUTE` + `QUEUE_ASYNC` durable coordinator path rather than the `FUNCTION` path.
 
 ::: warning Checkpoint Handoff Is Not Available In FUNCTION Mode
 Checkpoint publication and subscription are not available in `FUNCTION` mode.

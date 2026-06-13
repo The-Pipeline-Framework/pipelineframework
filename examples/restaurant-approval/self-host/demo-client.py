@@ -187,6 +187,10 @@ def auth(args):
     return args.control_plane_token
 
 
+def order_type(args):
+    return getattr(args, "order_type", ORDER_TYPE) or ORDER_TYPE
+
+
 def submit_order(args, customer_name, restaurant_name):
     request_id = str(uuid.uuid4())
     order = {
@@ -199,8 +203,8 @@ def submit_order(args, customer_name, restaurant_name):
     }
     body = {
         "pipelineId": args.pipeline_id,
-        "inputShape": "RAW",
-        "inputPayload": encoded_payload(order, ORDER_TYPE),
+        "inputShape": "UNI",
+        "inputPayload": encoded_payload(order, order_type(args)),
         "idempotencyKey": f"order-{request_id}",
         "outputStreaming": False,
     }
@@ -499,6 +503,8 @@ def main():
     flows.add_argument("--pipeline-id", required=True)
     flows.add_argument("--await-step-id", required=True)
     flows.add_argument("--control-plane-token", required=True)
+    flows.add_argument("--order-type", default=ORDER_TYPE)
+    flows.add_argument("--timeout-seconds", type=int, default=90)
     flows.set_defaults(func=run_flows)
 
     status = sub.add_parser("status")
@@ -542,6 +548,7 @@ def main():
     incident.add_argument("--admin-token")
     incident.add_argument("--log-file")
     incident.add_argument("--timeout-seconds", type=int, default=90)
+    incident.add_argument("--order-type", default=ORDER_TYPE)
     incident.set_defaults(func=run_incident)
 
     args = parser.parse_args()
