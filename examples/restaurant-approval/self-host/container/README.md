@@ -61,4 +61,4 @@ These defaults are for local verification only. Real deployments should use secr
 4. Release artifact storage can use an S3-compatible blob store for coordinator-managed artifacts.
 5. Worker lifecycle must report a healthy worker for the active release before hosted submissions are accepted.
 
-This is still a local reference stack. It is not Kubernetes, Terraform, production IAM, managed-service operations, bulk DLQ replay, or append-only execution/await storage.
+This is still a local reference stack, not a production deployment package. For the remaining HA hardening work, see [Self-Hosted HA Roadmap](/guide/evolve/durable-coordinator/self-hosted-ha-roadmap).

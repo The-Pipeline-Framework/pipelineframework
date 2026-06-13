@@ -6,6 +6,7 @@ import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -1205,6 +1206,10 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
 
     private Object readResultPayload(AttributeValue value) {
         Object payload = readPayload(value);
+        Optional<Object> serializedPayload = readSerializedResultPayload(payload);
+        if (serializedPayload.isPresent()) {
+            return serializedPayload.get();
+        }
         if (!(payload instanceof List<?> items)) {
             return payload;
         }
@@ -1212,7 +1217,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         for (Object item : items) {
             hydrated.add(readSerializedResultPayload(item).orElse(item));
         }
-        return List.copyOf(hydrated);
+        return Collections.unmodifiableList(hydrated);
     }
 
     private Optional<Object> readSerializedResultPayload(Object item) {

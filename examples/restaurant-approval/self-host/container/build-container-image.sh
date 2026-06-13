@@ -17,7 +17,7 @@ TPF_CONTAINER_STEP_TRANSPORT="${TPF_CONTAINER_STEP_TRANSPORT:-REST}"
 
 if [[ "${TPF_SKIP_FRAMEWORK_INSTALL}" != "true" ]]; then
   echo "Installing current framework SNAPSHOT for the example build..."
-  "${MVN_BIN}" -f "${REPO_ROOT}/framework/pom.xml" -pl runtime,deployment -am -DskipTests clean install
+  "${MVN_BIN}" -f "${REPO_ROOT}/framework/pom.xml" clean install
 fi
 
 echo "Building restaurant approval monolith container image ${TPF_RESTAURANT_IMAGE}..."

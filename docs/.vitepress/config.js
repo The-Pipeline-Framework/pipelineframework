@@ -219,6 +219,7 @@ const mainSidebar = [
                     {text: 'Runtime Boundaries And Performance', link: '/guide/evolve/durable-coordinator/runtime-boundaries-performance'},
                     {text: 'Local APIs', link: '/guide/evolve/durable-coordinator/local-apis'},
                     {text: 'Self-Hosted Deployment', link: '/guide/evolve/durable-coordinator/self-hosted-deployment'},
+                    {text: 'Self-Hosted HA Roadmap', link: '/guide/evolve/durable-coordinator/self-hosted-ha-roadmap'},
                     {text: 'Self-Hosted Milestone', link: '/guide/evolve/durable-coordinator/self-hosted-milestone'}
                 ]
             },
