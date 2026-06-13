@@ -143,6 +143,12 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
             && model.deploymentRole() == DeploymentRole.PIPELINE_SERVER) {
             return Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
         }
+        if (SpringRendererProfileSupport.isSpringProfile(ctx)
+            && transportMode == PipelineTransport.REST
+            && !model.sideEffect()
+            && model.deploymentRole() == DeploymentRole.PIPELINE_SERVER) {
+            return Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.LOCAL_CLIENT_STEP);
+        }
         LinkedHashSet<GenerationTarget> targets = new LinkedHashSet<>(resolveTargetsForRole(model.deploymentRole(), transportMode));
         if (model.serviceApiKind() != ServiceApiKind.REACTIVE
             && model.delegateService() == null

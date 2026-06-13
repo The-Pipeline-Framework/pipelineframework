@@ -25,6 +25,7 @@ import javax.tools.Diagnostic;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.ServiceApiKind;
 import org.pipelineframework.processor.ir.StreamingShape;
 
@@ -47,8 +48,9 @@ final class SpringRendererProfileSupport {
         }
 
         List<String> errors = new ArrayList<>();
-        if (!ctx.isTransportModeLocal()) {
-            errors.add("Spring renderer profile currently supports only pipeline.transport=LOCAL.");
+        PipelineTransport transportMode = ctx.getTransportMode();
+        if (transportMode != PipelineTransport.LOCAL && transportMode != PipelineTransport.REST) {
+            errors.add("Spring renderer profile currently supports only pipeline.transport=LOCAL or REST.");
         }
         if (ctx.isPlatformModeFunction()) {
             errors.add("Spring renderer profile currently supports only pipeline.platform=COMPUTE.");
@@ -58,7 +60,7 @@ final class SpringRendererProfileSupport {
         }
 
         for (PipelineStepModel model : ctx.getStepModels()) {
-            validateModel(model, errors);
+            validateModel(model, transportMode, errors);
         }
 
         if (!errors.isEmpty()) {
@@ -70,10 +72,12 @@ final class SpringRendererProfileSupport {
         }
     }
 
-    private static void validateModel(PipelineStepModel model, List<String> errors) {
-        Set<GenerationTarget> supportedTargets = Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
+    private static void validateModel(PipelineStepModel model, PipelineTransport transportMode, List<String> errors) {
+        Set<GenerationTarget> supportedTargets = transportMode == PipelineTransport.REST
+            ? Set.of(GenerationTarget.LOCAL_CLIENT_STEP, GenerationTarget.REST_RESOURCE)
+            : Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
         if (!supportedTargets.containsAll(model.enabledTargets())) {
-            errors.add("Spring renderer profile currently supports only LOCAL_CLIENT_STEP generation; step '"
+            errors.add("Spring renderer profile currently supports only " + supportedTargets + " generation; step '"
                 + model.serviceName() + "' resolved targets " + model.enabledTargets() + ".");
         }
         if (model.streamingShape() != StreamingShape.UNARY_UNARY) {

@@ -18,20 +18,20 @@ package org.pipelineframework.runtime.spring;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
+import org.pipelineframework.runtime.core.PipelineRunnerCore;
 import org.pipelineframework.runtime.core.PipelineUnaryStep;
 
 /**
- * Minimal Spring-local runner for unary generated pipeline steps.
- *
- * <p>This is a first portability proof for local unary pipelines, not the durable TPF runtime engine.</p>
+ * Spring adapter for the framework-neutral pipeline runner core.
  */
-public class SpringUnaryPipelineRunner {
+public class SpringPipelineRunner {
+    private final PipelineRunnerCore runnerCore;
     private final List<PipelineUnaryStep<?, ?>> steps;
 
-    public SpringUnaryPipelineRunner(List<PipelineUnaryStep<?, ?>> steps) {
+    public SpringPipelineRunner(PipelineRunnerCore runnerCore, List<PipelineUnaryStep<?, ?>> steps) {
+        this.runnerCore = Objects.requireNonNull(runnerCore, "runnerCore");
         this.steps = List.copyOf(Objects.requireNonNull(steps, "steps"));
     }
 
@@ -42,11 +42,7 @@ public class SpringUnaryPipelineRunner {
      * @return stage that completes with the final step output
      */
     public CompletionStage<Object> run(Object input) {
-        CompletionStage<Object> current = CompletableFuture.completedFuture(input);
-        for (PipelineUnaryStep<?, ?> step : steps) {
-            current = current.thenCompose(value -> applyUntyped(step, value));
-        }
-        return current;
+        return runnerCore.runAsync(input, steps, this::applyUntyped);
     }
 
     public int stepCount() {
@@ -54,7 +50,7 @@ public class SpringUnaryPipelineRunner {
     }
 
     @SuppressWarnings("unchecked")
-    private CompletionStage<Object> applyUntyped(PipelineUnaryStep<?, ?> step, Object input) {
+    private CompletionStage<Object> applyUntyped(PipelineUnaryStep<?, ?> step, Object input, int stepIndex) {
         PipelineUnaryStep<Object, Object> typedStep = (PipelineUnaryStep<Object, Object>) step;
         return typedStep.apply(input);
     }

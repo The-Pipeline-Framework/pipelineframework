@@ -88,7 +88,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             ? new SpringLocalClientStepRenderer()
             : new org.pipelineframework.processor.renderer.LocalClientStepRenderer();
         RestClientStepRenderer restClientRenderer = new RestClientStepRenderer();
-        RestResourceRenderer restRenderer = new RestResourceRenderer();
+        PipelineRenderer<RestBinding> restRenderer = springProfile
+            ? new SpringRestResourceRenderer()
+            : new RestResourceRenderer();
         RestFunctionHandlerRenderer restFunctionHandlerRenderer = new RestFunctionHandlerRenderer();
         BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer = new BlockingReactiveBridgeRenderer();
         RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer = new RemoteOperatorAdapterRenderer();
@@ -478,7 +480,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             org.pipelineframework.processor.renderer.ClientStepRenderer clientRenderer,
             PipelineRenderer<LocalBinding> localClientRenderer,
             RestClientStepRenderer restClientRenderer,
-            RestResourceRenderer restRenderer,
+            PipelineRenderer<RestBinding> restRenderer,
             RestFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer,
