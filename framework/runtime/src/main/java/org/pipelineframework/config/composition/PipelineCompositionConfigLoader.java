@@ -111,10 +111,16 @@ public class PipelineCompositionConfigLoader {
 
     private String readRequiredString(Map<?, ?> map, String key, String context) {
         Object value = map.get(key);
-        if (value == null || String.valueOf(value).isBlank()) {
+        if (value == null) {
             throw new IllegalArgumentException(context + "." + key + " must not be blank");
         }
-        return String.valueOf(value).trim();
+        if (!(value instanceof String stringValue)) {
+            throw new IllegalArgumentException(context + "." + key + " must be a string");
+        }
+        if (stringValue.isBlank()) {
+            throw new IllegalArgumentException(context + "." + key + " must not be blank");
+        }
+        return stringValue.trim();
     }
 
     private Path resolvePipelinePath(Path baseDir, PipelineCompositionPipeline pipeline) {

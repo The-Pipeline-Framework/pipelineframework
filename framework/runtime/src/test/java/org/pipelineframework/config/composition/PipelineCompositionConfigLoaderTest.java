@@ -93,6 +93,79 @@ class PipelineCompositionConfigLoaderTest {
     }
 
     @Test
+    void nonStringCompositionNameFailsClearly() throws Exception {
+        Path manifest = tempDir.resolve("pipeline-composition.yaml");
+        Files.writeString(manifest,
+            """
+            version: 1
+            name: 123
+            pipelines:
+              - id: producer
+                path: producer.yaml
+            """);
+
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineCompositionConfigLoader().load(manifest));
+
+        assertEquals("pipeline composition.name must be a string", exception.getMessage());
+    }
+
+    @Test
+    void nonStringPipelineIdFailsClearly() throws Exception {
+        Path manifest = tempDir.resolve("pipeline-composition.yaml");
+        Files.writeString(manifest,
+            """
+            version: 1
+            name: test-composition
+            pipelines:
+              - id: 123
+                path: producer.yaml
+            """);
+
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineCompositionConfigLoader().load(manifest));
+
+        assertEquals("pipeline composition pipeline[0].id must be a string", exception.getMessage());
+    }
+
+    @Test
+    void nonStringPipelinePathFailsClearly() throws Exception {
+        Path manifest = tempDir.resolve("pipeline-composition.yaml");
+        Files.writeString(manifest,
+            """
+            version: 1
+            name: test-composition
+            pipelines:
+              - id: producer
+                path: 123
+            """);
+
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineCompositionConfigLoader().load(manifest));
+
+        assertEquals("pipeline composition pipeline[0].path must be a string", exception.getMessage());
+    }
+
+    @Test
+    void pipelineIdMustMatchSchemaPattern() throws Exception {
+        Path manifest = writeManifest(tempDir,
+            """
+              - id: 1producer
+                path: producer.yaml
+            """);
+
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineCompositionConfigLoader().load(manifest));
+
+        assertTrue(exception.getMessage().contains(
+            "pipeline composition pipeline id must match ^[a-zA-Z][a-zA-Z0-9._-]*$"));
+    }
+
+    @Test
     void allowsFanOutFromOneCheckpointPublicationToMultipleSubscribers() throws Exception {
         writePipeline(tempDir.resolve("producer.yaml"), "Input", fields(field(1, "id", "uuid")), "OrderReady",
             fields(field(1, "id", "uuid")), null, "orders-ready");

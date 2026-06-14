@@ -69,7 +69,8 @@ single typed handoff graph so publication, subscription, terminal output, and en
 Validate the canonical composition contract through the framework runtime tests:
 
 ```bash
-./mvnw -f framework/pom.xml -pl runtime '-Dtest=PipelineComposition*Test,CheckoutReferenceContractTest' test
+./mvnw -f framework/pom.xml -pl runtime -am '-Dtest=PipelineComposition*Test,CheckoutReferenceContractTest' \
+  -Dsurefire.failIfNoSpecifiedTests=false test
 ```
 
 Build the full example:
