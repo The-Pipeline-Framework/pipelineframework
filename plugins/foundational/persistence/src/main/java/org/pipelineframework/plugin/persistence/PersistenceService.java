@@ -17,6 +17,10 @@
 package org.pipelineframework.plugin.persistence;
 
 import java.time.Duration;
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import jakarta.inject.Inject;
 
@@ -357,39 +361,74 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
     }
 
     private boolean isDuplicateKeyError(Throwable failure) {
-        Throwable current = failure;
-        while (current != null) {
-            if (current instanceof java.sql.SQLException sqlException) {
-                if ("23505".equals(sqlException.getSQLState())) {
-                    return true;
-                }
-            } else {
-                try {
-                    java.lang.reflect.Method getSqlState = current.getClass().getMethod("getSQLState");
-                    Object result = getSqlState.invoke(current);
-                    if (result != null && "23505".equals(result.toString())) {
-                        return true;
-                    }
-                } catch (Exception ignored) {
-                    // ignore reflection failures
-                }
+        if (failure == null) {
+            return false;
+        }
+        ArrayDeque<Throwable> pending = new ArrayDeque<>();
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        pending.add(failure);
+        while (!pending.isEmpty()) {
+            Throwable current = pending.removeFirst();
+            if (!seen.add(current)) {
+                continue;
             }
-
-            String msg = current.getMessage();
-            if (msg != null) {
-                String lowerMsg = msg.toLowerCase();
-                if (lowerMsg.contains("duplicate key") || lowerMsg.contains("unique constraint")) {
-                    return true;
-                }
+            if (isDuplicateKeyThrowable(current)) {
+                return true;
             }
-
-            current = current.getCause();
-            if (current == failure) {
-                break;
+            Throwable cause = current.getCause();
+            if (cause != null) {
+                pending.add(cause);
+            }
+            for (Throwable suppressed : current.getSuppressed()) {
+                if (suppressed != null) {
+                    pending.add(suppressed);
+                }
             }
         }
 
         return false;
+    }
+
+    private boolean isDuplicateKeyThrowable(Throwable throwable) {
+        if (throwable instanceof java.sql.SQLException sqlException
+            && isDuplicateKeySqlState(sqlException.getSQLState())) {
+            return true;
+        }
+        if (hasDuplicateKeySqlState(throwable, "getSQLState")
+            || hasDuplicateKeySqlState(throwable, "getSqlState")
+            || hasDuplicateKeySqlState(throwable, "getCode")) {
+            return true;
+        }
+        return hasDuplicateKeyText(throwable.getMessage())
+            || hasDuplicateKeyText(invokeStringGetter(throwable, "getErrorMessage"))
+            || hasDuplicateKeyText(invokeStringGetter(throwable, "getConstraint"));
+    }
+
+    private boolean hasDuplicateKeySqlState(Throwable throwable, String methodName) {
+        String value = invokeStringGetter(throwable, methodName);
+        return isDuplicateKeySqlState(value);
+    }
+
+    private boolean isDuplicateKeySqlState(String value) {
+        return "23505".equals(value) || "23000".equals(value);
+    }
+
+    private String invokeStringGetter(Throwable throwable, String methodName) {
+        try {
+            java.lang.reflect.Method method = throwable.getClass().getMethod(methodName);
+            Object value = method.invoke(throwable);
+            return value == null ? "" : value.toString();
+        } catch (ReflectiveOperationException ignored) {
+            return "";
+        }
+    }
+
+    private boolean hasDuplicateKeyText(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String lowerValue = value.toLowerCase();
+        return lowerValue.contains("duplicate key") || lowerValue.contains("unique constraint");
     }
 
     @Override

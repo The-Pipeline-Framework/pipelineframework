@@ -15,6 +15,7 @@ IMAGE_REGISTRY="${IMAGE_REGISTRY:-localhost}"
 IMAGE_GROUP="${IMAGE_GROUP:-csv-payments}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-GRPC}"
+TPF_CSV_PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG:-${EXAMPLE_DIR}/config/pipeline.container-sqs.yaml}"
 expected_coordinator_image="${IMAGE_REGISTRY}/${IMAGE_GROUP}/orchestrator-svc:${IMAGE_TAG}"
 expected_worker_image="${expected_coordinator_image}"
 expected_runtime_image="${IMAGE_REGISTRY}/${IMAGE_GROUP}/pipeline-runtime-svc:${IMAGE_TAG}"
@@ -46,12 +47,25 @@ if [[ "${TPF_SKIP_FRAMEWORK_INSTALL}" != "true" ]]; then
   "${MVN_BIN}" -f "${REPO_ROOT}/framework/pom.xml" clean install
 fi
 
-echo "Building CSV pipeline-runtime topology images with gRPC step transport..."
+COMMON_BUILD_PROPS=(
+  -Dpipeline.config="${TPF_CSV_PIPELINE_CONFIG}"
+  -Dtpf.await.kafka.reactive-messaging.enabled=false
+  -Dmp.messaging.outgoing.tpf-await-kafka-requests.enabled=false
+  -Dmp.messaging.incoming.tpf-await-kafka-responses.enabled=false
+  -Dmp.messaging.incoming.csv-payment-provider-requests.enabled=false
+  -Dmp.messaging.outgoing.csv-payment-provider-results.enabled=false
+  -Dcsv-payments.payment-provider.kafka.enabled=false
+  -Dcsv-payments.payment-provider.sqs.enabled=true
+)
+
+echo "Building CSV pipeline-runtime topology images with gRPC step transport and SQS await config..."
 IMAGE_REGISTRY="${IMAGE_REGISTRY}" \
 IMAGE_GROUP="${IMAGE_GROUP}" \
 IMAGE_TAG="${IMAGE_TAG}" \
 PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT}" \
+PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG}" \
 "${EXAMPLE_DIR}/build-pipeline-runtime.sh" \
+  "${COMMON_BUILD_PROPS[@]}" \
   -DskipTests \
   -Dquarkus.container-image.build=true \
   -Dquarkus.container-image.push=false
@@ -61,8 +75,10 @@ IMAGE_REGISTRY="${IMAGE_REGISTRY}" \
 IMAGE_GROUP="${IMAGE_GROUP}" \
 IMAGE_TAG="${IMAGE_TAG}" \
 PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT}" \
+PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG}" \
 "${EXAMPLE_DIR}/build-pipeline-runtime.sh" \
   -pl orchestrator-svc \
+  "${COMMON_BUILD_PROPS[@]}" \
   -DskipTests \
   -Dquarkus.container-image.build=true \
   -Dquarkus.container-image.push=false \

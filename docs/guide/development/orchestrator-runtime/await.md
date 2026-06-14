@@ -16,9 +16,9 @@ For production operation, see [Await Boundary Operations](/guide/operations/awai
 
 `csv-payments` uses authored `ONE_TO_ONE` await over a stream of `PaymentRecord` items. That is a stream of unary await interactions, not a hidden dispatch mode.
 
-The built-in `interaction-api` adapter is for human/UI inboxes and mock-provider style flows where another client queries pending interactions and later calls the generated completion API. The built-in `webhook` adapter dispatches an HTTP request to an external system and includes a signed resume token in the envelope. The built-in `kafka` adapter publishes a request envelope to Kafka and admits response envelopes from a configured response channel.
+The built-in `interaction-api` adapter is for human/UI inboxes and mock-provider style flows where another client queries pending interactions and later calls the generated completion API. The built-in `webhook` adapter dispatches an HTTP request to an external system and includes a signed resume token in the envelope. The built-in `kafka` adapter publishes a request envelope to Kafka and admits response envelopes from a configured response channel. The built-in `sqs` adapter does the same request/completion pattern with SQS queues.
 
-For runnable examples, use [`examples/restaurant-approval`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/restaurant-approval) for human/UI await and [`examples/csv-payments`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/csv-payments) for Kafka unary await over a stream.
+For runnable examples, use [`examples/restaurant-approval`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/restaurant-approval) for human/UI await and [`examples/csv-payments`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/csv-payments) for brokered unary await over a stream.
 
 ## Await Versus Operator
 
@@ -64,7 +64,7 @@ The runtime also enforces aggregate materialization guardrails:
 
 Set either value to `0` only when the application has its own upstream size control and storage budget. Prefer stable business limits at the API/file/broker boundary rather than relying on these guards as the first line of defense.
 
-Transport choice changes operational responsibility. `interaction-api` requires an API consumer to query and complete pending work. `webhook` requires stable resume-token signing and callback reachability. `kafka` requires broker channel configuration, consumer health, and response-envelope monitoring. The operational checklist is covered in [Await Boundary Operations](/guide/operations/await-boundaries).
+Transport choice changes operational responsibility. `interaction-api` requires an API consumer to query and complete pending work. `webhook` requires stable resume-token signing and callback reachability. `kafka` requires broker channel configuration, consumer health, and response-envelope monitoring. `sqs` requires request/response queue configuration, poller health, visibility-timeout sizing, and queue DLQ policy. The operational checklist is covered in [Await Boundary Operations](/guide/operations/await-boundaries).
 
 That matters for plugin-style side effects after an await boundary. A resumed queue-async execution can replay the remainder of the pipeline after a downstream retry, so once-only side-effect checkpointing is a separate concern from await durability itself.
 
@@ -142,7 +142,7 @@ steps:
           topic: "csv-payments.payment.results"
 ```
 
-Add the Quarkus Kafka messaging extension to the application that hosts the orchestrator, enable the default Kafka bridge with `pipeline.await.kafka.reactive-messaging.enabled=true`, then configure the SmallRye channels:
+Add the Quarkus Kafka messaging extension to the application that hosts the orchestrator, enable the default Kafka bridge with `tpf.await.kafka.reactive-messaging.enabled=true`, then configure the SmallRye channels:
 
 ```properties
 mp.messaging.outgoing.tpf-await-kafka-requests.connector=smallrye-kafka
@@ -152,4 +152,34 @@ mp.messaging.incoming.tpf-await-kafka-responses.topic=csv-payments.payment.resul
 mp.messaging.incoming.tpf-await-kafka-responses.value.deserializer=org.apache.kafka.common.serialization.StringDeserializer
 ```
 
-`pipeline.orchestrator.resume-token-secret` must be stable for the lifetime of outstanding webhook and Kafka interactions. If `pipeline.orchestrator.resume-token-secret` is missing, signed dispatch and token validation fail with a clear error rather than allowing insecure or unsigned resumptions.
+## SQS Example
+
+```yaml
+steps:
+  - name: "Brokered Fraud Check"
+    kind: "await"
+    cardinality: "ONE_TO_ONE"
+    input: "com.example.FraudCheckRequest"
+    output: "com.example.FraudCheckDecision"
+    timeout: "PT10M"
+    idempotencyKeyFields: ["orderId"]
+    await:
+      correlation:
+        strategy: "signedResumeToken"
+      transport:
+        type: "sqs"
+        request:
+          queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/fraud-check-requests"
+        response:
+          queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/fraud-check-decisions"
+```
+
+SQS dispatch sends a framework-owned JSON envelope with the same interaction identity and resume token fields as Kafka. The coordinator-side SQS completion poller consumes the response queue and admits completions through the await coordinator. This is separate from SQS work dispatch, SQS DLQ publication, and the SQS transition-worker request/reply protocol.
+
+```properties
+tpf.await.sqs.poller.enabled=true
+tpf.await.sqs.response-queue-url=https://sqs.us-east-1.amazonaws.com/123456789012/fraud-check-decisions
+pipeline.orchestrator.sqs.region=us-east-1
+```
+
+`pipeline.orchestrator.resume-token-secret` must be stable for the lifetime of outstanding webhook, Kafka, and SQS interactions. If `pipeline.orchestrator.resume-token-secret` is missing, signed dispatch and token validation fail with a clear error rather than allowing insecure or unsigned resumptions.

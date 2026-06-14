@@ -21,7 +21,6 @@ export TPF_WORKER_PORT="${TPF_WORKER_PORT:-8182}"
 export TPF_RUNTIME_PORT="${TPF_RUNTIME_PORT:-8283}"
 export TPF_PERSISTENCE_PORT="${TPF_PERSISTENCE_PORT:-8282}"
 export TPF_LOCALSTACK_PORT="${TPF_LOCALSTACK_PORT:-4567}"
-export TPF_KAFKA_PORT="${TPF_KAFKA_PORT:-9093}"
 export TPF_CONTROL_PLANE_TOKEN="${TPF_CONTROL_PLANE_TOKEN:-csv-control-plane-admin-token}"
 export TPF_ADMIN_TOKEN="${TPF_ADMIN_TOKEN:-csv-control-plane-admin-token}"
 export TPF_WORKER_SECRET="${TPF_WORKER_SECRET:-csv-transition-worker-secret}"
@@ -91,7 +90,6 @@ require_free_port "WORKER" "${TPF_WORKER_PORT}"
 require_free_port "RUNTIME" "${TPF_RUNTIME_PORT}"
 require_free_port "PERSISTENCE" "${TPF_PERSISTENCE_PORT}"
 require_free_port "LOCALSTACK" "${TPF_LOCALSTACK_PORT}"
-require_free_port "KAFKA" "${TPF_KAFKA_PORT}"
 
 if [[ "${TPF_SKIP_CONTAINER_BUILD}" != "true" ]]; then
   "${SCRIPT_DIR}/build-container-images.sh"
@@ -162,5 +160,5 @@ if [[ "${CI_MODE}" == "true" ]]; then
   echo "CSV containerized self-host HA demo completed in CI mode."
 else
   echo "CSV containerized self-host HA demo completed."
-  echo "Logs: docker compose -f ${COMPOSE_FILE} logs coordinator worker persistence kafka localstack"
+  echo "Logs: docker compose -f ${COMPOSE_FILE} logs coordinator worker runtime persistence localstack"
 fi

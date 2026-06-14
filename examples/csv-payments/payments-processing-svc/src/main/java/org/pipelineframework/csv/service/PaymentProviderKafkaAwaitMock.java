@@ -22,6 +22,7 @@ import java.util.concurrent.CompletionStage;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import io.quarkus.arc.properties.IfBuildProperty;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import io.smallrye.reactive.messaging.MutinyEmitter;
@@ -39,6 +40,7 @@ import org.pipelineframework.csv.common.domain.PaymentStatus;
  * External mock provider for the CSV await/Kafka example.
  */
 @ApplicationScoped
+@IfBuildProperty(name = "csv-payments.payment-provider.kafka.enabled", stringValue = "true", enableIfMissing = true)
 public class PaymentProviderKafkaAwaitMock {
 
   static final String REQUEST_CHANNEL = "csv-payment-provider-requests";

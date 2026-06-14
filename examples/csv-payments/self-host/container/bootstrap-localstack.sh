@@ -31,20 +31,6 @@ wait_for_localstack() {
   exit 1
 }
 
-wait_for_kafka() {
-  local timeout_seconds="${KAFKA_WAIT_SECONDS:-120}"
-  echo "Waiting for Kafka..."
-  for _ in $(seq 1 "${timeout_seconds}"); do
-    if compose exec -T kafka nc -z localhost 19092 >/dev/null 2>&1; then
-      return
-    fi
-    sleep 1
-  done
-  echo "Timed out waiting for Kafka after ${timeout_seconds}s." >&2
-  compose logs kafka >&2 || true
-  exit 1
-}
-
 create_table_if_missing() {
   local table_name="$1"
   shift
@@ -77,9 +63,8 @@ create_bucket_if_missing() {
   awslocal s3api create-bucket --bucket "${bucket}" >/dev/null
 }
 
-compose up -d localstack kafka postgres
+compose up -d localstack postgres
 wait_for_localstack
-wait_for_kafka
 
 create_table_if_missing tpf_execution \
   --attribute-definitions \
@@ -154,6 +139,8 @@ create_table_if_missing tpf_worker_registry \
 
 create_queue_if_missing tpf-work
 create_queue_if_missing tpf-execution-dlq
+create_queue_if_missing csv-payment-await-requests
+create_queue_if_missing csv-payment-await-results
 create_bucket_if_missing tpf-release-artifacts
 
-echo "CSV LocalStack/Kafka bootstrap complete. Kafka topics are created by the local broker on first use."
+echo "CSV LocalStack bootstrap complete."
