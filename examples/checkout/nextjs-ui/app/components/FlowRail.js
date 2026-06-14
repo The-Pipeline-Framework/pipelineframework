@@ -1,4 +1,17 @@
-import { CheckCircle2, Clock3, GitBranch, Hand } from "lucide-react";
+import {
+  CheckCircle2,
+  ChefHat,
+  ClipboardCheck,
+  Clock3,
+  CreditCard,
+  Flag,
+  GitBranch,
+  Hand,
+  Route,
+  Store,
+  Ticket,
+  Truck
+} from "lucide-react";
 
 import { CHECKOUT_FLOW_STAGES } from "../../lib/checkout-flow.js";
 
@@ -6,7 +19,26 @@ function iconFor(stage, activeStageId) {
   if (stage.id === activeStageId) {
     return CheckCircle2;
   }
-  return stage.mode === "human" ? Hand : GitBranch;
+  switch (stage.icon) {
+    case "ticket":
+      return Ticket;
+    case "approval":
+      return ClipboardCheck;
+    case "restaurant":
+      return Store;
+    case "kitchen":
+      return ChefHat;
+    case "route":
+      return Route;
+    case "delivery":
+      return Truck;
+    case "payment":
+      return CreditCard;
+    case "finish":
+      return Flag;
+    default:
+      return stage.mode === "human" ? Hand : GitBranch;
+  }
 }
 
 export default function FlowRail({ activeStageId = "", compact = false }) {
@@ -21,10 +53,10 @@ export default function FlowRail({ activeStageId = "", compact = false }) {
             </div>
             <div>
               <div className="flow-row">
-                <span className="flow-title">{stage.title}</span>
-                <span className={`mode ${stage.mode}`}>{stage.mode === "human" ? "Approval" : "Auto"}</span>
+                <span className="flow-title">{stage.plainTitle || stage.title}</span>
+                <span className={`mode ${stage.mode}`}>{stage.mode === "human" ? "Needs a person" : "Runs itself"}</span>
               </div>
-              <p>{stage.publication}</p>
+              <p>{stage.handoffSummary || stage.responsibility}</p>
               {!compact ? <small>{stage.serviceId}</small> : null}
             </div>
           </li>
@@ -34,19 +66,24 @@ export default function FlowRail({ activeStageId = "", compact = false }) {
   );
 }
 
-export function ApprovalCheckpointRail({ activeStageId = "", activeLabel = "Current approval task" }) {
+export function ApprovalCheckpointRail({
+  activeStageId = "",
+  activeLabel = "Current approval task",
+  activeIsActionable = true
+}) {
   return (
     <ol className="checkpoint-rail">
       {CHECKOUT_FLOW_STAGES.filter((stage) => stage.mode === "human").map((stage) => {
         const isActive = stage.id === activeStageId;
+        const showClock = isActive && activeIsActionable;
         return (
           <li className={isActive ? "active" : ""} key={stage.id}>
             <span className="checkpoint-index">{stage.order - 1}</span>
             <div>
-              <strong>{stage.title}</strong>
-              <span>{isActive ? activeLabel : stage.responsibility}</span>
+              <strong>{stage.plainTitle || stage.title}</strong>
+              <span>{isActive ? activeLabel : stage.handoffSummary}</span>
             </div>
-            {isActive ? <Clock3 aria-hidden="true" size={16} /> : null}
+            {showClock ? <Clock3 aria-hidden="true" size={16} /> : null}
           </li>
         );
       })}

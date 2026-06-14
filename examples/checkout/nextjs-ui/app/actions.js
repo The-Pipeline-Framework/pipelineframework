@@ -33,14 +33,18 @@ export async function submitCheckoutOrder(formData) {
   if (!executionId) {
     throw new Error("Checkout request accepted but no execution id was returned from TPF.");
   }
+  const requestId = String(accepted?.requestId || "").trim();
+  const tracking = requestId ? `&requestId=${encodeURIComponent(requestId)}` : "";
   revalidatePath("/interactions");
-  redirect(`/interactions?started=${encodeURIComponent(executionId)}`);
+  redirect(`/interactions?started=${encodeURIComponent(executionId)}${tracking}`);
 }
 
 export async function completeCheckoutInteraction(formData) {
   const interactionId = getRequiredField(formData, "interactionId");
   const targetId = String(formData.get("targetId") || "").trim();
   const stageId = String(formData.get("stageId") || "").trim();
+  const requestId = String(formData.get("requestId") || "").trim();
+  const orderId = String(formData.get("orderId") || "").trim();
   const payload = String(formData.get("payload") || "").trim();
   let destination;
   try {
@@ -50,10 +54,14 @@ export async function completeCheckoutInteraction(formData) {
     const completedStage = stageId ? `&completedStage=${encodeURIComponent(stageId)}` : "";
     const target = targetId ? `&target=${encodeURIComponent(targetId)}` : "";
     const execution = completedExecutionId ? `&execution=${encodeURIComponent(completedExecutionId)}` : "";
-    destination = `/interactions?completed=${encodeURIComponent(completedInteractionId)}${completedStage}${target}${execution}`;
+    const request = requestId ? `&requestId=${encodeURIComponent(requestId)}` : "";
+    const order = orderId ? `&orderId=${encodeURIComponent(orderId)}` : "";
+    destination = `/interactions?completed=${encodeURIComponent(completedInteractionId)}${completedStage}${target}${execution}${request}${order}`;
   } catch (error) {
     const message = String(error?.message || "Interaction completion failed.").slice(0, 600);
-    destination = `/interactions?error=${encodeURIComponent(message)}`;
+    const request = requestId ? `&requestId=${encodeURIComponent(requestId)}` : "";
+    const order = orderId ? `&orderId=${encodeURIComponent(orderId)}` : "";
+    destination = `/interactions?error=${encodeURIComponent(message)}${request}${order}`;
   }
   revalidatePath("/interactions");
   redirect(destination);

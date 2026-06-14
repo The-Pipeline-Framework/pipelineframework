@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-export default function AutoRefresh({ intervalMs = 1800, attempts = 6 }) {
+export default function AutoRefresh({ intervalMs = 1800, attempts = 6, refreshKey = "" }) {
   const router = useRouter();
 
   useEffect(() => {
@@ -12,16 +12,18 @@ export default function AutoRefresh({ intervalMs = 1800, attempts = 6 }) {
       return undefined;
     }
 
+    router.refresh();
+
     const timer = window.setInterval(() => {
       remaining -= 1;
       router.refresh();
       if (remaining <= 0) {
         window.clearInterval(timer);
       }
-    }, Math.max(1000, Number(intervalMs) || 1800));
+    }, Math.max(600, Number(intervalMs) || 1800));
 
     return () => window.clearInterval(timer);
-  }, [attempts, intervalMs, router]);
+  }, [attempts, intervalMs, refreshKey, router]);
 
   return null;
 }

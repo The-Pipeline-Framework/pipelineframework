@@ -2,17 +2,32 @@ import { Circle, CircleCheck, CircleDashed } from "lucide-react";
 
 import { CHECKOUT_FLOW_STAGES } from "../../lib/checkout-flow.js";
 
+function currentStepOrder(status) {
+  const rawStep = status?.currentStep ?? status?.current_step_index ?? status?.stepIndex;
+  const stepIndex = Number(rawStep);
+  if (!Number.isFinite(stepIndex) || stepIndex < 0) {
+    return 1;
+  }
+  return stepIndex + 1;
+}
+
 function stateFor(stage, status) {
-  if (status === "SUCCEEDED") {
+  const currentStatus = String(status?.status || "UNKNOWN");
+  const currentOrder = currentStepOrder(status);
+
+  if (currentStatus === "SUCCEEDED") {
     return "complete";
   }
-  if (status === "FAILED" || status === "DLQ") {
-    return "blocked";
+  if (currentStatus === "FAILED" || currentStatus === "DLQ") {
+    return stage.order === currentOrder ? "blocked" : stage.order < currentOrder ? "complete" : "pending";
   }
-  if (status === "WAITING_EXTERNAL" && stage.mode === "human") {
+  if (currentStatus === "WAITING_EXTERNAL" && stage.mode === "human" && stage.order === currentOrder) {
     return "active";
   }
-  if (stage.order === 1) {
+  if (stage.order < currentOrder) {
+    return "complete";
+  }
+  if (stage.order === currentOrder) {
     return "active";
   }
   return "pending";
@@ -29,11 +44,10 @@ function IconForState({ state }) {
 }
 
 export default function ExecutionTimeline({ status }) {
-  const currentStatus = String(status?.status || "UNKNOWN");
   return (
     <ol className="execution-timeline">
       {CHECKOUT_FLOW_STAGES.map((stage) => {
-        const state = stateFor(stage, currentStatus);
+        const state = stateFor(stage, status);
         return (
           <li className={state} key={stage.id}>
             <span className="timeline-icon">

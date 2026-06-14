@@ -10,7 +10,7 @@ import {
   shortIdentifier,
   stageIdForInteraction
 } from "../../lib/checkout-ui.js";
-import { nextReviewCheckpointAfterStage, stageForInteraction } from "../../lib/checkout-flow.js";
+import { handoffSummaryForStage, nextReviewCheckpointAfterStage, stageForInteraction } from "../../lib/checkout-flow.js";
 
 function defaultPayloadForInteraction(interaction) {
   const requestPayload = interaction.requestPayload;
@@ -103,11 +103,24 @@ export default function InteractionDecisionPanel({ interaction }) {
             <dd>{nextStage?.title || "Automatic downstream flow"}</dd>
           </div>
         </dl>
+        {stage ? (
+          <div className="payload-story">
+            <div>
+              <span>Comes in</span>
+              <strong>{stage.inputSummary}</strong>
+            </div>
+            <div>
+              <span>Goes out</span>
+              <strong>{stage.outputSummary}</strong>
+            </div>
+          </div>
+        ) : null}
         <div className="handoff-card">
           <span>{stage?.title || targetId}</span>
           <ArrowRight aria-hidden="true" size={16} />
           <strong>{nextStage?.title || "Automatic downstream flow"}</strong>
         </div>
+        {stage ? <p className="field-help">{handoffSummaryForStage(stage.id)}</p> : null}
         <details className="identity-details">
           <summary>Technical identifiers</summary>
           <dl className="definition-list">
@@ -132,6 +145,8 @@ export default function InteractionDecisionPanel({ interaction }) {
         <input type="hidden" name="executionId" value={interaction.executionId} />
         <input type="hidden" name="targetId" value={targetId} />
         <input type="hidden" name="stageId" value={stageId} />
+        <input type="hidden" name="requestId" value={interaction.requestId || ""} />
+        <input type="hidden" name="orderId" value={interaction.orderId || ""} />
         <input type="hidden" name="outputType" value={interaction.outputType || ""} />
         <details className="payload-details">
           <summary>Review response payload</summary>

@@ -1,10 +1,10 @@
 import { ArrowRight, ServerCog } from "lucide-react";
 
-import { CHECKOUT_FLOW_STAGES, stageById } from "../../lib/checkout-flow.js";
+import { CHECKOUT_FLOW_STAGES, handoffSummaryForStage, nextStageAfter, stageById } from "../../lib/checkout-flow.js";
 
 export default function ServiceStagePanel({ stageId = "consumer-approval" }) {
   const stage = stageById(stageId) || CHECKOUT_FLOW_STAGES[0];
-  const nextStage = CHECKOUT_FLOW_STAGES.find((candidate) => candidate.order === stage.order + 1);
+  const nextStage = nextStageAfter(stage.id);
 
   return (
     <aside className="panel stage-panel">
@@ -16,18 +16,25 @@ export default function ServiceStagePanel({ stageId = "consumer-approval" }) {
         </div>
       </div>
       <p className="lead">{stage.responsibility}</p>
+      <div className="stage-sketch" aria-hidden="true">
+        <span>{stage.sketch}</span>
+      </div>
       <dl className="definition-list">
+        <div>
+          <dt>What comes in</dt>
+          <dd>{stage.inputSummary}</dd>
+        </div>
+        <div>
+          <dt>What goes out</dt>
+          <dd>{stage.outputSummary}</dd>
+        </div>
+        <div>
+          <dt>Checkpoint handoff</dt>
+          <dd>{handoffSummaryForStage(stage.id)}</dd>
+        </div>
         <div>
           <dt>Owner</dt>
           <dd>{stage.serviceId}</dd>
-        </div>
-        <div>
-          <dt>Receives</dt>
-          <dd>{stage.receives}</dd>
-        </div>
-        <div>
-          <dt>Emits</dt>
-          <dd>{stage.emits}</dd>
         </div>
         <div>
           <dt>Endpoint</dt>

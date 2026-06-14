@@ -24,7 +24,7 @@ export default function HomePage() {
       <section className="intro-strip">
         <div>
           <Network aria-hidden="true" size={20} />
-          <span>Follow one order as generated gRPC endpoints and checkpoint publications hand it across services.</span>
+          <span>Follow one order as each service receives a checkpoint, does its job, and hands the ticket to the next service.</span>
         </div>
         <Link href="#run-order">
           Start with a sample order
@@ -39,12 +39,12 @@ export default function HomePage() {
             <Network aria-hidden="true" size={20} />
             <div>
               <p className="eyebrow">Service journey</p>
-              <h2>Eight modules, two approval steps</h2>
+              <h2>One order, eight service stops</h2>
             </div>
           </div>
-          <FlowRail activeStageId="consumer-approval" />
+          <FlowRail activeStageId="checkout" />
         </section>
-        <ServiceStagePanel stageId="consumer-approval" />
+        <ServiceStagePanel stageId="checkout" />
       </section>
 
       <section className="next-panel">
@@ -53,17 +53,17 @@ export default function HomePage() {
           <article>
             <span>1</span>
             <strong>Submit an order</strong>
-            <p>The checkout orchestrator accepts the request and publishes the order-pending checkpoint.</p>
+            <p>The checkout service writes the first ticket: an order-pending checkpoint.</p>
           </article>
           <article>
             <span>2</span>
             <strong>Approve consumer validation</strong>
-            <p>The first approval task appears in the desk as soon as consumer validation reaches its await boundary.</p>
+            <p>The first person step checks that the order is safe to continue.</p>
           </article>
           <article>
             <span>3</span>
             <strong>Accept restaurant handoff</strong>
-            <p>The second approval task resumes restaurant acceptance, then the rest of the flow runs automatically.</p>
+            <p>The restaurant accepts the ticket, then kitchen, dispatch, delivery, payment, and final state run by themselves.</p>
           </article>
         </div>
       </section>

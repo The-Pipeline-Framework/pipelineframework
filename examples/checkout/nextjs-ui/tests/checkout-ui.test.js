@@ -15,12 +15,16 @@ import {
   awaitStatusGuidance,
   normalizePendingInteraction
 } from "../lib/checkout-ui.js";
-import { buildListPendingRequest, normalizeGrpcAwaitInteraction } from "../lib/tpf-client.js";
+import { buildListPendingRequest, normalizeGrpcAwaitInteraction, normalizeJourneyTraceEvent } from "../lib/tpf-client.js";
 import {
+  AUTOMATIC_STAGES,
   CHECKOUT_FLOW_STAGES,
   REVIEW_CHECKPOINTS,
   checkpointProgress,
+  handoffSummaryForStage,
+  nextStageAfter,
   nextReviewCheckpointAfterOutputType,
+  stageForPublication,
   stageForOutputType
 } from "../lib/checkout-flow.js";
 
@@ -217,6 +221,7 @@ test("interaction helpers classify checkout await stages", () => {
 
 test("checkout flow metadata contains ordered approval checkpoints", () => {
   assert.equal(CHECKOUT_FLOW_STAGES.length, 8);
+  assert.equal(AUTOMATIC_STAGES.length, 6);
   assert.deepEqual(REVIEW_CHECKPOINTS.map((stage) => stage.id), [
     "consumer-approval",
     "restaurant-acceptance"
@@ -230,6 +235,58 @@ test("checkout flow metadata contains ordered approval checkpoints", () => {
   assert.equal(nextCheckpointLabelAfterOutputType("com.example.OrderAcceptedByRestaurant"), "Downstream automatic flow");
   assert.equal(checkpointProgress("").next.id, "consumer-approval");
   assert.equal(checkpointProgress("consumer-approval").next.id, "restaurant-acceptance");
+});
+
+test("checkout flow metadata teaches automatic handoffs without runtime tracing", () => {
+  for (const stage of CHECKOUT_FLOW_STAGES) {
+    assert.ok(stage.plainTitle, `${stage.id} has plain title`);
+    assert.ok(stage.sketch, `${stage.id} has sketch label`);
+    assert.ok(stage.inputSummary, `${stage.id} has input summary`);
+    assert.ok(stage.outputSummary, `${stage.id} has output summary`);
+    assert.ok(stage.handoffSummary, `${stage.id} has handoff summary`);
+  }
+
+  assert.equal(nextStageAfter("checkout").id, "consumer-approval");
+  assert.equal(nextStageAfter("terminal"), null);
+  assert.equal(
+    handoffSummaryForStage("checkout"),
+    "Checkout sends tpfgo.checkout.order-pending.v1 to Consumer."
+  );
+  assert.equal(
+    handoffSummaryForStage("restaurant-acceptance"),
+    "Restaurant sends tpfgo.restaurant.order-accepted.v1 to Kitchen."
+  );
+});
+
+test("checkpoint publications map to journey stages", () => {
+  assert.equal(stageForPublication("tpfgo.checkout.order-pending.v1").id, "checkout");
+  assert.equal(stageForPublication("tpfgo.kitchen.order-ready.v1").id, "kitchen-preparation");
+  assert.equal(stageForPublication("tpfgo.dispatch.delivery-assigned.v1").id, "dispatch");
+  assert.equal(stageForPublication("tpfgo.delivery.order-delivered.v1").id, "delivery");
+  assert.equal(stageForPublication("tpfgo.payment.capture-result.v1").id, "payment");
+  assert.equal(stageForPublication("tpfgo.compensation.terminal-state.v1").id, "terminal");
+  assert.equal(stageForPublication("unknown.publication"), null);
+});
+
+test("normalizeJourneyTraceEvent maps raw trace fields", () => {
+  const normalized = normalizeJourneyTraceEvent({
+    publication: "tpfgo.kitchen.order-ready.v1",
+    observed_at_epoch_ms: "1800000000000",
+    request_id: "request-1",
+    order_id: "order-1",
+    payload: {
+      orderId: "order-1",
+      requestId: "request-1",
+      items: [{ sku: "Pizza", quantity: 2 }]
+    }
+  });
+
+  assert.equal(normalized.publication, "tpfgo.kitchen.order-ready.v1");
+  assert.equal(normalized.stageId, "kitchen-preparation");
+  assert.equal(normalized.observedAtEpochMs, 1800000000000);
+  assert.equal(normalized.requestId, "request-1");
+  assert.equal(normalized.orderId, "order-1");
+  assert.equal(normalized.payload.items.length, 1);
 });
 
 test("shortIdentifier keeps UUIDs readable", () => {
@@ -246,21 +303,36 @@ test("buildCheckoutCompletionPayload enforces JSON", () => {
 });
 
 test("buildListPendingRequest omits empty step filter", () => {
-  process.env.TPF_TENANT_ID = "default";
-  delete process.env.TPF_AWAIT_STEP_ID;
+  const previousTenantId = process.env.TPF_TENANT_ID;
+  const previousAwaitStepId = process.env.TPF_AWAIT_STEP_ID;
+  try {
+    process.env.TPF_TENANT_ID = "default";
+    delete process.env.TPF_AWAIT_STEP_ID;
 
-  let request = buildListPendingRequest();
-  assert.equal(request.tenant_id, "default");
-  assert.equal(request.limit, 100);
-  assert.equal("step_id" in request, false);
+    let request = buildListPendingRequest();
+    assert.equal(request.tenant_id, "default");
+    assert.equal(request.limit, 100);
+    assert.equal("step_id" in request, false);
 
-  process.env.TPF_AWAIT_STEP_ID = " ";
-  request = buildListPendingRequest();
-  assert.equal("step_id" in request, false);
+    process.env.TPF_AWAIT_STEP_ID = " ";
+    request = buildListPendingRequest();
+    assert.equal("step_id" in request, false);
 
-  process.env.TPF_AWAIT_STEP_ID = "checkpoint-123";
-  request = buildListPendingRequest();
-  assert.equal(request.step_id, "checkpoint-123");
+    process.env.TPF_AWAIT_STEP_ID = "checkpoint-123";
+    request = buildListPendingRequest();
+    assert.equal(request.step_id, "checkpoint-123");
+  } finally {
+    if (previousTenantId === undefined) {
+      delete process.env.TPF_TENANT_ID;
+    } else {
+      process.env.TPF_TENANT_ID = previousTenantId;
+    }
+    if (previousAwaitStepId === undefined) {
+      delete process.env.TPF_AWAIT_STEP_ID;
+    } else {
+      process.env.TPF_AWAIT_STEP_ID = previousAwaitStepId;
+    }
+  }
 });
 
 test("await status helpers classify actionable state", () => {

@@ -22,6 +22,8 @@ import org.pipelineframework.telemetry.GrpcClientTracing;
 @Unremovable
 public class GrpcCheckpointPublicationTargetDispatcher implements CheckpointPublicationTargetDispatcher {
 
+    private static final long PUBLISH_DEADLINE_SECONDS = 5L;
+
     private final Map<String, ManagedChannel> channels = new ConcurrentHashMap<>();
     private final Map<String, MutinyCheckpointPublicationServiceGrpc.MutinyCheckpointPublicationServiceStub> stubs =
         new ConcurrentHashMap<>();
@@ -42,7 +44,10 @@ public class GrpcCheckpointPublicationTargetDispatcher implements CheckpointPubl
             return GrpcClientTracing.traceUnary(
                 CheckpointPublicationGrpcService.SERVICE,
                 CheckpointPublicationGrpcService.METHOD,
-                stubFor(target).publish(CheckpointPublicationProtoSupport.toProtoRequest(request, tenantId, idempotencyKey)))
+                stubFor(target)
+                    .withWaitForReady()
+                    .withDeadlineAfter(PUBLISH_DEADLINE_SECONDS, TimeUnit.SECONDS)
+                    .publish(CheckpointPublicationProtoSupport.toProtoRequest(request, tenantId, idempotencyKey)))
                 .replaceWithVoid();
         } catch (IOException e) {
             return Uni.createFrom().failure(e);

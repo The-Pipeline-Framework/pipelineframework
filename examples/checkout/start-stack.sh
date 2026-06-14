@@ -8,6 +8,8 @@ CHECKOUT_DIR="${SCRIPT_DIR}"
 LOG_DIR="${CHECKOUT_DIR}/target/stack-runtime"
 CONFIG_DIR="${CHECKOUT_DIR}/target/stack-runtime-config"
 MVN_BIN="${REPO_ROOT}/mvnw"
+TPF_MAVEN_REPO_LOCAL="${TPF_MAVEN_REPO_LOCAL:-${REPO_ROOT}/.m2/repository}"
+MVN_REPO_ARG="-Dmaven.repo.local=${TPF_MAVEN_REPO_LOCAL}"
 
 SKIP_BUILD="${SKIP_BUILD:-false}"
 RUN_VERIFY="${RUN_VERIFY:-false}"
@@ -68,7 +70,7 @@ if [[ "$RUN_VERIFY" == "true" && -n "$RUN_COMMAND" ]]; then
 fi
 
 if [[ "$RUN_VERIFY" == "true" && -z "$RUN_COMMAND" ]]; then
-  RUN_COMMAND="${MVN_BIN} -f ${CHECKOUT_DIR}/pom.xml verify"
+  RUN_COMMAND="${MVN_BIN} ${MVN_REPO_ARG} -f ${CHECKOUT_DIR}/pom.xml verify"
 fi
 
 if [[ "$START_UI" == "true" ]] && [[ -n "$RUN_COMMAND" ]]; then
@@ -154,7 +156,7 @@ if [[ ! -x "$MVN_BIN" ]]; then
   exit 1
 fi
 
-mkdir -p "${LOG_DIR}" "${CONFIG_DIR}"
+mkdir -p "${LOG_DIR}" "${CONFIG_DIR}" "${TPF_MAVEN_REPO_LOCAL}"
 
 cleanup() {
   if [[ ${#PIDS[@]:-0} -gt 0 ]]; then
@@ -216,7 +218,7 @@ module_publication() {
     dispatch-orchestrator-svc) echo tpfgo.dispatch.delivery-assigned.v1 ;;
     delivery-execution-orchestrator-svc) echo tpfgo.delivery.order-delivered.v1 ;;
     payment-capture-orchestrator-svc) echo tpfgo.payment.capture-result.v1 ;;
-    compensation-failure-orchestrator-svc) echo "" ;;
+    compensation-failure-orchestrator-svc) echo tpfgo.compensation.terminal-state.v1 ;;
     *) echo "" ;;
   esac
 }
@@ -297,6 +299,8 @@ write_service_props() {
       echo "pipeline.orchestrator.state-provider=memory"
       echo "pipeline.orchestrator.dispatcher-provider=event"
       echo "pipeline.orchestrator.dlq-provider=log"
+      echo "pipeline.orchestrator.retry-delay=PT0.25S"
+      echo "pipeline.orchestrator.retry-multiplier=1.0"
       echo "pipeline.orchestrator.sweep-interval=PT1S"
 
       for client in $(internal_clients "$module"); do
@@ -307,12 +311,22 @@ write_service_props() {
 
       local publication=$(module_publication "$module")
       local target=$(bind_target_port "$module")
-      if [[ -n "$publication" && -n "$target" ]]; then
-        local prefix="pipeline.handoff.bindings.\"${publication}\".targets.next"
-        echo "${prefix}.kind=GRPC"
-        echo "${prefix}.host=127.0.0.1"
-        echo "${prefix}.port=${target}"
-        echo "${prefix}.plaintext=true"
+      if [[ -n "$publication" ]]; then
+        if [[ -n "$target" ]]; then
+          local next_prefix="pipeline.handoff.bindings.\"${publication}\".targets.next"
+          echo "${next_prefix}.kind=GRPC"
+          echo "${next_prefix}.host=127.0.0.1"
+          echo "${next_prefix}.port=${target}"
+          echo "${next_prefix}.plaintext=true"
+        fi
+
+        local trace_prefix="pipeline.handoff.bindings.\"${publication}\".targets.trace"
+        echo "${trace_prefix}.kind=HTTP"
+        echo "${trace_prefix}.base-url=http://127.0.0.1:${runtime_port}"
+        echo "${trace_prefix}.path=/checkout/journey/checkpoints"
+        echo "${trace_prefix}.method=POST"
+        echo "${trace_prefix}.encoding=JSON"
+        echo "${trace_prefix}.content-type=application/json"
       fi
     fi
   } >"$config_file"
@@ -456,6 +470,7 @@ start_nextjs_ui() {
   local ui_port="${TPF_UI_PORT:-3000}"
   local ui_log="${LOG_DIR}/nextjs-ui.log"
   local ui_base_url="${TPF_BASE_URL:-http://127.0.0.1:8080}"
+  local ui_runtime_base_url="${TPF_RUNTIME_BASE_URL:-http://127.0.0.1:$(module_http_port pipeline-runtime-svc)}"
 
   if [[ ! -d "${ui_dir}" ]]; then
     echo "Checkout UI directory missing: ${ui_dir}" >&2
@@ -468,10 +483,11 @@ start_nextjs_ui() {
     exit 1
   fi
 
-  echo "Starting checkout Next.js UI (http=${ui_port}, baseUrl=${ui_base_url})"
+  echo "Starting checkout Next.js UI (http=${ui_port}, baseUrl=${ui_base_url}, runtimeBaseUrl=${ui_runtime_base_url})"
   (
     cd "$ui_dir"
     TPF_BASE_URL="$ui_base_url" \
+    TPF_RUNTIME_BASE_URL="$ui_runtime_base_url" \
     TPF_TENANT_ID="${TPF_TENANT_ID:-default}" \
     TPF_GRPC_HOST="${TPF_GRPC_HOST:-}" \
     TPF_GRPC_PORT="${TPF_GRPC_PORT:-}" \
@@ -517,8 +533,19 @@ start_module() {
 }
 
 build_modules() {
+  echo "Using Maven local repository: ${TPF_MAVEN_REPO_LOCAL}"
+  echo "Installing root parent POM into isolated Maven repository..."
+  "$MVN_BIN" "${MVN_REPO_ARG}" -N -f "${REPO_ROOT}/pom.xml" \
+    -DskipTests \
+    install
+
+  echo "Bootstrapping framework artifacts into isolated Maven repository..."
+  "$MVN_BIN" "${MVN_REPO_ARG}" -f "${REPO_ROOT}/framework/pom.xml" \
+    -DskipTests \
+    install
+
   echo "Building checkout modules..."
-  "$MVN_BIN" -f "${CHECKOUT_DIR}/pom.xml" \
+  "$MVN_BIN" "${MVN_REPO_ARG}" -f "${CHECKOUT_DIR}/pom.xml" \
     -pl pipeline-runtime-svc,checkout-orchestrator-svc,consumer-validation-orchestrator-svc,restaurant-acceptance-orchestrator-svc,kitchen-preparation-orchestrator-svc,dispatch-orchestrator-svc,delivery-execution-orchestrator-svc,payment-capture-orchestrator-svc,compensation-failure-orchestrator-svc \
     -am \
     -DskipTests \
@@ -554,7 +581,9 @@ EOF
 if [[ "$START_UI" == "true" ]]; then
   echo "Checkout UI:        http://127.0.0.1:${TPF_UI_PORT:-3000}"
   echo "UI config:          TPF_BASE_URL=${TPF_BASE_URL:-http://127.0.0.1:8080}"
+  echo "                    TPF_RUNTIME_BASE_URL=${TPF_RUNTIME_BASE_URL:-http://127.0.0.1:$(module_http_port pipeline-runtime-svc)}"
 fi
+echo "Maven local repo:   ${TPF_MAVEN_REPO_LOCAL}"
 
 if [[ -n "$RUN_COMMAND" ]]; then
   echo "Command mode is active; services will stop when the command exits."
@@ -565,7 +594,7 @@ fi
 if [[ -n "$RUN_COMMAND" ]]; then
   echo ""
   echo "Running command: $RUN_COMMAND"
-  if (cd "$REPO_ROOT" && bash -lc "$RUN_COMMAND"); then
+  if (cd "$REPO_ROOT" && MAVEN_OPTS="${MAVEN_OPTS:-} ${MVN_REPO_ARG}" bash -lc "$RUN_COMMAND"); then
     echo ""
     echo "Command completed successfully: $RUN_COMMAND"
   else

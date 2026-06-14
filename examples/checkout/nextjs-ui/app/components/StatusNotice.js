@@ -1,8 +1,9 @@
-import { AlertCircle, CheckCircle2, Info } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info, TriangleAlert } from "lucide-react";
 
 const icons = {
   success: CheckCircle2,
   error: AlertCircle,
+  warning: TriangleAlert,
   info: Info
 };
 

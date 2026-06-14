@@ -1,6 +1,6 @@
 :root {
   --bg: #f5f7fb;
-  --surface: #ffffff;
+  --surface: #fff;
   --surface-muted: #f8fafc;
   --ink: #111827;
   --muted: #64748b;
@@ -138,7 +138,7 @@ button:disabled {
 .button.primary {
   border-color: var(--primary);
   background: var(--primary);
-  color: #ffffff;
+  color: #fff;
 }
 
 .button.primary:hover {
@@ -404,6 +404,52 @@ button:disabled {
   color: var(--ink);
 }
 
+.stage-sketch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgb(37 99 235 / 9%), rgb(21 128 61 / 8%)),
+    var(--surface-muted);
+  color: var(--ink);
+  font-weight: 800;
+  text-align: center;
+}
+
+.stage-sketch {
+  min-height: 5.2rem;
+  margin-top: 0.9rem;
+  font-size: 1.05rem;
+}
+
+.payload-story {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.payload-story div {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.payload-story span {
+  color: var(--subtle);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.payload-story strong {
+  line-height: 1.35;
+}
+
 .order-summary {
   display: grid;
   gap: 0.25rem;
@@ -464,7 +510,7 @@ button:disabled {
   height: 1.75rem;
   border-radius: 999px;
   background: var(--primary);
-  color: #ffffff;
+  color: #fff;
   font-weight: 800;
 }
 
@@ -485,6 +531,12 @@ button:disabled {
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
+}
+
+.panel > .journey-tracker:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .journey-heading {
@@ -516,8 +568,8 @@ button:disabled {
 
 .journey-stages li {
   display: grid;
-  grid-template-columns: 1.75rem 1fr;
-  gap: 0.55rem;
+  grid-template-columns: 1.8rem 1fr;
+  gap: 0.7rem;
   align-items: start;
   padding: 0.5rem;
   border: 1px solid var(--border);
@@ -531,7 +583,7 @@ button:disabled {
 }
 
 .journey-stages li.active,
-.journey-stages li.continuing {
+.journey-stages li.waiting-trace {
   border-color: rgb(37 99 235 / 32%);
   background: #eff6ff;
 }
@@ -540,11 +592,8 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
+  width: 1.8rem;
+  height: 1.8rem;
   color: var(--primary);
 }
 
@@ -555,12 +604,94 @@ button:disabled {
 
 .journey-stages span,
 .journey-events span,
-.journey-events p {
+.journey-events p,
+.journey-stages small {
   display: block;
   margin: 0.12rem 0 0;
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.35;
+}
+
+.journey-stages small {
+  color: var(--subtle);
+}
+
+.payload-popover-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+  padding: 0.38rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.payload-popover-button:hover {
+  border-color: rgb(37 99 235 / 34%);
+  background: #eff6ff;
+}
+
+.payload-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgb(15 23 42 / 46%);
+}
+
+.payload-modal {
+  display: grid;
+  gap: 0.9rem;
+  width: min(960px, 100%);
+  max-height: min(780px, calc(100vh - 2.5rem));
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.payload-modal header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.payload-modal h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.payload-modal-section {
+  min-width: 0;
+}
+
+.payload-modal-section strong {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.payload-modal-section pre {
+  max-height: 22rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e5e7eb;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre;
 }
 
 .journey-events {
@@ -574,6 +705,38 @@ button:disabled {
   padding: 0.55rem;
   border-radius: 8px;
   background: var(--surface-muted);
+}
+
+.timing-board {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.65rem;
+  border: 1px solid rgb(37 99 235 / 22%);
+  border-radius: 8px;
+  background: #eff6ff;
+}
+
+.timing-board-heading,
+.timing-board div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.timing-board-heading {
+  justify-content: flex-start;
+  color: var(--primary);
+}
+
+.timing-board span,
+.timing-board small {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.timing-board small {
+  margin-left: auto;
 }
 
 .checkpoint-rail li {
@@ -666,6 +829,11 @@ button:disabled {
   background: #eff6ff;
 }
 
+.notice.warning {
+  border-color: rgb(180 83 9 / 28%);
+  background: #fffbeb;
+}
+
 .notice svg {
   margin-top: 0.15rem;
 }
@@ -680,6 +848,10 @@ button:disabled {
 
 .notice.info svg {
   color: var(--primary);
+}
+
+.notice.warning svg {
+  color: var(--warning);
 }
 
 .notice-body {
@@ -756,6 +928,7 @@ code {
   .decision-panel {
     grid-template-columns: 1fr;
   }
+
 }
 
 @media (max-width: 720px) {
@@ -776,8 +949,18 @@ code {
 
   .form-split,
   .metric-grid,
+  .payload-story,
   .next-grid {
     grid-template-columns: 1fr;
+  }
+
+  .timing-board div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .timing-board small {
+    margin-left: 0;
   }
 
   .button,

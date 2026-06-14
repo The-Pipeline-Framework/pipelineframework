@@ -4,6 +4,7 @@ import * as grpc from "@grpc/grpc-js";
 import * as protoLoader from "@grpc/proto-loader";
 
 import { getAwaitOrchestratorTargets, getUiConfig } from "./config.js";
+import { stageForPublication } from "./checkout-flow.js";
 import {
   buildCheckoutCompletionPayload,
   buildCheckoutOrder,
@@ -12,6 +13,7 @@ import {
 } from "./checkout-ui.js";
 
 const orchestratorServiceCache = new Map();
+const DEFAULT_GRPC_DEADLINE_MS = 5000;
 
 function toNumber(value, fallback = 0) {
   if (value === null || value === undefined || value === "") {
@@ -128,8 +130,10 @@ function runGrpcUnaryToTarget(target, methodName, request) {
   }
 
   const endpoint = parseAddressFromHostPort(target.grpcHost || target.host || "127.0.0.1", target.grpcPort);
+  const deadlineMs = Math.max(1, toNumber(target.grpcDeadlineMs, DEFAULT_GRPC_DEADLINE_MS));
+  const deadline = new Date(Date.now() + deadlineMs);
   return new Promise((resolve, reject) => {
-    client[methodName](request, (error, response) => {
+    client[methodName](request, { deadline }, (error, response) => {
       if (error) {
         reject(error);
       } else {
@@ -201,8 +205,7 @@ async function runGrpcUnaryAcrossTargets(
       const endpoint = parseAddressFromHostPort(target.grpcHost || target.host || "127.0.0.1", target.grpcPort);
       const wrapped = wrapGrpcError(error, methodName, endpoint);
       if (!allowExecutionNotFoundFallback || !isExecutionNotFoundError(error)) {
-        errors.push(wrapped);
-        continue;
+        throw wrapped;
       }
 
       if (targets.length === 1) {
@@ -344,10 +347,53 @@ export async function submitOrder(form) {
 
   return {
     executionId: String(response?.execution_id || ""),
+    requestId: String(request.requestId || ""),
     duplicate: Boolean(response?.duplicate),
     statusUrl: String(response?.status_url || ""),
     acceptedAtEpochMs: toNumber(response?.accepted_at_epoch_ms, 0)
   };
+}
+
+export function normalizeJourneyTraceEvent(event) {
+  const publication = toText(fieldValue(event, "publication"));
+  const stage = stageForPublication(publication);
+  return {
+    publication,
+    stageId: toText(fieldValue(event, "stageId", "stage_id")) || stage?.id || "",
+    observedAtEpochMs: toNumber(fieldValue(event, "observedAtEpochMs", "observed_at_epoch_ms"), 0),
+    requestId: toText(fieldValue(event, "requestId", "request_id")),
+    orderId: toText(fieldValue(event, "orderId", "order_id")),
+    payload: fieldValue(event, "payload") || {}
+  };
+}
+
+export async function fetchJourneyTrace({ requestId = "", orderId = "" } = {}) {
+  const normalizedRequestId = String(requestId || "").trim();
+  const normalizedOrderId = String(orderId || "").trim();
+  if (!normalizedRequestId && !normalizedOrderId) {
+    return [];
+  }
+
+  const config = getUiConfig();
+  const params = new URLSearchParams();
+  if (normalizedRequestId) {
+    params.set("requestId", normalizedRequestId);
+  }
+  if (normalizedOrderId) {
+    params.set("orderId", normalizedOrderId);
+  }
+
+  const runtimeBaseUrl = String(config.runtimeBaseUrl || "http://127.0.0.1:9000").replace(/\/+$/u, "");
+  const response = await fetch(`${runtimeBaseUrl}/checkout/journey?${params.toString()}`, {
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    throw new Error(`Journey trace request failed with HTTP ${response.status}`);
+  }
+
+  const body = await response.json();
+  const events = Array.isArray(body?.events) ? body.events : [];
+  return events.map(normalizeJourneyTraceEvent);
 }
 
 export async function fetchRunStatus(executionId, preferredTargetId = "") {
