@@ -39,6 +39,8 @@ The Spring adapter currently proves host integration only:
 It does not yet provide production Spring parity, Reactor context propagation, persistence providers, broker integration,
 or gRPC transport parity.
 
+Kafka await envelope records live on the runtime-core side of the seam so future Spring support can reuse the same request/completion contract. The concrete Kafka await publisher and completion consumer remain Quarkus runtime adapters backed by SmallRye Reactive Messaging.
+
 ## Renderer profile plumbing
 
 Deployment now accepts and validates `pipeline.codegen.rendererProfile` in discovery:

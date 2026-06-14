@@ -145,6 +145,7 @@ steps:
 Add the Quarkus Kafka messaging extension to the application that hosts the orchestrator, enable the default Kafka bridge with `tpf.await.kafka.reactive-messaging.enabled=true`, then configure the SmallRye channels:
 
 ```properties
+tpf.await.kafka.reactive-messaging.enabled=true
 mp.messaging.outgoing.tpf-await-kafka-requests.connector=smallrye-kafka
 mp.messaging.outgoing.tpf-await-kafka-requests.value.serializer=org.apache.kafka.common.serialization.StringSerializer
 mp.messaging.incoming.tpf-await-kafka-responses.connector=smallrye-kafka
