@@ -40,4 +40,12 @@ public interface PaymentProviderConfig {
   /** Deterministic fraction of provider requests that should return a business rejection. */
   @WithDefault("0.0")
   double providerRejectProbability();
+
+  /**
+   * Optional delay before publishing Kafka await completions. This keeps local
+   * self-host demos deterministic when the mock provider runs in the same process
+   * as the transition worker.
+   */
+  @WithDefault("0")
+  long responseDelayMillis();
 }

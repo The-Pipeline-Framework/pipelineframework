@@ -49,6 +49,8 @@ class PaymentProviderKafkaAwaitMockTest {
   @Mock
   PaymentProviderServiceMock paymentProvider;
 
+  PaymentProviderConfig paymentProviderConfig;
+
   @Mock
   MutinyEmitter<String> results;
 
@@ -57,8 +59,10 @@ class PaymentProviderKafkaAwaitMockTest {
   @BeforeEach
   void setUp() {
     MockitoAnnotations.openMocks(this);
+    paymentProviderConfig = new PaymentProviderServiceMockTest.FakePaymentProviderConfig();
     mockProvider = new PaymentProviderKafkaAwaitMock();
     mockProvider.paymentProvider = paymentProvider;
+    mockProvider.paymentProviderConfig = paymentProviderConfig;
     mockProvider.results = results;
   }
 

@@ -45,6 +45,112 @@ class TransitionCommandEnvelopeTest {
     }
 
     @Test
+    void preservesOptionalStopBeforeStepIndexAcrossEnvelopeRoundTrip() {
+        TransitionWorkerCommand command = new TransitionWorkerCommand(
+            "tenant-1",
+            "exec-1",
+            5,
+            7,
+            0,
+            ExecutionResultShape.MATERIALIZED_MULTI,
+            0L,
+            "await-item-continuation:unit-1:0",
+            new ExecutionInputSnapshot(ExecutionInputShape.UNI, new SamplePayload("payment-1", 99)));
+
+        TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
+            command,
+            "pipeline-1",
+            "contract-1",
+            "release-1",
+            "trace-1",
+            payloadCodec.encode(command.inputPayload()));
+        TransitionWorkerCommand decoded = envelope.toCommand(payloadCodec);
+
+        assertEquals(5, envelope.currentStepIndex());
+        assertEquals(7, envelope.stopBeforeStepIndex());
+        assertEquals(7, decoded.stopBeforeStepIndex());
+    }
+
+    @Test
+    void defaultTransitionWorkerCommandRunsToPipelineEnd() {
+        TransitionWorkerCommand command = command(new ExecutionInputSnapshot(
+            ExecutionInputShape.UNI,
+            new SamplePayload("payment-1", 99)));
+
+        assertEquals(-1, command.stopBeforeStepIndex());
+    }
+
+    @Test
+    void acceptsImmediateAggregateStopBeforeStepIndex() {
+        ExecutionInputSnapshot input = new ExecutionInputSnapshot(
+            ExecutionInputShape.UNI,
+            new SamplePayload("payment-1", 99));
+        TransitionWorkerCommand command = new TransitionWorkerCommand(
+            "tenant-1",
+            "exec-1",
+            5,
+            5,
+            0,
+            ExecutionResultShape.MATERIALIZED_MULTI,
+            0L,
+            "await-item-continuation:unit-1:0",
+            input);
+        TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
+            command,
+            "pipeline-1",
+            "contract-1",
+            "release-1",
+            "trace-1",
+            payloadCodec.encode(command.inputPayload()));
+
+        assertEquals(5, command.stopBeforeStepIndex());
+        assertEquals(5, envelope.stopBeforeStepIndex());
+        assertEquals(5, envelope.toCommand(payloadCodec).stopBeforeStepIndex());
+    }
+
+    @Test
+    void rejectsInvalidStopBeforeStepIndexInCommand() {
+        ExecutionInputSnapshot input = new ExecutionInputSnapshot(
+            ExecutionInputShape.UNI,
+            new SamplePayload("payment-1", 99));
+
+        assertThrows(IllegalArgumentException.class, () -> new TransitionWorkerCommand(
+            "tenant-1",
+            "exec-1",
+            5,
+            3,
+            0,
+            ExecutionResultShape.MATERIALIZED_MULTI,
+            0L,
+            "await-item-continuation:unit-1:0",
+            input));
+    }
+
+    @Test
+    void rejectsInvalidStopBeforeStepIndexInEnvelope() {
+        SerializedTransitionPayload payload = payloadCodec.encode(new ExecutionInputSnapshot(
+            ExecutionInputShape.UNI,
+            new SamplePayload("payment-1", 99)));
+
+        assertThrows(IllegalArgumentException.class, () -> new TransitionCommandEnvelope(
+            "tenant-1",
+            "exec-1",
+            "pipeline-1",
+            "contract-1",
+            "release-1",
+            5,
+            3,
+            0,
+            ExecutionResultShape.MATERIALIZED_MULTI,
+            0L,
+            "await-item-continuation:unit-1:0",
+            "trace-1",
+            payload.payloadTypeId(),
+            payload.payloadEncoding(),
+            payload.payload()));
+    }
+
+    @Test
     void preservesTypedMultiInputPayloadAcrossEnvelopeRoundTrip() {
         TransitionWorkerCommand command = command(new ExecutionInputSnapshot(
             ExecutionInputShape.MULTI,

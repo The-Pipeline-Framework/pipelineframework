@@ -4,6 +4,8 @@ This page describes the current production-ish self-host shape for the durable c
 
 The runnable starting point remains `examples/restaurant-approval/self-host`. That example proves the same control-plane, release, await, result, and failure/DLQ paths in one local process. The containerized HA reference in `examples/restaurant-approval/self-host/container` runs the same flow with a coordinator container, REST worker container, and LocalStack-backed DynamoDB/SQS/S3-compatible services.
 
+`examples/csv-payments/self-host/container` is the advanced container reference. It adds Kafka-backed await completions, stream input, app persistence, a REST transition worker, and a grouped `pipeline-runtime-svc` gRPC step runtime on top of the same durable coordinator pattern.
+
 ## Deployment Shapes
 
 ### One Process
@@ -130,6 +132,14 @@ The restaurant container reference demonstrates this baseline locally:
 ```
 
 It uses LocalStack to create the required DynamoDB tables, SQS work/DLQ queues, and S3-compatible release artifact bucket. Treat that as local verification of the topology, not production AWS provisioning.
+
+The CSV Payments container reference demonstrates the same baseline with Kafka await completions and the example persistence path:
+
+```bash
+./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
+```
+
+CSV await item continuations use the same bounded transition-worker seam as normal queue-async work. The worker executes each item continuation segment up to the aggregate boundary, while generated step clients target the runtime and persistence containers.
 
 ## Startup Checklist
 
