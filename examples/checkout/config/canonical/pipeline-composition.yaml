@@ -1,0 +1,19 @@
+version: 1
+name: tpfgo-checkout
+pipelines:
+  - id: checkout
+    path: 01-checkout-pipeline.yaml
+  - id: consumer-validation
+    path: 02-consumer-validation-pipeline.yaml
+  - id: restaurant-acceptance
+    path: 03-restaurant-acceptance-pipeline.yaml
+  - id: kitchen-preparation
+    path: 04-kitchen-preparation-pipeline.yaml
+  - id: dispatch
+    path: 05-dispatch-pipeline.yaml
+  - id: delivery-execution
+    path: 06-delivery-execution-pipeline.yaml
+  - id: payment-capture
+    path: 07-payment-capture-pipeline.yaml
+  - id: compensation-failure
+    path: 08-compensation-failure-pipeline.yaml
