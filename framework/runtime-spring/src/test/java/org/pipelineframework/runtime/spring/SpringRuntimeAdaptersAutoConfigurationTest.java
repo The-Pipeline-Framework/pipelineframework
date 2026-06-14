@@ -17,13 +17,16 @@
 package org.pipelineframework.runtime.spring;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.runtime.core.PipelineUnaryStep;
 import org.pipelineframework.runtime.core.RuntimeAdapters;
+import reactor.core.publisher.Mono;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -31,10 +34,16 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.event.EventListener;
+import org.springframework.http.MediaType;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -124,6 +133,38 @@ class SpringRuntimeAdaptersAutoConfigurationTest {
 
                 assertEquals(List.of(new SpringRuntimeEvent("orders.ready", "payload")), events.runtimeEvents);
                 assertEquals(List.of(new SpringRuntimeWorkEvent("work-item")), events.workEvents);
+            });
+    }
+
+    @Test
+    void springPipelineRunnerExecutesSpringStepBeansThroughCore() {
+        contextRunner
+            .withUserConfiguration(UnaryStepConfig.class)
+            .run(context -> {
+                SpringPipelineRunner runner = context.getBean(SpringPipelineRunner.class);
+
+                assertEquals(2, runner.stepCount());
+                assertEquals("HELLO!", runner.run("hello").toCompletableFuture().get(5, TimeUnit.SECONDS));
+            });
+    }
+
+    @Test
+    void webFluxControllerCanExecuteUnaryPipelineRunner() {
+        contextRunner
+            .withUserConfiguration(RestUnaryStepConfig.class)
+            .run(context -> {
+                WebTestClient client = WebTestClient
+                    .bindToController(context.getBean(RestUnarySmokeController.class))
+                    .build();
+
+                client.post()
+                    .uri("/payments/process")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(new PaymentRecord("p-100"))
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody(PaymentStatus.class)
+                    .value(status -> assertEquals("approved:p-100", status.value()));
             });
     }
 
@@ -262,6 +303,53 @@ class SpringRuntimeAdaptersAutoConfigurationTest {
         @EventListener
         void onWorkEvent(SpringRuntimeWorkEvent event) {
             workEvents.add(event);
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class UnaryStepConfig {
+        @Bean
+        PipelineUnaryStep<String, String> uppercaseStep() {
+            return input -> CompletableFuture.completedFuture(input.toUpperCase());
+        }
+
+        @Bean
+        PipelineUnaryStep<String, String> suffixStep() {
+            return input -> CompletableFuture.completedFuture(input + "!");
+        }
+    }
+
+    record PaymentRecord(String value) {
+    }
+
+    record PaymentStatus(String value) {
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class RestUnaryStepConfig {
+        @Bean
+        PipelineUnaryStep<PaymentRecord, PaymentStatus> approvePaymentStep() {
+            return input -> CompletableFuture.completedFuture(new PaymentStatus("approved:" + input.value()));
+        }
+
+        @Bean
+        RestUnarySmokeController restUnarySmokeController(SpringPipelineRunner runner) {
+            return new RestUnarySmokeController(runner);
+        }
+    }
+
+    @RestController
+    @RequestMapping("/payments")
+    static class RestUnarySmokeController {
+        private final SpringPipelineRunner runner;
+
+        RestUnarySmokeController(SpringPipelineRunner runner) {
+            this.runner = runner;
+        }
+
+        @PostMapping("/process")
+        Mono<PaymentStatus> process(@RequestBody PaymentRecord input) {
+            return Mono.fromCompletionStage(runner.run(input)).map(PaymentStatus.class::cast);
         }
     }
 }

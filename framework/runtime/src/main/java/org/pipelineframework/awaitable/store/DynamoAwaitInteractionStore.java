@@ -648,9 +648,6 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         Map<String, String> names = new HashMap<>();
         names.put("#version", VERSION);
         names.put("#status", STATUS);
-        names.put("#response", RESPONSE_PAYLOAD_JSON);
-        names.put("#actor", ACTOR);
-        names.put("#metadata", TRANSPORT_METADATA_JSON);
         names.put("#updated", UPDATED_AT_EPOCH_MS);
         names.put("#ttl", TTL_EPOCH_S);
         Map<String, AttributeValue> values = new HashMap<>();
@@ -663,12 +660,15 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             values.put(":requiredStatus", avS(requiredStatus.name()));
         }
         if (responsePayload != null) {
+            names.put("#response", RESPONSE_PAYLOAD_JSON);
             values.put(":response", avS(toJson(responsePayload)));
         }
         if (actor != null && !actor.isBlank()) {
+            names.put("#actor", ACTOR);
             values.put(":actor", avS(actor));
         }
         if (transportMetadata != null) {
+            names.put("#metadata", TRANSPORT_METADATA_JSON);
             values.put(":metadata", avS(toJson(transportMetadata)));
         }
         if (status.terminal()) {

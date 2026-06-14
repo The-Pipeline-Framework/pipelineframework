@@ -344,6 +344,63 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
+    void redriveTerminalExecutionUsesConditionalTerminalUpdate() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        Map<String, AttributeValue> queuedItem = new HashMap<>(executionItem(
+            "tenant-a",
+            "exec-1",
+            "key-1",
+            ttl,
+            ExecutionStatus.QUEUED));
+        queuedItem.put("attempt", AttributeValue.builder().n("3").build());
+
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(queuedItem).build());
+
+        Optional<ExecutionRecord<Object, Object>> result = store.redriveTerminalExecution(
+                "tenant-a",
+                "exec-1",
+                2L,
+                true,
+                "redrive",
+                now)
+            .await().indefinitely();
+
+        assertTrue(result.isPresent());
+        assertEquals(ExecutionStatus.QUEUED, result.get().status());
+        assertEquals(3, result.get().attempt());
+        verify(client).updateItem(argThat((UpdateItemRequest request) ->
+            request.conditionExpression().contains("#version = :expected")
+                && request.conditionExpression().contains("#status = :dlq OR #status = :failed")
+                && request.updateExpression().contains("#attempt = #attempt + :one")
+                && request.updateExpression().contains("REMOVE #result, #errorCode, #errorMessage, #leaseOwner")));
+    }
+
+    @Test
+    void redriveTerminalExecutionReturnsEmptyOnConditionFailure() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenThrow(ConditionalCheckFailedException.builder().message("not redrivable").build());
+
+        Optional<ExecutionRecord<Object, Object>> result = store.redriveTerminalExecution(
+                "tenant-a",
+                "exec-1",
+                2L,
+                false,
+                "redrive",
+                System.currentTimeMillis())
+            .await().indefinitely();
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
     void findDueExecutionsReturnsEmptyListWhenLimitIsZero() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");

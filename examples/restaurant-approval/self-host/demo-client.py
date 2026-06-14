@@ -120,6 +120,26 @@ def register_activate(args):
     release_version = registered["releaseVersion"]
     request("POST", f"{base}/{release_version}/activate", token=args.admin_token)
     print(f"Registered and activated release {release_version}")
+    if args.worker_id:
+        register_worker_from_release(args, registered)
+
+
+def register_worker_from_release(args, release):
+    base = f"{args.base_url}/tpf/admin/tenants/{args.tenant_id}/pipelines/{args.pipeline_id}/workers"
+    body = {
+        "workerId": args.worker_id,
+        "contractVersion": release["contractVersion"],
+        "releaseVersion": release["releaseVersion"],
+        "protocol": args.worker_protocol,
+        "endpoint": args.worker_endpoint,
+        "artifactId": release.get("primaryArtifactId", ""),
+        "artifactDigest": release.get("primaryArtifactDigest", ""),
+    }
+    registered = request("POST", f"{base}/register", token=args.admin_token, body=body)
+    print(
+        "Registered worker "
+        f"{registered['workerId']} ({registered['protocol']}) for release {registered['releaseVersion']}"
+    )
 
 
 def encoded_payload(payload, payload_type=None):
@@ -167,6 +187,10 @@ def auth(args):
     return args.control_plane_token
 
 
+def order_type(args):
+    return getattr(args, "order_type", ORDER_TYPE) or ORDER_TYPE
+
+
 def submit_order(args, customer_name, restaurant_name):
     request_id = str(uuid.uuid4())
     order = {
@@ -179,8 +203,8 @@ def submit_order(args, customer_name, restaurant_name):
     }
     body = {
         "pipelineId": args.pipeline_id,
-        "inputShape": "RAW",
-        "inputPayload": encoded_payload(order, ORDER_TYPE),
+        "inputShape": "UNI",
+        "inputPayload": encoded_payload(order, order_type(args)),
         "idempotencyKey": f"order-{request_id}",
         "outputStreaming": False,
     }
@@ -272,6 +296,24 @@ def inspect_result(args):
         token=auth(args),
     )
     print(json.dumps(result, indent=2, sort_keys=True))
+
+
+def redrive_execution(args):
+    body = {
+        "allowFailed": args.allow_failed,
+    }
+    if args.expected_version is not None:
+        body["expectedVersion"] = args.expected_version
+    if args.reason:
+        body["reason"] = args.reason
+    result = request(
+        "POST",
+        f"{args.base_url}/tpf/admin/tenants/{args.tenant_id}/executions/{args.execution_id}/redrive",
+        token=args.admin_token,
+        body=body,
+    )
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return result
 
 
 def complete(args, interaction, decision):
@@ -389,14 +431,36 @@ def run_incident(args):
     if terminal.get("errorMessage") in {None, ""}:
         raise RuntimeError(f"Expected terminal failure to include errorMessage; got {terminal}")
     wait_log_contains(args.log_file, execution_id)
+    redrive_summary = None
+    redrive_terminal = None
+    if args.admin_token:
+        redrive_args = argparse.Namespace(
+            base_url=args.base_url,
+            tenant_id=args.tenant_id,
+            execution_id=execution_id,
+            admin_token=args.admin_token,
+            expected_version=terminal.get("version"),
+            reason="self-host incident demo re-drive",
+            allow_failed=True,
+        )
+        redrive_summary = redrive_execution(redrive_args)
+        redrive_terminal = wait_terminal_failure(args, execution_id, timeout_seconds=args.timeout_seconds)
+        if redrive_terminal.get("version", 0) <= terminal.get("version", 0):
+            raise RuntimeError(
+                f"Expected re-driven execution version to advance; first={terminal}, second={redrive_terminal}")
     print("Incident triage summary:")
     print(json.dumps({
         "executionId": execution_id,
-        "status": terminal.get("status"),
-        "attempt": terminal.get("attempt"),
+        "status": (redrive_terminal or terminal).get("status"),
+        "attempt": (redrive_terminal or terminal).get("attempt"),
         "errorCode": terminal.get("errorCode"),
         "errorMessage": terminal.get("errorMessage"),
-        "operatorAction": "Inspect the failure and re-submit corrected business input; built-in DLQ replay is not provided yet.",
+        "redrive": redrive_summary,
+        "operatorAction": (
+            "The admin re-drive endpoint re-queued the durable execution record. "
+            "This demo intentionally re-drives the same invalid payload, so it fails again; "
+            "real recovery requires correcting the dependency/input path and relying on stable idempotency keys."
+        ),
     }, indent=2, sort_keys=True))
 
 
@@ -421,6 +485,9 @@ def main():
     reg.add_argument("--pipeline-id", required=True)
     reg.add_argument("--admin-token", required=True)
     reg.add_argument("--release-descriptor-path", required=True)
+    reg.add_argument("--worker-id")
+    reg.add_argument("--worker-protocol", default="local")
+    reg.add_argument("--worker-endpoint", default="in-process")
     reg.set_defaults(func=register_activate)
 
     release = sub.add_parser("create-release")
@@ -436,6 +503,8 @@ def main():
     flows.add_argument("--pipeline-id", required=True)
     flows.add_argument("--await-step-id", required=True)
     flows.add_argument("--control-plane-token", required=True)
+    flows.add_argument("--order-type", default=ORDER_TYPE)
+    flows.add_argument("--timeout-seconds", type=int, default=90)
     flows.set_defaults(func=run_flows)
 
     status = sub.add_parser("status")
@@ -460,14 +529,26 @@ def main():
     result.add_argument("--execution-id", required=True)
     result.set_defaults(func=inspect_result)
 
+    redrive = sub.add_parser("redrive")
+    redrive.add_argument("--base-url", required=True)
+    redrive.add_argument("--tenant-id", required=True)
+    redrive.add_argument("--admin-token", required=True)
+    redrive.add_argument("--execution-id", required=True)
+    redrive.add_argument("--expected-version", type=int)
+    redrive.add_argument("--reason", default="operator re-drive")
+    redrive.add_argument("--allow-failed", action="store_true")
+    redrive.set_defaults(func=redrive_execution)
+
     incident = sub.add_parser("run-incident")
     incident.add_argument("--base-url", required=True)
     incident.add_argument("--tenant-id", required=True)
     incident.add_argument("--pipeline-id", required=True)
     incident.add_argument("--await-step-id", required=True)
     incident.add_argument("--control-plane-token", required=True)
+    incident.add_argument("--admin-token")
     incident.add_argument("--log-file")
     incident.add_argument("--timeout-seconds", type=int, default=90)
+    incident.add_argument("--order-type", default=ORDER_TYPE)
     incident.set_defaults(func=run_incident)
 
     args = parser.parse_args()

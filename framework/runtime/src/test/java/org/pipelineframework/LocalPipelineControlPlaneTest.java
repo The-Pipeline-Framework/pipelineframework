@@ -13,6 +13,8 @@ import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
+import org.pipelineframework.orchestrator.ExecutionRedriveResult;
+import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.PipelineTransitionWorker;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
@@ -98,6 +100,35 @@ class LocalPipelineControlPlaneTest {
     controlPlane.processExecutionWorkItem(workItem, transitionWorker).await().indefinitely();
 
     verify(queueAsyncCoordinator).processExecutionWorkItem(eq(workItem), same(transitionWorker));
+  }
+
+  @Test
+  void redriveExecutionDelegatesToCoordinator() {
+    ExecutionRedriveResult result = new ExecutionRedriveResult(
+        "tenant-1",
+        "exec-5",
+        ExecutionStatus.DLQ,
+        ExecutionStatus.QUEUED,
+        8L,
+        2,
+        3,
+        "pipeline-a",
+        "contract-a",
+        "release-a",
+        100L);
+    when(queueAsyncCoordinator.redriveExecution("tenant-1", "exec-5", 7L, true, "operator retry"))
+        .thenReturn(Uni.createFrom().item(result));
+
+    ExecutionRedriveResult actual = controlPlane.redriveExecution(
+            "tenant-1",
+            "exec-5",
+            7L,
+            true,
+            "operator retry")
+        .await().indefinitely();
+
+    assertEquals(result, actual);
+    verify(queueAsyncCoordinator).redriveExecution("tenant-1", "exec-5", 7L, true, "operator retry");
   }
 
   private static AwaitInteractionRecord awaitRecord(String tenantId, String executionId, String interactionId) {

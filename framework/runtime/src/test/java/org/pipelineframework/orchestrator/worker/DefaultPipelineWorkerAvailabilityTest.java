@@ -29,6 +29,7 @@ class DefaultPipelineWorkerAvailabilityTest {
     private PipelineReleaseIdentityResolver identityResolver;
     private RestPipelineTransitionWorker restWorker;
     private GrpcPipelineTransitionWorker grpcWorker;
+    private InMemoryPipelineWorkerRegistry workerRegistry;
 
     @BeforeEach
     void setUp() {
@@ -40,10 +41,12 @@ class DefaultPipelineWorkerAvailabilityTest {
         identityResolver = mock(PipelineReleaseIdentityResolver.class);
         restWorker = mock(RestPipelineTransitionWorker.class);
         grpcWorker = mock(GrpcPipelineTransitionWorker.class);
+        workerRegistry = new InMemoryPipelineWorkerRegistry();
         availability.orchestratorConfig = config;
         availability.identityResolver = identityResolver;
         availability.restWorker = restWorker;
         availability.grpcWorker = grpcWorker;
+        availability.workerRegistry = workerRegistry;
         when(config.workerRest()).thenReturn(restConfig);
         when(config.workerGrpc()).thenReturn(grpcConfig);
         when(config.workerSqs()).thenReturn(sqsConfig);
@@ -65,6 +68,8 @@ class DefaultPipelineWorkerAvailabilityTest {
 
     @Test
     void localWorkerAvailabilityMatchesGeneratedIdentity() {
+        registerWorker("local", "sha256:release", "restaurant-approval-monolith", "sha256:artifact");
+
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
             "org.example.restaurant",
@@ -77,7 +82,23 @@ class DefaultPipelineWorkerAvailabilityTest {
     }
 
     @Test
+    void localWorkerAvailabilityRequiresHealthyLifecycleRecord() {
+        PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
+            "tenant-1",
+            "org.example.restaurant",
+            "sha256:contract",
+            "sha256:release",
+            "restaurant-approval-monolith",
+            "sha256:artifact")).await().atMost(Duration.ofSeconds(2));
+
+        assertFalse(result.available());
+        assertTrue(result.message().contains("No worker lifecycle record"));
+    }
+
+    @Test
     void localWorkerAvailabilityRejectsMismatchedRelease() {
+        registerWorker("local", "sha256:release", "restaurant-approval-monolith", "sha256:artifact");
+
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
             "org.example.restaurant",
@@ -117,6 +138,7 @@ class DefaultPipelineWorkerAvailabilityTest {
         when(sqsConfig.releaseVersion()).thenReturn(Optional.of("sha256:release"));
         when(sqsConfig.artifactId()).thenReturn(Optional.of("restaurant-approval-monolith"));
         when(sqsConfig.artifactDigest()).thenReturn(Optional.of("sha256:artifact"));
+        registerWorker("sqs", "sha256:release", "restaurant-approval-monolith", "sha256:artifact");
 
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
@@ -133,6 +155,7 @@ class DefaultPipelineWorkerAvailabilityTest {
     void restWorkerAvailabilityMatchesRemoteCapability() {
         when(restConfig.isEnabled()).thenReturn(true);
         when(restWorker.capabilities()).thenReturn(Uni.createFrom().item(capability("rest", "sha256:release")));
+        registerWorker("rest", "sha256:release", "", "");
 
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
@@ -149,6 +172,7 @@ class DefaultPipelineWorkerAvailabilityTest {
     void restWorkerAvailabilityRejectsMismatchedRemoteCapability() {
         when(restConfig.isEnabled()).thenReturn(true);
         when(restWorker.capabilities()).thenReturn(Uni.createFrom().item(capability("rest", "sha256:other")));
+        registerWorker("rest", "sha256:release", "", "");
 
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
@@ -165,6 +189,7 @@ class DefaultPipelineWorkerAvailabilityTest {
     void grpcWorkerAvailabilityMatchesRemoteCapability() {
         when(grpcConfig.isEnabled()).thenReturn(true);
         when(grpcWorker.capabilities()).thenReturn(Uni.createFrom().item(capability("grpc", "sha256:release")));
+        registerWorker("grpc", "sha256:release", "", "");
 
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
@@ -181,6 +206,7 @@ class DefaultPipelineWorkerAvailabilityTest {
     void grpcWorkerAvailabilityRejectsMismatchedRemoteCapability() {
         when(grpcConfig.isEnabled()).thenReturn(true);
         when(grpcWorker.capabilities()).thenReturn(Uni.createFrom().item(capability("grpc", "sha256:other")));
+        registerWorker("grpc", "sha256:release", "", "");
 
         PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
             "tenant-1",
@@ -191,6 +217,61 @@ class DefaultPipelineWorkerAvailabilityTest {
             "")).await().atMost(Duration.ofSeconds(2));
 
         assertFalse(result.available());
+    }
+
+    @Test
+    void availabilityRejectsDrainingWorker() {
+        registerWorker("local", "sha256:release", "restaurant-approval-monolith", "sha256:artifact");
+        workerRegistry.markDraining(
+            "tenant-1",
+            "org.example.restaurant",
+            "local-worker",
+            System.currentTimeMillis(),
+            Duration.ofMinutes(2)).await().atMost(Duration.ofSeconds(2));
+
+        PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
+            "tenant-1",
+            "org.example.restaurant",
+            "sha256:contract",
+            "sha256:release",
+            "restaurant-approval-monolith",
+            "sha256:artifact")).await().atMost(Duration.ofSeconds(2));
+
+        assertFalse(result.available());
+        assertTrue(result.message().contains("DRAINING"));
+    }
+
+    @Test
+    void availabilityRejectsArtifactMismatchLifecycleRecord() {
+        registerWorker("local", "sha256:release", "restaurant-approval-monolith", "sha256:other");
+
+        PipelineWorkerAvailabilityResult result = availability.check(new PipelineWorkerAvailabilityRequest(
+            "tenant-1",
+            "org.example.restaurant",
+            "sha256:contract",
+            "sha256:release",
+            "restaurant-approval-monolith",
+            "sha256:artifact")).await().atMost(Duration.ofSeconds(2));
+
+        assertFalse(result.available());
+        assertTrue(result.message().contains("artifact identity"));
+    }
+
+    private void registerWorker(
+        String protocol,
+        String releaseVersion,
+        String artifactId,
+        String artifactDigest) {
+        workerRegistry.register(new PipelineWorkerRegistration(
+            "tenant-1",
+            "org.example.restaurant",
+            "sha256:contract",
+            releaseVersion,
+            protocol + "-worker",
+            protocol,
+            protocol.equals("local") ? "in-process" : "http://localhost",
+            artifactId,
+            artifactDigest), System.currentTimeMillis()).await().atMost(Duration.ofSeconds(2));
     }
 
     private static PipelineWorkerCapability capability(String providerName, String releaseVersion) {

@@ -14,7 +14,7 @@ public record PipelineReleaseRecord(
     PipelineReleaseDescriptor descriptor,
     String primaryArtifactId,
     String primaryArtifactDigest,
-    String primaryArtifactPath,
+    String primaryArtifactUri,
     long primaryArtifactSizeBytes,
     String primaryArtifactChecksum,
     PipelineContractDescriptor contract,
@@ -31,7 +31,7 @@ public record PipelineReleaseRecord(
         Objects.requireNonNull(descriptor, "descriptor");
         primaryArtifactId = primaryArtifactId == null ? "" : primaryArtifactId;
         primaryArtifactDigest = primaryArtifactDigest == null ? "" : primaryArtifactDigest;
-        primaryArtifactPath = primaryArtifactPath == null ? "" : primaryArtifactPath;
+        primaryArtifactUri = primaryArtifactUri == null ? "" : primaryArtifactUri;
         primaryArtifactChecksum = primaryArtifactChecksum == null ? "" : primaryArtifactChecksum;
     }
 
@@ -45,7 +45,7 @@ public record PipelineReleaseRecord(
             descriptor,
             primaryArtifactId,
             primaryArtifactDigest,
-            primaryArtifactPath,
+            primaryArtifactUri,
             primaryArtifactSizeBytes,
             primaryArtifactChecksum,
             contract,

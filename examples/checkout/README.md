@@ -2,7 +2,9 @@
 
 `examples/checkout` is the canonical TPFGo example for reliable cross-pipeline handoff.
 
-It demonstrates an eight-pipeline application using only the framework checkpoint-publication model plus two interaction checkpoints:
+It demonstrates an eight-pipeline application using the framework checkpoint-publication model plus two interaction
+checkpoints. The canonical composition manifest at `config/canonical/pipeline-composition.yaml` lists the pipeline YAML
+files; typed handoff edges are derived from each pipeline's `input.subscription` and `output.checkpoint` declarations.
 
 1. checkout
 2. consumer-validation
@@ -89,8 +91,9 @@ TPF_UI_PORT=3001 TPF_BASE_URL=http://127.0.0.1:8080 ./examples/checkout/start-st
 
 ## Canonical contracts
 
-The canonical YAML contracts live under `config/canonical/`:
+The canonical YAML contracts and composition manifest live under `config/canonical/`:
 
+- `pipeline-composition.yaml`
 - `01-checkout-pipeline.yaml`
 - `02-consumer-validation-pipeline.yaml`
 - `03-restaurant-acceptance-pipeline.yaml`
@@ -100,7 +103,8 @@ The canonical YAML contracts live under `config/canonical/`:
 - `07-payment-capture-pipeline.yaml`
 - `08-compensation-failure-pipeline.yaml`
 
-Each file is kept in sync with the runnable module `pipeline.yaml`.
+Each pipeline file is kept in sync with the runnable module `pipeline.yaml`. The composition manifest is validated as a
+single typed handoff graph so publication, subscription, terminal output, and entry input contracts cannot drift.
 
 ## Runtime model
 
@@ -113,6 +117,13 @@ Each file is kept in sync with the runnable module `pipeline.yaml`.
 - idempotency is explicit on each publication boundary
 
 ## Validation
+
+Validate the canonical composition contract through the framework runtime tests:
+
+```bash
+./mvnw -f framework/pom.xml -pl runtime -am '-Dtest=PipelineComposition*Test,CheckoutReferenceContractTest' \
+  -Dsurefire.failIfNoSpecifiedTests=false test
+```
 
 Build the full example:
 
@@ -135,4 +146,4 @@ Run the full TPFGo checkpoint-flow integration suite directly:
 
 ## Docs
 
-The user-facing walkthrough is in [docs/guide/development/tpfgo-example.md](/Users/mari/tpf5/docs/guide/development/tpfgo-example.md).
+The user-facing walkthrough is in [docs/guide/development/tpfgo-example.md](../../docs/guide/development/tpfgo-example.md).

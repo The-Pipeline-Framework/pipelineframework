@@ -214,11 +214,24 @@ const mainSidebar = [
                     {text: 'Overview', link: '/guide/evolve/durable-coordinator/'},
                     {text: 'Worker Protocols', link: '/guide/evolve/durable-coordinator/worker-protocols'},
                     {text: 'Step-Aware Invocation Runtime', link: '/guide/evolve/durable-coordinator/boundary-invocation-model'},
+                    {
+                        text: 'Brokered Runtime Boundaries',
+                        link: '/guide/evolve/brokered-boundaries/',
+                        collapsed: true,
+                        items: [
+                            {text: 'Overview', link: '/guide/evolve/brokered-boundaries/'},
+                            {text: 'Boundary Taxonomy', link: '/guide/evolve/brokered-boundaries/boundary-taxonomy'},
+                            {text: 'Dispatch Substrates', link: '/guide/evolve/brokered-boundaries/dispatch-substrates'},
+                            {text: 'Envelope And Data Policy', link: '/guide/evolve/brokered-boundaries/envelope-and-data-policy'},
+                            {text: 'Adoption And Slices', link: '/guide/evolve/brokered-boundaries/adoption-and-slices'}
+                        ]
+                    },
                     {text: 'Bundle Contract', link: '/guide/evolve/durable-coordinator/bundle-contract'},
                     {text: 'Pipeline Contract And Release Model', link: '/guide/evolve/durable-coordinator/pipeline-contract-release-model'},
                     {text: 'Runtime Boundaries And Performance', link: '/guide/evolve/durable-coordinator/runtime-boundaries-performance'},
                     {text: 'Local APIs', link: '/guide/evolve/durable-coordinator/local-apis'},
                     {text: 'Self-Hosted Deployment', link: '/guide/evolve/durable-coordinator/self-hosted-deployment'},
+                    {text: 'Self-Hosted HA Roadmap', link: '/guide/evolve/durable-coordinator/self-hosted-ha-roadmap'},
                     {text: 'Self-Hosted Milestone', link: '/guide/evolve/durable-coordinator/self-hosted-milestone'}
                 ]
             },

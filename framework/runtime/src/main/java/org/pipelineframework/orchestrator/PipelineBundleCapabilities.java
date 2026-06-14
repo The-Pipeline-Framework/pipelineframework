@@ -3,9 +3,9 @@ package org.pipelineframework.orchestrator;
 import java.util.List;
 
 /**
- * Runtime capabilities declared by a generated pipeline bundle.
+ * Runtime capabilities declared by a generated pipeline contract.
  *
- * @param localTransitionExecution whether the bundle can execute transitions in-process
+ * @param localTransitionExecution whether the runtime can execute transitions in-process
  * @param transitionWorkerProtocols supported transition worker protocols
  */
 public record PipelineBundleCapabilities(

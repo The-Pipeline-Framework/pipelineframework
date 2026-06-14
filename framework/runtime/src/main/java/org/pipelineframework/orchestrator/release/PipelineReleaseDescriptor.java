@@ -1,6 +1,5 @@
 package org.pipelineframework.orchestrator.release;
 
-import org.pipelineframework.orchestrator.release.PipelineReleaseArtifactDescriptor;
 import java.util.List;
 import java.util.Objects;
 

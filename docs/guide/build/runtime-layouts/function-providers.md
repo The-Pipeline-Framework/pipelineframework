@@ -17,6 +17,15 @@ Important runtime constraint:
 - `FUNCTION` currently requires `REST` transport. `gRPC` is not a supported `FUNCTION` transport in the current implementation.
 - Google's current product name is Cloud Run functions, while the current Quarkus extension name remains `quarkus-google-cloud-functions`.
 
+## Support Matrix
+
+| Path | What TPF owns | Current HA meaning |
+| --- | --- | --- |
+| `COMPUTE` + `QUEUE_ASYNC` durable coordinator | Execution records, leases, await units, retry/DLQ, re-drive, release pinning, and worker lifecycle. | TPF-owned durable orchestration path for self-hosted HA. |
+| `FUNCTION` | Generated provider handlers and serverless invocation adapters for REST-backed pipeline or step calls. | Platform invocation availability only; not TPF-owned durable orchestration HA. |
+
+Use `FUNCTION` when you want serverless invocation packaging for supported handlers and can rely on caller/platform retries plus application idempotency. Use `COMPUTE` + `QUEUE_ASYNC` when the pipeline needs TPF-owned durable execution state, await recovery, DLQ/re-drive, or checkpoint-style orchestration semantics.
+
 ## Architecture
 
 ### Step-Level Handlers
@@ -49,11 +58,12 @@ It does not currently document or implement:
 
 1. Google Cloud Run services as a generic container/service target,
 2. Azure Durable Functions as a separate TPF runtime model,
-3. `gRPC` as a `FUNCTION` transport.
+3. `gRPC` as a `FUNCTION` transport,
+4. all-serverless durable orchestration.
 
 If you need queue-backed recovery, checkpoint handoff, or orchestrator-managed HA, use the `COMPUTE` + `QUEUE_ASYNC` path instead of treating function providers as a replacement for that runtime model.
 
-For how function providers relate to an external durable control plane, see [Durable Coordinator](/guide/evolve/durable-coordinator/).
+An all-serverless durable coordinator would be a separate design, backed by durable services such as DynamoDB, SQS, and EventBridge-style scheduling. Current `FUNCTION` support should be read as serverless adapter support, not as that architecture.
 
 ## Quick Start
 

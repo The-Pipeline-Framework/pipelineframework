@@ -356,6 +356,15 @@ public interface PipelineOrchestratorConfig {
         String releaseTable();
 
         /**
+         * Worker lifecycle metadata table name.
+         *
+         * @return worker lifecycle table name
+         */
+        @WithName("worker-table")
+        @WithDefault("tpf_worker_registry")
+        String workerTable();
+
+        /**
          * Optional region override.
          *
          * @return region when configured
@@ -531,12 +540,12 @@ public interface PipelineOrchestratorConfig {
     }
 
     /**
-     * Local/dev hosted bundle registry and artifact storage settings.
+     * Release registry and artifact storage settings.
      */
     interface ReleasesConfig {
 
         /**
-         * Bundle registry metadata provider settings.
+         * Release registry metadata provider settings.
          *
          * @return registry config
          */
@@ -544,7 +553,7 @@ public interface PipelineOrchestratorConfig {
         ReleaseRegistryConfig registry();
 
         /**
-         * Bundle artifact storage settings.
+         * Release artifact storage settings.
          *
          * @return storage config
          */
@@ -553,7 +562,7 @@ public interface PipelineOrchestratorConfig {
     }
 
     /**
-     * Bundle registry provider settings.
+     * Release registry provider settings.
      */
     interface ReleaseRegistryConfig {
 
@@ -573,6 +582,15 @@ public interface PipelineOrchestratorConfig {
     interface ReleaseStorageConfig {
 
         /**
+         * Release artifact storage provider name.
+         *
+         * @return local or s3
+         */
+        @WithName("provider")
+        @WithDefault("local")
+        String provider();
+
+        /**
          * Local root directory for managed release artifacts and file-backed registry metadata.
          *
          * @return storage root path
@@ -580,6 +598,62 @@ public interface PipelineOrchestratorConfig {
         @WithName("root")
         @WithDefault("target/tpf-releases")
         String root();
+
+        /**
+         * S3-compatible release artifact storage settings.
+         *
+         * @return S3 storage config
+         */
+        @WithName("s3")
+        ReleaseStorageS3Config s3();
+    }
+
+    /**
+     * S3-compatible release artifact storage settings.
+     */
+    interface ReleaseStorageS3Config {
+
+        /**
+         * Bucket for managed release artifacts.
+         *
+         * @return bucket name
+         */
+        @WithName("bucket")
+        Optional<String> bucket();
+
+        /**
+         * Object key prefix for managed release artifacts.
+         *
+         * @return object key prefix
+         */
+        @WithName("prefix")
+        @WithDefault("tpf/releases")
+        String prefix();
+
+        /**
+         * Optional S3 region override.
+         *
+         * @return region
+         */
+        @WithName("region")
+        Optional<String> region();
+
+        /**
+         * Optional S3-compatible endpoint override, for example MinIO or LocalStack.
+         *
+         * @return endpoint URI
+         */
+        @WithName("endpoint-override")
+        Optional<String> endpointOverride();
+
+        /**
+         * Enable path-style access for MinIO/LocalStack style endpoints.
+         *
+         * @return true when path-style access should be used
+         */
+        @WithName("path-style-access")
+        @WithDefault("false")
+        boolean pathStyleAccess();
     }
 
     /**
@@ -662,6 +736,38 @@ public interface PipelineOrchestratorConfig {
          */
         @WithName("sqs")
         SqsWorkerConfig sqs();
+
+        /**
+         * Worker lifecycle registry settings.
+         *
+         * @return lifecycle config
+         */
+        @WithName("lifecycle")
+        WorkerLifecycleConfig lifecycle();
+    }
+
+    /**
+     * Worker lifecycle registry settings.
+     */
+    interface WorkerLifecycleConfig {
+
+        /**
+         * Worker lifecycle provider name.
+         *
+         * @return memory or dynamo
+         */
+        @WithName("provider")
+        @WithDefault("memory")
+        String provider();
+
+        /**
+         * Maximum age since last heartbeat before a worker is considered stale.
+         *
+         * @return stale heartbeat duration
+         */
+        @WithName("stale-after")
+        @WithDefault("PT2M")
+        Duration staleAfter();
     }
 
     /**

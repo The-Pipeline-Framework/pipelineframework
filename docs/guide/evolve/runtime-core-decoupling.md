@@ -22,6 +22,7 @@ The goal is:
 - `EventBusBridge`
 - `WorkDispatcher`
 - `RuntimeAdapters`
+- `PipelineRunnerCore`
 
 `framework/runtime` remains Quarkus-first today and registers concrete implementations in `RuntimeAdapterBootstrap`.
 `framework/runtime-spring` provides the first Spring Boot adapter for these same contracts without depending on the
@@ -35,15 +36,15 @@ The Spring adapter currently proves host integration only:
 - Optional Spring transaction manager integration.
 - Spring application-event publishing for event and work dispatch seams.
 
-It does not yet provide generated Spring pipeline execution, WebFlux resources, Reactor context propagation, persistence
-providers, broker integration, or REST/gRPC transport parity.
+It does not yet provide production Spring parity, Reactor context propagation, persistence providers, broker integration,
+or gRPC transport parity.
 
 ## Renderer profile plumbing
 
 Deployment now accepts and validates `pipeline.codegen.rendererProfile` in discovery:
 
 - `quarkus` (default)
-- `spring` (currently mapped to the same renderer selection strategy as `quarkus`)
+- `spring`
 
 For the surrounding configuration model, see [build configuration](/guide/build/configuration/) and
 [application configuration](/guide/application/configuration).
@@ -52,6 +53,22 @@ For the surrounding configuration model, see [build configuration](/guide/build/
 [annotation processor generation and rendering](/guide/evolve/annotation-processor/generation-and-rendering).
 
 `PipelineGenerationPhase` passes the profile through and uses renderer-instance FQCN helpers when recording role metadata for orchestrator function handlers. That avoids hard-coding a provider class name at generation time.
+
+## Spring unary smoke
+
+The `spring` renderer profile now has two narrow generated execution proofs:
+
+- `pipeline.transport=LOCAL`
+- `pipeline.platform=COMPUTE`
+- YAML-declared internal services
+- reactive-authored `UNARY_UNARY` steps
+- generated Spring `@Component` local step beans
+
+Generated Spring local step beans implement the neutral `runtime-core` `PipelineUnaryStep<I, O>` contract and adapt the authored Mutiny service boundary to `CompletionStage` at the generated-code edge. `framework/runtime-spring` contributes `SpringPipelineRunner`, an adapter over the shared `PipelineRunnerCore`; the Quarkus `PipelineRunner` also delegates ordered step sequencing to that same core.
+
+The same profile also supports a constrained `pipeline.transport=REST`, `pipeline.platform=COMPUTE` unary smoke. Generation emits Spring WebFlux `@RestController` resources and the matching Spring unary step beans, then routes the HTTP request through `SpringPipelineRunner` and the shared runner core.
+
+Unsupported Spring profile combinations fail at build time instead of falling back to Quarkus generation. The unsupported set still includes Reactor-native generated service contracts, gRPC, function handlers, await/durable/checkpoint/broker paths, persistence, delegated/operator steps, side effects, and non-unary streaming shapes.
 
 ## Vert.x seam and context propagation
 

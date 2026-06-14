@@ -124,10 +124,12 @@ Fast triage checklist:
 
 ### Execution DLQ Re-drive Guidance
 
-1. Treat execution DLQ entries as at-least-once replays of full execution transitions.
-2. Preserve the original transition identity (`executionId:stepIndex:attempt`) when replaying.
-3. Re-drive in bounded execution batches and keep ordering by execution context when required by downstream side effects.
-4. Validate downstream idempotency controls before bulk replay and monitor duplicate-suppression and stale-commit metrics during replay.
+1. Use `POST /tpf/admin/tenants/{tenantId}/executions/{executionId}/redrive` for single execution re-drive.
+2. Treat the operation as at-least-once: downstream side effects must be protected by stable idempotency keys.
+3. Use `expectedVersion` when operating from an observed status response so stale operator decisions fail closed.
+4. Set `allowFailed=true` only when intentionally re-driving a terminal `FAILED` execution before the DLQ status.
+5. DLQ messages are triage evidence; the durable execution record is the source of re-drive truth.
+6. Re-drive in bounded execution batches and keep ordering by execution context when required by downstream side effects.
 
 ### Item Reject Re-drive Guidance
 

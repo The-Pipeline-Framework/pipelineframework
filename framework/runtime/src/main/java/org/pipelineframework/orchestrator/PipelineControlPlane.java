@@ -41,6 +41,13 @@ public interface PipelineControlPlane {
 
     Uni<Object> getExecutionResultPayload(String tenantId, String executionId);
 
+    Uni<ExecutionRedriveResult> redriveExecution(
+        String tenantId,
+        String executionId,
+        Long expectedVersion,
+        boolean allowFailed,
+        String reason);
+
     Uni<AwaitCompletionResult> completeAwait(AwaitCompletionCommand command);
 
     Uni<AwaitCompletionResult> completeAwait(

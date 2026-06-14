@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -39,7 +40,7 @@ public class LocalPipelineReleaseArtifactStore implements PipelineReleaseArtifac
             Files.createDirectories(target.getParent());
             if (Files.exists(target)) {
                 verifyStoredArtifact(target, size, checksum);
-                return new PipelineReleaseStoredArtifact(target.toString(), size, checksum);
+                return new PipelineReleaseStoredArtifact(target.toUri().toString(), size, checksum);
             }
             Path temporary = Files.createTempFile(target.getParent(), "release-artifact-", ".tmp");
             try {
@@ -48,20 +49,20 @@ public class LocalPipelineReleaseArtifactStore implements PipelineReleaseArtifac
                     Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
                 } catch (FileAlreadyExistsException e) {
                     verifyStoredArtifact(target, size, checksum);
-                    return new PipelineReleaseStoredArtifact(target.toString(), size, checksum);
+                    return new PipelineReleaseStoredArtifact(target.toUri().toString(), size, checksum);
                 } catch (AtomicMoveNotSupportedException e) {
                     try {
                         Files.move(temporary, target);
                     } catch (FileAlreadyExistsException alreadyStored) {
                         verifyStoredArtifact(target, size, checksum);
-                        return new PipelineReleaseStoredArtifact(target.toString(), size, checksum);
+                        return new PipelineReleaseStoredArtifact(target.toUri().toString(), size, checksum);
                     }
                 }
             } finally {
                 Files.deleteIfExists(temporary);
             }
             verifyStoredArtifact(target, size, checksum);
-            return new PipelineReleaseStoredArtifact(target.toString(), size, checksum);
+            return new PipelineReleaseStoredArtifact(target.toUri().toString(), size, checksum);
         } catch (IllegalArgumentException | IllegalStateException e) {
             throw e;
         } catch (Exception e) {
@@ -76,7 +77,7 @@ public class LocalPipelineReleaseArtifactStore implements PipelineReleaseArtifac
         }
         try {
             verifyStoredArtifact(
-                Path.of(record.primaryArtifactPath()),
+                artifactPathFromUri(record.primaryArtifactUri()),
                 record.primaryArtifactSizeBytes(),
                 record.primaryArtifactChecksum());
         } catch (IllegalArgumentException | IllegalStateException e) {
@@ -88,6 +89,26 @@ public class LocalPipelineReleaseArtifactStore implements PipelineReleaseArtifac
 
     Path root() {
         return root;
+    }
+
+    static Path artifactPathFromUri(String artifactUri) {
+        if (artifactUri == null || artifactUri.isBlank()) {
+            throw new IllegalArgumentException("Release artifact URI is required");
+        }
+        URI uri;
+        try {
+            uri = URI.create(artifactUri);
+        } catch (IllegalArgumentException ignored) {
+            return Path.of(artifactUri);
+        }
+        if (uri.getScheme() == null) {
+            return Path.of(artifactUri);
+        }
+        if ("file".equalsIgnoreCase(uri.getScheme())) {
+            return Path.of(uri);
+        }
+        throw new IllegalArgumentException(
+            "Unsupported release artifact URI scheme for local artifact store: " + uri.getScheme());
     }
 
     private Path artifactPath(String checksum, Path sourcePath) {

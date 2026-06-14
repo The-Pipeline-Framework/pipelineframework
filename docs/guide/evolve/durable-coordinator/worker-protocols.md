@@ -9,7 +9,7 @@ The coordinator owns durable state and scheduling. The worker owns business step
 The worker receives a `TransitionCommandEnvelope` containing:
 
 1. tenant and execution identity,
-2. pipeline and bundle identity,
+2. pipeline, contract, and release identity,
 3. current step index and attempt,
 4. transition key and result shape,
 5. typed serialized payload metadata.

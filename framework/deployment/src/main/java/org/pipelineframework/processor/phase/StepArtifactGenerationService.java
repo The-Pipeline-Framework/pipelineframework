@@ -19,7 +19,7 @@ import org.pipelineframework.processor.renderer.ClientStepRenderer;
 import org.pipelineframework.processor.renderer.BlockingReactiveBridgeRenderer;
 import org.pipelineframework.processor.renderer.GenerationContext;
 import org.pipelineframework.processor.renderer.GrpcServiceAdapterRenderer;
-import org.pipelineframework.processor.renderer.LocalClientStepRenderer;
+import org.pipelineframework.processor.renderer.PipelineRenderer;
 import org.pipelineframework.processor.renderer.RemoteOperatorAdapterRenderer;
 import org.pipelineframework.processor.renderer.RestClientStepRenderer;
 import org.pipelineframework.processor.renderer.AbstractFunctionHandlerRenderer;
@@ -87,9 +87,9 @@ class StepArtifactGenerationService {
             RoleMetadataGenerator roleMetadataGenerator,
             GrpcServiceAdapterRenderer grpcRenderer,
             ClientStepRenderer clientRenderer,
-            LocalClientStepRenderer localClientRenderer,
+            PipelineRenderer<LocalBinding> localClientRenderer,
             RestClientStepRenderer restClientRenderer,
-            RestResourceRenderer restRenderer,
+            PipelineRenderer<RestBinding> restRenderer,
             AbstractFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer,
@@ -366,9 +366,9 @@ class StepArtifactGenerationService {
             RoleMetadataGenerator roleMetadataGenerator,
             GrpcServiceAdapterRenderer grpcRenderer,
             ClientStepRenderer clientRenderer,
-            LocalClientStepRenderer localClientRenderer,
+            PipelineRenderer<LocalBinding> localClientRenderer,
             RestClientStepRenderer restClientRenderer,
-            RestResourceRenderer restRenderer,
+            PipelineRenderer<RestBinding> restRenderer,
             AbstractFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer) throws IOException {

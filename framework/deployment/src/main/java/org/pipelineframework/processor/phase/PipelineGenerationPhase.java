@@ -77,15 +77,20 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
 
         // Get the bindings map from the context
         Map<String, Object> bindingsMap = ctx.getRendererBindings();
+        SpringRendererProfileSupport.validateGenerationSupported(ctx);
+        boolean springProfile = SpringRendererProfileSupport.isSpringProfile(ctx);
 
         // Initialize renderers
         GrpcServiceAdapterRenderer grpcRenderer = new GrpcServiceAdapterRenderer(GenerationTarget.GRPC_SERVICE);
         org.pipelineframework.processor.renderer.ClientStepRenderer clientRenderer =
             new org.pipelineframework.processor.renderer.ClientStepRenderer(GenerationTarget.CLIENT_STEP);
-        org.pipelineframework.processor.renderer.LocalClientStepRenderer localClientRenderer =
-            new org.pipelineframework.processor.renderer.LocalClientStepRenderer();
+        PipelineRenderer<LocalBinding> localClientRenderer = springProfile
+            ? new SpringLocalClientStepRenderer()
+            : new org.pipelineframework.processor.renderer.LocalClientStepRenderer();
         RestClientStepRenderer restClientRenderer = new RestClientStepRenderer();
-        RestResourceRenderer restRenderer = new RestResourceRenderer();
+        PipelineRenderer<RestBinding> restRenderer = springProfile
+            ? new SpringRestResourceRenderer()
+            : new RestResourceRenderer();
         RestFunctionHandlerRenderer restFunctionHandlerRenderer = new RestFunctionHandlerRenderer();
         BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer = new BlockingReactiveBridgeRenderer();
         RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer = new RemoteOperatorAdapterRenderer();
@@ -473,9 +478,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             RoleMetadataGenerator roleMetadataGenerator,
             GrpcServiceAdapterRenderer grpcRenderer,
             org.pipelineframework.processor.renderer.ClientStepRenderer clientRenderer,
-            org.pipelineframework.processor.renderer.LocalClientStepRenderer localClientRenderer,
+            PipelineRenderer<LocalBinding> localClientRenderer,
             RestClientStepRenderer restClientRenderer,
-            RestResourceRenderer restRenderer,
+            PipelineRenderer<RestBinding> restRenderer,
             RestFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer,
