@@ -5,6 +5,9 @@ The Pipeline Framework is designed as a modular, extensible system for building 
 ## Related Architecture Topics
 
 - [Annotation Processor Guide](/guide/evolve/annotation-processor/): Deep dive into build-time phases, IR, bindings, and renderers
+- [Brokered Runtime Boundaries](/guide/evolve/brokered-boundaries/): Architecture guardrails for Kafka/SQS-style substrates under TPF-owned runtime semantics
+- [Boundary Taxonomy](/guide/evolve/brokered-boundaries/boundary-taxonomy): Mapping between broker concepts and TPF runtime boundaries
+- [Envelope And Data Policy](/guide/evolve/brokered-boundaries/envelope-and-data-policy): Design guidance for typed DTOs, generated protobuf, loose envelopes, and payload references
 
 ## Orchestrator Control Plane (Current)
 

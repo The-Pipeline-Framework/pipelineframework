@@ -89,7 +89,7 @@ class StepArtifactGenerationService {
             ClientStepRenderer clientRenderer,
             PipelineRenderer<LocalBinding> localClientRenderer,
             RestClientStepRenderer restClientRenderer,
-            RestResourceRenderer restRenderer,
+            PipelineRenderer<RestBinding> restRenderer,
             AbstractFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer,
@@ -368,7 +368,7 @@ class StepArtifactGenerationService {
             ClientStepRenderer clientRenderer,
             PipelineRenderer<LocalBinding> localClientRenderer,
             RestClientStepRenderer restClientRenderer,
-            RestResourceRenderer restRenderer,
+            PipelineRenderer<RestBinding> restRenderer,
             AbstractFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer) throws IOException {

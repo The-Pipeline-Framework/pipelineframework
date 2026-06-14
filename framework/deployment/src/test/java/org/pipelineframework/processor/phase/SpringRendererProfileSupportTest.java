@@ -45,9 +45,21 @@ class SpringRendererProfileSupportTest {
     }
 
     @Test
-    void rejectsRestTransport() {
+    void acceptsRestComputeUnaryStep() {
         PipelineCompilationContext context = context();
         context.setTransportMode(PipelineTransport.REST);
+        context.setStepModels(List.of(step(
+            Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.LOCAL_CLIENT_STEP),
+            StreamingShape.UNARY_UNARY,
+            ServiceApiKind.REACTIVE)));
+
+        assertDoesNotThrow(() -> SpringRendererProfileSupport.validateGenerationSupported(context));
+    }
+
+    @Test
+    void rejectsGrpcTransport() {
+        PipelineCompilationContext context = context();
+        context.setTransportMode(PipelineTransport.GRPC);
 
         assertThrows(IllegalStateException.class,
             () -> SpringRendererProfileSupport.validateGenerationSupported(context));

@@ -34,6 +34,7 @@ import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.runtime.core.PipelineRunnerCore;
 import org.pipelineframework.step.Configurable;
 import org.pipelineframework.step.ConfigFactory;
 import org.pipelineframework.step.StepOneToOne;
@@ -72,6 +73,8 @@ public class PipelineRunner implements AutoCloseable {
 
     @Inject
     PipelineStepExecutor stepExecutor;
+
+    private final PipelineRunnerCore runnerCore = new PipelineRunnerCore();
 
     /**
      * Default constructor for PipelineRunner.
@@ -135,47 +138,47 @@ public class PipelineRunner implements AutoCloseable {
             throw new IllegalArgumentException("stopBeforeStepIndex is out of range: " + stopBeforeStepIndex);
         }
 
-        Object current = input;
         ParallelismPolicy parallelismPolicy = parallelismPolicyResolver.resolveParallelismPolicy(pipelineConfig);
         int maxConcurrency = parallelismPolicyResolver.resolveMaxConcurrency(pipelineConfig);
         PipelineTelemetry.RunContext telemetryContext =
-            telemetry.startRun(current, orderedSteps.size(), parallelismPolicy, maxConcurrency);
-        current = telemetry.instrumentInput(current, telemetryContext);
+            telemetry.startRun(input, orderedSteps.size(), parallelismPolicy, maxConcurrency);
+        Object instrumentedInput = telemetry.instrumentInput(input, telemetryContext);
 
         PipelineContext contextSnapshot = PipelineContextHolder.get();
         CacheReadSupport cacheReadSupport = cacheSupportFactory.buildCacheReadSupport();
         AwaitExecutionContext awaitContext = AwaitExecutionContextHolder.get();
-        for (int index = startStepIndex; index < stopBeforeStepIndex; index++) {
-            Object step = orderedSteps.get(index);
-            if (step == null) {
-                logger.warn("Warning: Found null step in configuration, skipping...");
-                continue;
-            }
-            AwaitExecutionContext awaitContextSnapshot = awaitContext == null
-                ? null
-                : new AwaitExecutionContext(awaitContext.tenantId(), awaitContext.executionId(), index);
+        Object current = runnerCore.runSync(
+            instrumentedInput,
+            orderedSteps,
+            startStepIndex,
+            stopBeforeStepIndex,
+            (step, value, index) -> {
+                AwaitExecutionContext awaitContextSnapshot = awaitContext == null
+                    ? null
+                    : new AwaitExecutionContext(awaitContext.tenantId(), awaitContext.executionId(), index);
 
-            if (step instanceof Configurable configurable) {
-                configurable.initialiseWithConfig(configFactory.buildConfig(step.getClass(), pipelineConfig));
-            }
+                if (step instanceof Configurable configurable) {
+                    configurable.initialiseWithConfig(configFactory.buildConfig(step.getClass(), pipelineConfig));
+                }
 
-            Class<?> clazz = step.getClass();
-            logger.debugf("Step class: %s", clazz.getName());
-            for (Class<?> iface : clazz.getInterfaces()) {
-                logger.debugf("Implements: %s", iface.getName());
-            }
+                Class<?> clazz = step.getClass();
+                logger.debugf("Step class: %s", clazz.getName());
+                for (Class<?> iface : clazz.getInterfaces()) {
+                    logger.debugf("Implements: %s", iface.getName());
+                }
 
-            current = stepExecutor.applyStep(
-                step,
-                current,
-                parallelismPolicy,
-                maxConcurrency,
-                telemetry,
-                telemetryContext,
-                cacheReadSupport,
-                contextSnapshot,
-                awaitContextSnapshot);
-        }
+                return stepExecutor.applyStep(
+                    step,
+                    value,
+                    parallelismPolicy,
+                    maxConcurrency,
+                    telemetry,
+                    telemetryContext,
+                    cacheReadSupport,
+                    contextSnapshot,
+                    awaitContextSnapshot);
+            },
+            index -> logger.warnf("Warning: Found null step at index %d in configuration, skipping...", index));
 
         return new ExecutionResult(telemetry.instrumentRunCompletion(current, telemetryContext), telemetryContext);
     }
