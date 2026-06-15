@@ -43,7 +43,7 @@ class CheckoutReferenceContractTest {
             ir.nodes().stream()
                 .filter(node -> "kitchen-preparation".equals(node.id()))
                 .findFirst()
-                .orElseThrow()
+                .orElseThrow(() -> new AssertionError("Expected kitchen-preparation node in checkout composition"))
                 .terminalStep()
                 .cardinality());
     }

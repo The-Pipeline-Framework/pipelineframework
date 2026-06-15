@@ -4,7 +4,7 @@
 
 ## Overview
 
-The Payments Processing Service is a Quarkus-based mock provider for the CSV payment processing system. It consumes one awaited `PaymentRecord` request and returns one `PaymentStatus` completion through the Kafka await transport.
+The Payments Processing Service is a Quarkus-based mock provider for the CSV payment processing system. It consumes one awaited `PaymentRecord` request and returns one `PaymentStatus` completion through the configured broker-backed await transport.
 
 This service is part of the [CSV Payments POC](../README.md) project, which processes CSV files containing payment information through a series of microservices.
 
@@ -13,14 +13,14 @@ This service is part of the [CSV Payments POC](../README.md) project, which proc
 - Process one payment record at a time through the mock provider
 - Publish direct `PaymentStatus` await completions
 - Handle rate limiting and timeout scenarios
-- Provide the Kafka-backed external boundary used by the await step
+- Provide the external payment-provider boundary used by Kafka and SQS await examples
 
 ## Architecture
 
 ```mermaid
 graph LR
-    A[Kafka Await Dispatch: PaymentRecord] --> B[Mock Payment Provider]
-    B --> C[Kafka Await Completion: PaymentStatus]
+    A[Await Dispatch: PaymentRecord] --> B[Mock Payment Provider]
+    B --> C[Await Completion: PaymentStatus]
     
     subgraph "Payments Processing Service"
         B
@@ -50,7 +50,7 @@ The service processes several key domain objects:
 
 ## Service Interfaces
 
-The service implements the example-local provider contract used by the Kafka await mock:
+The service implements the example-local provider contract used by the broker-backed await mocks:
 
 ### PaymentProviderService
 
@@ -58,7 +58,7 @@ The service implements the example-local provider contract used by the Kafka awa
 PaymentStatus processPayment(PaymentRecord paymentRecord);
 ```
 
-`PaymentProviderKafkaAwaitMock` adapts Kafka await dispatch envelopes to this contract and publishes Kafka await completion envelopes.
+`PaymentProviderKafkaAwaitMock` adapts Kafka await dispatch envelopes to this contract and publishes Kafka await completion envelopes. `PaymentProviderSqsAwaitMock` does the same for the CSV containerized self-host HA reference by polling SQS request messages and publishing SQS completion messages.
 
 ## Performance Features
 
@@ -115,14 +115,19 @@ The service uses the following configuration properties:
 - `csv-payments.payment-provider.timeout-millis`: Timeout for acquiring permits (default: 2000)
 - `csv-payments.payment-provider.provider-timeout-probability`: Deterministic fraction of provider calls that time out
 - `csv-payments.payment-provider.provider-reject-probability`: Deterministic fraction of provider calls that return `PaymentStatus.status=Rejected`
+- `csv-payments.payment-provider.sqs.enabled`: Enables the example-local SQS await mock provider
+- `csv-payments.payment-provider.sqs.request-queue-url`: SQS await request queue consumed by the mock provider
+- `csv-payments.payment-provider.sqs.response-queue-url`: SQS await completion queue published by the mock provider
+- `csv-payments.payment-provider.sqs.region`: Optional SQS region override
+- `csv-payments.payment-provider.sqs.endpoint-override`: Optional LocalStack/SQS-compatible endpoint override
 
 ## Integration with Other Services
 
 This service is typically invoked by the Orchestrator Service as part of the payment processing workflow:
 
 1. Orchestrator receives payment records from the Input CSV File Processing Service
-2. The await step publishes one Kafka dispatch per payment record
-3. The mock provider processes each record and publishes one `PaymentStatus` completion
+2. The await step publishes one broker dispatch per payment record
+3. The mock provider processes each record and publishes one `PaymentStatus` completion through Kafka or SQS
 4. The orchestrator resumes the stream and forwards payment statuses to the Payment Status Service
 
 ## Related Services

@@ -225,7 +225,7 @@ Prefix: `pipeline.orchestrator`
 | `pipeline.orchestrator.dlq-provider` | string | `log` | Dead-letter publisher provider for terminal execution failures. |
 | `pipeline.orchestrator.dlq-url` | string | none | Dead-letter queue URL when `dlq-provider=sqs`. |
 | `pipeline.orchestrator.queue-url` | string | none | Queue URL for external dispatcher providers. |
-| `pipeline.orchestrator.resume-token-secret` | string | none | HMAC secret used to sign and verify await resume tokens for webhook-based await steps. Required when using the webhook transport adapter for await boundary steps. Use a high-entropy value, preferably at least 32 random bytes encoded as base64 or hex. If this property is missing, the orchestrator fails with a clear error when webhook dispatch attempts to generate a token. See [Await Boundaries](/guide/development/orchestrator-runtime/await). |
+| `pipeline.orchestrator.resume-token-secret` | string | none | HMAC secret used to sign and verify await resume tokens. Required for signed webhook, Kafka, and SQS await dispatch/completion. Use a high-entropy value, preferably at least 32 random bytes encoded as base64 or hex. If this property is missing, signed await dispatch fails with a clear error rather than allowing unsigned resumptions. See [Await Boundaries](/guide/development/orchestrator-runtime/await). |
 | `pipeline.orchestrator.control-plane.enabled` | boolean | `false` | Enables the internal hosted-control-plane REST surface under `/tpf/control-plane/tenants/{tenantId}` for local/dev coordinator proofs. |
 | `pipeline.orchestrator.control-plane.admin-token` | string | none | Bearer token accepted by the hosted-control-plane REST surface. Configure exactly one of `admin-token` or `admin-token-ref` when the surface is enabled. |
 | `pipeline.orchestrator.control-plane.admin-token-ref` | string | none | Local secret reference for the hosted-control-plane bearer token. Supports `env:NAME`, `sys:property.name`, and `config:some.config.key`. |
@@ -275,7 +275,7 @@ Background execution notes:
 3. In queue mode, strict startup also requires `pipeline.orchestrator.idempotency-policy` to be explicitly set to a non-default value.
 4. In-memory providers are for local/dev only; use providers backed by external storage/queues for crash recovery.
 5. For dead-letter handling that survives restarts, set both `pipeline.orchestrator.dlq-provider=sqs` and `pipeline.orchestrator.dlq-url`.
-6. For webhook await steps using signed resume tokens, configure a stable `pipeline.orchestrator.resume-token-secret`; rotating it invalidates outstanding resume tokens.
+6. For webhook, Kafka, or SQS await steps using signed resume tokens, configure a stable `pipeline.orchestrator.resume-token-secret`; rotating it invalidates outstanding resume tokens.
 7. Remote transition worker selection is inferred from configured targets: REST uses `pipeline.orchestrator.worker.rest.base-url`, gRPC uses `pipeline.orchestrator.worker.grpc.endpoint`, SQS uses `pipeline.orchestrator.worker.sqs.request-queue-url`, and no remote target uses the local in-process worker.
 8. Configure at most one remote worker target. Multiple remote targets fail startup as ambiguous; there is no `worker.provider` selector.
 9. `pipeline.platform` remains orthogonal and does not select worker invocation.
@@ -295,6 +295,36 @@ pipeline.orchestrator.queue-url=https://sqs.eu-west-1.amazonaws.com/123456789012
 pipeline.orchestrator.dlq-url=https://sqs.eu-west-1.amazonaws.com/123456789012/tpf-dlq
 pipeline.orchestrator.idempotency-policy=CLIENT_KEY_REQUIRED
 ```
+
+### Await Transports
+
+Await transport selection is authored per `kind: await` step in pipeline YAML. These runtime properties enable the concrete adapter plumbing for broker-backed await providers.
+
+#### Kafka Await
+
+Prefix: `tpf.await.kafka`
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `tpf.await.kafka.reactive-messaging.enabled` | boolean | `false` | Enables the Quarkus Reactive Messaging Kafka await publisher and completion consumer. |
+
+Kafka await also requires SmallRye channel configuration for the framework-owned `tpf-await-kafka-requests` outgoing channel and `tpf-await-kafka-responses` incoming channel. See [Await Boundaries](/guide/development/orchestrator-runtime/await).
+
+#### SQS Await
+
+Prefix: `tpf.await.sqs`
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `tpf.await.sqs.poller.enabled` | boolean | `false` | Enables the coordinator-side SQS await completion poller. |
+| `tpf.await.sqs.response-queue-url` | string | none | SQS response queue URL consumed by the completion poller. Required when the poller is enabled. |
+| `tpf.await.sqs.poll-start-delay` | duration | `PT0S` | Optional delay before the completion poller starts. |
+| `tpf.await.sqs.visibility-timeout` | duration | `PT30S` | Visibility timeout for claimed completion messages. |
+| `tpf.await.sqs.completion-timeout` | duration | `PT5M` | Timeout while admitting one completion through the await coordinator. |
+| `tpf.await.sqs.wait-time-seconds` | int | `1` | Long-poll wait time for SQS receive calls. Values are clamped to the SQS range `1..20`. |
+| `tpf.await.sqs.max-messages` | int | `1` | Maximum messages received per poll. Values are clamped to the SQS range `1..10`. |
+
+SQS await dispatch uses the `request.queueUrl` and `response.queueUrl` authored on the await step. The completion poller uses the runtime `response-queue-url` so the hosting coordinator can decide which queue it consumes. Region and endpoint override reuse `pipeline.orchestrator.sqs.region` and `pipeline.orchestrator.sqs.endpoint-override`.
 
 ### Item Reject Sink
 

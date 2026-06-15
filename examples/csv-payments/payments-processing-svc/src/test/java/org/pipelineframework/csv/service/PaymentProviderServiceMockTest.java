@@ -22,7 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.Currency;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -118,6 +120,65 @@ class PaymentProviderServiceMockTest {
     public double providerRejectProbability() {
       return 0.0;
     }
+
+    @Override
+    public long responseDelayMillis() {
+      return 0L;
+    }
+
+    @Override
+    public Sqs sqs() {
+      return disabledSqs();
+    }
+  }
+
+  private static PaymentProviderConfig.Sqs disabledSqs() {
+    return new PaymentProviderConfig.Sqs() {
+      @Override
+      public boolean enabled() {
+        return false;
+      }
+
+      @Override
+      public Optional<String> requestQueueUrl() {
+        return Optional.empty();
+      }
+
+      @Override
+      public Optional<String> responseQueueUrl() {
+        return Optional.empty();
+      }
+
+      @Override
+      public Optional<String> region() {
+        return Optional.empty();
+      }
+
+      @Override
+      public Optional<String> endpointOverride() {
+        return Optional.empty();
+      }
+
+      @Override
+      public Duration pollStartDelay() {
+        return Duration.ZERO;
+      }
+
+      @Override
+      public Duration visibilityTimeout() {
+        return Duration.ofSeconds(30);
+      }
+
+      @Override
+      public int waitTimeSeconds() {
+        return 1;
+      }
+
+      @Override
+      public int maxMessages() {
+        return 1;
+      }
+    };
   }
 
   private static final class NegativeTimeoutPaymentProviderConfig extends FakePaymentProviderConfig {

@@ -12,6 +12,7 @@ import java.util.Objects;
  * @param contractVersion semantic pipeline contract version
  * @param releaseVersion active release version
  * @param currentStepIndex step index where execution should continue
+ * @param stopBeforeStepIndex optional exclusive stop step index; negative means run to pipeline end
  * @param attempt current execution attempt
  * @param resultShape expected materialized result shape
  * @param executionVersion claimed execution record version
@@ -28,6 +29,7 @@ public record TransitionCommandEnvelope(
     String contractVersion,
     String releaseVersion,
     int currentStepIndex,
+    int stopBeforeStepIndex,
     int attempt,
     ExecutionResultShape resultShape,
     long executionVersion,
@@ -59,6 +61,7 @@ public record TransitionCommandEnvelope(
             PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
             releaseVersion,
             currentStepIndex,
+            -1,
             attempt,
             resultShape,
             executionVersion,
@@ -81,6 +84,9 @@ public record TransitionCommandEnvelope(
             : releaseVersion;
         if (currentStepIndex < 0) {
             throw new IllegalArgumentException("currentStepIndex must be >= 0");
+        }
+        if (stopBeforeStepIndex >= 0 && stopBeforeStepIndex < currentStepIndex) {
+            throw new IllegalArgumentException("stopBeforeStepIndex must be greater than or equal to currentStepIndex when set");
         }
         if (attempt < 0) {
             throw new IllegalArgumentException("attempt must be >= 0");
@@ -131,6 +137,7 @@ public record TransitionCommandEnvelope(
             contractVersion,
             releaseVersion,
             command.currentStepIndex(),
+            command.stopBeforeStepIndex(),
             command.attempt(),
             command.resultShape(),
             command.executionVersion(),
@@ -147,6 +154,7 @@ public record TransitionCommandEnvelope(
             tenantId,
             executionId,
             currentStepIndex,
+            stopBeforeStepIndex,
             attempt,
             resultShape,
             executionVersion,

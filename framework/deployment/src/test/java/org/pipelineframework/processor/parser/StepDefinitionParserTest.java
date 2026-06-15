@@ -440,6 +440,156 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void parsesSqsAwaitStepDefinition() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Sqs Fraud Check"
+                kind: "await"
+                input: "com.example.FraudCheckRequest"
+                output: "com.example.FraudCheckDecision"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "signedResumeToken"
+                  transport:
+                    type: "sqs"
+                    request:
+                      queueUrl: "http://localhost:4566/000000000000/fraud-check-requests"
+                    response:
+                      queueUrl: "http://localhost:4566/000000000000/fraud-check-decisions"
+            """, diagnostics);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.AWAIT, step.kind());
+        java.util.Map<?, ?> transport = (java.util.Map<?, ?>) step.awaitConfig().get("transport");
+        assertEquals("sqs", transport.get("type"));
+        assertEquals("http://localhost:4566/000000000000/fraud-check-requests",
+            ((java.util.Map<?, ?>) transport.get("request")).get("queueUrl"));
+        assertEquals("http://localhost:4566/000000000000/fraud-check-decisions",
+            ((java.util.Map<?, ?>) transport.get("response")).get("queueUrl"));
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
+    }
+
+    @Test
+    void rejectsSqsAwaitStepWithoutRequestQueueUrl() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Sqs Missing Request Queue"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "signedResumeToken"
+                  transport:
+                    type: "sqs"
+                    request: {}
+                    response:
+                      queueUrl: "http://localhost:4566/000000000000/responses"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("request.queueUrl")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsSqsAwaitStepWithoutResponseQueueUrl() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Sqs Missing Response Queue"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "signedResumeToken"
+                  transport:
+                    type: "sqs"
+                    request:
+                      queueUrl: "http://localhost:4566/000000000000/requests"
+                    response: {}
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("response.queueUrl")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsSqsAwaitStepWithFifoQueueUrl() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Sqs Fifo Queue"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "signedResumeToken"
+                  transport:
+                    type: "sqs"
+                    request:
+                      queueUrl: "http://localhost:4566/000000000000/requests.fifo"
+                    response:
+                      queueUrl: "http://localhost:4566/000000000000/responses"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("standard queues only")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsSqsAwaitStepWithNormalizedFifoQueueUrl() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Sqs Fifo Queue"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "signedResumeToken"
+                  transport:
+                    type: "sqs"
+                    request:
+                      queueUrl: "http://localhost:4566/000000000000/requests.fifo?ignored=true "
+                    response:
+                      queueUrl: "http://localhost:4566/000000000000/responses"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("standard queues only")),
+            diagnostics.toString());
+    }
+
+    @Test
     void rejectsAwaitStepWithoutCorrelationStrategy() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""

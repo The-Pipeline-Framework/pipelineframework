@@ -47,6 +47,7 @@ import org.pipelineframework.awaitable.AwaitUnitRecord;
 import org.pipelineframework.orchestrator.ExecutionInputShape;
 import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRecord;
+import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
@@ -60,6 +61,8 @@ import org.pipelineframework.orchestrator.TransitionCommandEnvelope;
 import org.pipelineframework.orchestrator.TransitionPayloadCodec;
 import org.pipelineframework.orchestrator.TransitionResultEnvelope;
 import org.pipelineframework.orchestrator.TransitionWorkerCommand;
+import org.pipelineframework.orchestrator.TransitionWorkerExecutor;
+import org.pipelineframework.orchestrator.TransitionWorkerOutcome;
 import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import org.pipelineframework.step.StepManyToMany;
 import org.pipelineframework.step.functional.ManyToOne;
@@ -112,6 +115,9 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
 
   @Inject
   PipelineTransitionWorkerSelector transitionWorkerSelector;
+
+  @Inject
+  TransitionWorkerExecutor transitionWorkerExecutor;
 
   @Inject
   TransitionPayloadCodec transitionPayloadCodec;
@@ -254,10 +260,11 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
    * Completes a durable await interaction and schedules owning execution continuation.
    */
   public Uni<AwaitCompletionResult> completeAwaitInteraction(AwaitCompletionCommand command) {
-    return controlPlane.completeAwait(command, awaitItemContinuationHandler());
+    PipelineTransitionWorker selectedWorker = transitionWorkerSelector.select(this);
+    return controlPlane.completeAwait(command, awaitItemContinuationHandler(selectedWorker));
   }
 
-  private AwaitItemContinuationHandler awaitItemContinuationHandler() {
+  private AwaitItemContinuationHandler awaitItemContinuationHandler(PipelineTransitionWorker selectedWorker) {
     return new AwaitItemContinuationHandler() {
       @Override
       public Uni<Void> continueAwaitItem(
@@ -274,18 +281,38 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
         int aggregateStepIndex = firstAggregateStepIndex(orderedSteps, nextStepIndex);
         Object awaitPayload = coerceAwaitItemPayload(record);
         ExecutionInputSnapshot continuationInput = new ExecutionInputSnapshot(ExecutionInputShape.UNI, awaitPayload);
-        return executePipelineSegment(
-                Uni.createFrom().item(awaitPayload),
-                steps,
-                nextStepIndex,
-                aggregateStepIndex)
-            .onItem().transformToUni(outputs -> queueAsyncCoordinator.recordAwaitItemContinuation(
+        String transitionKey = "await-item-continuation:" + unit.unitId() + ":" + record.itemIndex();
+        TransitionWorkerCommand workerCommand = new TransitionWorkerCommand(
+            parent.get().tenantId(),
+            parent.get().executionId(),
+            nextStepIndex,
+            aggregateStepIndex,
+            parent.get().attempt(),
+            ExecutionResultShape.MATERIALIZED_MULTI,
+            parent.get().version(),
+            transitionKey,
+            continuationInput);
+        TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
+            workerCommand,
+            parent.get().pipelineId(),
+            parent.get().contractVersion(),
+            parent.get().releaseVersion(),
+            transitionKey,
+            payloadCodec().encode(continuationInput));
+        return transitionWorkerExecutor().execute(selectedWorker, envelope)
+            .onItem().transformToUni(result -> {
+              if (result.outcome() != TransitionWorkerOutcome.COMPLETED) {
+                return Uni.createFrom().failure(new IllegalStateException(
+                    "Await item continuation transition did not complete: " + result.outcome()));
+              }
+              return queueAsyncCoordinator.recordAwaitItemContinuation(
                 record,
                 unit,
                 aggregateStepIndex,
                 continuationInput,
-                outputs,
-                nowEpochMs));
+                result.decodeOutputItems(payloadCodec()),
+                nowEpochMs);
+            });
       }
 
       @Override
@@ -344,7 +371,7 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
    */
   public Uni<Void> processExecutionWorkItem(ExecutionWorkItem workItem) {
     PipelineTransitionWorker selectedWorker = transitionWorkerSelector.select(this);
-    return controlPlane.processExecutionWorkItem(workItem, selectedWorker, awaitItemContinuationHandler());
+    return controlPlane.processExecutionWorkItem(workItem, selectedWorker, awaitItemContinuationHandler(selectedWorker));
   }
 
   /**
@@ -488,7 +515,31 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
             restoreAwaitContext(previous);
             return Multi.createFrom().failure(inputFailure);
           }
-          Object result = executePipelineStreamingInternalFromStep(reactiveInput, command.currentStepIndex());
+          List<Object> steps = loadStepsForExecution();
+          if (steps == null) {
+            restoreAwaitContext(previous);
+            return Multi.createFrom().failure(new IllegalStateException("Pipeline steps could not be loaded."));
+          }
+          int requestedStopBeforeStepIndex = command.stopBeforeStepIndex();
+          if (requestedStopBeforeStepIndex > steps.size()) {
+            restoreAwaitContext(previous);
+            return Multi.createFrom().failure(new IllegalArgumentException(
+                "stopBeforeStepIndex " + requestedStopBeforeStepIndex
+                    + " exceeds pipeline step count " + steps.size()));
+          }
+          int stopBeforeStepIndex = requestedStopBeforeStepIndex < 0
+              ? steps.size()
+              : requestedStopBeforeStepIndex;
+          if (stopBeforeStepIndex == command.currentStepIndex()) {
+            return reactiveInput instanceof Multi<?> multi
+                ? multi
+                : ((Uni<?>) reactiveInput).toMulti();
+          }
+          Object result = executePipelineStreamingInternalFromStep(
+              reactiveInput,
+              steps,
+              command.currentStepIndex(),
+              stopBeforeStepIndex);
           Multi<?> stream;
           if (result instanceof Multi<?> multi) {
             stream = multi;
@@ -522,6 +573,13 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
       }
     }
     return fallback;
+  }
+
+  private TransitionWorkerExecutor transitionWorkerExecutor() {
+    if (transitionWorkerExecutor != null) {
+      return transitionWorkerExecutor;
+    }
+    throw new IllegalStateException("TransitionWorkerExecutor is not available for await item continuation dispatch");
   }
 
   private PipelineReleaseIdentityResolver releaseIdentityResolver() {
@@ -574,17 +632,6 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
             startStepIndex,
             resultType)));
     return executionHooks.attachMultiHooks(failed, watch, executionResult.telemetryContext());
-  }
-
-  private Uni<List<?>> executePipelineSegment(Object input, List<Object> steps, int startStepIndex, int stopBeforeStepIndex) {
-    Object result = executePipelineStreamingInternalFromStep(input, steps, startStepIndex, stopBeforeStepIndex);
-    if (result instanceof Multi<?> multi) {
-      return multi.collect().asList().onItem().transform(list -> (List<?>) list);
-    }
-    if (result instanceof Uni<?> uni) {
-      return uni.toMulti().collect().asList().onItem().transform(list -> (List<?>) list);
-    }
-    return Uni.createFrom().failure(new IllegalStateException("Pipeline segment returned unsupported result"));
   }
 
   private static int firstAggregateStepIndex(List<Object> steps, int startStepIndex) {
