@@ -31,7 +31,7 @@ public class CheckoutJourneyTraceStore {
 
     private final CopyOnWriteArrayList<CheckoutJourneyTraceEvent> events = new CopyOnWriteArrayList<>();
 
-    public CheckoutJourneyTraceEvent record(CheckpointPublicationRequest request) {
+    public synchronized CheckoutJourneyTraceEvent record(CheckpointPublicationRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("checkpoint trace request must not be null");
         }
@@ -43,8 +43,11 @@ public class CheckoutJourneyTraceStore {
         if (publication == null) {
             throw new IllegalArgumentException("checkpoint trace request must include a publication");
         }
-        String requestId = firstText(payload, "requestId", "request_id");
-        String orderId = firstText(payload, "orderId", "order_id");
+        String requestId = normalize(firstText(payload, "requestId", "request_id"));
+        String orderId = normalize(firstText(payload, "orderId", "order_id"));
+        if (requestId == null && orderId == null) {
+            throw new IllegalArgumentException("checkpoint trace request must include requestId or orderId");
+        }
         CheckoutJourneyTraceEvent existing = existingEvent(publication, requestId, orderId);
         if (existing != null) {
             return existing;
