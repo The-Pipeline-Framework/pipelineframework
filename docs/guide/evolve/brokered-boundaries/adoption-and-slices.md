@@ -4,16 +4,18 @@ This page captures the product value and implementation ordering for brokered bo
 
 ## Value Proposition
 
-Brokered boundaries are attractive because many organisations already trust Kafka operationally. They have teams, dashboards, retention policies, ACLs, incident playbooks, and scaling patterns around it.
+Brokered boundaries are attractive because many organisations already trust brokers operationally. They have teams, dashboards, retention policies, queue policies, ACLs, incident playbooks, and scaling patterns around Kafka, SQS, or both.
 
 The TPF value proposition is not "you no longer need brokers." It is:
 
 - Application teams do not have to encode pipeline semantics as topic naming, offset handling, Redis key conventions, and sidecar logic.
-- Platform teams can keep trusted broker infrastructure where it is useful.
-- TPF keeps the execution model explicit: authored steps, typed or envelope contracts, deterministic lineage, replay topology, and generated/runtime validation.
+- Platform teams can choose Kafka, SQS, REST, gRPC, or local substrates per boundary.
+- TPF keeps the execution model explicit: authored steps, declared DTO/envelope contracts, deterministic lineage, replay topology, and generated/runtime validation.
 - Self-hosted TPF deployments can keep backing broker/cache choices explicit while preserving one TPF model for application code.
 
 This lowers adoption risk for enterprise users without weakening the core TPF model.
+
+Kafka/MSK is the stronger fit when the platform already needs a Kafka estate: topic fan-out, retained streams, partition-aware throughput, Kafka-native consumers, and stream observability. SQS is the simpler AWS-shaped fit for queue/request-reply/DLQ-oriented workloads, especially when the goal is an await request/completion queue rather than a retained event stream.
 
 ## Adoption Ramp
 
@@ -33,14 +35,15 @@ Platform teams can start with a loose envelope where adoption matters, then move
 
 Prefer these implementation slices if this work becomes active:
 
-1. Kafka-backed checkpoint publication/subscription.
-2. Kafka-backed await transport.
-3. Kafka-backed transition-worker dispatcher using the existing command/result envelope.
-4. Protobuf-backed external step-host contract generation for non-Java implementations.
-5. Optional envelope compatibility lane with strict TPF control metadata and loose payload.
-6. Brokered step-host dispatch only after the earlier boundary types are proven.
+1. SQS-backed await transport for AWS-shaped self-host HA. Implemented by the CSV container reference.
+2. Kafka await provider for event-stream await proofs. Implemented by the default CSV topology.
+3. Kafka-backed checkpoint publication/subscription.
+4. Kafka-backed transition-worker dispatcher using the existing command/result envelope.
+5. Protobuf-backed external step-host contract generation for non-Java implementations.
+6. Optional envelope compatibility lane with strict TPF control metadata and loose payload.
+7. Brokered step-host dispatch only after the earlier boundary types are proven.
 
-Avoid starting with a broad "Kafka transport" PR. That would mix unrelated risks and blur TPF semantics.
+Avoid starting with broad "Kafka transport" or "SQS transport" PRs. They mix unrelated risks and blur TPF semantics.
 
 ## Non-Goals
 
@@ -49,7 +52,7 @@ Envelope and brokered boundary work should not:
 1. replace typed TPF as the default,
 2. make mapper pair validation irrelevant for typed paths,
 3. hide drift by treating all payloads as arbitrary objects,
-4. turn Kafka offsets into TPF replay state,
+4. turn Kafka offsets, SQS visibility timeouts, or broker redelivery into TPF replay state,
 5. force users to operate Kafka when local, REST, gRPC, or SQS runtime boundaries are enough,
 6. introduce a second workflow engine inside TPF.
 

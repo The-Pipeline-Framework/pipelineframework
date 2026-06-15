@@ -34,7 +34,7 @@ The state transition that parks or resumes the execution is guarded by the orche
 | `kafka` | Configure request and response channels, monitor broker/consumer health, and keep correlation ids stable. |
 | `sqs` | Configure request and response queues, monitor poller health, size visibility timeouts, and attach queue DLQ policy. |
 
-Kafka and SQS await use framework-owned request and response envelopes. The external provider is not a pipeline step; it is the actor that completes the await interaction.
+Kafka and SQS await use framework-owned request and completion envelopes. The external provider is not a pipeline step; it is the actor that completes the await interaction.
 
 ## Idempotency And Completion
 

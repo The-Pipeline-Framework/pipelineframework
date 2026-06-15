@@ -16,7 +16,7 @@ For production operation, see [Await Boundary Operations](/guide/operations/awai
 
 `csv-payments` uses authored `ONE_TO_ONE` await over a stream of `PaymentRecord` items. That is a stream of unary await interactions, not a hidden dispatch mode.
 
-The built-in `interaction-api` adapter is for human/UI inboxes and mock-provider style flows where another client queries pending interactions and later calls the generated completion API. The built-in `webhook` adapter dispatches an HTTP request to an external system and includes a signed resume token in the envelope. The built-in `kafka` adapter publishes a request envelope to Kafka and admits response envelopes from a configured response channel. The built-in `sqs` adapter does the same request/completion pattern with SQS queues.
+The built-in `interaction-api` adapter is for human/UI inboxes and mock-provider style flows where another client queries pending interactions and later calls the generated completion API. The built-in `webhook` adapter dispatches an HTTP request to an external system and includes a signed resume token in the envelope. The built-in `kafka` adapter publishes a request envelope to Kafka and admits completion envelopes from a configured response channel. The built-in `sqs` adapter does the same request/completion pattern with SQS standard queues.
 
 For runnable examples, use [`examples/restaurant-approval`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/restaurant-approval) for human/UI await and [`examples/csv-payments`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/csv-payments) for brokered unary await over a stream.
 
@@ -174,7 +174,7 @@ steps:
           queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/fraud-check-decisions"
 ```
 
-SQS dispatch sends a framework-owned JSON envelope with the same interaction identity and resume token fields as Kafka. The coordinator-side SQS completion poller consumes the response queue and admits completions through the await coordinator. This is separate from SQS work dispatch, SQS DLQ publication, and the SQS transition-worker request/reply protocol.
+SQS dispatch sends a framework-owned JSON envelope with the same interaction identity and resume token fields as Kafka. The coordinator-side SQS completion poller consumes the response queue and admits completions through the await coordinator. SQS await v1 supports standard queues, not FIFO queue URLs. This is separate from SQS work dispatch, SQS DLQ publication, and the SQS transition-worker request/reply protocol.
 
 ```properties
 tpf.await.sqs.poller.enabled=true

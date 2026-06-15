@@ -102,7 +102,7 @@ You can determine that version with `template-generator --version`, by checking 
 
 The generator copies the authored config into `config/pipeline.yaml` so the build can recreate `.proto` definitions during `generate-sources`.
 
-Await steps are part of the v2 template schema so CI and automation can validate authored `kind: await` pipeline configs. The generator now scaffolds await-aware projects for `interaction-api` and `webhook` transports. It still rejects `kafka` await scaffolding explicitly because the generated project does not yet include the required messaging dependencies and channel configuration.
+Await steps are part of the v2 template schema so CI and automation can validate authored `kind: await` pipeline configs. The generator scaffolding surface lives in the `tpf-mcp-bridge` repository and must keep runtime support separate from generated dependency wiring. Runtime supports `interaction-api`, `webhook`, Kafka await, and SQS await; scaffold support for Kafka and SQS must emit the matching Quarkus dependencies, channel or poller properties, and queue/topic configuration rather than assuming generic await wiring is enough.
 
 ## Semantic Types and Derived Bindings
 
