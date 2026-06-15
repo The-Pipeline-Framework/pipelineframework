@@ -53,13 +53,13 @@ csv-payments.payment.results
 
 ## Containerized Self-Hosted HA Reference
 
-For a compute-first self-hosted HA reference with a durable coordinator, REST transition worker, SQS await completions, Postgres persistence, and LocalStack-backed DynamoDB/SQS/S3-compatible coordinator stores:
+For a compute-first self-hosted HA reference with a durable coordinator, REST transition worker, broker-backed await completions, Postgres persistence, and LocalStack-backed DynamoDB/SQS/S3-compatible coordinator stores:
 
 ```bash
 ./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
 ```
 
-This is the advanced stream-await self-host HA reference. It uses SQS for the await request/completion loop to keep the local AWS-shaped stack on LocalStack; the default CSV pipeline remains the Kafka await reference.
+This is the advanced stream-await self-host HA reference. It uses SQS by default for the AWS-shaped LocalStack lane. Run `TPF_CSV_AWAIT_TRANSPORT=kafka ./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci` to prove the same coordinator/worker topology with Kafka await completions.
 
 ## Running End-to-End Tests
 

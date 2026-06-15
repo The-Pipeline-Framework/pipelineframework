@@ -75,7 +75,7 @@ services:
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test
       AWS_REGION: "${AWS_REGION:-us-east-1}"
-      PIPELINE_CONFIG: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/config/pipeline.container-sqs.yaml"
+      PIPELINE_CONFIG: "${TPF_CSV_PIPELINE_CONFIG:-${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/config/pipeline.container-sqs.yaml}"
       SERVER_KEYSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/target/dev-certs/pipeline-runtime-svc/server-keystore.jks"
       SERVER_KEYSTORE_PASSWORD: secret
       SERVER_TRUSTSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/target/dev-certs/pipeline-runtime-svc/client-truststore.jks"
@@ -99,11 +99,13 @@ services:
         -Dpipeline.orchestrator.mode=QUEUE_ASYNC
         -Dpipeline.orchestrator.resume-token-secret=csv-payments-container-resume-token-secret
         -Dpipeline.orchestrator.strict-startup=false
-        -Dtpf.await.kafka.reactive-messaging.enabled=false
-        -Dmp.messaging.outgoing.tpf-await-kafka-requests.enabled=false
-        -Dmp.messaging.incoming.csv-payment-provider-requests.enabled=false
-        -Dmp.messaging.outgoing.csv-payment-provider-results.enabled=false
-        -Dcsv-payments.payment-provider.sqs.enabled=true
+        -Dkafka.bootstrap.servers=${TPF_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
+        -Dtpf.await.kafka.reactive-messaging.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
+        -Dmp.messaging.outgoing.tpf-await-kafka-requests.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
+        -Dmp.messaging.incoming.csv-payment-provider-requests.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
+        -Dmp.messaging.outgoing.csv-payment-provider-results.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
+        -Dcsv-payments.payment-provider.kafka.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
+        -Dcsv-payments.payment-provider.sqs.enabled=${TPF_RUNTIME_AWAIT_SQS_PROVIDER_ENABLED:-true}
         -Dcsv-payments.payment-provider.sqs.request-queue-url=http://localstack:4566/000000000000/csv-payment-await-requests
         -Dcsv-payments.payment-provider.sqs.response-queue-url=http://localstack:4566/000000000000/csv-payment-await-results
         -Dcsv-payments.payment-provider.sqs.region=${AWS_REGION:-us-east-1}
@@ -144,7 +146,7 @@ services:
       AWS_SECRET_ACCESS_KEY: test
       AWS_REGION: "${AWS_REGION:-us-east-1}"
       TPF_WORKER_SECRET: "${TPF_WORKER_SECRET:-csv-transition-worker-secret}"
-      PIPELINE_CONFIG: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/config/pipeline.container-sqs.yaml"
+      PIPELINE_CONFIG: "${TPF_CSV_PIPELINE_CONFIG:-${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/config/pipeline.container-sqs.yaml}"
       SERVER_KEYSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/target/dev-certs/orchestrator-svc/server-keystore.jks"
       SERVER_KEYSTORE_PASSWORD: secret
       SERVER_TRUSTSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/target/dev-certs/orchestrator-svc/client-truststore.jks"
@@ -240,7 +242,7 @@ services:
       TPF_CONTROL_PLANE_TOKEN: "${TPF_CONTROL_PLANE_TOKEN:-csv-control-plane-admin-token}"
       TPF_ADMIN_TOKEN: "${TPF_ADMIN_TOKEN:-csv-control-plane-admin-token}"
       TPF_WORKER_SECRET: "${TPF_WORKER_SECRET:-csv-transition-worker-secret}"
-      PIPELINE_CONFIG: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/config/pipeline.container-sqs.yaml"
+      PIPELINE_CONFIG: "${TPF_CSV_PIPELINE_CONFIG:-${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/config/pipeline.container-sqs.yaml}"
       SERVER_KEYSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/target/dev-certs/orchestrator-svc/server-keystore.jks"
       CLIENT_TRUSTSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/target/dev-certs/orchestrator-svc/client-truststore.jks"
       JAVA_OPTS_APPEND: >-
@@ -260,9 +262,10 @@ services:
         -Dpipeline.orchestrator.mode=QUEUE_ASYNC
         -Dpipeline.orchestrator.resume-token-secret=csv-payments-container-resume-token-secret
         -Dpipeline.orchestrator.strict-startup=true
-        -Dtpf.await.kafka.reactive-messaging.enabled=false
+        -Dkafka.bootstrap.servers=${TPF_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
+        -Dtpf.await.kafka.reactive-messaging.enabled=${TPF_COORDINATOR_AWAIT_KAFKA_ENABLED:-false}
         -Dmp.messaging.outgoing.tpf-await-kafka-requests.enabled=false
-        -Dmp.messaging.incoming.tpf-await-kafka-responses.enabled=false
+        -Dmp.messaging.incoming.tpf-await-kafka-responses.enabled=${TPF_COORDINATOR_AWAIT_KAFKA_ENABLED:-false}
         -Dpipeline.health.enabled=false
         -Dpipeline.orchestrator.idempotency-policy=CLIENT_KEY_REQUIRED
         -Dpipeline.orchestrator.state-provider=dynamo
@@ -301,7 +304,7 @@ services:
         -Dpipeline.orchestrator.worker.rest.base-url=http://worker:8182
         -Dpipeline.orchestrator.worker.rest.request-timeout=PT180S
         -Dpipeline.orchestrator.worker.rest.shared-secret-ref=env:TPF_WORKER_SECRET
-        -Dtpf.await.sqs.poller.enabled=true
+        -Dtpf.await.sqs.poller.enabled=${TPF_COORDINATOR_AWAIT_SQS_POLLER_ENABLED:-true}
         -Dtpf.await.sqs.response-queue-url=http://localstack:4566/000000000000/csv-payment-await-results
         -Dtpf.await.sqs.visibility-timeout=PT30S
         -Dtpf.await.sqs.wait-time-seconds=1
