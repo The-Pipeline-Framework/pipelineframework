@@ -809,6 +809,7 @@ public class PipelineProtoGenerator {
         builder.append("  int64 deadline_epoch_ms = 9;\n");
         builder.append("  int64 created_at_epoch_ms = 10;\n");
         builder.append("  int64 updated_at_epoch_ms = 11;\n");
+        builder.append("  string request_payload_json = 12;\n");
         builder.append("}\n\n");
         builder.append("message ListPendingAwaitResponse {\n");
         builder.append("  repeated AwaitInteraction interactions = 1;\n");

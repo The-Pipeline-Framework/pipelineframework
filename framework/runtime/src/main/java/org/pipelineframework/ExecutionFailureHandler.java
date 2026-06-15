@@ -7,6 +7,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
+import org.jboss.logging.Logger;
 import org.pipelineframework.config.pipeline.PipelinePlatformResourceLoader;
 import org.pipelineframework.orchestrator.DeadLetterEnvelope;
 import org.pipelineframework.orchestrator.DeadLetterPublisher;
@@ -24,6 +25,7 @@ import org.pipelineframework.step.NonRetryableException;
 @ApplicationScoped
 class ExecutionFailureHandler {
 
+  private static final Logger LOG = Logger.getLogger(ExecutionFailureHandler.class);
   private static final String ORCHESTRATOR_SERVICE = "OrchestratorService";
   private static final String ORCHESTRATOR_METHOD = "Run";
 
@@ -46,6 +48,15 @@ class ExecutionFailureHandler {
 
     if (retryAllowed && retryableFailure) {
       long nextDue = now + retryDelayMillis(nextAttempt);
+      LOG.warnf(
+          classifiedFailure,
+          "Scheduling async execution retry execution=%s tenant=%s transition=%s nextAttempt=%d delayMs=%d error=%s",
+          record.executionId(),
+          record.tenantId(),
+          transitionKey,
+          nextAttempt,
+          Math.max(0L, nextDue - now),
+          classifiedFailure.getMessage());
       return executionStateStore.scheduleRetry(
               record.tenantId(),
               record.executionId(),

@@ -13,7 +13,8 @@ messages:
         type: uuid
       - number: 3
         name: items
-        type: string
+        type: OrderLineItem
+        repeated: true
   OrderLineItem:
     fields:
       - number: 1
@@ -34,9 +35,12 @@ messages:
         name: orderId
         type: uuid
       - number: 2
-        name: customerId
+        name: requestId
         type: uuid
       - number: 3
+        name: customerId
+        type: uuid
+      - number: 4
         name: itemCount
         type: int32
   ReadyOrder:
@@ -45,9 +49,12 @@ messages:
         name: orderId
         type: uuid
       - number: 2
-        name: customerId
+        name: requestId
         type: uuid
       - number: 3
+        name: customerId
+        type: uuid
+      - number: 4
         name: readyAt
         type: timestamp
 steps:

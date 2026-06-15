@@ -29,6 +29,8 @@ public class OrchestratorGrpcBindingResolver {
         OrchestratorRpcConstants.RUN_ASYNC_METHOD,
         OrchestratorRpcConstants.GET_EXECUTION_STATUS_METHOD,
         OrchestratorRpcConstants.GET_EXECUTION_RESULT_METHOD,
+        OrchestratorRpcConstants.COMPLETE_AWAIT_METHOD,
+        OrchestratorRpcConstants.LIST_PENDING_AWAIT_METHOD,
         OrchestratorRpcConstants.INGEST_METHOD,
         OrchestratorRpcConstants.SUBSCRIBE_METHOD);
 

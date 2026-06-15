@@ -1,5 +1,6 @@
 package org.pipelineframework;
 
+import java.util.List;
 import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
@@ -24,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -110,6 +112,31 @@ class PipelineExecutionServiceTest {
             eq(item),
             eq(selectedWorker),
             org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void queryPendingAwaitInteractionsNormalizesBlankFilters() {
+        when(controlPlane.queryPendingAwaitInteractions(
+                eq("tenant-1"),
+                isNull(),
+                isNull(),
+                isNull(),
+                eq(42)))
+            .thenReturn(Uni.createFrom().item(List.of()));
+
+        service.queryPendingAwaitInteractions(
+            "tenant-1",
+            " ",
+            "",
+            "\t",
+            42).await().indefinitely();
+
+        verify(controlPlane).queryPendingAwaitInteractions(
+            eq("tenant-1"),
+            isNull(),
+            isNull(),
+            isNull(),
+            eq(42));
     }
 
     @Test

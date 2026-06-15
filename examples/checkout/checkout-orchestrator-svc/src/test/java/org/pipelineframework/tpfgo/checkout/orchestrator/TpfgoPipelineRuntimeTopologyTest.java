@@ -11,6 +11,7 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -57,6 +58,7 @@ class TpfgoPipelineRuntimeTopologyTest {
                 "Grouped runtime clients should preserve the externalized runtime host");
             assertEquals(Set.of("${PIPELINE_RUNTIME_GRPC_PORT:9000}"), ports,
                 "Grouped runtime clients should preserve the externalized runtime port");
+            assertCreateOrderMessagesCarryRequestIdCorrelation();
             assertFalse(properties.stringPropertyNames().stream().anyMatch(name -> name.contains("tpfgo.checkout.order-pending.v1")),
                 "Checkpoint publication bindings should not appear in orchestrator client metadata");
             assertRuntimeMappingActive();
@@ -108,6 +110,45 @@ class TpfgoPipelineRuntimeTopologyTest {
             "pipeline-runtime-svc should listen on the same externalized port used by generated clients");
         assertTrue(content.contains("quarkus.grpc.server.use-separate-server=false"),
             "pipeline-runtime-svc should keep gRPC bound to the HTTP listener port");
+    }
+
+    private static void assertCreateOrderMessagesCarryRequestIdCorrelation() throws IOException {
+        Path createOrderPath = resolveCheckoutRoot().resolve("config").resolve("create-order-pipeline.yaml");
+        assertTrue(Files.exists(createOrderPath), "Expected create-order pipeline config file");
+
+        String content = Files.readString(createOrderPath);
+        assertTrue(messageHasRequestId(content, "InitialOrder"),
+            "InitialOrder should include requestId in create-order contract");
+        assertTrue(messageHasRequestId(content, "ReadyOrder"),
+            "ReadyOrder should include requestId in create-order contract");
+    }
+
+    private static boolean messageHasRequestId(String content, String messageName) {
+        List<String> lines = List.of(content.split("\\R"));
+        String messageHeader = "  " + messageName + ":";
+
+        int messageStart = -1;
+        for (int i = 0; i < lines.size(); i++) {
+            if (lines.get(i).equals(messageHeader)) {
+                messageStart = i;
+                break;
+            }
+        }
+        if (messageStart < 0) {
+            fail("Could not find contract block for message: " + messageName);
+        }
+
+        for (int i = messageStart + 1; i < lines.size(); i++) {
+            String line = lines.get(i);
+            if (line.startsWith("  ") && !line.startsWith("    ") && line.endsWith(":")) {
+                break;
+            }
+            if (line.strip().equals("name: requestId")) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static Path resolveCheckoutRoot() {

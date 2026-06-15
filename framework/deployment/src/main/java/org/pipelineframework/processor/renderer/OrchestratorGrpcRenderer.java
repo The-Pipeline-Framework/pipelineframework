@@ -80,6 +80,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         ClassName executionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
         ClassName outputBus = ClassName.get("org.pipelineframework", "PipelineOutputBus");
         ClassName pipelineContextHolder = ClassName.get("org.pipelineframework.context", "PipelineContextHolder");
+        ClassName pipelineJson = ClassName.get("org.pipelineframework.config.pipeline", "PipelineJson");
 
         var grpcBinding = safeResolveBinding(
             binding, descriptorSet, ctx, ORCHESTRATOR_METHOD, binding.inputStreaming(), binding.outputStreaming());
@@ -320,6 +321,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         }
         if (listPendingAwaitMethod != null) {
             serviceBuilder.addMethod(listPendingAwaitMethod);
+            serviceBuilder.addMethod(buildRequestPayloadJsonSerializerMethod(pipelineJson));
         }
 
         TypeSpec service = serviceBuilder.build();
@@ -819,7 +821,8 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
                                 .setTransportType(record.transportType())
                                 .setDeadlineEpochMs(record.deadlineEpochMs())
                                 .setCreatedAtEpochMs(record.createdAtEpochMs())
-                                .setUpdatedAtEpochMs(record.updatedAtEpochMs());
+                                .setUpdatedAtEpochMs(record.updatedAtEpochMs())
+                                .setRequestPayloadJson(toJson(record.requestPayload()));
                         }
                         return builder.build();
                     })
@@ -842,6 +845,24 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
                 ORCHESTRATOR_SERVICE,
                 ORCHESTRATOR_LIST_PENDING_AWAIT_METHOD,
                 ClassName.get("io.grpc", "Status"))
+            .build();
+    }
+
+    private MethodSpec buildRequestPayloadJsonSerializerMethod(ClassName pipelineJson) {
+        return MethodSpec.methodBuilder("toJson")
+            .addModifiers(Modifier.PRIVATE)
+            .returns(String.class)
+            .addParameter(Object.class, "payload")
+            .addCode("""
+                if (payload == null) {
+                    return "";
+                }
+                try {
+                    return $T.mapper().writeValueAsString(payload);
+                } catch (Exception error) {
+                    throw new $T(\"Failed to serialize await request payload\", error);
+                }
+                """, pipelineJson, IllegalStateException.class)
             .build();
     }
 }

@@ -33,6 +33,7 @@ bin/
 /.idea/
 .idea/workspace.xml
 target/
+.m2/
 *.out
 
 # Generated files

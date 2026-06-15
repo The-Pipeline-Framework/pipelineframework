@@ -128,11 +128,87 @@ class AwaitClientStepRendererTest {
         assertTrue(source.contains("\"com.example.restaurantapproval.common.dto.RestaurantDecisionDto\""));
     }
 
+    @Test
+    void fallsBackToPipelineConfigForGrpcTransportAndBasePackage() throws IOException {
+        Path pipelineConfig = tempDir.resolve("pipeline.yaml");
+        Files.writeString(pipelineConfig, """
+            basePackage: com.example.restaurantapproval
+            transport: GRPC
+            steps: []
+            aspects: []
+            """);
+
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("AwaitRestaurantDecision")
+            .generatedName("AwaitRestaurantDecisionService")
+            .servicePackage("org.pipelineframework.pipeline.service")
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .inputMapping(new TypeMapping(ClassName.get("com.example.restaurantapproval.common.domain", "PendingRestaurantApproval"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("com.example.restaurantapproval.common.domain", "RestaurantDecision"), null, false))
+            .enabledTargets(Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .build();
+
+        new AwaitClientStepRenderer().render(model, generationContext(Map.of("pipeline.config", pipelineConfig.toString())));
+
+        String source = Files.readString(tempDir.resolve(
+            "org/pipelineframework/pipeline/service/pipeline/AwaitRestaurantDecisionAwaitClientStep.java"));
+
+        assertTrue(source.contains("import com.example.restaurantapproval.grpc.PipelineTypes"));
+        assertTrue(source.contains("StepOneToOne<PipelineTypes.PendingRestaurantApproval, PipelineTypes.RestaurantDecision>"));
+        assertTrue(source.contains("descriptorFactory.descriptor(\"AwaitRestaurantDecision\", "
+            + "\"com.example.restaurantapproval.grpc.PipelineTypes.PendingRestaurantApproval\", "
+            + "\"com.example.restaurantapproval.grpc.PipelineTypes.RestaurantDecision\")"));
+    }
+
+    @Test
+    void pipelineConfigBasePackageOverridesContextBasePackageForGrpcCommonDomainTypes() throws IOException {
+        Path pipelineConfig = tempDir.resolve("pipeline.yaml");
+        Files.writeString(pipelineConfig, """
+            basePackage: org.pipelineframework.tpfgo.consumer.validation
+            transport: GRPC
+            steps: []
+            aspects: []
+            """);
+
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("ProcessAwaitOrderApprovalService")
+            .generatedName("ProcessAwaitOrderApprovalService")
+            .servicePackage("org.pipelineframework.tpfgo.consumer.validation.service")
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .inputMapping(new TypeMapping(ClassName.get("org.pipelineframework.tpfgo.common.domain", "OrderApproved"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("org.pipelineframework.tpfgo.common.domain", "OrderApproved"), null, false))
+            .enabledTargets(Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .build();
+
+        new AwaitClientStepRenderer().render(model, generationContext(
+            Map.of("pipeline.config", pipelineConfig.toString()),
+            "org.pipelineframework.tpfgo"));
+
+        String source = Files.readString(tempDir.resolve(
+            "org/pipelineframework/tpfgo/consumer/validation/service/pipeline/ProcessAwaitOrderApprovalAwaitClientStep.java"));
+
+        assertTrue(source.contains("import org.pipelineframework.tpfgo.consumer.validation.grpc.PipelineTypes"));
+        assertTrue(source.contains("StepOneToOne<PipelineTypes.OrderApproved, PipelineTypes.OrderApproved>"));
+        assertTrue(source.contains("descriptorFactory.descriptor(\"ProcessAwaitOrderApprovalService\", "
+            + "\"org.pipelineframework.tpfgo.consumer.validation.grpc.PipelineTypes.OrderApproved\", "
+            + "\"org.pipelineframework.tpfgo.consumer.validation.grpc.PipelineTypes.OrderApproved\")"));
+    }
+
     private GenerationContext generationContext(String transport) {
         return generationContext(Map.of("pipeline.transport", transport));
     }
 
     private GenerationContext generationContext(Map<String, String> options) {
+        return generationContext(options, null);
+    }
+
+    private GenerationContext generationContext(Map<String, String> options, String pipelineBasePackage) {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(options);
         return new GenerationContext(
@@ -141,6 +217,8 @@ class AwaitClientStepRendererTest {
             DeploymentRole.ORCHESTRATOR_CLIENT,
             Set.of(),
             null,
-            null);
+            null,
+            null,
+            pipelineBasePackage);
     }
 }
