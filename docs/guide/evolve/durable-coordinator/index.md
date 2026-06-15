@@ -14,7 +14,7 @@ This section is implementation-facing. Application usage remains in [Orchestrato
 | Await state | `AwaitUnitRecord` plus pending/completion interaction records |
 | Worker boundary | portable command/result envelopes over local, REST, gRPC, or SQS |
 | Contract/release identity | generated `META-INF/pipeline/pipeline-contract.json`, release descriptor registration, activation, execution pinning, and worker identity validation |
-| Self-host path | batteries-included local coordinator using the restaurant approval example |
+| Self-host path | compute-first HA references using restaurant approval and CSV Payments |
 
 ```mermaid
 sequenceDiagram
@@ -51,11 +51,11 @@ sequenceDiagram
 9. [Runtime Boundaries And Performance](/guide/evolve/durable-coordinator/runtime-boundaries-performance) explains runtime mapping, patterns, package boundaries, and hot-path guardrails.
 10. [Local APIs](/guide/evolve/durable-coordinator/local-apis) documents the current default-disabled control-plane and admin APIs.
 11. [Self-Hosted Deployment](/guide/evolve/durable-coordinator/self-hosted-deployment) gives the production-ish self-host topology, configuration, and operator runbooks.
-12. [Self-Hosted HA Roadmap](/guide/evolve/durable-coordinator/self-hosted-ha-roadmap) tracks the hardening work left after the container reference.
-13. [Self-Hosted Milestone](/guide/evolve/durable-coordinator/self-hosted-milestone) tracks what remains after the current self-host proof.
+12. [Self-Hosted HA Roadmap](/guide/evolve/durable-coordinator/self-hosted-ha-roadmap) records the milestone closeout and deferred hardening.
+13. [Self-Hosted Milestone](/guide/evolve/durable-coordinator/self-hosted-milestone) gives the adoption entry points and current proof matrix.
 
 ## Limits
 
 The current coordinator path does not dynamically load registered JAR code. Workers must already host matching pipeline code and validate active `pipelineId + contractVersion + releaseVersion` identity.
 
-The Dynamo release registry provides multi-coordinator release metadata, while the file-backed registry remains local/dev oriented. Minimal worker lifecycle now gates new hosted submissions. Single-execution re-drive is present; bulk DLQ-message replay and append-only execution/await state remain follow-up runtime substrate work.
+The Dynamo release registry provides multi-coordinator release metadata, while the file-backed registry remains local/dev oriented. Minimal worker lifecycle gates new hosted submissions. Single-execution re-drive is present. Bulk DLQ-message replay and append-only execution/await state are deferred hardening work, not blockers for the current compute-first self-host HA milestone.

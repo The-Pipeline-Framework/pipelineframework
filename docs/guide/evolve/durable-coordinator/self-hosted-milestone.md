@@ -1,8 +1,25 @@
-# Self-Hosted Milestone
+# Self-Hosted HA Milestone
 
-The near-term adoption goal is a compute-first self-hosted durable coordinator path that users can run, inspect, and operate directly.
+The compute-first self-hosted durable coordinator milestone is credible for adoption and demos.
 
-The first reference is `examples/restaurant-approval/self-host`, which runs one batteries-included coordinator process from the packaged `monolith-svc` artifact. It uses the local in-process transition worker by default so users can exercise hosted-style submission, release activation, await completion, and result inspection without starting a second service.
+Users can run the durable coordinator, activate a release, register a worker, submit executions, complete awaits, inspect results, triage terminal failures, and re-drive individual executions. The remaining work is hardening, not a milestone blocker.
+
+## Adoption Entry Points
+
+Use the restaurant approval reference first. It is the smallest human-await path:
+
+```bash
+./examples/restaurant-approval/self-host/container/run-container-ha-demo.sh --ci
+```
+
+Use CSV Payments after that when you need the stream-await/provider proof:
+
+```bash
+./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
+TPF_CSV_AWAIT_TRANSPORT=kafka ./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
+```
+
+The self-host HA path is `COMPUTE + QUEUE_ASYNC`: a coordinator service owns durable execution state and dispatches work to local, REST, gRPC, or SQS workers. Current `FUNCTION` support is serverless invocation/adapter support, not a TPF-owned durable HA coordinator.
 
 ## Current Proof
 
@@ -23,17 +40,15 @@ The first reference is `examples/restaurant-approval/self-host`, which runs one 
 | Durable release metadata | Dynamo registry with immutable release records and append-only activation events |
 | Shared/replicated artifact storage | local filesystem or S3-compatible blob store for coordinator-managed artifacts; OCI/Maven-style repositories remain preferred for native artifact forms |
 | Minimal worker lifecycle | registration, heartbeat, drain, stale detection, and submit-time healthy-worker gate |
-| Kafka await over stream | covered separately by `csv-payments` |
+| Stream-await provider proof | CSV Payments container reference supports SQS and Kafka lanes |
 
-## Remaining Gap
+## Post-Milestone Hardening
 
-| Gap | Why it matters |
+| Hardening item | Tracking |
 | --- | --- |
-| Bulk DLQ replay campaigns | single-execution re-drive exists, but there is no DLQ-message consumer or batch replay surface |
-| Append-only execution/await stores | existing Dynamo execution and await stores still use conditional updates for leases and state transitions |
+| Bulk DLQ replay campaigns | [#406](https://github.com/The-Pipeline-Framework/pipelineframework/issues/406) |
+| Append-only execution/await stores | [#396](https://github.com/The-Pipeline-Framework/pipelineframework/issues/396) |
 
-The self-host path is compute-first: a coordinator service owns durable execution state and dispatches work to local, REST, gRPC, or SQS workers. Current `FUNCTION` support is serverless invocation/adapter support, not a TPF-owned durable HA coordinator.
-
-The main remaining HA gap is not the release metadata model, the minimum worker lifecycle gate, single-execution re-drive, or `FUNCTION` support. It is making execution/await state fully append-only and deciding whether bulk replay belongs in the framework or in operator/application runbooks.
+These items are valid follow-up work, but they should not block the adoption milestone.
 
 All-serverless durable orchestration would be a separate design. It would need a coordinator loop backed by durable services such as DynamoDB, SQS, and EventBridge-style scheduling rather than relying on a Lambda/Azure/GCP function process to hold orchestration state.

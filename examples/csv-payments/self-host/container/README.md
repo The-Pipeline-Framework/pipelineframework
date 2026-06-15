@@ -1,6 +1,6 @@
-# CSV Payments Containerized Self-Hosted HA Reference
+# CSV Payments Provider-Portability Self-Hosted HA Reference
 
-This directory runs the CSV Payments example as the advanced compute-first self-host HA reference:
+This directory runs the CSV Payments example as the advanced provider-portability self-host HA reference:
 
 1. LocalStack provides DynamoDB, SQS, and S3-compatible coordinator stores.
 2. SQS or Kafka carries the await request/completion flow for the mock payment provider.
@@ -9,7 +9,7 @@ This directory runs the CSV Payments example as the advanced compute-first self-
 5. One REST transition worker container hosts the canonical `orchestrator-svc` pipeline order and delegates generated step calls to the grouped runtime and persistence services.
 6. One `pipeline-runtime-svc` container hosts the grouped gRPC step services and the selected mock provider.
 
-Restaurant approval remains the smaller human-await reference. This stack proves the same coordinator model against stream input plus broker-backed await completions. SQS is the default AWS-shaped self-host HA lane; Kafka is an explicit second lane that proves the await abstraction is not tied to one provider.
+Restaurant approval remains the base human-await reference. This stack proves the same coordinator model against stream input plus broker-backed await completions. SQS is the default AWS-shaped self-host HA lane; Kafka is an explicit second lane that proves the await abstraction is not tied to one provider.
 
 ## Run The Demo
 

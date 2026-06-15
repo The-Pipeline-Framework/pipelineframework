@@ -1,6 +1,6 @@
-# Containerized Self-Hosted HA Reference
+# Base Containerized Self-Hosted HA Reference
 
-This directory runs the restaurant approval self-host path as a compute-first HA-shaped local stack:
+This directory runs the restaurant approval self-host path as the base compute-first HA local stack:
 
 1. LocalStack provides DynamoDB, SQS, and S3-compatible endpoints.
 2. One coordinator container owns control-plane APIs, release admin APIs, execution/await state, SQS work dispatch, DLQ publication, release metadata, artifact storage, and worker lifecycle.
@@ -61,4 +61,4 @@ These defaults are for local verification only. Real deployments should use secr
 4. Release artifact storage can use an S3-compatible blob store for coordinator-managed artifacts.
 5. Worker lifecycle must report a healthy worker for the active release before hosted submissions are accepted.
 
-This is still a local reference stack, not a production deployment package. For the remaining HA hardening work, see [Self-Hosted HA Roadmap](/guide/evolve/durable-coordinator/self-hosted-ha-roadmap).
+This is still a local reference stack, not a production deployment package. For milestone status and deferred hardening, see [Self-Hosted HA Roadmap](/guide/evolve/durable-coordinator/self-hosted-ha-roadmap).
