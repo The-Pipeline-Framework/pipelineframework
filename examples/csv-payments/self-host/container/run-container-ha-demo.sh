@@ -7,9 +7,33 @@ REPO_ROOT="$(cd "${EXAMPLE_DIR}/../.." && pwd)"
 PIPELINE_RUNTIME_DIR="${EXAMPLE_DIR}/pipeline-runtime-svc"
 ORCHESTRATOR_DIR="${EXAMPLE_DIR}/orchestrator-svc"
 COMPOSE_FILE="${SCRIPT_DIR}/compose.yaml"
+COMPOSE_KAFKA_FILE="${SCRIPT_DIR}/compose.kafka.yaml"
 CLIENT="${SCRIPT_DIR}/demo-client.py"
 
 export TPF_REPO_ROOT="${TPF_REPO_ROOT:-${REPO_ROOT}}"
+export TPF_CSV_AWAIT_TRANSPORT="${TPF_CSV_AWAIT_TRANSPORT:-sqs}"
+case "${TPF_CSV_AWAIT_TRANSPORT}" in
+  sqs)
+    export TPF_CSV_PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG:-${EXAMPLE_DIR}/config/pipeline.container-sqs.yaml}"
+    export TPF_RUNTIME_AWAIT_KAFKA_ENABLED="${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}"
+    export TPF_RUNTIME_AWAIT_SQS_PROVIDER_ENABLED="${TPF_RUNTIME_AWAIT_SQS_PROVIDER_ENABLED:-true}"
+    export TPF_COORDINATOR_AWAIT_KAFKA_ENABLED="${TPF_COORDINATOR_AWAIT_KAFKA_ENABLED:-false}"
+    export TPF_COORDINATOR_AWAIT_SQS_POLLER_ENABLED="${TPF_COORDINATOR_AWAIT_SQS_POLLER_ENABLED:-true}"
+    ;;
+  kafka)
+    export TPF_CSV_PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG:-${EXAMPLE_DIR}/config/pipeline.yaml}"
+    export TPF_KAFKA_PORT="${TPF_KAFKA_PORT:-9093}"
+    export TPF_KAFKA_BOOTSTRAP_SERVERS="${TPF_KAFKA_BOOTSTRAP_SERVERS:-kafka:19092}"
+    export TPF_RUNTIME_AWAIT_KAFKA_ENABLED="${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-true}"
+    export TPF_RUNTIME_AWAIT_SQS_PROVIDER_ENABLED="${TPF_RUNTIME_AWAIT_SQS_PROVIDER_ENABLED:-false}"
+    export TPF_COORDINATOR_AWAIT_KAFKA_ENABLED="${TPF_COORDINATOR_AWAIT_KAFKA_ENABLED:-true}"
+    export TPF_COORDINATOR_AWAIT_SQS_POLLER_ENABLED="${TPF_COORDINATOR_AWAIT_SQS_POLLER_ENABLED:-false}"
+    ;;
+  *)
+    echo "ERROR: TPF_CSV_AWAIT_TRANSPORT must be 'sqs' or 'kafka'." >&2
+    exit 1
+    ;;
+esac
 export TPF_CSV_COORDINATOR_IMAGE="${TPF_CSV_COORDINATOR_IMAGE:-localhost/csv-payments/orchestrator-svc:latest}"
 export TPF_CSV_WORKER_IMAGE="${TPF_CSV_WORKER_IMAGE:-localhost/csv-payments/orchestrator-svc:latest}"
 export TPF_CSV_RUNTIME_IMAGE="${TPF_CSV_RUNTIME_IMAGE:-localhost/csv-payments/pipeline-runtime-svc:latest}"
@@ -21,7 +45,6 @@ export TPF_WORKER_PORT="${TPF_WORKER_PORT:-8182}"
 export TPF_RUNTIME_PORT="${TPF_RUNTIME_PORT:-8283}"
 export TPF_PERSISTENCE_PORT="${TPF_PERSISTENCE_PORT:-8282}"
 export TPF_LOCALSTACK_PORT="${TPF_LOCALSTACK_PORT:-4567}"
-export TPF_KAFKA_PORT="${TPF_KAFKA_PORT:-9093}"
 export TPF_CONTROL_PLANE_TOKEN="${TPF_CONTROL_PLANE_TOKEN:-csv-control-plane-admin-token}"
 export TPF_ADMIN_TOKEN="${TPF_ADMIN_TOKEN:-csv-control-plane-admin-token}"
 export TPF_WORKER_SECRET="${TPF_WORKER_SECRET:-csv-transition-worker-secret}"
@@ -40,6 +63,10 @@ if [[ "${1:-}" == "--ci" ]]; then
 fi
 
 compose() {
+  if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" ]]; then
+    docker compose -f "${COMPOSE_FILE}" -f "${COMPOSE_KAFKA_FILE}" "$@"
+    return
+  fi
   docker compose -f "${COMPOSE_FILE}" "$@"
 }
 
@@ -91,7 +118,9 @@ require_free_port "WORKER" "${TPF_WORKER_PORT}"
 require_free_port "RUNTIME" "${TPF_RUNTIME_PORT}"
 require_free_port "PERSISTENCE" "${TPF_PERSISTENCE_PORT}"
 require_free_port "LOCALSTACK" "${TPF_LOCALSTACK_PORT}"
-require_free_port "KAFKA" "${TPF_KAFKA_PORT}"
+if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" ]]; then
+  require_free_port "KAFKA" "${TPF_KAFKA_PORT}"
+fi
 
 if [[ "${TPF_SKIP_CONTAINER_BUILD}" != "true" ]]; then
   "${SCRIPT_DIR}/build-container-images.sh"
@@ -100,8 +129,11 @@ fi
 "${EXAMPLE_DIR}/generate-dev-certs.sh" >/dev/null
 
 "${SCRIPT_DIR}/bootstrap-localstack.sh"
+if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" ]]; then
+  "${SCRIPT_DIR}/bootstrap-kafka.sh"
+fi
 
-echo "Starting CSV persistence, runtime, worker, and coordinator containers..."
+echo "Starting CSV persistence, runtime, worker, and coordinator containers with ${TPF_CSV_AWAIT_TRANSPORT} await..."
 compose up -d persistence runtime worker coordinator
 
 python3 "${CLIENT}" wait-health \
@@ -159,8 +191,8 @@ python3 "${CLIENT}" run-flow \
   --timeout-seconds 300
 
 if [[ "${CI_MODE}" == "true" ]]; then
-  echo "CSV containerized self-host HA demo completed in CI mode."
+  echo "CSV containerized self-host HA demo (${TPF_CSV_AWAIT_TRANSPORT}) completed in CI mode."
 else
-  echo "CSV containerized self-host HA demo completed."
-  echo "Logs: docker compose -f ${COMPOSE_FILE} logs coordinator worker persistence kafka localstack"
+  echo "CSV containerized self-host HA demo (${TPF_CSV_AWAIT_TRANSPORT}) completed."
+  echo "Logs: docker compose -f ${COMPOSE_FILE} logs coordinator worker runtime persistence localstack"
 fi

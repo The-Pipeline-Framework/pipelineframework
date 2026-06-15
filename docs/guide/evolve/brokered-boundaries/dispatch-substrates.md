@@ -11,14 +11,14 @@ It is not the same decision as transport mode, platform mode, runtime layout, or
 | Local | tests, demos, monoliths, low-friction adoption | no crash-surviving handoff by itself |
 | REST | simple request/response step hosts and transition workers | immediate call semantics; not durable buffering |
 | gRPC | efficient typed request/response and protobuf contracts | still immediate unless paired with await/checkpoint semantics |
-| SQS | durable coordinator dispatch and DLQ-oriented cloud deployments | weaker ordering/grouping model than Kafka |
-| Kafka | enterprise broker backbone, durable fan-out/fan-in pressure boundaries, checkpoint streams | do not treat offsets as TPF replay semantics |
+| SQS | AWS-shaped durable coordinator dispatch, await request/completion queues, DLQ/re-drive, and queue-style self-host HA | standard queues only for SQS await v1; weaker ordering/grouping model than Kafka |
+| Kafka | enterprise broker backbone, Kafka await, stream pressure boundaries, topic fan-out, retained event streams, and Kafka-native estates | do not treat offsets as TPF replay semantics |
 
-## Not `transport: KAFKA`
+## Not `transport: KAFKA` Or `transport: SQS`
 
-Do not flatten Kafka into the same top-level decision as REST or gRPC.
+Do not flatten Kafka or SQS into the same top-level decision as REST or gRPC.
 
-REST and gRPC are immediate call transports. Kafka is a brokered dispatch substrate with different timing, correlation, retry, and ownership implications.
+REST and gRPC are immediate call transports. Kafka and SQS are brokered dispatch substrates with different timing, correlation, retry, and ownership implications.
 
 Prefer boundary-specific configuration shapes:
 
@@ -27,6 +27,13 @@ kind: await
 await:
   transport:
     type: kafka
+```
+
+```yaml
+kind: await
+await:
+  transport:
+    type: sqs
 ```
 
 ```yaml
@@ -39,10 +46,10 @@ checkpoint:
 The checkpoint snippet is illustrative only. Current supported checkpoint handoff target configuration uses `pipeline.handoff.bindings.<publication>.targets.<target>.*`, and broker-backed `KAFKA` publication targets are not supported yet.
 
 ```properties
-pipeline.orchestrator.dispatcher-provider=kafka
+pipeline.orchestrator.dispatcher-provider=sqs
 ```
 
-These examples are design direction, not committed public API.
+Kafka and SQS await are supported runtime adapters. `pipeline.orchestrator.dispatcher-provider=sqs` is supported for queue-async work dispatch. Kafka checkpoint publication and Kafka dispatcher-provider examples remain design direction, not committed public API.
 
 ## Relationship To Existing Work
 
@@ -54,7 +61,7 @@ This guide extends existing boundary seams:
 - [Checkpoint Handoff](/guide/development/orchestrator-runtime/checkpoint-handoff) is the natural user-facing shape for pipeline-to-pipeline publication.
 - [Runtime Core Decoupling](/guide/evolve/runtime-core-decoupling) keeps runtime-adapter concerns out of core semantics.
 
-Kafka should extend these seams. It should not introduce an independent workflow engine inside TPF.
+Broker-backed await providers should extend these seams. They should not introduce an independent workflow engine inside TPF.
 
 ## Pressure And Replay
 

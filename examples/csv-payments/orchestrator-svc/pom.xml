@@ -241,6 +241,7 @@
                 <pipeline.runtime.source.dir.output>${pipeline.runtime.source.root}/output-csv-file-processing-svc/src/main/java</pipeline.runtime.source.dir.output>
                 <pipeline.runtime.source.exclude.executor>org/pipelineframework/csv/service/ExecutorProducer.java</pipeline.runtime.source.exclude.executor>
                 <pipeline.runtime.source.exclude.payment-provider-kafka-mock>org/pipelineframework/csv/service/PaymentProviderKafkaAwaitMock.java</pipeline.runtime.source.exclude.payment-provider-kafka-mock>
+                <pipeline.runtime.source.exclude.payment-provider-sqs-mock>org/pipelineframework/csv/service/PaymentProviderSqsAwaitMock.java</pipeline.runtime.source.exclude.payment-provider-sqs-mock>
                 <pipeline.runtime.source.exclude.payment-provider-mock>org/pipelineframework/csv/service/PaymentProviderServiceMock.java</pipeline.runtime.source.exclude.payment-provider-mock>
                 <pipeline.runtime.duplicate.check.script>${pipeline.runtime.source.root}/build-tools/check-duplicate-sources.sh</pipeline.runtime.duplicate.check.script>
             </properties>
@@ -281,6 +282,7 @@
                                             <fileset dir="${pipeline.runtime.source.dir.payments}">
                                                 <exclude name="${pipeline.runtime.source.exclude.executor}" />
                                                 <exclude name="${pipeline.runtime.source.exclude.payment-provider-kafka-mock}" />
+                                                <exclude name="${pipeline.runtime.source.exclude.payment-provider-sqs-mock}" />
                                                 <exclude name="${pipeline.runtime.source.exclude.payment-provider-mock}" />
                                             </fileset>
                                         </copy>

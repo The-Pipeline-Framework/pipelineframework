@@ -18,6 +18,9 @@ package org.pipelineframework.csv.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
+import java.util.Optional;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -53,6 +56,11 @@ class PaymentProviderConfigTest {
                     public long responseDelayMillis() {
                         return 0L;
                     }
+
+                    @Override
+                    public Sqs sqs() {
+                        return disabledSqs();
+                    }
                 };
     }
 
@@ -79,5 +87,54 @@ class PaymentProviderConfigTest {
     @Test
     void testDefaultResponseDelayMillis() {
         assertThat(config.responseDelayMillis()).isZero();
+    }
+
+    private static PaymentProviderConfig.Sqs disabledSqs() {
+        return new PaymentProviderConfig.Sqs() {
+            @Override
+            public boolean enabled() {
+                return false;
+            }
+
+            @Override
+            public Optional<String> requestQueueUrl() {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<String> responseQueueUrl() {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<String> region() {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<String> endpointOverride() {
+                return Optional.empty();
+            }
+
+            @Override
+            public Duration pollStartDelay() {
+                return Duration.ZERO;
+            }
+
+            @Override
+            public Duration visibilityTimeout() {
+                return Duration.ofSeconds(30);
+            }
+
+            @Override
+            public int waitTimeSeconds() {
+                return 1;
+            }
+
+            @Override
+            public int maxMessages() {
+                return 1;
+            }
+        };
     }
 }

@@ -16,6 +16,9 @@
 
 package org.pipelineframework.csv.service;
 
+import java.time.Duration;
+import java.util.Optional;
+
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
 
@@ -48,4 +51,43 @@ public interface PaymentProviderConfig {
    */
   @WithDefault("0")
   long responseDelayMillis();
+
+  /** SQS await mock provider configuration. */
+  Sqs sqs();
+
+  /** SQS await mock provider settings for the container self-host reference. */
+  interface Sqs {
+
+    /** Whether the SQS await mock provider poller starts with the application. */
+    @WithDefault("false")
+    boolean enabled();
+
+    /** SQS queue URL that receives payment-provider await requests. */
+    Optional<String> requestQueueUrl();
+
+    /** SQS queue URL that receives payment-provider await completion responses. */
+    Optional<String> responseQueueUrl();
+
+    /** AWS region used by the SQS client. */
+    Optional<String> region();
+
+    /** Optional SQS endpoint override, used by LocalStack in the self-host reference. */
+    Optional<String> endpointOverride();
+
+    /** Delay before the provider starts polling the request queue. */
+    @WithDefault("PT0S")
+    Duration pollStartDelay();
+
+    /** SQS visibility timeout used while processing provider requests. */
+    @WithDefault("PT30S")
+    Duration visibilityTimeout();
+
+    /** Long-poll wait time in seconds for request queue receives. */
+    @WithDefault("1")
+    int waitTimeSeconds();
+
+    /** Maximum number of request messages to receive per poll. */
+    @WithDefault("1")
+    int maxMessages();
+  }
 }

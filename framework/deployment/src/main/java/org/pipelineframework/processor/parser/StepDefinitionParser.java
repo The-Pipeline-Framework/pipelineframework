@@ -521,6 +521,9 @@ public class StepDefinitionParser {
         if ("kafka".equalsIgnoreCase(transportType) && !validateKafkaAwaitTransport(transportMap, stepName)) {
             return null;
         }
+        if ("sqs".equalsIgnoreCase(transportType) && !validateSqsAwaitTransport(transportMap, stepName)) {
+            return null;
+        }
         Object correlationObj = awaitMap.get("correlation");
         if (!(correlationObj instanceof Map<?, ?> correlationMap)) {
             String message = "Skipping step '" + stepName + "': await.correlation.strategy must be declared";
@@ -581,6 +584,59 @@ public class StepDefinitionParser {
             return false;
         }
         return true;
+    }
+
+    private boolean validateSqsAwaitTransport(Map<?, ?> transportMap, String stepName) {
+        Object requestObj = transportMap.get("request");
+        if (!(requestObj instanceof Map<?, ?> requestMap) || isBlank(stringValue(requestMap.get("queueUrl")))) {
+            String message = "Skipping step '" + stepName + "': sqs await transport must declare request.queueUrl";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        String requestQueueUrl = stringValue(requestMap.get("queueUrl"));
+        if (isFifoQueueUrl(requestQueueUrl)) {
+            String message = "Skipping step '" + stepName + "': sqs await transport supports standard queues only in v1";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        Object responseObj = transportMap.get("response");
+        if (!(responseObj instanceof Map<?, ?> responseMap) || isBlank(stringValue(responseMap.get("queueUrl")))) {
+            String message = "Skipping step '" + stepName + "': sqs await transport must declare response.queueUrl";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        String responseQueueUrl = stringValue(responseMap.get("queueUrl"));
+        if (isFifoQueueUrl(responseQueueUrl)) {
+            String message = "Skipping step '" + stepName + "': sqs await transport supports standard queues only in v1";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        return true;
+    }
+
+    private boolean isFifoQueueUrl(String queueUrl) {
+        return normalizedQueueUrlForTypeCheck(queueUrl).endsWith(".fifo");
+    }
+
+    private String normalizedQueueUrlForTypeCheck(String queueUrl) {
+        if (queueUrl == null) {
+            return "";
+        }
+        String normalized = queueUrl.trim();
+        int queryIndex = normalized.indexOf('?');
+        int fragmentIndex = normalized.indexOf('#');
+        int endIndex = normalized.length();
+        if (queryIndex >= 0) {
+            endIndex = Math.min(endIndex, queryIndex);
+        }
+        if (fragmentIndex >= 0) {
+            endIndex = Math.min(endIndex, fragmentIndex);
+        }
+        return normalized.substring(0, endIndex);
     }
 
     private List<String> parseStringList(Object value, String stepName, String fieldName) {
