@@ -81,12 +81,12 @@ class PersistenceServiceDuplicateKeyTest {
     }
 
     @Test
-    void ignoreDuplicateKeyPolicyRecognizesGenericIntegritySqlState() {
+    void ignoreDuplicateKeyPolicyRecognizesGenericIntegritySqlStateWithDuplicateText() {
         PersistenceManager manager = mock(PersistenceManager.class);
         PersistenceService<TestEntity> service = service(manager, ignorePolicyConfig());
 
         TestEntity entity = new TestEntity();
-        SQLException duplicate = new SQLException("constraint violation", "23000");
+        SQLException duplicate = new SQLException("duplicate key violates unique constraint", "23000");
         when(manager.persist(entity)).thenReturn(Uni.createFrom().failure(duplicate));
 
         UniAssertSubscriber<TestEntity> subscriber = service.process(entity)
@@ -94,6 +94,25 @@ class PersistenceServiceDuplicateKeyTest {
         subscriber.awaitItem();
 
         assertSame(entity, subscriber.getItem());
+        verify(manager).persist(entity);
+    }
+
+    @Test
+    void ignoreDuplicateKeyPolicyDoesNotTreatGenericIntegritySqlStateAsDuplicateKey() {
+        PersistenceManager manager = mock(PersistenceManager.class);
+        PersistenceService<TestEntity> service = service(manager, ignorePolicyConfig());
+
+        TestEntity entity = new TestEntity();
+        SQLException constraintViolation = new SQLException("foreign key constraint violation", "23000");
+        when(manager.persist(entity)).thenReturn(Uni.createFrom().failure(constraintViolation));
+
+        UniAssertSubscriber<TestEntity> subscriber = service.process(entity)
+            .subscribe().withSubscriber(UniAssertSubscriber.create());
+        subscriber.awaitFailure();
+
+        Throwable thrown = subscriber.getFailure();
+        assertTrue(thrown instanceof NonRetryableException);
+        assertSame(constraintViolation, thrown.getCause());
         verify(manager).persist(entity);
     }
 

@@ -410,7 +410,7 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
     }
 
     private boolean isDuplicateKeySqlState(String value) {
-        return "23505".equals(value) || "23000".equals(value);
+        return "23505".equals(value);
     }
 
     private String invokeStringGetter(Throwable throwable, String methodName) {

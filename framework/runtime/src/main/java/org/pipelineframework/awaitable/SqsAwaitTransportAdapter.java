@@ -169,9 +169,23 @@ public class SqsAwaitTransportAdapter implements AwaitTransportAdapter<Object> {
         }
 
         public SqsConfig {
-            if (requestQueueUrl.endsWith(".fifo") || responseQueueUrl.endsWith(".fifo")) {
+            if (normalizedQueueUrlForTypeCheck(requestQueueUrl).endsWith(".fifo")
+                || normalizedQueueUrlForTypeCheck(responseQueueUrl).endsWith(".fifo")) {
                 throw new IllegalArgumentException("sqs await transport supports standard queues only in v1");
             }
+        }
+
+        private static String normalizedQueueUrlForTypeCheck(String queueUrl) {
+            String normalized = queueUrl.trim();
+            int queryIndex = normalized.indexOf('?');
+            if (queryIndex >= 0) {
+                normalized = normalized.substring(0, queryIndex);
+            }
+            int fragmentIndex = normalized.indexOf('#');
+            if (fragmentIndex >= 0) {
+                normalized = normalized.substring(0, fragmentIndex);
+            }
+            return normalized;
         }
     }
 }

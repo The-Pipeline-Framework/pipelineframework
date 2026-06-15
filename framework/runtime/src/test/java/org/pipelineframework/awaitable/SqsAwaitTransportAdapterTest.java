@@ -103,6 +103,22 @@ class SqsAwaitTransportAdapterTest {
         assertTrue(exception.getMessage().contains("standard queues only"));
     }
 
+    @Test
+    void dispatchRejectsNormalizedFifoQueueUrl() {
+        SqsAwaitTransportAdapter adapter = adapter(mock(SqsClient.class));
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
+            "request", Map.of("queueUrl", "http://sqs.local/requests.fifo?ignored=true#fragment"),
+            "response", Map.of("queueUrl", "http://sqs.local/responses")));
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
+                descriptor,
+                interaction(),
+                Map.of())).await().atMost(Duration.ofSeconds(5)));
+
+        assertTrue(exception.getMessage().contains("standard queues only"));
+    }
+
     private static SqsAwaitTransportAdapter adapter(SqsClient client) {
         SqsAwaitTransportAdapter adapter = new SqsAwaitTransportAdapter(client, config());
         adapter.resumeTokenService = new AwaitResumeTokenService("secret-value-for-tests");
