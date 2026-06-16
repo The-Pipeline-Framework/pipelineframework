@@ -21,6 +21,18 @@ class RuntimeCoreDependencyGuardTest {
     }
 
     @Test
+    void runtimeCoreHasNoCdiDependencies() {
+        assertNoForbiddenDependency("jakarta.enterprise.");
+        assertNoForbiddenDependency("jakarta.inject.");
+    }
+
+    @Test
+    void runtimeCoreHasNoReactiveMessagingDependencies() {
+        assertNoForbiddenDependency("io.smallrye.reactive.messaging");
+        assertNoForbiddenDependency("org.eclipse.microprofile.reactive.messaging");
+    }
+
+    @Test
     void runtimeCoreHasNoVertxDependencies() {
         assertNoForbiddenDependency("io.vertx.");
     }
