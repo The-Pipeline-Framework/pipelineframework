@@ -60,6 +60,8 @@ jobs:
 
       - name: Dump restaurant self-host logs on failure
         if: failure()
+        env:
+          TPF_REPO_ROOT: ${{ github.workspace }}
         run: |
           docker compose -f examples/restaurant-approval/self-host/container/compose.yaml ps || true
           docker compose -f examples/restaurant-approval/self-host/container/compose.yaml logs --no-color --tail=400 || true

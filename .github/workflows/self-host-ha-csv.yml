@@ -63,6 +63,7 @@ jobs:
       - name: Dump CSV self-host logs on failure
         if: failure()
         env:
+          TPF_REPO_ROOT: ${{ github.workspace }}
           TPF_CSV_AWAIT_TRANSPORT: ${{ matrix.await-transport }}
         run: |
           compose_files=(-f examples/csv-payments/self-host/container/compose.yaml)
