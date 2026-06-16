@@ -48,10 +48,19 @@ jobs:
         uses: ./.github/actions/setup-testcontainers
 
       - name: Run restaurant self-host HA demo
+        env:
+          TPF_KEEP_STACK_ON_FAILURE: "true"
         run: ./examples/restaurant-approval/self-host/container/run-container-ha-demo.sh --ci
 
       - name: Run restaurant self-host HA incident demo
         env:
           TPF_SKIP_CONTAINER_BUILD: "true"
+          TPF_KEEP_STACK_ON_FAILURE: "true"
         run: ./examples/restaurant-approval/self-host/container/run-container-ha-incident.sh --ci
 
+      - name: Dump restaurant self-host logs on failure
+        if: failure()
+        run: |
+          docker compose -f examples/restaurant-approval/self-host/container/compose.yaml ps || true
+          docker compose -f examples/restaurant-approval/self-host/container/compose.yaml logs --no-color --tail=400 || true
+          docker compose -f examples/restaurant-approval/self-host/container/compose.yaml down -v --remove-orphans || true

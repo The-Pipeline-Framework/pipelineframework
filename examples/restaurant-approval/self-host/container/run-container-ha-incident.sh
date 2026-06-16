@@ -37,6 +37,11 @@ compose() {
 }
 
 cleanup() {
+  local exit_code="${1:-0}"
+  if [[ "${CI_MODE}" == "true" && "${exit_code}" != "0" && "${TPF_KEEP_STACK_ON_FAILURE:-false}" == "true" ]]; then
+    echo "Containerized self-host HA incident stack failed and is being preserved for log collection."
+    return
+  fi
   if [[ "${CI_MODE}" == "true" ]]; then
     compose down -v --remove-orphans >/dev/null 2>&1 || true
   else
@@ -44,7 +49,7 @@ cleanup() {
     echo "Stop it with: docker compose -f ${COMPOSE_FILE} down -v"
   fi
 }
-trap cleanup EXIT
+trap 'cleanup $?' EXIT
 
 if [[ "${CI_MODE}" == "true" ]]; then
   compose down -v --remove-orphans >/dev/null 2>&1 || true
@@ -53,7 +58,7 @@ fi
 mkdir -p "${TPF_RUN_DIR}"
 
 if [[ ! -f "${EXAMPLE_DIR}/target/dev-certs/orchestrator-svc/client-truststore.jks" ]]; then
-  "${EXAMPLE_DIR}/generate-dev-certs.sh"
+  bash "${EXAMPLE_DIR}/generate-dev-certs.sh"
 fi
 
 if [[ "${TPF_SKIP_CONTAINER_BUILD}" != "true" ]]; then

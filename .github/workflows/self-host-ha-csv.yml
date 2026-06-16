@@ -57,4 +57,18 @@ jobs:
       - name: Run CSV self-host HA demo
         env:
           TPF_CSV_AWAIT_TRANSPORT: ${{ matrix.await-transport }}
+          TPF_KEEP_STACK_ON_FAILURE: "true"
         run: ./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
+
+      - name: Dump CSV self-host logs on failure
+        if: failure()
+        env:
+          TPF_CSV_AWAIT_TRANSPORT: ${{ matrix.await-transport }}
+        run: |
+          compose_files=(-f examples/csv-payments/self-host/container/compose.yaml)
+          if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" ]]; then
+            compose_files+=(-f examples/csv-payments/self-host/container/compose.kafka.yaml)
+          fi
+          docker compose "${compose_files[@]}" ps || true
+          docker compose "${compose_files[@]}" logs --no-color --tail=500 || true
+          docker compose "${compose_files[@]}" down -v --remove-orphans || true
