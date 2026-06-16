@@ -75,27 +75,6 @@ if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "sqs" ]]; then
   )
 else
   COMMON_BUILD_PROPS+=(
-    -Dtpf.await.kafka.reactive-messaging.enabled=true
-    -Dmp.messaging.outgoing.tpf-await-kafka-requests.enabled=true
-    -Dmp.messaging.outgoing.tpf-await-kafka-requests.connector=smallrye-kafka
-    -Dmp.messaging.outgoing.tpf-await-kafka-requests.topic=csv-payments.payment.requests
-    -Dmp.messaging.outgoing.tpf-await-kafka-requests.value.serializer=org.apache.kafka.common.serialization.StringSerializer
-    -Dmp.messaging.incoming.tpf-await-kafka-responses.enabled=true
-    -Dmp.messaging.incoming.tpf-await-kafka-responses.connector=smallrye-kafka
-    -Dmp.messaging.incoming.tpf-await-kafka-responses.topic=csv-payments.payment.results
-    -Dmp.messaging.incoming.tpf-await-kafka-responses.group.id=csv-payments-orchestrator
-    -Dmp.messaging.incoming.tpf-await-kafka-responses.auto.offset.reset=earliest
-    -Dmp.messaging.incoming.tpf-await-kafka-responses.value.deserializer=org.apache.kafka.common.serialization.StringDeserializer
-    -Dmp.messaging.incoming.csv-payment-provider-requests.enabled=true
-    -Dmp.messaging.incoming.csv-payment-provider-requests.connector=smallrye-kafka
-    -Dmp.messaging.incoming.csv-payment-provider-requests.topic=csv-payments.payment.requests
-    -Dmp.messaging.incoming.csv-payment-provider-requests.group.id=csv-payments-mock-provider
-    -Dmp.messaging.incoming.csv-payment-provider-requests.auto.offset.reset=earliest
-    -Dmp.messaging.incoming.csv-payment-provider-requests.value.deserializer=org.apache.kafka.common.serialization.StringDeserializer
-    -Dmp.messaging.outgoing.csv-payment-provider-results.enabled=true
-    -Dmp.messaging.outgoing.csv-payment-provider-results.connector=smallrye-kafka
-    -Dmp.messaging.outgoing.csv-payment-provider-results.topic=csv-payments.payment.results
-    -Dmp.messaging.outgoing.csv-payment-provider-results.value.serializer=org.apache.kafka.common.serialization.StringSerializer
     -Dcsv-payments.payment-provider.kafka.enabled=true
     -Dcsv-payments.payment-provider.sqs.enabled=false
   )
