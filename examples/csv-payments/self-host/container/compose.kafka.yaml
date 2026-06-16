@@ -1,6 +1,6 @@
 services:
   kafka:
-    image: apache/kafka-native:3.8.0
+    image: apache/kafka:3.8.0
     ports:
       - "${TPF_KAFKA_PORT:-9093}:9092"
     environment:
