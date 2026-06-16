@@ -3,6 +3,7 @@ package org.pipelineframework.awaitable.kafka;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
@@ -47,6 +48,45 @@ class KafkaAwaitEnvelopeContractTest {
             null,
             Map.of(),
             null));
+    }
+
+    @Test
+    void dispatchEnvelopeNormalizesAndDefensivelyCopiesMetadata() {
+        KafkaAwaitDispatchEnvelope withoutMetadata = new KafkaAwaitDispatchEnvelope(
+            "tenant-1",
+            "execution-1",
+            "interaction-1",
+            "correlation-1",
+            "step-1",
+            123L,
+            "input.Type",
+            "output.Type",
+            "token",
+            Map.of("amount", 100),
+            null);
+
+        assertEquals(Map.of(), withoutMetadata.transportMetadata());
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("topic", "requests");
+        KafkaAwaitDispatchEnvelope envelope = new KafkaAwaitDispatchEnvelope(
+            "tenant-1",
+            "execution-1",
+            "interaction-1",
+            "correlation-1",
+            "step-1",
+            123L,
+            "input.Type",
+            "output.Type",
+            "token",
+            Map.of("amount", 100),
+            metadata);
+
+        metadata.put("topic", "changed");
+        metadata.put("extra", "ignored");
+
+        assertEquals(Map.of("topic", "requests"), envelope.transportMetadata());
+        assertThrows(UnsupportedOperationException.class, () -> envelope.transportMetadata().put("extra", "value"));
     }
 
     @Test
