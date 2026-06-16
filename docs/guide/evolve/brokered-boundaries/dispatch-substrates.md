@@ -43,13 +43,13 @@ checkpoint:
       kind: kafka
 ```
 
-The checkpoint snippet is illustrative only. Current supported checkpoint handoff target configuration uses `pipeline.handoff.bindings.<publication>.targets.<target>.*`, and broker-backed `KAFKA` publication targets are not supported yet.
+The checkpoint snippet is illustrative. Supported runtime configuration uses `pipeline.handoff.bindings.<publication>.targets.<target>.*` with `kind=KAFKA` and `topic=<topic>`.
 
 ```properties
 pipeline.orchestrator.dispatcher-provider=sqs
 ```
 
-Kafka and SQS await are supported runtime adapters. `pipeline.orchestrator.dispatcher-provider=sqs` is supported for queue-async work dispatch. Kafka checkpoint publication and Kafka dispatcher-provider examples remain design direction, not committed public API.
+Kafka and SQS await are supported runtime adapters. Kafka checkpoint publication/subscription is supported as a broker-backed handoff provider. `pipeline.orchestrator.dispatcher-provider=sqs` is supported for queue-async work dispatch. Kafka dispatcher-provider examples remain design direction, not committed public API.
 
 ## Relationship To Existing Work
 

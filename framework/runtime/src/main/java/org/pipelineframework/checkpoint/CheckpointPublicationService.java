@@ -153,6 +153,7 @@ public class CheckpointPublicationService {
         return switch (target.kind()) {
             case GRPC -> resolveGrpcTarget(publication, targetId, target);
             case HTTP -> resolveHttpTarget(publication, targetId, target);
+            case KAFKA -> resolveKafkaTarget(publication, targetId, target);
         };
     }
 
@@ -219,5 +220,27 @@ public class CheckpointPublicationService {
             target.idempotencyHeader().orElse("Idempotency-Key"),
             normalizedBase + normalizedPath,
             method);
+    }
+
+    private ResolvedCheckpointPublicationTarget resolveKafkaTarget(
+        String publication,
+        String targetId,
+        PipelineHandoffConfig.TargetConfig target
+    ) {
+        String topic = target.topic()
+            .map(String::trim)
+            .filter(value -> !value.isBlank())
+            .orElseThrow(() -> new IllegalStateException(
+                "Checkpoint publication '" + publication + "' target '" + targetId
+                    + "' requires topic for KAFKA delivery"));
+        return new ResolvedCheckpointPublicationTarget(
+            publication,
+            targetId,
+            PublicationTargetKind.KAFKA,
+            PublicationEncoding.JSON,
+            null,
+            null,
+            topic,
+            "PUBLISH");
     }
 }

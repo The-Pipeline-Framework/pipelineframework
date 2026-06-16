@@ -46,5 +46,8 @@ public record ResolvedCheckpointPublicationTarget(
         if (kind == PublicationTargetKind.GRPC && !"PLAINTEXT".equals(method) && !"TLS".equals(method)) {
             throw new IllegalArgumentException("GRPC checkpoint publication targets must use method PLAINTEXT or TLS");
         }
+        if (kind == PublicationTargetKind.KAFKA && !"PUBLISH".equals(method)) {
+            throw new IllegalArgumentException("KAFKA checkpoint publication targets must use method PUBLISH");
+        }
     }
 }
