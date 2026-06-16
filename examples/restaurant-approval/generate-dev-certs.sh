@@ -63,12 +63,13 @@ keytool -import -file "${CERT_DIR}/quarkus-cert.pem" -keystore "${CERT_DIR}/clie
 for svc in validate-order-request-svc create-pending-approval-svc finalize-restaurant-decision-svc orchestrator-svc pipeline-runtime-svc monolith-svc; do
     mkdir -p "${OUTPUT_DIR}/${svc}"
     cp "${CERT_DIR}/server-keystore.p12" "${OUTPUT_DIR}/${svc}/server-keystore.p12"
-    chmod 600 "${OUTPUT_DIR}/${svc}/server-keystore.p12"
+    # Container self-host demos bind-mount these dev-only certs into non-root images.
+    chmod 644 "${OUTPUT_DIR}/${svc}/server-keystore.p12"
 done
 
 mkdir -p "${OUTPUT_DIR}/orchestrator-svc"
 cp "${CERT_DIR}/client-truststore.jks" "${OUTPUT_DIR}/orchestrator-svc/client-truststore.jks"
-chmod 600 "${OUTPUT_DIR}/orchestrator-svc/client-truststore.jks"
+chmod 644 "${OUTPUT_DIR}/orchestrator-svc/client-truststore.jks"
 
 rm -rf "${CERT_DIR}"
 
