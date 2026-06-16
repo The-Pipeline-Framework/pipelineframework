@@ -1,0 +1,57 @@
+name: CI — Restaurant Self-Hosted HA
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "framework/**"
+      - "examples/restaurant-approval/**"
+      - "scripts/ci/**"
+      - "pom.xml"
+      - "mvnw"
+      - ".mvn/**"
+      - ".github/actions/setup-testcontainers/**"
+      - ".github/workflows/self-host-ha-restaurant.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  MAVEN_OPTS: -Xmx2g -Xms512m
+
+jobs:
+  restaurant-self-host-ha:
+    name: Restaurant Self-Hosted HA
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Setup Docker environment
+        uses: ./.github/actions/setup-testcontainers
+
+      - name: Run restaurant self-host HA demo
+        run: ./examples/restaurant-approval/self-host/container/run-container-ha-demo.sh --ci
+
+      - name: Run restaurant self-host HA incident demo
+        env:
+          TPF_SKIP_CONTAINER_BUILD: "true"
+        run: ./examples/restaurant-approval/self-host/container/run-container-ha-incident.sh --ci
+
