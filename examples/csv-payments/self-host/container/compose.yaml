@@ -104,7 +104,6 @@ services:
         -Dmp.messaging.outgoing.tpf-await-kafka-requests.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
         -Dmp.messaging.incoming.csv-payment-provider-requests.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
         -Dmp.messaging.outgoing.csv-payment-provider-results.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
-        -Dcsv-payments.payment-provider.kafka.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
         -Dcsv-payments.payment-provider.sqs.enabled=${TPF_RUNTIME_AWAIT_SQS_PROVIDER_ENABLED:-true}
         -Dcsv-payments.payment-provider.sqs.request-queue-url=http://localstack:4566/000000000000/csv-payment-await-requests
         -Dcsv-payments.payment-provider.sqs.response-queue-url=http://localstack:4566/000000000000/csv-payment-await-results
