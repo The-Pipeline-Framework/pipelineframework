@@ -4,6 +4,25 @@ Transition workers execute one bounded continuation and return an explicit outco
 
 The coordinator owns durable state and scheduling. The worker owns business step execution for the command it receives.
 
+For the deployment role split, see [Coordinator And Worker Topology](/guide/evolve/durable-coordinator/coordinator-worker-topology). This page focuses on the worker protocol contract after that split has already selected a worker.
+
+```mermaid
+sequenceDiagram
+    participant Coord as "Coordinator"
+    participant Worker as "Transition worker"
+    participant Steps as "Step/runtime services"
+
+    Coord->>Worker: TransitionCommandEnvelope
+    Worker->>Steps: execute bounded continuation
+    alt next durable boundary is await
+        Worker-->>Coord: WAITING_EXTERNAL
+    else transition completed
+        Worker-->>Coord: COMPLETED
+    else business/protocol failure
+        Worker-->>Coord: FAILED
+    end
+```
+
 ## Contract
 
 The worker receives a `TransitionCommandEnvelope` containing:

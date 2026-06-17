@@ -212,6 +212,7 @@ const mainSidebar = [
                 collapsed: true,
                 items: [
                     {text: 'Overview', link: '/guide/evolve/durable-coordinator/'},
+                    {text: 'Coordinator And Worker Topology', link: '/guide/evolve/durable-coordinator/coordinator-worker-topology'},
                     {text: 'Worker Protocols', link: '/guide/evolve/durable-coordinator/worker-protocols'},
                     {text: 'Step-Aware Invocation Runtime', link: '/guide/evolve/durable-coordinator/boundary-invocation-model'},
                     {

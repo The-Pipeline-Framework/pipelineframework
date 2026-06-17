@@ -16,7 +16,7 @@ These terms sound similar, but they answer different questions:
 
 Defined in `pipeline.runtime.yaml`.
 
-- Decides where the orchestrator, regular steps, and plugin side effects logically run.
+- Decides where the generated orchestrator namespace, regular steps, and plugin side effects logically run.
 - Values include `modular`, `pipeline-runtime`, and `monolith`.
 - Drives generated calls and validation.
 
@@ -43,6 +43,10 @@ Values include `COMPUTE` and `FUNCTION` (legacy aliases: `STANDARD`, `LAMBDA`).
 - This page provides the canonical deeper reference for choosing between `COMPUTE` and `FUNCTION`.
 - Constrained by transport and step-shape compatibility (Function mode requires REST; unary and streaming shapes are supported via generated function bridges).
 - Orthogonal to runtime layout/topology.
+
+::: note
+In durable self-host HA, `orchestrator-svc` is a module/artifact name, not always the whole orchestration role. The durable coordinator and transition worker roles are selected by runtime config. See [Coordinator And Worker Topology](/guide/evolve/durable-coordinator/coordinator-worker-topology).
+:::
 
 ## Who this guide is for
 

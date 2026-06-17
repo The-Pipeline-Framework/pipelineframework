@@ -11,7 +11,7 @@ This page documents the grouped pipeline-runtime topology in `examples/csv-payme
 
 ## Topology shape
 
-- `orchestrator-svc`: standalone orchestrator runtime
+- `orchestrator-svc`: generated orchestrator module/artifact. In normal pipeline-runtime runs it is the orchestration entrypoint; in self-host HA references the same artifact can run as the durable coordinator or as the REST transition worker depending on config.
 - `pipeline-runtime-svc`: grouped pipeline step runtime (all regular steps)
 - `persistence-svc`: plugin/aspect runtime (persistence side effects)
 

@@ -6,6 +6,8 @@ The runnable starting point remains `examples/restaurant-approval/self-host`. Th
 
 `examples/csv-payments/self-host/container` is the advanced container reference. It adds stream input, app persistence, a REST transition worker, and a grouped `pipeline-runtime-svc` gRPC step runtime on top of the same durable coordinator pattern. The default lane uses SQS to stay within the LocalStack-backed AWS-shaped substrate; `TPF_CSV_AWAIT_TRANSPORT=kafka` runs the same self-host topology with Kafka await completions.
 
+For the role split behind coordinator, transition worker, step/runtime services, and the historical `orchestrator-svc` name, see [Coordinator And Worker Topology](/guide/evolve/durable-coordinator/coordinator-worker-topology).
+
 ## Deployment Shapes
 
 ### One Process
@@ -27,6 +29,8 @@ This is the fastest way to prove the model, but it is not crash-surviving HA. If
 Use this shape when you want a real control-plane/data-plane boundary.
 
 The coordinator process enables the control-plane and admin APIs, owns execution/await state, and selects a remote transition worker through configured REST or gRPC target properties. Worker processes host the same pipeline release code and expose the default-disabled worker endpoint or service.
+
+The same image can run in both roles when it contains the required pipeline code. The role is determined by config, not by the Maven module name.
 
 REST worker selection example:
 
@@ -247,7 +251,7 @@ For metric names and observability surfaces, use the operations guides for [Metr
 
 This recipe intentionally does not include:
 
-1. Kubernetes manifests or Docker Compose files,
+1. production Kubernetes, Helm, Terraform, or IAM packaging,
 2. dynamic JAR loading in the coordinator,
 3. append-only execution/await state storage,
 4. bulk DLQ-message consumers or automated replay campaigns,

@@ -36,6 +36,11 @@ compose() {
 }
 
 cleanup() {
+  local exit_code="${1:-0}"
+  if [[ "${CI_MODE}" == "true" && "${exit_code}" != "0" && "${TPF_KEEP_STACK_ON_FAILURE:-false}" == "true" ]]; then
+    echo "Containerized self-host HA stack failed and is being preserved for log collection."
+    return
+  fi
   if [[ "${CI_MODE}" == "true" ]]; then
     compose down -v --remove-orphans >/dev/null 2>&1 || true
   else
@@ -43,7 +48,7 @@ cleanup() {
     echo "Stop it with: docker compose -f ${COMPOSE_FILE} down -v"
   fi
 }
-trap cleanup EXIT
+trap 'cleanup $?' EXIT
 
 if [[ "${CI_MODE}" == "true" ]]; then
   compose down -v --remove-orphans >/dev/null 2>&1 || true
@@ -51,13 +56,18 @@ if [[ "${CI_MODE}" == "true" ]]; then
 fi
 mkdir -p "${TPF_RUN_DIR}"
 
+CERT_FILE_PERMISSIONS="${CERT_FILE_PERMISSIONS:-644}"
 if [[ ! -f "${EXAMPLE_DIR}/target/dev-certs/orchestrator-svc/client-truststore.jks" ]]; then
-  "${EXAMPLE_DIR}/generate-dev-certs.sh"
+  CERT_FILE_PERMISSIONS="${CERT_FILE_PERMISSIONS}" bash "${EXAMPLE_DIR}/generate-dev-certs.sh"
 fi
+find "${EXAMPLE_DIR}/target/dev-certs" -type f \( -name "*.p12" -o -name "*.jks" \) \
+  -exec chmod "${CERT_FILE_PERMISSIONS}" {} +
 
 if [[ "${TPF_SKIP_CONTAINER_BUILD}" != "true" ]]; then
   "${SCRIPT_DIR}/build-container-image.sh"
 fi
+find "${EXAMPLE_DIR}/target/dev-certs" -type f \( -name "*.p12" -o -name "*.jks" \) \
+  -exec chmod "${CERT_FILE_PERMISSIONS}" {} +
 
 "${SCRIPT_DIR}/bootstrap-localstack.sh"
 

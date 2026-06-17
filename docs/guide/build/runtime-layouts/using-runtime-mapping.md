@@ -43,8 +43,10 @@ defaults:
 ## Layout meaning
 
 - `modular`: closest to classic one-step-per-module scaffolds.
-- `pipeline-runtime`: orchestrator isolated; service steps grouped; plugins usually grouped by aspect.
-- `monolith`: orchestrator + services + plugins in one runtime/module (requires matching Maven topology).
+- `pipeline-runtime`: generated orchestrator namespace isolated; service steps grouped; plugins usually grouped by aspect.
+- `monolith`: generated orchestrator namespace + services + plugins in one runtime/module (requires matching Maven topology).
+
+In durable self-host HA, the generated orchestrator module or monolith artifact can still be run in different roles. Coordinator versus transition worker is a runtime configuration choice, not a runtime-mapping layout value.
 
 ## Important for plugins/synthetics
 

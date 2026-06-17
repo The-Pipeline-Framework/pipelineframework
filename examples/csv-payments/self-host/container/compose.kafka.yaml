@@ -1,6 +1,6 @@
 services:
   kafka:
-    image: apache/kafka-native:3.8.0
+    image: apache/kafka:3.8.0
     ports:
       - "${TPF_KAFKA_PORT:-9093}:9092"
     environment:
@@ -18,7 +18,7 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --list >/dev/null 2>&1"]
       interval: 5s
       timeout: 5s
       retries: 30

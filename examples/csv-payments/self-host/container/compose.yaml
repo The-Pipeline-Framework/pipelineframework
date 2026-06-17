@@ -102,9 +102,8 @@ services:
         -Dkafka.bootstrap.servers=${TPF_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
         -Dtpf.await.kafka.reactive-messaging.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
         -Dmp.messaging.outgoing.tpf-await-kafka-requests.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
-        -Dmp.messaging.incoming.csv-payment-provider-requests.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
-        -Dmp.messaging.outgoing.csv-payment-provider-results.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
-        -Dcsv-payments.payment-provider.kafka.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
+        -Dmp.messaging.incoming.csv-payment-provider-requests.enabled=${TPF_RUNTIME_KAFKA_PROVIDER_ENABLED:-false}
+        -Dmp.messaging.outgoing.csv-payment-provider-results.enabled=${TPF_RUNTIME_KAFKA_PROVIDER_ENABLED:-false}
         -Dcsv-payments.payment-provider.sqs.enabled=${TPF_RUNTIME_AWAIT_SQS_PROVIDER_ENABLED:-true}
         -Dcsv-payments.payment-provider.sqs.request-queue-url=http://localstack:4566/000000000000/csv-payment-await-requests
         -Dcsv-payments.payment-provider.sqs.response-queue-url=http://localstack:4566/000000000000/csv-payment-await-results
@@ -172,8 +171,9 @@ services:
         -Dpipeline.orchestrator.worker.rest.server-enabled=true
         -Dpipeline.orchestrator.worker.rest.shared-secret-ref=env:TPF_WORKER_SECRET
         -Dpipeline.orchestrator.strict-startup=false
-        -Dtpf.await.kafka.reactive-messaging.enabled=false
-        -Dmp.messaging.outgoing.tpf-await-kafka-requests.enabled=false
+        -Dkafka.bootstrap.servers=${TPF_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
+        -Dtpf.await.kafka.reactive-messaging.enabled=${TPF_WORKER_AWAIT_KAFKA_ENABLED:-false}
+        -Dmp.messaging.outgoing.tpf-await-kafka-requests.enabled=${TPF_WORKER_AWAIT_KAFKA_ENABLED:-false}
         -Dmp.messaging.incoming.tpf-await-kafka-responses.enabled=false
         -Dpipeline.orchestrator.sqs.region=${AWS_REGION:-us-east-1}
         -Dpipeline.orchestrator.sqs.endpoint-override=http://localstack:4566

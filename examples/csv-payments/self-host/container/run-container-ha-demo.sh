@@ -16,7 +16,9 @@ case "${TPF_CSV_AWAIT_TRANSPORT}" in
   sqs)
     export TPF_CSV_PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG:-${EXAMPLE_DIR}/config/pipeline.container-sqs.yaml}"
     export TPF_RUNTIME_AWAIT_KAFKA_ENABLED="${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}"
+    export TPF_RUNTIME_KAFKA_PROVIDER_ENABLED="${TPF_RUNTIME_KAFKA_PROVIDER_ENABLED:-false}"
     export TPF_RUNTIME_AWAIT_SQS_PROVIDER_ENABLED="${TPF_RUNTIME_AWAIT_SQS_PROVIDER_ENABLED:-true}"
+    export TPF_WORKER_AWAIT_KAFKA_ENABLED="${TPF_WORKER_AWAIT_KAFKA_ENABLED:-false}"
     export TPF_COORDINATOR_AWAIT_KAFKA_ENABLED="${TPF_COORDINATOR_AWAIT_KAFKA_ENABLED:-false}"
     export TPF_COORDINATOR_AWAIT_SQS_POLLER_ENABLED="${TPF_COORDINATOR_AWAIT_SQS_POLLER_ENABLED:-true}"
     ;;
@@ -24,8 +26,10 @@ case "${TPF_CSV_AWAIT_TRANSPORT}" in
     export TPF_CSV_PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG:-${EXAMPLE_DIR}/config/pipeline.yaml}"
     export TPF_KAFKA_PORT="${TPF_KAFKA_PORT:-9093}"
     export TPF_KAFKA_BOOTSTRAP_SERVERS="${TPF_KAFKA_BOOTSTRAP_SERVERS:-kafka:19092}"
-    export TPF_RUNTIME_AWAIT_KAFKA_ENABLED="${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-true}"
+    export TPF_RUNTIME_AWAIT_KAFKA_ENABLED="${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}"
+    export TPF_RUNTIME_KAFKA_PROVIDER_ENABLED="${TPF_RUNTIME_KAFKA_PROVIDER_ENABLED:-true}"
     export TPF_RUNTIME_AWAIT_SQS_PROVIDER_ENABLED="${TPF_RUNTIME_AWAIT_SQS_PROVIDER_ENABLED:-false}"
+    export TPF_WORKER_AWAIT_KAFKA_ENABLED="${TPF_WORKER_AWAIT_KAFKA_ENABLED:-true}"
     export TPF_COORDINATOR_AWAIT_KAFKA_ENABLED="${TPF_COORDINATOR_AWAIT_KAFKA_ENABLED:-true}"
     export TPF_COORDINATOR_AWAIT_SQS_POLLER_ENABLED="${TPF_COORDINATOR_AWAIT_SQS_POLLER_ENABLED:-false}"
     ;;
@@ -98,6 +102,11 @@ PY
 }
 
 cleanup() {
+  local exit_code="${1:-0}"
+  if [[ "${CI_MODE}" == "true" && "${exit_code}" != "0" && "${TPF_KEEP_STACK_ON_FAILURE:-false}" == "true" ]]; then
+    echo "CSV containerized self-host HA stack failed and is being preserved for log collection."
+    return
+  fi
   if [[ "${CI_MODE}" == "true" ]]; then
     compose down -v --remove-orphans >/dev/null 2>&1 || true
   else
@@ -105,7 +114,7 @@ cleanup() {
     echo "Stop it with: docker compose -f ${COMPOSE_FILE} down -v"
   fi
 }
-trap cleanup EXIT
+trap 'cleanup $?' EXIT
 
 if [[ "${CI_MODE}" == "true" ]]; then
   compose down -v --remove-orphans >/dev/null 2>&1 || true
@@ -126,7 +135,7 @@ if [[ "${TPF_SKIP_CONTAINER_BUILD}" != "true" ]]; then
   "${SCRIPT_DIR}/build-container-images.sh"
 fi
 
-"${EXAMPLE_DIR}/generate-dev-certs.sh" >/dev/null
+bash "${EXAMPLE_DIR}/generate-dev-certs.sh" >/dev/null
 
 "${SCRIPT_DIR}/bootstrap-localstack.sh"
 if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" ]]; then

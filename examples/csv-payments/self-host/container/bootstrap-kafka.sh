@@ -17,7 +17,7 @@ wait_for_kafka() {
   local timeout_seconds="${KAFKA_WAIT_SECONDS:-180}"
   echo "Waiting for Kafka..."
   for _ in $(seq 1 "${timeout_seconds}"); do
-    if compose exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list >/dev/null 2>&1; then
+    if compose exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --list >/dev/null 2>&1; then
       return
     fi
     sleep 1
@@ -30,7 +30,7 @@ wait_for_kafka() {
 create_topic_if_missing() {
   local topic="$1"
   if compose exec -T kafka /opt/kafka/bin/kafka-topics.sh \
-      --bootstrap-server localhost:19092 \
+      --bootstrap-server kafka:19092 \
       --describe \
       --topic "${topic}" >/dev/null 2>&1; then
     echo "Kafka topic exists: ${topic}"
@@ -38,7 +38,7 @@ create_topic_if_missing() {
   fi
   echo "Creating Kafka topic: ${topic}"
   compose exec -T kafka /opt/kafka/bin/kafka-topics.sh \
-    --bootstrap-server localhost:19092 \
+    --bootstrap-server kafka:19092 \
     --create \
     --if-not-exists \
     --topic "${topic}" \

@@ -30,8 +30,14 @@ if [[ -n "${PIPELINE_CONFIG:-}" ]]; then
     echo "Pipeline config file not found: ${PIPELINE_CONFIG}" >&2
     exit 1
   fi
-  pipeline_config_backup_file="$(mktemp "${TMPDIR:-/tmp}/pipeline-config.XXXXXX")"
-  cp "$ACTIVE_PIPELINE_CONFIG" "$pipeline_config_backup_file"
+  active_pipeline_config_real="$(cd "$(dirname "$ACTIVE_PIPELINE_CONFIG")" && pwd -P)/$(basename "$ACTIVE_PIPELINE_CONFIG")"
+  pipeline_config_real="$(cd "$(dirname "$PIPELINE_CONFIG")" && pwd -P)/$(basename "$PIPELINE_CONFIG")"
+  if [[ "$pipeline_config_real" != "$active_pipeline_config_real" ]]; then
+    if [[ -f "$ACTIVE_PIPELINE_CONFIG" ]]; then
+      pipeline_config_backup_file="$(mktemp "${TMPDIR:-/tmp}/pipeline-config.XXXXXX")"
+      cp "$ACTIVE_PIPELINE_CONFIG" "$pipeline_config_backup_file"
+    fi
+  fi
 fi
 
 cleanup() {
@@ -48,7 +54,11 @@ trap cleanup EXIT
 
 cp "$PIPELINE_RUNTIME_MAPPING" "$ACTIVE_MAPPING"
 if [[ -n "${PIPELINE_CONFIG:-}" ]]; then
-  cp "$PIPELINE_CONFIG" "$ACTIVE_PIPELINE_CONFIG"
+  active_pipeline_config_real="$(cd "$(dirname "$ACTIVE_PIPELINE_CONFIG")" && pwd -P)/$(basename "$ACTIVE_PIPELINE_CONFIG")"
+  pipeline_config_real="$(cd "$(dirname "$PIPELINE_CONFIG")" && pwd -P)/$(basename "$PIPELINE_CONFIG")"
+  if [[ "$pipeline_config_real" != "$active_pipeline_config_real" ]]; then
+    cp "$PIPELINE_CONFIG" "$ACTIVE_PIPELINE_CONFIG"
+  fi
 fi
 PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-GRPC}"
 

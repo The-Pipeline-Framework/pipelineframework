@@ -1,12 +1,14 @@
-# Containerized Self-Hosted HA Reference
+# Base Containerized Self-Hosted HA Reference
 
-This directory runs the restaurant approval self-host path as a compute-first HA-shaped local stack:
+This directory runs the restaurant approval self-host path as the base compute-first HA local stack:
 
 1. LocalStack provides DynamoDB, SQS, and S3-compatible endpoints.
 2. One coordinator container owns control-plane APIs, release admin APIs, execution/await state, SQS work dispatch, DLQ publication, release metadata, artifact storage, and worker lifecycle.
 3. One REST worker container hosts the same restaurant pipeline release and exposes the signed transition worker endpoint.
 
 It uses the same `monolith-svc` image in two modes. The coordinator is configured with `pipeline.orchestrator.control-plane.require-remote-worker=true`, so it fails instead of silently falling back to local in-process execution.
+
+`monolith-svc` is the packaged artifact shape. The runtime role is selected by configuration: one container enables coordinator/admin APIs and points at a remote worker, while the other enables the REST transition worker endpoint. For the general model, see [Coordinator And Worker Topology](/guide/evolve/durable-coordinator/coordinator-worker-topology).
 
 ## Run The Happy Path
 
@@ -61,4 +63,4 @@ These defaults are for local verification only. Real deployments should use secr
 4. Release artifact storage can use an S3-compatible blob store for coordinator-managed artifacts.
 5. Worker lifecycle must report a healthy worker for the active release before hosted submissions are accepted.
 
-This is still a local reference stack, not a production deployment package. For the remaining HA hardening work, see [Self-Hosted HA Roadmap](/guide/evolve/durable-coordinator/self-hosted-ha-roadmap).
+This is still a local reference stack, not a production deployment package. For milestone status and deferred hardening, see [Self-Hosted HA Roadmap](/guide/evolve/durable-coordinator/self-hosted-ha-roadmap).

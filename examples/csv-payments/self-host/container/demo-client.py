@@ -213,6 +213,9 @@ def wait_status(args, execution_id, timeout_seconds):
 def prepare_input(args):
     input_dir = Path(args.input_dir).resolve()
     input_dir.mkdir(parents=True, exist_ok=True)
+    # The demo bind-mounts this host directory into non-root containers; the
+    # output step writes sibling .out files next to the copied CSV input.
+    input_dir.chmod(0o777)
     for candidate in input_dir.glob("*.csv"):
         candidate.unlink()
     for candidate in input_dir.glob("*.out"):
@@ -222,6 +225,7 @@ def prepare_input(args):
         raise RuntimeError(f"Source CSV not found: {source}")
     target = input_dir / source.name
     shutil.copyfile(source, target)
+    target.chmod(0o666)
     print(f"Prepared CSV input {target}")
     return input_dir
 
