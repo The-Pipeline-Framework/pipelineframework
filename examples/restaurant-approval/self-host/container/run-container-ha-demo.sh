@@ -66,6 +66,8 @@ find "${EXAMPLE_DIR}/target/dev-certs" -type f \( -name "*.p12" -o -name "*.jks"
 if [[ "${TPF_SKIP_CONTAINER_BUILD}" != "true" ]]; then
   "${SCRIPT_DIR}/build-container-image.sh"
 fi
+find "${EXAMPLE_DIR}/target/dev-certs" -type f \( -name "*.p12" -o -name "*.jks" \) \
+  -exec chmod "${CERT_FILE_PERMISSIONS}" {} +
 
 "${SCRIPT_DIR}/bootstrap-localstack.sh"
 
