@@ -11,6 +11,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.Uni;
@@ -98,11 +99,46 @@ class KafkaAwaitCompletionConsumerTest {
     }
 
     @Test
-    void deterministicNotFoundFailureAcksMessage() {
+    void notFoundFailureRetriesBeforeAckingMessage() {
+        PipelineExecutionService executionService = mock(PipelineExecutionService.class);
+        AtomicInteger attempts = new AtomicInteger();
+        when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class)))
+            .thenAnswer(invocation -> attempts.incrementAndGet() < 3
+                ? Uni.createFrom().failure(new AwaitInteractionNotFoundException("missing"))
+                : Uni.createFrom().item(new AwaitCompletionResult(record(), false)));
+        KafkaAwaitCompletionConsumer consumer = new KafkaAwaitCompletionConsumer(
+            executionService,
+            Duration.ofMillis(1),
+            3);
+        AtomicReference<Boolean> acked = new AtomicReference<>(false);
+        AtomicReference<Throwable> nacked = new AtomicReference<>();
+
+        consumer.consume(message("""
+            {
+              "tenantId": "tenant-1",
+              "interactionId": "interaction-1",
+              "idempotencyKey": "completion-1",
+              "responsePayload": {"decision": "approved"}
+            }
+            """, acked, nacked))
+            .toCompletableFuture()
+            .orTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+            .join();
+
+        assertEquals(3, attempts.get());
+        assertEquals(Boolean.TRUE, acked.get());
+        assertEquals(null, nacked.get());
+    }
+
+    @Test
+    void unresolvedNotFoundFailureAcksMessageAfterRetries() {
         PipelineExecutionService executionService = mock(PipelineExecutionService.class);
         when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class)))
             .thenReturn(Uni.createFrom().failure(new AwaitInteractionNotFoundException("missing")));
-        KafkaAwaitCompletionConsumer consumer = new KafkaAwaitCompletionConsumer(executionService);
+        KafkaAwaitCompletionConsumer consumer = new KafkaAwaitCompletionConsumer(
+            executionService,
+            Duration.ofMillis(1),
+            1);
         AtomicReference<Boolean> acked = new AtomicReference<>(false);
         AtomicReference<Throwable> nacked = new AtomicReference<>();
 

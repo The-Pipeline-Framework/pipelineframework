@@ -110,6 +110,11 @@ public class S3PipelineReleaseArtifactStore implements PipelineReleaseArtifactSt
         return prefix;
     }
 
+    @Override
+    public void close() {
+        client.close();
+    }
+
     private String objectKey(String checksum, Path sourcePath) {
         String filename = stripChecksumPrefix(checksum);
         String sourceName = sourcePath.getFileName() == null ? "" : sourcePath.getFileName().toString();

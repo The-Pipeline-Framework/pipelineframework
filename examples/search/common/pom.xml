@@ -314,7 +314,7 @@
         <profile>
             <id>native</id>
             <properties>
-                <quarkus.native.enabled>true</quarkus.native.enabled>
+                <quarkus.build.skip>true</quarkus.build.skip>
                 <skipITs>false</skipITs>
             </properties>
         </profile>
