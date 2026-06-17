@@ -58,7 +58,7 @@ fi
 mkdir -p "${TPF_RUN_DIR}"
 
 if [[ ! -f "${EXAMPLE_DIR}/target/dev-certs/orchestrator-svc/client-truststore.jks" ]]; then
-  bash "${EXAMPLE_DIR}/generate-dev-certs.sh"
+  CERT_FILE_PERMISSIONS="${CERT_FILE_PERMISSIONS:-644}" bash "${EXAMPLE_DIR}/generate-dev-certs.sh"
 fi
 
 if [[ "${TPF_SKIP_CONTAINER_BUILD}" != "true" ]]; then

@@ -33,8 +33,10 @@ if [[ -n "${PIPELINE_CONFIG:-}" ]]; then
   active_pipeline_config_real="$(cd "$(dirname "$ACTIVE_PIPELINE_CONFIG")" && pwd -P)/$(basename "$ACTIVE_PIPELINE_CONFIG")"
   pipeline_config_real="$(cd "$(dirname "$PIPELINE_CONFIG")" && pwd -P)/$(basename "$PIPELINE_CONFIG")"
   if [[ "$pipeline_config_real" != "$active_pipeline_config_real" ]]; then
-    pipeline_config_backup_file="$(mktemp "${TMPDIR:-/tmp}/pipeline-config.XXXXXX")"
-    cp "$ACTIVE_PIPELINE_CONFIG" "$pipeline_config_backup_file"
+    if [[ -f "$ACTIVE_PIPELINE_CONFIG" ]]; then
+      pipeline_config_backup_file="$(mktemp "${TMPDIR:-/tmp}/pipeline-config.XXXXXX")"
+      cp "$ACTIVE_PIPELINE_CONFIG" "$pipeline_config_backup_file"
+    fi
   fi
 fi
 
