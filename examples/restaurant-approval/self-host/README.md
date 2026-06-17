@@ -8,6 +8,8 @@ The separate REST worker script remains available for protocol experiments, but 
 
 For a compute-first HA-shaped reference with containers, DynamoDB/SQS-compatible backing services, S3-compatible release artifact storage, and a separate REST worker, use [container/](./container/README.md).
 
+For the terminology behind coordinator, transition worker, and the historical `orchestrator` naming, see [Coordinator And Worker Topology](/guide/evolve/durable-coordinator/coordinator-worker-topology).
+
 ## Quick Start
 
 From the repository root:

@@ -2,6 +2,8 @@
 
 The release runtime cutover adds coordinator-side concepts, but it does not make every execution cross a new network or artifact boundary. The hot path remains transition dispatch through the selected worker.
 
+For the role split behind the terms coordinator, transition worker, and `orchestrator-svc`, start with [Coordinator And Worker Topology](/guide/evolve/durable-coordinator/coordinator-worker-topology).
+
 ## Runtime Mapping
 
 Runtime layout and worker selection stay orthogonal.
@@ -13,6 +15,8 @@ Runtime layout and worker selection stay orthogonal.
 | Coordinator + SQS worker | `pipeline.orchestrator.worker.sqs.request-queue-url` configured | brokered worker boundary where request/reply queues fit |
 
 The coordinator does not infer worker selection from `pipeline.platform`, `runtimeLayout`, or `monolith`. A monolith can still run the local worker for batteries-included demos. A separated deployment should configure a remote worker target explicitly.
+
+`orchestrator-svc` remains a generated module/artifact name in several examples. It can run as the coordinator role, the transition worker role, or both in one local process depending on configuration.
 
 Operators that want to prevent accidental local-worker fallback can enable:
 

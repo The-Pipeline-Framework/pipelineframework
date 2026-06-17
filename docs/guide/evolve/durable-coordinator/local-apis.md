@@ -4,6 +4,8 @@ The runtime includes default-disabled local/dev APIs that prove coordinator owne
 
 They are internal runtime groundwork and self-host reference surfaces, not a general hosted-service API.
 
+For how these APIs relate to coordinator and worker processes, see [Coordinator And Worker Topology](/guide/evolve/durable-coordinator/coordinator-worker-topology).
+
 ## Control Plane
 
 Enable the generic control-plane resource:

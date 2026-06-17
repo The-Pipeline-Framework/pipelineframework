@@ -11,6 +11,8 @@ This directory runs the CSV Payments example as the advanced provider-portabilit
 
 Restaurant approval remains the base human-await reference. This stack proves the same coordinator model against stream input plus broker-backed await completions. SQS is the default AWS-shaped self-host HA lane; Kafka is an explicit second lane that proves the await abstraction is not tied to one provider.
 
+`orchestrator-svc` is the generated module/artifact name. In this reference, one `orchestrator-svc` container runs as the durable coordinator and another runs as the REST transition worker. The grouped `pipeline-runtime-svc` remains the step/runtime service. For the general role model, see [Coordinator And Worker Topology](/guide/evolve/durable-coordinator/coordinator-worker-topology).
+
 ## Run The Demo
 
 From the repository root:

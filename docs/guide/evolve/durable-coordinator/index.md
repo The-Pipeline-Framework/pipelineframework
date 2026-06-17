@@ -4,6 +4,8 @@ The durable coordinator is the self-hostable control-plane boundary for `QUEUE_A
 
 It owns execution state, leases, retry/DLQ, await units, release activation, worker dispatch, and status/result APIs. Step code still runs in workers: local in-process workers, REST workers, gRPC workers, or SQS request/reply workers.
 
+If you are trying to understand what happened to the old "orchestrator", start with [Coordinator And Worker Topology](/guide/evolve/durable-coordinator/coordinator-worker-topology). The short version is that `orchestrator-svc` and `pipeline.orchestrator.*` remain historical module/config names, while self-host HA splits runtime responsibility into a coordinator role and one or more transition worker roles.
+
 This section is implementation-facing. Application usage remains in [Orchestrator Runtime](/guide/development/orchestrator-runtime/). The first runnable reference is `examples/restaurant-approval/self-host`.
 
 ## Current Shape
@@ -40,19 +42,20 @@ sequenceDiagram
 
 ## Guides
 
-1. [Worker Protocols](/guide/evolve/durable-coordinator/worker-protocols) explains local, REST, gRPC, and SQS transition workers.
-2. [Step-Aware Invocation Runtime](/guide/evolve/durable-coordinator/boundary-invocation-model) explains the shared invocation seam used by pipeline steps and transition workers.
-3. [Brokered Runtime Boundaries](/guide/evolve/brokered-boundaries/) is the entry point for Kafka/SQS-style substrates under TPF-owned semantics.
-4. [Boundary Taxonomy](/guide/evolve/brokered-boundaries/boundary-taxonomy) maps broker concepts into TPF runtime boundaries.
-5. [Dispatch Substrates](/guide/evolve/brokered-boundaries/dispatch-substrates) separates substrate policy from transport, platform, and payload policy.
-6. [Envelope And Data Policy](/guide/evolve/brokered-boundaries/envelope-and-data-policy) separates loose payloads from strict TPF control metadata.
-7. [Contract And Release Identity](/guide/evolve/durable-coordinator/bundle-contract) explains generated contracts, release activation, and execution pinning.
-8. [Pipeline Contract And Release Model](/guide/evolve/durable-coordinator/pipeline-contract-release-model) describes contract/release descriptors, artifacts, deployment plans, and drift detection.
-9. [Runtime Boundaries And Performance](/guide/evolve/durable-coordinator/runtime-boundaries-performance) explains runtime mapping, patterns, package boundaries, and hot-path guardrails.
-10. [Local APIs](/guide/evolve/durable-coordinator/local-apis) documents the current default-disabled control-plane and admin APIs.
-11. [Self-Hosted Deployment](/guide/evolve/durable-coordinator/self-hosted-deployment) gives the production-ish self-host topology, configuration, and operator runbooks.
-12. [Self-Hosted HA Roadmap](/guide/evolve/durable-coordinator/self-hosted-ha-roadmap) records the milestone closeout and deferred hardening.
-13. [Self-Hosted Milestone](/guide/evolve/durable-coordinator/self-hosted-milestone) gives the adoption entry points and current proof matrix.
+1. [Coordinator And Worker Topology](/guide/evolve/durable-coordinator/coordinator-worker-topology) explains the role split behind `orchestrator-svc`, coordinator processes, and transition workers.
+2. [Worker Protocols](/guide/evolve/durable-coordinator/worker-protocols) explains local, REST, gRPC, and SQS transition workers.
+3. [Step-Aware Invocation Runtime](/guide/evolve/durable-coordinator/boundary-invocation-model) explains the shared invocation seam used by pipeline steps and transition workers.
+4. [Brokered Runtime Boundaries](/guide/evolve/brokered-boundaries/) is the entry point for Kafka/SQS-style substrates under TPF-owned semantics.
+5. [Boundary Taxonomy](/guide/evolve/brokered-boundaries/boundary-taxonomy) maps broker concepts into TPF runtime boundaries.
+6. [Dispatch Substrates](/guide/evolve/brokered-boundaries/dispatch-substrates) separates substrate policy from transport, platform, and payload policy.
+7. [Envelope And Data Policy](/guide/evolve/brokered-boundaries/envelope-and-data-policy) separates loose payloads from strict TPF control metadata.
+8. [Contract And Release Identity](/guide/evolve/durable-coordinator/bundle-contract) explains generated contracts, release activation, and execution pinning.
+9. [Pipeline Contract And Release Model](/guide/evolve/durable-coordinator/pipeline-contract-release-model) describes contract/release descriptors, artifacts, deployment plans, and drift detection.
+10. [Runtime Boundaries And Performance](/guide/evolve/durable-coordinator/runtime-boundaries-performance) explains runtime mapping, patterns, package boundaries, and hot-path guardrails.
+11. [Local APIs](/guide/evolve/durable-coordinator/local-apis) documents the current default-disabled control-plane and admin APIs.
+12. [Self-Hosted Deployment](/guide/evolve/durable-coordinator/self-hosted-deployment) gives the production-ish self-host topology, configuration, and operator runbooks.
+13. [Self-Hosted HA Roadmap](/guide/evolve/durable-coordinator/self-hosted-ha-roadmap) records the milestone closeout and deferred hardening.
+14. [Self-Hosted Milestone](/guide/evolve/durable-coordinator/self-hosted-milestone) gives the adoption entry points and current proof matrix.
 
 ## Limits
 

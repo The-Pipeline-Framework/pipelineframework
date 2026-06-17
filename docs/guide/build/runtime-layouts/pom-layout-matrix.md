@@ -20,7 +20,7 @@ If layout and topology are not aligned, the build can succeed but runtime behavi
 | Target runtime layout | Runtime mapping file | Maven entrypoint | Physical deployables produced | Status in csv-payments |
 | --- | --- | --- | --- | --- |
 | `modular` | `config/runtime-mapping/modular-auto.yaml` or `modular-strict.yaml` | `examples/csv-payments/pom.xml` | Per-service runtimes + orchestrator + persistence | Implemented |
-| `pipeline-runtime` | `config/runtime-mapping/pipeline-runtime.yaml` | `examples/csv-payments/pom.pipeline-runtime.xml` via `build-pipeline-runtime.sh` | `orchestrator-svc` + `pipeline-runtime-svc` + `persistence-svc` | Implemented |
+| `pipeline-runtime` | `config/runtime-mapping/pipeline-runtime.yaml` | `examples/csv-payments/pom.pipeline-runtime.xml` via `build-pipeline-runtime.sh` | `orchestrator-svc` artifact + `pipeline-runtime-svc` + `persistence-svc` | Implemented |
 | `monolith` | `config/runtime-mapping/monolith.yaml` | `examples/csv-payments/pom.monolith.xml` via `build-monolith.sh` | Single `monolith-svc` runtime | Implemented |
 
 ## Phase/execution relevance by topology
@@ -38,7 +38,7 @@ Legend:
 | Merge role outputs into `target/classes` before packaging | required | required | required |
 | Merge orchestrator pipeline metadata into packaged runtime (`META-INF/pipeline/order.json`, `telemetry.json`, `replay-topology.json`, `orchestrator-clients.properties`) | n/a | required for grouped runtime module | required (`monolith-svc`) |
 | Source aggregation from multiple service modules | n/a | required for grouped runtime module | required (`monolith-svc`) |
-| Standalone orchestrator runtime module | required | required | n/a |
+| Standalone orchestrator module/artifact | required | required | n/a |
 | Standalone grouped pipeline runtime module | n/a | required (`pipeline-runtime-svc`) | n/a |
 | Standalone plugin runtime module (for plugin aspects) | depends | required (typical) | n/a |
 
@@ -46,6 +46,7 @@ Legend:
 
 - Runtime mapping alone can make placement deterministic, but not alter artifact count.
 - Build topology determines whether you actually deploy 1, 2, or many runtimes.
+- In durable self-host HA, an `orchestrator-svc` artifact may run as a coordinator process, a transition worker process, or both in a one-process local demo depending on runtime config.
 - CSV Payments now ships dedicated topology lanes for all three layouts:
   modular (`pom.xml`), pipeline-runtime (`pom.pipeline-runtime.xml`), and
   monolith (`pom.monolith.xml`).
