@@ -56,6 +56,7 @@ require_matching_image "TPF_CSV_PERSISTENCE_IMAGE" "${TPF_CSV_PERSISTENCE_IMAGE}
 
 if [[ "${TPF_SKIP_FRAMEWORK_INSTALL}" != "true" ]]; then
   echo "Installing current framework SNAPSHOT for the CSV example build..."
+  "${MVN_BIN}" -f "${REPO_ROOT}/pom.xml" -N install
   "${MVN_BIN}" -f "${REPO_ROOT}/framework/pom.xml" clean install
 fi
 

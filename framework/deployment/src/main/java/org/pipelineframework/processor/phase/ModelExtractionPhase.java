@@ -11,6 +11,8 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
@@ -335,7 +337,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Internal step service '" + stepDef.executionClass().canonicalName()
-                    + "' must implement exactly one supported service interface for step '" + stepDef.name() + "'");
+                    + "' must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out> method for step '"
+                    + stepDef.name() + "'");
             return null;
         }
 
@@ -343,6 +346,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (extractedModel == null) {
             return null;
         }
+        boolean annotationBacked = serviceClass.getAnnotation(PipelineStep.class) != null;
 
         StreamingShape yamlShape = stepDef.streamingShapeHint();
         if (yamlShape != null && yamlShape != serviceSignature.shape()) {
@@ -359,7 +363,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             stepDef.name(),
             "input",
             stepDef.inputType(),
-            extractedModel.inboundDomainType(),
+            annotationBacked ? extractedModel.inboundDomainType() : null,
             serviceSignature.inputType());
         if (inputType == null) {
             return null;
@@ -369,7 +373,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             stepDef.name(),
             "output",
             stepDef.outputType(),
-            extractedModel.outboundDomainType(),
+            annotationBacked ? extractedModel.outboundDomainType() : null,
             serviceSignature.outputType());
         if (outputType == null) {
             return null;
@@ -380,7 +384,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             stepDef.name(),
             "inboundMapper",
             stepDef.inboundMapper(),
-            extractedModel.inputMapping() == null ? null : castToClassName(extractedModel.inputMapping().mapperType()),
+            annotationBacked && extractedModel.inputMapping() != null ? castToClassName(extractedModel.inputMapping().mapperType()) : null,
             inputType);
         if (inboundMapper == INVALID_CLASS_NAME) {
             return null;
@@ -390,7 +394,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             stepDef.name(),
             "outboundMapper",
             stepDef.outboundMapper(),
-            extractedModel.outputMapping() == null ? null : castToClassName(extractedModel.outputMapping().mapperType()),
+            annotationBacked && extractedModel.outputMapping() != null ? castToClassName(extractedModel.outputMapping().mapperType()) : null,
             outputType);
         if (outboundMapper == INVALID_CLASS_NAME) {
             return null;
@@ -1117,7 +1121,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return null;
         }
         if (combinedMatches.isEmpty()) {
-            return null;
+            return resolvePlainUniProcessSignature(serviceElement, messager);
         }
         SupportedServiceSignature match = combinedMatches.get(0);
         if (match.materializingWarning() != null) {
@@ -1127,6 +1131,50 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 serviceElement);
         }
         return match;
+    }
+
+    private SupportedServiceSignature resolvePlainUniProcessSignature(
+            TypeElement serviceElement,
+            javax.annotation.processing.Messager messager) {
+        List<SupportedServiceSignature> matches = new ArrayList<>();
+        for (Element enclosed : serviceElement.getEnclosedElements()) {
+            if (!(enclosed instanceof ExecutableElement method)) {
+                continue;
+            }
+            if (!method.getSimpleName().contentEquals("process")
+                || !method.getModifiers().contains(Modifier.PUBLIC)
+                || method.getModifiers().contains(Modifier.STATIC)
+                || method.getParameters().size() != 1) {
+                continue;
+            }
+            TypeMirror returnType = method.getReturnType();
+            if (!(returnType instanceof DeclaredType declaredReturn)
+                || !isDeclaredType(declaredReturn, "io.smallrye.mutiny.Uni")
+                || declaredReturn.getTypeArguments().size() != 1) {
+                continue;
+            }
+            matches.add(new SupportedServiceSignature(
+                ServiceApiKind.REACTIVE,
+                StreamingShape.UNARY_UNARY,
+                TypeName.get(method.getParameters().getFirst().asType()),
+                TypeName.get(declaredReturn.getTypeArguments().getFirst()),
+                null));
+        }
+
+        if (matches.size() > 1) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Internal service '" + serviceElement.getQualifiedName()
+                    + "' declares multiple public process(In): Uni<Out> methods. Please declare exactly one.");
+            return null;
+        }
+        return matches.isEmpty() ? null : matches.getFirst();
+    }
+
+    private boolean isDeclaredType(DeclaredType declaredType, String qualifiedName) {
+        Element element = declaredType.asElement();
+        return element instanceof TypeElement typeElement
+            && typeElement.getQualifiedName().contentEquals(qualifiedName);
     }
 
     private List<String> directSupportedInterfaceNames(Types typeUtils, TypeElement serviceElement) {
