@@ -232,6 +232,95 @@ class YamlDrivenStepGenerationTest {
     }
 
     @Test
+    void generatesYamlInternalStepFromPlainUniProcessMethod() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-plain-uni.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+
+            public class PaymentService {
+                public Uni<PaymentStatus> process(PaymentRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path uniStub = writeUniStub();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, paymentStatus, uniStub));
+        assertTrue(result.success(), "Expected plain Uni process method compilation to succeed: " + result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenPlainUniProcessMethodIsStatic() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-static-plain-uni.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+
+            public class PaymentService {
+                public static Uni<PaymentStatus> process(PaymentRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path uniStub = writeUniStub();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, paymentStatus, uniStub));
+        assertFalse(result.success(), "Expected static plain Uni process method compilation to fail");
+        assertTrue(
+            result.errorSummary().contains("must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out> method"),
+            result.errorSummary());
+    }
+
+    @Test
     void failsYamlInternalStepWhenServiceClassIsMissing() throws IOException {
         Path yamlFile = tempDir.resolve("pipeline-missing-internal.yaml");
         Files.writeString(yamlFile, """
@@ -280,7 +369,7 @@ class YamlDrivenStepGenerationTest {
         CompilationResult result = compile(yamlFile, List.of(nonService));
         assertFalse(result.success(), "Expected unsupported internal service contract to fail");
         assertTrue(
-            result.errorSummary().contains("must implement exactly one supported service interface"),
+            result.errorSummary().contains("must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out> method"),
             result.errorSummary());
     }
 

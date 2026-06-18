@@ -59,6 +59,11 @@
     <dependencies>
         <dependency>
             <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
             <artifactId>pipelineframework-runtime-core</artifactId>
             <version>${project.version}</version>
         </dependency>

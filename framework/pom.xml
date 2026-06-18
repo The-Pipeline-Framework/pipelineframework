@@ -76,10 +76,12 @@
     </properties>
 
     <modules>
+        <module>api</module>
         <module>runtime-core</module>
         <module>runtime-spring</module>
         <module>runtime</module>
         <module>deployment</module>
+        <module>spring-smoke-tests</module>
     </modules>
 
     <dependencyManagement>

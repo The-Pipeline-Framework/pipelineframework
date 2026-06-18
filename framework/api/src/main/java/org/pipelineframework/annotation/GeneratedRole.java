@@ -9,8 +9,8 @@ import java.lang.annotation.Target;
  * Annotation to mark generated classes with their role in the pipeline framework.
  * This is used to generate role metadata that Maven can use for classifier-based packaging.
  */
-@Retention(RetentionPolicy.SOURCE) // Only needed at compile time
-@Target(ElementType.TYPE) // Applies to classes
+@Retention(RetentionPolicy.SOURCE)
+@Target(ElementType.TYPE)
 public @interface GeneratedRole {
     /**
      * The role of the generated class in the pipeline framework.
@@ -27,22 +27,22 @@ public @interface GeneratedRole {
          * gRPC client steps for orchestrator services
          */
         ORCHESTRATOR_CLIENT,
-        
+
         /**
          * gRPC server adapters for application pipeline steps
          */
         PIPELINE_SERVER,
-        
+
         /**
          * Client stubs for calling external plugin services
          */
         PLUGIN_CLIENT,
-        
+
         /**
          * Server implementations for external plugin services
          */
         PLUGIN_SERVER,
-        
+
         /**
          * REST resources for HTTP-based access to pipeline steps
          */
