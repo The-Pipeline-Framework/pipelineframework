@@ -17,6 +17,7 @@ TPF_CONTAINER_STEP_TRANSPORT="${TPF_CONTAINER_STEP_TRANSPORT:-REST}"
 
 if [[ "${TPF_SKIP_FRAMEWORK_INSTALL}" != "true" ]]; then
   echo "Installing current framework SNAPSHOT for the example build..."
+  "${MVN_BIN}" -f "${REPO_ROOT}/pom.xml" -N install
   "${MVN_BIN}" -f "${REPO_ROOT}/framework/pom.xml" clean install
 fi
 
