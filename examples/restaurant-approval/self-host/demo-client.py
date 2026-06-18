@@ -218,6 +218,14 @@ def submit_order(args, customer_name, restaurant_name):
     return result["executionId"]
 
 
+def submit_one(args):
+    execution_id = submit_order(args, args.customer_name, args.restaurant_name)
+    if args.output:
+        Path(args.output).write_text(execution_id, encoding="utf-8")
+    else:
+        print(execution_id)
+
+
 def wait_status(args, execution_id, target_status, timeout_seconds=None):
     timeout_seconds = timeout_seconds or getattr(args, "timeout_seconds", 30)
     deadline = time.time() + timeout_seconds
@@ -385,6 +393,26 @@ def result_payload(args, execution_id):
     return json.loads(payload)
 
 
+def complete_pending(args):
+    interaction = pending_interaction(args, args.execution_id, args.timeout_seconds)
+    complete(args, interaction, args.decision)
+
+
+def print_wait_status(args):
+    print(json.dumps(
+        wait_status(args, args.execution_id, args.target_status),
+        indent=2,
+        sort_keys=True))
+
+
+def assert_result(args):
+    wait_status(args, args.execution_id, "SUCCEEDED")
+    result = result_payload(args, args.execution_id)
+    if result.get("outcome") != args.expected_outcome:
+        raise RuntimeError(f"Expected outcome={args.expected_outcome}, got result={result}")
+    print(f"Verified terminal result for {args.execution_id}: {json.dumps(result, sort_keys=True)}")
+
+
 def run_one(args, decision, customer_name, restaurant_name, expected_outcome):
     execution_id = submit_order(args, customer_name, restaurant_name)
     wait_status(args, execution_id, "WAITING_EXTERNAL")
@@ -507,6 +535,26 @@ def main():
     flows.add_argument("--timeout-seconds", type=int, default=90)
     flows.set_defaults(func=run_flows)
 
+    submit = sub.add_parser("submit-order")
+    submit.add_argument("--base-url", required=True)
+    submit.add_argument("--tenant-id", required=True)
+    submit.add_argument("--pipeline-id", required=True)
+    submit.add_argument("--control-plane-token", required=True)
+    submit.add_argument("--order-type", default=ORDER_TYPE)
+    submit.add_argument("--customer-name", default="Recovery Demo")
+    submit.add_argument("--restaurant-name", default="Cafe TPF")
+    submit.add_argument("--output")
+    submit.set_defaults(func=submit_one)
+
+    wait = sub.add_parser("wait-status")
+    wait.add_argument("--base-url", required=True)
+    wait.add_argument("--tenant-id", required=True)
+    wait.add_argument("--control-plane-token", required=True)
+    wait.add_argument("--execution-id", required=True)
+    wait.add_argument("--target-status", required=True)
+    wait.add_argument("--timeout-seconds", type=int, default=90)
+    wait.set_defaults(func=print_wait_status)
+
     status = sub.add_parser("status")
     status.add_argument("--base-url", required=True)
     status.add_argument("--tenant-id", required=True)
@@ -522,12 +570,31 @@ def main():
     pending.add_argument("--execution-id")
     pending.set_defaults(func=query_pending)
 
+    complete_cmd = sub.add_parser("complete-pending")
+    complete_cmd.add_argument("--base-url", required=True)
+    complete_cmd.add_argument("--tenant-id", required=True)
+    complete_cmd.add_argument("--await-step-id", required=True)
+    complete_cmd.add_argument("--control-plane-token", required=True)
+    complete_cmd.add_argument("--execution-id", required=True)
+    complete_cmd.add_argument("--decision", choices=["accepted", "declined"], default="accepted")
+    complete_cmd.add_argument("--timeout-seconds", type=int, default=90)
+    complete_cmd.set_defaults(func=complete_pending)
+
     result = sub.add_parser("result")
     result.add_argument("--base-url", required=True)
     result.add_argument("--tenant-id", required=True)
     result.add_argument("--control-plane-token", required=True)
     result.add_argument("--execution-id", required=True)
     result.set_defaults(func=inspect_result)
+
+    assert_cmd = sub.add_parser("assert-result")
+    assert_cmd.add_argument("--base-url", required=True)
+    assert_cmd.add_argument("--tenant-id", required=True)
+    assert_cmd.add_argument("--control-plane-token", required=True)
+    assert_cmd.add_argument("--execution-id", required=True)
+    assert_cmd.add_argument("--expected-outcome", required=True)
+    assert_cmd.add_argument("--timeout-seconds", type=int, default=90)
+    assert_cmd.set_defaults(func=assert_result)
 
     redrive = sub.add_parser("redrive")
     redrive.add_argument("--base-url", required=True)

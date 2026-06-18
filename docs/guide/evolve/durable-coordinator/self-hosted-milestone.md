@@ -35,6 +35,7 @@ The self-host HA path is `COMPUTE + QUEUE_ASYNC`: a coordinator service owns dur
 | Accepted/declined terminal results | present |
 | Failure/DLQ incident walkthrough | present in `restaurant-approval/self-host` |
 | Single-execution operator re-drive | present for terminal `DLQ` and explicit `FAILED` executions |
+| Coordinator/worker process restart proof | present in `restaurant-approval/self-host/container` |
 | Operator walkthrough | present in `restaurant-approval/self-host` |
 | Production-ish deployment recipe | present in [Self-Hosted Deployment](/guide/evolve/durable-coordinator/self-hosted-deployment) |
 | Durable release metadata | Dynamo registry with immutable release records and append-only activation events |

@@ -15,7 +15,7 @@ It uses the same `monolith-svc` image in two modes. The coordinator is configure
 From the repository root:
 
 ```bash
-./examples/restaurant-approval/self-host/container/run-container-ha-demo.sh --ci
+./examples/restaurant-approval/self-host/container/run-container-ha-demo.sh
 ```
 
 The script:
@@ -30,14 +30,25 @@ The script:
 8. runs accepted and declined approval flows through `/tpf/control-plane/...`.
 
 Set `TPF_SKIP_FRAMEWORK_INSTALL=true` or `TPF_SKIP_CONTAINER_BUILD=true` for faster reruns after local artifacts/images are current.
+CI runs the same script with `--ci` so containers and volumes are always torn down after the proof completes.
 
 ## Run The Incident Path
 
 ```bash
-./examples/restaurant-approval/self-host/container/run-container-ha-incident.sh --ci
+./examples/restaurant-approval/self-host/container/run-container-ha-incident.sh
 ```
 
 This starts the same container stack, completes the await interaction with an intentionally invalid but API-valid restaurant decision, observes terminal failure through the durable coordinator, and calls the admin re-drive endpoint. The re-drive intentionally fails again because the bad payload is unchanged; this proves operator control without pretending unrecoverable input fixes itself.
+
+## Run The Recovery Path
+
+```bash
+./examples/restaurant-approval/self-host/container/run-container-ha-recovery.sh
+```
+
+This keeps LocalStack running while restarting runtime processes. The script submits one execution, waits for `WAITING_EXTERNAL`, restarts the coordinator, verifies the pending await state is still readable, completes the await, and verifies the result. It then submits another execution, restarts the REST worker, re-registers the worker lifecycle record, completes the await, and verifies the resumed transition succeeds through the restarted worker.
+
+This is a process-restart proof, not a mid-transition crash injection test. It proves the durable stores survive coordinator and worker restarts at an await boundary, which is the deterministic recovery surface in this example.
 
 ## Local Defaults
 
@@ -62,5 +73,6 @@ These defaults are for local verification only. Real deployments should use secr
 3. Work dispatch and execution DLQ use SQS-compatible queues.
 4. Release artifact storage can use an S3-compatible blob store for coordinator-managed artifacts.
 5. Worker lifecycle must report a healthy worker for the active release before hosted submissions are accepted.
+6. Coordinator and worker process restarts do not lose parked await state or pinned release identity.
 
 This is still a local reference stack, not a production deployment package. For milestone status and deferred hardening, see [Self-Hosted HA Roadmap](/guide/evolve/durable-coordinator/self-hosted-ha-roadmap).

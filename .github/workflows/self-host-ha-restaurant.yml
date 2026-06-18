@@ -58,6 +58,12 @@ jobs:
           TPF_KEEP_STACK_ON_FAILURE: "true"
         run: ./examples/restaurant-approval/self-host/container/run-container-ha-incident.sh --ci
 
+      - name: Run restaurant self-host HA recovery demo
+        env:
+          TPF_SKIP_CONTAINER_BUILD: "true"
+          TPF_KEEP_STACK_ON_FAILURE: "true"
+        run: ./examples/restaurant-approval/self-host/container/run-container-ha-recovery.sh --ci
+
       - name: Dump restaurant self-host logs on failure
         if: failure()
         env:
