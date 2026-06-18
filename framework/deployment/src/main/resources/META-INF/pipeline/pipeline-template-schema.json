@@ -411,14 +411,263 @@
       ],
       "additionalProperties": false
     },
+    "objectInputEmit": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "typeName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mapper": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+        }
+      },
+      "required": [
+        "type",
+        "mapper"
+      ],
+      "additionalProperties": false
+    },
+    "objectInputBoundary": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "emits": {
+          "$ref": "#/$defs/objectInputEmit"
+        }
+      },
+      "required": [
+        "emits"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "source"
+          ]
+        },
+        {
+          "required": [
+            "from"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
     "pipelineInputBoundary": {
       "type": "object",
       "properties": {
         "subscription": {
           "$ref": "#/$defs/checkpointSubscription"
+        },
+        "object": {
+          "$ref": "#/$defs/objectInputBoundary"
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "emits": {
+          "$ref": "#/$defs/objectInputEmit"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "subscription"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "object"
+                ]
+              },
+              {
+                "required": [
+                  "from"
+                ]
+              },
+              {
+                "required": [
+                  "emits"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "object"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "subscription"
+                ]
+              },
+              {
+                "required": [
+                  "from"
+                ]
+              },
+              {
+                "required": [
+                  "emits"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "from",
+            "emits"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "subscription"
+                ]
+              },
+              {
+                "required": [
+                  "object"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "objectSourceFilter": {
+      "type": "object",
+      "properties": {
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       },
       "additionalProperties": false
+    },
+    "objectSourcePoll": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "interval": {
+          "type": "string",
+          "minLength": 1
+        },
+        "batchSize": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "objectSourceIdentity": {
+      "type": "object",
+      "properties": {
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "objectSourcePayload": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "metadata",
+            "reference",
+            "text"
+          ]
+        },
+        "refField": {
+          "type": "string",
+          "minLength": 1
+        },
+        "maxBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "charset": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "objectSource": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "object"
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "filter": {
+          "$ref": "#/$defs/objectSourceFilter"
+        },
+        "poll": {
+          "$ref": "#/$defs/objectSourcePoll"
+        },
+        "identity": {
+          "$ref": "#/$defs/objectSourceIdentity"
+        },
+        "payload": {
+          "$ref": "#/$defs/objectSourcePayload"
+        }
+      },
+      "required": [
+        "kind",
+        "provider"
+      ],
+      "additionalProperties": false
+    },
+    "pipelineSources": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/objectSource"
+      }
     },
     "v2Execution": {
       "type": "object",
@@ -1304,6 +1553,9 @@
     },
     "materialization": {
       "$ref": "#/$defs/materialization"
+    },
+    "sources": {
+      "$ref": "#/$defs/pipelineSources"
     },
     "input": {
       "$ref": "#/$defs/pipelineInputBoundary"

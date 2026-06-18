@@ -19,8 +19,12 @@ package org.pipelineframework.config.template;
 import java.io.IOException;
 import java.io.Reader;
 import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -34,6 +38,12 @@ import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
 import org.pipelineframework.config.boundary.PipelineCheckpointConfig;
 import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
+import org.pipelineframework.config.boundary.PipelineObjectFilterConfig;
+import org.pipelineframework.config.boundary.PipelineObjectIdentityConfig;
+import org.pipelineframework.config.boundary.PipelineObjectInputConfig;
+import org.pipelineframework.config.boundary.PipelineObjectPayloadConfig;
+import org.pipelineframework.config.boundary.PipelineObjectPollConfig;
+import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
 import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
 import org.pipelineframework.config.boundary.PipelineSubscriptionConfig;
 import org.pipelineframework.materialization.MaterializationAction;
@@ -48,6 +58,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  */
 public class PipelineTemplateConfigLoader {
     private static final Logger LOG = Logger.getLogger(PipelineTemplateConfigLoader.class.getName());
+    private static final int MAX_NESTING_DEPTH = 100;
     private static final String DEFAULT_TRANSPORT = "GRPC";
     private static final PipelinePlatform DEFAULT_PLATFORM = PipelinePlatform.COMPUTE;
     private final Function<String, String> propertyLookup;
@@ -102,11 +113,13 @@ public class PipelineTemplateConfigLoader {
         Map<String, PipelineTemplateUnion> rawUnions = version >= 2
             ? readUnions(rootMap)
             : new LinkedHashMap<>();
+        Map<String, PipelineObjectSourceConfig> sources = readSources(rootMap);
         List<PipelineTemplateStep> steps = readSteps(rootMap, version);
         Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
         PipelineTemplateMaterialization materialization = readMaterialization(rootMap);
         rejectLegacyConnectors(rootMap);
         PipelineInputBoundaryConfig input = readInputBoundary(rootMap);
+        validateObjectInputSource(input, sources);
         PipelineOutputBoundaryConfig output = readOutputBoundary(rootMap);
 
         if (version >= 2) {
@@ -123,6 +136,7 @@ public class PipelineTemplateConfigLoader {
                 resolvedPlatform,
                 normalizedMessages,
                 normalizedUnions,
+                sources,
                 steps,
                 aspects,
                 input,
@@ -138,6 +152,7 @@ public class PipelineTemplateConfigLoader {
             resolvedPlatform,
             Map.of(),
             Map.of(),
+            sources,
             steps,
             aspects,
             input,
@@ -962,6 +977,89 @@ public class PipelineTemplateConfigLoader {
         return aspects;
     }
 
+    private Map<String, PipelineObjectSourceConfig> readSources(Map<?, ?> rootMap) {
+        Object sourcesObj = rootMap.get("sources");
+        if (sourcesObj == null) {
+            return Map.of();
+        }
+        if (!(sourcesObj instanceof Map<?, ?> sourcesMap)) {
+            throw new IllegalArgumentException("pipeline sources must be defined as a YAML map");
+        }
+        Map<String, PipelineObjectSourceConfig> sources = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : sourcesMap.entrySet()) {
+            String name = stringify(entry.getKey());
+            if (name == null) {
+                throw new IllegalArgumentException("pipeline source name must not be blank");
+            }
+            if (!(entry.getValue() instanceof Map<?, ?> sourceMap)) {
+                throw new IllegalArgumentException("source '" + name + "' must be declared as a YAML map");
+            }
+            sources.put(name, new PipelineObjectSourceConfig(
+                name,
+                readRequiredString(sourceMap, "kind", "source '" + name + "'"),
+                readRequiredString(sourceMap, "provider", "source '" + name + "'"),
+                readObjectMap(sourceMap, "location"),
+                readObjectFilter(sourceMap),
+                readObjectPoll(sourceMap),
+                readObjectIdentity(sourceMap),
+                readObjectPayload(sourceMap)));
+        }
+        return Map.copyOf(sources);
+    }
+
+    private PipelineObjectFilterConfig readObjectFilter(Map<?, ?> sourceMap) {
+        Object filterObj = sourceMap.get("filter");
+        if (filterObj == null) {
+            return PipelineObjectFilterConfig.defaults();
+        }
+        if (!(filterObj instanceof Map<?, ?> filterMap)) {
+            throw new IllegalArgumentException("source.filter must be declared as a YAML map");
+        }
+        return new PipelineObjectFilterConfig(
+            readStringList(filterMap, "include"),
+            readStringList(filterMap, "exclude"));
+    }
+
+    private PipelineObjectPollConfig readObjectPoll(Map<?, ?> sourceMap) {
+        Object pollObj = sourceMap.get("poll");
+        if (pollObj == null) {
+            return PipelineObjectPollConfig.defaults();
+        }
+        if (!(pollObj instanceof Map<?, ?> pollMap)) {
+            throw new IllegalArgumentException("source.poll must be declared as a YAML map");
+        }
+        return new PipelineObjectPollConfig(
+            readBoolean(pollMap, "enabled", false),
+            readDuration(pollMap, "interval", Duration.ofSeconds(30)),
+            readInt(pollMap, "batchSize", 100));
+    }
+
+    private PipelineObjectIdentityConfig readObjectIdentity(Map<?, ?> sourceMap) {
+        Object identityObj = sourceMap.get("identity");
+        if (identityObj == null) {
+            return PipelineObjectIdentityConfig.defaults();
+        }
+        if (!(identityObj instanceof Map<?, ?> identityMap)) {
+            throw new IllegalArgumentException("source.identity must be declared as a YAML map");
+        }
+        return new PipelineObjectIdentityConfig(readStringList(identityMap, "fields"));
+    }
+
+    private PipelineObjectPayloadConfig readObjectPayload(Map<?, ?> sourceMap) {
+        Object payloadObj = sourceMap.get("payload");
+        if (payloadObj == null) {
+            return PipelineObjectPayloadConfig.reference();
+        }
+        if (!(payloadObj instanceof Map<?, ?> payloadMap)) {
+            throw new IllegalArgumentException("source.payload must be declared as a YAML map");
+        }
+        return new PipelineObjectPayloadConfig(
+            readString(payloadMap, "mode"),
+            readString(payloadMap, "refField"),
+            readLong(payloadMap, "maxBytes", 0L),
+            readCharset(payloadMap, "charset", StandardCharsets.UTF_8));
+    }
+
     private PipelineTemplateMaterialization readMaterialization(Map<?, ?> rootMap) {
         Object materializationObj = rootMap.get("materialization");
         if (materializationObj == null) {
@@ -1127,15 +1225,64 @@ public class PipelineTemplateConfigLoader {
             throw new IllegalArgumentException("pipeline input boundary must be defined as a YAML map");
         }
         Object subscriptionObj = inputMap.get("subscription");
-        if (subscriptionObj == null) {
-            return null;
+        Object objectObj = inputMap.get("object");
+        boolean hasInlineObject = inputMap.get("from") != null || inputMap.get("emits") != null;
+        if (subscriptionObj != null && (objectObj != null || hasInlineObject)) {
+            throw new IllegalArgumentException("pipeline input boundary cannot declare both subscription and object");
         }
-        if (!(subscriptionObj instanceof Map<?, ?> subscriptionMap)) {
-            throw new IllegalArgumentException("input.subscription must be declared as a YAML map");
+        if (objectObj != null && hasInlineObject) {
+            throw new IllegalArgumentException("pipeline input boundary cannot mix input.object with inline from/emits");
         }
-        return new PipelineInputBoundaryConfig(new PipelineSubscriptionConfig(
-            readRequiredString(subscriptionMap, "publication", "input.subscription"),
-            readString(subscriptionMap, "mapper")));
+        if (subscriptionObj != null) {
+            if (!(subscriptionObj instanceof Map<?, ?> subscriptionMap)) {
+                throw new IllegalArgumentException("input.subscription must be declared as a YAML map");
+            }
+            return new PipelineInputBoundaryConfig(new PipelineSubscriptionConfig(
+                readRequiredString(subscriptionMap, "publication", "input.subscription"),
+                readString(subscriptionMap, "mapper")));
+        }
+        if (objectObj != null || hasInlineObject) {
+            Map<?, ?> objectMap;
+            if (objectObj == null) {
+                objectMap = inputMap;
+            } else if (objectObj instanceof Map<?, ?> map) {
+                objectMap = map;
+            } else {
+                throw new IllegalArgumentException("input.object must be declared as a YAML map");
+            }
+            return new PipelineInputBoundaryConfig(null, readObjectInput(objectMap));
+        }
+        return null;
+    }
+
+    private PipelineObjectInputConfig readObjectInput(Map<?, ?> inputMap) {
+        Object emitsObj = inputMap.get("emits");
+        if (!(emitsObj instanceof Map<?, ?> emitsMap)) {
+            throw new IllegalArgumentException("input.object.emits must be declared as a YAML map");
+        }
+        String source = readString(inputMap, "source");
+        String from = readString(inputMap, "from");
+        if (source != null && from != null) {
+            throw new IllegalArgumentException("input.object must declare only one of source or from");
+        }
+        String resolvedSource = firstNonBlank(source, from);
+        if (resolvedSource == null || resolvedSource.isBlank()) {
+            throw new IllegalArgumentException("input.object must declare source or from");
+        }
+        return new PipelineObjectInputConfig(
+            resolvedSource,
+            readRequiredString(emitsMap, "type", "input.object.emits"),
+            readString(emitsMap, "typeName"),
+            readRequiredString(emitsMap, "mapper", "input.object.emits"));
+    }
+
+    private void validateObjectInputSource(
+        PipelineInputBoundaryConfig input,
+        Map<String, PipelineObjectSourceConfig> sources
+    ) {
+        if (input != null && input.object() != null && !sources.containsKey(input.object().source())) {
+            throw new IllegalArgumentException("input.object source not found: " + input.object().source());
+        }
     }
 
     private PipelineOutputBoundaryConfig readOutputBoundary(Map<?, ?> rootMap) {
@@ -1191,10 +1338,49 @@ public class PipelineTemplateConfigLoader {
         Map<String, Object> values = new LinkedHashMap<>();
         for (Map.Entry<?, ?> entry : configMap.entrySet()) {
             if (entry.getKey() != null) {
-                values.put(entry.getKey().toString(), entry.getValue());
+                values.put(entry.getKey().toString(), normalizeConfigValue(entry.getValue()));
             }
         }
-        return values;
+        return Map.copyOf(values);
+    }
+
+    private Object normalizeConfigValue(Object value) {
+        return normalizeConfigValue(value, 0);
+    }
+
+    private Object normalizeConfigValue(Object value, int depth) {
+        if (depth >= MAX_NESTING_DEPTH) {
+            throw new IllegalArgumentException(
+                "pipeline template nested configuration exceeds maximum depth of " + MAX_NESTING_DEPTH);
+        }
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> normalized = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (entry.getKey() != null) {
+                    normalized.put(entry.getKey().toString(), normalizeConfigValue(entry.getValue(), depth + 1));
+                }
+            }
+            return Map.copyOf(normalized);
+        }
+        if (value instanceof Iterable<?> iterable) {
+            List<Object> normalized = new ArrayList<>();
+            for (Object item : iterable) {
+                normalized.add(normalizeConfigValue(item, depth + 1));
+            }
+            return List.copyOf(normalized);
+        }
+        return value;
+    }
+
+    private Map<String, Object> readObjectMap(Map<?, ?> map, String key) {
+        Object value = map.get(key);
+        if (value == null) {
+            return Map.of();
+        }
+        if (!(value instanceof Map<?, ?> rawMap)) {
+            throw new IllegalArgumentException(key + " must be declared as a YAML map");
+        }
+        return readConfigMap(rawMap);
     }
 
     /**
@@ -1223,6 +1409,10 @@ public class PipelineTemplateConfigLoader {
         return text == null || text.isBlank() ? null : text.trim();
     }
 
+    private String firstNonBlank(String primary, String fallback) {
+        return primary == null || primary.isBlank() ? fallback : primary;
+    }
+
     /**
      * Retrieve an integer value from the given map by key, returning a default when the value is absent or null.
      *
@@ -1234,6 +1424,71 @@ public class PipelineTemplateConfigLoader {
     private int readInt(Map<?, ?> map, String key, int defaultValue) {
         Integer value = readIntegerObject(map, key);
         return value == null ? defaultValue : value;
+    }
+
+    private long readLong(Map<?, ?> map, String key, long defaultValue) {
+        Object value = map.get(key);
+        if (value == null || value.toString().isBlank()) {
+            return defaultValue;
+        }
+        if (value instanceof Number number) {
+            return strictLongValue(number, key);
+        }
+        try {
+            return Long.parseLong(value.toString().trim());
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(
+                "Invalid long value '" + value + "' for key '" + key + "'", ex);
+        }
+    }
+
+    private long strictLongValue(Number number, String context) {
+        if (number instanceof Byte || number instanceof Short || number instanceof Integer || number instanceof Long) {
+            return number.longValue();
+        }
+        if (number instanceof BigInteger bigInteger) {
+            if (bigInteger.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) < 0
+                || bigInteger.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+                throw new IllegalArgumentException("Invalid long value '" + number + "' for key '" + context + "'");
+            }
+            return bigInteger.longValueExact();
+        }
+        try {
+            BigDecimal decimal = new BigDecimal(number.toString());
+            if (decimal.stripTrailingZeros().scale() > 0) {
+                throw new IllegalArgumentException(
+                    "Invalid long value '" + number + "' for " + context + ": fractional values are not allowed");
+            }
+            return decimal.longValueExact();
+        } catch (ArithmeticException | NumberFormatException ex) {
+            throw new IllegalArgumentException(
+                "Invalid long value '" + number + "' for " + context, ex);
+        }
+    }
+
+    private Duration readDuration(Map<?, ?> map, String key, Duration defaultValue) {
+        Object value = map.get(key);
+        if (value == null || value.toString().isBlank()) {
+            return defaultValue;
+        }
+        try {
+            return Duration.parse(value.toString().trim());
+        } catch (RuntimeException ex) {
+            throw new IllegalArgumentException(
+                "Invalid duration value '" + value + "' for key '" + key + "'", ex);
+        }
+    }
+
+    private Charset readCharset(Map<?, ?> map, String key, Charset defaultValue) {
+        Object value = map.get(key);
+        if (value == null || value.toString().isBlank()) {
+            return defaultValue;
+        }
+        try {
+            return Charset.forName(value.toString().trim());
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Invalid charset value '" + value + "' for key '" + key + "'", e);
+        }
     }
 
     /**

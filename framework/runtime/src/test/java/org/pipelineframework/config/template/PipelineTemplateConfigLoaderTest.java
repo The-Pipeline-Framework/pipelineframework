@@ -38,6 +38,8 @@ class PipelineTemplateConfigLoaderTest {
                 config:
                   enabledTargets:
                     - "GRPC_SERVICE"
+                  options:
+                    retries: 3
             messages:
               FooInput:
                 fields:
@@ -81,6 +83,14 @@ class PipelineTemplateConfigLoaderTest {
         Map<String, PipelineTemplateAspect> aspects = config.aspects();
         assertNotNull(aspects);
         assertTrue(aspects.containsKey("persistence"));
+        PipelineTemplateAspect persistence = aspects.get("persistence");
+        assertThrows(UnsupportedOperationException.class, () -> persistence.config().put("newKey", "newValue"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> options = (Map<String, Object>) persistence.config().get("options");
+        assertThrows(UnsupportedOperationException.class, () -> options.put("timeout", "PT5S"));
+        @SuppressWarnings("unchecked")
+        List<Object> enabledTargets = (List<Object>) persistence.config().get("enabledTargets");
+        assertThrows(UnsupportedOperationException.class, () -> enabledTargets.add("REST_RESOURCE"));
     }
 
     @Test
@@ -403,6 +413,30 @@ class PipelineTemplateConfigLoaderTest {
             () -> new PipelineTemplateConfigLoader().load(configPath));
 
         assertEquals("output.checkpoint.idempotencyKeyFields must be declared as a YAML list", exception.getMessage());
+    }
+
+    @Test
+    void rejectsNonPositiveObjectSourcePollSettings() throws Exception {
+        String yaml = """
+            appName: "Test App"
+            basePackage: "com.example.test"
+            transport: "GRPC"
+            sources:
+              documents:
+                kind: object
+                provider: filesystem
+                poll:
+                  interval: PT0S
+            steps: []
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-bad-poll.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertEquals("object source poll.interval must be positive", exception.getMessage());
     }
 
     @Test

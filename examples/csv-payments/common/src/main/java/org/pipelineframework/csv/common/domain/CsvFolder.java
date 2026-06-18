@@ -27,8 +27,11 @@ import lombok.*;
 import lombok.experimental.Accessors;
 
 /**
- * Domain object representing a folder containing CSV files
+ * Domain object representing a folder containing CSV files.
+ *
+ * @deprecated Folder admission is being replaced by object ingest sources.
  */
+@Deprecated(since = "26.6.2", forRemoval = true)
 @Entity
 @Getter
 @Setter

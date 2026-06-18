@@ -37,6 +37,7 @@ import lombok.experimental.Accessors;
 @Accessors(chain = true)
 @MappedSuperclass
 @NoArgsConstructor
+@SuppressWarnings("removal")
 public abstract class BaseCsvPaymentsFile extends BaseEntity implements Serializable {
   @Transient @NonNull protected File csvFile;
 

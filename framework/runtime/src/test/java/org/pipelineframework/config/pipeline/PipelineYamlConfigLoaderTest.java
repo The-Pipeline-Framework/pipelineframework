@@ -48,6 +48,158 @@ class PipelineYamlConfigLoaderTest {
     }
 
     @Test
+    void loadsObjectSourceInputBoundary() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            platform: "COMPUTE"
+            sources:
+              documents:
+                kind: object
+                provider: filesystem
+                location:
+                  root: "/tmp/incoming"
+                filter:
+                  include: ["*.csv"]
+                poll:
+                  enabled: true
+                  interval: PT5S
+                  batchSize: 10
+                identity:
+                  fields: [provider, container, key, etag]
+                payload:
+                  mode: reference
+            input:
+              from: documents
+              emits:
+                type: com.example.DocumentInput
+                typeName: DocumentInput
+                mapper: com.example.DocumentObjectMapper
+            steps:
+              - name: "Process Document"
+                inputTypeName: "DocumentInput"
+                outputTypeName: "DocumentOutput"
+            """));
+
+        assertEquals(1, config.sources().size());
+        assertEquals("filesystem", config.sources().get("documents").provider());
+        assertEquals("/tmp/incoming", config.sources().get("documents").location().get("root"));
+        assertEquals(List.of("*.csv"), config.sources().get("documents").filter().include());
+        assertEquals(10, config.sources().get("documents").poll().batchSize());
+        assertNotNull(config.input());
+        assertEquals("documents", config.input().object().source());
+        assertEquals("com.example.DocumentInput", config.input().object().type());
+        assertEquals("DocumentInput", config.input().object().typeName());
+        assertEquals("com.example.DocumentObjectMapper", config.input().object().mapper());
+    }
+
+    @Test
+    void rejectsSubscriptionAndObjectInputTogether() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                steps: []
+                input:
+                  subscription:
+                    publication: orders-ready
+                  from: documents
+                  emits:
+                    type: com.example.DocumentInput
+                    mapper: com.example.DocumentObjectMapper
+                """)));
+
+        assertEquals("pipeline input boundary cannot declare both subscription and object", exception.getMessage());
+    }
+
+    @Test
+    void rejectsObjectPayloadMaxBytesOutsideLongRange() {
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                sources:
+                  documents:
+                    kind: object
+                    provider: filesystem
+                    payload:
+                      maxBytes: 9223372036854775808
+                steps: []
+                """)));
+
+        assertEquals("Invalid long value '9223372036854775808' for key 'maxBytes'", exception.getMessage());
+    }
+
+    @Test
+    void rejectsObjectInputWithoutSourceReference() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                input:
+                  emits:
+                    type: com.example.DocumentInput
+                    mapper: com.example.DocumentObjectMapper
+                steps: []
+                """)));
+
+        assertEquals("input.object must declare source or from", exception.getMessage());
+    }
+
+    @Test
+    void rejectsMalformedObjectSourcePayloadSection() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                sources:
+                  documents:
+                    kind: object
+                    provider: filesystem
+                    payload: text
+                steps: []
+                """)));
+
+        assertEquals("source.payload must be defined as a map", exception.getMessage());
+    }
+
+    @Test
+    void rejectsNonPositiveObjectSourcePollBatchSize() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                sources:
+                  documents:
+                    kind: object
+                    provider: filesystem
+                    poll:
+                      batchSize: 0
+                steps: []
+                """)));
+
+        assertEquals("object source poll.batchSize must be positive", exception.getMessage());
+    }
+
+    @Test
+    void rejectsNonPositiveObjectSourcePollInterval() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                sources:
+                  documents:
+                    kind: object
+                    provider: filesystem
+                    poll:
+                      interval: PT0S
+                steps: []
+                """)));
+
+        assertEquals("object source poll.interval must be positive", exception.getMessage());
+    }
+
+    @Test
     void loadsConfigWithoutCheckpointBoundaries() {
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
             basePackage: "com.example"

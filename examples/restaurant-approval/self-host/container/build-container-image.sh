@@ -16,6 +16,8 @@ TPF_SKIP_FRAMEWORK_INSTALL="${TPF_SKIP_FRAMEWORK_INSTALL:-false}"
 TPF_CONTAINER_STEP_TRANSPORT="${TPF_CONTAINER_STEP_TRANSPORT:-REST}"
 
 if [[ "${TPF_SKIP_FRAMEWORK_INSTALL}" != "true" ]]; then
+  echo "Installing root project POM for local SNAPSHOT parent resolution..."
+  "${MVN_BIN}" -N install
   echo "Installing current framework SNAPSHOT for the example build..."
   "${MVN_BIN}" -f "${REPO_ROOT}/framework/pom.xml" clean install
 fi

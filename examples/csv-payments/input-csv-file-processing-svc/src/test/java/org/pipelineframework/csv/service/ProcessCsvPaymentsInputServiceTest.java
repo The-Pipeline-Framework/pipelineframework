@@ -124,10 +124,9 @@ class ProcessCsvPaymentsInputServiceTest {
     @Test
     @SneakyThrows
     void process_fileNotFound() {
-        try (CsvPaymentsInputFile csvFile =
-                new CsvPaymentsInputFile(tempDir.resolve("nonexistent.csv").toFile())) {
-            assertThrows(RuntimeException.class, () -> service.iterateBlocking(csvFile));
-        }
+        CsvPaymentsInputFile csvFile =
+                new CsvPaymentsInputFile(tempDir.resolve("nonexistent.csv").toFile());
+        assertThrows(RuntimeException.class, () -> service.iterateBlocking(csvFile));
     }
 
     @Test

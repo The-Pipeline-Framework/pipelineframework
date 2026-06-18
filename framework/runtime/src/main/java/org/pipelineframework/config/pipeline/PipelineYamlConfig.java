@@ -17,9 +17,11 @@
 package org.pipelineframework.config.pipeline;
 
 import java.util.List;
+import java.util.Map;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
+import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
 import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
 
 /**
@@ -29,6 +31,7 @@ import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
  * @param transport the transport mode (GRPC, REST, or LOCAL)
  * @param platform the runtime/deployment platform mode (COMPUTE or FUNCTION)
  * @param steps the configured pipeline steps
+ * @param sources named pipeline I/O sources
  * @param aspects the configured pipeline aspects
  * @param input the configured reliable pipeline input boundary
  * @param output the configured reliable pipeline output boundary
@@ -38,6 +41,7 @@ public record PipelineYamlConfig(
     String transport,
     String platform,
     List<PipelineYamlStep> steps,
+    Map<String, PipelineObjectSourceConfig> sources,
     List<PipelineYamlAspect> aspects,
     PipelineInputBoundaryConfig input,
     PipelineOutputBoundaryConfig output
@@ -59,6 +63,22 @@ public record PipelineYamlConfig(
             }
         }
         platform = normalizedPlatform;
+        validateMap(sources, "sources");
+        sources = sources == null ? Map.of() : Map.copyOf(sources);
+    }
+
+    private static void validateMap(Map<?, ?> values, String fieldName) {
+        if (values == null) {
+            return;
+        }
+        for (Map.Entry<?, ?> entry : values.entrySet()) {
+            if (entry.getKey() == null) {
+                throw new IllegalArgumentException(fieldName + " must not contain null keys");
+            }
+            if (entry.getValue() == null) {
+                throw new IllegalArgumentException(fieldName + " must not contain null values");
+            }
+        }
     }
 
     /**
@@ -75,7 +95,7 @@ public record PipelineYamlConfig(
         List<PipelineYamlStep> steps,
         List<PipelineYamlAspect> aspects
     ) {
-        this(basePackage, transport, "COMPUTE", steps, aspects, null, null);
+        this(basePackage, transport, "COMPUTE", steps, Map.of(), aspects, null, null);
     }
 
     /**
@@ -95,7 +115,19 @@ public record PipelineYamlConfig(
         List<PipelineYamlStep> steps,
         List<PipelineYamlAspect> aspects
     ) {
-        this(basePackage, transport, platform, steps, aspects, null, null);
+        this(basePackage, transport, platform, steps, Map.of(), aspects, null, null);
+    }
+
+    public PipelineYamlConfig(
+        String basePackage,
+        String transport,
+        String platform,
+        List<PipelineYamlStep> steps,
+        List<PipelineYamlAspect> aspects,
+        PipelineInputBoundaryConfig input,
+        PipelineOutputBoundaryConfig output
+    ) {
+        this(basePackage, transport, platform, steps, Map.of(), aspects, input, output);
     }
 
     /**
@@ -105,7 +137,7 @@ public record PipelineYamlConfig(
      * @return a new PipelineYamlConfig with the updated transport
      */
     public PipelineYamlConfig withTransport(String transport) {
-        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects, input, output);
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, sources, aspects, input, output);
     }
 
     /**
@@ -115,6 +147,6 @@ public record PipelineYamlConfig(
      * @return a new PipelineYamlConfig with the updated platform
      */
     public PipelineYamlConfig withPlatform(String platform) {
-        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects, input, output);
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, sources, aspects, input, output);
     }
 }
