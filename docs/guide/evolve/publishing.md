@@ -29,6 +29,11 @@ The GitHub Actions workflow automatically:
 - Deploys to Sonatype Central
 - Creates a GitHub release with notes
 
+Sonatype Central can take a long time to move an automatic deployment from validated to published. The
+`central-publishing` profile therefore sets the Central Publishing plugin's `waitMaxTime` to 7200 seconds, and
+the publish workflow allows 150 minutes for the job. If the workflow still times out but Central later publishes
+the deployment, verify Maven Central metadata and create the skipped GitHub release from the existing immutable tag.
+
 ## Table of Contents
 
 - [Overview](#overview)
