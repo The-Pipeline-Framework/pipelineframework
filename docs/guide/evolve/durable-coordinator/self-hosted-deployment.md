@@ -137,6 +137,14 @@ The restaurant container reference demonstrates this baseline locally:
 
 It uses LocalStack to create the required DynamoDB tables, SQS work/DLQ queues, and S3-compatible release artifact bucket. Treat that as local verification of the topology, not production AWS provisioning.
 
+The same reference includes a process-restart recovery proof:
+
+```bash
+./examples/restaurant-approval/self-host/container/run-container-ha-recovery.sh --ci
+```
+
+That script submits an execution, waits until it is parked on an await unit, restarts the coordinator, verifies status and pending await state are still readable, completes the await, and verifies the terminal result. It then repeats the flow with a worker restart before await completion. This proves recovery at a deterministic await boundary; it does not claim arbitrary mid-transition crash injection.
+
 The CSV Payments container reference demonstrates the same baseline with broker-backed await completions and the example persistence path:
 
 ```bash
@@ -217,6 +225,28 @@ For real incidents:
 6. Re-drive a terminal execution with `POST /tpf/admin/tenants/{tenantId}/executions/{executionId}/redrive`.
 
 Re-drive reads the durable execution record and re-enqueues the original execution id. The DLQ message is evidence for triage and alerting; it is not consumed as the replay source. `FAILED` execution re-drive is opt-in (`allowFailed=true`) because those failures may not have exhausted the DLQ path.
+
+### Process Restart Recovery
+
+Use the restaurant recovery proof as the current restart runbook:
+
+```bash
+./examples/restaurant-approval/self-host/container/run-container-ha-recovery.sh --ci
+```
+
+For coordinator restarts:
+
+1. Confirm execution status is still readable through `GET /tpf/control-plane/tenants/{tenantId}/executions/{executionId}`.
+2. Confirm pending await interaction is still queryable.
+3. Complete the await and verify the execution resumes to `SUCCEEDED`.
+
+For worker restarts:
+
+1. Wait for the worker health endpoint.
+2. Register or heartbeat the worker lifecycle record for the active release.
+3. Complete or re-drive work only after a matching `HEALTHY` worker is visible.
+
+The current recovery proof intentionally parks at an await boundary before restarting processes. Mid-transition crash/lease-takeover campaigns are a separate hardening track because they need deterministic failure injection and stricter assertions around in-flight side effects.
 
 ### Manual Upgrade And Drain
 

@@ -11,7 +11,8 @@ The self-host HA path is credible for adoption and demos. The restaurant and CSV
 3. release registration, activation, and worker lifecycle are exercised,
 4. happy-path await completion and terminal result inspection are automated,
 5. incident handling reaches terminal failure and demonstrates single-execution re-drive,
-6. CSV Payments proves stream-await execution with both SQS and Kafka await-provider lanes.
+6. restaurant recovery proof restarts coordinator and worker processes while preserving parked await state,
+7. CSV Payments proves stream-await execution with both SQS and Kafka await-provider lanes.
 
 The milestone is intentionally compute-first. `FUNCTION` remains serverless invocation/adapter support; it is not the current TPF-owned durable HA path.
 
@@ -23,6 +24,7 @@ The following work is useful but not required for the current self-host HA adopt
 | --- | --- | --- |
 | Append-only execution and await state storage | [#396](https://github.com/The-Pipeline-Framework/pipelineframework/issues/396) | Existing Dynamo execution and await stores still use conditional updates for leases and state transitions. |
 | Bulk DLQ replay campaigns | [#406](https://github.com/The-Pipeline-Framework/pipelineframework/issues/406) | Single-execution re-drive exists; batch selection, rate limits, audit, and poison-record handling remain separate work. |
+| Mid-transition crash/lease-takeover campaign | none yet | The current restart proof uses a deterministic await boundary. In-flight crash campaigns need failure injection and side-effect idempotency assertions. |
 | Kubernetes/Helm/Terraform/IAM packaging | none yet | Deployment packaging belongs after the adoption path proves demand. |
 | Worker autoscaling or fleet routing | none yet | The current lifecycle gate is deliberately minimal: healthy, stale, draining, unavailable. |
 | Production tenancy/RBAC/support console | none yet | This is managed-product work, not required for OSS self-host adoption. |
