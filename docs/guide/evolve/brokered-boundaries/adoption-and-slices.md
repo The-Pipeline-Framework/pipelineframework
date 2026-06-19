@@ -37,13 +37,23 @@ Prefer these implementation slices if this work becomes active:
 
 1. SQS-backed await transport for AWS-shaped self-host HA. Implemented by the CSV container reference.
 2. Kafka await provider for event-stream await proofs. Implemented by the default CSV topology.
-3. Kafka-backed checkpoint publication/subscription.
-4. Kafka-backed transition-worker dispatcher using the existing command/result envelope.
-5. Protobuf-backed external step-host contract generation for non-Java implementations.
-6. Optional envelope compatibility lane with strict TPF control metadata and loose payload.
-7. Brokered step-host dispatch only after the earlier boundary types are proven.
+3. Kafka-backed checkpoint publication/subscription. Implemented as the first broker-backed checkpoint handoff provider.
+4. SQS-backed checkpoint publication/subscription for AWS queue-shaped handoff.
+5. Kafka-backed transition-worker dispatcher using the existing command/result envelope.
+6. Protobuf-backed external step-host contract generation for non-Java implementations.
+7. Optional envelope compatibility lane with strict TPF control metadata and loose payload.
+8. Brokered step-host dispatch only after the earlier boundary types are proven.
 
 Avoid starting with broad "Kafka transport" or "SQS transport" PRs. They mix unrelated risks and blur TPF semantics.
+
+## Checkpoint Handoff Follow-Ups
+
+Track these as brokered-boundary follow-ups, not user-facing runtime behaviour:
+
+1. generic broker-message re-drive,
+2. a separate durable checkpoint-publication service or publication-specific DLQ,
+3. dynamic runtime publication discovery or runtime subscription registration,
+4. SQS-backed checkpoint publication targets.
 
 ## Non-Goals
 
