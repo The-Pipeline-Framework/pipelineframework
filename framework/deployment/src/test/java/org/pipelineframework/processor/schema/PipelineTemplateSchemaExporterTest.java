@@ -57,6 +57,9 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("pipelineOutputBoundary"));
         assertTrue(definitions.has("pipelineSources"));
         assertTrue(definitions.has("objectSource"));
+        assertTrue(definitions.has("queryDefinition"));
+        assertTrue(definitions.has("queryCapture"));
+        assertTrue(definitions.has("queryTemplateStep"));
         assertTrue(definitions.has("delegatedOrInternalStep"));
         assertTrue(definitions.has("v2Execution"));
         assertTrue(definitions.has("awaitTemplateStep"));
@@ -69,7 +72,19 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(properties.has("input"));
         assertTrue(properties.has("output"));
         assertTrue(properties.has("sources"));
+        assertTrue(properties.has("queries"));
         assertTrue(properties.has("materialization"));
+    }
+
+    @Test
+    void queryStepSchemaRequiresQueryReferenceAndCaptureFields() {
+        JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
+        JsonObject queryStep = definitions.getAsJsonObject("queryTemplateStep");
+
+        JsonObject properties = queryStep.getAsJsonObject("properties");
+        assertTrue(properties.has("query"));
+        assertTrue(properties.has("capture"));
+        assertContains(queryStep.getAsJsonArray("required"), "query");
     }
 
     @Test

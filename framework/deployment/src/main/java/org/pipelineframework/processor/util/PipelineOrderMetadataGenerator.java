@@ -180,9 +180,7 @@ public class PipelineOrderMetadataGenerator {
             if (model.deploymentRole() != DeploymentRole.ORCHESTRATOR_CLIENT || model.sideEffect()) {
                 continue;
             }
-            String resolvedSuffix = model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)
-                ? "AwaitClientStep"
-                : suffix;
+            String resolvedSuffix = specialClientSuffix(model, suffix);
             String className = model.servicePackage() + ".pipeline." +
                 stripTrailingService(model.generatedName()) + resolvedSuffix;
             ordered.add(className);
@@ -203,6 +201,11 @@ public class PipelineOrderMetadataGenerator {
             if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
                 ordered.add(model.servicePackage() + ".pipeline."
                     + stripTrailingService(model.generatedName()) + "AwaitClientStep");
+                continue;
+            }
+            if (model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)) {
+                ordered.add(model.servicePackage() + ".pipeline."
+                    + stripTrailingService(model.generatedName()) + "QueryClientStep");
                 continue;
             }
             ordered.add(model.serviceClassName().canonicalName());
@@ -228,6 +231,11 @@ public class PipelineOrderMetadataGenerator {
                     + stripTrailingService(model.generatedName()) + "AwaitClientStep");
                 continue;
             }
+            if (model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)) {
+                generated.add(model.servicePackage() + ".pipeline."
+                    + stripTrailingService(model.generatedName()) + "QueryClientStep");
+                continue;
+            }
             if (clientTarget != null && !model.enabledTargets().contains(clientTarget)) {
                 continue;
             }
@@ -245,6 +253,16 @@ public class PipelineOrderMetadataGenerator {
             return generatedName.substring(0, generatedName.length() - "Service".length());
         }
         return generatedName;
+    }
+
+    private String specialClientSuffix(PipelineStepModel model, String defaultSuffix) {
+        if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
+            return "AwaitClientStep";
+        }
+        if (model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)) {
+            return "QueryClientStep";
+        }
+        return defaultSuffix;
     }
 
     private boolean isSideEffectClientStep(String className) {
@@ -320,7 +338,7 @@ public class PipelineOrderMetadataGenerator {
         if (lastDot != -1) {
             simple = simple.substring(lastDot + 1);
         }
-        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep|AwaitClientStep)(_Subclass)?$", "");
+        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep|AwaitClientStep|QueryClientStep)(_Subclass)?$", "");
         return toClassToken(simple);
     }
 

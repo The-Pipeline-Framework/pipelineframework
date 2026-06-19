@@ -42,5 +42,11 @@ public enum StepKind {
      * An await step that dispatches external work, stores durable interaction state,
      * and resumes from a correlated completion.
      */
-    AWAIT
+    AWAIT,
+
+    /**
+     * A captured query step that reads through an application connector and makes
+     * decision-affecting external state an explicit pipeline input.
+     */
+    QUERY
 }

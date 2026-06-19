@@ -419,6 +419,87 @@ public final class PipelineTemplateSchemaExporter {
       ],
       "additionalProperties": false
     },
+    "queryDefinition": {
+      "type": "object",
+      "properties": {
+        "connector": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outputType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "default": "v1"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "connector"
+      ],
+      "allOf": [
+        {
+          "anyOf": [
+            {
+              "required": [
+                "input"
+              ]
+            },
+            {
+              "required": [
+                "inputType"
+              ]
+            }
+          ]
+        },
+        {
+          "anyOf": [
+            {
+              "required": [
+                "output"
+              ]
+            },
+            {
+              "required": [
+                "outputType"
+              ]
+            }
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "queryCapture": {
+      "type": "object",
+      "properties": {
+        "keyFields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "pipelineOutputBoundary": {
       "type": "object",
       "properties": {
@@ -1407,6 +1488,86 @@ public final class PipelineTemplateSchemaExporter {
         "timeout",
         "await"
       ]
+    },
+    "queryTemplateStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "query"
+        },
+        "query": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cardinality": {
+          "type": "string",
+          "enum": [
+            "ONE_TO_ONE"
+          ]
+        },
+        "inputTypeName": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "outputTypeName": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "input": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+        },
+        "capture": {
+          "$ref": "#/$defs/queryCapture"
+        },
+        "flowRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "flowBoundaryRationale": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "anyOf": [
+            {
+              "required": [
+                "inputTypeName",
+                "outputTypeName"
+              ]
+            },
+            {
+              "required": [
+                "input",
+                "output"
+              ]
+            }
+          ]
+        }
+      ],
+      "required": [
+        "name",
+        "kind",
+        "query",
+        "cardinality"
+      ]
     }
   },
   "allOf": [
@@ -1427,6 +1588,9 @@ public final class PipelineTemplateSchemaExporter {
             "type": "array",
             "items": {
               "oneOf": [
+                {
+                  "$ref": "#/$defs/queryTemplateStep"
+                },
                 {
                   "$ref": "#/$defs/awaitTemplateStep"
                 },
@@ -1534,6 +1698,17 @@ public final class PipelineTemplateSchemaExporter {
     "steps": {
       "type": "array",
       "description": "List of pipeline steps."
+    },
+    "queries": {
+      "type": "object",
+      "description": "Captured query connector definitions referenced by kind: query steps.",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/queryDefinition"
+      }
     },
     "aspects": {
       "type": "object",

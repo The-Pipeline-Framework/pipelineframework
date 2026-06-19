@@ -95,6 +95,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer = new BlockingReactiveBridgeRenderer();
         RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer = new RemoteOperatorAdapterRenderer();
         AwaitClientStepRenderer awaitClientStepRenderer = new AwaitClientStepRenderer();
+        QueryClientStepRenderer queryClientStepRenderer = new QueryClientStepRenderer();
         OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
         OrchestratorRestResourceRenderer orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
         AbstractOrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer =
@@ -242,9 +243,10 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 restClientRenderer,
                 restRenderer,
                 restFunctionHandlerRenderer,
-                blockingReactiveBridgeRenderer,
-                remoteOperatorAdapterRenderer,
-                awaitClientStepRenderer);
+                    blockingReactiveBridgeRenderer,
+                    remoteOperatorAdapterRenderer,
+                    awaitClientStepRenderer,
+                    queryClientStepRenderer);
         }
 
         if (ctx.isTransportModeGrpc() && descriptorSet != null) {
@@ -484,7 +486,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             RestFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer,
-            AwaitClientStepRenderer awaitClientStepRenderer) throws IOException {
+            AwaitClientStepRenderer awaitClientStepRenderer,
+            QueryClientStepRenderer queryClientStepRenderer) throws IOException {
         stepArtifactGenerationService.generateArtifactsForModel(
             ctx,
             model,
@@ -504,7 +507,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             restFunctionHandlerRenderer,
             blockingReactiveBridgeRenderer,
             remoteOperatorAdapterRenderer,
-            awaitClientStepRenderer);
+            awaitClientStepRenderer,
+            queryClientStepRenderer);
     }
 
     /**

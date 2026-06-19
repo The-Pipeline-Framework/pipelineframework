@@ -72,7 +72,9 @@ public class StepDefinitionParser {
         "kind",
         "await",
         "timeout",
-        "idempotencyKeyFields");
+        "idempotencyKeyFields",
+        "query",
+        "capture");
     private final BiConsumer<Diagnostic.Kind, String> diagnosticReporter;
     private final String legacyInternalPackageSuffix;
 
@@ -129,6 +131,7 @@ public class StepDefinitionParser {
         Map<String, Object> templateData = YAML_MAPPER.readValue(yamlContent, Map.class);
         String basePackage = getStringValue(templateData, "basePackage");
         int version = parseVersion(templateData);
+        Map<String, QueryDefinition> queryDefinitions = parseQueryDefinitions(templateData);
 
         Object stepsObj = templateData.get("steps");
         if (!(stepsObj instanceof List)) {
@@ -145,7 +148,7 @@ public class StepDefinitionParser {
             }
             @SuppressWarnings("unchecked")
             Map<String, Object> stepData = (Map<String, Object>) stepObj;
-            StepDefinition stepDef = parseStepDefinition(stepData, basePackage, version);
+            StepDefinition stepDef = parseStepDefinition(stepData, basePackage, version, queryDefinitions);
             if (stepDef != null) {
                 stepDefinitions.add(stepDef);
             }
@@ -166,7 +169,11 @@ public class StepDefinitionParser {
      * @param stepData the map containing step configuration data (YAML-derived keys described above)
      * @return a StepDefinition for the parsed step, or null if the step is invalid, unsupported, or should be skipped
      */
-    private StepDefinition parseStepDefinition(Map<String, Object> stepData, String basePackage, int version) {
+    private StepDefinition parseStepDefinition(
+            Map<String, Object> stepData,
+            String basePackage,
+            int version,
+            Map<String, QueryDefinition> queryDefinitions) {
         String name = getStringValue(stepData, "name");
         if (isBlank(name)) {
             LOG.warnf("Skipping step with null or blank name: %s", stepData);
@@ -187,6 +194,7 @@ public class StepDefinitionParser {
         String serviceClassName = getStringValue(stepData, "service");
         String rawKind = getStringValue(stepData, "kind");
         boolean awaitStep = "await".equalsIgnoreCase(rawKind);
+        boolean queryStep = "query".equalsIgnoreCase(rawKind);
         String delegatedClassName = null;
 
         if (!isBlank(operatorClassName) && !isBlank(delegateClassName)) {
@@ -216,14 +224,23 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
+        if (queryStep && (!isBlank(delegatedClassName) || !isBlank(serviceClassName) || remoteExecution != null)) {
+            String message = "Skipping step '" + name
+                + "': query steps are framework-owned read boundaries and cannot declare 'service', 'operator', 'delegate',"
+                + " or remote 'execution'; use 'kind: query' with a referenced query connector definition";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
         if (!isBlank(rawKind)
             && !awaitStep
+            && !queryStep
             && !"internal".equalsIgnoreCase(rawKind)
             && !"delegated".equalsIgnoreCase(rawKind)
             && !"delegate".equalsIgnoreCase(rawKind)
             && !"remote".equalsIgnoreCase(rawKind)) {
             String message = "Skipping step '" + name + "': unsupported kind '" + rawKind
-                + "'. Allowed values: internal, delegated, remote, await";
+                + "'. Allowed values: internal, delegated, remote, await, query";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             return null;
@@ -235,13 +252,16 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
-        boolean inferredLegacyInternal = !awaitStep && isBlank(delegatedClassName) && isBlank(serviceClassName);
+        boolean inferredLegacyInternal = !awaitStep && !queryStep && isBlank(delegatedClassName) && isBlank(serviceClassName);
 
         StepKind kind;
         String executionClassName;
 
         if (awaitStep) {
             kind = StepKind.AWAIT;
+            executionClassName = null;
+        } else if (queryStep) {
+            kind = StepKind.QUERY;
             executionClassName = null;
         } else if (remoteExecution != null) {
             kind = StepKind.REMOTE;
@@ -406,6 +426,9 @@ public class StepDefinitionParser {
                 null,
                 List.of(),
                 null,
+                Map.of(),
+                List.of(),
+                null,
                 null,
                 null,
                 MapperFallbackMode.NONE,
@@ -454,12 +477,88 @@ public class StepDefinitionParser {
                 timeout,
                 idempotencyKeyFields,
                 null,
+                Map.of(),
+                List.of(),
+                null,
                 null,
                 null,
                 MapperFallbackMode.NONE,
                 inputType,
                 outputType,
                 resolvedShape);
+        }
+
+        if (kind == StepKind.QUERY) {
+            if (inboundMapper != null || outboundMapper != null || externalMapper != null || mapperFallback != MapperFallbackMode.NONE) {
+                String message = "Skipping step '" + name
+                    + "': query steps cannot declare mapper fields in this slice; use typed query input/output contracts";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            if (inputType == null || outputType == null) {
+                String message = "Skipping step '" + name + "': query steps must provide input and output types";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            StreamingShape shape = parseStreamingShapeHint(stepData, name);
+            if (shape != null && shape != StreamingShape.UNARY_UNARY) {
+                String message = "Skipping step '" + name
+                    + "': query steps support only ONE_TO_ONE cardinality in v1";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            String queryId = getStringValue(stepData, "query");
+            if (isBlank(queryId)) {
+                String message = "Skipping step '" + name + "': query steps must reference a top-level query id";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            QueryDefinition queryDefinition = queryDefinitions.get(queryId);
+            if (queryDefinition == null) {
+                String message = "Skipping step '" + name + "': query '" + queryId + "' is not defined under top-level queries";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            if (!typeNameMatches(inputType, queryDefinition.inputType())
+                || !typeNameMatches(outputType, queryDefinition.outputType())) {
+                String message = "Skipping step '" + name + "': query step types ["
+                    + inputType + " -> " + outputType + "] do not match query '" + queryId + "' types ["
+                    + queryDefinition.inputType() + " -> " + queryDefinition.outputType() + "]";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            Map<String, Object> captureConfig = parseQueryCaptureConfig(stepData, name);
+            if (captureConfig == null) {
+                return null;
+            }
+            List<String> keyFields = parseStringList(captureConfig.get("keyFields"), name, "capture.keyFields");
+            if (keyFields == null) {
+                return null;
+            }
+            return new StepDefinition(
+                name,
+                StepKind.QUERY,
+                null,
+                null,
+                Map.of(),
+                null,
+                List.of(),
+                queryId,
+                captureConfig,
+                keyFields,
+                null,
+                null,
+                null,
+                MapperFallbackMode.NONE,
+                inputType,
+                outputType,
+                StreamingShape.UNARY_UNARY);
         }
 
         // Create the execution class name
@@ -480,6 +579,75 @@ public class StepDefinitionParser {
             inputType,
             outputType,
             parseStreamingShapeHint(stepData, name));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, QueryDefinition> parseQueryDefinitions(Map<String, Object> templateData) {
+        Object queriesObj = templateData.get("queries");
+        if (!(queriesObj instanceof Map<?, ?> queriesMap)) {
+            return Map.of();
+        }
+        java.util.LinkedHashMap<String, QueryDefinition> queries = new java.util.LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : queriesMap.entrySet()) {
+            String id = entry.getKey() == null ? null : entry.getKey().toString();
+            if (isBlank(id)) {
+                continue;
+            }
+            if (!(entry.getValue() instanceof Map<?, ?> rawQueryMap)) {
+                String message = "Skipping query '" + id + "': query definition must be a map";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                continue;
+            }
+            Map<String, Object> queryMap = (Map<String, Object>) rawQueryMap;
+            String connector = getStringValue(queryMap, "connector");
+            String inputType = firstNonBlank(getStringValue(queryMap, "inputType"), getStringValue(queryMap, "input"));
+            String outputType = firstNonBlank(getStringValue(queryMap, "outputType"), getStringValue(queryMap, "output"));
+            if (isBlank(connector) || isBlank(inputType) || isBlank(outputType)) {
+                String message = "Skipping query '" + id + "': connector, input, and output must be declared";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                continue;
+            }
+            queries.put(id, new QueryDefinition(id, connector, inputType, outputType));
+        }
+        return Map.copyOf(queries);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseQueryCaptureConfig(Map<String, Object> stepData, String stepName) {
+        Object captureObj = stepData.get("capture");
+        if (captureObj == null) {
+            return Map.of();
+        }
+        if (!(captureObj instanceof Map<?, ?> captureMap)) {
+            String message = "Skipping step '" + stepName + "': capture must be a map";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        if (captureMap.containsKey("mode")) {
+            String message = "Skipping step '" + stepName
+                + "': capture.mode is not supported in v1; capture behavior is controlled by keyFields";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        return (Map<String, Object>) normalizeMap(captureMap);
+    }
+
+    private boolean typeNameMatches(ClassName stepType, String queryType) {
+        if (stepType == null || isBlank(queryType)) {
+            return false;
+        }
+        if (stepType.canonicalName().equals(queryType)) {
+            return true;
+        }
+        return false;
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        return isBlank(primary) ? fallback : primary;
     }
 
     @SuppressWarnings("unchecked")
@@ -685,6 +853,9 @@ public class StepDefinitionParser {
 
     private String stringValue(Object value) {
         return value == null ? null : value.toString();
+    }
+
+    private record QueryDefinition(String id, String connector, String inputType, String outputType) {
     }
 
     private ClassName parseOptionalStepMapper(String mapperName, String stepName, String fieldName) {
