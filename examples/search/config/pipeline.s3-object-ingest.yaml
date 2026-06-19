@@ -1,0 +1,201 @@
+version: 2
+appName: Search Pipeline
+basePackage: org.pipelineframework.search
+transport: REST
+platform: COMPUTE
+sources:
+  search-documents:
+    kind: object
+    provider: s3
+    location:
+      bucket: tpf-search-documents
+      prefix: raw/
+    filter:
+      include: ["**/*.txt", "**/*.md", "**/*.html"]
+    poll:
+      enabled: true
+      interval: PT30S
+      batchSize: 100
+    identity:
+      fields: [provider, container, key, etag]
+    payload:
+      mode: text
+      maxBytes: 1048576
+      charset: UTF-8
+input:
+  from: search-documents
+  emits:
+    type: org.pipelineframework.search.common.domain.RawDocument
+    typeName: RawDocument
+    mapper: org.pipelineframework.search.common.mapper.SearchObjectDocumentMapper
+aspects:
+  persistence:
+    enabled: true
+    scope: GLOBAL
+    position: AFTER_STEP
+    order: 0
+    config:
+      pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
+  cache:
+    enabled: true
+    scope: GLOBAL
+    position: AFTER_STEP
+    order: 5
+    config:
+      pluginImplementationClass: org.pipelineframework.plugin.cache.CacheService
+messages:
+  RawDocument:
+    fields:
+      - number: 1
+        name: docId
+        type: uuid
+      - number: 2
+        name: sourceUrl
+        type: string
+      - number: 3
+        name: fetchOptions
+        type: string
+      - number: 4
+        name: rawContent
+        type: string
+      - number: 5
+        name: rawContentHash
+        type: string
+      - number: 6
+        name: fetchedAt
+        type: timestamp
+  ParsedDocument:
+    fields:
+      - number: 1
+        name: docId
+        type: uuid
+      - number: 2
+        name: title
+        type: string
+      - number: 3
+        name: content
+        type: string
+      - number: 4
+        name: contentHash
+        type: string
+      - number: 5
+        name: rawContentHash
+        type: string
+      - number: 6
+        name: extractedAt
+        type: timestamp
+  TokenBatch:
+    fields:
+      - number: 1
+        name: docId
+        type: uuid
+      - number: 2
+        name: batchIndex
+        type: int32
+      - number: 3
+        name: tokenCount
+        type: int32
+      - number: 4
+        name: tokens
+        type: string
+      - number: 5
+        name: tokensHash
+        type: string
+      - number: 6
+        name: contentHash
+        type: string
+      - number: 7
+        name: tokenizedAt
+        type: timestamp
+  EmbeddedChunk:
+    fields:
+      - number: 1
+        name: docId
+        type: uuid
+      - number: 2
+        name: batchIndex
+        type: int32
+      - number: 3
+        name: tokenCount
+        type: int32
+      - number: 4
+        name: tokens
+        type: string
+      - number: 5
+        name: tokensHash
+        type: string
+      - number: 6
+        name: contentHash
+        type: string
+      - number: 7
+        name: vectorHash
+        type: string
+      - number: 8
+        name: vectorVersion
+        type: string
+      - number: 9
+        name: embeddedAt
+        type: timestamp
+  IndexAck:
+    fields:
+      - number: 1
+        name: docId
+        type: uuid
+      - number: 2
+        name: indexVersion
+        type: string
+      - number: 3
+        name: tokensHash
+        type: string
+      - number: 4
+        name: tokenBatchCount
+        type: int32
+      - number: 5
+        name: uniqueTokenCount
+        type: int32
+      - number: 6
+        name: topToken
+        type: string
+      - number: 7
+        name: indexedAt
+        type: timestamp
+      - number: 8
+        name: success
+        type: bool
+steps:
+  - name: Parse Document
+    service: org.pipelineframework.search.parse_document.service.ProcessParseDocumentService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.search.common.domain.RawDocument
+    inputTypeName: RawDocument
+    inboundMapper: org.pipelineframework.search.common.mapper.RawDocumentMapper
+    output: org.pipelineframework.search.common.domain.ParsedDocument
+    outputTypeName: ParsedDocument
+    outboundMapper: org.pipelineframework.search.common.mapper.ParsedDocumentMapper
+  - name: Tokenize Content
+    service: org.pipelineframework.search.tokenize_content.service.ProcessTokenizeContentService
+    cardinality: ONE_TO_MANY
+    input: org.pipelineframework.search.common.domain.ParsedDocument
+    inputTypeName: ParsedDocument
+    inboundMapper: org.pipelineframework.search.common.mapper.ParsedDocumentMapper
+    output: org.pipelineframework.search.common.domain.TokenBatch
+    outputTypeName: TokenBatch
+    outboundMapper: org.pipelineframework.search.common.mapper.TokenBatchMapper
+  - name: Embed Content
+    service: org.pipelineframework.search.embed_content.service.ProcessEmbedContentService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.search.common.domain.TokenBatch
+    inputTypeName: TokenBatch
+    inboundMapper: org.pipelineframework.search.common.mapper.TokenBatchMapper
+    output: org.pipelineframework.search.common.domain.EmbeddedChunk
+    outputTypeName: EmbeddedChunk
+    outboundMapper: org.pipelineframework.search.common.mapper.EmbeddedChunkMapper
+  - name: Index Document
+    service: org.pipelineframework.search.index_document.service.ProcessIndexDocumentService
+    cardinality: MANY_TO_ONE
+    input: org.pipelineframework.search.common.domain.EmbeddedChunk
+    inputTypeName: EmbeddedChunk
+    inboundMapper: org.pipelineframework.search.common.mapper.EmbeddedChunkMapper
+    output: org.pipelineframework.search.common.domain.IndexAck
+    outputTypeName: IndexAck
+    outboundMapper: org.pipelineframework.search.common.mapper.IndexAckMapper

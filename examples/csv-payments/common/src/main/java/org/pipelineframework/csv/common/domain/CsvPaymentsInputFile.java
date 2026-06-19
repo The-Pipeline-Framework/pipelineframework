@@ -31,23 +31,20 @@ import lombok.experimental.Accessors;
 @Setter
 @Accessors(chain = true)
 @NoArgsConstructor
-public class CsvPaymentsInputFile extends BaseCsvPaymentsFile implements CsvPaymentsInput {
+public class CsvPaymentsInputFile extends BaseCsvPaymentsFile {
 
   public CsvPaymentsInputFile(@NonNull File csvFile) {
     super(csvFile);
   }
 
-  @Override
   public Reader openReader() throws IOException {
     return new BufferedReader(new FileReader(filepath.toFile(), StandardCharsets.UTF_8));
   }
 
-  @Override
   public String getSourceName() {
     return filepath.toString();
   }
 
-  @Override
   public HeaderColumnNameMappingStrategy<PaymentRecord> veryOwnStrategy() {
     var strategy = new FilePathAwareMappingStrategy<PaymentRecord>(this.filepath);
     strategy.setType(PaymentRecord.class);

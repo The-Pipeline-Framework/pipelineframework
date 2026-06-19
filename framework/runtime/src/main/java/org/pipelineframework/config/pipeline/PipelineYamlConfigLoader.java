@@ -22,9 +22,13 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -35,6 +39,12 @@ import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
 import org.pipelineframework.config.boundary.PipelineCheckpointConfig;
 import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
+import org.pipelineframework.config.boundary.PipelineObjectFilterConfig;
+import org.pipelineframework.config.boundary.PipelineObjectIdentityConfig;
+import org.pipelineframework.config.boundary.PipelineObjectInputConfig;
+import org.pipelineframework.config.boundary.PipelineObjectPayloadConfig;
+import org.pipelineframework.config.boundary.PipelineObjectPollConfig;
+import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
 import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
 import org.pipelineframework.config.boundary.PipelineSubscriptionConfig;
 import org.yaml.snakeyaml.Yaml;
@@ -157,11 +167,13 @@ public class PipelineYamlConfigLoader {
             "COMPUTE",
             "platform");
         List<PipelineYamlStep> steps = readSteps(rootMap);
+        Map<String, PipelineObjectSourceConfig> sources = readSources(rootMap);
         List<PipelineYamlAspect> aspects = readAspects(rootMap);
         PipelineInputBoundaryConfig input = readInputBoundary(rootMap);
+        validateObjectInputSource(input, sources);
         PipelineOutputBoundaryConfig output = readOutputBoundary(rootMap);
 
-        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects, input, output);
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, sources, aspects, input, output);
     }
 
     /**
@@ -383,6 +395,90 @@ public class PipelineYamlConfigLoader {
         return aspects;
     }
 
+    private Map<String, PipelineObjectSourceConfig> readSources(Map<?, ?> rootMap) {
+        Object sourcesObj = rootMap.get("sources");
+        if (sourcesObj == null) {
+            return Map.of();
+        }
+        if (!(sourcesObj instanceof Map<?, ?> sourcesMap)) {
+            throw new IllegalArgumentException("pipeline sources must be defined as a map");
+        }
+        Map<String, PipelineObjectSourceConfig> sources = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : sourcesMap.entrySet()) {
+            String name = entry.getKey() == null ? null : entry.getKey().toString().trim();
+            if (name == null || name.isBlank()) {
+                throw new IllegalArgumentException("pipeline source name must not be blank");
+            }
+            if (!(entry.getValue() instanceof Map<?, ?> sourceMap)) {
+                throw new IllegalArgumentException("source '" + name + "' must be defined as a map");
+            }
+            String kind = readRequiredString(sourceMap, "kind", "source '" + name + "'");
+            sources.put(name, new PipelineObjectSourceConfig(
+                name,
+                kind,
+                readRequiredString(sourceMap, "provider", "source '" + name + "'"),
+                readObjectMap(sourceMap, "location"),
+                readObjectFilter(sourceMap),
+                readObjectPoll(sourceMap),
+                readObjectIdentity(sourceMap),
+                readObjectPayload(sourceMap)));
+        }
+        return Map.copyOf(sources);
+    }
+
+    private PipelineObjectFilterConfig readObjectFilter(Map<?, ?> sourceMap) {
+        Object filterObj = sourceMap.get("filter");
+        if (filterObj == null) {
+            return PipelineObjectFilterConfig.defaults();
+        }
+        if (!(filterObj instanceof Map<?, ?> filterMap)) {
+            throw new IllegalArgumentException("source.filter must be defined as a map");
+        }
+        return new PipelineObjectFilterConfig(
+            readStringList(filterMap, "include"),
+            readStringList(filterMap, "exclude"));
+    }
+
+    private PipelineObjectPollConfig readObjectPoll(Map<?, ?> sourceMap) {
+        Object pollObj = sourceMap.get("poll");
+        if (pollObj == null) {
+            return PipelineObjectPollConfig.defaults();
+        }
+        if (!(pollObj instanceof Map<?, ?> pollMap)) {
+            throw new IllegalArgumentException("source.poll must be defined as a map");
+        }
+        return new PipelineObjectPollConfig(
+            readBoolean(pollMap, "enabled", false),
+            readDuration(pollMap, "interval", Duration.ofSeconds(30)),
+            readInt(pollMap, "batchSize", 100));
+    }
+
+    private PipelineObjectIdentityConfig readObjectIdentity(Map<?, ?> sourceMap) {
+        Object identityObj = sourceMap.get("identity");
+        if (identityObj == null) {
+            return PipelineObjectIdentityConfig.defaults();
+        }
+        if (!(identityObj instanceof Map<?, ?> identityMap)) {
+            throw new IllegalArgumentException("source.identity must be defined as a map");
+        }
+        return new PipelineObjectIdentityConfig(readStringList(identityMap, "fields"));
+    }
+
+    private PipelineObjectPayloadConfig readObjectPayload(Map<?, ?> sourceMap) {
+        Object payloadObj = sourceMap.get("payload");
+        if (payloadObj == null) {
+            return PipelineObjectPayloadConfig.reference();
+        }
+        if (!(payloadObj instanceof Map<?, ?> payloadMap)) {
+            throw new IllegalArgumentException("source.payload must be defined as a map");
+        }
+        return new PipelineObjectPayloadConfig(
+            readString(payloadMap, "mode"),
+            readString(payloadMap, "refField"),
+            readLong(payloadMap, "maxBytes", 0L),
+            readCharset(payloadMap, "charset", StandardCharsets.UTF_8));
+    }
+
     /**
      * Parses the optional root-level input boundary.
      *
@@ -398,15 +494,64 @@ public class PipelineYamlConfigLoader {
             throw new IllegalArgumentException("pipeline input boundary must be defined as a map");
         }
         Object subscriptionObj = inputMap.get("subscription");
-        if (subscriptionObj == null) {
-            return null;
+        Object objectObj = inputMap.get("object");
+        boolean hasInlineObject = inputMap.get("from") != null || inputMap.get("emits") != null;
+        if (subscriptionObj != null && (objectObj != null || hasInlineObject)) {
+            throw new IllegalArgumentException("pipeline input boundary cannot declare both subscription and object");
         }
-        if (!(subscriptionObj instanceof Map<?, ?> subscriptionMap)) {
-            throw new IllegalArgumentException("input.subscription must be defined as a map");
+        if (objectObj != null && hasInlineObject) {
+            throw new IllegalArgumentException("pipeline input boundary cannot mix input.object with inline from/emits");
         }
-        return new PipelineInputBoundaryConfig(new PipelineSubscriptionConfig(
-            readRequiredString(subscriptionMap, "publication", "input.subscription"),
-            readString(subscriptionMap, "mapper")));
+        if (subscriptionObj != null) {
+            if (!(subscriptionObj instanceof Map<?, ?> subscriptionMap)) {
+                throw new IllegalArgumentException("input.subscription must be defined as a map");
+            }
+            return new PipelineInputBoundaryConfig(new PipelineSubscriptionConfig(
+                readRequiredString(subscriptionMap, "publication", "input.subscription"),
+                readString(subscriptionMap, "mapper")));
+        }
+        if (objectObj != null || hasInlineObject) {
+            Map<?, ?> objectMap;
+            if (objectObj == null) {
+                objectMap = inputMap;
+            } else if (objectObj instanceof Map<?, ?> map) {
+                objectMap = map;
+            } else {
+                throw new IllegalArgumentException("input.object must be defined as a map");
+            }
+            return new PipelineInputBoundaryConfig(null, readObjectInput(objectMap));
+        }
+        return null;
+    }
+
+    private PipelineObjectInputConfig readObjectInput(Map<?, ?> inputMap) {
+        Object emitsObj = inputMap.get("emits");
+        if (!(emitsObj instanceof Map<?, ?> emitsMap)) {
+            throw new IllegalArgumentException("input.object.emits must be defined as a map");
+        }
+        String source = readString(inputMap, "source");
+        String from = readString(inputMap, "from");
+        if (source != null && from != null) {
+            throw new IllegalArgumentException("input.object must declare only one of source or from");
+        }
+        String resolvedSource = firstNonBlank(source, from);
+        if (resolvedSource == null || resolvedSource.isBlank()) {
+            throw new IllegalArgumentException("input.object must declare source or from");
+        }
+        return new PipelineObjectInputConfig(
+            resolvedSource,
+            readRequiredString(emitsMap, "type", "input.object.emits"),
+            readString(emitsMap, "typeName"),
+            readRequiredString(emitsMap, "mapper", "input.object.emits"));
+    }
+
+    private void validateObjectInputSource(
+        PipelineInputBoundaryConfig input,
+        Map<String, PipelineObjectSourceConfig> sources
+    ) {
+        if (input != null && input.object() != null && !sources.containsKey(input.object().source())) {
+            throw new IllegalArgumentException("input.object source not found: " + input.object().source());
+        }
     }
 
     /**
@@ -452,6 +597,23 @@ public class PipelineYamlConfigLoader {
             throw new IllegalArgumentException(context + "." + key + " must not be blank");
         }
         return value.trim();
+    }
+
+    private Map<String, Object> readObjectMap(Map<?, ?> map, String key) {
+        Object value = map.get(key);
+        if (value == null) {
+            return Map.of();
+        }
+        if (!(value instanceof Map<?, ?> rawMap)) {
+            throw new IllegalArgumentException(key + " must be defined as a map");
+        }
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+            if (entry.getKey() != null) {
+                normalized.put(entry.getKey().toString(), normalizeConfigValue(entry.getValue()));
+            }
+        }
+        return Map.copyOf(normalized);
     }
 
     /**
@@ -526,6 +688,80 @@ public class PipelineYamlConfigLoader {
             return flag;
         }
         return Boolean.parseBoolean(value.toString());
+    }
+
+    private Duration readDuration(Map<?, ?> map, String key, Duration defaultValue) {
+        Object value = map.get(key);
+        if (value == null || value.toString().isBlank()) {
+            return defaultValue;
+        }
+        try {
+            return Duration.parse(value.toString().trim());
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Invalid duration value '" + value + "' for key '" + key + "'", e);
+        }
+    }
+
+    private Charset readCharset(Map<?, ?> map, String key, Charset defaultValue) {
+        Object value = map.get(key);
+        if (value == null || value.toString().isBlank()) {
+            return defaultValue;
+        }
+        try {
+            return Charset.forName(value.toString().trim());
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Invalid charset value '" + value + "' for key '" + key + "'", e);
+        }
+    }
+
+    private long readLong(Map<?, ?> map, String key, long defaultValue) {
+        Object value = map.get(key);
+        if (value == null || value.toString().isBlank()) {
+            return defaultValue;
+        }
+        if (value instanceof Number number) {
+            return exactLongValue(number, key);
+        }
+        try {
+            return Long.parseLong(value.toString().trim());
+        } catch (NumberFormatException ex) {
+            throw new IllegalStateException("Invalid long value '" + value + "' for key '" + key + "'", ex);
+        }
+    }
+
+    private long exactLongValue(Number number, String key) {
+        if (number instanceof Byte || number instanceof Short || number instanceof Integer || number instanceof Long) {
+            return number.longValue();
+        }
+        if (number instanceof BigInteger bigInteger) {
+            if (bigInteger.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) < 0
+                || bigInteger.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+                throw new IllegalStateException("Invalid long value '" + number + "' for key '" + key + "'");
+            }
+            return bigInteger.longValueExact();
+        }
+        if (number instanceof BigDecimal bigDecimal) {
+            try {
+                return bigDecimal.longValueExact();
+            } catch (ArithmeticException ex) {
+                throw new IllegalStateException("Invalid long value '" + number + "' for key '" + key + "'", ex);
+            }
+        }
+        if (number instanceof Float || number instanceof Double) {
+            double doubleValue = number.doubleValue();
+            if (!Double.isFinite(doubleValue)
+                || doubleValue != Math.rint(doubleValue)
+                || doubleValue < Long.MIN_VALUE
+                || doubleValue > Long.MAX_VALUE) {
+                throw new IllegalStateException("Invalid long value '" + number + "' for key '" + key + "'");
+            }
+            return (long) doubleValue;
+        }
+        long longValue = number.longValue();
+        if (number.doubleValue() != longValue) {
+            throw new IllegalStateException("Invalid long value '" + number + "' for key '" + key + "'");
+        }
+        return longValue;
     }
 
     /**

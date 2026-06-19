@@ -55,6 +55,8 @@ require_matching_image "TPF_CSV_RUNTIME_IMAGE" "${TPF_CSV_RUNTIME_IMAGE}" "${exp
 require_matching_image "TPF_CSV_PERSISTENCE_IMAGE" "${TPF_CSV_PERSISTENCE_IMAGE}" "${expected_persistence_image}"
 
 if [[ "${TPF_SKIP_FRAMEWORK_INSTALL}" != "true" ]]; then
+  echo "Installing root project POM for local SNAPSHOT parent resolution..."
+  "${MVN_BIN}" -N install
   echo "Installing current framework SNAPSHOT for the CSV example build..."
   "${MVN_BIN}" -f "${REPO_ROOT}/pom.xml" -N install
   "${MVN_BIN}" -f "${REPO_ROOT}/framework/pom.xml" clean install

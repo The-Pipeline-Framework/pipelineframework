@@ -20,6 +20,7 @@ on:
       - 'framework/**'
       - 'examples/search/**'
       - 'plugins/**'
+      - 'connectors/**'
       - 'pom.xml'
       - 'mvnw'
       - '.mvn/**'

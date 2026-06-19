@@ -55,6 +55,8 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("v2UnionDefinition"));
         assertTrue(definitions.has("pipelineInputBoundary"));
         assertTrue(definitions.has("pipelineOutputBoundary"));
+        assertTrue(definitions.has("pipelineSources"));
+        assertTrue(definitions.has("objectSource"));
         assertTrue(definitions.has("delegatedOrInternalStep"));
         assertTrue(definitions.has("v2Execution"));
         assertTrue(definitions.has("awaitTemplateStep"));
@@ -66,7 +68,20 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(properties.has("unions"));
         assertTrue(properties.has("input"));
         assertTrue(properties.has("output"));
+        assertTrue(properties.has("sources"));
         assertTrue(properties.has("materialization"));
+    }
+
+    @Test
+    void objectInputBoundaryRequiresSourceReference() {
+        JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
+        JsonObject objectInput = definitions.getAsJsonObject("objectInputBoundary");
+
+        assertContains(objectInput.getAsJsonArray("required"), "emits");
+        JsonArray oneOf = objectInput.getAsJsonArray("oneOf");
+        assertEquals(2, oneOf.size());
+        assertContains(oneOf.get(0).getAsJsonObject().getAsJsonArray("required"), "source");
+        assertContains(oneOf.get(1).getAsJsonObject().getAsJsonArray("required"), "from");
     }
 
     @Test

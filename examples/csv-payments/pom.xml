@@ -70,6 +70,7 @@
         <mapstruct.version>1.5.5.Final</mapstruct.version>
         <assertj.version>3.27.7</assertj.version>
         <skipUnitTests>false</skipUnitTests>
+        <csv.runtime.layout>modular</csv.runtime.layout>
     </properties>
 
     <dependencyManagement>
@@ -443,6 +444,7 @@
                         <reuseForks>true</reuseForks>
                         <systemPropertyVariables>
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                            <csv.runtime.layout>${csv.runtime.layout}</csv.runtime.layout>
                         </systemPropertyVariables>
                         <!--suppress UnresolvedMavenProperty -->
                         <argLine>@{argLine} ${surefireArgLine} --enable-preview -XX:+EnableDynamicAgentLoading</argLine>
@@ -453,6 +455,9 @@
                     <artifactId>maven-failsafe-plugin</artifactId>
                     <version>3.5.1</version>
                     <configuration>
+                        <systemPropertyVariables>
+                            <csv.runtime.layout>${csv.runtime.layout}</csv.runtime.layout>
+                        </systemPropertyVariables>
                         <!--suppress UnresolvedMavenProperty -->
                         <argLine>@{argLine} ${surefireArgLine} --enable-preview</argLine>
                     </configuration>

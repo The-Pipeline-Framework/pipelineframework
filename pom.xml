@@ -87,6 +87,8 @@
         <module>plugins/foundational/persistence</module>
         <module>plugins/foundational/cache</module>
         <module>plugins/foundational/repository</module>
+        <!-- Connectors -->
+        <module>connectors/object-ingest</module>
     </modules>
 
     <dependencyManagement>
