@@ -70,7 +70,11 @@ Generated Spring local step beans implement the neutral `runtime-core` `Pipeline
 
 The same profile also supports a constrained `pipeline.transport=REST`, `pipeline.platform=COMPUTE` unary smoke. Generation emits Spring WebFlux `@RestController` resources and the matching Spring unary step beans, then routes the HTTP request through `SpringPipelineRunner` and the shared runner core.
 
-Unsupported Spring profile combinations fail at build time instead of falling back to Quarkus generation. The unsupported set still includes Reactor-native generated service contracts, gRPC, function handlers, await/durable/checkpoint/broker paths, persistence, delegated/operator steps, side effects, and non-unary streaming shapes.
+`framework/api` now carries the tiny framework-neutral generated-code surface (`Mapper` and `GeneratedRole`) used by Spring generated applications. `framework/runtime` depends on that API module so existing Quarkus users remain source-compatible through the current runtime artifact.
+
+`framework/spring-smoke-tests` is the first real generated Spring Boot application smoke. It compiles a YAML-only `REST + COMPUTE` unary pipeline with `pipeline.codegen.rendererProfile=spring`, starts a Spring Boot WebFlux test context, invokes the generated REST endpoint, and verifies execution through `SpringPipelineRunner`. The authored service is a plain Spring component with `process(In): Uni<Out>` and no `@PipelineStep` or `ReactiveService` dependency.
+
+Unsupported Spring profile combinations fail at build time instead of falling back to Quarkus generation. The unsupported set still includes Reactor-native generated service contracts, gRPC, function handlers, await/durable/checkpoint/broker paths, persistence, delegated/operator steps, side effects, REST client-step remote boundaries, and non-unary streaming shapes.
 
 ## Vert.x seam and context propagation
 
