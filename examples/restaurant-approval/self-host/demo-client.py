@@ -191,7 +191,7 @@ def order_type(args):
     return getattr(args, "order_type", ORDER_TYPE) or ORDER_TYPE
 
 
-def submit_order(args, customer_name, restaurant_name):
+def submit_order(args, customer_name, restaurant_name, quiet=False):
     request_id = str(uuid.uuid4())
     order = {
         "requestId": request_id,
@@ -214,12 +214,13 @@ def submit_order(args, customer_name, restaurant_name):
         token=auth(args),
         body=body,
     )
-    print(f"Submitted execution {result['executionId']} for {customer_name}")
+    if not quiet:
+        print(f"Submitted execution {result['executionId']} for {customer_name}")
     return result["executionId"]
 
 
 def submit_one(args):
-    execution_id = submit_order(args, args.customer_name, args.restaurant_name)
+    execution_id = submit_order(args, args.customer_name, args.restaurant_name, quiet=True)
     if args.output:
         Path(args.output).write_text(execution_id, encoding="utf-8")
     else:
