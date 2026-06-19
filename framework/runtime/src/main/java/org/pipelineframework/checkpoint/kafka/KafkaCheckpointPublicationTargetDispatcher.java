@@ -9,6 +9,8 @@ import io.smallrye.mutiny.Uni;
 import org.pipelineframework.checkpoint.CheckpointPublicationEnvelope;
 import org.pipelineframework.checkpoint.CheckpointPublicationRequest;
 import org.pipelineframework.checkpoint.CheckpointPublicationTargetDispatcher;
+import org.pipelineframework.checkpoint.PipelineHandoffConfig;
+import org.pipelineframework.checkpoint.PublicationEncoding;
 import org.pipelineframework.checkpoint.PublicationTargetKind;
 import org.pipelineframework.checkpoint.ResolvedCheckpointPublicationTarget;
 import org.pipelineframework.config.pipeline.PipelineJson;
@@ -36,6 +38,29 @@ public class KafkaCheckpointPublicationTargetDispatcher implements CheckpointPub
     @Override
     public PublicationTargetKind kind() {
         return PublicationTargetKind.KAFKA;
+    }
+
+    @Override
+    public ResolvedCheckpointPublicationTarget resolveTarget(
+        String publication,
+        String targetId,
+        PipelineHandoffConfig.TargetConfig target
+    ) {
+        String topic = target.topic()
+            .map(String::trim)
+            .filter(value -> !value.isBlank())
+            .orElseThrow(() -> new IllegalStateException(
+                "Checkpoint publication '" + publication + "' target '" + targetId
+                    + "' requires topic for KAFKA delivery"));
+        return new ResolvedCheckpointPublicationTarget(
+            publication,
+            targetId,
+            PublicationTargetKind.KAFKA,
+            PublicationEncoding.JSON,
+            null,
+            null,
+            topic,
+            "PUBLISH");
     }
 
     @Override

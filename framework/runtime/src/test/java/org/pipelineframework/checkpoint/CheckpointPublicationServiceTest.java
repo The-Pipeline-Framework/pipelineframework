@@ -3,9 +3,7 @@ package org.pipelineframework.checkpoint;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import jakarta.enterprise.inject.Instance;
@@ -173,6 +171,25 @@ class CheckpointPublicationServiceTest {
         @Override
         public PublicationTargetKind kind() {
             return kind;
+        }
+
+        @Override
+        public ResolvedCheckpointPublicationTarget resolveTarget(
+            String publication,
+            String targetId,
+            PipelineHandoffConfig.TargetConfig target
+        ) {
+            return new ResolvedCheckpointPublicationTarget(
+                publication,
+                targetId,
+                kind,
+                kind == PublicationTargetKind.KAFKA ? PublicationEncoding.JSON : PublicationEncoding.PROTO,
+                kind == PublicationTargetKind.HTTP
+                    ? org.pipelineframework.transport.http.ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF
+                    : null,
+                null,
+                kind == PublicationTargetKind.KAFKA ? target.topic().orElseThrow() : target.baseUrl().orElseThrow(),
+                kind == PublicationTargetKind.KAFKA ? "PUBLISH" : "POST");
         }
 
         @Override

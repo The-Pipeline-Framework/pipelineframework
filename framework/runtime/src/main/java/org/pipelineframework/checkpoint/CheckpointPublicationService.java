@@ -123,10 +123,9 @@ public class CheckpointPublicationService {
         if (binding == null || binding.targets() == null || binding.targets().isEmpty()) {
             return java.util.List.of();
         }
-        java.util.Set<PublicationTargetKind> supportedKinds = dispatcherByKind.keySet();
         java.util.List<ResolvedCheckpointPublicationTarget> targets = new java.util.ArrayList<>();
         for (java.util.Map.Entry<String, PipelineHandoffConfig.TargetConfig> entry : binding.targets().entrySet()) {
-            targets.add(resolveTarget(publication, entry.getKey(), entry.getValue(), supportedKinds));
+            targets.add(resolveTarget(publication, entry.getKey(), entry.getValue()));
         }
         return java.util.List.copyOf(targets);
     }
@@ -134,8 +133,7 @@ public class CheckpointPublicationService {
     private ResolvedCheckpointPublicationTarget resolveTarget(
         String publication,
         String targetId,
-        PipelineHandoffConfig.TargetConfig target,
-        java.util.Set<PublicationTargetKind> supportedKinds
+        PipelineHandoffConfig.TargetConfig target
     ) {
         if (targetId == null || targetId.isBlank()) {
             throw new IllegalStateException(
@@ -145,102 +143,12 @@ public class CheckpointPublicationService {
             throw new IllegalStateException(
                 "Checkpoint publication '" + publication + "' target '" + targetId + "' must declare kind");
         }
-        if (!supportedKinds.contains(target.kind())) {
+        CheckpointPublicationTargetDispatcher dispatcher = dispatcherByKind.get(target.kind());
+        if (dispatcher == null) {
             throw new IllegalStateException(
                 "Checkpoint publication '" + publication + "' target '" + targetId
                     + "' uses unsupported kind " + target.kind());
         }
-        return switch (target.kind()) {
-            case GRPC -> resolveGrpcTarget(publication, targetId, target);
-            case HTTP -> resolveHttpTarget(publication, targetId, target);
-            case KAFKA -> resolveKafkaTarget(publication, targetId, target);
-        };
-    }
-
-    private ResolvedCheckpointPublicationTarget resolveGrpcTarget(
-        String publication,
-        String targetId,
-        PipelineHandoffConfig.TargetConfig target
-    ) {
-        String host = target.host()
-            .map(String::trim)
-            .filter(value -> !value.isBlank())
-            .orElseThrow(() -> new IllegalStateException(
-                "Checkpoint publication '" + publication + "' target '" + targetId
-                    + "' requires host for GRPC delivery"));
-        int port = target.port()
-            .filter(value -> value > 0)
-            .orElseThrow(() -> new IllegalStateException(
-                "Checkpoint publication '" + publication + "' target '" + targetId
-                    + "' requires port for GRPC delivery"));
-        return new ResolvedCheckpointPublicationTarget(
-            publication,
-            targetId,
-            PublicationTargetKind.GRPC,
-            PublicationEncoding.PROTO,
-            null,
-            null,
-            host + ":" + port,
-            target.plaintext() ? "PLAINTEXT" : "TLS");
-    }
-
-    private ResolvedCheckpointPublicationTarget resolveHttpTarget(
-        String publication,
-        String targetId,
-        PipelineHandoffConfig.TargetConfig target
-    ) {
-        String baseUrl = target.baseUrl()
-            .map(String::trim)
-            .filter(value -> !value.isBlank())
-            .orElseThrow(() -> new IllegalStateException(
-                "Checkpoint publication '" + publication + "' target '" + targetId
-                    + "' requires base-url for HTTP delivery"));
-        String path = target.path()
-            .map(String::trim)
-            .filter(value -> !value.isBlank())
-            .orElse(CheckpointPublicationResource.DEFAULT_PATH);
-        String method = target.method() == null ? "POST" : target.method().trim().toUpperCase(java.util.Locale.ROOT);
-        if (!"POST".equals(method)) {
-            throw new IllegalStateException(
-                "Checkpoint publication '" + publication + "' target '" + targetId
-                    + "' only supports HTTP method POST");
-        }
-        PublicationEncoding encoding = target.encoding().orElse(PublicationEncoding.PROTO);
-        String normalizedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-        String normalizedPath = path.startsWith("/") ? path : "/" + path;
-        return new ResolvedCheckpointPublicationTarget(
-            publication,
-            targetId,
-            PublicationTargetKind.HTTP,
-            encoding,
-            target.contentType().filter(value -> !value.isBlank()).orElse(
-                encoding == PublicationEncoding.PROTO
-                    ? org.pipelineframework.transport.http.ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF
-                    : org.pipelineframework.transport.http.ProtobufHttpContentTypes.APPLICATION_JSON),
-            target.idempotencyHeader().orElse("Idempotency-Key"),
-            normalizedBase + normalizedPath,
-            method);
-    }
-
-    private ResolvedCheckpointPublicationTarget resolveKafkaTarget(
-        String publication,
-        String targetId,
-        PipelineHandoffConfig.TargetConfig target
-    ) {
-        String topic = target.topic()
-            .map(String::trim)
-            .filter(value -> !value.isBlank())
-            .orElseThrow(() -> new IllegalStateException(
-                "Checkpoint publication '" + publication + "' target '" + targetId
-                    + "' requires topic for KAFKA delivery"));
-        return new ResolvedCheckpointPublicationTarget(
-            publication,
-            targetId,
-            PublicationTargetKind.KAFKA,
-            PublicationEncoding.JSON,
-            null,
-            null,
-            topic,
-            "PUBLISH");
+        return dispatcher.resolveTarget(publication, targetId, target);
     }
 }

@@ -37,6 +37,45 @@ public class HttpCheckpointPublicationTargetDispatcher implements CheckpointPubl
     }
 
     @Override
+    public ResolvedCheckpointPublicationTarget resolveTarget(
+        String publication,
+        String targetId,
+        PipelineHandoffConfig.TargetConfig target
+    ) {
+        String baseUrl = target.baseUrl()
+            .map(String::trim)
+            .filter(value -> !value.isBlank())
+            .orElseThrow(() -> new IllegalStateException(
+                "Checkpoint publication '" + publication + "' target '" + targetId
+                    + "' requires base-url for HTTP delivery"));
+        String path = target.path()
+            .map(String::trim)
+            .filter(value -> !value.isBlank())
+            .orElse(CheckpointPublicationResource.DEFAULT_PATH);
+        String method = target.method() == null ? "POST" : target.method().trim().toUpperCase(java.util.Locale.ROOT);
+        if (!"POST".equals(method)) {
+            throw new IllegalStateException(
+                "Checkpoint publication '" + publication + "' target '" + targetId
+                    + "' only supports HTTP method POST");
+        }
+        PublicationEncoding encoding = target.encoding().orElse(PublicationEncoding.PROTO);
+        String normalizedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        String normalizedPath = path.startsWith("/") ? path : "/" + path;
+        return new ResolvedCheckpointPublicationTarget(
+            publication,
+            targetId,
+            PublicationTargetKind.HTTP,
+            encoding,
+            target.contentType().filter(value -> !value.isBlank()).orElse(
+                encoding == PublicationEncoding.PROTO
+                    ? org.pipelineframework.transport.http.ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF
+                    : org.pipelineframework.transport.http.ProtobufHttpContentTypes.APPLICATION_JSON),
+            target.idempotencyHeader().orElse(DEFAULT_IDEMPOTENCY_HEADER),
+            normalizedBase + normalizedPath,
+            method);
+    }
+
+    @Override
     public Uni<Void> dispatch(
         ResolvedCheckpointPublicationTarget target,
         CheckpointPublicationRequest request,
