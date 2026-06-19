@@ -45,6 +45,11 @@ public class GrpcCheckpointPublicationTargetDispatcher implements CheckpointPubl
             .orElseThrow(() -> new IllegalStateException(
                 "Checkpoint publication '" + publication + "' target '" + targetId
                     + "' requires host for GRPC delivery"));
+        if (host.contains(":")) {
+            throw new IllegalStateException(
+                "Checkpoint publication '" + publication + "' target '" + targetId
+                    + "' does not support colon-containing GRPC hosts; use a DNS name or IPv4 address");
+        }
         int port = target.port()
             .filter(value -> value > 0)
             .orElseThrow(() -> new IllegalStateException(

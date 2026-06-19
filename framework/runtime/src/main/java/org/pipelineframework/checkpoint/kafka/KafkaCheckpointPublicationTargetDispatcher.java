@@ -90,10 +90,17 @@ public class KafkaCheckpointPublicationTargetDispatcher implements CheckpointPub
         if (explicitPublisher != null) {
             return explicitPublisher;
         }
-        return publishers.stream()
-            .findFirst()
-            .orElseThrow(() -> new IllegalStateException(
+        java.util.List<KafkaCheckpointPublisher> candidates = publishers.stream().toList();
+        if (candidates.isEmpty()) {
+            throw new IllegalStateException(
                 "Kafka checkpoint handoff requires a KafkaCheckpointPublisher provider. "
-                    + "Enable tpf.checkpoint.kafka.publisher.enabled=true and configure the TPF checkpoint Kafka channel."));
+                    + "Enable tpf.checkpoint.kafka.publisher.enabled=true and configure the TPF checkpoint Kafka channel.");
+        }
+        if (candidates.size() > 1) {
+            throw new IllegalStateException(
+                "Ambiguous KafkaCheckpointPublisher providers configured for Kafka checkpoint handoff: "
+                    + candidates.size());
+        }
+        return candidates.get(0);
     }
 }

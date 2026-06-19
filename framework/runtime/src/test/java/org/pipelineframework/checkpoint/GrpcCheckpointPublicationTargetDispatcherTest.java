@@ -64,6 +64,21 @@ class GrpcCheckpointPublicationTargetDispatcherTest {
     }
 
     @Test
+    void resolveTargetRejectsColonContainingHosts() {
+        GrpcCheckpointPublicationTargetDispatcher dispatcher = new GrpcCheckpointPublicationTargetDispatcher();
+        PipelineHandoffConfig.TargetConfig target = mock(PipelineHandoffConfig.TargetConfig.class);
+        when(target.host()).thenReturn(Optional.of("::1"));
+        when(target.port()).thenReturn(Optional.of(9000));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> dispatcher.resolveTarget("orders-ready", "deliver", target));
+
+        assertEquals(
+            "Checkpoint publication 'orders-ready' target 'deliver' does not support colon-containing GRPC hosts; use a DNS name or IPv4 address",
+            error.getMessage());
+    }
+
+    @Test
     void resolveTargetFailsWhenHostBlank() {
         GrpcCheckpointPublicationTargetDispatcher dispatcher = new GrpcCheckpointPublicationTargetDispatcher();
         PipelineHandoffConfig.TargetConfig config = mock(PipelineHandoffConfig.TargetConfig.class);

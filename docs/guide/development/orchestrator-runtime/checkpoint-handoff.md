@@ -65,10 +65,3 @@ mp.messaging.incoming.tpf-checkpoint-kafka-publications.value.deserializer=org.a
 ```
 
 The Kafka record carries TPF-owned control metadata plus the checkpoint payload. Kafka offsets remain broker delivery cursors, not TPF replay state.
-
-## Not Yet Supported
-
-1. generic broker-message re-drive,
-2. a separate durable checkpoint-publication service or publication-specific DLQ,
-3. dynamic runtime publication discovery or runtime subscription registration,
-4. SQS-backed checkpoint publication targets.

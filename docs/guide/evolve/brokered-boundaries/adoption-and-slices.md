@@ -46,6 +46,15 @@ Prefer these implementation slices if this work becomes active:
 
 Avoid starting with broad "Kafka transport" or "SQS transport" PRs. They mix unrelated risks and blur TPF semantics.
 
+## Checkpoint Handoff Follow-Ups
+
+Track these as brokered-boundary follow-ups, not user-facing runtime behaviour:
+
+1. generic broker-message re-drive,
+2. a separate durable checkpoint-publication service or publication-specific DLQ,
+3. dynamic runtime publication discovery or runtime subscription registration,
+4. SQS-backed checkpoint publication targets.
+
 ## Non-Goals
 
 Envelope and brokered boundary work should not:

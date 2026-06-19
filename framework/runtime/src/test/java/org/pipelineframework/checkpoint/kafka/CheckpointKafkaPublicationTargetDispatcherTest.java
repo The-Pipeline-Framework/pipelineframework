@@ -5,8 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import jakarta.enterprise.inject.Instance;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
@@ -162,6 +164,46 @@ class CheckpointKafkaPublicationTargetDispatcherTest {
             null).await().indefinitely();
 
         assertEquals("orders-ready", captured.get().key());
+    }
+
+    @Test
+    void dispatchFailsWhenMultiplePublishersAreConfigured() {
+        KafkaCheckpointPublicationTargetDispatcher dispatcher = new KafkaCheckpointPublicationTargetDispatcher();
+        dispatcher.publishers = publishers(
+            request -> Uni.createFrom().voidItem(),
+            request -> Uni.createFrom().voidItem());
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> dispatcher.dispatch(
+                target(),
+                new CheckpointPublicationRequest(
+                    "orders-ready",
+                    PipelineJson.mapper().valueToTree(new PublishedOrder("o-1", "c-1"))),
+                "tenant-1",
+                "idem-1"));
+
+        assertEquals(
+            "Ambiguous KafkaCheckpointPublisher providers configured for Kafka checkpoint handoff: 2",
+            error.getMessage());
+    }
+
+    @SuppressWarnings("unchecked")
+    private Instance<KafkaCheckpointPublisher> publishers(KafkaCheckpointPublisher... publishers) {
+        Instance<KafkaCheckpointPublisher> instance = mock(Instance.class);
+        when(instance.stream()).thenReturn(Stream.of(publishers));
+        return instance;
+    }
+
+    private ResolvedCheckpointPublicationTarget target() {
+        return new ResolvedCheckpointPublicationTarget(
+            "orders-ready",
+            "deliver",
+            PublicationTargetKind.KAFKA,
+            PublicationEncoding.JSON,
+            null,
+            null,
+            "checkout.orders.ready.v1",
+            "PUBLISH");
     }
 
     private record PublishedOrder(String orderId, String customerId) {
