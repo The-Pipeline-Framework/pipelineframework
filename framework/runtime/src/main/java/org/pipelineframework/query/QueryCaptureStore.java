@@ -15,4 +15,8 @@ public interface QueryCaptureStore {
     Uni<Optional<QueryCaptureRecord>> get(String captureKey);
 
     Uni<QueryCaptureRecord> putIfAbsent(QueryCaptureRecord record);
+
+    Uni<Boolean> remove(String captureKey);
+
+    Uni<Void> clear();
 }

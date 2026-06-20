@@ -400,4 +400,44 @@ class PipelineYamlConfigLoaderTest {
 
         assertEquals("input.subscription.publication must not be blank", exception.getMessage());
     }
+
+    @Test
+    void trimsStepQueryReferences() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            queries:
+              customer-risk-by-id:
+                connector: customer-risk
+                input: com.example.CustomerRiskLookup
+                output: com.example.CustomerRiskSnapshot
+            steps:
+              - name: "Load Customer Risk"
+                kind: query
+                cardinality: ONE_TO_ONE
+                query: " customer-risk-by-id "
+                input: com.example.CustomerRiskLookup
+                output: com.example.CustomerRiskSnapshot
+            """));
+
+        assertEquals("customer-risk-by-id", config.steps().getFirst().queryId());
+    }
+
+    @Test
+    void rejectsMalformedQueryConfigSection() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                queries:
+                  customer-risk-by-id:
+                    connector: customer-risk
+                    input: com.example.CustomerRiskLookup
+                    output: com.example.CustomerRiskSnapshot
+                    config: "not-a-map"
+                steps: []
+                """)));
+
+        assertEquals("query 'customer-risk-by-id' config must be defined as a map", exception.getMessage());
+    }
 }

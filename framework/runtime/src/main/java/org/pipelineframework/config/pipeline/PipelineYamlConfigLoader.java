@@ -253,7 +253,7 @@ public class PipelineYamlConfigLoader {
             String timeout = readString(stepMap, "timeout");
             List<String> idempotencyKeyFields = readStringList(stepMap, "idempotencyKeyFields");
             PipelineYamlAwaitConfig awaitConfig = readAwaitConfig(stepMap, name);
-            String queryId = readString(stepMap, "query");
+            String queryId = trimToNull(readString(stepMap, "query"));
             PipelineYamlQueryCapture queryCapture = readQueryCapture(stepMap, name);
             if (name != null && !name.isBlank()) {
                 stepInfos.add(new PipelineYamlStep(
@@ -305,6 +305,8 @@ public class PipelineYamlConfigLoader {
                         config.put(configEntry.getKey().toString(), normalizeConfigValue(configEntry.getValue()));
                     }
                 }
+            } else if (configObj != null) {
+                throw new IllegalArgumentException("query '" + id + "' config must be defined as a map");
             }
             queries.put(id, new PipelineYamlQuery(
                 id,
@@ -419,6 +421,14 @@ public class PipelineYamlConfigLoader {
 
     private String firstNonBlank(String primary, String fallback) {
         return primary == null || primary.isBlank() ? fallback : primary;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     /**

@@ -1,6 +1,7 @@
 package org.pipelineframework.query;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import java.util.List;
@@ -68,6 +69,33 @@ class QueryStepSupportTest {
 
         assertEquals(first, second);
         assertEquals(1, connector.calls.get());
+    }
+
+    @Test
+    void inMemoryCaptureStoreSupportsExplicitCleanup() {
+        InMemoryQueryCaptureStore store = new InMemoryQueryCaptureStore();
+        QueryCaptureRecord record = new QueryCaptureRecord(
+            "tenant-1",
+            "exec-1",
+            2,
+            "customer-risk-by-id",
+            "v1",
+            "capture-key",
+            "{}",
+            "{}",
+            Snapshot.class.getName(),
+            java.time.Instant.now());
+
+        store.putIfAbsent(record).await().atMost(Duration.ofSeconds(2));
+
+        assertTrue(store.get("capture-key").await().atMost(Duration.ofSeconds(2)).isPresent());
+        assertTrue(store.remove("capture-key").await().atMost(Duration.ofSeconds(2)));
+        assertTrue(store.get("capture-key").await().atMost(Duration.ofSeconds(2)).isEmpty());
+
+        store.putIfAbsent(record).await().atMost(Duration.ofSeconds(2));
+        store.clear().await().atMost(Duration.ofSeconds(2));
+
+        assertTrue(store.get("capture-key").await().atMost(Duration.ofSeconds(2)).isEmpty());
     }
 
     private QueryStepDescriptor descriptor() {

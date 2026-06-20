@@ -24,4 +24,15 @@ public class InMemoryQueryCaptureStore implements QueryCaptureStore {
         QueryCaptureRecord existing = records.putIfAbsent(record.captureKey(), record);
         return Uni.createFrom().item(existing == null ? record : existing);
     }
+
+    @Override
+    public Uni<Boolean> remove(String captureKey) {
+        return Uni.createFrom().item(records.remove(captureKey) != null);
+    }
+
+    @Override
+    public Uni<Void> clear() {
+        records.clear();
+        return Uni.createFrom().voidItem();
+    }
 }

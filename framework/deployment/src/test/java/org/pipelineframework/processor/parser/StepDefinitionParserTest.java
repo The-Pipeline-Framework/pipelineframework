@@ -1565,6 +1565,67 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void rejectsQueryStepWhenOperatorIsAlsoDeclared() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "customer-risk"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                operator: "com.example.CustomerRiskOperator"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
+        assertTrue(errorSummary.contains("query steps are framework-owned read boundaries"));
+    }
+
+    @Test
+    void rejectsQueryStepWhenRemoteExecutionIsAlsoDeclared() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "customer-risk"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "customer-risk"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  target:
+                    url: "https://risk.example/query"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
+        assertTrue(errorSummary.contains("query steps are framework-owned read boundaries"));
+    }
+
+    @Test
     void rejectsIncompleteQueryDefinition() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""

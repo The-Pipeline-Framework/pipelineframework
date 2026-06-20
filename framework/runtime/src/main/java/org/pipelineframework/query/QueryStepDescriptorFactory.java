@@ -1,5 +1,6 @@
 package org.pipelineframework.query;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -66,12 +67,10 @@ public class QueryStepDescriptorFactory {
     }
 
     private QueryStepDescriptor loadDescriptor(String serviceName, String inputType, String outputType) {
-        Path base = resolveConfigBase();
-        Path configPath = new PipelineYamlConfigLocator().locate(base)
-            .orElseThrow(() -> new IllegalStateException("No pipeline YAML found for query step " + serviceName));
+        Path configPath = resolveConfigPath(serviceName);
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath);
         PipelineYamlStep step = config.steps().stream()
-            .filter(candidate -> serviceName.equals(toServiceName(candidate.name())))
+            .filter(candidate -> matchesServiceName(serviceName, candidate.name()))
             .findFirst()
             .orElseThrow(() -> new IllegalStateException("No query YAML step found for generated service " + serviceName));
         if (!"query".equalsIgnoreCase(step.kind())) {
@@ -133,15 +132,18 @@ public class QueryStepDescriptorFactory {
         return lastDot >= 0 ? type.substring(lastDot + 1) : type;
     }
 
-    private static Path resolveConfigBase() {
+    private static Path resolveConfigPath(String serviceName) {
         String explicit = firstNonBlank(System.getProperty("pipeline.config"), System.getenv("PIPELINE_CONFIG"));
         if (explicit != null) {
-            Path candidate = Path.of(explicit);
-            if (candidate.isAbsolute()) {
-                return candidate.getParent() != null ? candidate.getParent() : candidate;
+            Path candidate = Path.of(explicit).toAbsolutePath().normalize();
+            if (!Files.isDirectory(candidate)) {
+                return candidate;
             }
+            return new PipelineYamlConfigLocator().locate(candidate)
+                .orElseThrow(() -> new IllegalStateException("No pipeline YAML found for query step " + serviceName));
         }
-        return Path.of("").toAbsolutePath();
+        return new PipelineYamlConfigLocator().locate(Path.of("").toAbsolutePath())
+            .orElseThrow(() -> new IllegalStateException("No pipeline YAML found for query step " + serviceName));
     }
 
     private static String firstNonBlank(String... values) {
@@ -170,5 +172,21 @@ public class QueryStepDescriptorFactory {
             }
         }
         return formatted.isEmpty() ? "ProcessStepService" : "Process" + formatted + "Service";
+    }
+
+    private static boolean matchesServiceName(String generatedServiceName, String stepName) {
+        if (generatedServiceName == null || generatedServiceName.isBlank()) {
+            return false;
+        }
+        return generatedServiceName.equals(toServiceName(stepName))
+            || generatedServiceName.equals(toCompactServiceName(stepName));
+    }
+
+    private static String toCompactServiceName(String stepName) {
+        String serviceName = toServiceName(stepName);
+        if (serviceName.startsWith("Process") && serviceName.endsWith("Service")) {
+            return serviceName.substring("Process".length(), serviceName.length() - "Service".length());
+        }
+        return serviceName;
     }
 }

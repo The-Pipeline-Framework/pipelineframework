@@ -637,6 +637,8 @@ public class StepDefinitionParser {
     }
 
     private boolean typeNameMatches(ClassName stepType, String queryType) {
+        // Query step type matching is intentionally canonical-only. YAML step types and
+        // top-level query definitions must use the same naming format, preferably FQCNs.
         if (stepType == null || isBlank(queryType)) {
             return false;
         }

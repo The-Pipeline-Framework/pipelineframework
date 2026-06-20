@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.renderer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -21,6 +22,7 @@ import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
 
@@ -37,18 +39,9 @@ class QueryClientStepRendererTest {
     @ParameterizedTest
     @ValueSource(strings = {"LOCAL", "REST", "GRPC"})
     void rendersReactiveStepThatDelegatesToQuerySupport(String transport) throws IOException {
-        PipelineStepModel model = new PipelineStepModel.Builder()
-            .serviceName("LoadCustomerRisk")
-            .generatedName("LoadCustomerRiskService")
-            .servicePackage("com.example.risk")
-            .serviceClassName(ClassName.get("org.pipelineframework.query", "QueryStepDescriptor"))
-            .streamingShape(StreamingShape.UNARY_UNARY)
-            .executionMode(ExecutionMode.DEFAULT)
-            .inputMapping(new TypeMapping(ClassName.get("com.example.common.domain", "CustomerRiskLookup"), null, false))
-            .outputMapping(new TypeMapping(ClassName.get("com.example.common.domain", "CustomerRiskSnapshot"), null, false))
-            .enabledTargets(Set.of(GenerationTarget.QUERY_CLIENT_STEP))
-            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
-            .build();
+        PipelineStepModel model = model(
+            ClassName.get("com.example.common.domain", "CustomerRiskLookup"),
+            ClassName.get("com.example.common.domain", "CustomerRiskSnapshot"));
 
         new QueryClientStepRenderer().render(model, generationContext(transport));
 
@@ -79,6 +72,64 @@ class QueryClientStepRendererTest {
         assertTrue(source.contains("support.queryOneToOne(descriptorFactory.descriptor(\"LoadCustomerRisk\", "));
     }
 
+    @Test
+    void fallsBackToConfiguredBasePackageForNonStandardDomainPackage() throws IOException {
+        PipelineStepModel model = model(
+            ClassName.get("com.example.risk.domain", "CustomerRiskLookup"),
+            ClassName.get("com.example.risk.domain", "CustomerRiskSnapshot"));
+
+        new QueryClientStepRenderer().render(model, generationContext(PipelineTransport.REST, "com.example"));
+
+        String source = Files.readString(tempDir.resolve(
+            "com/example/risk/pipeline/LoadCustomerRiskQueryClientStep.java"));
+
+        assertTrue(source.contains("import com.example.common.dto.CustomerRiskLookupDto;"));
+        assertTrue(source.contains("import com.example.common.dto.CustomerRiskSnapshotDto;"));
+    }
+
+    @Test
+    void usesConfiguredBasePackageForBlankDomainPackage() throws IOException {
+        PipelineStepModel model = model(
+            ClassName.get("", "CustomerRiskLookup"),
+            ClassName.get("", "CustomerRiskSnapshot"));
+
+        new QueryClientStepRenderer().render(model, generationContext(PipelineTransport.GRPC, "com.example"));
+
+        String source = Files.readString(tempDir.resolve(
+            "com/example/risk/pipeline/LoadCustomerRiskQueryClientStep.java"));
+
+        assertTrue(source.contains("import com.example.grpc.PipelineTypes;"));
+        assertTrue(source.contains(
+            "implements StepOneToOne<PipelineTypes.CustomerRiskLookup, PipelineTypes.CustomerRiskSnapshot>"));
+    }
+
+    @Test
+    void rejectsUnrecognizedDomainPackageWithoutConfiguredBasePackage() {
+        PipelineStepModel model = model(
+            ClassName.get("com.example.risk.domain", "CustomerRiskLookup"),
+            ClassName.get("com.example.risk.domain", "CustomerRiskSnapshot"));
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
+            new QueryClientStepRenderer().render(model, generationContext(PipelineTransport.REST, null)));
+
+        assertTrue(exception.getMessage().contains("does not match .common.domain, .common.dto, or .service"));
+    }
+
+    private PipelineStepModel model(ClassName inputType, ClassName outputType) {
+        return new PipelineStepModel.Builder()
+            .serviceName("LoadCustomerRisk")
+            .generatedName("LoadCustomerRiskService")
+            .servicePackage("com.example.risk")
+            .serviceClassName(ClassName.get("org.pipelineframework.query", "QueryStepDescriptor"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .inputMapping(new TypeMapping(inputType, null, false))
+            .outputMapping(new TypeMapping(outputType, null, false))
+            .enabledTargets(Set.of(GenerationTarget.QUERY_CLIENT_STEP))
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .build();
+    }
+
     private GenerationContext generationContext(String transport) {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.transport", transport));
@@ -89,5 +140,19 @@ class QueryClientStepRendererTest {
             Set.of(),
             null,
             null);
+    }
+
+    private GenerationContext generationContext(PipelineTransport transport, String basePackage) {
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(Map.of());
+        return new GenerationContext(
+            processingEnv,
+            tempDir,
+            DeploymentRole.ORCHESTRATOR_CLIENT,
+            Set.of(),
+            null,
+            null,
+            transport,
+            basePackage);
     }
 }

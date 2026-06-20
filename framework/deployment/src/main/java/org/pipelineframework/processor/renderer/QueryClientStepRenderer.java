@@ -156,7 +156,13 @@ public class QueryClientStepRenderer {
         if (packageName.endsWith(".service")) {
             return packageName.substring(0, packageName.length() - ".service".length());
         }
-        return packageName;
+        if (pipelineBasePackage != null && !pipelineBasePackage.isBlank()) {
+            return pipelineBasePackage;
+        }
+        throw new IllegalStateException(
+            "Cannot determine base package for type " + className
+                + "; package '" + packageName
+                + "' does not match .common.domain, .common.dto, or .service and pipeline basePackage is not configured");
     }
 
     private record PipelineConfigHints(PipelineTransport transportMode, String basePackage) {
