@@ -28,6 +28,7 @@ import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.LocalBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.ReactiveReturnKind;
 import org.pipelineframework.processor.ir.ServiceApiKind;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
@@ -56,9 +57,32 @@ class SpringLocalClientStepRendererTest {
         assertTrue(source.contains("private final PaymentService paymentService;"));
         assertTrue(source.contains("public PaymentLocalClientStep(PaymentService paymentService)"));
         assertTrue(source.contains("return this.paymentService.process(input).subscribeAsCompletionStage();"));
+        assertFalse(source.contains(".toFuture();"));
         assertFalse(source.contains("io.quarkus."));
         assertFalse(source.contains("jakarta.enterprise."));
         assertFalse(source.contains("jakarta.inject."));
+        assertFalse(source.contains("io.vertx."));
+        assertFalse(source.contains("org.jboss.resteasy."));
+        assertFalse(source.contains("jakarta.ws.rs."));
+    }
+
+    @Test
+    void rendersReactorMonoUnaryLocalClientStep() throws Exception {
+        SpringLocalClientStepRenderer renderer = new SpringLocalClientStepRenderer();
+
+        renderer.render(new LocalBinding(model(
+                StreamingShape.UNARY_UNARY,
+                ServiceApiKind.REACTIVE,
+                ReactiveReturnKind.REACTOR_MONO)),
+            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+
+        Path clientStep = tempDir.resolve("com/example/service/pipeline/PaymentLocalClientStep.java");
+        String source = Files.readString(clientStep);
+        assertTrue(source.contains("return this.paymentService.process(input).toFuture();"));
+        assertFalse(source.contains("subscribeAsCompletionStage"));
+        assertFalse(source.contains("io.smallrye.mutiny"));
+        assertFalse(source.contains("io.quarkus."));
+        assertFalse(source.contains("jakarta.enterprise."));
         assertFalse(source.contains("io.vertx."));
         assertFalse(source.contains("org.jboss.resteasy."));
         assertFalse(source.contains("jakarta.ws.rs."));
@@ -83,6 +107,10 @@ class SpringLocalClientStepRendererTest {
     }
 
     private PipelineStepModel model(StreamingShape shape, ServiceApiKind apiKind) {
+        return model(shape, apiKind, ReactiveReturnKind.MUTINY_UNI);
+    }
+
+    private PipelineStepModel model(StreamingShape shape, ServiceApiKind apiKind, ReactiveReturnKind reactiveReturnKind) {
         return new PipelineStepModel.Builder()
             .serviceName("PaymentService")
             .generatedName("PaymentService")
@@ -95,6 +123,7 @@ class SpringLocalClientStepRendererTest {
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.PIPELINE_SERVER)
             .serviceApiKind(apiKind)
+            .reactiveReturnKind(reactiveReturnKind)
             .build();
     }
 }

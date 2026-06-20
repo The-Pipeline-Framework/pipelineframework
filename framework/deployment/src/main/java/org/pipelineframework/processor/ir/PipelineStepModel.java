@@ -32,6 +32,7 @@ import org.pipelineframework.parallelism.ThreadSafety;
  * @param mapperFallbackMode Gets mapper fallback mode used when no explicit/inferred mapper matches.
  * @param remoteExecution Gets remote operator execution metadata when the step is remote, otherwise null.
  * @param serviceApiKind Distinguishes reactive-authored from blocking-authored internal services.
+ * @param reactiveReturnKind Identifies the reactive return library used by unary reactive services.
  */
 public record PipelineStepModel(
         String serviceName,
@@ -52,7 +53,8 @@ public record PipelineStepModel(
         ClassName externalMapper,
         MapperFallbackMode mapperFallbackMode,
         PipelineTemplateStepExecution remoteExecution,
-        ServiceApiKind serviceApiKind
+        ServiceApiKind serviceApiKind,
+        ReactiveReturnKind reactiveReturnKind
 ) {
     /**
          * Creates a new PipelineStepModel with the supplied service identity, type mappings and generation configuration.
@@ -95,7 +97,8 @@ public record PipelineStepModel(
             ClassName externalMapper,
             MapperFallbackMode mapperFallbackMode,
             PipelineTemplateStepExecution remoteExecution,
-            ServiceApiKind serviceApiKind) {
+            ServiceApiKind serviceApiKind,
+            ReactiveReturnKind reactiveReturnKind) {
         // Validate non-null invariants
         if (serviceName == null)
             throw new IllegalArgumentException("serviceName cannot be null");
@@ -133,6 +136,52 @@ public record PipelineStepModel(
         this.mapperFallbackMode = mapperFallbackMode == null ? MapperFallbackMode.NONE : mapperFallbackMode;
         this.remoteExecution = remoteExecution;
         this.serviceApiKind = serviceApiKind == null ? ServiceApiKind.REACTIVE : serviceApiKind;
+        this.reactiveReturnKind = reactiveReturnKind == null ? ReactiveReturnKind.MUTINY_UNI : reactiveReturnKind;
+    }
+
+    /**
+     * @deprecated prefer {@link Builder} for construction.
+     */
+    @Deprecated
+    public PipelineStepModel(String serviceName,
+            String generatedName,
+            String servicePackage,
+            ClassName serviceClassName,
+            TypeMapping inputMapping,
+            TypeMapping outputMapping,
+            StreamingShape streamingShape,
+            Set<GenerationTarget> enabledTargets,
+            ExecutionMode executionMode,
+            DeploymentRole deploymentRole,
+            boolean sideEffect,
+            ClassName cacheKeyGenerator,
+            OrderingRequirement orderingRequirement,
+            ThreadSafety threadSafety,
+            ClassName delegateService,
+            ClassName externalMapper,
+            MapperFallbackMode mapperFallbackMode,
+            PipelineTemplateStepExecution remoteExecution,
+            ServiceApiKind serviceApiKind) {
+        this(serviceName,
+            generatedName,
+            servicePackage,
+            serviceClassName,
+            inputMapping,
+            outputMapping,
+            streamingShape,
+            enabledTargets,
+            executionMode,
+            deploymentRole,
+            sideEffect,
+            cacheKeyGenerator,
+            orderingRequirement,
+            threadSafety,
+            delegateService,
+            externalMapper,
+            mapperFallbackMode,
+            remoteExecution,
+            serviceApiKind,
+            ReactiveReturnKind.MUTINY_UNI);
     }
 
     /**
@@ -319,6 +368,7 @@ public record PipelineStepModel(
         private MapperFallbackMode mapperFallbackMode = MapperFallbackMode.NONE;
         private PipelineTemplateStepExecution remoteExecution;
         private ServiceApiKind serviceApiKind = ServiceApiKind.REACTIVE;
+        private ReactiveReturnKind reactiveReturnKind = ReactiveReturnKind.MUTINY_UNI;
 
         /**
          * Sets the service name.
@@ -541,6 +591,17 @@ public record PipelineStepModel(
         }
 
         /**
+         * Sets the reactive return library for unary reactive services.
+         *
+         * @param reactiveReturnKind reactive return library marker
+         * @return this {@link PipelineStepModel.Builder} for chaining
+         */
+        public Builder reactiveReturnKind(ReactiveReturnKind reactiveReturnKind) {
+            this.reactiveReturnKind = reactiveReturnKind;
+            return this;
+        }
+
+        /**
          * Create a PipelineStepModel populated from the builder's current state.
          *
          * @return a PipelineStepModel populated with the builder's state
@@ -584,7 +645,8 @@ public record PipelineStepModel(
                 externalMapper,
                 mapperFallbackMode,
                 remoteExecution,
-                serviceApiKind);
+                serviceApiKind,
+                reactiveReturnKind);
         }
     }
     
@@ -614,7 +676,8 @@ public record PipelineStepModel(
             externalMapper,
             mapperFallbackMode,
             remoteExecution,
-            serviceApiKind
+            serviceApiKind,
+            reactiveReturnKind
         );
     }
 
@@ -650,6 +713,7 @@ public record PipelineStepModel(
             .externalMapper(externalMapper)
             .mapperFallbackMode(mapperFallbackMode)
             .remoteExecution(remoteExecution)
-            .serviceApiKind(serviceApiKind);
+            .serviceApiKind(serviceApiKind)
+            .reactiveReturnKind(reactiveReturnKind);
     }
 }

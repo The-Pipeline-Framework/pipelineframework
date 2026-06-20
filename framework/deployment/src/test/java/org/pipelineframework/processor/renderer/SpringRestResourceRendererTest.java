@@ -65,6 +65,7 @@ class SpringRestResourceRendererTest {
         assertFalse(source.contains("jakarta.enterprise."));
         assertFalse(source.contains("jakarta.inject."));
         assertFalse(source.contains("io.vertx."));
+        assertFalse(source.contains("io.smallrye.mutiny"));
         assertFalse(source.contains("org.jboss.resteasy."));
         assertFalse(source.contains("jakarta.ws.rs."));
     }

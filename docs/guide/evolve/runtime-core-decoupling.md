@@ -66,15 +66,17 @@ The `spring` renderer profile now has two narrow generated execution proofs:
 - reactive-authored `UNARY_UNARY` steps
 - generated Spring `@Component` local step beans
 
-Generated Spring local step beans implement the neutral `runtime-core` `PipelineUnaryStep<I, O>` contract and adapt the authored Mutiny service boundary to `CompletionStage` at the generated-code edge. `framework/runtime-spring` contributes `SpringPipelineRunner`, an adapter over the shared `PipelineRunnerCore`; the Quarkus `PipelineRunner` also delegates ordered step sequencing to that same core.
+Generated Spring local step beans implement the neutral `runtime-core` `PipelineUnaryStep<I, O>` contract and adapt authored `Uni<Out>` or Spring-profile `Mono<Out>` service boundaries to `CompletionStage` at the generated-code edge. `framework/runtime-spring` contributes `SpringPipelineRunner`, an adapter over the shared `PipelineRunnerCore`; the Quarkus `PipelineRunner` also delegates ordered step sequencing to that same core.
 
 The same profile also supports a constrained `pipeline.transport=REST`, `pipeline.platform=COMPUTE` unary smoke. Generation emits Spring WebFlux `@RestController` resources and the matching Spring unary step beans, then routes the HTTP request through `SpringPipelineRunner` and the shared runner core.
 
 `framework/api` now carries the tiny framework-neutral generated-code surface (`Mapper` and `GeneratedRole`) used by Spring generated applications. `framework/runtime` depends on that API module so existing Quarkus users remain source-compatible through the current runtime artifact.
 
-`framework/spring-smoke-tests` is the first real generated Spring Boot application smoke. It compiles a YAML-only `REST + COMPUTE` unary pipeline with `pipeline.codegen.rendererProfile=spring`, starts a Spring Boot WebFlux test context, invokes the generated REST endpoint, and verifies execution through `SpringPipelineRunner`. The authored service is a plain Spring component with `process(In): Uni<Out>` and no `@PipelineStep` or `ReactiveService` dependency.
+`framework/spring-smoke-tests` is the first real generated Spring Boot application smoke. It compiles a YAML-only `REST + COMPUTE` unary pipeline with `pipeline.codegen.rendererProfile=spring`, starts a Spring Boot WebFlux test context, invokes the generated REST endpoint, and verifies execution through `SpringPipelineRunner`. The authored service is a plain Spring component with `process(In): Mono<Out>` and no `@PipelineStep`, `ReactiveService`, or direct Mutiny dependency.
 
-Unsupported Spring profile combinations fail at build time instead of falling back to Quarkus generation. The unsupported set still includes Reactor-native generated service contracts, gRPC, function handlers, await/durable/checkpoint/broker paths, persistence, delegated/operator steps, side effects, REST client-step remote boundaries, and non-unary streaming shapes.
+Unsupported Spring profile combinations fail at build time instead of falling back to Quarkus generation. The unsupported set still includes public Reactor service interfaces, Reactor-native core execution, gRPC, function handlers, await/durable/checkpoint/broker paths, persistence, delegated/operator steps, side effects, REST client-step remote boundaries, and non-unary streaming shapes.
+
+`Mono<Out>` is currently supported only for YAML-declared Spring-profile unary services. Generated Spring local steps adapt `Mono` to the neutral `CompletionStage` runner boundary with `toFuture()`. Reactor context propagation, `Flux`, and Reactor-native core execution remain deferred.
 
 ## Vert.x seam and context propagation
 
