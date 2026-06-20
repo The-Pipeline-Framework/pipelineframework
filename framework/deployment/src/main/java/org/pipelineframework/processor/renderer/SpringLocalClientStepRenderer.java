@@ -32,6 +32,7 @@ import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.LocalBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.ReactiveReturnKind;
 import org.pipelineframework.processor.ir.ServiceApiKind;
 import org.pipelineframework.processor.ir.StreamingShape;
 
@@ -79,7 +80,7 @@ public class SpringLocalClientStepRenderer implements PipelineRenderer<LocalBind
             .addModifiers(Modifier.PUBLIC)
             .returns(completionStage)
             .addParameter(inputType, "input")
-            .addStatement("return this.$N.process(input).subscribeAsCompletionStage()", serviceFieldName)
+            .addStatement("return this.$N.process(input).$L", serviceFieldName, completionStageAdapter(model))
             .build();
 
         return TypeSpec.classBuilder(getClientStepClassName(model))
@@ -90,6 +91,12 @@ public class SpringLocalClientStepRenderer implements PipelineRenderer<LocalBind
             .addMethod(constructor)
             .addMethod(applyMethod)
             .build();
+    }
+
+    private String completionStageAdapter(PipelineStepModel model) {
+        return model.reactiveReturnKind() == ReactiveReturnKind.REACTOR_MONO
+            ? "toFuture()"
+            : "subscribeAsCompletionStage()";
     }
 
     private void validateSupported(PipelineStepModel model) {

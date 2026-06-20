@@ -275,6 +275,209 @@ class YamlDrivenStepGenerationTest {
     }
 
     @Test
+    void generatesYamlInternalStepFromPlainMonoProcessMethodWithSpringProfile() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-plain-mono.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import reactor.core.publisher.Mono;
+
+            public class PaymentService {
+                public Mono<PaymentStatus> process(PaymentRecord input) {
+                    return Mono.just(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path monoStub = writeMonoStub();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus, monoStub),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertTrue(result.success(), "Expected plain Mono process method compilation to succeed: " + result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepFromPlainMonoProcessMethodWithoutSpringProfile() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-plain-mono-quarkus.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import reactor.core.publisher.Mono;
+
+            public class PaymentService {
+                public Mono<PaymentStatus> process(PaymentRecord input) {
+                    return Mono.just(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path monoStub = writeMonoStub();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, paymentStatus, monoStub));
+        assertFalse(result.success(), "Expected default renderer profile to reject plain Mono process methods");
+        assertTrue(
+            result.errorSummary().contains("must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out> method"),
+            result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenPlainMonoProcessMethodIsRaw() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-raw-plain-mono.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import reactor.core.publisher.Mono;
+
+            public class PaymentService {
+                @SuppressWarnings("rawtypes")
+                public Mono process(PaymentRecord input) {
+                    return Mono.just(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path monoStub = writeMonoStub();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus, monoStub),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected raw Mono process method compilation to fail");
+        assertTrue(
+            result.errorSummary().contains("process(In): Mono<Out>"),
+            result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenMultiplePlainReactiveProcessMethodsExist() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-multiple-plain-reactive.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+            import reactor.core.publisher.Mono;
+
+            public class PaymentService {
+                public Uni<PaymentStatus> process(PaymentRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+
+                public Mono<PaymentStatus> process(AlternatePaymentRecord input) {
+                    return Mono.just(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path alternatePaymentRecord = writeSource("AlternatePaymentRecord.java", """
+            package com.example.app;
+
+            public class AlternatePaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path uniStub = writeUniStub();
+        Path monoStub = writeMonoStub();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, alternatePaymentRecord, paymentStatus, uniStub, monoStub),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected multiple plain reactive process methods to fail");
+        assertTrue(
+            result.errorSummary().contains("declares multiple public process(In): Uni<Out> or process(In): Mono<Out> methods"),
+            result.errorSummary());
+    }
+
+    @Test
     void failsYamlInternalStepWhenPlainUniProcessMethodIsStatic() throws IOException {
         Path yamlFile = tempDir.resolve("pipeline-internal-static-plain-uni.yaml");
         Files.writeString(yamlFile, """
@@ -944,6 +1147,18 @@ class YamlDrivenStepGenerationTest {
                     public <U> Uni<U> item(U value) {
                         return new Uni<>();
                     }
+                }
+            }
+            """);
+    }
+
+    private Path writeMonoStub() throws IOException {
+        return writeSource("Mono.java", """
+            package reactor.core.publisher;
+
+            public class Mono<T> {
+                public static <U> Mono<U> just(U value) {
+                    return new Mono<>();
                 }
             }
             """);
