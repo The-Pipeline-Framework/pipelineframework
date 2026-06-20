@@ -43,7 +43,8 @@ Service-side execution context (event loop vs. worker threads) affects throughpu
 TPF now supports a first-class blocking authoring path for internal `service:` steps.
 
 - Blocking services are executed on worker threads by default.
-- `@PipelineStep(runOnVirtualThreads = true)` switches the generated blocking bridge and service entrypoints to virtual threads.
+- Quarkus YAML-declared internal blocking services that implement the existing blocking service interfaces can set `runOnVirtualThreads: true`; generated bridges pass `true` to `BlockingExecutionSupport`, and generated REST/gRPC entrypoints receive `@RunOnVirtualThread`.
+- Spring YAML-only `REST` or `LOCAL` + `COMPUTE` unary blocking internal steps can also set `runOnVirtualThreads: true`; generated Spring steps use `RuntimeAdapters.executeBlocking(..., true)`.
 - Blocking authoring is split into two modes:
   - materialized blocking: `BlockingStreamingService`, `BlockingStreamingClientService`, `BlockingBidirectionalStreamingService`
   - incremental blocking: `BlockingIteratorService`

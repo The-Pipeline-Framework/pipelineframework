@@ -180,6 +180,17 @@ class PipelineTemplateSchemaExporterTest {
     }
 
     @Test
+    void internalStepShapeIncludesVirtualThreadHint() {
+        JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
+        JsonObject step = definitions.getAsJsonObject("delegatedOrInternalStep");
+        JsonObject properties = step.getAsJsonObject("properties");
+
+        JsonObject runOnVirtualThreads = properties.getAsJsonObject("runOnVirtualThreads");
+        assertNotNull(runOnVirtualThreads);
+        assertEquals("boolean", text(runOnVirtualThreads, "type"));
+    }
+
+    @Test
     void deterministicTopLevelOrderingKeepsSchemaStableForConsumers() {
         JsonObject schema = parse(PipelineTemplateSchemaExporter.schemaJson());
         List<String> keys = new ArrayList<>();

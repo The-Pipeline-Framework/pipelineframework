@@ -92,11 +92,24 @@ class SpringRestResourceRendererTest {
     }
 
     @Test
-    void rejectsBlockingAuthoredService() {
+    void rendersBlockingAuthoredRestResource() throws Exception {
+        SpringRestResourceRenderer renderer = new SpringRestResourceRenderer();
+
+        renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.BLOCKING), "/payments"),
+            new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null));
+
+        Path resource = tempDir.resolve("com/example/service/pipeline/PaymentResource.java");
+        String source = Files.readString(resource);
+        assertTrue(source.contains("private final SpringPipelineRunner pipelineRunner;"));
+        assertTrue(source.contains("return Mono.fromCompletionStage(this.pipelineRunner.run(inputDomain))"));
+    }
+
+    @Test
+    void rejectsBlockingIteratorResource() {
         SpringRestResourceRenderer renderer = new SpringRestResourceRenderer();
 
         assertThrows(IllegalArgumentException.class,
-            () -> renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.BLOCKING), null),
+            () -> renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.BLOCKING_ITERATOR), null),
                 new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null)));
     }
 

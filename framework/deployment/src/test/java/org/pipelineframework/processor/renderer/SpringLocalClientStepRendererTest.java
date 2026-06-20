@@ -89,6 +89,48 @@ class SpringLocalClientStepRendererTest {
     }
 
     @Test
+    void rendersBlockingUnaryLocalClientStep() throws Exception {
+        SpringLocalClientStepRenderer renderer = new SpringLocalClientStepRenderer();
+
+        renderer.render(new LocalBinding(model(
+                StreamingShape.UNARY_UNARY,
+                ServiceApiKind.BLOCKING,
+                ReactiveReturnKind.MUTINY_UNI,
+                ExecutionMode.DEFAULT)),
+            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+
+        Path clientStep = tempDir.resolve("com/example/service/pipeline/PaymentLocalClientStep.java");
+        String source = Files.readString(clientStep);
+        assertTrue(source.contains("import org.pipelineframework.runtime.core.RuntimeAdapters;"));
+        assertTrue(source.contains("return RuntimeAdapters.executeBlocking(() -> this.paymentService.processBlocking(input), false);"));
+        assertFalse(source.contains("subscribeAsCompletionStage"));
+        assertFalse(source.contains(".toFuture();"));
+        assertFalse(source.contains("io.smallrye.mutiny"));
+        assertFalse(source.contains("reactor.core.publisher"));
+        assertFalse(source.contains("io.quarkus."));
+        assertFalse(source.contains("jakarta.enterprise."));
+        assertFalse(source.contains("io.vertx."));
+        assertFalse(source.contains("org.jboss.resteasy."));
+        assertFalse(source.contains("jakarta.ws.rs."));
+    }
+
+    @Test
+    void rendersBlockingUnaryLocalClientStepWithVirtualThreads() throws Exception {
+        SpringLocalClientStepRenderer renderer = new SpringLocalClientStepRenderer();
+
+        renderer.render(new LocalBinding(model(
+                StreamingShape.UNARY_UNARY,
+                ServiceApiKind.BLOCKING,
+                ReactiveReturnKind.MUTINY_UNI,
+                ExecutionMode.VIRTUAL_THREADS)),
+            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+
+        Path clientStep = tempDir.resolve("com/example/service/pipeline/PaymentLocalClientStep.java");
+        String source = Files.readString(clientStep);
+        assertTrue(source.contains("return RuntimeAdapters.executeBlocking(() -> this.paymentService.processBlocking(input), true);"));
+    }
+
+    @Test
     void rejectsNonUnaryShape() {
         SpringLocalClientStepRenderer renderer = new SpringLocalClientStepRenderer();
 
@@ -98,11 +140,11 @@ class SpringLocalClientStepRendererTest {
     }
 
     @Test
-    void rejectsBlockingAuthoredService() {
+    void rejectsBlockingIteratorService() {
         SpringLocalClientStepRenderer renderer = new SpringLocalClientStepRenderer();
 
         assertThrows(IllegalArgumentException.class,
-            () -> renderer.render(new LocalBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.BLOCKING)),
+            () -> renderer.render(new LocalBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.BLOCKING_ITERATOR)),
                 new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
     }
 
@@ -111,6 +153,15 @@ class SpringLocalClientStepRendererTest {
     }
 
     private PipelineStepModel model(StreamingShape shape, ServiceApiKind apiKind, ReactiveReturnKind reactiveReturnKind) {
+        return model(shape, apiKind, reactiveReturnKind, ExecutionMode.DEFAULT);
+    }
+
+    private PipelineStepModel model(
+        StreamingShape shape,
+        ServiceApiKind apiKind,
+        ReactiveReturnKind reactiveReturnKind,
+        ExecutionMode executionMode
+    ) {
         return new PipelineStepModel.Builder()
             .serviceName("PaymentService")
             .generatedName("PaymentService")
@@ -120,7 +171,7 @@ class SpringLocalClientStepRendererTest {
             .outputMapping(new TypeMapping(ClassName.get("com.example.service", "PaymentStatus"), null, false))
             .streamingShape(shape)
             .enabledTargets(Set.of(GenerationTarget.LOCAL_CLIENT_STEP))
-            .executionMode(ExecutionMode.DEFAULT)
+            .executionMode(executionMode)
             .deploymentRole(DeploymentRole.PIPELINE_SERVER)
             .serviceApiKind(apiKind)
             .reactiveReturnKind(reactiveReturnKind)

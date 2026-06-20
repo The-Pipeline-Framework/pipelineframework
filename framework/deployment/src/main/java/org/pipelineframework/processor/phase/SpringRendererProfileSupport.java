@@ -84,8 +84,9 @@ final class SpringRendererProfileSupport {
             errors.add("Spring renderer profile currently supports only unary-unary steps; step '"
                 + model.serviceName() + "' has shape " + model.streamingShape() + ".");
         }
-        if (model.serviceApiKind() != ServiceApiKind.REACTIVE) {
-            errors.add("Spring renderer profile currently supports only reactive-authored services; step '"
+        if (model.serviceApiKind() != ServiceApiKind.REACTIVE
+            && model.serviceApiKind() != ServiceApiKind.BLOCKING) {
+            errors.add("Spring renderer profile currently supports only reactive or blocking unary services; step '"
                 + model.serviceName() + "' has API kind " + model.serviceApiKind() + ".");
         }
         if (model.sideEffect()) {

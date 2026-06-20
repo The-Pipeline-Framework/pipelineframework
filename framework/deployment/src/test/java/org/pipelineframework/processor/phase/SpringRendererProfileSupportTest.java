@@ -57,6 +57,15 @@ class SpringRendererProfileSupportTest {
     }
 
     @Test
+    void acceptsBlockingUnaryStep() {
+        PipelineCompilationContext context = context();
+        context.setStepModels(List.of(step(Set.of(GenerationTarget.LOCAL_CLIENT_STEP), StreamingShape.UNARY_UNARY,
+            ServiceApiKind.BLOCKING)));
+
+        assertDoesNotThrow(() -> SpringRendererProfileSupport.validateGenerationSupported(context));
+    }
+
+    @Test
     void rejectsGrpcTransport() {
         PipelineCompilationContext context = context();
         context.setTransportMode(PipelineTransport.GRPC);
@@ -79,6 +88,16 @@ class SpringRendererProfileSupportTest {
         PipelineCompilationContext context = context();
         context.setStepModels(List.of(step(Set.of(GenerationTarget.REST_RESOURCE), StreamingShape.UNARY_UNARY,
             ServiceApiKind.REACTIVE)));
+
+        assertThrows(IllegalStateException.class,
+            () -> SpringRendererProfileSupport.validateGenerationSupported(context));
+    }
+
+    @Test
+    void rejectsBlockingIteratorStep() {
+        PipelineCompilationContext context = context();
+        context.setStepModels(List.of(step(Set.of(GenerationTarget.LOCAL_CLIENT_STEP), StreamingShape.UNARY_UNARY,
+            ServiceApiKind.BLOCKING_ITERATOR)));
 
         assertThrows(IllegalStateException.class,
             () -> SpringRendererProfileSupport.validateGenerationSupported(context));

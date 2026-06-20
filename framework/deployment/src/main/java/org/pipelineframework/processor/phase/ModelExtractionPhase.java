@@ -390,7 +390,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Internal step service '" + stepDef.executionClass().canonicalName()
                     + "' must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out>"
-                    + springPlainMonoHint(ctx) + " method for step '"
+                    + springPlainMethodHint(ctx) + " method for step '"
                     + stepDef.name() + "'");
             return null;
         }
@@ -460,6 +460,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .inputMapping(new TypeMapping(inputType, inboundMapper, inboundMapper != null, inputType))
             .outputMapping(new TypeMapping(outputType, outboundMapper, outboundMapper != null, outputType))
             .streamingShape(serviceSignature.shape())
+            .executionMode(executionMode(stepDef))
             .serviceApiKind(serviceSignature.apiKind())
             .reactiveReturnKind(serviceSignature.reactiveReturnKind())
             .build();
@@ -569,7 +570,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 outputType))
             .streamingShape(streamingShape)
             .enabledTargets(targets)
-            .executionMode(ExecutionMode.DEFAULT)
+            .executionMode(executionMode(stepDef))
             .deploymentRole(crossModuleRole)
             .sideEffect(false)
             .cacheKeyGenerator(null)
@@ -1199,14 +1200,27 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             if (!(enclosed instanceof ExecutableElement method)) {
                 continue;
             }
-            if (!method.getSimpleName().contentEquals("process")
-                || !method.getModifiers().contains(Modifier.PUBLIC)
+            if (!method.getModifiers().contains(Modifier.PUBLIC)
                 || method.getModifiers().contains(Modifier.STATIC)
                 || method.getParameters().size() != 1) {
                 continue;
             }
+            String methodName = method.getSimpleName().toString();
             TypeMirror returnType = method.getReturnType();
-            if (!(returnType instanceof DeclaredType declaredReturn)
+            if ("processBlocking".equals(methodName) && springProfile && returnType.getKind() != TypeKind.VOID) {
+                matches.add(new SupportedServiceSignature(
+                    ServiceApiKind.BLOCKING,
+                    StreamingShape.UNARY_UNARY,
+                    TypeName.get(method.getParameters().getFirst().asType()),
+                    TypeName.get(returnType),
+                    // Blocking services do not have a reactive return. Renderers branch on
+                    // ServiceApiKind first; this value is retained only for model compatibility.
+                    ReactiveReturnKind.MUTINY_UNI,
+                    null));
+                continue;
+            }
+            if (!"process".equals(methodName)
+                || !(returnType instanceof DeclaredType declaredReturn)
                 || declaredReturn.getTypeArguments().size() != 1) {
                 continue;
             }
@@ -1231,19 +1245,23 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             messager.printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Internal service '" + serviceElement.getQualifiedName()
-                    + "' declares multiple public process(In): Uni<Out>" + springPlainMonoHint(ctx)
+                    + "' declares multiple public process(In): Uni<Out>" + springPlainMethodHint(ctx)
                     + " methods. Please declare exactly one.");
             return Optional.empty();
         }
         return matches.isEmpty() ? Optional.empty() : Optional.of(matches.getFirst());
     }
 
+    private ExecutionMode executionMode(org.pipelineframework.processor.ir.StepDefinition stepDef) {
+        return stepDef.runOnVirtualThreads() ? ExecutionMode.VIRTUAL_THREADS : ExecutionMode.DEFAULT;
+    }
+
     private boolean isSpringRendererProfile(PipelineCompilationContext ctx) {
         return ctx != null && "spring".equalsIgnoreCase(ctx.getRendererProfile());
     }
 
-    private String springPlainMonoHint(PipelineCompilationContext ctx) {
-        return isSpringRendererProfile(ctx) ? " or process(In): Mono<Out>" : "";
+    private String springPlainMethodHint(PipelineCompilationContext ctx) {
+        return isSpringRendererProfile(ctx) ? " or process(In): Mono<Out> or processBlocking(In): Out" : "";
     }
 
     private boolean isDeclaredType(DeclaredType declaredType, String qualifiedName) {

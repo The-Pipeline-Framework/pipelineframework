@@ -104,6 +104,62 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void parsesRunOnVirtualThreadsForInternalStep() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "blocking-payment"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+                runOnVirtualThreads: true
+            """, diagnostics);
+
+        assertEquals(1, steps.size(), diagnostics.toString());
+        assertTrue(steps.getFirst().runOnVirtualThreads());
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsNonBooleanRunOnVirtualThreads() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "blocking-payment"
+                service: "com.example.app.PaymentService"
+                runOnVirtualThreads: "true"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("runOnVirtualThreads must be a boolean")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsRunOnVirtualThreadsForDelegatedStep() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "delegate-payment"
+                operator: "com.example.PaymentOperators::approve"
+                input: "com.example.PaymentRecord"
+                output: "com.example.PaymentStatus"
+                runOnVirtualThreads: true
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("valid only for internal service steps")),
+            diagnostics.toString());
+    }
+
+    @Test
     void parsesAwaitStepDefinition() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""

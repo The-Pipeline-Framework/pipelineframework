@@ -29,6 +29,7 @@ import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import org.pipelineframework.processor.PipelineStepProcessor;
+import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.LocalBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
@@ -80,7 +81,7 @@ public class SpringLocalClientStepRenderer implements PipelineRenderer<LocalBind
             .addModifiers(Modifier.PUBLIC)
             .returns(completionStage)
             .addParameter(inputType, "input")
-            .addStatement("return this.$N.process(input).$L", serviceFieldName, completionStageAdapter(model))
+            .addStatement(applyStatement(model), applyStatementArgs(model, serviceFieldName))
             .build();
 
         return TypeSpec.classBuilder(getClientStepClassName(model))
@@ -100,15 +101,37 @@ public class SpringLocalClientStepRenderer implements PipelineRenderer<LocalBind
         };
     }
 
+    private String applyStatement(PipelineStepModel model) {
+        if (model.serviceApiKind() == ServiceApiKind.BLOCKING) {
+            return "return $T.executeBlocking(() -> this.$N.processBlocking(input), $L)";
+        }
+        return "return this.$N.process(input).$L";
+    }
+
+    private Object[] applyStatementArgs(PipelineStepModel model, String serviceFieldName) {
+        if (model.serviceApiKind() == ServiceApiKind.BLOCKING) {
+            return new Object[] {
+                ClassName.get("org.pipelineframework.runtime.core", "RuntimeAdapters"),
+                serviceFieldName,
+                model.executionMode() == ExecutionMode.VIRTUAL_THREADS
+            };
+        }
+        return new Object[] {
+            serviceFieldName,
+            completionStageAdapter(model)
+        };
+    }
+
     private void validateSupported(PipelineStepModel model) {
         if (model.streamingShape() != StreamingShape.UNARY_UNARY) {
             throw new IllegalArgumentException(
                 "Spring renderer profile currently supports only unary-unary LOCAL steps; step '"
                     + model.serviceName() + "' has shape " + model.streamingShape());
         }
-        if (model.serviceApiKind() != ServiceApiKind.REACTIVE) {
+        if (model.serviceApiKind() != ServiceApiKind.REACTIVE
+            && model.serviceApiKind() != ServiceApiKind.BLOCKING) {
             throw new IllegalArgumentException(
-                "Spring renderer profile currently supports only reactive-authored services; step '"
+                "Spring renderer profile currently supports only reactive or blocking unary services; step '"
                     + model.serviceName() + "' has API kind " + model.serviceApiKind());
         }
         if (model.sideEffect()) {

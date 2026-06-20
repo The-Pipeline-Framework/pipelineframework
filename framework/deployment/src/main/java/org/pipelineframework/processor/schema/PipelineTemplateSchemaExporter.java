@@ -1230,6 +1230,10 @@ public final class PipelineTemplateSchemaExporter {
             "none",
             "jackson"
           ]
+        },
+        "runOnVirtualThreads": {
+          "type": "boolean",
+          "description": "Whether this YAML-declared internal blocking step should use virtual-thread offload."
         }
       },
       "oneOf": [
