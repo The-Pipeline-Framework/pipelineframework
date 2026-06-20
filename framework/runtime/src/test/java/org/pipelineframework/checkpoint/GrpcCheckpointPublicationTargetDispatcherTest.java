@@ -1,10 +1,14 @@
 package org.pipelineframework.checkpoint;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.checkpoint.grpc.CheckpointPublishAcceptedResponse;
@@ -13,6 +17,108 @@ import org.pipelineframework.checkpoint.grpc.MutinyCheckpointPublicationServiceG
 import org.pipelineframework.config.pipeline.PipelineJson;
 
 class GrpcCheckpointPublicationTargetDispatcherTest {
+
+    @Test
+    void resolveTargetBuildsEndpointFromHostAndPort() {
+        GrpcCheckpointPublicationTargetDispatcher dispatcher = new GrpcCheckpointPublicationTargetDispatcher();
+        PipelineHandoffConfig.TargetConfig config = mock(PipelineHandoffConfig.TargetConfig.class);
+        when(config.host()).thenReturn(Optional.of("downstream-host"));
+        when(config.port()).thenReturn(Optional.of(9090));
+        when(config.plaintext()).thenReturn(false);
+
+        ResolvedCheckpointPublicationTarget target = dispatcher.resolveTarget("orders-ready", "deliver", config);
+
+        assertEquals("orders-ready", target.publication());
+        assertEquals("deliver", target.targetId());
+        assertEquals(PublicationTargetKind.GRPC, target.kind());
+        assertEquals(PublicationEncoding.PROTO, target.encoding());
+        assertEquals("downstream-host:9090", target.endpoint());
+        assertEquals("TLS", target.method());
+    }
+
+    @Test
+    void resolveTargetUsesPlaintextWhenConfigured() {
+        GrpcCheckpointPublicationTargetDispatcher dispatcher = new GrpcCheckpointPublicationTargetDispatcher();
+        PipelineHandoffConfig.TargetConfig config = mock(PipelineHandoffConfig.TargetConfig.class);
+        when(config.host()).thenReturn(Optional.of("localhost"));
+        when(config.port()).thenReturn(Optional.of(9000));
+        when(config.plaintext()).thenReturn(true);
+
+        ResolvedCheckpointPublicationTarget target = dispatcher.resolveTarget("orders-ready", "deliver", config);
+
+        assertEquals("PLAINTEXT", target.method());
+    }
+
+    @Test
+    void resolveTargetFailsWhenHostAbsent() {
+        GrpcCheckpointPublicationTargetDispatcher dispatcher = new GrpcCheckpointPublicationTargetDispatcher();
+        PipelineHandoffConfig.TargetConfig config = mock(PipelineHandoffConfig.TargetConfig.class);
+        when(config.host()).thenReturn(Optional.empty());
+        when(config.port()).thenReturn(Optional.of(9000));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> dispatcher.resolveTarget("orders-ready", "deliver", config));
+        assertEquals(
+            "Checkpoint publication 'orders-ready' target 'deliver' requires host for GRPC delivery",
+            error.getMessage());
+    }
+
+    @Test
+    void resolveTargetRejectsColonContainingHosts() {
+        GrpcCheckpointPublicationTargetDispatcher dispatcher = new GrpcCheckpointPublicationTargetDispatcher();
+        PipelineHandoffConfig.TargetConfig target = mock(PipelineHandoffConfig.TargetConfig.class);
+        when(target.host()).thenReturn(Optional.of("::1"));
+        when(target.port()).thenReturn(Optional.of(9000));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> dispatcher.resolveTarget("orders-ready", "deliver", target));
+
+        assertEquals(
+            "Checkpoint publication 'orders-ready' target 'deliver' does not support colon-containing GRPC hosts; use a DNS name or IPv4 address",
+            error.getMessage());
+    }
+
+    @Test
+    void resolveTargetFailsWhenHostBlank() {
+        GrpcCheckpointPublicationTargetDispatcher dispatcher = new GrpcCheckpointPublicationTargetDispatcher();
+        PipelineHandoffConfig.TargetConfig config = mock(PipelineHandoffConfig.TargetConfig.class);
+        when(config.host()).thenReturn(Optional.of("   "));
+        when(config.port()).thenReturn(Optional.of(9000));
+
+        assertThrows(IllegalStateException.class,
+            () -> dispatcher.resolveTarget("orders-ready", "deliver", config));
+    }
+
+    @Test
+    void resolveTargetFailsWhenPortAbsent() {
+        GrpcCheckpointPublicationTargetDispatcher dispatcher = new GrpcCheckpointPublicationTargetDispatcher();
+        PipelineHandoffConfig.TargetConfig config = mock(PipelineHandoffConfig.TargetConfig.class);
+        when(config.host()).thenReturn(Optional.of("localhost"));
+        when(config.port()).thenReturn(Optional.empty());
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> dispatcher.resolveTarget("orders-ready", "deliver", config));
+        assertEquals(
+            "Checkpoint publication 'orders-ready' target 'deliver' requires port for GRPC delivery",
+            error.getMessage());
+    }
+
+    @Test
+    void resolveTargetFailsWhenPortIsZero() {
+        GrpcCheckpointPublicationTargetDispatcher dispatcher = new GrpcCheckpointPublicationTargetDispatcher();
+        PipelineHandoffConfig.TargetConfig config = mock(PipelineHandoffConfig.TargetConfig.class);
+        when(config.host()).thenReturn(Optional.of("localhost"));
+        when(config.port()).thenReturn(Optional.of(0));
+
+        assertThrows(IllegalStateException.class,
+            () -> dispatcher.resolveTarget("orders-ready", "deliver", config));
+    }
+
+    @Test
+    void resolveTargetKindIsGrpc() {
+        GrpcCheckpointPublicationTargetDispatcher dispatcher = new GrpcCheckpointPublicationTargetDispatcher();
+        assertEquals(PublicationTargetKind.GRPC, dispatcher.kind());
+    }
 
     @Test
     void dispatchSendsCanonicalProtoRequest() throws Exception {

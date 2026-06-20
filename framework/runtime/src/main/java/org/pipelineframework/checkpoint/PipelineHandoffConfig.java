@@ -43,6 +43,7 @@ public interface PipelineHandoffConfig {
      * {@code HTTP} targets require {@code base-url}; {@code path}, {@code method},
      * {@code content-type}, and {@code idempotency-header} are optional.
      * {@code GRPC} targets require {@code host} and {@code port}; {@code plaintext} is optional.
+     * {@code KAFKA} targets require {@code topic}.
      */
     interface TargetConfig {
 
@@ -122,5 +123,12 @@ public interface PipelineHandoffConfig {
          */
         @WithDefault("POST")
         String method();
+
+        /**
+         * Kafka topic for {@link PublicationTargetKind#KAFKA} targets (required).
+         *
+         * @return topic when configured
+         */
+        Optional<String> topic();
     }
 }

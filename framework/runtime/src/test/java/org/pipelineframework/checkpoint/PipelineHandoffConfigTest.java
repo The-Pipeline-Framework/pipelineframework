@@ -45,6 +45,17 @@ class PipelineHandoffConfigTest {
         assertTrue(target.plaintext());
     }
 
+    @Test
+    void configReadsKafkaBindingShape() {
+        PipelineHandoffConfig config = buildConfig(Map.of(
+            "pipeline.handoff.bindings.orders-ready.targets.deliver.kind", "KAFKA",
+            "pipeline.handoff.bindings.orders-ready.targets.deliver.topic", "checkout.orders.ready.v1"));
+
+        PipelineHandoffConfig.TargetConfig target = config.bindings().get("orders-ready").targets().get("deliver");
+        assertEquals(PublicationTargetKind.KAFKA, target.kind());
+        assertEquals("checkout.orders.ready.v1", target.topic().orElseThrow());
+    }
+
     private PipelineHandoffConfig buildConfig(Map<String, String> properties) {
         SmallRyeConfigBuilder builder = new SmallRyeConfigBuilder();
         builder.withMapping(PipelineHandoffConfig.class);
