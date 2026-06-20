@@ -884,9 +884,445 @@ class PipelineProtoGeneratorTest {
     }
 
     @Test
-    void generatesPayloadReferenceTypeForPayloadRefFields() throws Exception {
+    void generatesExternalStepHostContractPackForMultipleRemoteSteps() throws Exception {
         String yaml = """
             version: 2
+            appName: "Multi Remote Step Test"
+            basePackage: "com.example.multi"
+            transport: "REST"
+            messages:
+              OrderRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+              FraudResult:
+                fields:
+                  - number: 1
+                    name: "riskScore"
+                    type: "string"
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+            steps:
+              - name: "Check Fraud"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "OrderRequest"
+                outputTypeName: "FraudResult"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "fraud-check"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  timeoutMs: 2000
+                  target:
+                    urlConfigKey: "tpf.remote-operators.fraud-check.url"
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "FraudResult"
+                outputTypeName: "ChargeResult"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "charge-card"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  timeoutMs: 3000
+                  target:
+                    urlConfigKey: "tpf.remote-operators.charge-card.url"
+            """;
+        Path configPath = tempDir.resolve("multi-remote-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-multi-remote-out");
+
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+
+        Path manifestPath = outputDir.resolve("external-step-hosts.json");
+        assertTrue(Files.exists(manifestPath));
+        assertTrue(Files.exists(outputDir.resolve("EXTERNAL-STEP-HOSTS.md")));
+        assertTrue(Files.exists(outputDir.resolve("check-fraud-svc.proto")));
+        assertTrue(Files.exists(outputDir.resolve("charge-card-svc.proto")));
+
+        JsonNode manifest = PipelineJson.mapper().readTree(manifestPath.toFile());
+        JsonNode steps = manifest.path("steps");
+        assertEquals(2, steps.size());
+
+        JsonNode first = steps.get(0);
+        assertEquals("Check Fraud", first.path("step").asText());
+        assertEquals("fraud-check", first.path("operatorId").asText());
+        assertEquals("check-fraud-svc.proto", first.path("proto").asText());
+        assertEquals("ProcessCheckFraudService", first.path("service").asText());
+        assertEquals("OrderRequest", first.path("inputType").asText());
+        assertEquals("FraudResult", first.path("outputType").asText());
+
+        JsonNode second = steps.get(1);
+        assertEquals("Charge Card", second.path("step").asText());
+        assertEquals("charge-card", second.path("operatorId").asText());
+        assertEquals("charge-card-svc.proto", second.path("proto").asText());
+        assertEquals("ProcessChargeCardService", second.path("service").asText());
+        assertEquals("ChargeResult", second.path("outputType").asText());
+
+        String readme = Files.readString(outputDir.resolve("EXTERNAL-STEP-HOSTS.md"));
+        assertTrue(readme.contains("Check Fraud"));
+        assertTrue(readme.contains("Charge Card"));
+    }
+
+    @Test
+    void omitsLocalStepsFromExternalStepHostManifest() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Mixed Steps Test"
+            basePackage: "com.example.mixed"
+            transport: "REST"
+            messages:
+              InputMsg:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+              LocalResult:
+                fields:
+                  - number: 1
+                    name: "value"
+                    type: "string"
+              RemoteResult:
+                fields:
+                  - number: 1
+                    name: "output"
+                    type: "string"
+            steps:
+              - name: "Local Step"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "InputMsg"
+                outputTypeName: "LocalResult"
+              - name: "Remote Step"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "LocalResult"
+                outputTypeName: "RemoteResult"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "remote-op"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  timeoutMs: 1000
+                  target:
+                    urlConfigKey: "tpf.remote-operators.remote-op.url"
+            """;
+        Path configPath = tempDir.resolve("mixed-steps-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-mixed-out");
+
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+
+        Path manifestPath = outputDir.resolve("external-step-hosts.json");
+        assertTrue(Files.exists(manifestPath));
+
+        JsonNode manifest = PipelineJson.mapper().readTree(manifestPath.toFile());
+        JsonNode steps = manifest.path("steps");
+        assertEquals(1, steps.size(), "Only remote step should appear in manifest");
+        assertEquals("Remote Step", steps.get(0).path("step").asText());
+        assertEquals("remote-op", steps.get(0).path("operatorId").asText());
+    }
+
+    @Test
+    void usesDirectUrlInTargetMapWhenUrlProvided() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Direct URL Test"
+            basePackage: "com.example.directurl"
+            transport: "REST"
+            messages:
+              Input:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+              Output:
+                fields:
+                  - number: 1
+                    name: "result"
+                    type: "string"
+            steps:
+              - name: "Call Service"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "Input"
+                outputTypeName: "Output"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "call-service"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  timeoutMs: 500
+                  target:
+                    url: "https://service.example.com/grpc"
+            """;
+        Path configPath = tempDir.resolve("direct-url-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-direct-url-out");
+
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+
+        Path manifestPath = outputDir.resolve("external-step-hosts.json");
+        assertTrue(Files.exists(manifestPath));
+
+        JsonNode manifest = PipelineJson.mapper().readTree(manifestPath.toFile());
+        JsonNode step = manifest.path("steps").get(0);
+        assertEquals("https://service.example.com/grpc", step.path("target").path("url").asText());
+        assertTrue(step.path("target").path("urlConfigKey").isMissingNode(),
+            "urlConfigKey must not appear when direct url is used");
+    }
+
+    @Test
+    void generatesExternalStepHostContractPackWithGrpcTransport() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "GRPC Remote Test"
+            basePackage: "com.example.grpcremote"
+            transport: "GRPC"
+            messages:
+              GrpcInput:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+              GrpcOutput:
+                fields:
+                  - number: 1
+                    name: "result"
+                    type: "string"
+            steps:
+              - name: "Grpc Remote"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "GrpcInput"
+                outputTypeName: "GrpcOutput"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "grpc-remote"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  timeoutMs: 1000
+                  target:
+                    urlConfigKey: "tpf.remote-operators.grpc-remote.url"
+            """;
+        Path configPath = tempDir.resolve("grpc-remote-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-grpc-remote-out");
+
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+
+        assertTrue(Files.exists(outputDir.resolve("external-step-hosts.json")),
+            "Contract pack must be emitted even when transport is GRPC");
+        assertTrue(Files.exists(outputDir.resolve("EXTERNAL-STEP-HOSTS.md")));
+        assertTrue(Files.exists(outputDir.resolve("orchestrator.proto")),
+            "GRPC transport still generates orchestrator proto");
+
+        JsonNode manifest = PipelineJson.mapper().readTree(outputDir.resolve("external-step-hosts.json").toFile());
+        assertEquals(1, manifest.path("steps").size());
+        assertEquals("grpc-remote", manifest.path("steps").get(0).path("operatorId").asText());
+    }
+
+    @Test
+    void externalStepHostManifestContainsAllRequiredHttpHeaders() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Header Test"
+            basePackage: "com.example.headers"
+            transport: "REST"
+            messages:
+              Req:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+              Res:
+                fields:
+                  - number: 1
+                    name: "value"
+                    type: "string"
+            steps:
+              - name: "Step One"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "Req"
+                outputTypeName: "Res"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "step-one"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  timeoutMs: 1000
+                  target:
+                    urlConfigKey: "tpf.remote-operators.step-one.url"
+            """;
+        Path configPath = tempDir.resolve("headers-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-headers-out");
+
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+
+        JsonNode manifest = PipelineJson.mapper().readTree(outputDir.resolve("external-step-hosts.json").toFile());
+        JsonNode headers = manifest.path("steps").get(0).path("http").path("headers");
+        assertTrue(headers.isArray());
+        List<String> headerList = new java.util.ArrayList<>();
+        headers.forEach(h -> headerList.add(h.asText()));
+
+        assertTrue(headerList.contains("x-tpf-correlation-id"), "must include x-tpf-correlation-id");
+        assertTrue(headerList.contains("x-tpf-execution-id"), "must include x-tpf-execution-id");
+        assertTrue(headerList.contains("x-tpf-idempotency-key"), "must include x-tpf-idempotency-key");
+        assertTrue(headerList.contains("x-tpf-retry-attempt"), "must include x-tpf-retry-attempt");
+        assertTrue(headerList.contains("x-tpf-deadline-epoch-ms"), "must include x-tpf-deadline-epoch-ms");
+        assertTrue(headerList.contains("x-tpf-dispatch-ts-epoch-ms"), "must include x-tpf-dispatch-ts-epoch-ms");
+        assertTrue(headerList.contains("x-tpf-parent-item-id"), "must include x-tpf-parent-item-id");
+        assertEquals(7, headerList.size(), "exactly 7 TPF metadata headers must be declared");
+
+        JsonNode http = manifest.path("steps").get(0).path("http");
+        assertEquals("POST", http.path("method").asText());
+        assertEquals("application/x-protobuf", http.path("accept").asText());
+        assertEquals("2xx", http.path("successStatus").asText());
+    }
+
+    @Test
+    void readmeTableEscapesPipeCharacterInStepName() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Pipe Escape Test"
+            basePackage: "com.example.pipe"
+            transport: "REST"
+            messages:
+              PipeInput:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+              PipeOutput:
+                fields:
+                  - number: 1
+                    name: "result"
+                    type: "string"
+            steps:
+              - name: "Step A | Step B"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "PipeInput"
+                outputTypeName: "PipeOutput"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "pipe-step"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  timeoutMs: 500
+                  target:
+                    urlConfigKey: "tpf.remote-operators.pipe-step.url"
+            """;
+        Path configPath = tempDir.resolve("pipe-escape-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-pipe-escape-out");
+
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+
+        String readme = Files.readString(outputDir.resolve("EXTERNAL-STEP-HOSTS.md"));
+        assertTrue(readme.contains("Step A \\| Step B"),
+            "Pipe characters in step names must be escaped as \\| in readme table");
+        assertFalse(readme.contains("| Step A | Step B |"),
+            "Unescaped pipe in step name would break markdown table");
+    }
+
+    @Test
+    void omitsTimeoutFromContractWhenNotSpecified() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "No Timeout Test"
+            basePackage: "com.example.notimeout"
+            transport: "REST"
+            messages:
+              NtInput:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+              NtOutput:
+                fields:
+                  - number: 1
+                    name: "result"
+                    type: "string"
+            steps:
+              - name: "No Timeout Step"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "NtInput"
+                outputTypeName: "NtOutput"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "no-timeout-op"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  target:
+                    urlConfigKey: "tpf.remote-operators.no-timeout-op.url"
+            """;
+        Path configPath = tempDir.resolve("no-timeout-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-no-timeout-out");
+
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+
+        Path manifestPath = outputDir.resolve("external-step-hosts.json");
+        assertTrue(Files.exists(manifestPath));
+
+        JsonNode manifest = PipelineJson.mapper().readTree(manifestPath.toFile());
+        JsonNode step = manifest.path("steps").get(0);
+        assertEquals("No Timeout Step", step.path("step").asText());
+        assertTrue(step.path("timeoutMs").isNull() || step.path("timeoutMs").isMissingNode(),
+            "timeoutMs must be absent or null when not configured");
+    }
+
+    @Test
+    void externalStepHostManifestUsesCustomTypesProtoName() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Custom Types Proto Test"
+            basePackage: "com.example.custom"
+            transport: "REST"
+            messages:
+              CtInput:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+              CtOutput:
+                fields:
+                  - number: 1
+                    name: "result"
+                    type: "string"
+            steps:
+              - name: "Custom Types Step"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "CtInput"
+                outputTypeName: "CtOutput"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "custom-types-op"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  timeoutMs: 1000
+                  target:
+                    urlConfigKey: "tpf.remote-operators.custom-types-op.url"
+            """;
+        Path configPath = tempDir.resolve("custom-types-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-custom-types-out");
+
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir, "my-shared-types.proto");
+
+        Path manifestPath = outputDir.resolve("external-step-hosts.json");
+        assertTrue(Files.exists(manifestPath));
+        assertTrue(Files.exists(outputDir.resolve("my-shared-types.proto")));
+
+        JsonNode manifest = PipelineJson.mapper().readTree(manifestPath.toFile());
+        assertEquals("my-shared-types.proto", manifest.path("typesProto").asText(),
+            "manifest typesProto must reflect the custom types proto name");
+
+        JsonNode step = manifest.path("steps").get(0);
+        assertEquals("my-shared-types.proto", step.path("typesProto").asText(),
+            "per-step typesProto must match the custom types proto name");
+
+        String readme = Files.readString(outputDir.resolve("EXTERNAL-STEP-HOSTS.md"));
+        assertTrue(readme.contains("`my-shared-types.proto`"),
+            "Readme shared types proto line must use the custom name");
+    }
+
+    @Test
+    void generatesPayloadReferenceTypeForPayloadRefFields() throws Exception {
+        String yaml = """
+
             appName: "Materialized Search"
             basePackage: "com.example.search"
             transport: "GRPC"
