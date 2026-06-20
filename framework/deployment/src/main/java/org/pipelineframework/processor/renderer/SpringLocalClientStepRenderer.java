@@ -94,9 +94,10 @@ public class SpringLocalClientStepRenderer implements PipelineRenderer<LocalBind
     }
 
     private String completionStageAdapter(PipelineStepModel model) {
-        return model.reactiveReturnKind() == ReactiveReturnKind.REACTOR_MONO
-            ? "toFuture()"
-            : "subscribeAsCompletionStage()";
+        return switch (model.reactiveReturnKind()) {
+            case MUTINY_UNI -> "subscribeAsCompletionStage()";
+            case REACTOR_MONO -> "toFuture()";
+        };
     }
 
     private void validateSupported(PipelineStepModel model) {

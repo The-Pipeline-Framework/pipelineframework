@@ -380,13 +380,12 @@ class PipelineStepModelTest {
                 .build();
 
         PipelineStepModel modified = original.toBuilder()
-                .serviceApiKind(ServiceApiKind.BLOCKING_ITERATOR)
                 .reactiveReturnKind(ReactiveReturnKind.REACTOR_MONO)
                 .build();
 
         assertEquals(ServiceApiKind.REACTIVE, original.serviceApiKind());
         assertEquals(ReactiveReturnKind.MUTINY_UNI, original.reactiveReturnKind());
-        assertEquals(ServiceApiKind.BLOCKING_ITERATOR, modified.serviceApiKind());
+        assertEquals(ServiceApiKind.REACTIVE, modified.serviceApiKind());
         assertEquals(ReactiveReturnKind.REACTOR_MONO, modified.reactiveReturnKind());
     }
 
