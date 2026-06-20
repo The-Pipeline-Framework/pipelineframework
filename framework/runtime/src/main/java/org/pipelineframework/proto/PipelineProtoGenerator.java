@@ -39,8 +39,10 @@ import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
 import org.pipelineframework.config.template.PipelineTemplateField;
 import org.pipelineframework.config.template.PipelineTemplateMessage;
+import org.pipelineframework.config.template.PipelineTemplateRemoteTarget;
 import org.pipelineframework.config.template.PipelineTemplateReserved;
 import org.pipelineframework.config.template.PipelineTemplateStep;
+import org.pipelineframework.config.template.PipelineTemplateStepExecution;
 import org.pipelineframework.config.template.PipelineTemplateUnion;
 import org.pipelineframework.config.template.PipelineTemplateUnionVariant;
 
@@ -51,6 +53,8 @@ public class PipelineProtoGenerator {
 
     private static final String ORCHESTRATOR_PROTO = "orchestrator.proto";
     private static final String TYPES_PROTO = "pipeline-types.proto";
+    private static final String EXTERNAL_STEP_HOSTS_MANIFEST = "external-step-hosts.json";
+    private static final String EXTERNAL_STEP_HOSTS_README = "EXTERNAL-STEP-HOSTS.md";
     private static final String IDL_SNAPSHOT_PROPERTY = "tpf.idl.compat.baseline";
     private static final String IDL_SNAPSHOT_ENV = "TPF_IDL_COMPAT_BASELINE";
     private static final ObjectMapper IDL_MAPPER = PipelineJson.mapper().copy().findAndRegisterModules();
@@ -150,6 +154,7 @@ public class PipelineProtoGenerator {
             Path protoPath = resolvedOutput.resolve(step.serviceName() + ".proto");
             writeProto(protoPath, content);
         }
+        writeExternalStepHostContracts(config.basePackage(), resolvedOutput, resolvedSteps, resolvedTypesProtoName);
 
         String transport = config.transport();
         if (transport == null || transport.isBlank() || "GRPC".equalsIgnoreCase(transport)) {
@@ -250,6 +255,14 @@ public class PipelineProtoGenerator {
         }
     }
 
+    private void writeJson(Path outputPath, Object value) {
+        try {
+            IDL_MAPPER.writerWithDefaultPrettyPrinter().writeValue(outputPath.toFile(), value);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to write JSON file: " + outputPath, e);
+        }
+    }
+
     private List<ResolvedStep> normalizeSteps(List<PipelineTemplateStep> steps) {
         List<ResolvedStep> resolved = new ArrayList<>();
         ResolvedStep previous = null;
@@ -271,7 +284,8 @@ public class PipelineProtoGenerator {
                 inputTypeName,
                 inputFields,
                 step.outputTypeName(),
-                step.outputFields());
+                step.outputFields(),
+                step.execution());
             resolved.add(resolvedStep);
             previous = resolvedStep;
         }
@@ -341,6 +355,143 @@ public class PipelineProtoGenerator {
             first = false;
         }
         return builder.toString();
+    }
+
+    private void writeExternalStepHostContracts(
+        String basePackage,
+        Path outputDir,
+        List<ResolvedStep> steps,
+        String typesProtoName
+    ) {
+        List<ExternalStepHostContract> contracts = externalStepHostContracts(basePackage, steps, typesProtoName);
+        if (contracts.isEmpty()) {
+            return;
+        }
+        ExternalStepHostManifest manifest = new ExternalStepHostManifest(
+            "tpf.external-step-hosts.v1",
+            basePackage,
+            typesProtoName,
+            contracts);
+        writeJson(outputDir.resolve(EXTERNAL_STEP_HOSTS_MANIFEST), manifest);
+        writeProto(outputDir.resolve(EXTERNAL_STEP_HOSTS_README), renderExternalStepHostReadme(manifest));
+    }
+
+    private List<ExternalStepHostContract> externalStepHostContracts(
+        String basePackage,
+        List<ResolvedStep> steps,
+        String typesProtoName
+    ) {
+        if (steps == null || steps.isEmpty()) {
+            return List.of();
+        }
+        List<ExternalStepHostContract> contracts = new ArrayList<>();
+        for (ResolvedStep step : steps) {
+            PipelineTemplateStepExecution execution = step.execution();
+            if (execution == null || !execution.isRemote()) {
+                continue;
+            }
+            contracts.add(new ExternalStepHostContract(
+                step.name(),
+                "Process" + step.serviceNameFormatted() + "Service",
+                "remoteProcess",
+                step.serviceName() + ".proto",
+                typesProtoName,
+                step.cardinality(),
+                step.inputTypeName(),
+                step.outputTypeName(),
+                execution.operatorId(),
+                execution.protocol(),
+                execution.timeoutMs(),
+                targetMap(execution.target()),
+                protobufHttpContract()));
+        }
+        return List.copyOf(contracts);
+    }
+
+    private Map<String, String> targetMap(PipelineTemplateRemoteTarget target) {
+        if (target == null) {
+            return Map.of();
+        }
+        Map<String, String> values = new LinkedHashMap<>();
+        if (target.url() != null) {
+            values.put("url", target.url());
+        }
+        if (target.urlConfigKey() != null) {
+            values.put("urlConfigKey", target.urlConfigKey());
+        }
+        return values;
+    }
+
+    private Map<String, Object> protobufHttpContract() {
+        Map<String, Object> contract = new LinkedHashMap<>();
+        contract.put("method", "POST");
+        contract.put("contentType", "application/x-protobuf");
+        contract.put("accept", "application/x-protobuf");
+        contract.put("successStatus", "2xx");
+        contract.put("failureEnvelope", "google.rpc.Status");
+        contract.put("headers", List.of(
+            "x-tpf-correlation-id",
+            "x-tpf-execution-id",
+            "x-tpf-idempotency-key",
+            "x-tpf-retry-attempt",
+            "x-tpf-deadline-epoch-ms",
+            "x-tpf-dispatch-ts-epoch-ms",
+            "x-tpf-parent-item-id"));
+        return contract;
+    }
+
+    private String renderExternalStepHostReadme(ExternalStepHostManifest manifest) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("# External Step Host Contracts\n\n");
+        builder.append("This directory contains protobuf contracts for remote TPF step hosts.\n");
+        builder.append("Remote step hosts implement immediate request/response boundaries. ");
+        builder.append("If the result arrives later, model that boundary as an await step.\n\n");
+        builder.append("- Protocol version: ").append(markdownCode(manifest.protocolVersion())).append('\n');
+        builder.append("- Protobuf package: ").append(markdownCode(manifest.basePackage())).append('\n');
+        builder.append("- Shared types proto: ").append(markdownCode(manifest.typesProto())).append("\n\n");
+        builder.append("| Step | Operator id | Service | RPC | Request | Response | Proto |\n");
+        builder.append("| --- | --- | --- | --- | --- | --- | --- |\n");
+        for (ExternalStepHostContract contract : manifest.steps()) {
+            builder.append("| ")
+                .append(markdownText(contract.step()))
+                .append(" | ")
+                .append(markdownCode(contract.operatorId()))
+                .append(" | ")
+                .append(markdownCode(contract.service()))
+                .append(" | ")
+                .append(markdownCode(contract.rpc()))
+                .append(" | ")
+                .append(markdownCode(contract.inputType()))
+                .append(" | ")
+                .append(markdownCode(contract.outputType()))
+                .append(" | ")
+                .append(markdownCode(contract.proto()))
+                .append(" |\n");
+        }
+        builder.append("\n");
+        builder.append("For `PROTOBUF_HTTP_V1`, hosts receive a `POST` body encoded as `application/x-protobuf` ");
+        builder.append("using the request message and return the response message as `application/x-protobuf`.\n");
+        builder.append("Non-2xx failures should return a `google.rpc.Status` protobuf body when possible.\n");
+        return builder.toString();
+    }
+
+    private String markdownText(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        return value.replace('\n', ' ').replace("|", "\\|");
+    }
+
+    private String markdownCode(String value) {
+        String text = markdownText(value);
+        if (text.isEmpty()) {
+            return "";
+        }
+        String delimiter = "`";
+        while (text.contains(delimiter)) {
+            delimiter += "`";
+        }
+        return delimiter + text + delimiter;
     }
 
     private boolean usesPayloadReference(Map<String, PipelineTemplateMessage> messages) {
@@ -1026,7 +1177,8 @@ public class PipelineProtoGenerator {
         String inputTypeName,
         List<PipelineTemplateField> inputFields,
         String outputTypeName,
-        List<PipelineTemplateField> outputFields
+        List<PipelineTemplateField> outputFields,
+        PipelineTemplateStepExecution execution
     ) {
     }
 
@@ -1034,6 +1186,31 @@ public class PipelineProtoGenerator {
     }
 
     private record AspectDefinition(String name, String position, List<String> enabledTargets) {
+    }
+
+    private record ExternalStepHostManifest(
+        String protocolVersion,
+        String basePackage,
+        String typesProto,
+        List<ExternalStepHostContract> steps
+    ) {
+    }
+
+    private record ExternalStepHostContract(
+        String step,
+        String service,
+        String rpc,
+        String proto,
+        String typesProto,
+        String cardinality,
+        String inputType,
+        String outputType,
+        String operatorId,
+        String protocol,
+        Integer timeoutMs,
+        Map<String, String> target,
+        Map<String, Object> http
+    ) {
     }
 
     private record Arguments(Path moduleDir, Path configPath, Path outputDir, String typesProtoName) {

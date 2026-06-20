@@ -19,9 +19,11 @@ package org.pipelineframework.proto;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junitpioneer.jupiter.ClearSystemProperty;
+import org.pipelineframework.config.pipeline.PipelineJson;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -270,6 +272,84 @@ class PipelineProtoGeneratorTest {
 
         assertTrue(Files.exists(dataProtoPath));
         assertFalse(Files.exists(orchestratorProtoPath));
+        assertFalse(Files.exists(outputDir.resolve("external-step-hosts.json")));
+        assertFalse(Files.exists(outputDir.resolve("EXTERNAL-STEP-HOSTS.md")));
+    }
+
+    @Test
+    void generatesExternalStepHostContractPackForRemoteSteps() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Remote Step Test"
+            basePackage: "com.example.remote"
+            transport: "REST"
+            messages:
+              ChargeRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeRequest"
+                outputTypeName: "ChargeResult"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "charge-card"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  timeoutMs: 3000
+                  target:
+                    urlConfigKey: "tpf.remote-operators.charge-card.url"
+            """;
+        Path configPath = tempDir.resolve("remote-step-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-remote-step-out");
+
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+
+        Path manifestPath = outputDir.resolve("external-step-hosts.json");
+        Path readmePath = outputDir.resolve("EXTERNAL-STEP-HOSTS.md");
+
+        assertTrue(Files.exists(outputDir.resolve("charge-card-svc.proto")));
+        assertTrue(Files.exists(outputDir.resolve("pipeline-types.proto")));
+        assertTrue(Files.exists(manifestPath));
+        assertTrue(Files.exists(readmePath));
+
+        JsonNode manifest = PipelineJson.mapper().readTree(manifestPath.toFile());
+        assertEquals("tpf.external-step-hosts.v1", manifest.path("protocolVersion").asText());
+        assertEquals("com.example.remote", manifest.path("basePackage").asText());
+        assertEquals("pipeline-types.proto", manifest.path("typesProto").asText());
+
+        JsonNode steps = manifest.path("steps");
+        assertEquals(1, steps.size());
+        JsonNode step = steps.get(0);
+        assertEquals("Charge Card", step.path("step").asText());
+        assertEquals("charge-card", step.path("operatorId").asText());
+        assertEquals("PROTOBUF_HTTP_V1", step.path("protocol").asText());
+        assertEquals("ProcessChargeCardService", step.path("service").asText());
+        assertEquals("remoteProcess", step.path("rpc").asText());
+        assertEquals("charge-card-svc.proto", step.path("proto").asText());
+        assertEquals("ChargeRequest", step.path("inputType").asText());
+        assertEquals("ChargeResult", step.path("outputType").asText());
+        assertEquals("tpf.remote-operators.charge-card.url", step.path("target").path("urlConfigKey").asText());
+        assertEquals("application/x-protobuf", step.path("http").path("contentType").asText());
+        assertEquals("google.rpc.Status", step.path("http").path("failureEnvelope").asText());
+        JsonNode headers = step.path("http").path("headers");
+        assertTrue(headers.isArray(), "headers must be an array");
+        assertTrue(headers.size() >= 2, "headers must include at least correlation and execution ids");
+        assertEquals("x-tpf-correlation-id", headers.get(0).asText());
+        assertEquals("x-tpf-execution-id", headers.get(1).asText());
+
+        String readme = Files.readString(readmePath);
+        assertTrue(readme.contains("# External Step Host Contracts"));
+        assertTrue(readme.contains("| Charge Card | `charge-card` | `ProcessChargeCardService`"));
+        assertTrue(readme.contains("If the result arrives later, model that boundary as an await step"));
     }
 
     @Test

@@ -146,6 +146,16 @@ For remote v2 operators, build-time validation is contract-only:
 - the remote target must be configured correctly,
 - no local Java operator resolution or remote endpoint introspection is attempted.
 
+## External Step-Host Contract Pack
+
+When a v2 pipeline declares remote execution, proto generation also emits an external step-host contract pack next to the generated `.proto` files:
+
+- `external-step-hosts.json`: machine-readable step-host manifest.
+- `EXTERNAL-STEP-HOSTS.md`: human-readable implementer notes.
+- `pipeline-types.proto` plus the per-step service `.proto` files: protobuf IDL compiled by the non-Java service.
+
+The manifest records the remote step name, operator id, service, RPC, input/output message names, protobuf file names, target configuration, and `PROTOBUF_HTTP_V1` HTTP contract. This gives Python and other non-Java implementers a stable contract without making loose payload envelopes the default TPF model.
+
 ## Current Invocation Scope
 
 Generated invokers currently support unary execution:
