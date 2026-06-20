@@ -62,6 +62,12 @@ At runtime, the generated adapter:
 - propagates canonical `x-tpf-*` metadata headers,
 - decodes either the output protobuf message or a `google.rpc.Status` failure envelope.
 
+Proto generation emits an external step-host contract pack beside the generated `.proto` files:
+
+- `external-step-hosts.json` for tooling and conformance fixtures.
+- `EXTERNAL-STEP-HOSTS.md` for implementers.
+- `pipeline-types.proto` and each remote step service proto for language-specific codegen.
+
 Remote operators are still immediate request/response steps. The remote implementation may use async I/O internally, but the pipeline execution remains on the same invocation lease and expects the reply inline. If the external system returns `accepted` and the final answer arrives later through a broker, webhook, or human task, model that boundary as `kind: await` instead.
 
 ## Operator vs Await
