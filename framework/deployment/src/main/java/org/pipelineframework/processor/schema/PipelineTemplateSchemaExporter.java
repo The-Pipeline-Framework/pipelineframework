@@ -545,8 +545,88 @@ public final class PipelineTemplateSchemaExporter {
       "properties": {
         "checkpoint": {
           "$ref": "#/$defs/checkpointPublication"
+        },
+        "object": {
+          "$ref": "#/$defs/objectOutputBoundary"
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "consumes": {
+          "$ref": "#/$defs/objectOutputConsume"
         }
       },
+      "oneOf": [
+        {
+          "required": [
+            "checkpoint"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "object"
+                ]
+              },
+              {
+                "required": [
+                  "to"
+                ]
+              },
+              {
+                "required": [
+                  "consumes"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "object"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "checkpoint"
+                ]
+              },
+              {
+                "required": [
+                  "to"
+                ]
+              },
+              {
+                "required": [
+                  "consumes"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "to",
+            "consumes"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "checkpoint"
+                ]
+              },
+              {
+                "required": [
+                  "object"
+                ]
+              }
+            ]
+          }
+        }
+      ],
       "additionalProperties": false
     },
     "checkpointSubscription": {
@@ -615,6 +695,60 @@ public final class PipelineTemplateSchemaExporter {
         {
           "required": [
             "from"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "objectOutputConsume": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "typeName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mapper": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+        }
+      },
+      "required": [
+        "type",
+        "mapper"
+      ],
+      "additionalProperties": false
+    },
+    "objectOutputBoundary": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "consumes": {
+          "$ref": "#/$defs/objectOutputConsume"
+        }
+      },
+      "required": [
+        "consumes"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "target"
+          ]
+        },
+        {
+          "required": [
+            "to"
           ]
         }
       ],
@@ -822,6 +956,63 @@ public final class PipelineTemplateSchemaExporter {
       "type": "object",
       "additionalProperties": {
         "$ref": "#/$defs/objectSource"
+      }
+    },
+    "objectPublishNaming": {
+      "type": "object",
+      "properties": {
+        "keyTemplate": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "objectPublishPayload": {
+      "type": "object",
+      "properties": {
+        "contentType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "charset": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "objectPublishTarget": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "object"
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "naming": {
+          "$ref": "#/$defs/objectPublishNaming"
+        },
+        "payload": {
+          "$ref": "#/$defs/objectPublishPayload"
+        }
+      },
+      "required": [
+        "kind",
+        "provider"
+      ],
+      "additionalProperties": false
+    },
+    "pipelinePublishTargets": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/objectPublishTarget"
       }
     },
     "v2Execution": {
@@ -1806,6 +1997,9 @@ public final class PipelineTemplateSchemaExporter {
     },
     "sources": {
       "$ref": "#/$defs/pipelineSources"
+    },
+    "publish": {
+      "$ref": "#/$defs/pipelinePublishTargets"
     },
     "input": {
       "$ref": "#/$defs/pipelineInputBoundary"

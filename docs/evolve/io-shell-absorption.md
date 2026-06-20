@@ -39,7 +39,7 @@ Use this decision rule:
 | Moving data representation without changing domain meaning | Framework-owned representation shell |
 | Enforcing business correctness inside another system | Guardrail only; the target system must still participate |
 
-## Object Ingest V1
+## Object Ingest And Publish V1
 
 File/object/S3 ingest is the first connector follow-up because it removes common batch/background plumbing:
 
@@ -51,7 +51,17 @@ File/object/S3 ingest is the first connector follow-up because it removes common
 - payload references or text loading
 - async execution submission
 
-Filesystem and S3 support ship as object source connectors. They are I/O boundary
+Object Publish is the matching output-side shell. It removes terminal plumbing that otherwise appears as a final "write file" or "upload object" step:
+
+- grouping terminal business results
+- deterministic key naming
+- content type and metadata attachment
+- filesystem or S3 provider selection
+- duplicate/idempotent write keys
+- object write telemetry
+- lifecycle reporting outside the business transition list
+
+Filesystem and S3 support ship as object source and target connectors. They are I/O boundary
 capabilities, not pipeline side-effect plugins, even though the runtime-neutral Java SPI still
 uses provider selection internally.
 
@@ -83,13 +93,43 @@ input:
 
 This keeps object discovery out of business steps. In CSV Payments, the folder expansion step can be removed and the pipeline can start with `Process Csv Payments Input`. In Search, an S3 text source can emit `RawDocument` and start at `Parse Document`.
 
+The output-side DSL uses top-level `publish` plus an output binding:
+
+```yaml
+publish:
+  csv-payment-output-files:
+    kind: object
+    provider: filesystem
+    location:
+      root: ../output-csv-file-processing-svc/csv
+    naming:
+      keyTemplate: "{groupKey}.out"
+    payload:
+      contentType: text/csv
+    grouping:
+      maxOpenGroups: 1
+
+output:
+  to: csv-payment-output-files
+  consumes:
+    type: org.pipelineframework.csv.common.domain.PaymentOutput
+    typeName: PaymentOutput
+    mapper: org.pipelineframework.csv.common.mapper.CsvPaymentOutputPublishMapper
+```
+
+This keeps object writing out of business steps. In CSV Payments, the direct output-file step can be replaced by terminal publish: the last business step still emits `PaymentOutput`, and the publish mapper owns only domain-to-payload rendering.
+
+S3 should be a first-class publish target in the same slice as filesystem publish. Otherwise Object Publish would fail parity with Object Ingest and look like a local-file convenience rather than an I/O shell absorption.
+
 Guardrails:
 
 - V1 requires `QUEUE_ASYNC`.
 - V1 rejects FUNCTION pipelines.
 - The emitted input type must match the first step input.
 - The mapper must implement `ObjectSnapshotMapper<T>`.
-- The core runner and provider SPI are runtime-neutral; Quarkus only supplies the current lifecycle adapter.
+- The consumed output type must match the last step output.
+- Streaming terminal output must use `StreamingObjectPublishMapper<T>`; the batch `ObjectPublishMapper<T>` remains for unary/small compatibility only.
+- The core runner and provider SPI are runtime-neutral; provider contracts use JDK `CompletionStage`, and Quarkus/Mutiny adaptation stays inside the current runtime.
 
 ## Very High ROI Capabilities
 

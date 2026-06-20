@@ -1291,6 +1291,9 @@ public class PipelineProtoGenerator {
             if (args != null) {
                 for (int i = 0; i < args.length; i++) {
                     String arg = args[i];
+                    if (arg == null || arg.isBlank()) {
+                        continue;
+                    }
                     if (arg.startsWith("--module-dir=")) {
                         moduleDir = Path.of(arg.substring("--module-dir=".length()));
                     } else if ("--module-dir".equals(arg) && i + 1 < args.length) {

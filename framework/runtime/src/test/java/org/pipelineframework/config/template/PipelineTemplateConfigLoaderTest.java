@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -341,6 +342,85 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void loadsObjectPublishOutputBoundary() throws Exception {
+        String yaml = """
+            appName: "Test App"
+            basePackage: "com.example.test"
+            transport: "GRPC"
+            publish:
+              results:
+                kind: object
+                provider: filesystem
+                location:
+                  root: "/tmp/outgoing"
+                naming:
+                  keyTemplate: "{groupKey}.out"
+                payload:
+                  contentType: text/csv
+            output:
+              to: results
+              consumes:
+                type: com.example.test.FooOutput
+                typeName: FooOutput
+                mapper: com.example.test.mapper.FooOutputPublishMapper
+            steps:
+              - name: "Process Foo"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "FooInput"
+                outputTypeName: "FooOutput"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-object-publish.yaml");
+        Files.writeString(configPath, yaml);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        assertEquals(1, config.publish().size());
+        assertEquals("filesystem", config.publish().get("results").provider());
+        assertEquals("/tmp/outgoing", config.publish().get("results").location().get("root"));
+        assertEquals("{groupKey}.out", config.publish().get("results").naming().keyTemplate());
+        assertEquals("text/csv", config.publish().get("results").payload().contentType());
+        assertNotNull(config.output());
+        assertEquals("results", config.output().object().target());
+        assertEquals("com.example.test.FooOutput", config.output().object().type());
+        assertEquals("FooOutput", config.output().object().typeName());
+        assertEquals("com.example.test.mapper.FooOutputPublishMapper", config.output().object().mapper());
+    }
+
+    @Test
+    void loadsObjectPublishOutputBoundaryDefaults() throws Exception {
+        String yaml = """
+            appName: "Test App"
+            basePackage: "com.example.test"
+            transport: "GRPC"
+            publish:
+              results:
+                kind: object
+                provider: filesystem
+                location:
+                  root: "/tmp/outgoing"
+            output:
+              to: results
+              consumes:
+                type: com.example.test.FooOutput
+                typeName: FooOutput
+                mapper: com.example.test.mapper.FooOutputPublishMapper
+            steps:
+              - name: "Process Foo"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "FooInput"
+                outputTypeName: "FooOutput"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-object-publish-defaults.yaml");
+        Files.writeString(configPath, yaml);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        assertEquals("{groupKey}", config.publish().get("results").naming().keyTemplate());
+        assertEquals("application/octet-stream", config.publish().get("results").payload().contentType());
+        assertEquals(StandardCharsets.UTF_8, config.publish().get("results").payload().charset());
+    }
+
+    @Test
     void rejectsLegacyConnectorSection() throws Exception {
         String yaml = """
             appName: "Test App"
@@ -413,6 +493,29 @@ class PipelineTemplateConfigLoaderTest {
             () -> new PipelineTemplateConfigLoader().load(configPath));
 
         assertEquals("output.checkpoint.idempotencyKeyFields must be declared as a YAML list", exception.getMessage());
+    }
+
+    @Test
+    void rejectsObjectOutputReferencingMissingPublishTarget() throws Exception {
+        String yaml = """
+            appName: "Test App"
+            basePackage: "com.example.test"
+            transport: "GRPC"
+            output:
+              to: missing
+              consumes:
+                type: com.example.test.FooOutput
+                mapper: com.example.test.mapper.FooOutputPublishMapper
+            steps: []
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-missing-publish.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertEquals("output.object publish target not found: missing", exception.getMessage());
     }
 
     @Test

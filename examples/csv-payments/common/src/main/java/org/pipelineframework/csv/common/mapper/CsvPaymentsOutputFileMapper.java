@@ -24,10 +24,17 @@ import org.mapstruct.factory.Mappers;
 import org.pipelineframework.csv.common.domain.CsvPaymentsOutputFile;
 import org.pipelineframework.csv.common.dto.CsvPaymentsOutputFileDto;
 
+/**
+ * Legacy mapper for the direct CSV output-file step.
+ *
+ * @deprecated Use Object Publish with {@code CsvPaymentOutputPublishMapper}; terminal object writing no longer
+ *             needs a domain-to-gRPC output-file mapper in the object-ingest path.
+ */
 @Mapper(
     componentModel = "jakarta",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
+@Deprecated(forRemoval = false)
 public interface CsvPaymentsOutputFileMapper extends org.pipelineframework.mapper.Mapper<CsvPaymentsOutputFile, org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsOutputFile> {
 
   CsvPaymentsOutputFileMapper INSTANCE = Mappers.getMapper( CsvPaymentsOutputFileMapper.class );

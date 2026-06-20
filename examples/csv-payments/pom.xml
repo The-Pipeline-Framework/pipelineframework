@@ -57,6 +57,8 @@
         <argLine />
         <surefireArgLine />
         <pipeline.generatedSourcesArg />
+        <pipeline.configArg />
+        <pipeline.protoConfigArg />
         <pipeline.moduleArg>-Apipeline.module=${project.artifactId}</pipeline.moduleArg>
         <protobuf.descriptor.fileArg />
         <pipeline.parallelism>PARALLEL</pipeline.parallelism>
@@ -314,6 +316,7 @@
                             <configuration>
                                 <compilerArgs>
                                     <arg>${pipeline.generatedSourcesArg}</arg>
+                                    <arg>${pipeline.configArg}</arg>
                                     <arg>${pipeline.moduleArg}</arg>
                                     <arg>${protobuf.descriptor.fileArg}</arg>
                                     <arg>-Apipeline.transport=${tpf.build.transport}</arg>

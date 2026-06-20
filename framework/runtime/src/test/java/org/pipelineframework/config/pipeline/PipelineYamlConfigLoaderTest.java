@@ -95,6 +95,46 @@ class PipelineYamlConfigLoaderTest {
     }
 
     @Test
+    void loadsObjectPublishOutputBoundary() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            platform: "COMPUTE"
+            publish:
+              results:
+                kind: object
+                provider: filesystem
+                location:
+                  root: "/tmp/outgoing"
+                naming:
+                  keyTemplate: "{groupKey}.out"
+                payload:
+                  contentType: text/csv
+            output:
+              to: results
+              consumes:
+                type: com.example.DocumentOutput
+                typeName: DocumentOutput
+                mapper: com.example.DocumentOutputPublishMapper
+            steps:
+              - name: "Process Document"
+                inputTypeName: "DocumentInput"
+                outputTypeName: "DocumentOutput"
+            """));
+
+        assertEquals(1, config.publish().size());
+        assertEquals("filesystem", config.publish().get("results").provider());
+        assertEquals("/tmp/outgoing", config.publish().get("results").location().get("root"));
+        assertEquals("{groupKey}.out", config.publish().get("results").naming().keyTemplate());
+        assertEquals("text/csv", config.publish().get("results").payload().contentType());
+        assertNotNull(config.output());
+        assertEquals("results", config.output().object().target());
+        assertEquals("com.example.DocumentOutput", config.output().object().type());
+        assertEquals("DocumentOutput", config.output().object().typeName());
+        assertEquals("com.example.DocumentOutputPublishMapper", config.output().object().mapper());
+    }
+
+    @Test
     void rejectsSubscriptionAndObjectInputTogether() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
             new PipelineYamlConfigLoader().load(new StringReader("""
@@ -145,6 +185,39 @@ class PipelineYamlConfigLoaderTest {
                 """)));
 
         assertEquals("input.object must declare source or from", exception.getMessage());
+    }
+
+    @Test
+    void rejectsObjectOutputWithoutPublishTargetReference() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                output:
+                  consumes:
+                    type: com.example.DocumentOutput
+                    mapper: com.example.DocumentOutputPublishMapper
+                steps: []
+                """)));
+
+        assertEquals("output.object must declare target or to", exception.getMessage());
+    }
+
+    @Test
+    void rejectsObjectOutputReferencingMissingPublishTarget() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                output:
+                  to: missing
+                  consumes:
+                    type: com.example.DocumentOutput
+                    mapper: com.example.DocumentOutputPublishMapper
+                steps: []
+                """)));
+
+        assertEquals("output.object publish target not found: missing", exception.getMessage());
     }
 
     @Test
