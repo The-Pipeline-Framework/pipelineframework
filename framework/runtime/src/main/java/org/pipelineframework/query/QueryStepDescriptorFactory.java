@@ -3,6 +3,7 @@ package org.pipelineframework.query;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -133,9 +134,9 @@ public class QueryStepDescriptorFactory {
     }
 
     private static Path resolveConfigPath(String serviceName) {
-        String explicit = firstNonBlank(System.getProperty("pipeline.config"), System.getenv("PIPELINE_CONFIG"));
-        if (explicit != null) {
-            Path candidate = Path.of(explicit).toAbsolutePath().normalize();
+        Optional<String> explicit = firstNonBlank(System.getProperty("pipeline.config"), System.getenv("PIPELINE_CONFIG"));
+        if (explicit.isPresent()) {
+            Path candidate = Path.of(explicit.get()).toAbsolutePath().normalize();
             if (!Files.isDirectory(candidate)) {
                 return candidate;
             }
@@ -146,13 +147,13 @@ public class QueryStepDescriptorFactory {
             .orElseThrow(() -> new IllegalStateException("No pipeline YAML found for query step " + serviceName));
     }
 
-    private static String firstNonBlank(String... values) {
+    private static Optional<String> firstNonBlank(String... values) {
         for (String value : values) {
             if (value != null && !value.isBlank()) {
-                return value;
+                return Optional.of(value);
             }
         }
-        return null;
+        return Optional.empty();
     }
 
     private static String toServiceName(String stepName) {

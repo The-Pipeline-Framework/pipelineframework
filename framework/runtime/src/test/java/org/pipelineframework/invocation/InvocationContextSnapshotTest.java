@@ -2,6 +2,7 @@ package org.pipelineframework.invocation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,7 +44,7 @@ class InvocationContextSnapshotTest {
             assertEquals("exec-abc", installed.executionId());
             assertEquals(3, installed.currentStepIndex());
 
-            PipelineExecutionContext executionCtx = PipelineExecutionContextHolder.get();
+            PipelineExecutionContext executionCtx = PipelineExecutionContextHolder.get().orElseThrow();
             assertEquals("tenant-1", executionCtx.tenantId());
             assertEquals("exec-abc", executionCtx.executionId());
             assertEquals(3, executionCtx.currentStepIndex());
@@ -60,7 +61,7 @@ class InvocationContextSnapshotTest {
 
         snapshot.run(() -> {
             assertNull(AwaitExecutionContextHolder.get());
-            assertNull(PipelineExecutionContextHolder.get());
+            assertTrue(PipelineExecutionContextHolder.get().isEmpty());
         });
     }
 
@@ -75,12 +76,12 @@ class InvocationContextSnapshotTest {
 
         snapshot.run(() -> {
             assertEquals("tenant-new", AwaitExecutionContextHolder.get().tenantId());
-            assertEquals("tenant-new", PipelineExecutionContextHolder.get().tenantId());
+            assertEquals("tenant-new", PipelineExecutionContextHolder.get().orElseThrow().tenantId());
         });
 
         // After scope closes, previous contexts are restored
         assertEquals("tenant-prev", AwaitExecutionContextHolder.get().tenantId());
-        assertEquals("tenant-prev", PipelineExecutionContextHolder.get().tenantId());
+        assertEquals("tenant-prev", PipelineExecutionContextHolder.get().orElseThrow().tenantId());
     }
 
     @Test
@@ -93,12 +94,12 @@ class InvocationContextSnapshotTest {
 
         snapshot.run(() -> {
             assertNull(AwaitExecutionContextHolder.get());
-            assertNull(PipelineExecutionContextHolder.get());
+            assertTrue(PipelineExecutionContextHolder.get().isEmpty());
         });
 
         // After scope, previous contexts are restored
         assertEquals("tenant-original", AwaitExecutionContextHolder.get().tenantId());
-        assertEquals("tenant-original", PipelineExecutionContextHolder.get().tenantId());
+        assertEquals("tenant-original", PipelineExecutionContextHolder.get().orElseThrow().tenantId());
     }
 
     @Test
@@ -107,7 +108,7 @@ class InvocationContextSnapshotTest {
         InvocationContextSnapshot snapshot = new InvocationContextSnapshot(null, awaitCtx);
 
         snapshot.run(() -> {
-            PipelineExecutionContext executionCtx = PipelineExecutionContextHolder.get();
+            PipelineExecutionContext executionCtx = PipelineExecutionContextHolder.get().orElseThrow();
             assertEquals(awaitCtx.currentStepIndex(), executionCtx.currentStepIndex());
         });
     }

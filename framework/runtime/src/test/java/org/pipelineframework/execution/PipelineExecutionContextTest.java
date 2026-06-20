@@ -2,10 +2,26 @@ package org.pipelineframework.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.runtime.core.RuntimeAdapters;
 
 class PipelineExecutionContextTest {
+
+    @BeforeEach
+    void resetContext() {
+        RuntimeAdapters.resetForTests();
+        PipelineExecutionContextHolder.clear();
+    }
+
+    @AfterEach
+    void cleanupContext() {
+        RuntimeAdapters.resetForTests();
+        PipelineExecutionContextHolder.clear();
+    }
 
     @Test
     void constructsContextWithValidFields() {
@@ -72,5 +88,28 @@ class PipelineExecutionContextTest {
 
         assertEquals(ctx1, ctx2);
         assertEquals(ctx1.hashCode(), ctx2.hashCode());
+    }
+
+    @Test
+    void holderReturnsEmptyWhenContextIsAbsent() {
+        assertTrue(PipelineExecutionContextHolder.get().isEmpty());
+    }
+
+    @Test
+    void holderReturnsPresentContextWhenSet() {
+        PipelineExecutionContext context = new PipelineExecutionContext("tenant-1", "exec-abc", 2);
+
+        PipelineExecutionContextHolder.set(context);
+
+        assertEquals(context, PipelineExecutionContextHolder.get().orElseThrow());
+    }
+
+    @Test
+    void holderClearRemovesContext() {
+        PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant-1", "exec-abc", 2));
+
+        PipelineExecutionContextHolder.clear();
+
+        assertTrue(PipelineExecutionContextHolder.get().isEmpty());
     }
 }

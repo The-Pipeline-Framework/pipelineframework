@@ -1,6 +1,7 @@
 package org.pipelineframework.invocation;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 import org.pipelineframework.awaitable.AwaitExecutionContext;
@@ -42,7 +43,7 @@ final class InvocationContextSnapshot {
     private InvocationContextScope install() {
         PipelineContext previousPipeline = PipelineContextHolder.get();
         AwaitExecutionContext previousAwait = AwaitExecutionContextHolder.get();
-        PipelineExecutionContext previousExecution = PipelineExecutionContextHolder.get();
+        Optional<PipelineExecutionContext> previousExecution = PipelineExecutionContextHolder.get();
         if (pipelineContext != null) {
             PipelineContextHolder.set(pipelineContext);
         } else {
@@ -64,16 +65,16 @@ final class InvocationContextSnapshot {
     private final class InvocationContextScope implements AutoCloseable {
         private final PipelineContext previousPipeline;
         private final AwaitExecutionContext previousAwait;
-        private final PipelineExecutionContext previousExecution;
+        private final Optional<PipelineExecutionContext> previousExecution;
 
         private InvocationContextScope(
             PipelineContext previousPipeline,
             AwaitExecutionContext previousAwait,
-            PipelineExecutionContext previousExecution
+            Optional<PipelineExecutionContext> previousExecution
         ) {
             this.previousPipeline = previousPipeline;
             this.previousAwait = previousAwait;
-            this.previousExecution = previousExecution;
+            this.previousExecution = Objects.requireNonNull(previousExecution, "previousExecution must not be null");
         }
 
         @Override
@@ -83,11 +84,7 @@ final class InvocationContextSnapshot {
             } else {
                 AwaitExecutionContextHolder.clear();
             }
-            if (previousExecution != null) {
-                PipelineExecutionContextHolder.set(previousExecution);
-            } else {
-                PipelineExecutionContextHolder.clear();
-            }
+            previousExecution.ifPresentOrElse(PipelineExecutionContextHolder::set, PipelineExecutionContextHolder::clear);
             if (previousPipeline != null) {
                 PipelineContextHolder.set(previousPipeline);
             } else {

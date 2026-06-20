@@ -54,17 +54,18 @@ public class QueryStepSupport {
         } catch (RuntimeException ex) {
             return Uni.createFrom().failure(ex);
         }
-        PipelineExecutionContext context = PipelineExecutionContextHolder.get();
-        if (context == null) {
+        Optional<PipelineExecutionContext> context = PipelineExecutionContextHolder.get();
+        if (context.isEmpty()) {
             return connector.execute(new QueryRequest<>(descriptor, input, descriptor.config()));
         }
+        PipelineExecutionContext executionContext = context.orElseThrow();
         QueryCaptureStore store;
         String captureKey;
         String inputJson;
         try {
             store = resolveStore();
             inputJson = json.writeValueAsString(normalizedKeyInput(input, descriptor.keyFields()));
-            captureKey = captureKey(context, descriptor, inputJson);
+            captureKey = captureKey(executionContext, descriptor, inputJson);
         } catch (Exception ex) {
             return Uni.createFrom().failure(ex);
         }
@@ -74,7 +75,7 @@ public class QueryStepSupport {
                     return coerce(existing.get(), outputType);
                 }
                 return connector.execute(new QueryRequest<>(descriptor, input, descriptor.config()))
-                    .onItem().transformToUni(output -> capture(store, context, descriptor, captureKey, inputJson, output, outputType));
+                    .onItem().transformToUni(output -> capture(store, executionContext, descriptor, captureKey, inputJson, output, outputType));
             });
     }
 

@@ -1,5 +1,7 @@
 package org.pipelineframework.execution;
 
+import java.util.Optional;
+
 import org.pipelineframework.runtime.core.RuntimeAdapters;
 
 /**
@@ -11,12 +13,12 @@ public final class PipelineExecutionContextHolder {
     private PipelineExecutionContextHolder() {
     }
 
-    public static PipelineExecutionContext get() {
+    public static Optional<PipelineExecutionContext> get() {
         Object value = RuntimeAdapters.executionContext(CONTEXT_KEY, Object.class);
         if (value instanceof PipelineExecutionContext executionContext) {
-            return executionContext;
+            return Optional.of(executionContext);
         }
-        return null;
+        return Optional.empty();
     }
 
     public static void set(PipelineExecutionContext context) {
