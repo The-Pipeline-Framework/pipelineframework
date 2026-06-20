@@ -308,4 +308,214 @@ class StepDefinitionTest {
         assertEquals(List.of(), step.idempotencyKeyFields());
         assertNull(step.timeout());
     }
+
+    // ---- QUERY kind tests ----
+
+    @Test
+    void constructsQueryStepWithRequiredFields() {
+        StepDefinition step = new StepDefinition(
+            "Load Customer Risk",
+            StepKind.QUERY,
+            null,
+            null,
+            Map.of(),
+            null,
+            List.of(),
+            "customer-risk-by-id",
+            Map.of("source", "risk-db"),
+            List.of("customerId"),
+            null,
+            null,
+            null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            OUTPUT_TYPE,
+            StreamingShape.UNARY_UNARY);
+
+        assertEquals("Load Customer Risk", step.name());
+        assertEquals(StepKind.QUERY, step.kind());
+        assertNull(step.executionClass());
+        assertNull(step.remoteExecution());
+        assertEquals("customer-risk-by-id", step.queryId());
+        assertEquals(List.of("customerId"), step.queryKeyFields());
+        assertEquals(Map.of("source", "risk-db"), step.queryConfig());
+        assertEquals(INPUT_TYPE, step.inputType());
+        assertEquals(OUTPUT_TYPE, step.outputType());
+    }
+
+    @Test
+    void queryStepRejectsNullInputType() {
+        assertThrows(NullPointerException.class, () -> new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            null, null,
+            Map.of(), null, List.of(),
+            "query-id", Map.of(), List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            null,  // null inputType
+            OUTPUT_TYPE, null));
+    }
+
+    @Test
+    void queryStepRejectsNullOutputType() {
+        assertThrows(NullPointerException.class, () -> new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            null, null,
+            Map.of(), null, List.of(),
+            "query-id", Map.of(), List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            null,  // null outputType
+            null));
+    }
+
+    @Test
+    void queryStepRejectsNullQueryId() {
+        assertThrows(NullPointerException.class, () -> new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            null, null,
+            Map.of(), null, List.of(),
+            null,  // null queryId
+            Map.of(), List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null));
+    }
+
+    @Test
+    void queryStepRejectsBlankQueryId() {
+        assertThrows(IllegalArgumentException.class, () -> new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            null, null,
+            Map.of(), null, List.of(),
+            "   ",  // blank queryId
+            Map.of(), List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null));
+    }
+
+    @Test
+    void queryStepRejectsExecutionClass() {
+        assertThrows(IllegalArgumentException.class, () -> new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            EXECUTION_CLASS,  // must be null
+            null,
+            Map.of(), null, List.of(),
+            "query-id", Map.of(), List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null));
+    }
+
+    @Test
+    void queryStepRejectsRemoteExecution() {
+        org.pipelineframework.config.template.PipelineTemplateStepExecution remoteExecution =
+            new org.pipelineframework.config.template.PipelineTemplateStepExecution(
+                "REMOTE", "op-id", "PROTOBUF_HTTP_V1", 3000,
+                org.pipelineframework.config.template.PipelineTemplateRemoteTarget.ofUrlConfigKey("cfg"));
+
+        assertThrows(IllegalArgumentException.class, () -> new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            null,
+            remoteExecution,  // must be null
+            Map.of(), null, List.of(),
+            "query-id", Map.of(), List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null));
+    }
+
+    @Test
+    void queryStepDefaultsQueryConfigToEmptyMapWhenNull() {
+        StepDefinition step = new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            null, null,
+            Map.of(), null, List.of(),
+            "query-id",
+            null,  // null queryConfig
+            null,  // null queryKeyFields
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null);
+
+        assertEquals(Map.of(), step.queryConfig());
+        assertEquals(List.of(), step.queryKeyFields());
+    }
+
+    @Test
+    void queryStepMakesImmutableCopyOfQueryConfig() {
+        Map<String, Object> config = new HashMap<>();
+        config.put("source", "risk-db");
+        StepDefinition step = new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            null, null,
+            Map.of(), null, List.of(),
+            "query-id", config, List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null);
+
+        config.put("extra", "value");
+
+        assertEquals(1, step.queryConfig().size());
+        assertThrows(UnsupportedOperationException.class, () -> step.queryConfig().put("k", "v"));
+    }
+
+    @Test
+    void queryStepMakesImmutableCopyOfQueryKeyFields() {
+        List<String> fields = new ArrayList<>();
+        fields.add("customerId");
+        StepDefinition step = new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            null, null,
+            Map.of(), null, List.of(),
+            "query-id", Map.of(), fields,
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null);
+
+        fields.add("tenantId");
+
+        assertEquals(1, step.queryKeyFields().size());
+        assertThrows(UnsupportedOperationException.class, () -> step.queryKeyFields().add("x"));
+    }
+
+    @Test
+    void convenienceConstructorRejectsQueryKind() {
+        assertThrows(IllegalArgumentException.class, () -> new StepDefinition(
+            "step",
+            StepKind.QUERY,
+            EXECUTION_CLASS,
+            null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null));
+    }
+
+    @Test
+    void internalStepDefaultsQueryFieldsToEmptyCollections() {
+        StepDefinition step = new StepDefinition(
+            "step",
+            StepKind.INTERNAL,
+            EXECUTION_CLASS,
+            null,
+            Map.of(), null, List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null);
+
+        assertNull(step.queryId());
+        assertEquals(Map.of(), step.queryConfig());
+        assertEquals(List.of(), step.queryKeyFields());
+    }
 }
