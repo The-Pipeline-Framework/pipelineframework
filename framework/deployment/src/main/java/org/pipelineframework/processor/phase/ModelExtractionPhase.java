@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -1127,7 +1128,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return null;
         }
         if (combinedMatches.isEmpty()) {
-            return resolvePlainUnaryProcessSignature(ctx, serviceElement, messager);
+            return resolvePlainUnaryProcessSignature(ctx, serviceElement, messager).orElse(null);
         }
         SupportedServiceSignature match = combinedMatches.get(0);
         if (match.materializingWarning() != null) {
@@ -1139,7 +1140,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return match;
     }
 
-    private SupportedServiceSignature resolvePlainUnaryProcessSignature(
+    private Optional<SupportedServiceSignature> resolvePlainUnaryProcessSignature(
             PipelineCompilationContext ctx,
             TypeElement serviceElement,
             javax.annotation.processing.Messager messager) {
@@ -1183,9 +1184,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 "Internal service '" + serviceElement.getQualifiedName()
                     + "' declares multiple public process(In): Uni<Out>" + springPlainMonoHint(ctx)
                     + " methods. Please declare exactly one.");
-            return null;
+            return Optional.empty();
         }
-        return matches.isEmpty() ? null : matches.getFirst();
+        return matches.isEmpty() ? Optional.empty() : Optional.of(matches.getFirst());
     }
 
     private boolean isSpringRendererProfile(PipelineCompilationContext ctx) {
