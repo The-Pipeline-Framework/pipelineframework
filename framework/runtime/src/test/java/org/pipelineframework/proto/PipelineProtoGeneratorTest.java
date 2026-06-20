@@ -18,6 +18,7 @@ package org.pipelineframework.proto;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
@@ -1070,6 +1071,47 @@ class PipelineProtoGeneratorTest {
     }
 
     @Test
+    void rejectsRemoteTargetWithBothUrlAndUrlConfigKey() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Ambiguous Target Test"
+            basePackage: "com.example.ambiguous"
+            transport: "REST"
+            messages:
+              Input:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+              Output:
+                fields:
+                  - number: 1
+                    name: "result"
+                    type: "string"
+            steps:
+              - name: "Call Service"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "Input"
+                outputTypeName: "Output"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "call-service"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  timeoutMs: 500
+                  target:
+                    url: "https://service.example.com/grpc"
+                    urlConfigKey: "tpf.remote-operators.call-service.url"
+            """;
+        Path configPath = tempDir.resolve("ambiguous-target-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-ambiguous-target-out");
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> new PipelineProtoGenerator().generate(tempDir, configPath, outputDir));
+        assertTrue(error.getMessage().contains("Specify either url or urlConfigKey"));
+    }
+
+    @Test
     void generatesExternalStepHostContractPackWithGrpcTransport() throws Exception {
         String yaml = """
             version: 2
@@ -1322,7 +1364,7 @@ class PipelineProtoGeneratorTest {
     @Test
     void generatesPayloadReferenceTypeForPayloadRefFields() throws Exception {
         String yaml = """
-
+            version: 2
             appName: "Materialized Search"
             basePackage: "com.example.search"
             transport: "GRPC"

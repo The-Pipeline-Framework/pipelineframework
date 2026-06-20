@@ -410,13 +410,18 @@ public class PipelineProtoGenerator {
 
     private Map<String, String> targetMap(PipelineTemplateRemoteTarget target) {
         if (target == null) {
-            return Map.of();
+            throw new IllegalArgumentException("Remote step host target requires exactly one of url or urlConfigKey");
+        }
+        boolean hasUrl = target.url() != null;
+        boolean hasUrlConfigKey = target.urlConfigKey() != null;
+        if (hasUrl == hasUrlConfigKey) {
+            throw new IllegalArgumentException("Remote step host target requires exactly one of url or urlConfigKey");
         }
         Map<String, String> values = new LinkedHashMap<>();
-        if (target.url() != null) {
+        if (hasUrl) {
             values.put("url", target.url());
         }
-        if (target.urlConfigKey() != null) {
+        if (hasUrlConfigKey) {
             values.put("urlConfigKey", target.urlConfigKey());
         }
         return values;
