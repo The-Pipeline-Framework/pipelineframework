@@ -1,7 +1,8 @@
 package org.pipelineframework.query;
 
 import java.util.List;
-import java.util.Map;
+
+import org.pipelineframework.config.pipeline.PipelineYamlJpaQuery;
 
 /**
  * Runtime descriptor for a generated query client step.
@@ -15,7 +16,7 @@ public record QueryStepDescriptor(
     String outputType,
     String cardinality,
     List<String> keyFields,
-    Map<String, Object> config
+    PipelineYamlJpaQuery jpa
 ) {
     public QueryStepDescriptor {
         requireText(stepId, "stepId");
@@ -29,7 +30,9 @@ public record QueryStepDescriptor(
             throw new IllegalArgumentException("Query step '" + stepId + "' supports only ONE_TO_ONE cardinality in v1");
         }
         keyFields = keyFields == null ? List.of() : List.copyOf(keyFields);
-        config = config == null ? Map.of() : Map.copyOf(config);
+        if (jpa == null) {
+            throw new IllegalArgumentException("jpa query config must not be null");
+        }
     }
 
     private static void requireText(String value, String field) {

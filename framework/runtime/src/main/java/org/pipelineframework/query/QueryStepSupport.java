@@ -8,6 +8,7 @@ import java.util.Collection;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletionStage;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -24,16 +25,16 @@ import org.pipelineframework.execution.PipelineExecutionContextHolder;
  */
 @ApplicationScoped
 public class QueryStepSupport {
-    private final List<QueryConnector<?, ?>> connectors;
+    private final List<FrameworkQueryConnector> connectors;
     private final List<QueryCaptureStore> stores;
     private final ObjectMapper json = PipelineJson.mapper();
 
     @Inject
-    public QueryStepSupport(Instance<QueryConnector<?, ?>> connectors, Instance<QueryCaptureStore> stores) {
+    public QueryStepSupport(Instance<FrameworkQueryConnector> connectors, Instance<QueryCaptureStore> stores) {
         this(toList(connectors), toStores(stores));
     }
 
-    public QueryStepSupport(Collection<QueryConnector<?, ?>> connectors, Collection<QueryCaptureStore> stores) {
+    public QueryStepSupport(Collection<FrameworkQueryConnector> connectors, Collection<QueryCaptureStore> stores) {
         this.connectors = connectors == null ? List.of() : List.copyOf(connectors);
         this.stores = stores == null || stores.isEmpty()
             ? List.of(new InMemoryQueryCaptureStore())
@@ -48,7 +49,7 @@ public class QueryStepSupport {
         if (descriptor == null) {
             return Uni.createFrom().failure(new IllegalArgumentException("descriptor must not be null"));
         }
-        QueryConnector<I, O> connector;
+        FrameworkQueryConnector connector;
         try {
             connector = resolveConnector(descriptor.connector());
         } catch (RuntimeException ex) {
@@ -56,7 +57,7 @@ public class QueryStepSupport {
         }
         Optional<PipelineExecutionContext> context = PipelineExecutionContextHolder.get();
         if (context.isEmpty()) {
-            return connector.execute(new QueryRequest<>(descriptor, input, descriptor.config()));
+            return executeConnector(connector, new QueryRequest<>(descriptor, input), outputType);
         }
         PipelineExecutionContext executionContext = context.orElseThrow();
         QueryCaptureStore store;
@@ -69,28 +70,79 @@ public class QueryStepSupport {
         } catch (Exception ex) {
             return Uni.createFrom().failure(ex);
         }
-        return store.get(captureKey)
+        return getCaptured(store, captureKey)
             .onItem().transformToUni(existing -> {
                 if (existing.isPresent()) {
                     return coerce(existing.get(), outputType);
                 }
-                return connector.execute(new QueryRequest<>(descriptor, input, descriptor.config()))
+                return executeConnector(connector, new QueryRequest<>(descriptor, input), outputType)
                     .onItem().transformToUni(output -> capture(store, executionContext, descriptor, captureKey, inputJson, output, outputType));
             });
     }
 
-    @SuppressWarnings("unchecked")
-    private <I, O> QueryConnector<I, O> resolveConnector(String connectorName) {
-        List<QueryConnector<?, ?>> matches = connectors.stream()
+    private <O> Uni<O> executeConnector(
+        FrameworkQueryConnector connector,
+        QueryRequest<?> request,
+        Class<O> outputType
+    ) {
+        CompletionStage<O> result;
+        try {
+            result = connector.queryOne(request, outputType);
+        } catch (RuntimeException ex) {
+            return Uni.createFrom().failure(ex);
+        }
+        if (result == null) {
+            return Uni.createFrom().failure(new IllegalStateException(
+                "Framework query connector '" + connector.connectorName() + "' returned null CompletionStage"));
+        }
+        return Uni.createFrom().completionStage(result)
+            .onItem().ifNull().failWith(() -> new IllegalStateException(
+                "Framework query connector '" + connector.connectorName() + "' completed with null result"));
+    }
+
+    private Uni<Optional<QueryCaptureRecord>> getCaptured(QueryCaptureStore store, String captureKey) {
+        CompletionStage<Optional<QueryCaptureRecord>> result;
+        try {
+            result = store.get(captureKey);
+        } catch (RuntimeException ex) {
+            return Uni.createFrom().failure(ex);
+        }
+        if (result == null) {
+            return Uni.createFrom().failure(new IllegalStateException(
+                "Query capture store '" + store.providerName() + "' returned null CompletionStage from get"));
+        }
+        return Uni.createFrom().completionStage(result)
+            .onItem().ifNull().failWith(() -> new IllegalStateException(
+                "Query capture store '" + store.providerName() + "' completed get with null Optional"));
+    }
+
+    private Uni<QueryCaptureRecord> putCaptured(QueryCaptureStore store, QueryCaptureRecord record) {
+        CompletionStage<QueryCaptureRecord> result;
+        try {
+            result = store.putIfAbsent(record);
+        } catch (RuntimeException ex) {
+            return Uni.createFrom().failure(ex);
+        }
+        if (result == null) {
+            return Uni.createFrom().failure(new IllegalStateException(
+                "Query capture store '" + store.providerName() + "' returned null CompletionStage from putIfAbsent"));
+        }
+        return Uni.createFrom().completionStage(result)
+            .onItem().ifNull().failWith(() -> new IllegalStateException(
+                "Query capture store '" + store.providerName() + "' completed putIfAbsent with null record"));
+    }
+
+    private FrameworkQueryConnector resolveConnector(String connectorName) {
+        List<FrameworkQueryConnector> matches = connectors.stream()
             .filter(connector -> connectorName.equals(connector.connectorName()))
             .toList();
         if (matches.isEmpty()) {
-            throw new IllegalStateException("No QueryConnector registered with connectorName '" + connectorName + "'");
+            throw new IllegalStateException("No framework query connector registered with connectorName '" + connectorName + "'");
         }
         if (matches.size() > 1) {
-            throw new IllegalStateException("Multiple QueryConnector beans registered with connectorName '" + connectorName + "'");
+            throw new IllegalStateException("Multiple framework query connectors registered with connectorName '" + connectorName + "'");
         }
-        return (QueryConnector<I, O>) matches.get(0);
+        return matches.get(0);
     }
 
     private QueryCaptureStore resolveStore() {
@@ -130,7 +182,7 @@ public class QueryStepSupport {
                 outputJson,
                 outputType.getName(),
                 Instant.now());
-            return store.putIfAbsent(record).onItem().transformToUni(captured -> coerce(captured, outputType));
+            return putCaptured(store, record).onItem().transformToUni(captured -> coerce(captured, outputType));
         } catch (Exception ex) {
             return Uni.createFrom().failure(ex);
         }

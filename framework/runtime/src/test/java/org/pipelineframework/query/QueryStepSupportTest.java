@@ -1,16 +1,19 @@
 package org.pipelineframework.query;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.pipeline.PipelineYamlJpaQuery;
 import org.pipelineframework.execution.PipelineExecutionContext;
 import org.pipelineframework.execution.PipelineExecutionContextHolder;
 
@@ -23,7 +26,7 @@ class QueryStepSupportTest {
 
     @Test
     void unmanagedExecutionCallsConnectorEachTimeWithoutCapture() {
-        CountingConnector connector = new CountingConnector();
+        CountingFrameworkConnector connector = new CountingFrameworkConnector();
         QueryStepSupport support = new QueryStepSupport(List.of(connector), List.of(new InMemoryQueryCaptureStore()));
         QueryStepDescriptor descriptor = descriptor();
         Lookup input = new Lookup("customer-1", "US");
@@ -40,7 +43,7 @@ class QueryStepSupportTest {
 
     @Test
     void managedExecutionReusesCapturedOutputForSameExecutionStepAndKey() {
-        CountingConnector connector = new CountingConnector();
+        CountingFrameworkConnector connector = new CountingFrameworkConnector();
         QueryStepSupport support = new QueryStepSupport(List.of(connector), List.of(new InMemoryQueryCaptureStore()));
         QueryStepDescriptor descriptor = descriptor();
         Lookup input = new Lookup("customer-1", "US");
@@ -57,7 +60,7 @@ class QueryStepSupportTest {
 
     @Test
     void keyFieldsLimitCaptureIdentityToSelectedInputFields() {
-        CountingConnector connector = new CountingConnector();
+        CountingFrameworkConnector connector = new CountingFrameworkConnector();
         QueryStepSupport support = new QueryStepSupport(List.of(connector), List.of(new InMemoryQueryCaptureStore()));
         QueryStepDescriptor descriptor = descriptor();
         PipelineExecutionContextHolder.set(new PipelineExecutionContext("tenant-1", "exec-1", 2));
@@ -86,43 +89,95 @@ class QueryStepSupportTest {
             Snapshot.class.getName(),
             java.time.Instant.now());
 
-        store.putIfAbsent(record).await().atMost(Duration.ofSeconds(2));
+        store.putIfAbsent(record).toCompletableFuture().join();
 
-        assertTrue(store.get("capture-key").await().atMost(Duration.ofSeconds(2)).isPresent());
-        assertTrue(store.remove("capture-key").await().atMost(Duration.ofSeconds(2)));
-        assertTrue(store.get("capture-key").await().atMost(Duration.ofSeconds(2)).isEmpty());
+        assertTrue(store.get("capture-key").toCompletableFuture().join().isPresent());
+        assertTrue(store.remove("capture-key").toCompletableFuture().join());
+        assertTrue(store.get("capture-key").toCompletableFuture().join().isEmpty());
 
-        store.putIfAbsent(record).await().atMost(Duration.ofSeconds(2));
-        store.clear().await().atMost(Duration.ofSeconds(2));
+        store.putIfAbsent(record).toCompletableFuture().join();
+        store.clear().toCompletableFuture().join();
 
-        assertTrue(store.get("capture-key").await().atMost(Duration.ofSeconds(2)).isEmpty());
+        assertTrue(store.get("capture-key").toCompletableFuture().join().isEmpty());
+    }
+
+    @Test
+    void connectorNullCompletionStageFailsDeterministically() {
+        QueryStepSupport support = new QueryStepSupport(List.of(new NullStageFrameworkConnector()), List.of(new InMemoryQueryCaptureStore()));
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () ->
+            support.queryOneToOne(descriptor(), new Lookup("customer-1", "US"), Snapshot.class)
+                .await().atMost(Duration.ofSeconds(2)));
+
+        assertTrue(failure.getMessage().contains("returned null CompletionStage"));
+    }
+
+    @Test
+    void connectorCompletedNullResultFailsDeterministically() {
+        QueryStepSupport support = new QueryStepSupport(List.of(new NullResultFrameworkConnector()), List.of(new InMemoryQueryCaptureStore()));
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () ->
+            support.queryOneToOne(descriptor(), new Lookup("customer-1", "US"), Snapshot.class)
+                .await().atMost(Duration.ofSeconds(2)));
+
+        assertTrue(failure.getMessage().contains("completed with null result"));
     }
 
     private QueryStepDescriptor descriptor() {
         return new QueryStepDescriptor(
             "LoadCustomerRisk",
             "customer-risk-by-id",
-            "customer-risk",
+            "jpa",
             "v1",
             Lookup.class.getName(),
             Snapshot.class.getName(),
             "ONE_TO_ONE",
             List.of("customerId"),
-            Map.of("source", "risk-db"));
+            new PipelineYamlJpaQuery(
+                CustomerRiskEntity.class.getName(),
+                Map.of("customerId", "input.customerId"),
+                Map.of("customerId", "customerId", "riskBand", "riskBand", "callNumber", "callNumber"),
+                "single"));
     }
 
-    private static final class CountingConnector implements QueryConnector<Lookup, Snapshot> {
+    private static final class CountingFrameworkConnector implements FrameworkQueryConnector {
         private final AtomicInteger calls = new AtomicInteger();
 
         @Override
         public String connectorName() {
-            return "customer-risk";
+            return "jpa";
         }
 
         @Override
-        public Uni<Snapshot> execute(QueryRequest<Lookup> request) {
+        public <O> CompletionStage<O> queryOne(QueryRequest<?> request, Class<O> outputType) {
             int call = calls.incrementAndGet();
-            return Uni.createFrom().item(new Snapshot(request.input().customerId(), "MEDIUM", call));
+            Lookup input = (Lookup) request.input();
+            Snapshot output = new Snapshot(input.customerId(), "MEDIUM", call);
+            return CompletableFuture.completedFuture(outputType.cast(output));
+        }
+    }
+
+    private static final class NullStageFrameworkConnector implements FrameworkQueryConnector {
+        @Override
+        public String connectorName() {
+            return "jpa";
+        }
+
+        @Override
+        public <O> CompletionStage<O> queryOne(QueryRequest<?> request, Class<O> outputType) {
+            return null;
+        }
+    }
+
+    private static final class NullResultFrameworkConnector implements FrameworkQueryConnector {
+        @Override
+        public String connectorName() {
+            return "jpa";
+        }
+
+        @Override
+        public <O> CompletionStage<O> queryOne(QueryRequest<?> request, Class<O> outputType) {
+            return CompletableFuture.completedFuture(null);
         }
     }
 
@@ -130,5 +185,8 @@ class QueryStepSupportTest {
     }
 
     record Snapshot(String customerId, String riskBand, int callNumber) {
+    }
+
+    private static final class CustomerRiskEntity {
     }
 }

@@ -1258,6 +1258,33 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void acceptsEnvelopeHttpRemoteExecutionProtocol() throws IOException {
+        Path file = tempDir.resolve("pipeline.yaml");
+        Files.writeString(file, """
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "chunk"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "com.example.contract.ParsedDocument"
+                outputTypeName: "com.example.contract.ChunkResult"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "chunker"
+                  protocol: "ENVELOPE_HTTP_V1"
+                  target:
+                    url: "https://example.com/operators/chunker"
+            """);
+
+        List<StepDefinition> steps = new StepDefinitionParser().parseStepDefinitions(file);
+
+        assertEquals(1, steps.size());
+        assertEquals("ENVELOPE_HTTP_V1", steps.getFirst().remoteExecution().protocol());
+        assertEquals("chunker", steps.getFirst().remoteExecution().operatorId());
+    }
+
+    @Test
     void rejectsRemoteExecutionWhenMixedWithLocalServiceFields() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         Path file = tempDir.resolve("pipeline.yaml");
@@ -1402,10 +1429,14 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             queries:
               customer-risk-by-id:
-                connector: "customer-risk"
+                connector: "jpa"
                 input: "com.example.CustomerRiskLookup"
                 output: "com.example.CustomerRiskSnapshot"
                 version: "v1"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
             steps:
               - name: "Load Customer Risk"
                 kind: "query"
@@ -1438,9 +1469,13 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             queries:
               customer-risk-by-id:
-                connector: "customer-risk"
+                connector: "jpa"
                 input: "com.example.CustomerRiskLookup"
                 output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
             steps:
               - name: "Load Customer Risk"
                 kind: "query"
@@ -1466,9 +1501,13 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             queries:
               customer-risk-by-id:
-                connector: "customer-risk"
+                connector: "jpa"
                 input: "com.example.CustomerRiskLookup"
                 output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
             steps:
               - name: "Load Customer Risk"
                 kind: "query"
@@ -1512,9 +1551,13 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             queries:
               customer-risk-by-id:
-                connector: "customer-risk"
+                connector: "jpa"
                 input: "com.example.CustomerRiskLookup"
                 output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
             steps:
               - name: "Load Customer Risk"
                 kind: "query"
@@ -1538,9 +1581,13 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             queries:
               customer-risk-by-id:
-                connector: "customer-risk"
+                connector: "jpa"
                 input: "com.example.CustomerRiskLookup"
                 output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
             steps:
               - name: "Load Customer Risk Stream"
                 kind: "query"
@@ -1573,9 +1620,13 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             queries:
               customer-risk-by-id:
-                connector: "customer-risk"
+                connector: "jpa"
                 input: "com.example.CustomerRiskLookup"
                 output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
             steps:
               - name: "Load Customer Risk"
                 kind: "query"
@@ -1601,9 +1652,13 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             queries:
               customer-risk-by-id:
-                connector: "customer-risk"
+                connector: "jpa"
                 input: "com.example.CustomerRiskLookup"
                 output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
             steps:
               - name: "Load Customer Risk"
                 kind: "query"

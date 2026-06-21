@@ -22,7 +22,7 @@ class QueryStepDescriptorFactoryTest {
     @Test
     void descriptorAcceptsCompactGeneratedServiceNameAndExplicitRelativeConfigFile() throws Exception {
         Path explicit = tempDir.resolve("query-config.yaml");
-        Files.writeString(explicit, pipelineYaml("customer-risk", "v2"));
+        Files.writeString(explicit, pipelineYaml("v2"));
         System.setProperty("pipeline.config", relativeToWorkingDirectory(explicit).toString());
 
         QueryStepDescriptorFactory factory = new QueryStepDescriptorFactory();
@@ -33,9 +33,10 @@ class QueryStepDescriptorFactoryTest {
                 "org.example.CustomerRiskSnapshot").await().atMost(Duration.ofSeconds(2));
 
             assertEquals("customer-risk-by-id", descriptor.queryId());
-            assertEquals("customer-risk", descriptor.connector());
+            assertEquals("jpa", descriptor.connector());
             assertEquals("v2", descriptor.version());
-            assertEquals("customer_risk", descriptor.config().get("table"));
+            assertEquals("org.example.CustomerRiskEntity", descriptor.jpa().entity());
+            assertEquals("input.customerId", descriptor.jpa().where().get("customerId"));
         } finally {
             factory.shutdown();
         }
@@ -43,7 +44,7 @@ class QueryStepDescriptorFactoryTest {
 
     @Test
     void descriptorResolvesExplicitConfigDirectory() throws Exception {
-        Files.writeString(tempDir.resolve("pipeline.yaml"), pipelineYaml("directory-risk", "v1"));
+        Files.writeString(tempDir.resolve("pipeline.yaml"), pipelineYaml("v1"));
         System.setProperty("pipeline.config", tempDir.toString());
 
         QueryStepDescriptorFactory factory = new QueryStepDescriptorFactory();
@@ -53,7 +54,7 @@ class QueryStepDescriptorFactoryTest {
                 "org.example.CustomerRiskLookup",
                 "org.example.CustomerRiskSnapshot").await().atMost(Duration.ofSeconds(2));
 
-            assertEquals("directory-risk", descriptor.connector());
+            assertEquals("jpa", descriptor.connector());
         } finally {
             factory.shutdown();
         }
@@ -63,18 +64,24 @@ class QueryStepDescriptorFactoryTest {
         return Path.of("").toAbsolutePath().normalize().relativize(path.toAbsolutePath().normalize());
     }
 
-    private static String pipelineYaml(String connector, String version) {
+    private static String pipelineYaml(String version) {
         return """
             basePackage: org.example
             transport: GRPC
             queries:
               customer-risk-by-id:
-                connector: %s
+                connector: jpa
                 input: org.example.CustomerRiskLookup
                 output: org.example.CustomerRiskSnapshot
                 version: %s
-                config:
-                  table: customer_risk
+                jpa:
+                  entity: org.example.CustomerRiskEntity
+                  where:
+                    customerId: input.customerId
+                  projection:
+                    customerId: customerId
+                    riskBand: riskBand
+                  result: single
             steps:
               - name: Load Customer Risk
                 kind: query
@@ -84,6 +91,6 @@ class QueryStepDescriptorFactoryTest {
                 output: org.example.CustomerRiskSnapshot
                 capture:
                   keyFields: [customerId]
-            """.formatted(connector, version);
+            """.formatted(version);
     }
 }

@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -33,6 +34,7 @@ import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.ReactiveReturnKind;
 import org.pipelineframework.processor.ir.ServiceApiKind;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
@@ -379,6 +381,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         SupportedServiceSignature serviceSignature = resolveSupportedInternalSignature(
+            ctx,
             serviceClass,
             ctx.getProcessingEnv().getTypeUtils(),
             ctx.getProcessingEnv().getMessager());
@@ -386,7 +389,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Internal step service '" + stepDef.executionClass().canonicalName()
-                    + "' must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out> method for step '"
+                    + "' must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out>"
+                    + springPlainMonoHint(ctx) + " method for step '"
                     + stepDef.name() + "'");
             return null;
         }
@@ -457,6 +461,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .outputMapping(new TypeMapping(outputType, outboundMapper, outboundMapper != null, outputType))
             .streamingShape(serviceSignature.shape())
             .serviceApiKind(serviceSignature.apiKind())
+            .reactiveReturnKind(serviceSignature.reactiveReturnKind())
             .build();
     }
 
@@ -503,6 +508,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .sideEffect(false)
             .cacheKeyGenerator(null)
             .serviceApiKind(serviceSignature.apiKind())
+            .reactiveReturnKind(serviceSignature.reactiveReturnKind())
             .build();
     }
 
@@ -1095,6 +1101,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     }
 
     private SupportedServiceSignature resolveSupportedInternalSignature(
+            PipelineCompilationContext ctx,
             TypeElement serviceElement,
             Types typeUtils,
             javax.annotation.processing.Messager messager) {
@@ -1170,7 +1177,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return null;
         }
         if (combinedMatches.isEmpty()) {
-            return resolvePlainUniProcessSignature(serviceElement, messager);
+            return resolvePlainUnaryProcessSignature(ctx, serviceElement, messager).orElse(null);
         }
         SupportedServiceSignature match = combinedMatches.get(0);
         if (match.materializingWarning() != null) {
@@ -1182,10 +1189,12 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return match;
     }
 
-    private SupportedServiceSignature resolvePlainUniProcessSignature(
+    private Optional<SupportedServiceSignature> resolvePlainUnaryProcessSignature(
+            PipelineCompilationContext ctx,
             TypeElement serviceElement,
             javax.annotation.processing.Messager messager) {
         List<SupportedServiceSignature> matches = new ArrayList<>();
+        boolean springProfile = isSpringRendererProfile(ctx);
         for (Element enclosed : serviceElement.getEnclosedElements()) {
             if (!(enclosed instanceof ExecutableElement method)) {
                 continue;
@@ -1198,8 +1207,15 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             }
             TypeMirror returnType = method.getReturnType();
             if (!(returnType instanceof DeclaredType declaredReturn)
-                || !isDeclaredType(declaredReturn, "io.smallrye.mutiny.Uni")
                 || declaredReturn.getTypeArguments().size() != 1) {
+                continue;
+            }
+            ReactiveReturnKind reactiveReturnKind;
+            if (isDeclaredType(declaredReturn, "io.smallrye.mutiny.Uni")) {
+                reactiveReturnKind = ReactiveReturnKind.MUTINY_UNI;
+            } else if (springProfile && isDeclaredType(declaredReturn, "reactor.core.publisher.Mono")) {
+                reactiveReturnKind = ReactiveReturnKind.REACTOR_MONO;
+            } else {
                 continue;
             }
             matches.add(new SupportedServiceSignature(
@@ -1207,6 +1223,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 StreamingShape.UNARY_UNARY,
                 TypeName.get(method.getParameters().getFirst().asType()),
                 TypeName.get(declaredReturn.getTypeArguments().getFirst()),
+                reactiveReturnKind,
                 null));
         }
 
@@ -1214,10 +1231,19 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             messager.printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Internal service '" + serviceElement.getQualifiedName()
-                    + "' declares multiple public process(In): Uni<Out> methods. Please declare exactly one.");
-            return null;
+                    + "' declares multiple public process(In): Uni<Out>" + springPlainMonoHint(ctx)
+                    + " methods. Please declare exactly one.");
+            return Optional.empty();
         }
-        return matches.isEmpty() ? null : matches.getFirst();
+        return matches.isEmpty() ? Optional.empty() : Optional.of(matches.getFirst());
+    }
+
+    private boolean isSpringRendererProfile(PipelineCompilationContext ctx) {
+        return ctx != null && "spring".equalsIgnoreCase(ctx.getRendererProfile());
+    }
+
+    private String springPlainMonoHint(PipelineCompilationContext ctx) {
+        return isSpringRendererProfile(ctx) ? " or process(In): Mono<Out>" : "";
     }
 
     private boolean isDeclaredType(DeclaredType declaredType, String qualifiedName) {
@@ -1268,6 +1294,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             shape,
             TypeName.get(declared.getTypeArguments().get(0)),
             TypeName.get(declared.getTypeArguments().get(1)),
+            ReactiveReturnKind.MUTINY_UNI,
             materializingWarning));
         matchNames.add(interfaceName);
     }
@@ -1471,6 +1498,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         StreamingShape shape,
         TypeName inputType,
         TypeName outputType,
+        ReactiveReturnKind reactiveReturnKind,
         String materializingWarning
     ) {
     }

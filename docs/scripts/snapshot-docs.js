@@ -46,7 +46,7 @@ export function compareVersionsDesc(left, right) {
 }
 
 const root = process.cwd()
-const sourceDirs = ['guide', 'value']
+const sourceDirs = ['value', 'design', 'develop', 'deploy', 'operate', 'evolve']
 const isDirectExecution =
   process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 const args = process.argv.slice(2)
@@ -124,34 +124,20 @@ async function applySnapshotSpecificRewrites(filePath) {
 export function applySnapshotSpecificRewritesContent(content, relativePath, versionValue) {
   const normalizedVersion = normalizeVersion(versionValue)
 
-  if (relativePath === path.join('guide', 'build', 'using-plugins.md')) {
-    const target = `/versions/${normalizedVersion}/guide/development/using-plugins`
-    return content
-      .replace('content: 2;url=/guide/development/using-plugins', `content: 2;url=${target}`)
-      .replace("window.location.replace('/guide/development/using-plugins')", `window.location.replace('${target}')`)
-  }
-
-  if (relativePath === path.join('guide', 'evolve', 'testing-guidelines.md')) {
+  if (relativePath === path.join('evolve', 'testing-guidelines.md')) {
     return `---
 search: false
 ---
 
 # Testing Guidelines for This Project
 
-This page is maintainer process guidance rather than versioned user documentation. Contributors should use the current internal policy at [Testing Guidelines](/guide/evolve/testing-guidelines).
+This page is maintainer process guidance rather than versioned user documentation. Contributors should use the current internal policy at [Testing Guidelines](/evolve/testing-guidelines).
 `
-  }
-
-  if (relativePath === path.join('guide', 'getting-started', 'business-value.md')) {
-    return content
-      .replace("withBase('/value/business-value')", `withBase('/versions/${normalizedVersion}/value/business-value')`)
-      .replace('Redirect to /value/business-value failed', `Redirect to /versions/${normalizedVersion}/value/business-value failed`)
-      .replace('](/value/business-value)', `](/versions/${normalizedVersion}/value/business-value)`)
   }
 
   if (relativePath === 'index.md') {
     return content.replace(
-      /^(\s*link:\s*)\/(guide|value)\//gm,
+      /^(\s*link:\s*)\/(value|design|develop|deploy|operate|evolve)\//gm,
       `$1/versions/${normalizedVersion}/$2/`
     )
   }
@@ -164,26 +150,26 @@ async function rewriteInternalLinks(filePath) {
   const versionPrefix = `/versions/${version}`
   let updated = content
 
+  const canonicalDirs = ['value', 'design', 'develop', 'deploy', 'operate', 'evolve']
   const replacements = [
     {from: '](/)', to: `](${versionPrefix}/)`},
     {from: '](/index)', to: `](${versionPrefix}/index)`},
-    {from: '](/guide)', to: `](${versionPrefix}/guide)`},
-    {from: '](/guide/', to: `](${versionPrefix}/guide/`},
-    {from: '](/value)', to: `](${versionPrefix}/value)`},
-    {from: '](/value/', to: `](${versionPrefix}/value/`},
     {from: 'href="/"', to: `href="${versionPrefix}/"`},
     {from: 'href="/index"', to: `href="${versionPrefix}/index"`},
-    {from: 'href="/guide"', to: `href="${versionPrefix}/guide"`},
-    {from: 'href="/guide/', to: `href="${versionPrefix}/guide/`},
-    {from: 'href="/value"', to: `href="${versionPrefix}/value"`},
-    {from: 'href="/value/', to: `href="${versionPrefix}/value/`},
     {from: "href='/'", to: `href='${versionPrefix}/'`},
-    {from: "href='/index'", to: `href='${versionPrefix}/index'`},
-    {from: "href='/guide'", to: `href='${versionPrefix}/guide'`},
-    {from: "href='/guide/", to: `href='${versionPrefix}/guide/`},
-    {from: "href='/value'", to: `href='${versionPrefix}/value'`},
-    {from: "href='/value/", to: `href='${versionPrefix}/value/`}
+    {from: "href='/index'", to: `href='${versionPrefix}/index'`}
   ]
+
+  for (const dir of canonicalDirs) {
+    replacements.push(
+      {from: `](/${dir})`, to: `](${versionPrefix}/${dir})`},
+      {from: `](/${dir}/`, to: `](${versionPrefix}/${dir}/`},
+      {from: `href="/${dir}"`, to: `href="${versionPrefix}/${dir}"`},
+      {from: `href="/${dir}/`, to: `href="${versionPrefix}/${dir}/`},
+      {from: `href='/${dir}'`, to: `href='${versionPrefix}/${dir}'`},
+      {from: `href='/${dir}/`, to: `href='${versionPrefix}/${dir}/`}
+    )
+  }
 
   for (const {from, to} of replacements) {
     updated = updated.split(from).join(to)

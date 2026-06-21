@@ -56,11 +56,11 @@ Keep the current platform limits explicit:
 
 <div class="value-links">
 
-- [AWS Lambda Platform](/guide/development/aws-lambda)
-- [Azure Functions Platform](/guide/development/azure-functions)
-- [Google Cloud Run Functions Platform](/guide/development/google-cloud-run-functions)
-- [Runtime Layouts](/guide/build/runtime-layouts/)
-- [Multi-Cloud Function Providers](/guide/build/runtime-layouts/function-providers)
-- [Orchestrator Runtime](/guide/development/orchestrator-runtime/)
+- [AWS Lambda Platform](/deploy/aws-lambda)
+- [Azure Functions Platform](/deploy/azure-functions)
+- [Google Cloud Run Functions Platform](/deploy/google-cloud-run-functions)
+- [Runtime Layouts](/deploy/runtime-layouts/)
+- [Multi-Cloud Function Providers](/deploy/function-providers)
+- [Orchestrator Runtime](/deploy/orchestrator-runtime/)
 
 </div>

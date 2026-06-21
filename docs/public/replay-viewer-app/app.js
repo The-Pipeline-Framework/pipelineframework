@@ -228,7 +228,7 @@ let completionPromptTimeout = null;
 let completionPromptShownForPlayback = false;
 
 function resolveReplayDocsHref() {
-  const replayDocsPath = "/guide/operations/observability/replay";
+  const replayDocsPath = "/operate/observability/replay";
   const currentPath = window.location.pathname;
   if (currentPath.includes("/replay-viewer/") || currentPath.includes("/replay-viewer-app/")) {
     return `${window.location.origin}${replayDocsPath}`;

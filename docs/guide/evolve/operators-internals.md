@@ -1,94 +1,26 @@
-# Operator Invocation Internals
+---
+title: Redirecting...
+search: false
+head:
+  - - meta
+    - name: robots
+      content: noindex
+  - - meta
+    - http-equiv: refresh
+      content: 0;url=/evolve/operators/internals
+---
 
-## Build-Time Flow
+<script setup>
+import {onMounted} from 'vue'
+import {withBase} from 'vitepress'
 
-```mermaid
-flowchart TD
-  A["PipelineConfigBuildSteps"] --> B["PipelineConfigBuildItem"]
-  B --> C["OperatorResolutionBuildSteps"]
-  C --> D["OperatorBuildItem"]
-  D --> E["OperatorLinkValidationBuildSteps"]
-  D --> F["OperatorInvokerBuildSteps"]
-  F --> G["Generated CDI invoker beans"]
-```
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.location.replace(withBase('/evolve/operators/internals'))
+  }
+})
+</script>
 
-## Core Build Items
+# Redirecting...
 
-- `PipelineConfigBuildItem`: parsed operator step declarations.
-- `OperatorBuildItem`: resolved class/method/input/normalized return/category metadata.
-
-## Resolution Contract
-
-- Jandex-only resolution for operator classes and methods.
-- Fail-fast diagnostics for unresolved or ambiguous methods.
-- Return-type normalization to reactive metadata (`Uni<T>` / `Multi<T>`).
-
-## Link Validation Contract
-
-`OperatorLinkValidationBuildSteps` validates adjacent links before generation:
-- cardinality constraints,
-- assignability checks (with generic compatibility),
-- mapper presence checks when direct assignability fails.
-
-## Invoker Generation Contract
-
-`OperatorInvokerBuildSteps` generates operator invoker bytecode with Gizmo:
-- direct invocation (no reflection lookup),
-- CDI bean registration,
-- unary reactive contract (`ReactiveService`),
-- checked/runtime exceptions adapted to `Uni.createFrom().failure(e)`.
-
-Note: this is specific to operator invokers in the Quarkus build-step path. Other generation paths in the annotation processor still render Java sources with JavaPoet.
-
-## Generated Equivalent (Conceptual)
-
-### Non-reactive operator
-
-```java
-@Singleton
-public class EnrichPaymentOperatorInvoker implements ReactiveService<PaymentIn, PaymentOut> {
-
-    @Inject
-    PaymentOperators target;
-
-    @Override
-    public Uni<PaymentOut> process(PaymentIn input) {
-        try {
-            PaymentOut out = target.enrich(input);
-            return Uni.createFrom().item(out);
-        } catch (Exception e) {
-            return Uni.createFrom().failure(e);
-        }
-    }
-}
-```
-
-### Reactive operator
-
-```java
-@Singleton
-public class ScorePaymentOperatorInvoker implements ReactiveService<PaymentIn, PaymentScore> {
-
-    @Inject
-    PaymentScoringOperators target;
-
-    @Override
-    public Uni<PaymentScore> process(PaymentIn input) {
-        try {
-            return target.score(input);
-        } catch (Exception e) {
-            return Uni.createFrom().failure(e);
-        }
-    }
-}
-```
-
-## Current Scope
-
-- Unary invocation is the supported path for generated operator invokers.
-- Streaming service interfaces exist in runtime and transport layers, but operator invoker generation is still unary-scoped.
-
-## Related
-
-- [Operators](/guide/build/operators)
-- [Compiler Pipeline Architecture](/guide/evolve/compiler-pipeline-architecture)
+This page moved to [/evolve/operators/internals](/evolve/operators/internals).

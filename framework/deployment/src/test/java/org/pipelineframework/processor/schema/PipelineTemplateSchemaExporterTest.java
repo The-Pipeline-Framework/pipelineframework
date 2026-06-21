@@ -58,6 +58,7 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("pipelineSources"));
         assertTrue(definitions.has("objectSource"));
         assertTrue(definitions.has("queryDefinition"));
+        assertTrue(definitions.has("jpaQueryDefinition"));
         assertTrue(definitions.has("queryCapture"));
         assertTrue(definitions.has("queryTemplateStep"));
         assertTrue(definitions.has("delegatedOrInternalStep"));
@@ -79,6 +80,15 @@ class PipelineTemplateSchemaExporterTest {
     @Test
     void queryStepSchemaRequiresQueryReferenceAndCaptureFields() {
         JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
+        JsonObject queryDefinition = definitions.getAsJsonObject("queryDefinition");
+        JsonObject queryProperties = queryDefinition.getAsJsonObject("properties");
+        assertEquals("jpa", queryProperties.getAsJsonObject("connector").get("const").getAsString());
+        assertContains(queryDefinition.getAsJsonArray("required"), "jpa");
+
+        JsonObject jpaDefinition = definitions.getAsJsonObject("jpaQueryDefinition");
+        assertContains(jpaDefinition.getAsJsonArray("required"), "entity");
+        assertContains(jpaDefinition.getAsJsonArray("required"), "where");
+
         JsonObject queryStep = definitions.getAsJsonObject("queryTemplateStep");
 
         JsonObject properties = queryStep.getAsJsonObject("properties");
@@ -155,6 +165,18 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(transport.getAsJsonObject("properties").has("config"));
         assertTrue(transport.getAsJsonObject("properties").has("request"));
         assertTrue(transport.getAsJsonObject("properties").has("callback"));
+    }
+
+    @Test
+    void remoteExecutionProtocolEnumIncludesEnvelopeCompatibilityProtocol() {
+        JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
+        JsonObject execution = definitions.getAsJsonObject("v2Execution");
+        JsonArray protocols = execution.getAsJsonObject("properties")
+            .getAsJsonObject("protocol")
+            .getAsJsonArray("enum");
+
+        assertContains(protocols, "PROTOBUF_HTTP_V1");
+        assertContains(protocols, "ENVELOPE_HTTP_V1");
     }
 
     @Test

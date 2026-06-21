@@ -409,10 +409,14 @@ class PipelineYamlConfigLoaderTest {
             transport: "GRPC"
             queries:
               customer-risk-by-id:
-                connector: "customer-risk"
+                connector: "jpa"
                 input: "com.example.CustomerRiskLookup"
                 output: "com.example.CustomerRiskSnapshot"
                 version: "v1"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
             steps: []
             """));
 
@@ -421,10 +425,11 @@ class PipelineYamlConfigLoaderTest {
         PipelineYamlQuery query = config.queries().get("customer-risk-by-id");
         assertNotNull(query);
         assertEquals("customer-risk-by-id", query.id());
-        assertEquals("customer-risk", query.connector());
+        assertEquals("jpa", query.connector());
         assertEquals("com.example.CustomerRiskLookup", query.inputType());
         assertEquals("com.example.CustomerRiskSnapshot", query.outputType());
         assertEquals("v1", query.version());
+        assertEquals("com.example.CustomerRiskEntity", query.jpa().entity());
     }
 
     @Test
@@ -434,9 +439,13 @@ class PipelineYamlConfigLoaderTest {
             transport: "GRPC"
             queries:
               order-risk-by-id:
-                connector: "order-risk"
+                connector: "jpa"
                 inputType: "com.example.OrderRiskLookup"
                 outputType: "com.example.OrderRiskSnapshot"
+                jpa:
+                  entity: "com.example.OrderRiskEntity"
+                  where:
+                    orderId: "input.orderId"
             steps: []
             """));
 
@@ -447,43 +456,52 @@ class PipelineYamlConfigLoaderTest {
     }
 
     @Test
-    void loadsQueriesWithConfigMap() {
+    void loadsQueriesWithJpaConfig() {
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
             basePackage: "com.example"
             transport: "GRPC"
             queries:
               risk-query:
-                connector: "risk-db"
+                connector: "jpa"
                 input: "com.example.RiskLookup"
                 output: "com.example.RiskSnapshot"
-                config:
-                  source: "risk-db"
-                  readTimeout: 5000
+                jpa:
+                  entity: "com.example.RiskEntity"
+                  where:
+                    customerId: "input.customerId"
+                  projection:
+                    riskBand: "riskBand"
+                  result: "single"
             steps: []
             """));
 
         PipelineYamlQuery query = config.queries().get("risk-query");
         assertNotNull(query);
-        assertEquals("risk-db", query.config().get("source"));
-        assertEquals(5000, query.config().get("readTimeout"));
+        assertEquals("com.example.RiskEntity", query.jpa().entity());
+        assertEquals("input.customerId", query.jpa().where().get("customerId"));
+        assertEquals("riskBand", query.jpa().projection().get("riskBand"));
     }
 
     @Test
-    void rejectsMalformedQueryConfigSection() {
+    void rejectsRawQueryConfigSection() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
             new PipelineYamlConfigLoader().load(new StringReader("""
                 basePackage: "com.example"
                 transport: "GRPC"
                 queries:
                   customer-risk-by-id:
-                    connector: customer-risk
+                    connector: jpa
                     input: com.example.CustomerRiskLookup
                     output: com.example.CustomerRiskSnapshot
                     config: "not-a-map"
+                    jpa:
+                      entity: com.example.CustomerRiskEntity
+                      where:
+                        customerId: input.customerId
                 steps: []
                 """)));
 
-        assertEquals("query 'customer-risk-by-id' config must be defined as a map", exception.getMessage());
+        assertEquals("query 'customer-risk-by-id' config is not supported; use jpa", exception.getMessage());
     }
 
     @Test
@@ -493,9 +511,13 @@ class PipelineYamlConfigLoaderTest {
             transport: "GRPC"
             queries:
               customer-risk-by-id:
-                connector: "customer-risk"
+                connector: "jpa"
                 input: "com.example.CustomerRiskLookup"
                 output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
             steps:
               - name: "Load Customer Risk"
                 kind: "query"
@@ -523,9 +545,13 @@ class PipelineYamlConfigLoaderTest {
             transport: "GRPC"
             queries:
               customer-risk-by-id:
-                connector: customer-risk
+                connector: jpa
                 input: com.example.CustomerRiskLookup
                 output: com.example.CustomerRiskSnapshot
+                jpa:
+                  entity: com.example.CustomerRiskEntity
+                  where:
+                    customerId: input.customerId
             steps:
               - name: "Load Customer Risk"
                 kind: query
@@ -545,9 +571,13 @@ class PipelineYamlConfigLoaderTest {
             transport: "GRPC"
             queries:
               my-query:
-                connector: "my-connector"
+                connector: "jpa"
                 input: "com.example.LookupType"
                 output: "com.example.SnapshotType"
+                jpa:
+                  entity: "com.example.Entity"
+                  where:
+                    id: "input.id"
             steps: []
             """));
 
@@ -564,6 +594,10 @@ class PipelineYamlConfigLoaderTest {
                   bad-query:
                     input: "com.example.LookupType"
                     output: "com.example.SnapshotType"
+                    jpa:
+                      entity: "com.example.Entity"
+                      where:
+                        id: "input.id"
                 steps: []
                 """)));
     }
@@ -575,8 +609,12 @@ class PipelineYamlConfigLoaderTest {
                 basePackage: "com.example"
                 queries:
                   bad-query:
-                    connector: "my-connector"
+                    connector: "jpa"
                     output: "com.example.SnapshotType"
+                    jpa:
+                      entity: "com.example.Entity"
+                      where:
+                        id: "input.id"
                 steps: []
                 """)));
     }
@@ -588,8 +626,12 @@ class PipelineYamlConfigLoaderTest {
                 basePackage: "com.example"
                 queries:
                   bad-query:
-                    connector: "my-connector"
+                    connector: "jpa"
                     input: "com.example.LookupType"
+                    jpa:
+                      entity: "com.example.Entity"
+                      where:
+                        id: "input.id"
                 steps: []
                 """)));
     }
@@ -601,9 +643,13 @@ class PipelineYamlConfigLoaderTest {
                 basePackage: "com.example"
                 queries:
                   my-query:
-                    connector: "my-connector"
+                    connector: "jpa"
                     input: "com.example.LookupType"
                     output: "com.example.SnapshotType"
+                    jpa:
+                      entity: "com.example.Entity"
+                      where:
+                        id: "input.id"
                 steps:
                   - name: "My Step"
                     kind: "query"
@@ -634,14 +680,22 @@ class PipelineYamlConfigLoaderTest {
             transport: "GRPC"
             queries:
               customer-risk-by-id:
-                connector: "customer-risk"
+                connector: "jpa"
                 input: "com.example.CustomerRiskLookup"
                 output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
               order-history:
-                connector: "order-history"
+                connector: "jpa"
                 input: "com.example.OrderHistoryLookup"
                 output: "com.example.OrderHistorySnapshot"
                 version: "v2"
+                jpa:
+                  entity: "com.example.OrderHistoryEntity"
+                  where:
+                    orderId: "input.orderId"
             steps: []
             """));
 
@@ -656,9 +710,13 @@ class PipelineYamlConfigLoaderTest {
             basePackage: "com.example"
             queries:
               my-query:
-                connector: "my-connector"
+                connector: "jpa"
                 input: "com.example.LookupType"
                 output: "com.example.SnapshotType"
+                jpa:
+                  entity: "com.example.Entity"
+                  where:
+                    id: "input.id"
             steps:
               - name: "My Step"
                 kind: "query"

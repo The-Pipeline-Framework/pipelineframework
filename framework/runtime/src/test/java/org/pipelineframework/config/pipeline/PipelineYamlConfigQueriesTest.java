@@ -17,11 +17,11 @@ class PipelineYamlConfigQueriesTest {
     void constructsConfigWithQueriesMap() {
         PipelineYamlQuery query = new PipelineYamlQuery(
             "customer-risk-by-id",
-            "customer-risk",
+            "jpa",
             "com.example.CustomerRiskLookup",
             "com.example.CustomerRiskSnapshot",
             "v1",
-            Map.of());
+            jpa());
 
         PipelineYamlConfig config = new PipelineYamlConfig(
             "com.example",
@@ -36,7 +36,7 @@ class PipelineYamlConfigQueriesTest {
 
         assertEquals(1, config.queries().size());
         assertNotNull(config.queries().get("customer-risk-by-id"));
-        assertEquals("customer-risk", config.queries().get("customer-risk-by-id").connector());
+        assertEquals("jpa", config.queries().get("customer-risk-by-id").connector());
     }
 
     @Test
@@ -60,7 +60,7 @@ class PipelineYamlConfigQueriesTest {
     void rejectsQueriesMapWithNullKey() {
         Map<String, PipelineYamlQuery> queriesWithNullKey = new HashMap<>();
         queriesWithNullKey.put(null, new PipelineYamlQuery(
-            "id", "connector", "in.Type", "out.Type", "v1", Map.of()));
+            "id", "jpa", "in.Type", "out.Type", "v1", jpa()));
 
         assertThrows(IllegalArgumentException.class, () ->
             new PipelineYamlConfig(
@@ -86,7 +86,7 @@ class PipelineYamlConfigQueriesTest {
     @Test
     void queriesMapIsImmutable() {
         Map<String, PipelineYamlQuery> queries = new HashMap<>();
-        queries.put("q1", new PipelineYamlQuery("q1", "conn", "in.T", "out.T", "v1", Map.of()));
+        queries.put("q1", new PipelineYamlQuery("q1", "jpa", "in.T", "out.T", "v1", jpa()));
 
         PipelineYamlConfig config = new PipelineYamlConfig(
             "com.example", "GRPC", "COMPUTE",
@@ -112,7 +112,7 @@ class PipelineYamlConfigQueriesTest {
     @Test
     void withTransportPreservesQueries() {
         PipelineYamlQuery query = new PipelineYamlQuery(
-            "q1", "connector", "in.Type", "out.Type", "v1", Map.of());
+            "q1", "jpa", "in.Type", "out.Type", "v1", jpa());
 
         PipelineYamlConfig config = new PipelineYamlConfig(
             "com.example", "GRPC", "COMPUTE",
@@ -130,7 +130,7 @@ class PipelineYamlConfigQueriesTest {
     @Test
     void withPlatformPreservesQueries() {
         PipelineYamlQuery query = new PipelineYamlQuery(
-            "q1", "connector", "in.Type", "out.Type", "v1", Map.of());
+            "q1", "jpa", "in.Type", "out.Type", "v1", jpa());
 
         PipelineYamlConfig config = new PipelineYamlConfig(
             "com.example", "GRPC", "COMPUTE",
@@ -158,5 +158,13 @@ class PipelineYamlConfigQueriesTest {
 
         assertNotNull(config.queries());
         assertTrue(config.queries().isEmpty());
+    }
+
+    private static PipelineYamlJpaQuery jpa() {
+        return new PipelineYamlJpaQuery(
+            "com.example.Entity",
+            Map.of("id", "input.id"),
+            Map.of(),
+            "single");
     }
 }

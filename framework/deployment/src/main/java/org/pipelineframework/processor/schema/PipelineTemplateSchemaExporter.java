@@ -423,8 +423,7 @@ public final class PipelineTemplateSchemaExporter {
       "type": "object",
       "properties": {
         "connector": {
-          "type": "string",
-          "minLength": 1
+          "const": "jpa"
         },
         "input": {
           "type": "string",
@@ -447,13 +446,13 @@ public final class PipelineTemplateSchemaExporter {
           "minLength": 1,
           "default": "v1"
         },
-        "config": {
-          "type": "object",
-          "additionalProperties": true
+        "jpa": {
+          "$ref": "#/$defs/jpaQueryDefinition"
         }
       },
       "required": [
-        "connector"
+        "connector",
+        "jpa"
       ],
       "allOf": [
         {
@@ -484,6 +483,47 @@ public final class PipelineTemplateSchemaExporter {
             }
           ]
         }
+      ],
+      "additionalProperties": false
+    },
+    "jpaQueryDefinition": {
+      "type": "object",
+      "properties": {
+        "entity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "where": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "projection": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "result": {
+          "const": "single",
+          "default": "single"
+        }
+      },
+      "required": [
+        "entity",
+        "where"
       ],
       "additionalProperties": false
     },
@@ -804,7 +844,8 @@ public final class PipelineTemplateSchemaExporter {
         "protocol": {
           "type": "string",
           "enum": [
-            "PROTOBUF_HTTP_V1"
+            "PROTOBUF_HTTP_V1",
+            "ENVELOPE_HTTP_V1"
           ]
         },
         "timeoutMs": {

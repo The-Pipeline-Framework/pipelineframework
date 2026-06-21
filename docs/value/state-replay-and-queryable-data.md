@@ -46,11 +46,11 @@ Persistence and caching solve different parts of the same problem:
 
 <div class="value-links">
 
-- [Persistence Plugin](/guide/plugins/persistence)
-- [Caching](/guide/plugins/caching/)
-- [Cache vs Persistence](/guide/plugins/caching/cache-vs-persistence)
-- [Search Replay Walkthrough](/guide/plugins/caching/replay-walkthrough)
-- [Using Plugins](/guide/development/using-plugins)
-- [Orchestrator Runtime](/guide/development/orchestrator-runtime/)
+- [Persistence Plugin](/design/persistence)
+- [Caching](/design/caching/)
+- [Cache vs Persistence](/design/caching/cache-vs-persistence)
+- [Search Replay Walkthrough](/design/caching/replay-walkthrough)
+- [Using Plugins](/develop/using-plugins)
+- [Orchestrator Runtime](/deploy/orchestrator-runtime/)
 
 </div>

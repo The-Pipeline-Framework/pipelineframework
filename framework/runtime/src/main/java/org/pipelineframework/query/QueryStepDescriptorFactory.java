@@ -100,7 +100,7 @@ public class QueryStepDescriptorFactory {
             step.queryCapture() == null || step.queryCapture().keyFields() == null
                 ? java.util.List.of()
                 : step.queryCapture().keyFields(),
-            query.config());
+            query.jpa());
     }
 
     private static String descriptorCacheKey(String serviceName, String inputType, String outputType) {

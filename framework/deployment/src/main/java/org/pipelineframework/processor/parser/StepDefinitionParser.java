@@ -609,9 +609,82 @@ public class StepDefinitionParser {
                 report(Diagnostic.Kind.ERROR, message);
                 continue;
             }
+            if (!"jpa".equals(connector)) {
+                String message = "Skipping query '" + id + "': connector supports only jpa in v1";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                continue;
+            }
+            if (queryMap.containsKey("config")) {
+                String message = "Skipping query '" + id + "': config is not supported; use jpa";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                continue;
+            }
+            if (!validateJpaQueryDefinition(id, queryMap)) {
+                continue;
+            }
             queries.put(id, new QueryDefinition(id, connector, inputType, outputType));
         }
         return Map.copyOf(queries);
+    }
+
+    @SuppressWarnings("unchecked")
+    private boolean validateJpaQueryDefinition(String id, Map<String, Object> queryMap) {
+        Object jpaObj = queryMap.get("jpa");
+        if (!(jpaObj instanceof Map<?, ?> rawJpaMap)) {
+            String message = "Skipping query '" + id + "': jpa must be defined as a map";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        Map<String, Object> jpaMap = (Map<String, Object>) rawJpaMap;
+        if (isBlank(getStringValue(jpaMap, "entity"))) {
+            String message = "Skipping query '" + id + "': jpa.entity must be declared";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        Object whereObj = jpaMap.get("where");
+        if (!(whereObj instanceof Map<?, ?> whereMap) || whereMap.isEmpty()) {
+            String message = "Skipping query '" + id + "': jpa.where must be a non-empty map";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        if (!allStringMapEntries(whereMap)) {
+            String message = "Skipping query '" + id + "': jpa.where entries must be non-blank strings";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        Object projectionObj = jpaMap.get("projection");
+        if (projectionObj != null) {
+            if (!(projectionObj instanceof Map<?, ?> projectionMap) || !allStringMapEntries(projectionMap)) {
+                String message = "Skipping query '" + id + "': jpa.projection entries must be non-blank strings";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return false;
+            }
+        }
+        String result = getStringValue(jpaMap, "result");
+        if (!isBlank(result) && !"single".equals(result)) {
+            String message = "Skipping query '" + id + "': jpa.result supports only single in v1";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        return true;
+    }
+
+    private boolean allStringMapEntries(Map<?, ?> map) {
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            if (entry.getKey() == null || entry.getKey().toString().isBlank()
+                || entry.getValue() == null || entry.getValue().toString().isBlank()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @SuppressWarnings("unchecked")
@@ -936,9 +1009,10 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             throw new IllegalArgumentException(message);
         }
-        if (!"PROTOBUF_HTTP_V1".equalsIgnoreCase(execution.protocol())) {
+        if (!"PROTOBUF_HTTP_V1".equalsIgnoreCase(execution.protocol())
+            && !"ENVELOPE_HTTP_V1".equalsIgnoreCase(execution.protocol())) {
             String message = "Skipping step '" + stepName
-                + "': remote execution requires execution.protocol=PROTOBUF_HTTP_V1";
+                + "': remote execution requires execution.protocol=PROTOBUF_HTTP_V1 or ENVELOPE_HTTP_V1";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             throw new IllegalArgumentException(message);

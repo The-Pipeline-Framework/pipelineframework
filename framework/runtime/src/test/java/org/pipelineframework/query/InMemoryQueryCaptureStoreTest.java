@@ -28,7 +28,7 @@ class InMemoryQueryCaptureStoreTest {
     void returnsEmptyOptionalForUnknownCaptureKey() {
         InMemoryQueryCaptureStore store = new InMemoryQueryCaptureStore();
 
-        Optional<QueryCaptureRecord> result = store.get("unknown-key").await().indefinitely();
+        Optional<QueryCaptureRecord> result = store.get("unknown-key").toCompletableFuture().join();
 
         assertFalse(result.isPresent());
     }
@@ -39,8 +39,8 @@ class InMemoryQueryCaptureStoreTest {
         QueryCaptureRecord record = record("tenant-1", "exec-abc", 2,
             "customer-risk-by-id", "tenant-1:exec-abc:2:cust-123");
 
-        store.putIfAbsent(record).await().indefinitely();
-        Optional<QueryCaptureRecord> result = store.get("tenant-1:exec-abc:2:cust-123").await().indefinitely();
+        store.putIfAbsent(record).toCompletableFuture().join();
+        Optional<QueryCaptureRecord> result = store.get("tenant-1:exec-abc:2:cust-123").toCompletableFuture().join();
 
         assertTrue(result.isPresent());
         assertEquals(record, result.get());
@@ -52,7 +52,7 @@ class InMemoryQueryCaptureStoreTest {
         QueryCaptureRecord record = record("tenant-1", "exec-abc", 2,
             "query-id", "key-1");
 
-        QueryCaptureRecord returned = store.putIfAbsent(record).await().indefinitely();
+        QueryCaptureRecord returned = store.putIfAbsent(record).toCompletableFuture().join();
 
         assertEquals(record, returned);
     }
@@ -69,8 +69,8 @@ class InMemoryQueryCaptureStoreTest {
             "com.example.RiskSnapshot",
             FIXED_TIME);
 
-        store.putIfAbsent(first).await().indefinitely();
-        QueryCaptureRecord result = store.putIfAbsent(second).await().indefinitely();
+        store.putIfAbsent(first).toCompletableFuture().join();
+        QueryCaptureRecord result = store.putIfAbsent(second).toCompletableFuture().join();
 
         assertEquals(first, result);
         assertEquals("{\"riskScore\":42}", result.outputJson());
@@ -84,11 +84,11 @@ class InMemoryQueryCaptureStoreTest {
         QueryCaptureRecord record2 = record("tenant-1", "exec-abc", 3,
             "query-id", "key-2");
 
-        store.putIfAbsent(record1).await().indefinitely();
-        store.putIfAbsent(record2).await().indefinitely();
+        store.putIfAbsent(record1).toCompletableFuture().join();
+        store.putIfAbsent(record2).toCompletableFuture().join();
 
-        Optional<QueryCaptureRecord> result1 = store.get("key-1").await().indefinitely();
-        Optional<QueryCaptureRecord> result2 = store.get("key-2").await().indefinitely();
+        Optional<QueryCaptureRecord> result1 = store.get("key-1").toCompletableFuture().join();
+        Optional<QueryCaptureRecord> result2 = store.get("key-2").toCompletableFuture().join();
 
         assertTrue(result1.isPresent());
         assertTrue(result2.isPresent());
@@ -104,7 +104,7 @@ class InMemoryQueryCaptureStoreTest {
     }
 
     @Test
-    void getReturnsNonNullUni() {
+    void getReturnsNonNullCompletionStage() {
         InMemoryQueryCaptureStore store = new InMemoryQueryCaptureStore();
 
         assertNotNull(store.get("any-key"));
@@ -116,8 +116,8 @@ class InMemoryQueryCaptureStoreTest {
         QueryCaptureRecord first = record("tenant-1", "exec-001", 1, "q", "shared-key");
         QueryCaptureRecord second = record("tenant-1", "exec-002", 1, "q", "shared-key");
 
-        store.putIfAbsent(first).await().indefinitely();
-        QueryCaptureRecord stored = store.putIfAbsent(second).await().indefinitely();
+        store.putIfAbsent(first).toCompletableFuture().join();
+        QueryCaptureRecord stored = store.putIfAbsent(second).toCompletableFuture().join();
 
         // putIfAbsent should return the first stored record
         assertEquals(first.executionId(), stored.executionId());

@@ -22,6 +22,7 @@ package org.pipelineframework.transport.http;
 public final class ProtobufHttpContentTypes {
     public static final String APPLICATION_X_PROTOBUF = "application/x-protobuf";
     public static final String APPLICATION_JSON = "application/json";
+    public static final String APPLICATION_TPF_ENVELOPE_JSON = "application/vnd.tpf.envelope.v1+json";
 
     private ProtobufHttpContentTypes() {
         throw new AssertionError("No instances");

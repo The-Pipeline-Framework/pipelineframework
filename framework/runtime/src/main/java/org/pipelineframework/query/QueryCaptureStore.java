@@ -1,8 +1,7 @@
 package org.pipelineframework.query;
 
 import java.util.Optional;
-
-import io.smallrye.mutiny.Uni;
+import java.util.concurrent.CompletionStage;
 
 /**
  * Store used by captured query steps to replay prior read results for an execution.
@@ -12,11 +11,11 @@ public interface QueryCaptureStore {
         return "memory";
     }
 
-    Uni<Optional<QueryCaptureRecord>> get(String captureKey);
+    CompletionStage<Optional<QueryCaptureRecord>> get(String captureKey);
 
-    Uni<QueryCaptureRecord> putIfAbsent(QueryCaptureRecord record);
+    CompletionStage<QueryCaptureRecord> putIfAbsent(QueryCaptureRecord record);
 
-    Uni<Boolean> remove(String captureKey);
+    CompletionStage<Boolean> remove(String captureKey);
 
-    Uni<Void> clear();
+    CompletionStage<Void> clear();
 }

@@ -334,9 +334,13 @@ class PipelineOrderMetadataGeneratorTest {
             transport: "GRPC"
             queries:
               customer-risk-by-id:
-                connector: "customer-risk"
+                connector: "jpa"
                 input: "com.example.CustomerRiskLookup"
                 output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
             steps:
               - name: "Load Customer Risk"
                 kind: "query"
@@ -401,9 +405,13 @@ class PipelineOrderMetadataGeneratorTest {
             transport: "GRPC"
             queries:
               order-history:
-                connector: "order-history"
+                connector: "jpa"
                 input: "com.example.OrderHistoryLookup"
                 output: "com.example.OrderHistorySnapshot"
+                jpa:
+                  entity: "com.example.OrderHistoryEntity"
+                  where:
+                    orderId: "input.orderId"
             steps:
               - name: "Load Order History"
                 kind: "query"

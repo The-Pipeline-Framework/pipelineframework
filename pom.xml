@@ -89,6 +89,7 @@
         <module>plugins/foundational/repository</module>
         <!-- Connectors -->
         <module>connectors/object-ingest</module>
+        <module>connectors/query-jpa</module>
     </modules>
 
     <dependencyManagement>

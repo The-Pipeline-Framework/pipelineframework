@@ -24,10 +24,10 @@ Persistence and caching are more than generic extension examples. They are the m
 
 <div class="value-links">
 
-- [Using Plugins](/guide/development/using-plugins)
+- [Using Plugins](/develop/using-plugins)
 - [State, Replay, and Queryable Data](/value/state-replay-and-queryable-data)
-- [Writing a Plugin](/guide/plugins/writing-a-plugin)
-- [Persistence Plugin](/guide/plugins/persistence)
-- [Plugins Architecture](/guide/evolve/plugins-architecture)
+- [Writing a Plugin](/develop/writing-a-plugin)
+- [Persistence Plugin](/design/persistence)
+- [Plugins Architecture](/evolve/plugins-architecture)
 
 </div>
