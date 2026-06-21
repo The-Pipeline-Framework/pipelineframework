@@ -160,6 +160,89 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void parsesExplicitFalseRunOnVirtualThreadsForInternalStep() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "blocking-payment"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+                runOnVirtualThreads: false
+            """, diagnostics);
+
+        assertEquals(1, steps.size(), diagnostics.toString());
+        assertFalse(steps.getFirst().runOnVirtualThreads(),
+            "runOnVirtualThreads: false must be stored as false");
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+            diagnostics.toString());
+    }
+
+    @Test
+    void internalStepWithoutRunOnVirtualThreadsDefaultsToFalse() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "payment"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """, diagnostics);
+
+        assertEquals(1, steps.size(), diagnostics.toString());
+        assertFalse(steps.getFirst().runOnVirtualThreads(),
+            "runOnVirtualThreads must default to false when not specified");
+    }
+
+    @Test
+    void rejectsRunOnVirtualThreadsAsIntegerValue() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "blocking-payment"
+                service: "com.example.app.PaymentService"
+                runOnVirtualThreads: 1
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("runOnVirtualThreads must be a boolean")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void skipsOnlyInvalidStepWhenMultipleStepsAreDeclared() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "valid-internal"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+                runOnVirtualThreads: true
+              - name: "invalid-delegated"
+                operator: "com.example.PaymentOperators::approve"
+                input: "com.example.PaymentRecord"
+                output: "com.example.PaymentStatus"
+                runOnVirtualThreads: true
+            """, diagnostics);
+
+        // The valid INTERNAL step is retained; the DELEGATED step with runOnVirtualThreads is skipped
+        assertEquals(1, steps.size(), "Only the valid internal step should be parsed");
+        assertEquals("valid-internal", steps.getFirst().name());
+        assertTrue(steps.getFirst().runOnVirtualThreads());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("valid only for internal service steps")),
+            diagnostics.toString());
+    }
+
+    @Test
     void parsesAwaitStepDefinition() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""

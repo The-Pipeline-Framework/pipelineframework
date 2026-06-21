@@ -105,6 +105,44 @@ class SpringRestResourceRendererTest {
     }
 
     @Test
+    void blockingRestResourceContainsNoQuarkusOrMutinyImports() throws Exception {
+        SpringRestResourceRenderer renderer = new SpringRestResourceRenderer();
+
+        renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.BLOCKING), null),
+            new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null));
+
+        Path resource = tempDir.resolve("com/example/service/pipeline/PaymentResource.java");
+        String source = Files.readString(resource);
+        assertFalse(source.contains("io.quarkus."), "Blocking REST resource must not contain Quarkus imports");
+        assertFalse(source.contains("jakarta.enterprise."), "Blocking REST resource must not contain CDI imports");
+        assertFalse(source.contains("io.vertx."), "Blocking REST resource must not contain Vert.x imports");
+        assertFalse(source.contains("io.smallrye.mutiny"), "Blocking REST resource must not contain Mutiny imports");
+        assertFalse(source.contains("org.jboss.resteasy."), "Blocking REST resource must not contain RESTEasy imports");
+        assertFalse(source.contains("jakarta.ws.rs."), "Blocking REST resource must not contain JAX-RS imports");
+    }
+
+    @Test
+    void blockingRestResourceWithVirtualThreadsModeBehavesSameAsDefault() throws Exception {
+        SpringRestResourceRenderer renderer = new SpringRestResourceRenderer();
+
+        // With virtual threads execution mode - REST resource delegates to SpringPipelineRunner,
+        // not to a blocking call directly, so the REST resource output should be the same.
+        PipelineStepModel virtualThreadsModel = modelBuilder(StreamingShape.UNARY_UNARY, ServiceApiKind.BLOCKING)
+            .executionMode(ExecutionMode.VIRTUAL_THREADS)
+            .build();
+
+        renderer.render(new RestBinding(virtualThreadsModel, "/payments"),
+            new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null));
+
+        Path resource = tempDir.resolve("com/example/service/pipeline/PaymentResource.java");
+        String source = Files.readString(resource);
+        assertTrue(source.contains("return Mono.fromCompletionStage(this.pipelineRunner.run(inputDomain))"),
+            "REST resource must still route through SpringPipelineRunner for virtual-threads blocking steps");
+        assertFalse(source.contains("RuntimeAdapters"),
+            "REST resource must not call RuntimeAdapters directly; that is the local client step's job");
+    }
+
+    @Test
     void rejectsBlockingIteratorResource() {
         SpringRestResourceRenderer renderer = new SpringRestResourceRenderer();
 
