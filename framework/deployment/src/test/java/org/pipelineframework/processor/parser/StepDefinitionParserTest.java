@@ -1420,6 +1420,291 @@ class StepDefinitionParserTest {
         assertTrue(errorSummary.contains("expected REMOTE"));
     }
 
+    @Test
+    void parsesQueryStepDefinition() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                version: "v1"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                capture:
+                  keyFields: ["customerId"]
+            """, diagnostics);
+
+        assertEquals(1, steps.size(), diagnostics.toString());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.QUERY, step.kind());
+        assertNull(step.executionClass());
+        assertEquals("customer-risk-by-id", step.queryId());
+        assertEquals(List.of("customerId"), step.queryKeyFields());
+        assertEquals(ClassName.get("com.example", "CustomerRiskLookup"), step.inputType());
+        assertEquals(ClassName.get("com.example", "CustomerRiskSnapshot"), step.outputType());
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryCaptureModeBecauseCapturedIsTheOnlyV1Behavior() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                capture:
+                  mode: "CAPTURED"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("capture.mode is not supported in v1")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryStepWithoutQueryReference() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("must reference a top-level query id")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsUndefinedQueryReference() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "missing-query"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("is not defined under top-level queries")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryTypeMismatch() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.other.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("do not match query")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryStepWithNonOneToOneCardinalityOrServiceBinding() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps:
+              - name: "Load Customer Risk Stream"
+                kind: "query"
+                cardinality: "ONE_TO_MANY"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+              - name: "Load Customer Risk Bound"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                service: "com.example.CustomerRiskService"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("support only ONE_TO_ONE")),
+            diagnostics.toString());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("cannot declare 'service'")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryStepWhenOperatorIsAlsoDeclared() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                operator: "com.example.CustomerRiskOperator"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
+        assertTrue(errorSummary.contains("query steps are framework-owned read boundaries"));
+    }
+
+    @Test
+    void rejectsQueryStepWhenRemoteExecutionIsAlsoDeclared() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "customer-risk"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  target:
+                    url: "https://risk.example/query"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
+        assertTrue(errorSummary.contains("query steps are framework-owned read boundaries"));
+    }
+
+    @Test
+    void rejectsIncompleteQueryDefinition() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("connector, input, and output must be declared")),
+            diagnostics.toString());
+    }
+
     private List<StepDefinition> parse(String yaml) throws IOException {
         return parse(yaml, null);
     }

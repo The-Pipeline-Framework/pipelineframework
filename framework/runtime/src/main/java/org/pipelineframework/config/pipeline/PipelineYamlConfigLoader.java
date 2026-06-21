@@ -168,12 +168,13 @@ public class PipelineYamlConfigLoader {
             "platform");
         List<PipelineYamlStep> steps = readSteps(rootMap);
         Map<String, PipelineObjectSourceConfig> sources = readSources(rootMap);
+        Map<String, PipelineYamlQuery> queries = readQueries(rootMap);
         List<PipelineYamlAspect> aspects = readAspects(rootMap);
         PipelineInputBoundaryConfig input = readInputBoundary(rootMap);
         validateObjectInputSource(input, sources);
         PipelineOutputBoundaryConfig output = readOutputBoundary(rootMap);
 
-        return new PipelineYamlConfig(basePackage, transport, platform, steps, sources, aspects, input, output);
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, sources, queries, aspects, input, output);
     }
 
     /**
@@ -252,6 +253,8 @@ public class PipelineYamlConfigLoader {
             String timeout = readString(stepMap, "timeout");
             List<String> idempotencyKeyFields = readStringList(stepMap, "idempotencyKeyFields");
             PipelineYamlAwaitConfig awaitConfig = readAwaitConfig(stepMap, name);
+            String queryId = trimToNull(readString(stepMap, "query"));
+            PipelineYamlQueryCapture queryCapture = readQueryCapture(stepMap, name);
             if (name != null && !name.isBlank()) {
                 stepInfos.add(new PipelineYamlStep(
                     name,
@@ -263,10 +266,106 @@ public class PipelineYamlConfigLoader {
                     outboundMapper,
                     timeout,
                     idempotencyKeyFields,
-                    awaitConfig));
+                    awaitConfig,
+                    queryId,
+                    queryCapture));
             }
         }
         return stepInfos;
+    }
+
+    private Map<String, PipelineYamlQuery> readQueries(Map<?, ?> rootMap) {
+        Object queriesObj = rootMap.get("queries");
+        if (!(queriesObj instanceof Map<?, ?> queriesMap)) {
+            return Map.of();
+        }
+        Map<String, PipelineYamlQuery> queries = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : queriesMap.entrySet()) {
+            String id = entry.getKey() == null ? null : entry.getKey().toString().trim();
+            if (id == null || id.isBlank()) {
+                throw new IllegalArgumentException("query id must not be blank");
+            }
+            if (!(entry.getValue() instanceof Map<?, ?> queryMap)) {
+                throw new IllegalArgumentException("query '" + id + "' must be defined as a map");
+            }
+            String connector = readRequiredString(queryMap, "connector", "query '" + id + "'");
+            String inputType = firstNonBlank(readString(queryMap, "inputType"), readString(queryMap, "input"));
+            String outputType = firstNonBlank(readString(queryMap, "outputType"), readString(queryMap, "output"));
+            if (inputType == null || inputType.isBlank()) {
+                throw new IllegalArgumentException("query '" + id + "' input is required");
+            }
+            if (outputType == null || outputType.isBlank()) {
+                throw new IllegalArgumentException("query '" + id + "' output is required");
+            }
+            if (queryMap.containsKey("config")) {
+                throw new IllegalArgumentException("query '" + id + "' config is not supported; use jpa");
+            }
+            queries.put(id, new PipelineYamlQuery(
+                id,
+                connector,
+                inputType,
+                outputType,
+                readString(queryMap, "version"),
+                readJpaQuery(queryMap, id)));
+        }
+        return Map.copyOf(queries);
+    }
+
+    private PipelineYamlJpaQuery readJpaQuery(Map<?, ?> queryMap, String queryId) {
+        Object jpaObj = queryMap.get("jpa");
+        if (!(jpaObj instanceof Map<?, ?> jpaMap)) {
+            throw new IllegalArgumentException("query '" + queryId + "' jpa must be defined as a map");
+        }
+        return new PipelineYamlJpaQuery(
+            readRequiredString(jpaMap, "entity", "query '" + queryId + "' jpa"),
+            readStringMap(jpaMap, "where", "query '" + queryId + "' jpa.where", true),
+            readStringMap(jpaMap, "projection", "query '" + queryId + "' jpa.projection", false),
+            readString(jpaMap, "result"));
+    }
+
+    private Map<String, String> readStringMap(Map<?, ?> map, String key, String context, boolean required) {
+        Object value = map.get(key);
+        if (value == null) {
+            if (required) {
+                throw new IllegalArgumentException(context + " must not be empty");
+            }
+            return Map.of();
+        }
+        if (!(value instanceof Map<?, ?> rawMap)) {
+            throw new IllegalArgumentException(context + " must be defined as a map");
+        }
+        if (rawMap.isEmpty() && required) {
+            throw new IllegalArgumentException(context + " must not be empty");
+        }
+        Map<String, String> normalized = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> rawEntry : rawMap.entrySet()) {
+            String mapKey = rawEntry.getKey() == null ? null : rawEntry.getKey().toString().trim();
+            String mapValue = rawEntry.getValue() == null ? null : rawEntry.getValue().toString().trim();
+            if (mapKey == null || mapKey.isBlank()) {
+                throw new IllegalArgumentException(context + " must not contain blank keys");
+            }
+            if (mapValue == null || mapValue.isBlank()) {
+                throw new IllegalArgumentException(context + "." + mapKey + " must not be blank");
+            }
+            normalized.put(mapKey, mapValue);
+        }
+        return Map.copyOf(normalized);
+    }
+
+    private PipelineYamlQueryCapture readQueryCapture(Map<?, ?> stepMap, String stepName) {
+        Object captureObj = stepMap.get("capture");
+        if (captureObj == null) {
+            return new PipelineYamlQueryCapture(List.of());
+        }
+        if (!(captureObj instanceof Map<?, ?> captureMap)) {
+            throw new IllegalArgumentException("step '" + stepName + "' capture must be defined as a map");
+        }
+        if (captureMap.containsKey("mode")) {
+            throw new IllegalArgumentException(
+                "step '" + stepName
+                    + "' capture.mode is not supported in v1; capture behavior is controlled by keyFields");
+        }
+        return new PipelineYamlQueryCapture(readStringList(captureMap, "keyFields"));
     }
 
     private PipelineYamlAwaitConfig readAwaitConfig(Map<?, ?> stepMap, String stepName) {
@@ -355,6 +454,14 @@ public class PipelineYamlConfigLoader {
 
     private String firstNonBlank(String primary, String fallback) {
         return primary == null || primary.isBlank() ? fallback : primary;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     /**

@@ -27,4 +27,6 @@ public enum GenerationTarget {
     BLOCKING_REACTIVE_BRIDGE,
     /** Generated await client step that suspends queue-async execution */
     AWAIT_CLIENT_STEP,
+    /** Generated query client step that invokes a captured query connector */
+    QUERY_CLIENT_STEP,
 }

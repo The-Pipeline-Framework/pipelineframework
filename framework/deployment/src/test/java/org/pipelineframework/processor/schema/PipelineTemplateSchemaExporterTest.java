@@ -57,6 +57,10 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("pipelineOutputBoundary"));
         assertTrue(definitions.has("pipelineSources"));
         assertTrue(definitions.has("objectSource"));
+        assertTrue(definitions.has("queryDefinition"));
+        assertTrue(definitions.has("jpaQueryDefinition"));
+        assertTrue(definitions.has("queryCapture"));
+        assertTrue(definitions.has("queryTemplateStep"));
         assertTrue(definitions.has("delegatedOrInternalStep"));
         assertTrue(definitions.has("v2Execution"));
         assertTrue(definitions.has("awaitTemplateStep"));
@@ -69,7 +73,28 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(properties.has("input"));
         assertTrue(properties.has("output"));
         assertTrue(properties.has("sources"));
+        assertTrue(properties.has("queries"));
         assertTrue(properties.has("materialization"));
+    }
+
+    @Test
+    void queryStepSchemaRequiresQueryReferenceAndCaptureFields() {
+        JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
+        JsonObject queryDefinition = definitions.getAsJsonObject("queryDefinition");
+        JsonObject queryProperties = queryDefinition.getAsJsonObject("properties");
+        assertEquals("jpa", queryProperties.getAsJsonObject("connector").get("const").getAsString());
+        assertContains(queryDefinition.getAsJsonArray("required"), "jpa");
+
+        JsonObject jpaDefinition = definitions.getAsJsonObject("jpaQueryDefinition");
+        assertContains(jpaDefinition.getAsJsonArray("required"), "entity");
+        assertContains(jpaDefinition.getAsJsonArray("required"), "where");
+
+        JsonObject queryStep = definitions.getAsJsonObject("queryTemplateStep");
+
+        JsonObject properties = queryStep.getAsJsonObject("properties");
+        assertTrue(properties.has("query"));
+        assertTrue(properties.has("capture"));
+        assertContains(queryStep.getAsJsonArray("required"), "query");
     }
 
     @Test

@@ -34,6 +34,9 @@ import org.pipelineframework.config.template.PipelineTemplateStepExecution;
  * @param awaitConfig raw await configuration for AWAIT steps
  * @param timeout await timeout string for AWAIT steps
  * @param idempotencyKeyFields fields used to derive await idempotency keys
+ * @param queryId referenced query id for QUERY steps
+ * @param queryConfig raw capture configuration for QUERY steps
+ * @param queryKeyFields fields used to derive captured query keys
  * @param inboundMapper The inbound mapper class for internal service steps (nullable)
  * @param outboundMapper The outbound mapper class for internal service steps (nullable)
  * @param externalMapper The operator mapper class for mapping between domain and operator types (nullable)
@@ -50,6 +53,9 @@ public record StepDefinition(
         Map<String, Object> awaitConfig,
         @Nullable String timeout,
         List<String> idempotencyKeyFields,
+        @Nullable String queryId,
+        Map<String, Object> queryConfig,
+        List<String> queryKeyFields,
         @Nullable ClassName inboundMapper,
         @Nullable ClassName outboundMapper,
         @Nullable ClassName externalMapper,
@@ -58,6 +64,42 @@ public record StepDefinition(
         @Nullable ClassName outputType,
         @Nullable StreamingShape streamingShapeHint
 ) {
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        @Nullable ClassName executionClass,
+        @Nullable PipelineTemplateStepExecution remoteExecution,
+        Map<String, Object> awaitConfig,
+        @Nullable String timeout,
+        List<String> idempotencyKeyFields,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint
+    ) {
+        this(
+            name,
+            kind,
+            executionClass,
+            remoteExecution,
+            awaitConfig,
+            timeout,
+            idempotencyKeyFields,
+            null,
+            Map.of(),
+            List.of(),
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint);
+    }
+
     public StepDefinition(
         String name,
         StepKind kind,
@@ -75,6 +117,9 @@ public record StepDefinition(
             null,
             Map.of(),
             null,
+            List.of(),
+            null,
+            Map.of(),
             List.of(),
             null,
             null,
@@ -104,6 +149,9 @@ public record StepDefinition(
             Map.of(),
             null,
             List.of(),
+            null,
+            Map.of(),
+            List.of(),
             inboundMapper,
             outboundMapper,
             null,
@@ -132,6 +180,9 @@ public record StepDefinition(
             null,
             Map.of(),
             null,
+            List.of(),
+            null,
+            Map.of(),
             List.of(),
             inboundMapper,
             outboundMapper,
@@ -153,22 +204,30 @@ public record StepDefinition(
         }
         if (kind == StepKind.REMOTE) {
             Objects.requireNonNull(remoteExecution, "Remote execution cannot be null for REMOTE steps");
-        } else if (kind == StepKind.AWAIT) {
+        } else if (kind == StepKind.AWAIT || kind == StepKind.QUERY) {
             if (executionClass != null || remoteExecution != null) {
-                throw new IllegalArgumentException("AWAIT steps cannot declare executionClass or remoteExecution");
+                throw new IllegalArgumentException(kind + " steps cannot declare executionClass or remoteExecution");
             }
-            Objects.requireNonNull(inputType, "Input type cannot be null for AWAIT steps");
-            Objects.requireNonNull(outputType, "Output type cannot be null for AWAIT steps");
+            Objects.requireNonNull(inputType, "Input type cannot be null for " + kind + " steps");
+            Objects.requireNonNull(outputType, "Output type cannot be null for " + kind + " steps");
+            if (kind == StepKind.QUERY) {
+                Objects.requireNonNull(queryId, "Query id cannot be null for QUERY steps");
+                if (queryId.isBlank()) {
+                    throw new IllegalArgumentException("Query id cannot be blank for QUERY steps");
+                }
+            }
         } else {
             Objects.requireNonNull(executionClass, "Execution class cannot be null");
         }
         mapperFallback = mapperFallback == null ? MapperFallbackMode.NONE : mapperFallback;
         awaitConfig = awaitConfig == null ? Map.of() : Map.copyOf(awaitConfig);
         idempotencyKeyFields = idempotencyKeyFields == null ? List.of() : List.copyOf(idempotencyKeyFields);
+        queryConfig = queryConfig == null ? Map.of() : Map.copyOf(queryConfig);
+        queryKeyFields = queryKeyFields == null ? List.of() : List.copyOf(queryKeyFields);
     }
 
     private static StepKind requireNonRemoteKind(StepKind kind) {
-        if (kind == StepKind.REMOTE || kind == StepKind.AWAIT) {
+        if (kind == StepKind.REMOTE || kind == StepKind.AWAIT || kind == StepKind.QUERY) {
             throw new IllegalArgumentException("Convenience constructor cannot be used for " + kind);
         }
         return kind;

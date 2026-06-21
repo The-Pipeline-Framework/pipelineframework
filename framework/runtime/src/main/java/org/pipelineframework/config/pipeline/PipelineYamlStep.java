@@ -29,6 +29,8 @@ package org.pipelineframework.config.pipeline;
  * @param timeout the await timeout, if this is an await step
  * @param idempotencyKeyFields fields used to derive await idempotency keys
  * @param awaitConfig await-step configuration, if this is an await step
+ * @param queryId referenced query definition id, if this is a query step
+ * @param queryCapture query capture settings, if this is a query step
  */
 public record PipelineYamlStep(
     String name,
@@ -40,12 +42,15 @@ public record PipelineYamlStep(
     String outboundMapper,
     String timeout,
     java.util.List<String> idempotencyKeyFields,
-    PipelineYamlAwaitConfig awaitConfig
+    PipelineYamlAwaitConfig awaitConfig,
+    String queryId,
+    PipelineYamlQueryCapture queryCapture
 ) {
     public PipelineYamlStep {
         kind = kind == null || kind.isBlank() ? "internal" : kind;
         cardinality = cardinality == null || cardinality.isBlank() ? "ONE_TO_ONE" : cardinality;
         idempotencyKeyFields = idempotencyKeyFields == null ? java.util.List.of() : java.util.List.copyOf(idempotencyKeyFields);
+        queryCapture = queryCapture == null ? new PipelineYamlQueryCapture(java.util.List.of()) : queryCapture;
     }
 
     public PipelineYamlStep(
@@ -55,10 +60,10 @@ public record PipelineYamlStep(
         String outputType,
         String outboundMapper
     ) {
-        this(name, "internal", "ONE_TO_ONE", inputType, inboundMapper, outputType, outboundMapper, null, java.util.List.of(), null);
+        this(name, "internal", "ONE_TO_ONE", inputType, inboundMapper, outputType, outboundMapper, null, java.util.List.of(), null, null, null);
     }
 
     public PipelineYamlStep(String name, String inputType, String outputType) {
-        this(name, "internal", "ONE_TO_ONE", inputType, null, outputType, null, null, java.util.List.of(), null);
+        this(name, "internal", "ONE_TO_ONE", inputType, null, outputType, null, null, java.util.List.of(), null, null, null);
     }
 }

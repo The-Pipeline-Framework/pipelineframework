@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.StringReader;
 import java.util.List;
@@ -399,5 +400,335 @@ class PipelineYamlConfigLoaderTest {
                 """)));
 
         assertEquals("input.subscription.publication must not be blank", exception.getMessage());
+    }
+
+    @Test
+    void loadsQueriesSectionWithConnectorInputAndOutput() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                version: "v1"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps: []
+            """));
+
+        assertNotNull(config.queries());
+        assertEquals(1, config.queries().size());
+        PipelineYamlQuery query = config.queries().get("customer-risk-by-id");
+        assertNotNull(query);
+        assertEquals("customer-risk-by-id", query.id());
+        assertEquals("jpa", query.connector());
+        assertEquals("com.example.CustomerRiskLookup", query.inputType());
+        assertEquals("com.example.CustomerRiskSnapshot", query.outputType());
+        assertEquals("v1", query.version());
+        assertEquals("com.example.CustomerRiskEntity", query.jpa().entity());
+    }
+
+    @Test
+    void loadsQueriesSectionWithInputTypeAndOutputTypeAliases() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            queries:
+              order-risk-by-id:
+                connector: "jpa"
+                inputType: "com.example.OrderRiskLookup"
+                outputType: "com.example.OrderRiskSnapshot"
+                jpa:
+                  entity: "com.example.OrderRiskEntity"
+                  where:
+                    orderId: "input.orderId"
+            steps: []
+            """));
+
+        PipelineYamlQuery query = config.queries().get("order-risk-by-id");
+        assertNotNull(query);
+        assertEquals("com.example.OrderRiskLookup", query.inputType());
+        assertEquals("com.example.OrderRiskSnapshot", query.outputType());
+    }
+
+    @Test
+    void loadsQueriesWithJpaConfig() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            queries:
+              risk-query:
+                connector: "jpa"
+                input: "com.example.RiskLookup"
+                output: "com.example.RiskSnapshot"
+                jpa:
+                  entity: "com.example.RiskEntity"
+                  where:
+                    customerId: "input.customerId"
+                  projection:
+                    riskBand: "riskBand"
+                  result: "single"
+            steps: []
+            """));
+
+        PipelineYamlQuery query = config.queries().get("risk-query");
+        assertNotNull(query);
+        assertEquals("com.example.RiskEntity", query.jpa().entity());
+        assertEquals("input.customerId", query.jpa().where().get("customerId"));
+        assertEquals("riskBand", query.jpa().projection().get("riskBand"));
+    }
+
+    @Test
+    void rejectsRawQueryConfigSection() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                queries:
+                  customer-risk-by-id:
+                    connector: jpa
+                    input: com.example.CustomerRiskLookup
+                    output: com.example.CustomerRiskSnapshot
+                    config: "not-a-map"
+                    jpa:
+                      entity: com.example.CustomerRiskEntity
+                      where:
+                        customerId: input.customerId
+                steps: []
+                """)));
+
+        assertEquals("query 'customer-risk-by-id' config is not supported; use jpa", exception.getMessage());
+    }
+
+    @Test
+    void loadsQueryStepFieldsFromStepsSection() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                capture:
+                  keyFields: ["customerId"]
+            """));
+
+        assertEquals(1, config.steps().size());
+        PipelineYamlStep step = config.steps().getFirst();
+        assertEquals("Load Customer Risk", step.name());
+        assertEquals("query", step.kind());
+        assertEquals("customer-risk-by-id", step.queryId());
+        assertNotNull(step.queryCapture());
+        assertEquals(List.of("customerId"), step.queryCapture().keyFields());
+    }
+
+    @Test
+    void trimsStepQueryReferences() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            queries:
+              customer-risk-by-id:
+                connector: jpa
+                input: com.example.CustomerRiskLookup
+                output: com.example.CustomerRiskSnapshot
+                jpa:
+                  entity: com.example.CustomerRiskEntity
+                  where:
+                    customerId: input.customerId
+            steps:
+              - name: "Load Customer Risk"
+                kind: query
+                cardinality: ONE_TO_ONE
+                query: " customer-risk-by-id "
+                input: com.example.CustomerRiskLookup
+                output: com.example.CustomerRiskSnapshot
+            """));
+
+        assertEquals("customer-risk-by-id", config.steps().getFirst().queryId());
+    }
+
+    @Test
+    void defaultsQueryVersionToV1WhenNotProvided() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            queries:
+              my-query:
+                connector: "jpa"
+                input: "com.example.LookupType"
+                output: "com.example.SnapshotType"
+                jpa:
+                  entity: "com.example.Entity"
+                  where:
+                    id: "input.id"
+            steps: []
+            """));
+
+        PipelineYamlQuery query = config.queries().get("my-query");
+        assertEquals("v1", query.version());
+    }
+
+    @Test
+    void rejectsQueryWithMissingConnector() {
+        assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                queries:
+                  bad-query:
+                    input: "com.example.LookupType"
+                    output: "com.example.SnapshotType"
+                    jpa:
+                      entity: "com.example.Entity"
+                      where:
+                        id: "input.id"
+                steps: []
+                """)));
+    }
+
+    @Test
+    void rejectsQueryWithMissingInput() {
+        assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                queries:
+                  bad-query:
+                    connector: "jpa"
+                    output: "com.example.SnapshotType"
+                    jpa:
+                      entity: "com.example.Entity"
+                      where:
+                        id: "input.id"
+                steps: []
+                """)));
+    }
+
+    @Test
+    void rejectsQueryWithMissingOutput() {
+        assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                queries:
+                  bad-query:
+                    connector: "jpa"
+                    input: "com.example.LookupType"
+                    jpa:
+                      entity: "com.example.Entity"
+                      where:
+                        id: "input.id"
+                steps: []
+                """)));
+    }
+
+    @Test
+    void rejectsQueryCaptureModeV1() {
+        assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                queries:
+                  my-query:
+                    connector: "jpa"
+                    input: "com.example.LookupType"
+                    output: "com.example.SnapshotType"
+                    jpa:
+                      entity: "com.example.Entity"
+                      where:
+                        id: "input.id"
+                steps:
+                  - name: "My Step"
+                    kind: "query"
+                    query: "my-query"
+                    input: "com.example.LookupType"
+                    output: "com.example.SnapshotType"
+                    capture:
+                      mode: "CAPTURED"
+                """)));
+    }
+
+    @Test
+    void queriesDefaultsToEmptyMapWhenNotPresent() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            steps: []
+            """));
+
+        assertNotNull(config.queries());
+        assertTrue(config.queries().isEmpty());
+    }
+
+    @Test
+    void loadsMultipleQueryDefinitions() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+              order-history:
+                connector: "jpa"
+                input: "com.example.OrderHistoryLookup"
+                output: "com.example.OrderHistorySnapshot"
+                version: "v2"
+                jpa:
+                  entity: "com.example.OrderHistoryEntity"
+                  where:
+                    orderId: "input.orderId"
+            steps: []
+            """));
+
+        assertEquals(2, config.queries().size());
+        assertNotNull(config.queries().get("customer-risk-by-id"));
+        assertEquals("v2", config.queries().get("order-history").version());
+    }
+
+    @Test
+    void queryCaptureWithEmptyKeyFieldsIsAllowed() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            queries:
+              my-query:
+                connector: "jpa"
+                input: "com.example.LookupType"
+                output: "com.example.SnapshotType"
+                jpa:
+                  entity: "com.example.Entity"
+                  where:
+                    id: "input.id"
+            steps:
+              - name: "My Step"
+                kind: "query"
+                query: "my-query"
+                input: "com.example.LookupType"
+                output: "com.example.SnapshotType"
+                capture:
+                  keyFields: []
+            """));
+
+        PipelineYamlStep step = config.steps().getFirst();
+        assertNotNull(step.queryCapture());
+        assertTrue(step.queryCapture().keyFields().isEmpty());
     }
 }
