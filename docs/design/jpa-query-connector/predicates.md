@@ -37,6 +37,43 @@ Multiple predicates are combined with `AND`.
 
 Scalar values can be literals or `input.<field>` references. Nested maps and nested arrays are rejected so predicate values stay predictable.
 
+## Predicate values
+
+The left side of each `where` entry is an entity property path:
+
+```yaml
+where:
+  customerId: "input.customerId"
+```
+
+In that example, `customerId` means `CustomerRiskEntity.customerId`.
+
+The right side is a predicate value. It can be either:
+
+- a literal value, such as `"ACTIVE"`, `80`, or `true`
+- an `input.<field>` reference, such as `"input.customerId"` or `"input.minimumScore"`
+
+`input` is the query input record declared on the query:
+
+```yaml
+queries:
+  latest-active-risk:
+    input: "com.example.CustomerRiskLookup"
+```
+
+For:
+
+```java
+public record CustomerRiskLookup(String customerId, int minimumScore) {
+}
+```
+
+`"input.customerId"` binds the `customerId` record component, and `"input.minimumScore"` binds the `minimumScore` record component.
+
+This is a TPF query-connector convention, not JPA syntax. The connector uses it to keep YAML declarative and then renders safe JPA parameters internally. The generated HQL uses connector-owned parameter names such as `:p0`; user YAML does not provide JPQL parameter names, aliases, or expressions.
+
+No other placeholder roots are supported in this slice. Values cannot reference `env`, `config`, `step`, `tenant`, previous outputs, or arbitrary expression functions. Add those values to the query input record when they are part of the decision read.
+
 ## Paths and projection
 
 `where`, `projection`, and `orderBy` accept simple dotted paths such as `account.status`. Each segment must be a Java identifier.
