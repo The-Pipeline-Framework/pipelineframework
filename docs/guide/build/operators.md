@@ -87,7 +87,27 @@ Rules:
 - Remote execution is immediate request/response only. It does not persist durable waiting state or resume later from correlated completion.
 - Exactly one of `execution.target.url` or `execution.target.urlConfigKey` must be set.
 - `execution.target.urlConfigKey` resolves at runtime startup, not at compile time.
-- `pipeline.transport` and the remote operator protocol are orthogonal. TPF can expose the pipeline over REST, gRPC, or local transport while invoking the remote operator over Protobuf-over-HTTP.
+- `execution.protocol` can be `PROTOBUF_HTTP_V1` for generated protobuf contracts or `ENVELOPE_HTTP_V1` for explicit loose-payload envelope compatibility.
+- `pipeline.transport` and the remote operator protocol are orthogonal. TPF can expose the pipeline over REST, gRPC, or local transport while invoking the remote operator over Protobuf-over-HTTP or envelope-over-HTTP.
+
+Use `ENVELOPE_HTTP_V1` only when the external step host needs a strict TPF control envelope with a loose payload region:
+
+```yaml
+steps:
+  - name: "Chunk Document"
+    cardinality: "ONE_TO_ONE"
+    inputTypeName: "ParsedDocument"
+    outputTypeName: "ChunkResult"
+    execution:
+      mode: "REMOTE"
+      operatorId: "chunker"
+      protocol: "ENVELOPE_HTTP_V1"
+      timeoutMs: 3000
+      target:
+        urlConfigKey: "tpf.remote-operators.chunker.url"
+```
+
+Envelope mode sends and receives `application/vnd.tpf.envelope.v1+json`. TPF owns the control metadata (`step`, `operatorId`, correlation, execution, idempotency, retry, deadline, and parent item metadata); only the payload region is loose JSON, bytes, or a payload reference. Prefer `PROTOBUF_HTTP_V1` when the external host can compile generated protobuf contracts.
 
 ## Operator vs Await
 
@@ -142,7 +162,7 @@ Simple concrete parameterised returns such as `List<Foo>` and `Map<String, Foo>`
 For remote v2 operators, build-time validation is contract-only:
 - input/output messages must resolve from the v2 message table,
 - the step must be unary,
-- the protocol must be `PROTOBUF_HTTP_V1`,
+- the protocol must be `PROTOBUF_HTTP_V1` or `ENVELOPE_HTTP_V1`,
 - the remote target must be configured correctly,
 - no local Java operator resolution or remote endpoint introspection is attempted.
 
@@ -154,7 +174,7 @@ When a v2 pipeline declares remote execution, proto generation also emits an ext
 - `EXTERNAL-STEP-HOSTS.md`: human-readable implementer notes.
 - `pipeline-types.proto` plus the per-step service `.proto` files: protobuf IDL compiled by the non-Java service.
 
-The manifest records the remote step name, operator id, service, RPC, input/output message names, protobuf file names, target configuration, and `PROTOBUF_HTTP_V1` HTTP contract. This gives Python and other non-Java implementers a stable contract without making loose payload envelopes the default TPF model.
+The manifest records the remote step name, operator id, service, RPC, input/output message names, protobuf file names, target configuration, protocol-specific HTTP contract, and payload policy. This gives Python and other non-Java implementers a stable contract without making loose payload envelopes the default TPF model.
 
 ## Current Invocation Scope
 

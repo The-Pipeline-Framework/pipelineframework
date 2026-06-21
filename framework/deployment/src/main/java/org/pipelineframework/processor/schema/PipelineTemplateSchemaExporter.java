@@ -723,7 +723,8 @@ public final class PipelineTemplateSchemaExporter {
         "protocol": {
           "type": "string",
           "enum": [
-            "PROTOBUF_HTTP_V1"
+            "PROTOBUF_HTTP_V1",
+            "ENVELOPE_HTTP_V1"
           ]
         },
         "timeoutMs": {

@@ -81,7 +81,36 @@ class RemoteOperatorAdapterRendererTest {
         assertFalse(source.contains("configuredTargetUrl"));
     }
 
+    @Test
+    void rendersEnvelopeRemoteAdapterWithoutProtobufMappers() throws IOException {
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
+
+        RemoteOperatorAdapterRenderer renderer = new RemoteOperatorAdapterRenderer();
+        renderer.render(
+            new GrpcBinding(
+                remoteModel(new PipelineTemplateRemoteTarget("https://operator.example/process", null), "ENVELOPE_HTTP_V1"),
+                serviceDescriptor(),
+                methodDescriptor()),
+            new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+                java.util.Set.of(), null, null));
+
+        Path generatedSource =
+            tempDir.resolve("org/example/checkout/service/pipeline/ChargeCardRemoteOperatorAdapter.java");
+        String source = Files.readString(generatedSource);
+
+        assertTrue(source.contains("EnvelopeHttpRemoteOperatorClient remoteOperatorClient"));
+        assertTrue(source.contains("Uni.createFrom().completionStage(() -> remoteOperatorClient.invoke(resolveTargetUrl(), \"ChargeCard\", \"charge-card\", input, ChargeResult.class, 3000))"));
+        assertFalse(source.contains("ProtobufHttpRemoteOperatorClient"));
+        assertFalse(source.contains("requestMapper"));
+        assertFalse(source.contains("decodeResponse"));
+    }
+
     private PipelineStepModel remoteModel(PipelineTemplateRemoteTarget target) {
+        return remoteModel(target, "PROTOBUF_HTTP_V1");
+    }
+
+    private PipelineStepModel remoteModel(PipelineTemplateRemoteTarget target, String protocol) {
         return new PipelineStepModel.Builder()
             .serviceName("ChargeCard")
             .generatedName("ChargeCard")
@@ -102,7 +131,7 @@ class RemoteOperatorAdapterRendererTest {
             .remoteExecution(new PipelineTemplateStepExecution(
                 "REMOTE",
                 "charge-card",
-                "PROTOBUF_HTTP_V1",
+                protocol,
                 3000,
                 target))
             .build();

@@ -763,9 +763,10 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             throw new IllegalArgumentException(message);
         }
-        if (!"PROTOBUF_HTTP_V1".equalsIgnoreCase(execution.protocol())) {
+        if (!"PROTOBUF_HTTP_V1".equalsIgnoreCase(execution.protocol())
+            && !"ENVELOPE_HTTP_V1".equalsIgnoreCase(execution.protocol())) {
             String message = "Skipping step '" + stepName
-                + "': remote execution requires execution.protocol=PROTOBUF_HTTP_V1";
+                + "': remote execution requires execution.protocol=PROTOBUF_HTTP_V1 or ENVELOPE_HTTP_V1";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             throw new IllegalArgumentException(message);
