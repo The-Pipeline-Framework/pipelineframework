@@ -28,6 +28,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -326,9 +327,85 @@ public class PipelineYamlConfigLoader {
         }
         return new PipelineYamlJpaQuery(
             readRequiredString(jpaMap, "entity", "query '" + queryId + "' jpa"),
-            readStringMap(jpaMap, "where", "query '" + queryId + "' jpa.where", true),
+            readJpaWhereMap(jpaMap, "query '" + queryId + "' jpa.where"),
             readStringMap(jpaMap, "projection", "query '" + queryId + "' jpa.projection", false),
+            readStringMap(jpaMap, "orderBy", "query '" + queryId + "' jpa.orderBy", false),
+            readOptionalInt(jpaMap, "limit").orElse(null),
             readString(jpaMap, "result"));
+    }
+
+    private Map<String, PipelineYamlJpaPredicate> readJpaWhereMap(Map<?, ?> map, String context) {
+        Object value = map.get("where");
+        if (value == null) {
+            throw new IllegalArgumentException(context + " must not be empty");
+        }
+        if (!(value instanceof Map<?, ?> rawMap)) {
+            throw new IllegalArgumentException(context + " must be defined as a map");
+        }
+        if (rawMap.isEmpty()) {
+            throw new IllegalArgumentException(context + " must not be empty");
+        }
+        Map<String, PipelineYamlJpaPredicate> normalized = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> rawEntry : rawMap.entrySet()) {
+            String path = rawEntry.getKey() == null ? null : rawEntry.getKey().toString().trim();
+            if (path == null || path.isBlank()) {
+                throw new IllegalArgumentException(context + " must not contain blank keys");
+            }
+            normalized.put(path, readJpaPredicate(rawEntry.getValue(), context + "." + path));
+        }
+        return Collections.unmodifiableMap(new LinkedHashMap<>(normalized));
+    }
+
+    private PipelineYamlJpaPredicate readJpaPredicate(Object rawValue, String context) {
+        if (rawValue == null) {
+            throw new IllegalArgumentException(context + " must not be null");
+        }
+        if (rawValue instanceof Map<?, ?> operatorMap) {
+            if (operatorMap.size() != 1) {
+                throw new IllegalArgumentException(context + " must declare exactly one predicate operator");
+            }
+            Map.Entry<?, ?> entry = operatorMap.entrySet().iterator().next();
+            String operator = entry.getKey() == null ? null : entry.getKey().toString().trim();
+            if (operator == null || operator.isBlank()) {
+                throw new IllegalArgumentException(context + " predicate operator must not be blank");
+            }
+            return new PipelineYamlJpaPredicate(operator, readPredicateValues(operator, entry.getValue(), context));
+        }
+        String text = rawValue.toString().trim();
+        if (text.isBlank()) {
+            throw new IllegalArgumentException(context + " must not be blank");
+        }
+        return PipelineYamlJpaPredicate.equalTo(text);
+    }
+
+    private List<Object> readPredicateValues(String operator, Object rawValue, String context) {
+        if (rawValue == null) {
+            throw new IllegalArgumentException(context + "." + operator + " must not be null");
+        }
+        if (rawValue instanceof Iterable<?> iterable) {
+            List<Object> values = new ArrayList<>();
+            for (Object item : iterable) {
+                values.add(normalizePredicateScalar(item, context + "." + operator));
+            }
+            return List.copyOf(values);
+        }
+        return List.of(normalizePredicateScalar(rawValue, context + "." + operator));
+    }
+
+    private Object normalizePredicateScalar(Object rawValue, String context) {
+        if (rawValue == null) {
+            throw new IllegalArgumentException(context + " values must not be null");
+        }
+        if (rawValue instanceof String text) {
+            if (text.isBlank()) {
+                throw new IllegalArgumentException(context + " values must not be blank");
+            }
+            return text.trim();
+        }
+        if (rawValue instanceof Map<?, ?> || rawValue instanceof Iterable<?> || rawValue.getClass().isArray()) {
+            throw new IllegalArgumentException(context + " values must be scalar");
+        }
+        return rawValue;
     }
 
     private Map<String, String> readStringMap(Map<?, ?> map, String key, String context, boolean required) {
@@ -357,7 +434,7 @@ public class PipelineYamlConfigLoader {
             }
             normalized.put(mapKey, mapValue);
         }
-        return Map.copyOf(normalized);
+        return Collections.unmodifiableMap(new LinkedHashMap<>(normalized));
     }
 
     private PipelineYamlQueryCapture readQueryCapture(Map<?, ?> stepMap, String stepName) {
@@ -1020,6 +1097,24 @@ public class PipelineYamlConfigLoader {
             return Integer.parseInt(text.trim());
         } catch (NumberFormatException ex) {
             throw new IllegalStateException("Invalid integer value '" + text + "' for key '" + key + "'", ex);
+        }
+    }
+
+    private Optional<Integer> readOptionalInt(Map<?, ?> map, String key) {
+        if (!map.containsKey(key)) {
+            return Optional.empty();
+        }
+        Object value = map.get(key);
+        if (value == null || value.toString().isBlank()) {
+            return Optional.empty();
+        }
+        if (value instanceof Number number) {
+            return Optional.of(exactIntegerValue(number, key));
+        }
+        try {
+            return Optional.of(Integer.parseInt(value.toString().trim()));
+        } catch (NumberFormatException ex) {
+            throw new IllegalStateException("Invalid integer value '" + value + "' for key '" + key + "'", ex);
         }
     }
 

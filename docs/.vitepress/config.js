@@ -57,6 +57,17 @@ const mainSidebar = [
             {text: 'Await Boundaries', link: '/design/await-boundaries'},
             {text: 'Object Ingest', link: '/design/object-ingest'},
             {
+                text: 'JPA Query Connector',
+                link: '/design/jpa-query-connector/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/design/jpa-query-connector/'},
+                    {text: 'Setup and YAML', link: '/design/jpa-query-connector/setup'},
+                    {text: 'Predicates and Selection', link: '/design/jpa-query-connector/predicates'},
+                    {text: 'Capture and Persistence', link: '/design/jpa-query-connector/capture-and-persistence'}
+                ]
+            },
+            {
                 text: 'Caching',
                 link: '/design/caching/',
                 collapsed: true,

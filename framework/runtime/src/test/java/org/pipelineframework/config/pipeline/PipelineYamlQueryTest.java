@@ -3,6 +3,7 @@ package org.pipelineframework.config.pipeline;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
@@ -120,8 +121,29 @@ class PipelineYamlQueryTest {
             null);
 
         assertEquals("single", jpa.result());
-        assertEquals("input.customerId", jpa.where().get("customerId"));
-        assertThrows(UnsupportedOperationException.class, () -> jpa.where().put("other", "input.other"));
+        assertEquals("eq", jpa.where().get("customerId").operator());
+        assertEquals(List.of("input.customerId"), jpa.where().get("customerId").values());
+        assertThrows(UnsupportedOperationException.class,
+            () -> jpa.where().put("other", PipelineYamlJpaPredicate.equalTo("input.other")));
+    }
+
+    @Test
+    void validatesJpaPredicateOrderAndLimitConfig() {
+        PipelineYamlJpaQuery jpa = new PipelineYamlJpaQuery(
+            "com.example.CustomerRiskEntity",
+            Map.of(
+                "score", new PipelineYamlJpaPredicate("gte", List.of("input.minimumScore")),
+                "deletedAt", new PipelineYamlJpaPredicate("isNull", List.of("true"))),
+            Map.of("accountStatus", "account.status"),
+            Map.of("updatedAt", "DESC"),
+            1,
+            "single");
+
+        assertEquals("gte", jpa.where().get("score").operator());
+        assertEquals(List.of("input.minimumScore"), jpa.where().get("score").values());
+        assertEquals(List.of(Boolean.TRUE), jpa.where().get("deletedAt").values());
+        assertEquals("desc", jpa.orderBy().get("updatedAt"));
+        assertEquals(1, jpa.limit());
     }
 
     @Test
@@ -132,6 +154,36 @@ class PipelineYamlQueryTest {
                 Map.of("customerId", "input.customerId"),
                 Map.of(),
                 "optional"));
+    }
+
+    @Test
+    void rejectsInvalidJpaPredicateShapes() {
+        assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlJpaPredicate("contains", List.of("HIGH")));
+        assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlJpaPredicate("between", List.of("input.low")));
+        assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlJpaPredicate("isNull", List.of("yes")));
+    }
+
+    @Test
+    void rejectsNullJpaPredicateValueWithDomainError() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            PipelineYamlJpaPredicate.equalTo(null));
+
+        assertEquals("query jpa.where eq values must not be null", exception.getMessage());
+    }
+
+    @Test
+    void rejectsLimitWithoutOrderBy() {
+        assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlJpaQuery(
+                "com.example.CustomerRiskEntity",
+                Map.of("customerId", PipelineYamlJpaPredicate.equalTo("input.customerId")),
+                Map.of(),
+                Map.of(),
+                1,
+                "single"));
     }
 
     private static PipelineYamlJpaQuery jpa() {

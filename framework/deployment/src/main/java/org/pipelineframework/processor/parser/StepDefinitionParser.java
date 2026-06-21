@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.regex.Pattern;
 import javax.tools.Diagnostic;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -45,6 +46,17 @@ public class StepDefinitionParser {
 
     private static final Logger LOG = Logger.getLogger(StepDefinitionParser.class);
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
+    private static final Pattern JPA_PATH = Pattern.compile("[A-Za-z_$][A-Za-z\\d_$]*(\\.[A-Za-z_$][A-Za-z\\d_$]*)*");
+    private static final Set<String> JPA_PREDICATE_OPERATORS = Set.of(
+        "eq",
+        "in",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between",
+        "like",
+        "isNull");
     /**
      * Legacy suffix used to resolve short-form internal step types.
      * For legacy internal steps, {@code input/output: Foo} resolves to
@@ -691,16 +703,36 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return false;
         }
-        if (!allStringMapEntries(whereMap)) {
-            String message = "Skipping query '" + id + "': jpa.where entries must be non-blank strings";
+        if (!validJpaWhereMap(whereMap)) {
+            String message = "Skipping query '" + id + "': jpa.where entries must use supported predicate shapes";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             return false;
         }
         Object projectionObj = jpaMap.get("projection");
         if (projectionObj != null) {
-            if (!(projectionObj instanceof Map<?, ?> projectionMap) || !allStringMapEntries(projectionMap)) {
-                String message = "Skipping query '" + id + "': jpa.projection entries must be non-blank strings";
+            if (!(projectionObj instanceof Map<?, ?> projectionMap) || !allJpaPathMapEntries(projectionMap)) {
+                String message = "Skipping query '" + id + "': jpa.projection entries must be non-blank property paths";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return false;
+            }
+        }
+        Object orderByObj = jpaMap.get("orderBy");
+        Map<?, ?> orderByMap = null;
+        if (orderByObj != null) {
+            if (!(orderByObj instanceof Map<?, ?> rawOrderByMap) || !allOrderByEntries(rawOrderByMap)) {
+                String message = "Skipping query '" + id + "': jpa.orderBy entries must be property paths with asc or desc";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return false;
+            }
+            orderByMap = rawOrderByMap;
+        }
+        Object limitObj = jpaMap.get("limit");
+        if (limitObj != null) {
+            if (!isOne(limitObj) || orderByMap == null || orderByMap.isEmpty()) {
+                String message = "Skipping query '" + id + "': jpa.limit supports only 1 and requires orderBy";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
                 return false;
@@ -716,14 +748,90 @@ public class StepDefinitionParser {
         return true;
     }
 
-    private boolean allStringMapEntries(Map<?, ?> map) {
+    private boolean validJpaWhereMap(Map<?, ?> map) {
         for (Map.Entry<?, ?> entry : map.entrySet()) {
-            if (entry.getKey() == null || entry.getKey().toString().isBlank()
-                || entry.getValue() == null || entry.getValue().toString().isBlank()) {
+            if (!isJpaPath(entry.getKey())) {
+                return false;
+            }
+            Object value = entry.getValue();
+            if (value instanceof String text) {
+                if (text.isBlank()) {
+                    return false;
+                }
+                continue;
+            }
+            if (!(value instanceof Map<?, ?> operatorMap) || operatorMap.size() != 1) {
+                return false;
+            }
+            Map.Entry<?, ?> operatorEntry = operatorMap.entrySet().iterator().next();
+            String operator = operatorEntry.getKey() == null ? null : operatorEntry.getKey().toString().trim();
+            if (operator == null || !JPA_PREDICATE_OPERATORS.contains(operator)) {
+                return false;
+            }
+            if (!validPredicateValue(operator, operatorEntry.getValue())) {
                 return false;
             }
         }
         return true;
+    }
+
+    private boolean validPredicateValue(String operator, Object value) {
+        if ("isNull".equals(operator)) {
+            if (value instanceof Boolean) {
+                return true;
+            }
+            if (value instanceof String text) {
+                return "true".equalsIgnoreCase(text.trim()) || "false".equalsIgnoreCase(text.trim());
+            }
+            return false;
+        }
+        if ("between".equals(operator)) {
+            return value instanceof List<?> list && list.size() == 2 && list.stream().allMatch(this::isNonBlankScalar);
+        }
+        if ("in".equals(operator)) {
+            if (value instanceof List<?> list) {
+                return !list.isEmpty() && list.stream().allMatch(this::isNonBlankScalar);
+            }
+            return isNonBlankScalar(value);
+        }
+        return isNonBlankScalar(value);
+    }
+
+    private boolean isNonBlankScalar(Object value) {
+        return value != null
+            && !(value instanceof Map<?, ?>)
+            && !(value instanceof List<?>)
+            && !value.toString().isBlank();
+    }
+
+    private boolean allJpaPathMapEntries(Map<?, ?> map) {
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            if (!isJpaPath(entry.getKey()) || !isJpaPath(entry.getValue())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean allOrderByEntries(Map<?, ?> map) {
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            String direction = entry.getValue() == null ? null : entry.getValue().toString().trim();
+            if (!isJpaPath(entry.getKey()) || (!"asc".equalsIgnoreCase(direction) && !"desc".equalsIgnoreCase(direction))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isJpaPath(Object value) {
+        return value != null && JPA_PATH.matcher(value.toString().trim()).matches();
+    }
+
+    private boolean isOne(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue() == 1 && number.doubleValue() == 1.0d;
+        }
+        return value != null && "1".equals(value.toString().trim());
     }
 
     @SuppressWarnings("unchecked")

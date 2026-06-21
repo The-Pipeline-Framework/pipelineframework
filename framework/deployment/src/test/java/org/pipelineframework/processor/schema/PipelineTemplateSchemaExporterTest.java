@@ -91,6 +91,25 @@ class PipelineTemplateSchemaExporterTest {
         JsonObject jpaDefinition = definitions.getAsJsonObject("jpaQueryDefinition");
         assertContains(jpaDefinition.getAsJsonArray("required"), "entity");
         assertContains(jpaDefinition.getAsJsonArray("required"), "where");
+        JsonObject jpaProperties = jpaDefinition.getAsJsonObject("properties");
+        assertTrue(jpaProperties.has("orderBy"));
+        assertTrue(jpaProperties.has("limit"));
+        JsonObject whereDefinition = jpaProperties.getAsJsonObject("where");
+        JsonArray whereShapes = whereDefinition.getAsJsonObject("additionalProperties").getAsJsonArray("oneOf");
+        assertEquals(2, whereShapes.size());
+        JsonObject predicateObject = whereShapes.get(1).getAsJsonObject();
+        JsonObject predicateProperties = predicateObject.getAsJsonObject("properties");
+        assertTrue(predicateProperties.has("eq"));
+        assertTrue(predicateProperties.has("gte"));
+        assertTrue(predicateProperties.has("between"));
+        assertTrue(predicateProperties.has("isNull"));
+        assertTrue(predicateProperties.getAsJsonObject("isNull").has("oneOf"));
+        JsonObject orderByDefinition = jpaProperties.getAsJsonObject("orderBy");
+        assertEquals(1, orderByDefinition.get("minProperties").getAsInt());
+        assertTrue(orderByDefinition.getAsJsonObject("additionalProperties").has("pattern"));
+        assertTrue(jpaDefinition.has("allOf"));
+        assertTrue(definitions.has("jpaPredicateScalar"));
+        assertTrue(definitions.getAsJsonObject("jpaPredicateScalar").has("anyOf"));
 
         JsonObject queryStep = definitions.getAsJsonObject("queryTemplateStep");
 

@@ -498,23 +498,101 @@ public final class PipelineTemplateSchemaExporter {
           "minProperties": 1,
           "propertyNames": {
             "type": "string",
-            "minLength": 1
+            "pattern": "^[A-Za-z_$][A-Za-z\\\\d_$]*(\\\\.[A-Za-z_$][A-Za-z\\\\d_$]*)*$"
           },
           "additionalProperties": {
-            "type": "string",
-            "minLength": 1
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "object",
+                "minProperties": 1,
+                "maxProperties": 1,
+                "properties": {
+                  "eq": {
+                    "$ref": "#/$defs/jpaPredicateScalar"
+                  },
+                  "in": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/jpaPredicateScalar"
+                      },
+                      {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "$ref": "#/$defs/jpaPredicateScalar"
+                        }
+                      }
+                    ]
+                  },
+                  "gt": {
+                    "$ref": "#/$defs/jpaPredicateScalar"
+                  },
+                  "gte": {
+                    "$ref": "#/$defs/jpaPredicateScalar"
+                  },
+                  "lt": {
+                    "$ref": "#/$defs/jpaPredicateScalar"
+                  },
+                  "lte": {
+                    "$ref": "#/$defs/jpaPredicateScalar"
+                  },
+                  "between": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                      "$ref": "#/$defs/jpaPredicateScalar"
+                    }
+                  },
+                  "like": {
+                    "$ref": "#/$defs/jpaPredicateScalar"
+                  },
+                  "isNull": {
+                    "oneOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^([Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
           }
         },
         "projection": {
           "type": "object",
           "propertyNames": {
             "type": "string",
-            "minLength": 1
+            "pattern": "^[A-Za-z_$][A-Za-z\\\\d_$]*(\\\\.[A-Za-z_$][A-Za-z\\\\d_$]*)*$"
           },
           "additionalProperties": {
             "type": "string",
-            "minLength": 1
+            "pattern": "^[A-Za-z_$][A-Za-z\\\\d_$]*(\\\\.[A-Za-z_$][A-Za-z\\\\d_$]*)*$"
           }
+        },
+        "orderBy": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Za-z_$][A-Za-z\\\\d_$]*(\\\\.[A-Za-z_$][A-Za-z\\\\d_$]*)*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^([Aa][Ss][Cc]|[Dd][Ee][Ss][Cc])$"
+          }
+        },
+        "limit": {
+          "const": 1
         },
         "result": {
           "const": "single",
@@ -525,7 +603,35 @@ public final class PipelineTemplateSchemaExporter {
         "entity",
         "where"
       ],
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "limit"
+            ]
+          },
+          "then": {
+            "required": [
+              "orderBy"
+            ]
+          }
+        }
+      ],
       "additionalProperties": false
+    },
+    "jpaPredicateScalar": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        }
+      ]
     },
     "queryCapture": {
       "type": "object",

@@ -1600,6 +1600,175 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void parsesQueryStepDefinitionWithJpaPredicatesOrderAndLimit() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              latest-active-risk:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                version: "v2"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+                    status:
+                      eq: ACTIVE
+                    score:
+                      gte: 80
+                    deletedAt:
+                      isNull: true
+                    account.riskBand:
+                      in: [HIGH, CRITICAL]
+                  orderBy:
+                    updatedAt: desc
+                  limit: 1
+                  projection:
+                    accountStatus: account.status
+                  result: single
+            steps:
+              - name: "Load Latest Active Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "latest-active-risk"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertEquals(1, steps.size(), diagnostics.toString());
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryDefinitionWithUnsupportedJpaPredicateOperator() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    riskBand:
+                      contains: HIGH
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("jpa.where entries must use supported predicate shapes")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryDefinitionWithInvalidJpaDottedPath() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    account..riskBand: HIGH
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("jpa.where entries must use supported predicate shapes")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryDefinitionWithJpaLimitWithoutOrderBy() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+                  limit: 1
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("jpa.limit supports only 1 and requires orderBy")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryDefinitionWithJpaLimitAndEmptyOrderBy() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+                  orderBy: {}
+                  limit: 1
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("jpa.limit supports only 1 and requires orderBy")),
+            diagnostics.toString());
+    }
+
+    @Test
     void rejectsQueryCaptureModeBecauseCapturedIsTheOnlyV1Behavior() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
