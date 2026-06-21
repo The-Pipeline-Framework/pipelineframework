@@ -4,6 +4,10 @@ Persistence stores pipeline data without changing the flow itself. In practical 
 
 This is one of the most important state capabilities in The Pipeline Framework (TPF). You keep the business function focused on processing, while the persistence plugin stores the resulting records in a way that fits reactive execution cleanly.
 
+::: tip Runtime Scope
+The current persistence implementation is Quarkus/Mutiny-oriented. Spring persistence providers are not production-supported yet; see [Spring Support Status](/develop/spring-support). For the broader state map, see [State Model](/design/state-model).
+:::
+
 ## What it does
 
 - Observes stream elements and persists them
@@ -19,7 +23,9 @@ The plugin is split into two parts:
 1. **Plugin library**: `plugins/foundational/persistence`
 2. **Service host module**: e.g. `examples/.../persistence-svc`
 
-The host module provides a concrete module that knows your domain types and enables runtime discovery. At runtime, `PersistenceManager` and `PersistenceService` are CDI beans that discover providers via `Instance<PersistenceProvider<?>>`. The `PersistencePluginHost` is a marker class annotated with `@PipelinePlugin` to make the module discoverable by the framework. This is a runtime-discovery model, not a build-time code-generation hook.
+The host module provides a concrete module that knows your domain types and enables runtime discovery.
+
+In the current Quarkus runtime, `PersistenceManager` and `PersistenceService` are CDI beans that discover providers via `Instance<PersistenceProvider<?>>`. The `PersistencePluginHost` is a marker class annotated with `@PipelinePlugin` to make the module discoverable by the framework. This is a runtime-discovery model, not a build-time code-generation hook.
 
 ## Required dependencies
 

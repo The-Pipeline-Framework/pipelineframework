@@ -1,5 +1,9 @@
 # I/O Shell Absorption
 
+::: tip Strategic Context
+This page is the internal strategy companion to the public [Functional Core, Imperative Shell](/design/fcis) guide. Keep public docs focused on typed boundaries and connector usage; use this page for evolution decisions about which I/O shells TPF should absorb next.
+:::
+
 TPF should not replace Spring, Quarkus, or ordinary Java APIs. Its strongest adoption value is absorbing imperative I/O shells when framework semantics remove distributed-systems plumbing that application teams otherwise rebuild.
 
 The benchmark is Await: a single await step absorbs pending interaction state, callback admission, correlation, continuation, timeout, duplicate completion handling, replay shape, and lifecycle observability.
