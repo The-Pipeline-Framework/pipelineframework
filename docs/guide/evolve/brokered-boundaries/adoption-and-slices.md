@@ -41,7 +41,7 @@ Prefer these implementation slices if this work becomes active:
 4. SQS-backed checkpoint publication/subscription for AWS queue-shaped handoff.
 5. Kafka-backed transition-worker dispatcher using the existing command/result envelope.
 6. Protobuf-backed external step-host contract generation for non-Java implementations. Implemented as generated proto files plus an external step-host manifest for remote v2 operators.
-7. Optional envelope compatibility lane with strict TPF control metadata and loose payload.
+7. Optional envelope compatibility lane with strict TPF control metadata and loose payload. Implemented first for remote v2 HTTP step hosts through `ENVELOPE_HTTP_V1`; brokered dispatch remains separate.
 8. Brokered step-host dispatch only after the earlier boundary types are proven.
 
 Avoid starting with broad "Kafka transport" or "SQS transport" PRs. They mix unrelated risks and blur TPF semantics.

@@ -143,6 +143,18 @@ class PipelineTemplateSchemaExporterTest {
     }
 
     @Test
+    void remoteExecutionProtocolEnumIncludesEnvelopeCompatibilityProtocol() {
+        JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
+        JsonObject execution = definitions.getAsJsonObject("v2Execution");
+        JsonArray protocols = execution.getAsJsonObject("properties")
+            .getAsJsonObject("protocol")
+            .getAsJsonArray("enum");
+
+        assertContains(protocols, "PROTOBUF_HTTP_V1");
+        assertContains(protocols, "ENVELOPE_HTTP_V1");
+    }
+
+    @Test
     void deterministicTopLevelOrderingKeepsSchemaStableForConsumers() {
         JsonObject schema = parse(PipelineTemplateSchemaExporter.schemaJson());
         List<String> keys = new ArrayList<>();

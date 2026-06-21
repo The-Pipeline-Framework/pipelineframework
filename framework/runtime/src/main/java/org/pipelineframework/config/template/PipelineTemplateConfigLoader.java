@@ -686,9 +686,11 @@ public class PipelineTemplateConfigLoader {
         if (execution.operatorId() == null) {
             throw new IllegalStateException("Step '" + stepName + "' remote execution requires execution.operatorId");
         }
-        if (!"PROTOBUF_HTTP_V1".equalsIgnoreCase(execution.protocol())) {
+        if (!"PROTOBUF_HTTP_V1".equalsIgnoreCase(execution.protocol())
+            && !"ENVELOPE_HTTP_V1".equalsIgnoreCase(execution.protocol())) {
             throw new IllegalStateException(
-                "Step '" + stepName + "' remote execution requires execution.protocol=PROTOBUF_HTTP_V1");
+                "Step '" + stepName
+                    + "' remote execution requires execution.protocol=PROTOBUF_HTTP_V1 or ENVELOPE_HTTP_V1");
         }
         PipelineTemplateRemoteTarget target = execution.target();
         if (target == null) {
