@@ -21,6 +21,7 @@ import java.util.Map;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
+import org.pipelineframework.config.boundary.PipelineObjectPublishConfig;
 import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
 import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
 
@@ -33,6 +34,7 @@ import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
  * @param steps the configured pipeline steps
  * @param sources named pipeline I/O sources
  * @param queries named captured query definitions
+ * @param publish named pipeline object publish targets
  * @param aspects the configured pipeline aspects
  * @param input the configured reliable pipeline input boundary
  * @param output the configured reliable pipeline output boundary
@@ -44,6 +46,7 @@ public record PipelineYamlConfig(
     List<PipelineYamlStep> steps,
     Map<String, PipelineObjectSourceConfig> sources,
     Map<String, PipelineYamlQuery> queries,
+    Map<String, PipelineObjectPublishConfig> publish,
     List<PipelineYamlAspect> aspects,
     PipelineInputBoundaryConfig input,
     PipelineOutputBoundaryConfig output
@@ -67,8 +70,10 @@ public record PipelineYamlConfig(
         platform = normalizedPlatform;
         validateMap(sources, "sources");
         validateMap(queries, "queries");
+        validateMap(publish, "publish");
         sources = sources == null ? Map.of() : Map.copyOf(sources);
         queries = queries == null ? Map.of() : Map.copyOf(queries);
+        publish = publish == null ? Map.of() : Map.copyOf(publish);
     }
 
     private static void validateMap(Map<?, ?> values, String fieldName) {
@@ -99,7 +104,7 @@ public record PipelineYamlConfig(
         List<PipelineYamlStep> steps,
         List<PipelineYamlAspect> aspects
     ) {
-        this(basePackage, transport, "COMPUTE", steps, Map.of(), Map.of(), aspects, null, null);
+        this(basePackage, transport, "COMPUTE", steps, Map.of(), Map.of(), Map.of(), aspects, null, null);
     }
 
     /**
@@ -119,7 +124,7 @@ public record PipelineYamlConfig(
         List<PipelineYamlStep> steps,
         List<PipelineYamlAspect> aspects
     ) {
-        this(basePackage, transport, platform, steps, Map.of(), Map.of(), aspects, null, null);
+        this(basePackage, transport, platform, steps, Map.of(), Map.of(), Map.of(), aspects, null, null);
     }
 
     public PipelineYamlConfig(
@@ -127,11 +132,13 @@ public record PipelineYamlConfig(
         String transport,
         String platform,
         List<PipelineYamlStep> steps,
+        Map<String, PipelineObjectSourceConfig> sources,
+        Map<String, PipelineYamlQuery> queries,
         List<PipelineYamlAspect> aspects,
         PipelineInputBoundaryConfig input,
         PipelineOutputBoundaryConfig output
     ) {
-        this(basePackage, transport, platform, steps, Map.of(), Map.of(), aspects, input, output);
+        this(basePackage, transport, platform, steps, sources, queries, Map.of(), aspects, input, output);
     }
 
     public PipelineYamlConfig(
@@ -144,7 +151,19 @@ public record PipelineYamlConfig(
         PipelineInputBoundaryConfig input,
         PipelineOutputBoundaryConfig output
     ) {
-        this(basePackage, transport, platform, steps, sources, Map.of(), aspects, input, output);
+        this(basePackage, transport, platform, steps, sources, Map.of(), Map.of(), aspects, input, output);
+    }
+
+    public PipelineYamlConfig(
+        String basePackage,
+        String transport,
+        String platform,
+        List<PipelineYamlStep> steps,
+        List<PipelineYamlAspect> aspects,
+        PipelineInputBoundaryConfig input,
+        PipelineOutputBoundaryConfig output
+    ) {
+        this(basePackage, transport, platform, steps, Map.of(), Map.of(), Map.of(), aspects, input, output);
     }
 
     /**
@@ -154,7 +173,7 @@ public record PipelineYamlConfig(
      * @return a new PipelineYamlConfig with the updated transport
      */
     public PipelineYamlConfig withTransport(String transport) {
-        return new PipelineYamlConfig(basePackage, transport, platform, steps, sources, queries, aspects, input, output);
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, sources, queries, publish, aspects, input, output);
     }
 
     /**
@@ -164,6 +183,6 @@ public record PipelineYamlConfig(
      * @return a new PipelineYamlConfig with the updated platform
      */
     public PipelineYamlConfig withPlatform(String platform) {
-        return new PipelineYamlConfig(basePackage, transport, platform, steps, sources, queries, aspects, input, output);
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, sources, queries, publish, aspects, input, output);
     }
 }

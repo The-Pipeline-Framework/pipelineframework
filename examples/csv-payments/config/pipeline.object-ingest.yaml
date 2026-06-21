@@ -25,6 +25,24 @@ input:
     type: org.pipelineframework.csv.common.domain.CsvPaymentsInputFile
     typeName: CsvPaymentsInputFile
     mapper: org.pipelineframework.csv.common.mapper.CsvPaymentFileObjectMapper
+publish:
+  csv-payment-output-files:
+    kind: object
+    provider: filesystem
+    location:
+      root: ../input-csv-file-processing-svc/csv
+    naming:
+      keyTemplate: "{groupKey}.out"
+    payload:
+      contentType: text/csv
+    grouping:
+      maxOpenGroups: 1
+output:
+  to: csv-payment-output-files
+  consumes:
+    type: org.pipelineframework.csv.common.domain.PaymentOutput
+    typeName: PaymentOutput
+    mapper: org.pipelineframework.csv.common.mapper.CsvPaymentOutputPublishMapper
 aspects:
   persistence:
     enabled: true
@@ -34,12 +52,16 @@ aspects:
       targetSteps:
         - ProcessCsvPaymentsInputService
         - ProcessPaymentStatusService
-        - ProcessCsvPaymentsOutputFileService
       pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
       enabledTargets:
         - GRPC_SERVICE
         - CLIENT_STEP
 messages:
+  CsvFolder:
+    fields:
+      - number: 1
+        name: path
+        type: path
   CsvPaymentsInputFile:
     fields:
       - number: 1
@@ -186,12 +208,3 @@ steps:
     output: org.pipelineframework.csv.common.domain.PaymentOutput
     outputTypeName: PaymentOutput
     outboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputMapper
-  - name: Process Csv Payments Output File
-    service: org.pipelineframework.csv.service.ProcessCsvPaymentsOutputFileService
-    cardinality: MANY_TO_MANY
-    input: org.pipelineframework.csv.common.domain.PaymentOutput
-    inputTypeName: PaymentOutput
-    inboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputMapper
-    output: org.pipelineframework.csv.common.domain.CsvPaymentsOutputFile
-    outputTypeName: CsvPaymentsOutputFile
-    outboundMapper: org.pipelineframework.csv.common.mapper.CsvPaymentsOutputFileMapper

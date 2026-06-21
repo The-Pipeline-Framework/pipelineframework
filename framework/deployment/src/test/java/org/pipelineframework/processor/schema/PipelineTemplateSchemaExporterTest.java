@@ -56,11 +56,13 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("pipelineInputBoundary"));
         assertTrue(definitions.has("pipelineOutputBoundary"));
         assertTrue(definitions.has("pipelineSources"));
+        assertTrue(definitions.has("pipelinePublishTargets"));
         assertTrue(definitions.has("objectSource"));
         assertTrue(definitions.has("queryDefinition"));
         assertTrue(definitions.has("jpaQueryDefinition"));
         assertTrue(definitions.has("queryCapture"));
         assertTrue(definitions.has("queryTemplateStep"));
+        assertTrue(definitions.has("objectPublishTarget"));
         assertTrue(definitions.has("delegatedOrInternalStep"));
         assertTrue(definitions.has("v2Execution"));
         assertTrue(definitions.has("awaitTemplateStep"));
@@ -74,6 +76,7 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(properties.has("output"));
         assertTrue(properties.has("sources"));
         assertTrue(properties.has("queries"));
+        assertTrue(properties.has("publish"));
         assertTrue(properties.has("materialization"));
     }
 
@@ -107,6 +110,18 @@ class PipelineTemplateSchemaExporterTest {
         assertEquals(2, oneOf.size());
         assertContains(oneOf.get(0).getAsJsonObject().getAsJsonArray("required"), "source");
         assertContains(oneOf.get(1).getAsJsonObject().getAsJsonArray("required"), "from");
+    }
+
+    @Test
+    void objectOutputBoundaryRequiresTargetReference() {
+        JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
+        JsonObject objectOutput = definitions.getAsJsonObject("objectOutputBoundary");
+
+        assertContains(objectOutput.getAsJsonArray("required"), "consumes");
+        JsonArray oneOf = objectOutput.getAsJsonArray("oneOf");
+        assertEquals(2, oneOf.size());
+        assertContains(oneOf.get(0).getAsJsonObject().getAsJsonArray("required"), "target");
+        assertContains(oneOf.get(1).getAsJsonObject().getAsJsonArray("required"), "to");
     }
 
     @Test
