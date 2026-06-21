@@ -330,7 +330,7 @@ public class PipelineYamlConfigLoader {
             readJpaWhereMap(jpaMap, "query '" + queryId + "' jpa.where"),
             readStringMap(jpaMap, "projection", "query '" + queryId + "' jpa.projection", false),
             readStringMap(jpaMap, "orderBy", "query '" + queryId + "' jpa.orderBy", false),
-            readOptionalInt(jpaMap, "limit"),
+            readOptionalInt(jpaMap, "limit").orElse(null),
             readString(jpaMap, "result"));
     }
 
@@ -401,6 +401,9 @@ public class PipelineYamlConfigLoader {
                 throw new IllegalArgumentException(context + " values must not be blank");
             }
             return text.trim();
+        }
+        if (rawValue instanceof Map<?, ?> || rawValue instanceof Iterable<?> || rawValue.getClass().isArray()) {
+            throw new IllegalArgumentException(context + " values must be scalar");
         }
         return rawValue;
     }
@@ -1097,19 +1100,19 @@ public class PipelineYamlConfigLoader {
         }
     }
 
-    private Integer readOptionalInt(Map<?, ?> map, String key) {
+    private Optional<Integer> readOptionalInt(Map<?, ?> map, String key) {
         if (!map.containsKey(key)) {
-            return null;
+            return Optional.empty();
         }
         Object value = map.get(key);
         if (value == null || value.toString().isBlank()) {
-            return null;
+            return Optional.empty();
         }
         if (value instanceof Number number) {
-            return exactIntegerValue(number, key);
+            return Optional.of(exactIntegerValue(number, key));
         }
         try {
-            return Integer.parseInt(value.toString().trim());
+            return Optional.of(Integer.parseInt(value.toString().trim()));
         } catch (NumberFormatException ex) {
             throw new IllegalStateException("Invalid integer value '" + value + "' for key '" + key + "'", ex);
         }

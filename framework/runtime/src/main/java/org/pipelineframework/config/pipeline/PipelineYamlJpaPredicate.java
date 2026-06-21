@@ -32,11 +32,13 @@ public record PipelineYamlJpaPredicate(String operator, List<Object> values) {
     }
 
     public static PipelineYamlJpaPredicate equalTo(Object value) {
-        return new PipelineYamlJpaPredicate("eq", List.of(value));
+        List<Object> values = new ArrayList<>();
+        values.add(value);
+        return new PipelineYamlJpaPredicate("eq", values);
     }
 
     private static List<Object> normalizeValues(String operator, List<Object> rawValues) {
-        List<Object> normalized = rawValues == null ? List.of() : List.copyOf(rawValues);
+        List<Object> normalized = rawValues == null ? List.of() : new ArrayList<>(rawValues);
         return switch (operator) {
             case "isNull" -> normalizeIsNull(normalized);
             case "between" -> {
@@ -66,7 +68,7 @@ public record PipelineYamlJpaPredicate(String operator, List<Object> values) {
         }
         Object value = values.get(0);
         if (value instanceof Boolean) {
-            return values;
+            return List.of(value);
         }
         if (value instanceof String text) {
             String normalized = text.trim().toLowerCase(Locale.ROOT);

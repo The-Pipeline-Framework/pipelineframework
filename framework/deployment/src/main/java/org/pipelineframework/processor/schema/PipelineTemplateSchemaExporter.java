@@ -552,7 +552,15 @@ public final class PipelineTemplateSchemaExporter {
                     "$ref": "#/$defs/jpaPredicateScalar"
                   },
                   "isNull": {
-                    "type": "boolean"
+                    "oneOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^([Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$"
+                      }
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -573,18 +581,14 @@ public final class PipelineTemplateSchemaExporter {
         },
         "orderBy": {
           "type": "object",
+          "minProperties": 1,
           "propertyNames": {
             "type": "string",
             "pattern": "^[A-Za-z_$][A-Za-z\\\\d_$]*(\\\\.[A-Za-z_$][A-Za-z\\\\d_$]*)*$"
           },
           "additionalProperties": {
             "type": "string",
-            "enum": [
-              "asc",
-              "desc",
-              "ASC",
-              "DESC"
-            ]
+            "pattern": "^([Aa][Ss][Cc]|[Dd][Ee][Ss][Cc])$"
           }
         },
         "limit": {
@@ -598,6 +602,20 @@ public final class PipelineTemplateSchemaExporter {
       "required": [
         "entity",
         "where"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "limit"
+            ]
+          },
+          "then": {
+            "required": [
+              "orderBy"
+            ]
+          }
+        }
       ],
       "additionalProperties": false
     },

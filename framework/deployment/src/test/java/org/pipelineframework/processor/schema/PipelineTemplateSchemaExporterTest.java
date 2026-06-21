@@ -103,6 +103,11 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(predicateProperties.has("gte"));
         assertTrue(predicateProperties.has("between"));
         assertTrue(predicateProperties.has("isNull"));
+        assertTrue(predicateProperties.getAsJsonObject("isNull").has("oneOf"));
+        JsonObject orderByDefinition = jpaProperties.getAsJsonObject("orderBy");
+        assertEquals(1, orderByDefinition.get("minProperties").getAsInt());
+        assertTrue(orderByDefinition.getAsJsonObject("additionalProperties").has("pattern"));
+        assertTrue(jpaDefinition.has("allOf"));
         assertTrue(definitions.has("jpaPredicateScalar"));
         assertTrue(definitions.getAsJsonObject("jpaPredicateScalar").has("anyOf"));
 

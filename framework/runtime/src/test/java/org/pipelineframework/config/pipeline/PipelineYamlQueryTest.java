@@ -167,6 +167,14 @@ class PipelineYamlQueryTest {
     }
 
     @Test
+    void rejectsNullJpaPredicateValueWithDomainError() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            PipelineYamlJpaPredicate.equalTo(null));
+
+        assertEquals("query jpa.where eq values must not be null", exception.getMessage());
+    }
+
+    @Test
     void rejectsLimitWithoutOrderBy() {
         assertThrows(IllegalArgumentException.class, () ->
             new PipelineYamlJpaQuery(

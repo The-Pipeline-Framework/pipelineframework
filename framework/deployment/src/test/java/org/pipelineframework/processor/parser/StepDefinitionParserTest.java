@@ -1598,6 +1598,38 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void rejectsQueryDefinitionWithJpaLimitAndEmptyOrderBy() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+                  orderBy: {}
+                  limit: 1
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("jpa.limit supports only 1 and requires orderBy")),
+            diagnostics.toString());
+    }
+
+    @Test
     void rejectsQueryCaptureModeBecauseCapturedIsTheOnlyV1Behavior() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""

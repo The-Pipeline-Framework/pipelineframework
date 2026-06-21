@@ -623,6 +623,29 @@ class PipelineYamlConfigLoaderTest {
     }
 
     @Test
+    void rejectsNestedJpaPredicateValues() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                queries:
+                  bad-query:
+                    connector: "jpa"
+                    input: "com.example.LookupType"
+                    output: "com.example.SnapshotType"
+                    jpa:
+                      entity: "com.example.Entity"
+                      where:
+                        score:
+                          in:
+                            - 10
+                            - nested: true
+                steps: []
+                """)));
+
+        assertEquals("query 'bad-query' jpa.where.score.in values must be scalar", exception.getMessage());
+    }
+
+    @Test
     void rejectsJpaLimitWithoutOrderBy() {
         assertThrows(IllegalArgumentException.class, () ->
             new PipelineYamlConfigLoader().load(new StringReader("""

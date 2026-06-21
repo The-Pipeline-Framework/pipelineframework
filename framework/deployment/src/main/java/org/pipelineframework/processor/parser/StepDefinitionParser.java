@@ -680,17 +680,19 @@ public class StepDefinitionParser {
             }
         }
         Object orderByObj = jpaMap.get("orderBy");
+        Map<?, ?> orderByMap = null;
         if (orderByObj != null) {
-            if (!(orderByObj instanceof Map<?, ?> orderByMap) || !allOrderByEntries(orderByMap)) {
+            if (!(orderByObj instanceof Map<?, ?> rawOrderByMap) || !allOrderByEntries(rawOrderByMap)) {
                 String message = "Skipping query '" + id + "': jpa.orderBy entries must be property paths with asc or desc";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
                 return false;
             }
+            orderByMap = rawOrderByMap;
         }
         Object limitObj = jpaMap.get("limit");
         if (limitObj != null) {
-            if (!isOne(limitObj) || orderByObj == null) {
+            if (!isOne(limitObj) || orderByMap == null || orderByMap.isEmpty()) {
                 String message = "Skipping query '" + id + "': jpa.limit supports only 1 and requires orderBy";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);

@@ -64,7 +64,8 @@ class JpaQueryConnectorQuarkusTest {
             session.createMutationQuery("delete from " + CustomerRiskEntity.class.getName()).executeUpdate()
                 .replaceWithVoid()
                 .chain(() -> session.persist(new CustomerRiskEntity("customer-latest", "LOW", 45, "ACTIVE", 1, null)))
-                .chain(() -> session.persist(new CustomerRiskEntity("customer-latest", "HIGH", 91, "ACTIVE", 2, null)))
+                .chain(() -> session.persist(new CustomerRiskEntity("customer-latest", "MEDIUM", 85, "ACTIVE", 2, null)))
+                .chain(() -> session.persist(new CustomerRiskEntity("customer-latest", "HIGH", 91, "ACTIVE", 3, null)))
                 .chain(() -> session.persist(new CustomerRiskEntity("customer-latest", "CRITICAL", 99, "INACTIVE", 3, null)))));
 
         asserter.assertThat(

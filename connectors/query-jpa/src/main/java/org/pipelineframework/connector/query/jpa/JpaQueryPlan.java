@@ -6,7 +6,9 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import org.pipelineframework.config.pipeline.PipelineYamlJpaQuery;
@@ -16,6 +18,7 @@ import org.pipelineframework.query.QueryStepDescriptor;
 final class JpaQueryPlan {
     private static final Pattern JAVA_IDENTIFIER = Pattern.compile("[A-Za-z_$][A-Za-z\\d_$]*");
     private static final String INPUT_PREFIX = "input.";
+    private static final Set<String> ORDER_DIRECTIONS = Set.of("asc", "desc");
 
     private final String queryId;
     private final Class<?> entityType;
@@ -197,7 +200,12 @@ final class JpaQueryPlan {
     }
 
     private static void validateOrderByMap(Map<String, String> values) {
-        values.keySet().forEach(key -> validatePath(key, "jpa.orderBy key"));
+        values.forEach((key, direction) -> {
+            validatePath(key, "jpa.orderBy key");
+            if (direction == null || !ORDER_DIRECTIONS.contains(direction.toLowerCase(Locale.ROOT))) {
+                throw new IllegalArgumentException("jpa.orderBy direction must be asc or desc: " + direction);
+            }
+        });
     }
 
     private static void validateIdentifier(String value, String field) {
@@ -207,6 +215,9 @@ final class JpaQueryPlan {
     }
 
     private static void validatePathMap(Map<String, PipelineYamlJpaPredicate> values, String field) {
+        if (values == null || values.isEmpty()) {
+            throw new IllegalArgumentException("jpa." + field + " must not be empty");
+        }
         values.keySet().forEach(key -> validatePath(key, "jpa." + field + " key"));
     }
 
