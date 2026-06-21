@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -36,7 +37,8 @@ class QueryStepDescriptorFactoryTest {
             assertEquals("jpa", descriptor.connector());
             assertEquals("v2", descriptor.version());
             assertEquals("org.example.CustomerRiskEntity", descriptor.jpa().entity());
-            assertEquals("input.customerId", descriptor.jpa().where().get("customerId"));
+            assertEquals("eq", descriptor.jpa().where().get("customerId").operator());
+            assertEquals(List.of("input.customerId"), descriptor.jpa().where().get("customerId").values());
         } finally {
             factory.shutdown();
         }

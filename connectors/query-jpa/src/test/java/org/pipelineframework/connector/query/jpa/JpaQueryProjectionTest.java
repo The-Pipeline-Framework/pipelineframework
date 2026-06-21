@@ -11,7 +11,7 @@ class JpaQueryProjectionTest {
 
     @Test
     void projectsEntityPropertiesIntoRecordOutput() {
-        CustomerRiskEntity entity = new CustomerRiskEntity("customer-1", "HIGH", 83);
+        CustomerRiskEntity entity = new CustomerRiskEntity("customer-1", "HIGH", 83, new Account("ACTIVE"));
 
         CustomerRiskFacts facts = JpaQueryProjection.project(
             entity,
@@ -22,14 +22,32 @@ class JpaQueryProjectionTest {
     }
 
     @Test
+    void projectsDottedEntityPropertiesIntoRecordOutput() {
+        CustomerRiskEntity entity = new CustomerRiskEntity("customer-1", "HIGH", 83, new Account("ACTIVE"));
+
+        CustomerRiskWithAccount facts = JpaQueryProjection.project(
+            entity,
+            CustomerRiskWithAccount.class,
+            Map.of("accountStatus", "account.status"));
+
+        assertEquals(new CustomerRiskWithAccount("customer-1", "ACTIVE"), facts);
+    }
+
+    @Test
     void rejectsNonRecordOutputs() {
-        CustomerRiskEntity entity = new CustomerRiskEntity("customer-1", "HIGH", 83);
+        CustomerRiskEntity entity = new CustomerRiskEntity("customer-1", "HIGH", 83, new Account("ACTIVE"));
 
         assertThrows(IllegalArgumentException.class, () ->
             JpaQueryProjection.project(entity, CustomerRiskBean.class, Map.of()));
     }
 
     record CustomerRiskFacts(String customerId, String riskBand, int score) {
+    }
+
+    record CustomerRiskWithAccount(String customerId, String accountStatus) {
+    }
+
+    record Account(String status) {
     }
 
     static final class CustomerRiskBean {
@@ -39,11 +57,13 @@ class JpaQueryProjectionTest {
         private final String customerId;
         private final String riskBand;
         private final int riskScore;
+        private final Account account;
 
-        CustomerRiskEntity(String customerId, String riskBand, int riskScore) {
+        CustomerRiskEntity(String customerId, String riskBand, int riskScore, Account account) {
             this.customerId = customerId;
             this.riskBand = riskBand;
             this.riskScore = riskScore;
+            this.account = account;
         }
 
         public String getCustomerId() {
@@ -56,6 +76,10 @@ class JpaQueryProjectionTest {
 
         public int getRiskScore() {
             return riskScore;
+        }
+
+        public Account account() {
+            return account;
         }
     }
 }

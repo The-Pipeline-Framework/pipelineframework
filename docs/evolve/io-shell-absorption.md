@@ -232,6 +232,10 @@ Capability design:
 - Query metadata includes query id, connector name, query version, input/output types, connector-specific spec, and capture key fields.
 - Query steps are captured by default during managed TPF execution. On retry/replay of the same execution, TPF returns the captured result instead of calling the connector again.
 - V1 intentionally does not expose `capture.mode`; `CAPTURED` is the only behavior. Refresh/live modes require a real future semantic choice.
+- V1 supports equality lookup. V2 adds bounded predicates for common decision reads: `eq`, `in`, `gt`, `gte`, `lt`, `lte`, `between`, `like`, and `isNull`.
+- V2 still keeps multiple predicates as `AND` only. It does not add JPQL, named queries, `OR` groups, aggregates, pagination, optional/list results, or application-supplied connector code.
+- `where`, `projection`, and `orderBy` accept simple dotted entity paths such as `account.status`. They do not accept aliases, functions, bracket syntax, collection joins, or arbitrary HQL fragments.
+- `orderBy` may be paired with `limit: 1` for deterministic first-row selection. Without `limit`, multiple matching rows remain an error.
 - Build-time validation catches missing input/output types, unknown query ids, mapper/service/operator misuse, and non-`ONE_TO_ONE` cardinality.
 
 DSL illustration:
@@ -242,15 +246,25 @@ queries:
     connector: "jpa"
     input: "com.example.CustomerRiskLookup"
     output: "com.example.CustomerRiskFacts"
-    version: "v1"
+    version: "v2"
     jpa:
       entity: "com.example.CustomerRiskEntity"
       where:
         customerId: "input.customerId"
+        status:
+          eq: "ACTIVE"
+        score:
+          gte: "input.minimumScore"
+        deletedAt:
+          isNull: true
+      orderBy:
+        updatedAt: "desc"
+      limit: 1
       projection:
         customerId: "customerId"
         riskBand: "riskBand"
         score: "score"
+        accountStatus: "account.status"
       result: "single"
 
 steps:

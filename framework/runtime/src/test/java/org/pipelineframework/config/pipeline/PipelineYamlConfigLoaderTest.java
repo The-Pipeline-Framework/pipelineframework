@@ -554,8 +554,91 @@ class PipelineYamlConfigLoaderTest {
         PipelineYamlQuery query = config.queries().get("risk-query");
         assertNotNull(query);
         assertEquals("com.example.RiskEntity", query.jpa().entity());
-        assertEquals("input.customerId", query.jpa().where().get("customerId"));
+        assertEquals("eq", query.jpa().where().get("customerId").operator());
+        assertEquals(List.of("input.customerId"), query.jpa().where().get("customerId").values());
         assertEquals("riskBand", query.jpa().projection().get("riskBand"));
+    }
+
+    @Test
+    void loadsQueriesWithJpaPredicatesOrderAndLimit() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            queries:
+              latest-active-risk:
+                connector: "jpa"
+                input: "com.example.RiskLookup"
+                output: "com.example.RiskFacts"
+                version: "v2"
+                jpa:
+                  entity: "com.example.RiskEntity"
+                  where:
+                    customerId: "input.customerId"
+                    status:
+                      eq: ACTIVE
+                    score:
+                      gte: 80
+                    deletedAt:
+                      isNull: true
+                    account.riskBand:
+                      in: [HIGH, CRITICAL]
+                  orderBy:
+                    updatedAt: DESC
+                  limit: 1
+                  projection:
+                    accountStatus: "account.status"
+                  result: "single"
+            steps: []
+            """));
+
+        PipelineYamlJpaQuery jpa = config.queries().get("latest-active-risk").jpa();
+        assertEquals("eq", jpa.where().get("customerId").operator());
+        assertEquals(List.of("input.customerId"), jpa.where().get("customerId").values());
+        assertEquals(List.of("ACTIVE"), jpa.where().get("status").values());
+        assertEquals(List.of(80), jpa.where().get("score").values());
+        assertEquals(List.of(Boolean.TRUE), jpa.where().get("deletedAt").values());
+        assertEquals(List.of("HIGH", "CRITICAL"), jpa.where().get("account.riskBand").values());
+        assertEquals("desc", jpa.orderBy().get("updatedAt"));
+        assertEquals(1, jpa.limit());
+        assertEquals("account.status", jpa.projection().get("accountStatus"));
+    }
+
+    @Test
+    void rejectsInvalidJpaPredicateShapes() {
+        assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                queries:
+                  bad-query:
+                    connector: "jpa"
+                    input: "com.example.LookupType"
+                    output: "com.example.SnapshotType"
+                    jpa:
+                      entity: "com.example.Entity"
+                      where:
+                        score:
+                          between: [10]
+                steps: []
+                """)));
+    }
+
+    @Test
+    void rejectsJpaLimitWithoutOrderBy() {
+        assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                queries:
+                  bad-query:
+                    connector: "jpa"
+                    input: "com.example.LookupType"
+                    output: "com.example.SnapshotType"
+                    jpa:
+                      entity: "com.example.Entity"
+                      where:
+                        id: "input.id"
+                      limit: 1
+                steps: []
+                """)));
     }
 
     @Test

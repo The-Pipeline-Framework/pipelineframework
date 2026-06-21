@@ -8,6 +8,9 @@ final class JpaQueryReflection {
     }
 
     static Object readProperty(Object target, String property) {
+        if (property != null && property.contains(".")) {
+            return readPath(target, property);
+        }
         Method accessor = findAccessor(target.getClass(), property);
         if (accessor != null) {
             try {
@@ -27,6 +30,17 @@ final class JpaQueryReflection {
             }
         }
         throw new IllegalArgumentException("Property '" + property + "' not found on " + target.getClass().getName());
+    }
+
+    private static Object readPath(Object target, String path) {
+        Object current = target;
+        for (String segment : path.split("\\.")) {
+            if (current == null) {
+                throw new IllegalArgumentException("Property path '" + path + "' resolved through null segment '" + segment + "'");
+            }
+            current = readProperty(current, segment);
+        }
+        return current;
     }
 
     private static Method findAccessor(Class<?> type, String property) {

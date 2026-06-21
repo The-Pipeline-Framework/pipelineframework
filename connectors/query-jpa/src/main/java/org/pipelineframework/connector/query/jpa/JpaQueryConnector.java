@@ -54,7 +54,7 @@ public class JpaQueryConnector implements FrameworkQueryConnector {
         Mutiny.SelectionQuery<?> query = session.createQuery(plan.toHql(), entityType)
             .setReadOnly(true)
             .setFlushMode(FlushMode.MANUAL)
-            .setMaxResults(2);
+            .setMaxResults(plan.maxResults());
         plan.bindings(input).forEach(query::setParameter);
         return query.getResultList().onItem().transform(rows -> (List<?>) rows);
     }
@@ -63,7 +63,7 @@ public class JpaQueryConnector implements FrameworkQueryConnector {
         if (rows.isEmpty()) {
             throw new IllegalStateException("JPA query '" + plan.queryId() + "' returned no rows");
         }
-        if (rows.size() > 1) {
+        if (!plan.firstResultOnly() && rows.size() > 1) {
             throw new IllegalStateException("JPA query '" + plan.queryId() + "' returned multiple rows");
         }
         return JpaQueryProjection.project(rows.getFirst(), outputType, plan.projection());
