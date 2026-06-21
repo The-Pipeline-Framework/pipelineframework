@@ -74,7 +74,8 @@ public class StepDefinitionParser {
         "timeout",
         "idempotencyKeyFields",
         "query",
-        "capture");
+        "capture",
+        "runOnVirtualThreads");
     private final BiConsumer<Diagnostic.Kind, String> diagnosticReporter;
     private final String legacyInternalPackageSuffix;
 
@@ -148,7 +149,12 @@ public class StepDefinitionParser {
             }
             @SuppressWarnings("unchecked")
             Map<String, Object> stepData = (Map<String, Object>) stepObj;
-            StepDefinition stepDef = parseStepDefinition(stepData, basePackage, version, queryDefinitions);
+            StepDefinition stepDef;
+            try {
+                stepDef = parseStepDefinition(stepData, basePackage, version, queryDefinitions);
+            } catch (StepSkippedException ignored) {
+                continue;
+            }
             if (stepDef != null) {
                 stepDefinitions.add(stepDef);
             }
@@ -252,6 +258,7 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
+        boolean runOnVirtualThreads = parseOptionalBoolean(stepData, name, "runOnVirtualThreads");
         boolean inferredLegacyInternal = !awaitStep && !queryStep && isBlank(delegatedClassName) && isBlank(serviceClassName);
 
         StepKind kind;
@@ -281,6 +288,13 @@ public class StepDefinitionParser {
             }
             kind = StepKind.INTERNAL;
             executionClassName = inferredService;
+        }
+        if (stepData.containsKey("runOnVirtualThreads") && kind != StepKind.INTERNAL) {
+            String message = "Skipping step '" + name
+                + "': runOnVirtualThreads is valid only for internal service steps";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            throw new StepSkippedException();
         }
 
         // Parse input and output types
@@ -434,7 +448,8 @@ public class StepDefinitionParser {
                 MapperFallbackMode.NONE,
                 inputType,
                 outputType,
-                StreamingShape.UNARY_UNARY);
+                StreamingShape.UNARY_UNARY,
+                false);
         }
 
         if (kind == StepKind.AWAIT) {
@@ -485,7 +500,8 @@ public class StepDefinitionParser {
                 MapperFallbackMode.NONE,
                 inputType,
                 outputType,
-                resolvedShape);
+                resolvedShape,
+                false);
         }
 
         if (kind == StepKind.QUERY) {
@@ -558,7 +574,8 @@ public class StepDefinitionParser {
                 MapperFallbackMode.NONE,
                 inputType,
                 outputType,
-                StreamingShape.UNARY_UNARY);
+                StreamingShape.UNARY_UNARY,
+                false);
         }
 
         // Create the execution class name
@@ -572,13 +589,35 @@ public class StepDefinitionParser {
             name,
             kind,
             executionClass,
+            null,
+            Map.of(),
+            null,
+            List.of(),
+            null,
+            Map.of(),
+            List.of(),
             inboundMapper,
             outboundMapper,
             externalMapper,
             mapperFallback,
             inputType,
             outputType,
-            parseStreamingShapeHint(stepData, name));
+            parseStreamingShapeHint(stepData, name),
+            runOnVirtualThreads);
+    }
+
+    private boolean parseOptionalBoolean(Map<String, Object> stepData, String stepName, String fieldName) {
+        if (!stepData.containsKey(fieldName)) {
+            return false;
+        }
+        Object value = stepData.get(fieldName);
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        String message = "Skipping step '" + stepName + "': " + fieldName + " must be a boolean";
+        LOG.warn(message);
+        report(Diagnostic.Kind.ERROR, message);
+        throw new StepSkippedException();
     }
 
     @SuppressWarnings("unchecked")
@@ -1358,5 +1397,11 @@ public class StepDefinitionParser {
             }
         }
         return true;
+    }
+
+    private static final class StepSkippedException extends RuntimeException {
+        private StepSkippedException() {
+            super(null, null, false, false);
+        }
     }
 }

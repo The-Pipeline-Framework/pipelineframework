@@ -132,17 +132,6 @@ public @interface PipelineStep {
     ThreadSafety threadSafety() default ThreadSafety.SAFE;
 
     /**
-     * Opts generated adapters and blocking bridges into virtual-thread execution.
-     *
-     * Blocking work is still offloaded explicitly; this flag selects the virtual-thread executor
-     * instead of the default worker pool and enables {@code @RunOnVirtualThread} on generated
-     * REST/gRPC entrypoints.
-     *
-     * @return whether blocking execution should use virtual threads
-     */
-    boolean runOnVirtualThreads() default false;
-
-    /**
      * Specifies the operator service class that provides the actual execution implementation.
      * When present, the annotated class becomes a client-only step that delegates to the specified service.
      * When absent (defaults to Void.class), the annotated class is treated as a traditional internal step.

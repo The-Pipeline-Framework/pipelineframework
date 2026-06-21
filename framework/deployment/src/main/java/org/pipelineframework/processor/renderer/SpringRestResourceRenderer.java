@@ -169,9 +169,10 @@ public class SpringRestResourceRenderer implements PipelineRenderer<RestBinding>
                 "Unary-unary REST resources require non-null input and output domain types; step '"
                     + model.serviceName() + "'");
         }
-        if (model.serviceApiKind() != ServiceApiKind.REACTIVE) {
+        if (model.serviceApiKind() != ServiceApiKind.REACTIVE
+            && model.serviceApiKind() != ServiceApiKind.BLOCKING) {
             throw new IllegalArgumentException(
-                "Spring renderer profile currently supports only reactive-authored services; step '"
+                "Spring renderer profile currently supports only reactive or blocking unary services; step '"
                     + model.serviceName() + "' has API kind " + model.serviceApiKind());
         }
         if (model.sideEffect()) {

@@ -426,6 +426,86 @@ class PipelineGenerationPhaseIntegrationTest {
     }
 
     @Test
+    void quarkusProfileUsesYamlVirtualThreadsForBlockingServiceBridge() throws IOException {
+        Path projectRoot = tempDir;
+        Files.writeString(projectRoot.resolve("pom.xml"), """
+            <project>
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>quarkus-blocking</artifactId>
+              <version>1.0.0</version>
+              <packaging>pom</packaging>
+            </project>
+            """);
+
+        Path moduleDir = projectRoot.resolve("quarkus-blocking");
+        Path generatedSourcesDir = moduleDir.resolve("target/generated-sources/pipeline");
+        Files.createDirectories(generatedSourcesDir);
+
+        Path pipelineConfig = projectRoot.resolve("pipeline.quarkus-blocking.yaml");
+        Files.writeString(pipelineConfig, """
+            appName: "Quarkus Blocking"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            platform: "COMPUTE"
+            steps:
+              - name: "payment"
+                service: "com.example.service.PaymentService"
+                input: "com.example.service.PaymentRecord"
+                output: "com.example.service.PaymentStatus"
+                runOnVirtualThreads: true
+            """);
+
+        Compilation compilation = Compiler.javac()
+            .withProcessors(new PipelineStepProcessor())
+            .withOptions(
+                "-Apipeline.generatedSourcesDir=" + generatedSourcesDir.toString().replace('\\', '/'),
+                "-Apipeline.config=" + pipelineConfig.toString().replace('\\', '/'),
+                "-Apipeline.transport=LOCAL",
+                "-Apipeline.platform=COMPUTE")
+            .compile(
+                JavaFileObjects.forSourceString(
+                    "com.example.service.PaymentService",
+                    """
+                        package com.example.service;
+
+                        import org.pipelineframework.service.blocking.BlockingService;
+
+                        public class PaymentService implements BlockingService<PaymentRecord, PaymentStatus> {
+                            @Override
+                            public PaymentStatus processBlocking(PaymentRecord input) {
+                                return new PaymentStatus();
+                            }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.service.PaymentRecord",
+                    """
+                        package com.example.service;
+
+                        public class PaymentRecord {
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.service.PaymentStatus",
+                    """
+                        package com.example.service;
+
+                        public class PaymentStatus {
+                        }
+                        """));
+
+        assertThat(compilation).succeeded();
+
+        Path bridge = findGeneratedClass(generatedSourcesDir, "ProcessPaymentServiceBlockingReactiveBridge");
+        assertTrue(Files.exists(bridge), "Expected Quarkus blocking bridge in " + generatedJavaFiles(generatedSourcesDir));
+        String bridgeSource = Files.readString(bridge);
+        assertTrue(bridgeSource.contains("import jakarta.enterprise.context.ApplicationScoped;"));
+        assertTrue(bridgeSource.contains("blockingExecutionSupport.supply(true,"));
+        assertTrue(bridgeSource.contains("blockingService.processBlocking(processableObj)"));
+    }
+
+    @Test
     void generatesRestServerArtifactsForRuntimeMappedModularFunctionStepModule() throws IOException {
         Path projectRoot = tempDir;
         Files.writeString(projectRoot.resolve("pom.xml"), """

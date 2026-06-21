@@ -44,6 +44,7 @@ import org.pipelineframework.config.template.PipelineTemplateStepExecution;
  * @param inputType The input type for the step
  * @param outputType The output type for the step
  * @param streamingShapeHint Optional streaming shape hint parsed from YAML cardinality
+ * @param runOnVirtualThreads Whether blocking execution should use virtual threads
  */
 public record StepDefinition(
         String name,
@@ -62,7 +63,8 @@ public record StepDefinition(
         MapperFallbackMode mapperFallback,
         @Nullable ClassName inputType,
         @Nullable ClassName outputType,
-        @Nullable StreamingShape streamingShapeHint
+        @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads
 ) {
     public StepDefinition(
         String name,
@@ -97,7 +99,8 @@ public record StepDefinition(
             mapperFallback,
             inputType,
             outputType,
-            streamingShapeHint);
+            streamingShapeHint,
+            false);
     }
 
     public StepDefinition(
@@ -127,7 +130,8 @@ public record StepDefinition(
             mapperFallback,
             inputType,
             outputType,
-            streamingShapeHint);
+            streamingShapeHint,
+            false);
     }
 
     public StepDefinition(
@@ -158,7 +162,8 @@ public record StepDefinition(
             mapperFallback,
             inputType,
             outputType,
-            streamingShapeHint);
+            streamingShapeHint,
+            false);
     }
 
     public StepDefinition(
@@ -190,7 +195,8 @@ public record StepDefinition(
             mapperFallback,
             inputType,
             outputType,
-            streamingShapeHint);
+            streamingShapeHint,
+            false);
     }
 
     public StepDefinition {
@@ -199,8 +205,14 @@ public record StepDefinition(
             throw new IllegalArgumentException("Name cannot be blank");
         }
         Objects.requireNonNull(kind, "Kind cannot be null");
+        if (runOnVirtualThreads && kind != StepKind.INTERNAL) {
+            throw new IllegalArgumentException("runOnVirtualThreads is valid only for INTERNAL steps");
+        }
         if (executionClass != null && remoteExecution != null) {
             throw new IllegalArgumentException("executionClass and remoteExecution are mutually exclusive");
+        }
+        if (runOnVirtualThreads && kind != StepKind.INTERNAL) {
+            throw new IllegalArgumentException("runOnVirtualThreads is valid only for INTERNAL steps");
         }
         if (kind == StepKind.REMOTE) {
             Objects.requireNonNull(remoteExecution, "Remote execution cannot be null for REMOTE steps");

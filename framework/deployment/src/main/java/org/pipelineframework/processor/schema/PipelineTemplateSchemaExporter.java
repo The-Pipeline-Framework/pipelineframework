@@ -1435,6 +1435,10 @@ public final class PipelineTemplateSchemaExporter {
             "none",
             "jackson"
           ]
+        },
+        "runOnVirtualThreads": {
+          "type": "boolean",
+          "description": "Whether this YAML-declared internal blocking step should use virtual-thread offload."
         }
       },
       "oneOf": [
@@ -1480,6 +1484,34 @@ public final class PipelineTemplateSchemaExporter {
             "required": [
               "input"
             ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "operator"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "runOnVirtualThreads"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "delegate"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "runOnVirtualThreads"
+              ]
+            }
           }
         },
         {

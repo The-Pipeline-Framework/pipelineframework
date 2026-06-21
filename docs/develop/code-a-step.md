@@ -69,7 +69,7 @@ public class ProcessPaymentService implements ReactiveService<PaymentRecord, Pay
 Blocking authoring:
 
 ```java
-@PipelineStep(runOnVirtualThreads = true)
+@PipelineStep
 @ApplicationScoped
 public class ProcessCsvService implements BlockingIteratorService<CsvFile, PaymentRecord> {
 
@@ -80,7 +80,23 @@ public class ProcessCsvService implements BlockingIteratorService<CsvFile, Payme
 }
 ```
 
-The framework keeps transport adapters reactive in both cases. Blocking service interfaces expose synchronous methods such as `processBlocking(...)`, and the framework supplies the reactive `process(...)` adapter. Blocking services are wrapped in a generated reactive bridge and offloaded to worker threads by default, or to virtual threads when `runOnVirtualThreads = true`.
+The framework keeps transport adapters reactive in both cases. Blocking service interfaces expose synchronous methods such as `processBlocking(...)`, and the framework supplies the reactive `process(...)` adapter. Blocking services are wrapped in a generated reactive bridge and offloaded to worker threads by default.
+
+Virtual-thread offload is configured in YAML, not on `@PipelineStep`.
+For Quarkus, YAML-declared internal blocking services that implement the existing blocking service interfaces can opt in; the generated reactive bridge passes `true` to `BlockingExecutionSupport`.
+For Spring, YAML-only `REST` or `LOCAL` + `COMPUTE` unary blocking internal steps can set the same YAML flag when authored as `processBlocking(In): Out`.
+
+```yaml
+steps:
+  - name: "process csv"
+    service: "com.example.ProcessCsvService"
+    input: "com.example.CsvFile"
+    output: "com.example.PaymentRecord"
+    runOnVirtualThreads: true
+```
+
+Quarkus generated REST/gRPC entrypoints for virtual-thread steps also receive `@RunOnVirtualThread`.
+Spring generated unary steps adapt `processBlocking(In): Out` through `RuntimeAdapters.executeBlocking(..., true)`.
 
 `BlockingStreamingService`, `BlockingStreamingClientService`, and `BlockingBidirectionalStreamingService` are materialising contracts. They trade away automatic backpressure and also increase heap usage, GC pressure, first-item latency, and whole-batch retry cost. `BlockingIteratorService` reduces those materialisation costs, but it is still blocking work and should be used only when synchronous authoring is worth the throughput trade-off.
 
