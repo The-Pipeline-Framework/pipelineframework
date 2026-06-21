@@ -10,6 +10,8 @@ Keep typed DTO contracts as the normal TPF model. Add envelope compatibility onl
 
 The control envelope must remain strict even when the payload is loose.
 
+The first concrete implementation is `ENVELOPE_HTTP_V1` for remote v2 HTTP step hosts. It is a request/response operator boundary, not a brokered step-host dispatcher.
+
 ```mermaid
 flowchart TB
     Envelope["TPF envelope"]

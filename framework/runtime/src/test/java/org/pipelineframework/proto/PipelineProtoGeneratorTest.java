@@ -18,6 +18,7 @@ package org.pipelineframework.proto;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -1071,6 +1072,57 @@ class PipelineProtoGeneratorTest {
     }
 
     @Test
+    void generatesEnvelopeExternalStepHostContractPolicy() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Envelope Remote Test"
+            basePackage: "com.example.envelope"
+            transport: "REST"
+            messages:
+              ParsedDocument:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+              ChunkResult:
+                fields:
+                  - number: 1
+                    name: "status"
+                    type: "string"
+            steps:
+              - name: "Chunk Document"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ParsedDocument"
+                outputTypeName: "ChunkResult"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "chunker"
+                  protocol: "ENVELOPE_HTTP_V1"
+                  timeoutMs: 500
+                  target:
+                    url: "https://service.example.com/chunker"
+            """;
+        Path configPath = tempDir.resolve("envelope-remote-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-envelope-remote-out");
+
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+
+        JsonNode manifest = PipelineJson.mapper().readTree(outputDir.resolve("external-step-hosts.json").toFile());
+        JsonNode step = manifest.path("steps").get(0);
+        assertEquals("ENVELOPE_HTTP_V1", step.path("protocol").asText());
+        assertEquals("application/vnd.tpf.envelope.v1+json", step.path("http").path("contentType").asText());
+        assertEquals("ENVELOPE", step.path("payloadPolicy").path("mode").asText());
+        assertEquals("strict", step.path("payloadPolicy").path("control").asText());
+        assertEquals("tpf.envelope.v1", step.path("payloadPolicy").path("protocolVersion").asText());
+        assertEquals("json", step.path("payloadPolicy").path("payload").get(0).asText());
+
+        String readme = Files.readString(outputDir.resolve("EXTERNAL-STEP-HOSTS.md"));
+        assertTrue(readme.contains("For `ENVELOPE_HTTP_V1`"));
+        assertTrue(readme.contains("application/vnd.tpf.envelope.v1+json"));
+    }
+
+    @Test
     void rejectsRemoteTargetWithBothUrlAndUrlConfigKey() throws Exception {
         String yaml = """
             version: 2
@@ -1199,7 +1251,7 @@ class PipelineProtoGeneratorTest {
         JsonNode manifest = PipelineJson.mapper().readTree(outputDir.resolve("external-step-hosts.json").toFile());
         JsonNode headers = manifest.path("steps").get(0).path("http").path("headers");
         assertTrue(headers.isArray());
-        List<String> headerList = new java.util.ArrayList<>();
+        List<String> headerList = new ArrayList<>();
         headers.forEach(h -> headerList.add(h.asText()));
 
         assertTrue(headerList.contains("x-tpf-correlation-id"), "must include x-tpf-correlation-id");

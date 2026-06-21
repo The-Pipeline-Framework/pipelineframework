@@ -50,7 +50,8 @@ public final class RemoteOperatorAdapterRenderer implements PipelineRenderer<Grp
     private static final ClassName OPTIONAL = ClassName.get(Optional.class);
     private static final ClassName MAPPER = ClassName.get("org.pipelineframework.mapper", "Mapper");
     private static final ClassName REACTIVE_SERVICE = ClassName.get("org.pipelineframework.service", "ReactiveService");
-    private static final ClassName REMOTE_CLIENT = ClassName.get("org.pipelineframework.transport.http", "ProtobufHttpRemoteOperatorClient");
+    private static final ClassName PROTOBUF_REMOTE_CLIENT = ClassName.get("org.pipelineframework.transport.http", "ProtobufHttpRemoteOperatorClient");
+    private static final ClassName ENVELOPE_REMOTE_CLIENT = ClassName.get("org.pipelineframework.transport.http", "EnvelopeHttpRemoteOperatorClient");
 
     @Override
     public GenerationTarget target() {
@@ -78,18 +79,10 @@ public final class RemoteOperatorAdapterRenderer implements PipelineRenderer<Grp
             throw new IllegalStateException("Remote operator adapter rendering requires remote execution metadata");
         }
 
-        GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = GRPC_TYPE_RESOLVER.resolve(binding, messager);
         TypeName domainInputType = Objects.requireNonNull(model.inboundDomainType(),
             "Remote operator adapter requires a non-null inbound domain type for " + model.generatedName());
         TypeName domainOutputType = Objects.requireNonNull(model.outboundDomainType(),
             "Remote operator adapter requires a non-null outbound domain type for " + model.generatedName());
-        TypeName protoInputType = grpcTypes.grpcParameterType();
-        TypeName protoOutputType = grpcTypes.grpcReturnType();
-        if (protoInputType == null || ClassName.OBJECT.equals(protoInputType)
-            || protoOutputType == null || ClassName.OBJECT.equals(protoOutputType)) {
-            throw new IllegalStateException(
-                "Remote operator adapter requires resolved gRPC protobuf input/output types for " + model.generatedName());
-        }
         if (model.remoteExecution().target() == null
             || (model.remoteExecution().target().url() == null && model.remoteExecution().target().urlConfigKey() == null)) {
             throw new IllegalStateException(
@@ -116,22 +109,40 @@ public final class RemoteOperatorAdapterRenderer implements PipelineRenderer<Grp
                 .build())
             .addSuperinterface(ParameterizedTypeName.get(REACTIVE_SERVICE, domainInputType, domainOutputType));
 
-        builder.addField(FieldSpec.builder(REMOTE_CLIENT, "remoteOperatorClient")
-            .addAnnotation(INJECT)
-            .addModifiers(Modifier.PRIVATE)
-            .build());
-        builder.addField(FieldSpec.builder(
-                ParameterizedTypeName.get(MAPPER, domainInputType, protoInputType),
-                "requestMapper")
-            .addAnnotation(INJECT)
-            .addModifiers(Modifier.PRIVATE)
-            .build());
-        builder.addField(FieldSpec.builder(
-                ParameterizedTypeName.get(MAPPER, domainOutputType, protoOutputType),
-                "responseMapper")
-            .addAnnotation(INJECT)
-            .addModifiers(Modifier.PRIVATE)
-            .build());
+        TypeName protoInputType = null;
+        if (isEnvelopeProtocol(model)) {
+            builder.addField(FieldSpec.builder(ENVELOPE_REMOTE_CLIENT, "remoteOperatorClient")
+                .addModifiers(Modifier.PRIVATE)
+                .initializer("new $T()", ENVELOPE_REMOTE_CLIENT)
+                .build());
+        } else {
+            validateProtobufProtocol(model);
+            GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = GRPC_TYPE_RESOLVER.resolve(binding, messager);
+            protoInputType = grpcTypes.grpcParameterType();
+            TypeName protoOutputType = grpcTypes.grpcReturnType();
+            if (protoInputType == null || ClassName.OBJECT.equals(protoInputType)
+                || protoOutputType == null || ClassName.OBJECT.equals(protoOutputType)) {
+                throw new IllegalStateException(
+                    "Remote operator adapter requires resolved gRPC protobuf input/output types for " + model.generatedName());
+            }
+            builder.addField(FieldSpec.builder(PROTOBUF_REMOTE_CLIENT, "remoteOperatorClient")
+                .addAnnotation(INJECT)
+                .addModifiers(Modifier.PRIVATE)
+                .build());
+            builder.addField(FieldSpec.builder(
+                    ParameterizedTypeName.get(MAPPER, domainInputType, protoInputType),
+                    "requestMapper")
+                .addAnnotation(INJECT)
+                .addModifiers(Modifier.PRIVATE)
+                .build());
+            builder.addField(FieldSpec.builder(
+                    ParameterizedTypeName.get(MAPPER, domainOutputType, protoOutputType),
+                    "responseMapper")
+                .addAnnotation(INJECT)
+                .addModifiers(Modifier.PRIVATE)
+                .build());
+            builder.addMethod(buildDecodeResponseMethod(protoOutputType));
+        }
 
         if (model.remoteExecution().target() != null && model.remoteExecution().target().urlConfigKey() != null) {
             builder.addField(FieldSpec.builder(
@@ -150,10 +161,27 @@ public final class RemoteOperatorAdapterRenderer implements PipelineRenderer<Grp
             .build());
         builder.addMethod(buildValidateTargetMethod(model));
         builder.addMethod(buildResolveTargetUrlMethod(model));
-        builder.addMethod(buildDecodeResponseMethod(protoOutputType));
-        builder.addMethod(buildProcessMethod(model, domainInputType, domainOutputType, protoInputType));
+        if (isEnvelopeProtocol(model)) {
+            builder.addMethod(buildEnvelopeProcessMethod(model, domainInputType, domainOutputType));
+        } else {
+            builder.addMethod(buildProtobufProcessMethod(model, domainInputType, domainOutputType, protoInputType));
+        }
 
         return builder.build();
+    }
+
+    private boolean isEnvelopeProtocol(PipelineStepModel model) {
+        return model.remoteExecution() != null
+            && "ENVELOPE_HTTP_V1".equalsIgnoreCase(model.remoteExecution().protocol());
+    }
+
+    private void validateProtobufProtocol(PipelineStepModel model) {
+        if (model.remoteExecution() == null
+            || !"PROTOBUF_HTTP_V1".equalsIgnoreCase(model.remoteExecution().protocol())) {
+            throw new IllegalStateException("Remote operator adapter does not support protocol '"
+                + (model.remoteExecution() == null ? "<missing>" : model.remoteExecution().protocol())
+                + "' for " + model.generatedName());
+        }
     }
 
     private MethodSpec buildValidateTargetMethod(PipelineStepModel model) {
@@ -198,7 +226,7 @@ public final class RemoteOperatorAdapterRenderer implements PipelineRenderer<Grp
             .build();
     }
 
-    private MethodSpec buildProcessMethod(
+    private MethodSpec buildProtobufProcessMethod(
         PipelineStepModel model,
         TypeName domainInputType,
         TypeName domainOutputType,
@@ -224,6 +252,35 @@ public final class RemoteOperatorAdapterRenderer implements PipelineRenderer<Grp
                     + ".map(bytes -> responseMapper.fromExternal(decodeResponse(bytes)))",
                 model.remoteExecution().operatorId(),
                 timeoutMs == null ? "null" : timeoutMs.toString());
+        return builder.build();
+    }
+
+    private MethodSpec buildEnvelopeProcessMethod(
+        PipelineStepModel model,
+        TypeName domainInputType,
+        TypeName domainOutputType
+    ) {
+        if (model.remoteExecution() == null || model.remoteExecution().operatorId() == null) {
+            throw new IllegalStateException("Remote operator adapter requires a non-null remote execution operatorId");
+        }
+        Integer timeoutMs = model.remoteExecution().timeoutMs();
+
+        MethodSpec.Builder builder = MethodSpec.methodBuilder("process")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), domainOutputType))
+            .addParameter(domainInputType, "input");
+
+        if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
+            builder.addAnnotation(ClassName.get("io.smallrye.common.annotation", "RunOnVirtualThread"));
+        }
+
+        builder.addStatement("return $T.createFrom().completionStage(() -> remoteOperatorClient.invoke(resolveTargetUrl(), $S, $S, input, $T.class, $L))",
+            ClassName.get(Uni.class),
+            model.serviceName(),
+            model.remoteExecution().operatorId(),
+            domainOutputType,
+            timeoutMs == null ? "null" : timeoutMs.toString());
         return builder.build();
     }
 }

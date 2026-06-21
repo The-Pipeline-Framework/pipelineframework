@@ -55,6 +55,7 @@ public class PipelineProtoGenerator {
     private static final String TYPES_PROTO = "pipeline-types.proto";
     private static final String EXTERNAL_STEP_HOSTS_MANIFEST = "external-step-hosts.json";
     private static final String EXTERNAL_STEP_HOSTS_README = "EXTERNAL-STEP-HOSTS.md";
+    private static final String EXTERNAL_STEP_HOSTS_PROTOCOL_VERSION = "tpf.external-step-hosts.v1";
     private static final String IDL_SNAPSHOT_PROPERTY = "tpf.idl.compat.baseline";
     private static final String IDL_SNAPSHOT_ENV = "TPF_IDL_COMPAT_BASELINE";
     private static final ObjectMapper IDL_MAPPER = PipelineJson.mapper().copy().findAndRegisterModules();
@@ -368,7 +369,7 @@ public class PipelineProtoGenerator {
             return;
         }
         ExternalStepHostManifest manifest = new ExternalStepHostManifest(
-            "tpf.external-step-hosts.v1",
+            EXTERNAL_STEP_HOSTS_PROTOCOL_VERSION,
             basePackage,
             typesProtoName,
             contracts);
@@ -403,7 +404,8 @@ public class PipelineProtoGenerator {
                 execution.protocol(),
                 execution.timeoutMs(),
                 targetMap(execution.target()),
-                protobufHttpContract()));
+                httpContract(execution.protocol()),
+                payloadPolicy(execution.protocol())));
         }
         return List.copyOf(contracts);
     }
@@ -424,7 +426,17 @@ public class PipelineProtoGenerator {
         if (hasUrlConfigKey) {
             values.put("urlConfigKey", target.urlConfigKey());
         }
-        return values;
+        return Collections.unmodifiableMap(new LinkedHashMap<>(values));
+    }
+
+    private Map<String, Object> httpContract(String protocol) {
+        if ("ENVELOPE_HTTP_V1".equalsIgnoreCase(protocol)) {
+            return envelopeHttpContract();
+        }
+        if ("PROTOBUF_HTTP_V1".equalsIgnoreCase(protocol)) {
+            return protobufHttpContract();
+        }
+        throw new IllegalArgumentException("Unsupported remote step host protocol '" + protocol + "'");
     }
 
     private Map<String, Object> protobufHttpContract() {
@@ -442,7 +454,43 @@ public class PipelineProtoGenerator {
             "x-tpf-deadline-epoch-ms",
             "x-tpf-dispatch-ts-epoch-ms",
             "x-tpf-parent-item-id"));
-        return contract;
+        return Collections.unmodifiableMap(new LinkedHashMap<>(contract));
+    }
+
+    private Map<String, Object> envelopeHttpContract() {
+        Map<String, Object> contract = new LinkedHashMap<>();
+        contract.put("method", "POST");
+        contract.put("contentType", "application/vnd.tpf.envelope.v1+json");
+        contract.put("accept", "application/vnd.tpf.envelope.v1+json");
+        contract.put("successStatus", "2xx");
+        contract.put("failureEnvelope", "tpf.envelope.v1 error payload or HTTP error body");
+        contract.put("headers", List.of(
+            "x-tpf-correlation-id",
+            "x-tpf-execution-id",
+            "x-tpf-idempotency-key",
+            "x-tpf-retry-attempt",
+            "x-tpf-deadline-epoch-ms",
+            "x-tpf-dispatch-ts-epoch-ms",
+            "x-tpf-parent-item-id"));
+        return Collections.unmodifiableMap(new LinkedHashMap<>(contract));
+    }
+
+    private Map<String, Object> payloadPolicy(String protocol) {
+        Map<String, Object> policy = new LinkedHashMap<>();
+        if ("ENVELOPE_HTTP_V1".equalsIgnoreCase(protocol)) {
+            policy.put("mode", "ENVELOPE");
+            policy.put("control", "strict");
+            policy.put("payload", List.of("json", "bytes", "ref"));
+            policy.put("protocolVersion", "tpf.envelope.v1");
+            return Collections.unmodifiableMap(new LinkedHashMap<>(policy));
+        }
+        if (!"PROTOBUF_HTTP_V1".equalsIgnoreCase(protocol)) {
+            throw new IllegalArgumentException("Unsupported remote step host payload protocol '" + protocol + "'");
+        }
+        policy.put("mode", "PROTOBUF");
+        policy.put("control", "http-headers");
+        policy.put("payload", List.of("protobuf"));
+        return Collections.unmodifiableMap(new LinkedHashMap<>(policy));
     }
 
     private String renderExternalStepHostReadme(ExternalStepHostManifest manifest) {
@@ -477,6 +525,8 @@ public class PipelineProtoGenerator {
         builder.append("For `PROTOBUF_HTTP_V1`, hosts receive a `POST` body encoded as `application/x-protobuf` ");
         builder.append("using the request message and return the response message as `application/x-protobuf`.\n");
         builder.append("Non-2xx failures should return a `google.rpc.Status` protobuf body when possible.\n");
+        builder.append("For `ENVELOPE_HTTP_V1`, hosts receive and return `application/vnd.tpf.envelope.v1+json`; ");
+        builder.append("TPF owns the control metadata while the payload region may carry JSON, bytes, or a payload reference.\n");
         return builder.toString();
     }
 
@@ -1214,7 +1264,8 @@ public class PipelineProtoGenerator {
         String protocol,
         Integer timeoutMs,
         Map<String, String> target,
-        Map<String, Object> http
+        Map<String, Object> http,
+        Map<String, Object> payloadPolicy
     ) {
     }
 
