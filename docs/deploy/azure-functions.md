@@ -70,6 +70,6 @@ For deeper Azure-specific setup and local runtime testing with Core Tools, use t
 
 ## Next Steps
 
-- [Search Azure Functions Testing Guide](/deploy/search-azure-functions)
+- [Search Azure Verification Lane](/deploy/search-azure-functions)
 - [Multi-Cloud Function Providers Guide](/deploy/function-providers)
 - [Runtime Layouts](/deploy/runtime-layouts/)

@@ -1,5 +1,9 @@
 # Handling File Operations with Generated REST Resources
 
+::: warning Legacy Approach
+This page documents a generated-REST-plus-custom-resource approach for file uploads and downloads. For new ingestion flows, prefer connector-based I/O shells such as [Object Ingest](/design/object-ingest). Connectors keep listing, identity, filtering, duplicate admission, and payload references out of business steps.
+:::
+
 This guide explains how to handle file operations such as downloads and uploads when using the auto-generated REST resources in The Pipeline Framework.
 
 ## Overview
@@ -94,7 +98,11 @@ public class ProcessFileRestResource {
 
 ## Recommended Approaches
 
-### Option 1: Hybrid Approach (Recommended)
+### Connector-first approach
+
+Use a connector when the application needs to admit files or object-store entries as pipeline input. Start with [Object Ingest](/design/object-ingest) and use this page only for request/response file endpoints that are truly custom application APIs.
+
+### Option 2: Hybrid generated/custom REST approach
 Keep both the generated resource for standard operations and create custom resources for file operations:
 
 1. **Set `transport: REST`** in your pipeline YAML for standard DTO processing
@@ -138,7 +146,7 @@ public class CustomFileProcessingResource {
 }
 ```
 
-### Option 2: Custom Annotation Configuration
+### Option 3: Custom Annotation Configuration
 For common patterns, you can implement custom handling by keeping the generated functionality but extending it:
 
 ```java
@@ -188,11 +196,12 @@ public class FileDownloadService {
 
 ## Best Practices
 
-1. **Start with Generated Resources**: Use the auto-generated REST endpoints for standard operations
-2. **Add Custom Resources for Specialized Needs**: Implement custom resources when you need file handling, streaming, or other specialized operations
-3. **Share Service Logic**: Re-use the same service instances to avoid duplicating business logic
-4. **Maintain Consistency**: Follow similar patterns for error handling and response formats
-5. **Document Differences**: Clearly document which endpoints are auto-generated vs. custom
+1. **Prefer connectors for ingestion**: Use object/file connectors for pipeline input admission when possible
+2. **Start with Generated Resources**: Use the auto-generated REST endpoints for standard DTO request/response operations
+3. **Add Custom Resources for Specialized Needs**: Implement custom resources when you need file handling, streaming, or other specialized operations
+4. **Share Service Logic**: Re-use the same service instances to avoid duplicating business logic
+5. **Maintain Consistency**: Follow similar patterns for error handling and response formats
+6. **Document Differences**: Clearly document which endpoints are auto-generated vs. custom
 
 ## Example Implementation
 

@@ -1,6 +1,10 @@
 # Checkpoint Handoff
 
-Reliable cross-pipeline handoff is orchestrator-owned and checkpoint-based.
+Reliable cross-pipeline handoff is orchestrator-owned and checkpoint-based. It is the deploy-time reliability primitive for moving a completed pipeline result into another pipeline without making application code own broker correlation, duplicate admission, or continuation state.
+
+Design the handoff boundary from the typed contract first. The source pipeline publishes a named checkpoint; the target pipeline admits that checkpoint through a mapper-backed subscription. Transport, broker binding, and retry ownership stay in the runtime shell.
+
+For the broader application design model, see [State Model](/design/state-model), [Functional Core, Imperative Shell](/design/fcis), and [Await Boundaries](/design/await-boundaries).
 
 Supported in this release:
 

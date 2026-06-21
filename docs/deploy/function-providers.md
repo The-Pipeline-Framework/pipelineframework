@@ -103,7 +103,7 @@ See [AWS Lambda Platform Guide](/deploy/aws-lambda) for detailed deployment inst
   test
 ```
 
-See [Azure Functions Testing Guide](/deploy/search-azure-functions) for detailed deployment instructions.
+See [Search Azure Verification Lane](/deploy/search-azure-functions) and [Azure Functions Deployment Walkthrough](/deploy/azure-functions-deployment-walkthrough) for the current Azure verification and deployment path.
 
 ### Google Cloud Run functions
 

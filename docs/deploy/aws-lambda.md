@@ -58,7 +58,7 @@ Use these guides for the broader function-platform story:
 - [Multi-Cloud Function Providers Guide](/deploy/function-providers)
 - [Azure Functions Platform](/deploy/azure-functions)
 - [Google Cloud Run Functions Platform](/deploy/google-cloud-run-functions)
-- [Search Azure Functions Testing Guide](/deploy/search-azure-functions)
+- [Search Azure Verification Lane](/deploy/search-azure-functions)
 
 Current scope notes:
 
