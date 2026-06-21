@@ -104,6 +104,7 @@ class RemoteOperatorAdapterRendererTest {
         assertFalse(source.contains("ProtobufHttpRemoteOperatorClient"));
         assertFalse(source.contains("requestMapper"));
         assertFalse(source.contains("decodeResponse"));
+        assertFalse(source.contains("responseMapper"));
     }
 
     private PipelineStepModel remoteModel(PipelineTemplateRemoteTarget target) {

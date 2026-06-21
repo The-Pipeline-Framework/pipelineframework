@@ -37,6 +37,7 @@ import org.pipelineframework.envelope.TpfEnvelopeCodec;
 import org.pipelineframework.step.NonRetryableException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -117,6 +118,35 @@ class EnvelopeHttpRemoteOperatorClientTest {
         try (ServerHandle rateLimit = startServer(exchange -> respond(exchange, 429, "rate limit"))) {
             ExecutionException error = invokeExpectingFailure(rateLimit.url());
             assertEquals(IllegalStateException.class, error.getCause().getClass());
+        }
+    }
+
+    @Test
+    void omitsBlankOptionalContextValuesFromEnvelopeControl() throws Exception {
+        AtomicReference<TpfEnvelope> requestEnvelope = new AtomicReference<>();
+
+        try (ServerHandle server = startServer(exchange -> {
+            requestEnvelope.set(codec.read(exchange.getRequestBody().readAllBytes()));
+            TpfEnvelope response = codec.envelope(requestEnvelope.get().control(),
+                codec.jsonPayload(new DemoResponse("ok"), DemoResponse.class.getName()));
+            byte[] body = codec.write(response);
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(body);
+            }
+        })) {
+            TransportDispatchMetadataHolder.set(new TransportDispatchMetadata(
+                " ", "", " idem-1 ", 0, 2_000_000_000_000L, 1_900_000_000_000L, "   "));
+
+            EnvelopeHttpRemoteOperatorClient client = new EnvelopeHttpRemoteOperatorClient();
+            client.invoke(server.url(), "Chunk", "chunker", new DemoRequest("doc-1"), DemoResponse.class, 3000)
+                .toCompletableFuture()
+                .get(2, TimeUnit.SECONDS);
+
+            assertFalse(requestEnvelope.get().control().context().containsKey("correlationId"));
+            assertFalse(requestEnvelope.get().control().context().containsKey("executionId"));
+            assertEquals("idem-1", requestEnvelope.get().control().context().get("idempotencyKey"));
+            assertFalse(requestEnvelope.get().control().context().containsKey("parentItemId"));
         }
     }
 

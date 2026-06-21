@@ -121,6 +121,14 @@ class TpfEnvelopeCodecTest {
         assertEquals("application/octet-stream", payload.contentType());
     }
 
+    @Test
+    void bytesPayloadTrimsContentType() {
+        TpfEnvelopePayload payload = codec.bytesPayload("hello".getBytes(StandardCharsets.UTF_8),
+            " text/plain ", "raw-text");
+
+        assertEquals("text/plain", payload.contentType());
+    }
+
     private TpfEnvelopeControl control(Map<String, String> metadata) {
         return new TpfEnvelopeControl(
             "pipeline-v1",

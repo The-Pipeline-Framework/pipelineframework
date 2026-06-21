@@ -59,9 +59,12 @@ public final class TpfEnvelopeCodec {
         Objects.requireNonNull(value, "value must not be null");
         ObjectNode data = mapper.createObjectNode();
         data.put("bytesBase64", Base64.getEncoder().encodeToString(value));
+        String normalizedContentType = contentType == null ? null : contentType.trim();
         return new TpfEnvelopePayload(
             "bytes",
-            contentType == null || contentType.isBlank() ? "application/octet-stream" : contentType,
+            normalizedContentType == null || normalizedContentType.isBlank()
+                ? "application/octet-stream"
+                : normalizedContentType,
             schemaHint,
             "base64",
             data,

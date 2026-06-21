@@ -156,7 +156,9 @@ public class EnvelopeHttpRemoteOperatorClient {
     }
 
     private void putContext(Map<String, String> context, String name, Optional<String> value) {
-        value.ifPresent(actual -> context.put(name, actual));
+        value.map(String::trim)
+            .filter(actual -> !actual.isEmpty())
+            .ifPresent(actual -> context.put(name, actual));
     }
 
     private void putContext(Map<String, String> context, String name, OptionalLong value) {
