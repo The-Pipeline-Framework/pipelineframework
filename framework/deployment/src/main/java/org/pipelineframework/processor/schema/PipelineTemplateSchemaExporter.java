@@ -982,6 +982,17 @@ public final class PipelineTemplateSchemaExporter {
       },
       "additionalProperties": false
     },
+    "objectPublishGrouping": {
+      "type": "object",
+      "properties": {
+        "maxOpenGroups": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 32
+        }
+      },
+      "additionalProperties": false
+    },
     "objectPublishTarget": {
       "type": "object",
       "properties": {
@@ -1001,6 +1012,9 @@ public final class PipelineTemplateSchemaExporter {
         },
         "payload": {
           "$ref": "#/$defs/objectPublishPayload"
+        },
+        "grouping": {
+          "$ref": "#/$defs/objectPublishGrouping"
         }
       },
       "required": [

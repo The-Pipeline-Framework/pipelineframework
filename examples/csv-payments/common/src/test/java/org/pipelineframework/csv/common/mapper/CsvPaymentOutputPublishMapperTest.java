@@ -7,7 +7,6 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Currency;
-import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -15,7 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.csv.common.domain.PaymentOutput;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
-import org.pipelineframework.objectpublish.ObjectPayload;
+import org.pipelineframework.objectpublish.ObjectPublishGroupRenderer;
 
 class CsvPaymentOutputPublishMapperTest {
 
@@ -28,12 +27,12 @@ class CsvPaymentOutputPublishMapperTest {
         PaymentOutput output = paymentOutput(tempDir.resolve("payments.csv"), "csv-1", "Alice", "100.00");
 
         String groupKey = mapper.groupKey(output);
-        ObjectPayload payload = mapper.render(groupKey, List.of(output));
-        String csv = new String(payload.bytes(), StandardCharsets.UTF_8);
+        ObjectPublishGroupRenderer<PaymentOutput> renderer = mapper.openGroup(groupKey, output);
+        String csv = new String(renderer.onItem(output).bytes(), StandardCharsets.UTF_8);
 
         assertEquals("payments.csv", groupKey);
-        assertEquals("text/csv", payload.contentType());
-        assertEquals("1", payload.metadata().get("recordCount"));
+        assertEquals("text/csv", renderer.contentType());
+        assertEquals("1", renderer.finalMetadata().get("recordCount"));
         assertTrue(csv.contains("AMOUNT"));
         assertTrue(csv.contains("CSV ID"));
         assertTrue(csv.contains("RECIPIENT"));
@@ -41,6 +40,22 @@ class CsvPaymentOutputPublishMapperTest {
         assertTrue(csv.contains("100.00"));
         assertTrue(csv.contains("csv-1"));
         assertTrue(csv.contains("Alice"));
+    }
+
+    @Test
+    void streamsRowsWithoutRepeatingHeader() {
+        CsvPaymentOutputPublishMapper mapper = new CsvPaymentOutputPublishMapper();
+        PaymentOutput first = paymentOutput(tempDir.resolve("payments.csv"), "csv-1", "Alice", "100.00");
+        PaymentOutput second = paymentOutput(tempDir.resolve("payments.csv"), "csv-2", "Bob", "200.00");
+        ObjectPublishGroupRenderer<PaymentOutput> renderer = mapper.openGroup("payments.csv", first);
+
+        String csv = new String(renderer.onItem(first).bytes(), StandardCharsets.UTF_8)
+            + new String(renderer.onItem(second).bytes(), StandardCharsets.UTF_8);
+
+        assertEquals(1, occurrences(csv, "AMOUNT"));
+        assertEquals("2", renderer.finalMetadata().get("recordCount"));
+        assertTrue(csv.contains("csv-1"));
+        assertTrue(csv.contains("csv-2"));
     }
 
     private PaymentOutput paymentOutput(Path inputFile, String csvId, String recipient, String amount) {
@@ -69,5 +84,15 @@ class CsvPaymentOutputPublishMapperTest {
         output.setMessage("Success");
         output.setFee(BigDecimal.ZERO);
         return output;
+    }
+
+    private int occurrences(String value, String token) {
+        int count = 0;
+        int index = 0;
+        while ((index = value.indexOf(token, index)) >= 0) {
+            count++;
+            index += token.length();
+        }
+        return count;
     }
 }

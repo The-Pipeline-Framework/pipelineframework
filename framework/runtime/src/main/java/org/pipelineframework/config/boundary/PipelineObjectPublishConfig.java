@@ -11,6 +11,7 @@ import java.util.Map;
  * @param location provider-specific location map
  * @param naming object key naming settings
  * @param payload object payload settings
+ * @param grouping object publish grouping settings
  */
 public record PipelineObjectPublishConfig(
     String name,
@@ -18,8 +19,20 @@ public record PipelineObjectPublishConfig(
     String provider,
     Map<String, Object> location,
     PipelineObjectNamingConfig naming,
-    PipelineObjectPublishPayloadConfig payload
+    PipelineObjectPublishPayloadConfig payload,
+    PipelineObjectPublishGroupingConfig grouping
 ) {
+    public PipelineObjectPublishConfig(
+        String name,
+        String kind,
+        String provider,
+        Map<String, Object> location,
+        PipelineObjectNamingConfig naming,
+        PipelineObjectPublishPayloadConfig payload
+    ) {
+        this(name, kind, provider, location, naming, payload, PipelineObjectPublishGroupingConfig.defaults());
+    }
+
     public PipelineObjectPublishConfig {
         name = normalize(name);
         kind = normalize(kind);
@@ -34,6 +47,7 @@ public record PipelineObjectPublishConfig(
         location = location == null ? Map.of() : Map.copyOf(location);
         naming = naming == null ? PipelineObjectNamingConfig.defaults() : naming;
         payload = payload == null ? PipelineObjectPublishPayloadConfig.defaults() : payload;
+        grouping = grouping == null ? PipelineObjectPublishGroupingConfig.defaults() : grouping;
         if (name == null) {
             throw new IllegalArgumentException("publish target name must not be blank");
         }

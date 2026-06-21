@@ -110,6 +110,8 @@ class PipelineYamlConfigLoaderTest {
                   keyTemplate: "{groupKey}.out"
                 payload:
                   contentType: text/csv
+                grouping:
+                  maxOpenGroups: 7
             output:
               to: results
               consumes:
@@ -127,6 +129,7 @@ class PipelineYamlConfigLoaderTest {
         assertEquals("/tmp/outgoing", config.publish().get("results").location().get("root"));
         assertEquals("{groupKey}.out", config.publish().get("results").naming().keyTemplate());
         assertEquals("text/csv", config.publish().get("results").payload().contentType());
+        assertEquals(7, config.publish().get("results").grouping().maxOpenGroups());
         assertNotNull(config.output());
         assertEquals("results", config.output().object().target());
         assertEquals("com.example.DocumentOutput", config.output().object().type());

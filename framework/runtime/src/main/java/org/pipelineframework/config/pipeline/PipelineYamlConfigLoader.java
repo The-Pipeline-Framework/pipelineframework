@@ -48,6 +48,7 @@ import org.pipelineframework.config.boundary.PipelineObjectOutputConfig;
 import org.pipelineframework.config.boundary.PipelineObjectPayloadConfig;
 import org.pipelineframework.config.boundary.PipelineObjectPollConfig;
 import org.pipelineframework.config.boundary.PipelineObjectPublishConfig;
+import org.pipelineframework.config.boundary.PipelineObjectPublishGroupingConfig;
 import org.pipelineframework.config.boundary.PipelineObjectPublishPayloadConfig;
 import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
 import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
@@ -563,7 +564,8 @@ public class PipelineYamlConfigLoader {
                 readRequiredString(targetMap, "provider", "publish target '" + name + "'"),
                 readObjectMap(targetMap, "location"),
                 readObjectNaming(targetMap),
-                readObjectPublishPayload(targetMap)));
+                readObjectPublishPayload(targetMap),
+                readObjectPublishGrouping(targetMap)));
         }
         return Map.copyOf(targets);
     }
@@ -590,6 +592,17 @@ public class PipelineYamlConfigLoader {
         return new PipelineObjectPublishPayloadConfig(
             readString(payloadMap, "contentType"),
             readCharset(payloadMap, "charset", StandardCharsets.UTF_8));
+    }
+
+    private PipelineObjectPublishGroupingConfig readObjectPublishGrouping(Map<?, ?> targetMap) {
+        Object groupingObj = targetMap.get("grouping");
+        if (groupingObj == null) {
+            return PipelineObjectPublishGroupingConfig.defaults();
+        }
+        if (!(groupingObj instanceof Map<?, ?> groupingMap)) {
+            throw new IllegalArgumentException("publish.grouping must be defined as a map");
+        }
+        return new PipelineObjectPublishGroupingConfig(readInt(groupingMap, "maxOpenGroups", 32));
     }
 
     private PipelineObjectFilterConfig readObjectFilter(Map<?, ?> sourceMap) {

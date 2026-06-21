@@ -948,6 +948,17 @@
       },
       "additionalProperties": false
     },
+    "objectPublishGrouping": {
+      "type": "object",
+      "properties": {
+        "maxOpenGroups": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 32
+        }
+      },
+      "additionalProperties": false
+    },
     "objectPublishTarget": {
       "type": "object",
       "properties": {
@@ -967,6 +978,9 @@
         },
         "payload": {
           "$ref": "#/$defs/objectPublishPayload"
+        },
+        "grouping": {
+          "$ref": "#/$defs/objectPublishGrouping"
         }
       },
       "required": [

@@ -35,6 +35,8 @@ publish:
       keyTemplate: "{groupKey}.out"
     payload:
       contentType: text/csv
+    grouping:
+      maxOpenGroups: 1
 output:
   to: csv-payment-output-files
   consumes:
