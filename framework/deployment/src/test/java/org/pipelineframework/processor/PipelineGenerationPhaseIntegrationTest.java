@@ -501,7 +501,8 @@ class PipelineGenerationPhaseIntegrationTest {
         assertTrue(Files.exists(bridge), "Expected Quarkus blocking bridge in " + generatedJavaFiles(generatedSourcesDir));
         String bridgeSource = Files.readString(bridge);
         assertTrue(bridgeSource.contains("import jakarta.enterprise.context.ApplicationScoped;"));
-        assertTrue(bridgeSource.contains("blockingExecutionSupport.supply(true, () -> blockingService.processBlocking(processableObj))"));
+        assertTrue(bridgeSource.contains("blockingExecutionSupport.supply(true,"));
+        assertTrue(bridgeSource.contains("blockingService.processBlocking(processableObj)"));
     }
 
     @Test

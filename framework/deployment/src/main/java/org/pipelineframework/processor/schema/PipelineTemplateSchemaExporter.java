@@ -1282,6 +1282,34 @@ public final class PipelineTemplateSchemaExporter {
           }
         },
         {
+          "if": {
+            "required": [
+              "operator"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "runOnVirtualThreads"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "delegate"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "runOnVirtualThreads"
+              ]
+            }
+          }
+        },
+        {
           "not": {
             "required": [
               "operatorMapper",

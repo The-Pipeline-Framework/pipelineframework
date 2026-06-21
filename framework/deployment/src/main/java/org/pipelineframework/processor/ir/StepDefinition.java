@@ -205,6 +205,9 @@ public record StepDefinition(
             throw new IllegalArgumentException("Name cannot be blank");
         }
         Objects.requireNonNull(kind, "Kind cannot be null");
+        if (runOnVirtualThreads && kind != StepKind.INTERNAL) {
+            throw new IllegalArgumentException("runOnVirtualThreads is valid only for INTERNAL steps");
+        }
         if (executionClass != null && remoteExecution != null) {
             throw new IllegalArgumentException("executionClass and remoteExecution are mutually exclusive");
         }

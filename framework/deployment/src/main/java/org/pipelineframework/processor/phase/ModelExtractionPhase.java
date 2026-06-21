@@ -454,13 +454,14 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         String serviceName = toYamlServiceName(stepDef.name());
+        ExecutionMode resolvedExecutionMode = executionMode(ctx, stepDef, serviceSignature.apiKind());
         return extractedModel.toBuilder()
             .serviceName(serviceName)
             .generatedName(serviceName)
             .inputMapping(new TypeMapping(inputType, inboundMapper, inboundMapper != null, inputType))
             .outputMapping(new TypeMapping(outputType, outboundMapper, outboundMapper != null, outputType))
             .streamingShape(serviceSignature.shape())
-            .executionMode(executionMode(stepDef))
+            .executionMode(resolvedExecutionMode)
             .serviceApiKind(serviceSignature.apiKind())
             .reactiveReturnKind(serviceSignature.reactiveReturnKind())
             .build();
@@ -553,6 +554,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ? DeploymentRole.PLUGIN_CLIENT
             : DeploymentRole.ORCHESTRATOR_CLIENT;
 
+        ExecutionMode resolvedExecutionMode = executionMode(ctx, stepDef, null);
         return new PipelineStepModel.Builder()
             .serviceName(serviceName)
             .generatedName(serviceName)
@@ -570,7 +572,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 outputType))
             .streamingShape(streamingShape)
             .enabledTargets(targets)
-            .executionMode(executionMode(stepDef))
+            .executionMode(resolvedExecutionMode)
             .deploymentRole(crossModuleRole)
             .sideEffect(false)
             .cacheKeyGenerator(null)
@@ -1252,8 +1254,29 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return matches.isEmpty() ? Optional.empty() : Optional.of(matches.getFirst());
     }
 
-    private ExecutionMode executionMode(org.pipelineframework.processor.ir.StepDefinition stepDef) {
-        return stepDef.runOnVirtualThreads() ? ExecutionMode.VIRTUAL_THREADS : ExecutionMode.DEFAULT;
+    private ExecutionMode executionMode(
+            PipelineCompilationContext ctx,
+            org.pipelineframework.processor.ir.StepDefinition stepDef,
+            ServiceApiKind serviceApiKind) {
+        ExecutionMode mode = stepDef.runOnVirtualThreads() ? ExecutionMode.VIRTUAL_THREADS : ExecutionMode.DEFAULT;
+        if (mode == ExecutionMode.VIRTUAL_THREADS && serviceApiKind == ServiceApiKind.REACTIVE) {
+            printVirtualThreadError(
+                ctx,
+                "Internal step '" + stepDef.name()
+                    + "' sets runOnVirtualThreads, but virtual-thread offload is valid only for blocking internal services.");
+        } else if (mode == ExecutionMode.VIRTUAL_THREADS && serviceApiKind == null) {
+            printVirtualThreadError(
+                ctx,
+                "Internal step '" + stepDef.name()
+                    + "' sets runOnVirtualThreads, but the service class must be available at build time to verify blocking execution.");
+        }
+        return mode;
+    }
+
+    private void printVirtualThreadError(PipelineCompilationContext ctx, String message) {
+        if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
+            ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR, message);
+        }
     }
 
     private boolean isSpringRendererProfile(PipelineCompilationContext ctx) {

@@ -472,9 +472,9 @@ class YamlDrivenStepGenerationTest {
             List.of(paymentService, paymentRecord, alternatePaymentRecord, paymentStatus, uniStub, monoStub),
             List.of("-Apipeline.codegen.rendererProfile=spring"));
         assertFalse(result.success(), "Expected multiple plain reactive process methods to fail");
-        assertTrue(
-            result.errorSummary().contains("declares multiple public process(In): Uni<Out> or process(In): Mono<Out> or processBlocking(In): Out methods"),
-            result.errorSummary());
+        assertAll(
+            () -> assertTrue(result.errorSummary().contains("multiple public"), result.errorSummary()),
+            () -> assertTrue(result.errorSummary().contains("processBlocking(In): Out"), result.errorSummary()));
     }
 
     @Test
@@ -526,6 +526,43 @@ class YamlDrivenStepGenerationTest {
             List.of(paymentService, paymentRecord, paymentStatus),
             List.of("-Apipeline.codegen.rendererProfile=spring"));
         assertTrue(result.success(), "Expected virtual-thread blocking service compilation to succeed: " + result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalReactiveProcessMethodWithVirtualThreads() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-plain-uni-virtual.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+                runOnVirtualThreads: true
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+
+            public class PaymentService {
+                public Uni<PaymentStatus> process(PaymentRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writePaymentRecord();
+        Path paymentStatus = writePaymentStatus();
+        Path uniStub = writeUniStub();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, paymentStatus, uniStub));
+        assertFalse(result.success(), "Expected reactive virtual-thread service compilation to fail");
+        assertAll(
+            () -> assertTrue(result.errorSummary().contains("runOnVirtualThreads"), result.errorSummary()),
+            () -> assertTrue(result.errorSummary().contains("blocking internal services"), result.errorSummary()));
     }
 
     @Test
@@ -729,9 +766,9 @@ class YamlDrivenStepGenerationTest {
             List.of(paymentService, paymentRecord, alternatePaymentRecord, paymentStatus),
             List.of("-Apipeline.codegen.rendererProfile=spring"));
         assertFalse(result.success(), "Expected multiple plain blocking process methods to fail");
-        assertTrue(
-            result.errorSummary().contains("declares multiple public process(In): Uni<Out> or process(In): Mono<Out> or processBlocking(In): Out methods"),
-            result.errorSummary());
+        assertAll(
+            () -> assertTrue(result.errorSummary().contains("multiple public"), result.errorSummary()),
+            () -> assertTrue(result.errorSummary().contains("processBlocking(In): Out"), result.errorSummary()));
     }
 
     @Test

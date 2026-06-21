@@ -224,6 +224,21 @@ class StepDefinitionTest {
     }
 
     @Test
+    void virtualThreadsRejectDelegatedSteps() {
+        assertThrows(IllegalArgumentException.class, () -> new StepDefinition(
+            "delegated-step",
+            StepKind.DELEGATED,
+            EXECUTION_CLASS,
+            null,
+            Map.of(), null, List.of(),
+            null, Map.of(), List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, StreamingShape.UNARY_UNARY,
+            true));
+    }
+
+    @Test
     void rejectsBlankName() {
         assertThrows(IllegalArgumentException.class, () -> new StepDefinition(
             "  ",  // blank name
@@ -529,7 +544,6 @@ class StepDefinitionTest {
         assertEquals(Map.of(), step.queryConfig());
         assertEquals(List.of(), step.queryKeyFields());
     }
-
     // ---- runOnVirtualThreads tests ----
 
     @Test

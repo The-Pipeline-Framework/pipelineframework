@@ -188,6 +188,10 @@ class PipelineTemplateSchemaExporterTest {
         JsonObject runOnVirtualThreads = properties.getAsJsonObject("runOnVirtualThreads");
         assertNotNull(runOnVirtualThreads);
         assertEquals("boolean", text(runOnVirtualThreads, "type"));
+        JsonArray allOf = step.getAsJsonArray("allOf");
+        assertTrue(allOf.toString().contains("\"operator\""));
+        assertTrue(allOf.toString().contains("\"delegate\""));
+        assertTrue(allOf.toString().contains("\"runOnVirtualThreads\""));
     }
 
     @Test
