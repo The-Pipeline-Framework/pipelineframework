@@ -57,7 +57,7 @@ Persistence and caching solve different parts of the same problem:
 <div class="value-links">
 
 - [Persistence Plugin](/design/persistence)
-- [JPA Query Connector](/design/jpa-query-connector)
+- [JPA Query Connector](/design/jpa-query-connector/)
 - [Caching](/design/caching/)
 - [Cache vs Persistence](/design/caching/cache-vs-persistence)
 - [Search Replay Walkthrough](/design/caching/replay-walkthrough)

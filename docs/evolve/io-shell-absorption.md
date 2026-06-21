@@ -216,7 +216,7 @@ instead of hiding mutable database state inside:
 AssessCustomerRisk(customerId) -> RiskDecision
 ```
 
-For the current user-facing JPA connector shape, see [JPA Query Connector](/design/jpa-query-connector).
+For the current user-facing JPA connector shape, see [JPA Query Connector](/design/jpa-query-connector/).
 
 Benefits to the user:
 
