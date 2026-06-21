@@ -1,15 +1,26 @@
-# Maven And Scaffolding
+---
+title: Redirecting...
+search: false
+head:
+  - - meta
+    - name: robots
+      content: noindex
+  - - meta
+    - http-equiv: refresh
+      content: 0;url=/evolve/framework-portability-assessment/maven-and-scaffolding
+---
 
-Generated POMs and framework artifacts are Quarkus-first today. That is acceptable for current users but limits Spring-first scaffolding.
+<script setup>
+import {onMounted} from 'vue'
+import {withBase} from 'vitepress'
 
-Proposed target artifacts:
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.location.replace(withBase('/evolve/framework-portability-assessment/maven-and-scaffolding'))
+  }
+})
+</script>
 
-- `tpf-api`
-- `tpf-compiler-core`
-- `tpf-runtime-core`
-- `tpf-runtime-mutiny`
-- `tpf-runtime-reactor`
-- `tpf-quarkus-extension`
-- `tpf-spring-boot-starter`
+# Redirecting...
 
-Spring scaffolds are likely simpler for local/REST and harder for build-time generation unless a plugin-based compiler flow is part of the adapter story.
+This page moved to [/evolve/framework-portability-assessment/maven-and-scaffolding](/evolve/framework-portability-assessment/maven-and-scaffolding).

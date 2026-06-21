@@ -3,15 +3,15 @@ layout: home
 
 hero:
   name: The Pipeline Framework
-  text: Fast Java Function Flows on Quarkus
-  tagline: Write small typed business functions; TPF generates, validates, and reliably runs the Quarkus runtime around them
+  text: Keep the core pure. Connect to reality.
+  tagline: "Not another workflow engine or CI/CD pipeline. TPF pipelines are strongly typed application flows: each step transforms explicit business types while TPF handles persistence, transport, replay, observability, retries, and deployment concerns."
   image:
     src: /logo.png
     alt: The Pipeline Framework
   actions:
     - theme: alt
       text: Quick Start
-      link: /guide/getting-started/
+      link: /design/pipeline-studio/
     - theme: brand
       text: Design with Canvas
       link: https://app.pipelineframework.org
@@ -32,15 +32,15 @@ hero:
       <source src="/home/replay-proof.mp4" type="video/mp4" />
     </video>
   </a>
-  <figcaption>Async pipeline motion: an await step hands work through Kafka to an external provider while TPF persists payment records automatically.</figcaption>
+  <figcaption>Async application flow: an await step hands work through Kafka to an external provider, then resumes from captured state with deterministic lineage.</figcaption>
 </figure>
 
 <Callout type="tip" title="Fastest path: design with Canvas">
-Use <a href="https://app.pipelineframework.org" target="_blank" rel="noopener noreferrer">Canvas</a> when you want to sketch the flow visually and download a runnable Quarkus scaffold. The same model can then be refined through YAML, Java functions, existing-method operators, type mappers, and runtime configuration.
+Use <a href="https://app.pipelineframework.org" target="_blank" rel="noopener noreferrer">Canvas</a> when you want to model a typed application flow visually and download a runnable baseline. The same model can then be refined through YAML, Java functions, existing-method operators, type mappers, connectors, and runtime configuration.
 </Callout>
 
-<Callout type="info" title="Platform mode and transport mode are different decisions">
-`COMPUTE` and `FUNCTION` are platform modes: they decide whether TPF generates a standard Quarkus service runtime for containers and Kubernetes or a function-style runtime. REST, gRPC, and local are transport modes: they decide how generated components call each other.
+<Callout type="info" title="TPF understands contracts, not just order">
+The framework understands the contracts flowing through the system, not just the order of execution, so teams can evolve from local execution to APIs, messaging, serverless platforms, and distributed deployments without rewriting business logic.
 </Callout>
 
 <FeaturedArticles />
@@ -49,92 +49,92 @@ Use <a href="https://app.pipelineframework.org" target="_blank" rel="noopener no
 ## Why Teams Choose TPF
 
 <div class="home-capability-grid">
-  <a class="home-capability-card" href="/value/developer-experience">
-    <h3>Clear Inputs and Outputs</h3>
-    <p>Each step is one Java function with explicit input and output types, so it is obvious what goes in and what comes out.</p>
+  <a class="home-capability-card" href="/develop/pipeline-compilation/">
+    <h3>Strongly Typed Pipelines</h3>
+    <p>Model business flows as explicit transformations between typed contracts. TPF validates application boundaries, cardinality, mappings, and transport compatibility before deployment, reducing semantic drift as systems evolve.</p>
   </a>
-  <a class="home-capability-card" href="/guide/build/pipeline-compilation">
-    <h3>Define the Flow in YAML</h3>
-    <p>Describe the flow once, then let TPF generate the Quarkus endpoints, callers, handlers, and runtime files around it.</p>
+  <a class="home-capability-card" href="/develop/code-a-step">
+    <h3>Keep the Core Pure</h3>
+    <p>Write business logic as ordinary Java functions. TPF isolates persistence, messaging, APIs, file ingestion, asynchronous workflows, retries, and deployment concerns from application decisions.</p>
   </a>
-  <a class="home-capability-card" href="/guide/development/operators">
-    <h3>Reuse Existing Java Code</h3>
-    <p>Turn an existing Java method or remote endpoint into a pipeline function without hiding its inputs and outputs.</p>
+  <a class="home-capability-card" href="/design/object-ingest">
+    <h3>Connect to Reality</h3>
+    <p>Databases, APIs, Kafka, S3, files, human approvals, long-running jobs, and external providers are modeled through connectors and runtime primitives instead of custom glue code.</p>
   </a>
-  <a class="home-capability-card" href="/guide/development/orchestrator-runtime/">
-    <h3>Reliable Background Work</h3>
-    <p>Store accepted work, retry failed transitions, recover after crashes, and send terminal failures to a dead-letter channel.</p>
-  </a>
-  <a class="home-capability-card" href="/value/runtime-efficiency">
-    <h3>Runtime Efficiency</h3>
-    <p>Keep many items moving through reactive function chains, including await steps that pause for external work without tying up a thread.</p>
-  </a>
-  <a class="home-capability-card" href="/value/integration-flexibility">
-    <h3>Portable Serverless Functions</h3>
-    <p>Generate serverless function entry points and handlers for AWS Lambda, Azure Functions, and Google Cloud Run functions from the same typed Java flow.</p>
-  </a>
-  <a class="home-capability-card" href="/value/deployment-evolution">
-    <h3>Container and Kubernetes Ready</h3>
-    <p>Generate standard Quarkus service runtimes for containers and Kubernetes, then evolve from monolith to split layouts when needed.</p>
+  <a class="home-capability-card" href="/deploy/runtime-layouts/">
+    <h3>Transport Independence</h3>
+    <p>Run locally, over REST, gRPC, Kafka, SQS, or serverless platforms without changing business logic. Infrastructure choices become deployment concerns rather than application concerns.</p>
   </a>
   <a class="home-capability-card" href="/value/state-replay-and-queryable-data">
-    <h3>State, Replay, and Queryable Data</h3>
-    <p>Use persistence for durable business state and caching for fast recomputation, replay, and query-ready outputs.</p>
+    <h3>Replayable by Design</h3>
+    <p>Execution lineage, captured external state, persistence, caching, retries, and idempotency help make distributed systems easier to reason about, debug, and recover.</p>
+  </a>
+  <a class="home-capability-card" href="/operate/observability/">
+    <h3>Operational Visibility Built In</h3>
+    <p>Execution tracking, telemetry, audit trails, checkpointing, and runtime validation are available from the beginning rather than added later through custom instrumentation.</p>
+  </a>
+  <a class="home-capability-card" href="/design/await-boundaries">
+    <h3>Await External Reality</h3>
+    <p>Pause execution while waiting for human approvals, webhook callbacks, provider responses, and long-running jobs without polling loops, correlation tables, or custom state machines.</p>
+  </a>
+  <a class="home-capability-card" href="/develop/mappers-and-dtos">
+    <h3>Data Fails First</h3>
+    <p>Distributed-system complexity often begins as semantic drift rather than network failures. TPF makes contracts explicit through strongly typed application boundaries and generated transports, helping teams evolve safely as systems grow.</p>
   </a>
 </div>
 
 ## What TPF Helps You Build
 
-TPF pipelines are fast, forward-only flows of Java functions. They are not CI/CD job chains or coarse batch jobs. A **step** is one function in the flow: it receives a typed Java input, produces a typed Java output, and leaves the repeated Quarkus code to TPF.
+TPF pipelines are strongly typed application flows. They are not CI/CD job chains, coarse batch jobs, or generic workflow diagrams. A **step** is one business transformation: it receives an explicit Java input type, produces an explicit Java output type, and leaves distributed-system concerns to the framework-owned shell.
 
 <div class="home-proof-grid">
   <div>
-    <h3>What you write</h3>
-    <p>Focused Java business functions such as validating a payment, enriching a record, parsing a document, or calling an existing Java method.</p>
+    <h3>Functional core</h3>
+    <p>Focused Java business functions such as validating a payment, enriching a record, parsing a document, or deciding how to handle a domain event.</p>
   </div>
   <div>
-    <h3>What TPF generates</h3>
-    <p>REST, gRPC, local, and function-style code that calls those functions, plus runtime files that tell the generated runtime which function comes next.</p>
+    <h3>I/O shell</h3>
+    <p>Connectors, adapters, mappers, persistence, caching, await boundaries, and transport-specific calls that connect the core to external reality.</p>
   </div>
   <div>
-    <h3>What TPF runs</h3>
-    <p>The generated runner that starts the flow, calls each step, tracks progress when configured, retries failed work, and routes failures.</p>
+    <h3>Runtime proof</h3>
+    <p>The runtime starts the flow, calls each step, records lineage when configured, retries failed work, exposes status, and routes terminal failures.</p>
   </div>
 </div>
 
 ## How It Works
 
-### Write functions, not glue
+### Keep the core pure
 
-You write typed Java functions and declare their order in YAML. TPF checks the flow at build time, including whether each function shape is valid, whether outputs match the next inputs, whether [mappers](/guide/development/mappers-and-dtos) convert types correctly, whether [operators](/guide/development/operators) are valid, and whether the generated code can call each function cleanly.
+You write typed Java functions and declare their application flow in YAML. TPF checks the flow at build time, including whether each function shape is valid, whether outputs match the next inputs, whether [mappers](/develop/mappers-and-dtos) convert types correctly, whether [operators](/develop/operators) are valid, and whether generated transports can call each boundary cleanly.
 
 A **mapper** translates between your domain types and transport or external-system types. An **operator** is an existing Java method or remote endpoint reused as a pipeline function.
 
-Start with [pipeline compilation](/guide/build/pipeline-compilation) when you want the build-time generation model, or [code a step](/guide/development/code-a-step) when you want to implement the function itself.
+Start with [pipeline compilation](/develop/pipeline-compilation/) when you want the build-time generation model, or [code a step](/develop/code-a-step) when you want to implement the function itself.
 
-### Generate the repeated Quarkus code
+### Connect to reality through explicit shells
 
-TPF creates the REST resources, gRPC services, local clients, function-style handlers, and runtime files that would otherwise become handwritten service glue. An **adapter** is the generated code around your business function: it lets another component call the function through the selected transport.
+TPF creates the connector and transport shells that would otherwise become handwritten service glue. An **adapter** is generated code around your business function: it lets another component call the function through the selected transport without moving transport logic into the function.
 
-Generated code keeps business logic independent of whether a caller uses REST, gRPC, local in-process calls, or a serverless function entry point. That same generated runtime can be packaged as a standard Quarkus service for containers and Kubernetes or as a `FUNCTION` deployment when that model fits better. See [Portable Serverless Functions](/value/integration-flexibility) and [runtime layouts](/guide/build/runtime-layouts/) when you want the details behind platform mode, transport mode, logical placement, and Maven/container packaging.
+Connectors own I/O admission such as file and object ingest. Await steps own durable suspend/resume for human approvals, webhook callbacks, provider responses, and long-running jobs. Generated transports keep business logic independent of whether a caller uses local calls, REST, gRPC, messaging, or a serverless function entry point. See [Object Ingest](/design/object-ingest), [Await Boundaries](/design/await-boundaries), and [runtime layouts](/deploy/runtime-layouts/) when you want the implementation details.
 
 ### Run the flow reliably
 
-The generated runtime starts the flow, invokes each step, records execution state when configured, retries failed transitions, and exposes status/result endpoints for background work. For crash-surviving background execution, TPF can store accepted work outside the current JVM, recover it after restart, and send terminal execution failures to a **DLQ**, a dead-letter channel for investigation or replay.
+The runtime starts the flow, invokes each step, records execution state when configured, retries failed transitions, and exposes status/result endpoints for background work. For crash-surviving background execution, TPF can store accepted work outside the current JVM, recover it after restart, and send terminal execution failures to a **DLQ**, a dead-letter channel for investigation or replay.
 
-The exact config value for this mode is `QUEUE_ASYNC`; start with the [Orchestrator Runtime](/guide/development/orchestrator-runtime/) guide before using it in production.
+The exact config value for this mode is `QUEUE_ASYNC`; start with the [Orchestrator Runtime](/deploy/orchestrator-runtime/) guide before using it in production.
 
 Persistence and caching matter here more than the word "plugin" suggests. Persistence stores business outputs developers can query later from APIs, reports, or UIs. Caching protects expensive steps, speeds recomputation, and supports replay or rewind scenarios when downstream logic changes. Together they reduce the need to invent separate state stores, replay workflows, or read-model plumbing.
 
-<Callout type="info" title="High availability is a runtime responsibility">
-TPF does not just generate code and walk away. In the background execution path, it owns stored execution state, dispatch, retry, crash recovery, and terminal failure publication. Your team still owns provider choice, duplicate-protection policy, retry budgets, observability thresholds, and deployment rollout.
+<Callout type="info" title="Infrastructure is still your decision">
+TPF keeps transport, platform, and deployment choices outside the business functions. Your team still owns provider choice, duplicate-protection policy, retry budgets, observability thresholds, and deployment rollout.
 </Callout>
 
 ### Add cross-cutting work without hiding it
 
-[Plugins](/guide/development/using-plugins) add declared cross-cutting work such as persistence, cache, telemetry, and logging. An **aspect** is the rule that says where the plugin runs, for example before or after a step; the plugin provides the implementation.
+[Plugins](/develop/using-plugins) add declared cross-cutting work such as persistence, cache, telemetry, and logging. An **aspect** is the rule that says where the plugin runs, for example before or after a step; the plugin provides the implementation.
 
-That keeps business functions focused on domain behaviour while TPF keeps generated plugin calls aligned across REST, gRPC, and local execution.
+That keeps business functions focused on domain behaviour while TPF keeps generated plugin calls aligned across transports and runtime layouts.
 
 See [State, Replay, and Queryable Data](/value/state-replay-and-queryable-data) for the full persistence-and-caching story.
 
@@ -147,11 +147,11 @@ If you already have proven Java libraries or remote endpoints, operators let you
 <div class="home-proof-grid">
   <div>
     <h3>Payments</h3>
-    <p>Validate and enrich records, produce status output, reject one malformed item, and continue the workload.</p>
+    <p>Validate and enrich records, await provider decisions through Kafka, produce status output, reject one malformed item, and continue the workload.</p>
   </div>
   <div>
     <h3>Search</h3>
-    <p>Crawl, parse, tokenize, index, cache intermediate results, and replay safely when source content changes.</p>
+    <p>Admit documents through object connectors, parse, tokenize, index, cache intermediate results, and replay safely when source content changes.</p>
   </div>
   <div>
     <h3>Checkout and TPFGo</h3>
@@ -162,25 +162,25 @@ If you already have proven Java libraries or remote endpoints, operators let you
     <p>Reuse embedding, vector-search, or LLM helper libraries as operators inside a typed Java flow.</p>
   </div>
   <div>
-    <h3>Serverless deployments</h3>
-    <p>Run the same typed flow behind AWS Lambda, Azure Functions, or Google Cloud Run functions without rewriting the business code.</p>
+    <h3>External approvals</h3>
+    <p>Pause while a person, webhook, provider, or long-running job decides, then resume the same execution without custom correlation state.</p>
   </div>
   <div>
-    <h3>Container platforms</h3>
-    <p>Run the same typed flow as a standard Quarkus service in containers or Kubernetes when you want service-style deployment and operations.</p>
+    <h3>Deployment options</h3>
+    <p>Run the same typed flow locally, behind APIs, through messaging, on serverless platforms, or as distributed services when the deployment model requires it.</p>
   </div>
 </div>
 
 ## Start Here
 
-- [Quick Start](/guide/getting-started/) for the fastest path to a runnable scaffold.
-- [Pipeline Compilation](/guide/build/pipeline-compilation) for YAML-first generation and build-time validation.
-- [Operators](/guide/development/operators) for reusing existing Java methods or remote endpoints.
-- [Runtime Layouts](/guide/build/runtime-layouts/) for logical placement versus Maven/container build topology.
-- [AWS Lambda Platform](/guide/development/aws-lambda) for the canonical `FUNCTION` platform guide.
-- [Azure Functions Platform](/guide/development/azure-functions) for Azure development-time guidance.
-- [Google Cloud Run Functions Platform](/guide/development/google-cloud-run-functions) for the Google function-platform path.
-- [Multi-Cloud Function Providers](/guide/build/runtime-layouts/function-providers) for provider-specific function deployment targets.
-- [Orchestrator Runtime](/guide/development/orchestrator-runtime/) for synchronous execution, background execution, crash recovery, and DLQ behaviour.
-- [Using Plugins](/guide/development/using-plugins) for persistence, cache, telemetry, and logging extensions.
-- [TPFGo Example](/guide/development/tpfgo-example) for checkpoint handoff between pipelines.
+- [Quick Start](/design/pipeline-studio/) for the fastest path to a runnable scaffold.
+- [Pipeline Compilation](/develop/pipeline-compilation/) for YAML-first generation and build-time validation.
+- [Operators](/develop/operators) for reusing existing Java methods or remote endpoints.
+- [Runtime Layouts](/deploy/runtime-layouts/) for logical placement versus Maven/container build topology.
+- [AWS Lambda Platform](/deploy/aws-lambda) for the canonical `FUNCTION` platform guide.
+- [Azure Functions Platform](/deploy/azure-functions) for Azure development-time guidance.
+- [Google Cloud Run Functions Platform](/deploy/google-cloud-run-functions) for the Google function-platform path.
+- [Multi-Cloud Function Providers](/deploy/function-providers) for provider-specific function deployment targets.
+- [Orchestrator Runtime](/deploy/orchestrator-runtime/) for synchronous execution, background execution, crash recovery, and DLQ behaviour.
+- [Using Plugins](/develop/using-plugins) for persistence, cache, telemetry, and logging extensions.
+- [TPFGo Example](/develop/tpfgo-example) for checkpoint handoff between pipelines.

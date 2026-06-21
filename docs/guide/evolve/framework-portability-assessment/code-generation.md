@@ -1,38 +1,26 @@
-# Code Generation Portability
+---
+title: Redirecting...
+search: false
+head:
+  - - meta
+    - name: robots
+      content: noindex
+  - - meta
+    - http-equiv: refresh
+      content: 0;url=/evolve/framework-portability-assessment/code-generation
+---
 
-Current generation is model-aware but renderer assumptions are Quarkus-centric.
+<script setup>
+import {onMounted} from 'vue'
+import {withBase} from 'vitepress'
 
-Current model:
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.location.replace(withBase('/evolve/framework-portability-assessment/code-generation'))
+  }
+})
+</script>
 
-```mermaid
-flowchart LR
-    A["YAML + annotations"] --> B["Semantic model"]
-    B --> C["Target resolution"]
-    C --> D["Bindings"]
-    D --> E["Hardcoded renderer set"]
-    E --> F["CDI/JAX-RS/gRPC/Mutiny artifacts"]
-```
+# Redirecting...
 
-Target model:
-
-```mermaid
-flowchart LR
-    A["YAML + optional annotations"] --> B["Semantic model"]
-    B --> C["Target resolution"]
-    C --> D["Bindings"]
-    D --> E{"Renderer profile"}
-    E --> F["Quarkus renderer set"]
-    E --> G["Spring renderer set"]
-    F --> H["CDI + RESTEasy Reactive + Mutiny"]
-    G --> I["Spring beans + WebFlux + Reactor"]
-```
-
-Renderer assumptions to split:
-
-- Bean scope and injection (`@ApplicationScoped`/`@Inject` vs Spring equivalents)
-- REST transport (`JAX-RS` vs WebFlux)
-- Reactive types (`Uni`/`Multi` vs `Mono`/`Flux`)
-- Blocking/offload policy (`@RunOnVirtualThread` vs scheduler policy)
-- Context propagation (Vert.x locals vs Reactor context)
-
-The semantic IR remains transport/platform-agnostic; renderer profile owns framework assumptions.
+This page moved to [/evolve/framework-portability-assessment/code-generation](/evolve/framework-portability-assessment/code-generation).

@@ -55,13 +55,13 @@ Together they give TPF a practical state-and-replay story: keep the durable reco
 
 <div class="value-links">
 
-- [Quick Start](/guide/getting-started/)
-- [Canvas Guide](/guide/getting-started/canvas-guide)
-- [Runtime Layouts](/guide/build/runtime-layouts/)
-- [Operators](/guide/build/operators)
-- [Operator Reuse Strategy](/guide/design/operator-reuse-strategy)
+- [Quick Start](/design/pipeline-studio/)
+- [Canvas Guide](/design/pipeline-studio/canvas-guide)
+- [Runtime Layouts](/deploy/runtime-layouts/)
+- [Operators](/design/operators)
+- [Operator Reuse Strategy](/design/operator-reuse-strategy)
 - [State, Replay, and Queryable Data](/value/state-replay-and-queryable-data)
-- [Using Plugins](/guide/development/using-plugins)
-- [Observability](/guide/operations/observability/)
+- [Using Plugins](/develop/using-plugins)
+- [Observability](/operate/observability/)
 
 </div>

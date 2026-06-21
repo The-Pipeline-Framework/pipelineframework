@@ -1,20 +1,26 @@
-# Annotation Removal
+---
+title: Redirecting...
+search: false
+head:
+  - - meta
+    - name: robots
+      content: noindex
+  - - meta
+    - http-equiv: refresh
+      content: 0;url=/evolve/framework-portability-assessment/annotation-removal
+---
 
-Current posture: YAML authority is rising, but annotations remain part of extraction.
+<script setup>
+import {onMounted} from 'vue'
+import {withBase} from 'vitepress'
 
-| Annotation | Current role | Portability stance |
-| --- | --- | --- |
-| `@PipelineStep` | Build-time marker and metadata source | Make optional; migrate metadata to YAML or neutral descriptors |
-| `@PipelineOrchestrator` | Orchestrator endpoint and generation trigger | Replace with YAML orchestrator declaration |
-| `@PipelinePlugin` | Plugin host marker | Replace with service descriptor metadata |
-| `@GeneratedRole` | Internal generated marker | Keep internally |
-| `@ParallelismHint` | Runtime/compiler hint | Keep as neutral internal metadata or descriptor fields |
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.location.replace(withBase('/evolve/framework-portability-assessment/annotation-removal'))
+  }
+})
+</script>
 
-Suggested migration path:
+# Redirecting...
 
-1. Keep annotations supported.
-2. Make YAML service declarations authoritative.
-3. Validate service signatures directly from YAML class names.
-4. Warn on annotation/YAML conflicts.
-5. Move operational metadata (cache keys, ordering, virtual thread hints, side-effects) to YAML.
-6. End with annotations optional, then remove Quarkus-only public annotation coupling.
+This page moved to [/evolve/framework-portability-assessment/annotation-removal](/evolve/framework-portability-assessment/annotation-removal).
