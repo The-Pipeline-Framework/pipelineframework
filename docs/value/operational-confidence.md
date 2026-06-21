@@ -26,11 +26,11 @@ Persistence and caching strengthen this recovery story. Persistence gives teams 
 
 <div class="value-links">
 
-- [Error Handling & DLQ](/guide/operations/error-handling)
-- [In-flight Probe](/guide/operations/in-flight-probe)
-- [Orchestrator Runtime](/guide/development/orchestrator-runtime/)
+- [Error Handling & DLQ](/operate/error-handling)
+- [In-flight Probe](/operate/in-flight-probe)
+- [Orchestrator Runtime](/deploy/orchestrator-runtime/)
 - [State, Replay, and Queryable Data](/value/state-replay-and-queryable-data)
-- [Observability](/guide/operations/observability/index)
-- [Best Practices](/guide/operations/best-practices)
+- [Observability](/operate/observability/)
+- [Best Practices](/operate/best-practices)
 
 </div>

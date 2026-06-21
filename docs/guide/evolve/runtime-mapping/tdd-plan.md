@@ -1,32 +1,26 @@
-# TDD Plan
+---
+title: Redirecting...
+search: false
+head:
+  - - meta
+    - name: robots
+      content: noindex
+  - - meta
+    - http-equiv: refresh
+      content: 0;url=/evolve/runtime-mapping/tdd-plan
+---
 
-This plan treats runtime mapping as a compiler feature with deterministic inputs and outputs. Start with small tests and grow coverage alongside implementation.
+<script setup>
+import {onMounted} from 'vue'
+import {withBase} from 'vitepress'
 
-## Unit tests (parser and resolver)
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.location.replace(withBase('/evolve/runtime-mapping/tdd-plan'))
+  }
+})
+</script>
 
-- Parse minimal file with `version: 1` and defaults.
-- Parse `layout: monolith` and enforce implied single runtime/module.
-- Resolve step placement with explicit mappings.
-- Resolve step placement via defaults in `validation: auto`.
-- Resolve synthetic placement using canonical ids and suffixes.
-- Reject ambiguous synthetic ids when multiple instances exist.
-- Reject unknown steps/synthetics/modules/runtimes.
+# Redirecting...
 
-## Integration tests (annotation processor)
-
-- Per-module AP uses global mapping and filters to current module.
-- Cross-module client wiring uses the pipeline transport.
-- In-module wiring remains in-process.
-- `layout: monolith` collapses to single module behaviour.
-
-## Regression tests
-
-- No mapping file present: generated outputs match current scaffold.
-- Partial mapping in `validation: auto` does not change unmapped behaviour.
-
-## Suggested naming for tests
-
-- `RuntimeMappingParserTest`
-- `RuntimeMappingResolverTest`
-- `RuntimeMappingValidationTest`
-- `RuntimeMappingApIntegrationTest`
+This page moved to [/evolve/runtime-mapping/tdd-plan](/evolve/runtime-mapping/tdd-plan).

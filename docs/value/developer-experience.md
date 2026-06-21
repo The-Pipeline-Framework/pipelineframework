@@ -33,11 +33,11 @@ This avoids custom side channels and keeps recovery logic explicit in step code.
 
 <div class="value-links">
 
-- [Quick Start](/guide/getting-started/)
-- [Canvas Guide](/guide/getting-started/canvas-guide)
-- [Operators](/guide/build/operators)
-- [Item Reject Sink](/guide/development/item-reject-sink)
-- [Mappers and DTOs](/guide/development/mappers-and-dtos)
-- [Testing with Testcontainers](/guide/development/testing)
+- [Quick Start](/design/pipeline-studio/)
+- [Canvas Guide](/design/pipeline-studio/canvas-guide)
+- [Operators](/design/operators)
+- [Item Reject Sink](/develop/item-reject-sink)
+- [Mappers and DTOs](/develop/mappers-and-dtos)
+- [Testing with Testcontainers](/develop/testing)
 
 </div>

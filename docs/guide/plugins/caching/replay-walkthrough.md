@@ -1,176 +1,26 @@
-# Search Replay Walkthrough
+---
+title: Redirecting...
+search: false
+head:
+  - - meta
+    - name: robots
+      content: noindex
+  - - meta
+    - http-equiv: refresh
+      content: 0;url=/design/caching/replay-walkthrough
+---
 
-This walkthrough uses the Search pipeline to show replay and versioned caching end to end.
+<script setup>
+import {onMounted} from 'vue'
+import {withBase} from 'vitepress'
 
-## Pipeline shape
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.location.replace(withBase('/design/caching/replay-walkthrough'))
+  }
+})
+</script>
 
-```mermaid
-flowchart LR
-  A[Crawl] --> B[Parse] --> C[Tokenize] --> D[Index]
-```
+# Redirecting...
 
-The expensive stage is Crawl. We want to re-index with a new tokenizer without re-crawling.
-
-## Search use cases
-
-- **Normal production run**: `x-pipeline-cache-policy: prefer-cache` keeps throughput high and reuses stable outputs.
-- **Deterministic replay**: `x-pipeline-cache-policy: require-cache` ensures only cached entries are used.
-- **Forced rebuild**: `x-pipeline-cache-policy: cache-only` overwrites cached outputs without reads.
-- **Debug or verification**: `x-pipeline-cache-policy: bypass-cache` runs the pipeline without cache I/O.
-
-Invalidation steps are reserved for targeted corrections (bug fixes, schema changes). The runtime only propagates `x-pipeline-replay` as metadata; replay-aware tooling or your custom invalidation logic, not the runtime, must read that header and perform cache invalidation or replay-specific actions.
-
-## Step 1: Choose cache keys
-
-Define cache key strategies that emit stable keys for each output type:
-
-```java
-import java.util.Optional;
-
-public class ParsedDocumentKeyStrategy implements CacheKeyStrategy {
-    @Override
-    public Optional<String> resolveKey(Object item, PipelineContext context) {
-        if (!(item instanceof ParsedDocument doc) || doc.docId == null) {
-            return Optional.empty();
-        }
-        return Optional.of(doc.getClass().getName() + ":" + doc.docId);
-    }
-}
-```
-
-## Step 2: Run baseline (v1)
-
-```http
-x-pipeline-version: v1
-x-pipeline-cache-policy: cache-only
-```
-
-This caches every stage output under:
-
-```text
-v1:{Type}:{docId}
-```
-
-## Step 3: Recompute downstream while reusing cached upstream outputs
-
-Change the tokenizer logic and reuse cached outputs from earlier steps by keeping the same version tag:
-
-```http
-x-pipeline-version: v1
-x-pipeline-cache-policy: prefer-cache
-```
-
-Now:
-- Parse cache lookup hits `v1:{Type}:{docId}`.
-- Tokenize runs with new logic.
-- Index runs with new logic.
-- Outputs are cached under `v1:{Type}:{docId}`.
-
-`x-pipeline-replay` is forwarded as a header only by the core runtime. If your deployment adds replay-aware invalidation logic, document that component, not the runtime, as the interpreter of the header.
-
-Caching happens in the cache plugin side effect steps, so the step services remain unchanged.
-
-## Step 4: Fork a new version
-
-If you want a clean namespace for a new run, bump the version tag:
-
-```http
-x-pipeline-version: v2
-x-pipeline-cache-policy: cache-only
-```
-
-## Manual verification (curl + Redis)
-
-Warm the cache:
-
-```bash
-curl -k -X POST https://localhost:8443/pipeline/run \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: application/json' \
-  -H 'x-pipeline-version: v4' \
-  -H 'x-pipeline-cache-policy: prefer-cache' \
-  -d '{"docId":"00000000-0000-0000-0000-000000000001","sourceUrl":"https://example.com"}'
-```
-
-Inspect Redis keys:
-
-```bash
-redis-cli --scan --pattern "pipeline-cache:v4:*"
-```
-
-Expected key shapes (Search example):
-
-- `v4:org.pipelineframework.search.common.domain.RawDocument:https://example.com|method=GET|accept=text/html`
-- `v4:org.pipelineframework.search.common.domain.ParsedDocument:<rawContentHash>`
-- `v4:org.pipelineframework.search.common.domain.TokenBatch:<contentHash>:model=v1`
-- `v4:org.pipelineframework.search.common.domain.IndexAck:<tokensHash>:schema=v1`
-
-Force deterministic replay (should fail on cold cache, succeed on warm cache):
-
-```bash
-curl -k -X POST https://localhost:8443/pipeline/run \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: application/json' \
-  -H 'x-pipeline-version: v4' \
-  -H 'x-pipeline-cache-policy: require-cache' \
-  -d '{"docId":"00000000-0000-0000-0000-000000000001","sourceUrl":"https://example.com"}'
-```
-
-Use invalidation only when replaying:
-
-The runtime only forwards `x-pipeline-replay`; replay-aware tooling or custom invalidation logic must perform any invalidation triggered by this request.
-
-```bash
-curl -k -X POST https://localhost:8443/pipeline/run \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: application/json' \
-  -H 'x-pipeline-version: v4' \
-  -H 'x-pipeline-cache-policy: prefer-cache' \
-  -H 'x-pipeline-replay: true' \
-  -d '{"docId":"00000000-0000-0000-0000-000000000001","sourceUrl":"https://example.com"}'
-```
-
-This will miss old cache entries and recompute the pipeline when replay-aware invalidation or equivalent external replay logic is configured.
-
-## Replay flow diagram
-
-```mermaid
-sequenceDiagram
-  participant Client
-  participant Orchestrator
-  participant CachePlugin
-  participant Tokenize
-  participant Index
-
-  Client->>Orchestrator: run with version v1
-  Orchestrator->>CachePlugin: lookup v1:Type:docId (Parse output)
-  CachePlugin-->>Orchestrator: HIT (ParsedDocument)
-  Orchestrator->>Tokenize: process(ParsedDocument)
-  Tokenize-->>Orchestrator: TokenBatch
-  Orchestrator->>CachePlugin: store v1:Type:docId (TokenBatch)
-  Orchestrator->>Index: process(TokenBatch)
-  Index-->>Orchestrator: IndexAck
-  Orchestrator->>CachePlugin: store v1:Type:docId (IndexAck)
-```
-
-## Header propagation diagram
-
-```mermaid
-sequenceDiagram
-  participant Client
-  participant Orchestrator
-  participant StepA
-  participant StepB
-
-  Client->>Orchestrator: x-pipeline-version=v1<br/>x-pipeline-cache-policy=prefer-cache
-  Orchestrator->>StepA: propagate headers
-  StepA-->>Orchestrator: response
-  Orchestrator->>StepB: propagate headers
-  StepB-->>Orchestrator: response
-```
-
-## Outcome
-
-- Old outputs remain under `v1`.
-- New outputs land under `v2`.
-- You can compare Index outputs across versions without re-crawling.
+This page moved to [/design/caching/replay-walkthrough](/design/caching/replay-walkthrough).

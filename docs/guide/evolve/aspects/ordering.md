@@ -1,38 +1,26 @@
-# Aspect Ordering & Precedence Rules
+---
+title: Redirecting...
+search: false
+head:
+  - - meta
+    - name: robots
+      content: noindex
+  - - meta
+    - http-equiv: refresh
+      content: 0;url=/evolve/aspects/ordering
+---
 
-## Ordering Rules
+<script setup>
+import {onMounted} from 'vue'
+import {withBase} from 'vitepress'
 
-1. **Aspects execute in ascending order** - `AspectExpansionProcessor` sorts applicable aspects with `Comparator.comparingInt(PipelineAspectModel::order)` and appends synthetic steps in that sorted order.
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.location.replace(withBase('/evolve/aspects/ordering'))
+  }
+})
+</script>
 
-2. **Lower order executes earlier** - For both `BEFORE_STEP` and `AFTER_STEP`, lower order values are emitted earlier than higher order values.
+# Redirecting...
 
-3. **Same position chaining** - If multiple aspects target the same position, `BEFORE_STEP` aspects execute before the step in ascending `order`, and `AFTER_STEP` aspects execute after the step in ascending `order`. This follows the `AspectExpansionProcessor` sort-and-append logic directly.
-
-4. **Default order is 0** - If no order is specified, aspects default to order 0.
-
-5. **Tie-breaking** - When multiple aspects share the same order and position, execution order is deterministic but unspecified; implementations MUST preserve declaration order.
-
-6. **Order is signed** - Order is a signed integer. Negative values are allowed and execute before zero-valued aspects.
-
-7. **Position precedence** - BEFORE_STEP aspects always execute before the step, and AFTER_STEP aspects always execute after the step, regardless of order value.
-
-## Example
-
-Consider these aspects applied to a single step:
-- Aspect A: position=BEFORE_STEP, order=10
-- Aspect B: position=BEFORE_STEP, order=5
-- Aspect C: position=AFTER_STEP, order=0
-- Aspect D: position=AFTER_STEP, order=1
-
-The execution order would be:
-1. Aspect B executes (BEFORE_STEP, order=5)
-2. Aspect A executes (BEFORE_STEP, order=10)
-3. Actual step executes
-4. Aspect C executes (AFTER_STEP, order=0)
-5. Aspect D executes (AFTER_STEP, order=1)
-
-This creates the following logical pipeline:
-
-```text
-Input -> Aspect B -> Aspect A -> Step -> Aspect C -> Aspect D -> Output
-```
+This page moved to [/evolve/aspects/ordering](/evolve/aspects/ordering).
