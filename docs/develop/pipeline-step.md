@@ -50,7 +50,6 @@ Use `@PipelineStep` for Java-local execution concerns:
 - `cacheKeyGenerator`
 - `ordering`
 - `threadSafety`
-- `runOnVirtualThreads`
 - `sideEffect`
 - `delegate` (for operator steps only)
 
@@ -99,7 +98,9 @@ The `ordering` and `threadSafety` values on `@PipelineStep` are propagated to th
 which the runtime uses to decide parallelism under `AUTO`.
 
 Blocking services are offloaded by default onto worker threads so the framework does not execute them on event-loop threads.
-Set `runOnVirtualThreads = true` when you want the generated blocking bridge and server entrypoints to use virtual threads instead of the default worker pool.
+Virtual-thread offload is configured in YAML-owned execution metadata, not on `@PipelineStep`.
+For Quarkus, YAML-declared internal blocking services that implement the existing blocking service interfaces can set `runOnVirtualThreads: true`; generated bridges pass `true` to `BlockingExecutionSupport`, and generated REST/gRPC entrypoints receive `@RunOnVirtualThread`.
+For Spring, YAML-only `REST` or `LOCAL` + `COMPUTE` unary blocking internal steps can set the same flag; the generated Spring step calls `RuntimeAdapters.executeBlocking(..., true)`.
 
 Transport selection (gRPC vs REST) is configured in `pipeline.yaml`, not on the annotation.
 

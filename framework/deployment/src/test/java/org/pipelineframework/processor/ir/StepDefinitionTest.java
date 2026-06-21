@@ -27,6 +27,7 @@ import org.pipelineframework.config.template.PipelineTemplateRemoteTarget;
 import org.pipelineframework.config.template.PipelineTemplateStepExecution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -223,6 +224,21 @@ class StepDefinitionTest {
     }
 
     @Test
+    void virtualThreadsRejectDelegatedSteps() {
+        assertThrows(IllegalArgumentException.class, () -> new StepDefinition(
+            "delegated-step",
+            StepKind.DELEGATED,
+            EXECUTION_CLASS,
+            null,
+            Map.of(), null, List.of(),
+            null, Map.of(), List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, StreamingShape.UNARY_UNARY,
+            true));
+    }
+
+    @Test
     void rejectsBlankName() {
         assertThrows(IllegalArgumentException.class, () -> new StepDefinition(
             "  ",  // blank name
@@ -330,7 +346,8 @@ class StepDefinitionTest {
             MapperFallbackMode.NONE,
             INPUT_TYPE,
             OUTPUT_TYPE,
-            StreamingShape.UNARY_UNARY);
+            StreamingShape.UNARY_UNARY,
+            false);
 
         assertEquals("Load Customer Risk", step.name());
         assertEquals(StepKind.QUERY, step.kind());
@@ -354,7 +371,8 @@ class StepDefinitionTest {
             null, null, null,
             MapperFallbackMode.NONE,
             null,  // null inputType
-            OUTPUT_TYPE, null));
+            OUTPUT_TYPE, null,
+            false));
     }
 
     @Test
@@ -369,7 +387,8 @@ class StepDefinitionTest {
             MapperFallbackMode.NONE,
             INPUT_TYPE,
             null,  // null outputType
-            null));
+            null,
+            false));
     }
 
     @Test
@@ -383,7 +402,8 @@ class StepDefinitionTest {
             Map.of(), List.of(),
             null, null, null,
             MapperFallbackMode.NONE,
-            INPUT_TYPE, OUTPUT_TYPE, null));
+            INPUT_TYPE, OUTPUT_TYPE, null,
+            false));
     }
 
     @Test
@@ -397,7 +417,8 @@ class StepDefinitionTest {
             Map.of(), List.of(),
             null, null, null,
             MapperFallbackMode.NONE,
-            INPUT_TYPE, OUTPUT_TYPE, null));
+            INPUT_TYPE, OUTPUT_TYPE, null,
+            false));
     }
 
     @Test
@@ -411,7 +432,8 @@ class StepDefinitionTest {
             "query-id", Map.of(), List.of(),
             null, null, null,
             MapperFallbackMode.NONE,
-            INPUT_TYPE, OUTPUT_TYPE, null));
+            INPUT_TYPE, OUTPUT_TYPE, null,
+            false));
     }
 
     @Test
@@ -430,7 +452,8 @@ class StepDefinitionTest {
             "query-id", Map.of(), List.of(),
             null, null, null,
             MapperFallbackMode.NONE,
-            INPUT_TYPE, OUTPUT_TYPE, null));
+            INPUT_TYPE, OUTPUT_TYPE, null,
+            false));
     }
 
     @Test
@@ -445,7 +468,8 @@ class StepDefinitionTest {
             null,  // null queryKeyFields
             null, null, null,
             MapperFallbackMode.NONE,
-            INPUT_TYPE, OUTPUT_TYPE, null);
+            INPUT_TYPE, OUTPUT_TYPE, null,
+            false);
 
         assertEquals(Map.of(), step.queryConfig());
         assertEquals(List.of(), step.queryKeyFields());
@@ -463,7 +487,8 @@ class StepDefinitionTest {
             "query-id", config, List.of(),
             null, null, null,
             MapperFallbackMode.NONE,
-            INPUT_TYPE, OUTPUT_TYPE, null);
+            INPUT_TYPE, OUTPUT_TYPE, null,
+            false);
 
         config.put("extra", "value");
 
@@ -483,7 +508,8 @@ class StepDefinitionTest {
             "query-id", Map.of(), fields,
             null, null, null,
             MapperFallbackMode.NONE,
-            INPUT_TYPE, OUTPUT_TYPE, null);
+            INPUT_TYPE, OUTPUT_TYPE, null,
+            false);
 
         fields.add("tenantId");
 
@@ -517,5 +543,163 @@ class StepDefinitionTest {
         assertNull(step.queryId());
         assertEquals(Map.of(), step.queryConfig());
         assertEquals(List.of(), step.queryKeyFields());
+    }
+    // ---- runOnVirtualThreads tests ----
+
+    @Test
+    void backwardCompatConstructorDefaultsRunOnVirtualThreadsToFalse() {
+        StepDefinition step = new StepDefinition(
+            "step",
+            StepKind.INTERNAL,
+            EXECUTION_CLASS,
+            null,            // remoteExecution
+            Map.of(),        // awaitConfig
+            null,            // timeout
+            List.of(),       // idempotencyKeyFields
+            null,            // inboundMapper
+            null,            // outboundMapper
+            null,            // externalMapper
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            OUTPUT_TYPE,
+            StreamingShape.UNARY_UNARY
+        );
+
+        assertFalse(step.runOnVirtualThreads());
+    }
+
+    @Test
+    void delegatedStepConvenienceConstructorDefaultsRunOnVirtualThreadsToFalse() {
+        StepDefinition step = new StepDefinition(
+            "step",
+            StepKind.DELEGATED,
+            EXECUTION_CLASS,
+            null,            // externalMapper
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            OUTPUT_TYPE,
+            StreamingShape.UNARY_UNARY
+        );
+
+        assertFalse(step.runOnVirtualThreads());
+    }
+
+    @Test
+    void internalStepWithInboundOutboundMappersConvenienceConstructorDefaultsRunOnVirtualThreadsToFalse() {
+        ClassName inboundMapper = ClassName.get("com.example", "InboundMapper");
+        ClassName outboundMapper = ClassName.get("com.example", "OutboundMapper");
+
+        StepDefinition step = new StepDefinition(
+            "step",
+            StepKind.INTERNAL,
+            EXECUTION_CLASS,
+            inboundMapper,
+            outboundMapper,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            OUTPUT_TYPE,
+            StreamingShape.UNARY_UNARY
+        );
+
+        assertFalse(step.runOnVirtualThreads());
+    }
+
+    @Test
+    void internalStepWithAllMappersConvenienceConstructorDefaultsRunOnVirtualThreadsToFalse() {
+        ClassName inboundMapper = ClassName.get("com.example", "InboundMapper");
+        ClassName outboundMapper = ClassName.get("com.example", "OutboundMapper");
+        ClassName externalMapper = ClassName.get("com.example", "ExternalMapper");
+
+        StepDefinition step = new StepDefinition(
+            "step",
+            StepKind.INTERNAL,
+            EXECUTION_CLASS,
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            OUTPUT_TYPE,
+            StreamingShape.UNARY_UNARY
+        );
+
+        assertFalse(step.runOnVirtualThreads());
+    }
+
+    @Test
+    void canonicalConstructorWithRunOnVirtualThreadsTrueRetainsValue() {
+        StepDefinition step = new StepDefinition(
+            "step",
+            StepKind.INTERNAL,
+            EXECUTION_CLASS,
+            null,            // remoteExecution
+            Map.of(),        // awaitConfig
+            null,            // timeout
+            List.of(),       // idempotencyKeyFields
+            null,            // queryId
+            Map.of(),        // queryConfig
+            List.of(),       // queryKeyFields
+            null,            // inboundMapper
+            null,            // outboundMapper
+            null,            // externalMapper
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            OUTPUT_TYPE,
+            StreamingShape.UNARY_UNARY,
+            true             // runOnVirtualThreads = true
+        );
+
+        assertTrue(step.runOnVirtualThreads());
+    }
+
+    @Test
+    void canonicalConstructorWithRunOnVirtualThreadsFalseRetainsValue() {
+        StepDefinition step = new StepDefinition(
+            "step",
+            StepKind.INTERNAL,
+            EXECUTION_CLASS,
+            null,
+            Map.of(),
+            null,
+            List.of(),
+            null,
+            Map.of(),
+            List.of(),
+            null,
+            null,
+            null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            OUTPUT_TYPE,
+            StreamingShape.UNARY_UNARY,
+            false
+        );
+
+        assertFalse(step.runOnVirtualThreads());
+    }
+
+    @Test
+    void virtualThreadsAreValidOnlyForInternalSteps() {
+        assertThrows(IllegalArgumentException.class, () -> new StepDefinition(
+            "remote-step",
+            StepKind.REMOTE,
+            null,
+            new PipelineTemplateStepExecution(
+                "REMOTE", "op-id", "PROTOBUF_HTTP_V1", 3000,
+                PipelineTemplateRemoteTarget.ofUrlConfigKey("some.config.key")),
+            Map.of(),
+            null,
+            List.of(),
+            null,
+            Map.of(),
+            List.of(),
+            null,
+            null,
+            null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            OUTPUT_TYPE,
+            StreamingShape.UNARY_UNARY,
+            true));
     }
 }

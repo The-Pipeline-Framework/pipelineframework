@@ -27,9 +27,9 @@ import org.pipelineframework.service.ReactiveStreamingService;
  * <p>Use this contract when a synchronous library can iterate results incrementally and you want
  * non-Mutiny authored code without forcing full in-memory materialization.
  *
- * <p>The returned iterator is still blocking. The framework offloads iterator acquisition and item
- * iteration to worker threads by default, or virtual threads when
- * {@code @PipelineStep(runOnVirtualThreads = true)} is enabled.
+ * <p>The returned iterator is still blocking. The default adapter offloads iterator acquisition
+ * and item iteration to worker threads. Generated bridges may choose a different offload policy
+ * from YAML-owned execution metadata.
  */
 @FunctionalInterface
 public interface BlockingIteratorService<T, S> extends ReactiveStreamingService<T, S> {
