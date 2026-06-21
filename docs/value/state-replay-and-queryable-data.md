@@ -6,6 +6,7 @@
 
 <div class="value-glance">
   <div class="value-glance-item"><strong>Durable Business State</strong> &middot; Persistence stores business outputs so teams can query them later from APIs, reports, or user interfaces.</div>
+  <div class="value-glance-item"><strong>Captured Decision Reads</strong> &middot; Query connectors make database facts explicit pipeline inputs before pure business decisions run.</div>
   <div class="value-glance-item"><strong>Fast Recompute</strong> &middot; Caching reuses expensive step outputs and makes replay or rewind far cheaper.</div>
   <div class="value-glance-item"><strong>Better Together</strong> &middot; Persistence keeps the durable record; cache accelerates derived-state recomputation and selective replay.</div>
 </div>
@@ -13,6 +14,7 @@
 ## Use This When
 
 - A background process produces data that a UI needs to query later.
+- A pipeline decision depends on database state that should be captured for retry, audit, and tests.
 - Expensive steps should not rerun every time downstream logic changes.
 - Teams want replay or recompute capabilities without inventing a separate event-storage and replay layer.
 
@@ -28,18 +30,26 @@ Caching protects expensive steps by reusing outputs that are still valid. That h
 
 If a downstream step changes, cache can let you reuse earlier stable outputs instead of rerunning the whole pipeline. This is the practical replay story: keep the durable records you care about, then selectively recompute the parts that should change.
 
+## What Captured Queries Give You
+
+Captured query steps make read-side facts explicit before a decision step runs. A JPA query connector can load `CustomerRiskFacts` from a database, capture those facts for the managed execution, and pass the immutable record to `AssessCustomerRisk`.
+
+That separation keeps the decision step pure and testable. It also prevents a retry of the same execution from silently using newer database state as if it were the original decision input.
+
 ## Why They Work Best Together
 
 Persistence and caching solve different parts of the same problem:
 
-1. Persistence keeps the durable business record for audit, query, and follow-on processing.
-2. Cache keeps reusable derived outputs close at hand so replay and recomputation stay fast.
-3. Together they reduce the need for bespoke state stores, custom read models, or one-off replay scripts.
+1. Captured queries make decision inputs explicit before business logic runs.
+2. Persistence keeps the durable business record for audit, query, and follow-on processing.
+3. Cache keeps reusable derived outputs close at hand so replay and recomputation stay fast.
+4. Together they reduce the need for bespoke state stores, custom read models, or one-off replay scripts.
 
 ## Concrete Examples
 
 - **Search**: persist crawl and parse outputs, cache tokenize and index outputs, then replay downstream indexing changes without re-crawling everything.
 - **Business application with a UI**: process inputs in the pipeline, persist the resulting business records, and let the UI query them later through a normal API.
+- **Risk or eligibility decision**: load captured customer facts with a query connector, then keep the assessment step as pure Java over those facts.
 - **Background processing**: keep durable state for recovery and reporting, while cache reduces the cost of replaying expensive downstream steps.
 
 ## Jump to Guides
@@ -47,6 +57,7 @@ Persistence and caching solve different parts of the same problem:
 <div class="value-links">
 
 - [Persistence Plugin](/design/persistence)
+- [JPA Query Connector](/design/jpa-query-connector)
 - [Caching](/design/caching/)
 - [Cache vs Persistence](/design/caching/cache-vs-persistence)
 - [Search Replay Walkthrough](/design/caching/replay-walkthrough)

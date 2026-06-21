@@ -56,6 +56,7 @@ const mainSidebar = [
             {text: 'Operators', link: '/design/operators'},
             {text: 'Await Boundaries', link: '/design/await-boundaries'},
             {text: 'Object Ingest', link: '/design/object-ingest'},
+            {text: 'JPA Query Connector', link: '/design/jpa-query-connector'},
             {
                 text: 'Caching',
                 link: '/design/caching/',

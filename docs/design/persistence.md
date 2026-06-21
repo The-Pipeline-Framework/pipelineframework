@@ -12,6 +12,8 @@ This is one of the most important state capabilities in The Pipeline Framework (
 
 If you are looking for the broader value story behind persistence plus caching, start with [State, Replay, and Queryable Data](/value/state-replay-and-queryable-data) and [Cache vs Persistence](/design/caching/cache-vs-persistence).
 
+If a database read influences a downstream decision, model that read with the [JPA Query Connector](/design/jpa-query-connector). Persistence is the write-side plugin; the JPA query connector is the read-side connector for captured decision facts.
+
 ## Module layout
 
 The plugin is split into two parts:
