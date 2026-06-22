@@ -10,7 +10,7 @@ This guide explains how pipeline throughput is affected by parallelism, step car
 
 Client steps can process multiple items from the same stream concurrently. This is especially useful when some items are slow while others are fast, because it prevents the slow items from blocking the whole stream.
 
-Parallelism is configured at the pipeline level. See the [Configuration Reference](/develop/configuration/) for the exact settings.
+Parallelism is configured at the pipeline level. See [All Settings](/develop/configuration/all-settings) for the exact settings.
 
 `pipeline.parallelism` controls the execution policy:
 

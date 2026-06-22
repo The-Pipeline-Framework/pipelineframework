@@ -1,14 +1,18 @@
 # Quick Start
 
-This guide will help you quickly get started with The Pipeline Framework using the visual Canvas designer - the fastest and easiest way to create your first pipeline application!
+Pipeline Studio is the visual Canvas path for sketching a baseline TPF application. It is useful for first-pass flow modelling and scaffold generation, but YAML remains the canonical path for current advanced features.
+
+::: warning Current Scope
+Pipeline Studio does not yet expose every current TPF capability. Use YAML and the linked guides for await boundaries, object ingest, checkpoint handoff, runtime mapping, advanced configuration, and Spring portability work.
+:::
 
 <Callout type="tip" title="Prerequisites">
-Before you begin, ensure you have Java 21+, Maven 3.8+, and an IDE with Quarkus Dev Mode support (like IntelliJ IDEA or VS Code) installed on your system for building and running the generated applications.
+Before you begin, ensure you have Java 21+, Maven 3.8+, and an IDE installed on your system for building and running generated applications. Quarkus is the mature generated runtime today.
 </Callout>
 
-## Quick Start with Visual Canvas Designer
+## Quick Start with Canvas
 
-The fastest way to get started with The Pipeline Framework is by using the visual Canvas designer at [https://app.pipelineframework.org](https://app.pipelineframework.org).
+Open the visual Canvas designer at [https://app.pipelineframework.org](https://app.pipelineframework.org).
 
 ### 1. Access the Canvas Designer
 
@@ -44,14 +48,18 @@ Your application is now running locally.
 
 ## Next Steps
 
-Congratulations! You've successfully created your first pipeline application. Now explore these topics:
+After you have a baseline, use the current guides for the parts Canvas does not fully model yet:
 
-- [Canvas Designer Guide](/design/pipeline-studio/canvas-guide) - Complete guide to using the visual designer
-- [Application Structure](/design/application-structure) - Learn how the generated application is structured
-- [Functional Architecture](/evolve/architecture) - Deep dive into the framework architecture
+- [Functional Core, Imperative Shell](/design/fcis)
+- [Application Structure](/design/application-structure)
+- [Pipeline Compilation](/develop/pipeline-compilation/)
+- [Configuration](/develop/configuration/)
+- [Object Ingest](/design/object-ingest)
+- [Await Boundaries](/design/await-boundaries)
+- [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff)
 
 ## Template Generator (Reference Only)
 
-The visual Canvas is the primary way to create new applications. If you need automation or CI-only generation, use the template generator as a secondary option.
+Use [MCP and Template Generation](/develop/mcp-template-generation) when you need automation or CI-driven scaffold generation.
 
-See [Template Generator Guide](/evolve/template-generator) for details.
+See [Template Generator Reference](/evolve/template-generator) for the lower-level reference.

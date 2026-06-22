@@ -1,5 +1,9 @@
 # I/O Shell Absorption Priorities
 
+::: tip Strategic Context
+This page is the internal strategy companion to the public [Functional Core, Imperative Shell](/design/fcis) guide. Keep public docs focused on typed boundaries and connector usage; use this page for evolution decisions about which I/O shells TPF should absorb next.
+:::
+
 This note explores where TPF should absorb imperative I/O plumbing into framework semantics. It is an evolve document: it is useful for architecture and prioritisation, but it is not a public commitment that every capability below exists today.
 
 The working value proposition is:

@@ -1,8 +1,12 @@
 # Using the Canvas Designer
 
+::: warning Current Scope
+The Canvas designer is a baseline visual modelling and scaffold tool. It may lag current framework capabilities. Use YAML as the source of truth for advanced features such as await boundaries, object ingest, checkpoint handoff, runtime mapping, Spring renderer experiments, and advanced configuration.
+:::
+
 ## Overview
 
-The Canvas designer (https://app.pipelineframework.org) provides a visual interface for creating and configuring pipeline applications. This document explains how to use it effectively.
+The Canvas designer (https://app.pipelineframework.org) provides a visual interface for creating and configuring basic pipeline applications. This document explains where it fits and when to switch to YAML.
 
 ## Getting Started
 
@@ -74,7 +78,7 @@ Visit https://app.pipelineframework.org in your web browser.
 - Input and output types are visually represented
 - Field mappings are clearly shown
 
-## Canvas Features
+## Canvas Features In Scope
 
 ### Visual Design Elements
 
@@ -111,7 +115,7 @@ Visit https://app.pipelineframework.org in your web browser.
 - Click the "Download Application" button to get a ZIP file containing your complete generated application
 - The ZIP includes all source code, configuration files, and build scripts
 - No additional generation step is needed - the application is ready to build and run
-- Perfect for immediately starting development
+- Useful for starting a baseline application, then refining through YAML and code
 
 ### Upload Configuration
 
@@ -145,7 +149,7 @@ Visit https://app.pipelineframework.org in your web browser.
 - Verify field types match between connected steps
 - Use the visualization to catch potential issues
 
-## Advanced Features
+## Advanced Features In The UI
 
 ### Two-Column Layout
 
@@ -176,7 +180,7 @@ Visit https://app.pipelineframework.org in your web browser.
 ### 2. Development Phase
 
 - Download YAML configuration from Canvas
-- Use with template generator to create codebase
+- Use YAML or [MCP/template generation](/develop/mcp-template-generation) to create or refresh a codebase
 - Implement business logic in generated services
 
 ### 3. Testing Phase
@@ -220,3 +224,11 @@ Visit https://app.pipelineframework.org in your web browser.
 - **Keep Types Simple**: Complex types can make debugging harder
 - **Document Your Design**: Add comments to explain complex transformations
 - **Version Control**: Save your YAML configurations in version control
+
+## Switch To YAML When
+
+- you need [Object Ingest](/design/object-ingest),
+- you need [Await Boundaries](/design/await-boundaries),
+- you need [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff),
+- you need advanced [Configuration](/develop/configuration/),
+- you are validating [Spring support](/develop/spring-support).

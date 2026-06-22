@@ -51,6 +51,8 @@ const mainSidebar = [
                     {text: 'Canvas Guide', link: '/design/pipeline-studio/canvas-guide'}
                 ]
             },
+            {text: 'Functional Core, Imperative Shell', link: '/design/fcis'},
+            {text: 'State Model', link: '/design/state-model'},
             {text: 'Application Structure', link: '/design/application-structure'},
             {text: 'Common Module Structure', link: '/design/common-module-structure'},
             {text: 'Operators', link: '/design/operators'},
@@ -94,6 +96,8 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Overview', link: '/develop/'},
+            {text: 'Spring Support Status', link: '/develop/spring-support'},
+            {text: 'MCP and Template Generation', link: '/develop/mcp-template-generation'},
             {
                 text: 'Pipeline Compilation',
                 link: '/develop/pipeline-compilation/',
@@ -107,11 +111,17 @@ const mainSidebar = [
                 ]
             },
             {
-                text: 'Configuration Reference',
+                text: 'Configuration',
                 link: '/develop/configuration/',
                 collapsed: true,
                 items: [
-                    {text: 'All Settings', link: '/develop/configuration/'},
+                    {text: 'Overview', link: '/develop/configuration/'},
+                    {text: 'Build-Time Settings', link: '/develop/configuration/build-time'},
+                    {text: 'Runtime Settings', link: '/develop/configuration/runtime'},
+                    {text: 'Await and Checkpoint', link: '/develop/configuration/await-and-checkpoint'},
+                    {text: 'Transport and Platform', link: '/develop/configuration/transport-and-platform'},
+                    {text: 'Providers and Plugins', link: '/develop/configuration/providers-and-plugins'},
+                    {text: 'All Settings', link: '/develop/configuration/all-settings'},
                     {text: 'Application Configuration', link: '/develop/configuration/application'},
                     {text: 'Replay Viewer Parameters', link: '/develop/configuration/replay-viewer-parameters'},
                     {text: 'Lambda-Focused Configuration', link: '/develop/configuration/lambda-focused'}
@@ -128,6 +138,10 @@ const mainSidebar = [
                 collapsed: true,
                 items: [
                     {text: 'External Library Delegation', link: '/develop/external-library-delegation'},
+                    {text: 'Use Existing Java Methods', link: '/develop/extension/use-existing-java-methods'},
+                    {text: 'Operator Service Contracts', link: '/develop/extension/operator-service-contracts'},
+                    {text: 'Legacy Delegation Migration', link: '/develop/extension/legacy-delegation-migration'},
+                    {text: 'Operator Delegation Reference', link: '/develop/extension/operator-delegation-reference'},
                     {text: 'Operator Libraries', link: '/develop/extension/operator-libraries'},
                     {text: 'Client Steps', link: '/develop/extension/client-steps'},
                     {text: 'Orchestrator Runtime Extensions', link: '/develop/extension/orchestrator-runtime'},
@@ -184,12 +198,16 @@ const mainSidebar = [
                     {text: 'Google Cloud Run Functions Platform', link: '/deploy/google-cloud-run-functions'},
                     {text: 'Multi-Cloud Function Providers', link: '/deploy/function-providers'},
                     {text: 'Search Lambda Verification Lane', link: '/deploy/search-lambda'},
-                    {text: 'Search Azure Functions Testing Guide', link: '/deploy/search-azure-functions'}
+                    {text: 'Search Azure Verification Lane', link: '/deploy/search-azure-functions'},
+                    {text: 'Azure Deployment Walkthrough', link: '/deploy/azure-functions-deployment-walkthrough'},
+                    {text: 'Azure Troubleshooting', link: '/deploy/azure-functions-troubleshooting'},
+                    {text: 'Search Azure Reference', link: '/deploy/search-azure-functions-reference'}
                 ]
             },
             {text: 'Dependency Management', link: '/deploy/dependency-management'},
             {text: 'Pipeline Parent POM Lifecycle', link: '/deploy/pipeline-parent-pom-lifecycle'},
             {text: 'CSV Payments POM Lifecycle', link: '/deploy/csv-payments-pom-lifecycle'},
+            {text: 'Checkpoint Handoff', link: '/deploy/orchestrator-runtime/checkpoint-handoff'},
             {text: 'Concurrency and Backpressure Sizing', link: '/deploy/concurrency-and-backpressure'}
         ]
     },
@@ -240,6 +258,7 @@ const mainSidebar = [
         items: [
             {text: 'Overview', link: '/evolve/'},
             {text: 'Architecture', link: '/evolve/architecture'},
+            {text: 'Architecture Reference', link: '/evolve/architecture-reference'},
             {
                 text: 'Operators',
                 link: '/evolve/operators/',
@@ -275,7 +294,8 @@ const mainSidebar = [
                     {text: 'Design Spectrum', link: '/evolve/tpfgo/design-spectrum'},
                     {text: 'DDD Alignment', link: '/evolve/tpfgo/ddd-alignment'},
                     {text: 'Observer and Tap Contract', link: '/evolve/tpfgo/observer-tap-contract'},
-                    {text: 'Roadmap', link: '/evolve/tpfgo/roadmap'}
+                    {text: 'Roadmap', link: '/evolve/tpfgo/roadmap'},
+                    {text: 'Roadmap Archive', link: '/evolve/tpfgo/roadmap-archive'}
                 ]
             },
             {
@@ -347,8 +367,20 @@ const mainSidebar = [
             {text: 'Typed Union Output Contracts', link: '/evolve/typed-union-output-contracts'},
             {text: 'Plugins Architecture', link: '/evolve/plugins-architecture'},
             {text: 'Reference Implementation', link: '/evolve/reference-implementation'},
+            {text: 'Reference Implementation Archive', link: '/evolve/reference-implementation-archive'},
             {text: 'Template Generator', link: '/evolve/template-generator'},
-            {text: 'Publishing', link: '/evolve/publishing'},
+            {
+                text: 'Release And Publishing',
+                link: '/evolve/publishing',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/evolve/publishing'},
+                    {text: 'Framework Release Process', link: '/evolve/framework-release-process'},
+                    {text: 'Docs Snapshot Process', link: '/evolve/docs-snapshot-process'},
+                    {text: 'Bridge Release Coordination', link: '/evolve/bridge-release-coordination'},
+                    {text: 'Publishing Reference', link: '/evolve/publishing-reference'}
+                ]
+            },
             {text: 'CI Guidelines', link: '/evolve/ci-guidelines'},
             {text: 'Testing Guidelines', link: '/evolve/testing-guidelines'},
             {text: 'Gotchas & Pitfalls', link: '/evolve/gotchas-pitfalls'},
