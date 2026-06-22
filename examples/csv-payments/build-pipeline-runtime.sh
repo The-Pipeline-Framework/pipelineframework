@@ -59,6 +59,7 @@ if [[ -n "${PIPELINE_CONFIG:-}" ]]; then
   if [[ "$pipeline_config_real" != "$active_pipeline_config_real" ]]; then
     cp "$PIPELINE_CONFIG" "$ACTIVE_PIPELINE_CONFIG"
   fi
+  export PIPELINE_CONFIG="$ACTIVE_PIPELINE_CONFIG"
 fi
 PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-GRPC}"
 

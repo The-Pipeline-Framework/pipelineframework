@@ -4,7 +4,9 @@ import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 import io.smallrye.mutiny.Multi;
@@ -60,6 +62,7 @@ import org.pipelineframework.awaitable.AwaitUnitRecord;
 import org.pipelineframework.awaitable.AwaitUnitStatus;
 import org.pipelineframework.checkpoint.CheckpointPublicationService;
 import org.pipelineframework.invocation.PipelineInvocationRuntime;
+import org.pipelineframework.objectpublish.ObjectPublishCompletionService;
 import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 
@@ -857,6 +860,56 @@ class QueueAsyncCoordinatorTest {
             org.mockito.ArgumentMatchers.eq("exec-remote"),
             org.mockito.ArgumentMatchers.eq(0L),
             org.mockito.ArgumentMatchers.eq("exec-remote:0:0"),
+            resultCaptor.capture(),
+            org.mockito.ArgumentMatchers.anyLong());
+        List<?> persisted = assertInstanceOf(List.class, resultCaptor.getValue());
+        assertEquals(serialized, persisted.getFirst());
+    }
+
+    @Test
+    void processExecutionWorkItemPublishesDecodedRemoteOutputWhenObjectPublishConfigured() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.leaseMs()).thenReturn(1000L);
+        ExecutionRecord<Object, Object> claimed = createRecord("tenant-1", "exec-publish", "key-publish");
+        SerializedTransitionPayload serialized = payloadCodec.encode("published-output");
+        ObjectPublishCompletionService publishService = mock(ObjectPublishCompletionService.class);
+        AtomicReference<List<?>> publishedItems = new AtomicReference<>();
+        coordinator.objectPublishCompletionService = publishService;
+        when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(checkpointPublicationService.publishIfConfigured(org.mockito.ArgumentMatchers.eq(claimed), org.mockito.ArgumentMatchers.eq(serialized)))
+            .thenReturn(Uni.createFrom().voidItem());
+        when(publishService.publishIfConfigured(org.mockito.ArgumentMatchers.<Supplier<List<?>>>any()))
+            .thenAnswer(invocation -> {
+                Supplier<List<?>> supplier = invocation.getArgument(0);
+                publishedItems.set(supplier.get());
+                return Uni.createFrom().voidItem();
+            });
+        when(executionStateStore.markSucceeded(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-publish"),
+                org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq("exec-publish:0:0"),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+
+        coordinator.processExecutionWorkItem(
+                new ExecutionWorkItem("tenant-1", "exec-publish"),
+                command -> Uni.createFrom().item(new TransitionResultEnvelope(
+                    TransitionWorkerOutcome.COMPLETED,
+                    List.of(serialized),
+                    null,
+                    null)))
+            .await().indefinitely();
+
+        assertEquals(List.of("published-output"), publishedItems.get());
+        ArgumentCaptor<Object> resultCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(executionStateStore).markSucceeded(
+            org.mockito.ArgumentMatchers.eq("tenant-1"),
+            org.mockito.ArgumentMatchers.eq("exec-publish"),
+            org.mockito.ArgumentMatchers.eq(0L),
+            org.mockito.ArgumentMatchers.eq("exec-publish:0:0"),
             resultCaptor.capture(),
             org.mockito.ArgumentMatchers.anyLong());
         List<?> persisted = assertInstanceOf(List.class, resultCaptor.getValue());

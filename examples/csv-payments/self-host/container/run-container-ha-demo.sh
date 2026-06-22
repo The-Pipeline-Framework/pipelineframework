@@ -12,9 +12,10 @@ CLIENT="${SCRIPT_DIR}/demo-client.py"
 
 export TPF_REPO_ROOT="${TPF_REPO_ROOT:-${REPO_ROOT}}"
 export TPF_CSV_AWAIT_TRANSPORT="${TPF_CSV_AWAIT_TRANSPORT:-sqs}"
+TPF_CSV_PIPELINE_CONFIG_EXPLICIT="${TPF_CSV_PIPELINE_CONFIG:-}"
 case "${TPF_CSV_AWAIT_TRANSPORT}" in
   sqs)
-    export TPF_CSV_PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG:-${EXAMPLE_DIR}/config/pipeline.container-sqs.yaml}"
+    TPF_CSV_PIPELINE_CONFIG_TEMPLATE="${EXAMPLE_DIR}/config/pipeline.container-sqs.yaml"
     export TPF_RUNTIME_AWAIT_KAFKA_ENABLED="${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}"
     export TPF_RUNTIME_KAFKA_PROVIDER_ENABLED="${TPF_RUNTIME_KAFKA_PROVIDER_ENABLED:-false}"
     export TPF_RUNTIME_AWAIT_SQS_PROVIDER_ENABLED="${TPF_RUNTIME_AWAIT_SQS_PROVIDER_ENABLED:-true}"
@@ -23,7 +24,7 @@ case "${TPF_CSV_AWAIT_TRANSPORT}" in
     export TPF_COORDINATOR_AWAIT_SQS_POLLER_ENABLED="${TPF_COORDINATOR_AWAIT_SQS_POLLER_ENABLED:-true}"
     ;;
   kafka)
-    export TPF_CSV_PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG:-${EXAMPLE_DIR}/config/pipeline.yaml}"
+    TPF_CSV_PIPELINE_CONFIG_TEMPLATE="${EXAMPLE_DIR}/config/pipeline.yaml"
     export TPF_KAFKA_PORT="${TPF_KAFKA_PORT:-9093}"
     export TPF_KAFKA_BOOTSTRAP_SERVERS="${TPF_KAFKA_BOOTSTRAP_SERVERS:-kafka:19092}"
     export TPF_RUNTIME_AWAIT_KAFKA_ENABLED="${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}"
@@ -55,8 +56,9 @@ export TPF_WORKER_SECRET="${TPF_WORKER_SECRET:-csv-transition-worker-secret}"
 export TPF_WORKER_ID="${TPF_WORKER_ID:-csv-rest-worker}"
 export TPF_WORKER_PROTOCOL="${TPF_WORKER_PROTOCOL:-rest}"
 export TPF_WORKER_ENDPOINT="${TPF_WORKER_ENDPOINT:-http://worker:8182}"
-export TPF_RUN_DIR="${TPF_RUN_DIR:-${PIPELINE_RUNTIME_DIR}/target/tpf-container-ha}"
+export TPF_RUN_DIR="${TPF_RUN_DIR:-${SCRIPT_DIR}/target/tpf-container-ha}"
 export TPF_INPUT_DIR="${TPF_INPUT_DIR:-${TPF_RUN_DIR}/input}"
+export TPF_OUTPUT_DIR="${TPF_OUTPUT_DIR:-${TPF_INPUT_DIR}}"
 export TPF_RELEASE_DESCRIPTOR="${TPF_RELEASE_DESCRIPTOR:-${TPF_RUN_DIR}/pipeline-release.json}"
 export TPF_SOURCE_CSV="${TPF_SOURCE_CSV:-${EXAMPLE_DIR}/input-csv-file-processing-svc/csv/payments_12.csv}"
 export TPF_SKIP_CONTAINER_BUILD="${TPF_SKIP_CONTAINER_BUILD:-false}"
@@ -116,11 +118,24 @@ cleanup() {
 }
 trap 'cleanup $?' EXIT
 
+generate_container_pipeline_config() {
+  mkdir -p "${TPF_RUN_DIR}" "${TPF_INPUT_DIR}"
+  if [[ -n "${TPF_CSV_PIPELINE_CONFIG_EXPLICIT}" ]]; then
+    export TPF_CSV_PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG_EXPLICIT}"
+    return
+  fi
+  export TPF_CSV_PIPELINE_CONFIG="${TPF_RUN_DIR}/pipeline.container-${TPF_CSV_AWAIT_TRANSPORT}.yaml"
+  cp "${TPF_CSV_PIPELINE_CONFIG_TEMPLATE}" "${TPF_CSV_PIPELINE_CONFIG}"
+  TPF_CONTAINER_OBJECT_ROOT="${TPF_INPUT_DIR}" \
+    perl -0pi -e 's#root: \.\./input-csv-file-processing-svc/csv#root: $ENV{TPF_CONTAINER_OBJECT_ROOT}#g' \
+    "${TPF_CSV_PIPELINE_CONFIG}"
+}
+
 if [[ "${CI_MODE}" == "true" ]]; then
   compose down -v --remove-orphans >/dev/null 2>&1 || true
   rm -rf "${TPF_RUN_DIR}"
 fi
-mkdir -p "${TPF_RUN_DIR}" "${TPF_INPUT_DIR}"
+generate_container_pipeline_config
 
 require_free_port "COORDINATOR" "${TPF_COORDINATOR_PORT}"
 require_free_port "WORKER" "${TPF_WORKER_PORT}"
@@ -133,6 +148,7 @@ fi
 
 if [[ "${TPF_SKIP_CONTAINER_BUILD}" != "true" ]]; then
   "${SCRIPT_DIR}/build-container-images.sh"
+  generate_container_pipeline_config
 fi
 
 bash "${EXAMPLE_DIR}/generate-dev-certs.sh" >/dev/null
@@ -196,6 +212,7 @@ python3 "${CLIENT}" run-flow \
   --pipeline-id "${TPF_PIPELINE_ID}" \
   --control-plane-token "${TPF_CONTROL_PLANE_TOKEN}" \
   --input-dir "${TPF_INPUT_DIR}" \
+  --output-dir "${TPF_OUTPUT_DIR}" \
   --source-csv "${TPF_SOURCE_CSV}" \
   --timeout-seconds 300
 

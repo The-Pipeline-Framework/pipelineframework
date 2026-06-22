@@ -858,7 +858,7 @@ class QueueAsyncCoordinator {
           deadLetterPublisher);
     }
     if (result.outcome() == TransitionWorkerOutcome.COMPLETED) {
-      return handleCompletedTransition(record, transitionKey, result.coordinatorOutputItems());
+      return handleCompletedTransition(record, transitionKey, result);
     }
     if (result.outcome() == TransitionWorkerOutcome.WAITING_EXTERNAL) {
       return markWaitingExternal(record, result.awaitSuspension(), transitionKey, itemContinuationHandler);
@@ -875,7 +875,8 @@ class QueueAsyncCoordinator {
   private Uni<Void> handleCompletedTransition(
       ExecutionRecord<Object, Object> record,
       String transitionKey,
-      List<?> outputItems) {
+      TransitionResultEnvelope result) {
+    List<?> outputItems = result.coordinatorOutputItems();
     if (record.resultShape() == ExecutionResultShape.SINGLE && outputItems.size() > 1) {
       return Uni.createFrom().failure(new IllegalStateException(
           "Async queue execution " + record.executionId()
@@ -884,7 +885,7 @@ class QueueAsyncCoordinator {
     }
     return checkpointPublicationService
         .publishIfConfigured(record, singleResult(outputItems))
-        .chain(() -> publishTerminalOutputsIfConfigured(outputItems))
+        .chain(() -> publishTerminalOutputsIfConfigured(result))
         .replaceWith(outputItems)
         .onItem().transformToUni(payload -> executionStateStore.markSucceeded(
             record.tenantId(),
@@ -896,11 +897,11 @@ class QueueAsyncCoordinator {
         .replaceWithVoid();
   }
 
-  private Uni<Void> publishTerminalOutputsIfConfigured(List<?> outputItems) {
+  private Uni<Void> publishTerminalOutputsIfConfigured(TransitionResultEnvelope result) {
     if (objectPublishCompletionService == null) {
       return Uni.createFrom().voidItem();
     }
-    return objectPublishCompletionService.publishIfConfigured(outputItems);
+    return objectPublishCompletionService.publishIfConfigured(() -> result.decodeOutputItems(payloadCodec()));
   }
 
   private Uni<Void> markWaitingExternal(
