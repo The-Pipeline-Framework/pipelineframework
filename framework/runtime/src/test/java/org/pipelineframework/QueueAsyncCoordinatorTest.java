@@ -1456,7 +1456,7 @@ class QueueAsyncCoordinatorTest {
             org.mockito.ArgumentMatchers.eq(3),
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.anyLong());
-        verify(handler).releaseAwaitParentIfReady(
+        verify(handler, timeout(1000)).releaseAwaitParentIfReady(
             org.mockito.ArgumentMatchers.eq(waiting),
             org.mockito.ArgumentMatchers.eq(completedUnit),
             org.mockito.ArgumentMatchers.eq(3),

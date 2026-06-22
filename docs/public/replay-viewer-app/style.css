@@ -754,17 +754,17 @@ button:disabled {
   box-shadow: 0 0 12px rgb(202 166 255 / 40%);
 }
 
-.legend-swatch--ingest {
+.legend-swatch-ingest {
   background: #8bffa5;
   box-shadow: 0 0 12px rgb(139 255 165 / 40%);
 }
 
-.legend-swatch--publish {
+.legend-swatch-publish {
   background: #86f0cf;
   box-shadow: 0 0 12px rgb(134 240 207 / 40%);
 }
 
-.legend-swatch--querydb {
+.legend-swatch-querydb {
   background: #67b2f3;
   box-shadow: 0 0 12px rgb(103 178 243 / 40%);
 }

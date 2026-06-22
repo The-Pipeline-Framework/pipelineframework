@@ -472,9 +472,6 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     return Multi.createFrom().deferred(() -> {
       StopWatch watch = new StopWatch();
       List<Object> steps = loadStepsForExecution();
-      if (steps == null) {
-        return Multi.createFrom().failure(new IllegalStateException("Pipeline steps could not be loaded."));
-      }
       RuntimeException healthFailure = healthCheckFailure();
       if (healthFailure != null) {
         return Multi.createFrom().failure(healthFailure);
@@ -521,10 +518,6 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
             return Multi.createFrom().failure(inputFailure);
           }
           List<Object> steps = loadStepsForExecution();
-          if (steps == null) {
-            restoreAwaitContext(previous);
-            return Multi.createFrom().failure(new IllegalStateException("Pipeline steps could not be loaded."));
-          }
           int requestedStopBeforeStepIndex = command.stopBeforeStepIndex();
           if (requestedStopBeforeStepIndex > steps.size()) {
             restoreAwaitContext(previous);
@@ -606,9 +599,6 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
 
   private Object executePipelineStreamingInternalFromStep(Object input, int startStepIndex) {
     List<Object> steps = loadStepsForExecution();
-    if (steps == null) {
-      return Multi.createFrom().failure(new IllegalStateException("Pipeline steps could not be loaded."));
-    }
     return executePipelineStreamingInternalFromStep(input, steps, startStepIndex, steps.size());
   }
 
@@ -676,13 +666,6 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
       int nextStepIndex,
       long nowEpochMs) {
     List<Object> steps = loadStepsForExecution();
-    if (steps == null) {
-      return Uni.createFrom().failure(new IllegalStateException(
-          "Failed loading pipeline steps for await itemized parent release executionId="
-              + parent.executionId()
-              + ", awaitUnitId="
-              + unit.unitId()));
-    }
     List<Object> orderedSteps = stepOrderer.orderSteps(steps);
     int aggregateStepIndex = firstAggregateStepIndex(orderedSteps, nextStepIndex);
     return queueAsyncCoordinator.releaseItemizedAwaitParentIfReady(
@@ -704,9 +687,6 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     return Uni.createFrom().deferred(() -> {
       StopWatch watch = new StopWatch();
       List<Object> steps = loadStepsForExecution();
-      if (steps == null) {
-        return Uni.createFrom().failure(new IllegalStateException("Pipeline steps could not be loaded."));
-      }
       RuntimeException healthFailure = healthCheckFailure();
       if (healthFailure != null) {
         return Uni.createFrom().failure(healthFailure);
@@ -736,7 +716,7 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
       return steps;
     } catch (PipelineConfigurationException e) {
       LOG.errorf(e, "Failed to load pipeline configuration: %s", e.getMessage());
-      return null;
+      throw e;
     }
   }
 
