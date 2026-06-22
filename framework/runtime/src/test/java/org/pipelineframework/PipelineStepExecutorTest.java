@@ -29,6 +29,7 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
 import io.smallrye.mutiny.subscription.BackPressureStrategy;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
@@ -59,6 +60,11 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineStepExecutorTest {
+    @AfterEach
+    void clearCapturedContexts() {
+        PipelineContextHolder.clear();
+        AwaitExecutionContextHolder.clear();
+    }
 
     @Test
     void oneToOneOnUniExecutesAndPropagatesContext() {
@@ -258,6 +264,35 @@ class PipelineStepExecutorTest {
 
         subscriber.assertItems("x-1");
         assertEquals(1, emitted.get());
+    }
+
+    @Test
+    void oneToManyAwaitParentBypassesStepApplyRetryRecoveryAndRejectPolicies() {
+        RecoveringOneToManyStep step = new RecoveringOneToManyStep();
+
+        try {
+            Object result = PipelineStepExecutor.applyOneToManyUnchecked(
+                step,
+                Uni.createFrom().item("bad"),
+                false,
+                16,
+                null,
+                null,
+                null,
+                new AwaitExecutionContext("tenant", "execution", 0));
+
+            AssertSubscriber<String> subscriber = ((Multi<String>) result)
+                .subscribe()
+                .withSubscriber(AssertSubscriber.create(Long.MAX_VALUE));
+            subscriber.awaitFailure(Duration.ofSeconds(5));
+
+            assertTrue(subscriber.getFailure() instanceof RuntimeException);
+            assertEquals("stream boom", subscriber.getFailure().getMessage());
+            assertEquals(1, step.applyOneToManyCalls());
+            assertTrue(!step.rejectCalled());
+        } finally {
+            AwaitExecutionContextHolder.clear();
+        }
     }
 
     @Test
@@ -566,9 +601,11 @@ class PipelineStepExecutorTest {
 
     static final class RecoveringOneToManyStep extends ConfigurableStep implements StepOneToMany<String, String> {
         private final AtomicBoolean rejectCalled = new AtomicBoolean(false);
+        private final AtomicInteger applyOneToManyCalls = new AtomicInteger();
 
         @Override
         public Multi<String> applyOneToMany(String in) {
+            applyOneToManyCalls.incrementAndGet();
             if ("bad".equals(in)) {
                 return Multi.createFrom().failure(new RuntimeException("stream boom"));
             }
@@ -606,6 +643,10 @@ class PipelineStepExecutorTest {
 
         boolean rejectCalled() {
             return rejectCalled.get();
+        }
+
+        int applyOneToManyCalls() {
+            return applyOneToManyCalls.get();
         }
     }
 

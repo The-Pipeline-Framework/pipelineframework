@@ -1421,7 +1421,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> loadYamlMap(Path path) throws IOException {
-        Object loaded = new Yaml().load(Files.newBufferedReader(path, StandardCharsets.UTF_8));
+        Object loaded;
+        try (var reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            loaded = new Yaml().load(reader);
+        }
         if (loaded instanceof Map<?, ?> map) {
             return (Map<String, Object>) map;
         }

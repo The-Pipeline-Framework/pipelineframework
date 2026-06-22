@@ -11,9 +11,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
+import org.pipelineframework.awaitable.AwaitThrowableSupport;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -75,6 +77,6 @@ class ExecutionHooksTest {
                     new AwaitSuspendedException("tenant", "execution", "interaction", 1))),
                 new StopWatch()).collect().asList().await().indefinitely());
 
-        assertNotNull(failure);
+        assertTrue(AwaitThrowableSupport.containsAwaitSuspension(failure));
     }
 }

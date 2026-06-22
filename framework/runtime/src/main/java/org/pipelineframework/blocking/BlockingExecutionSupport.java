@@ -106,6 +106,17 @@ public class BlockingExecutionSupport {
         }
     }
 
+    private static void withCapturedContext(
+        PipelineContext context,
+        TransportDispatchMetadata transport,
+        Runnable runnable
+    ) {
+        withCapturedContext(context, transport, () -> {
+            runnable.run();
+            return Boolean.TRUE;
+        });
+    }
+
     @PreDestroy
     void close() {
         virtualThreadExecutor.shutdown();
@@ -159,10 +170,7 @@ public class BlockingExecutionSupport {
         }
 
         private void drainWithContext() {
-            withCapturedContext(context, transport, () -> {
-                drain();
-                return null;
-            });
+            withCapturedContext(context, transport, this::drain);
         }
 
         private void drain() {
@@ -201,6 +209,19 @@ public class BlockingExecutionSupport {
                         fail(failure);
                         return;
                     }
+                    if (requested.get() == 0 && !closed && !completed) {
+                        try {
+                            if (!iterator.hasNext()) {
+                                completed = true;
+                                closeIterator();
+                                subscriber.onComplete();
+                                return;
+                            }
+                        } catch (Throwable failure) {
+                            fail(failure);
+                            return;
+                        }
+                    }
                 }
                 missed = workInProgress.addAndGet(-missed);
                 if (missed == 0) {
@@ -234,10 +255,7 @@ public class BlockingExecutionSupport {
                 return;
             }
             closed = true;
-            executor.execute(() -> withCapturedContext(context, transport, () -> {
-                closeIterator();
-                return null;
-            }));
+            executor.execute(() -> withCapturedContext(context, transport, this::closeIterator));
         }
 
         private void closeIterator() {

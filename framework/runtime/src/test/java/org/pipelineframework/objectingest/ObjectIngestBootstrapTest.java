@@ -3,6 +3,7 @@ package org.pipelineframework.objectingest;
 import jakarta.enterprise.inject.Instance;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.PipelineExecutionService;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
@@ -11,11 +12,27 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 class ObjectIngestBootstrapTest {
+    private String originalAutostart;
+    private String originalJavaCommand;
+
+    @BeforeEach
+    void captureSystemProperties() {
+        originalAutostart = System.getProperty("pipeline.object-ingest.autostart");
+        originalJavaCommand = System.getProperty("sun.java.command");
+    }
 
     @AfterEach
     void clearAutostartProperty() {
-        System.clearProperty("pipeline.object-ingest.autostart");
-        System.clearProperty("sun.java.command");
+        restoreProperty("pipeline.object-ingest.autostart", originalAutostart);
+        restoreProperty("sun.java.command", originalJavaCommand);
+    }
+
+    private static void restoreProperty(String key, String value) {
+        if (value == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, value);
+        }
     }
 
     @Test

@@ -931,12 +931,12 @@ function resolveDisplayRole(step) {
   if (!step) {
     return "primary";
   }
-  if (step.renderRole) {
-    return step.renderRole;
-  }
   const connectorRole = connectorRenderRole(step);
   if (connectorRole) {
     return connectorRole;
+  }
+  if (step.renderRole) {
+    return step.renderRole;
   }
   if (step.pluginKind === "persistence") {
     return "persistence-plugin";
@@ -1043,7 +1043,10 @@ function buildSupportAnimationPolicy(displayTopology, rawTopology = displayTopol
   const storeTransitions = transitionsByRelation.get("store") ?? [];
   const objectIngestTransitions = transitionsByRelation.get("object-ingest") ?? [];
   const objectPublishTransitions = transitionsByRelation.get("object-publish") ?? [];
-  const queryTransitions = transitionsByRelation.get("query-connector") ?? transitionsByRelation.get("query") ?? [];
+  const queryTransitions = [
+    ...(transitionsByRelation.get("query-connector") ?? []),
+    ...(transitionsByRelation.get("query") ?? [])
+  ];
 
   for (const awaitStep of stepsByRole.get("await") ?? []) {
     const firstRequest = findTransitionByFrom(awaitRequestTransitions, awaitStep.step);

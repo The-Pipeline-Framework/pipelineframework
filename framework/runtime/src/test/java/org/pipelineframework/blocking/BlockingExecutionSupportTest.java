@@ -211,6 +211,8 @@ class BlockingExecutionSupportTest {
         subscriber.request(1).awaitItems(3);
         assertTrue(nextCalls.get() == 3);
         subscriber.assertItems("item-1", "item-2", "item-3");
+        subscriber.awaitCompletion(Duration.ofSeconds(5));
+        subscriber.assertCompleted();
     }
 
     @Test

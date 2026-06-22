@@ -31,6 +31,7 @@ import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -164,9 +165,9 @@ class PipelineGenerationPhaseTest {
     }
 
     @Test
-    void skipsObjectIoBoundaryAdaptersForPluginHostModules() throws Exception {
+    void skipsObjectIoBoundaryAdaptersForPluginHostModules(@TempDir Path tempDir) throws Exception {
         PipelineGenerationPhase phase = new PipelineGenerationPhase();
-        Path config = Files.createTempFile("pipeline-object-io", ".yaml");
+        Path config = tempDir.resolve("pipeline-object-io.yaml");
         Files.writeString(config, """
             version: 2
             basePackage: com.example
