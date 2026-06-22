@@ -19,8 +19,6 @@ import org.pipelineframework.command.CommandDuplicatePolicy;
 import org.pipelineframework.command.CommandRequest;
 import org.pipelineframework.search.common.domain.SearchIndexDocument;
 import org.pipelineframework.search.common.domain.SearchIndexWriteResult;
-import org.pipelineframework.search.common.dto.SearchIndexDocumentDto;
-import org.pipelineframework.search.common.dto.SearchIndexWriteResultDto;
 
 class OpenSearchIndexDocumentCommandConnectorTest {
   private HttpServer server;
@@ -50,7 +48,7 @@ class OpenSearchIndexDocumentCommandConnectorTest {
     System.setProperty("search.index.opensearch.timeout-seconds", "2");
 
     SearchIndexDocument document = document();
-    SearchIndexWriteResult result = (SearchIndexWriteResult) new OpenSearchIndexDocumentCommandConnector()
+    SearchIndexWriteResult result = new OpenSearchIndexDocumentCommandConnector()
         .execute(new CommandRequest<>(
             descriptor(),
             "cmd-1",
@@ -73,42 +71,13 @@ class OpenSearchIndexDocumentCommandConnectorTest {
   void usesInMemorySinkWhenEndpointIsNotConfigured() {
     OpenSearchIndexDocumentCommandConnector connector = new OpenSearchIndexDocumentCommandConnector();
 
-    SearchIndexWriteResult result = (SearchIndexWriteResult) connector
+    SearchIndexWriteResult result = connector
         .execute(request(document()))
         .await().atMost(Duration.ofSeconds(5));
 
     assertEquals(1, connector.inMemorySinkSize());
     assertEquals("cmd-1", result.commandId);
     assertEquals("search-index", result.indexName);
-  }
-
-  @Test
-  void returnsDtoResultForDtoInput() {
-    SearchIndexDocument document = document();
-    SearchIndexDocumentDto dto = SearchIndexDocumentDto.builder()
-        .docId(document.docId)
-        .externalId(document.externalId)
-        .batchIndex(document.batchIndex)
-        .tokenCount(document.tokenCount)
-        .tokens(document.tokens)
-        .tokensHash(document.tokensHash)
-        .contentHash(document.contentHash)
-        .vectorHash(document.vectorHash)
-        .vectorVersion(document.vectorVersion)
-        .indexName(document.indexName)
-        .build();
-
-    Object result = new OpenSearchIndexDocumentCommandConnector()
-        .execute(new CommandRequest<>(
-            descriptor(),
-            "cmd-1",
-            dto,
-            new AwaitExecutionContext("tenant", "exec-1", 4),
-            Map.of()))
-        .await().atMost(Duration.ofSeconds(5));
-
-    assertTrue(result instanceof SearchIndexWriteResultDto);
-    assertEquals("cmd-1", ((SearchIndexWriteResultDto) result).getCommandId());
   }
 
   @Test
@@ -142,7 +111,7 @@ class OpenSearchIndexDocumentCommandConnectorTest {
     assertEquals("externalId is required", error.getMessage());
   }
 
-  private CommandRequest<Object> request(Object document) {
+  private CommandRequest<SearchIndexDocument> request(SearchIndexDocument document) {
     return new CommandRequest<>(
         descriptor(),
         "cmd-1",

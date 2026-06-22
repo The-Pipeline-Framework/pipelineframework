@@ -5,13 +5,12 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.pipelineframework.command.CommandDescriptor;
 import org.pipelineframework.command.CommandIdGenerator;
 import org.pipelineframework.search.common.domain.SearchIndexDocument;
-import org.pipelineframework.search.common.dto.SearchIndexDocumentDto;
 import org.pipelineframework.search.common.util.HashingUtils;
 
 @ApplicationScoped
-public class SearchIndexDocumentCommandIdGenerator implements CommandIdGenerator<Object> {
+public class SearchIndexDocumentCommandIdGenerator implements CommandIdGenerator<SearchIndexDocument> {
   @Override
-  public String commandId(CommandDescriptor descriptor, Object input) {
+  public String commandId(CommandDescriptor descriptor, SearchIndexDocument input) {
     if (descriptor == null) {
       throw new IllegalArgumentException("descriptor is required");
     }
@@ -35,17 +34,11 @@ public class SearchIndexDocumentCommandIdGenerator implements CommandIdGenerator
         identity.vectorHash().trim()));
   }
 
-  private SearchIndexIdentity identity(Object input) {
-    if (input instanceof SearchIndexDocument document) {
-      return new SearchIndexIdentity(document.docId, document.batchIndex, document.vectorVersion, document.vectorHash);
-    }
-    if (input instanceof SearchIndexDocumentDto dto) {
-      return new SearchIndexIdentity(dto.getDocId(), dto.getBatchIndex(), dto.getVectorVersion(), dto.getVectorHash());
-    }
+  private SearchIndexIdentity identity(SearchIndexDocument input) {
     if (input == null) {
       throw new IllegalArgumentException("search index document is required");
     }
-    throw new IllegalArgumentException("unsupported search index document type: " + input.getClass().getName());
+    return new SearchIndexIdentity(input.docId, input.batchIndex, input.vectorVersion, input.vectorHash);
   }
 
   private record SearchIndexIdentity(

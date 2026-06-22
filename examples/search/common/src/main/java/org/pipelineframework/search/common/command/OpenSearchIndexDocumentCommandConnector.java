@@ -22,12 +22,10 @@ import org.pipelineframework.command.CommandConnector;
 import org.pipelineframework.command.CommandRequest;
 import org.pipelineframework.search.common.domain.SearchIndexDocument;
 import org.pipelineframework.search.common.domain.SearchIndexWriteResult;
-import org.pipelineframework.search.common.dto.SearchIndexDocumentDto;
-import org.pipelineframework.search.common.dto.SearchIndexWriteResultDto;
 
 @ApplicationScoped
 public class OpenSearchIndexDocumentCommandConnector
-    implements CommandConnector<Object, Object> {
+    implements CommandConnector<SearchIndexDocument, SearchIndexWriteResult> {
   public static final String COMMAND = "opensearch-index-document";
 
   private final Map<String, IndexedDocument> inMemorySink = new ConcurrentHashMap<>();
@@ -40,7 +38,7 @@ public class OpenSearchIndexDocumentCommandConnector
   }
 
   @Override
-  public Uni<Object> execute(CommandRequest<Object> request) {
+  public Uni<SearchIndexWriteResult> execute(CommandRequest<SearchIndexDocument> request) {
     return Uni.createFrom().item(() -> executeBlocking(request))
         .runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
   }
@@ -49,7 +47,7 @@ public class OpenSearchIndexDocumentCommandConnector
     return inMemorySink.size();
   }
 
-  private Object executeBlocking(CommandRequest<Object> request) {
+  private SearchIndexWriteResult executeBlocking(CommandRequest<SearchIndexDocument> request) {
     IndexedDocument document = validate(request.input());
     String indexName = resolveIndexName(document);
     Optional<String> endpoint = config("search.index.opensearch.endpoint");
@@ -100,31 +98,13 @@ public class OpenSearchIndexDocumentCommandConnector
     }
   }
 
-  private Object result(
-      CommandRequest<Object> request,
+  private SearchIndexWriteResult result(
+      CommandRequest<SearchIndexDocument> request,
       IndexedDocument document,
       String indexName,
       String status,
       boolean createdOrUpdated,
       boolean recordedDuplicate) {
-    if (request.input() instanceof SearchIndexDocumentDto) {
-      return SearchIndexWriteResultDto.builder()
-          .docId(document.docId())
-          .externalId(document.externalId())
-          .commandId(request.commandId())
-          .indexName(indexName)
-          .resultStatus(status)
-          .createdOrUpdated(createdOrUpdated)
-          .recordedDuplicate(recordedDuplicate)
-          .batchIndex(document.batchIndex())
-          .tokenCount(document.tokenCount())
-          .tokens(document.tokens())
-          .tokensHash(document.tokensHash())
-          .vectorHash(document.vectorHash())
-          .vectorVersion(document.vectorVersion())
-          .indexedAt(Instant.now())
-          .build();
-    }
     SearchIndexWriteResult result = new SearchIndexWriteResult();
     result.docId = document.docId();
     result.externalId = document.externalId();
@@ -143,37 +123,21 @@ public class OpenSearchIndexDocumentCommandConnector
     return result;
   }
 
-  private IndexedDocument validate(Object input) {
-    IndexedDocument document;
-    if (input instanceof SearchIndexDocument domain) {
-      document = new IndexedDocument(
-          domain.docId,
-          domain.externalId,
-          domain.batchIndex,
-          domain.tokenCount,
-          domain.tokens,
-          domain.tokensHash,
-          domain.contentHash,
-          domain.vectorHash,
-          domain.vectorVersion,
-          domain.indexName);
-    } else if (input instanceof SearchIndexDocumentDto dto) {
-      document = new IndexedDocument(
-          dto.getDocId(),
-          dto.getExternalId(),
-          dto.getBatchIndex(),
-          dto.getTokenCount(),
-          dto.getTokens(),
-          dto.getTokensHash(),
-          dto.getContentHash(),
-          dto.getVectorHash(),
-          dto.getVectorVersion(),
-          dto.getIndexName());
-    } else if (input == null) {
+  private IndexedDocument validate(SearchIndexDocument input) {
+    if (input == null) {
       throw new IllegalArgumentException("search index document is required");
-    } else {
-      throw new IllegalArgumentException("unsupported search index document type: " + input.getClass().getName());
     }
+    IndexedDocument document = new IndexedDocument(
+        input.docId,
+        input.externalId,
+        input.batchIndex,
+        input.tokenCount,
+        input.tokens,
+        input.tokensHash,
+        input.contentHash,
+        input.vectorHash,
+        input.vectorVersion,
+        input.indexName);
     if (document.docId() == null) {
       throw new IllegalArgumentException("docId is required");
     }
