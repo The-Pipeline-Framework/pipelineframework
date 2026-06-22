@@ -36,6 +36,8 @@ import org.pipelineframework.processor.parser.StepDefinitionParser;
 public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     private static final PipelineStepConfigLoader.StepConfig DEFAULT_STEP_CONFIG =
         new PipelineStepConfigLoader.StepConfig("", "GRPC", "COMPUTE", List.of(), List.of());
+    private static final String RENDERER_PROFILE_OPTION = "pipeline.codegen.rendererProfile";
+    private static final String RENDERER_PROFILE_OPTION_LEGACY = "pipeline.codegen.renderer-profile";
     private final DiscoveryPathResolver discoveryPathResolver;
     private final DiscoveryConfigLoader discoveryConfigLoader;
     private final TransportPlatformResolver transportPlatformResolver;
@@ -143,6 +145,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         boolean isPluginHost = !pluginElements.isEmpty();
         ctx.setPluginHost(isPluginHost);
         ctx.setFunctionHttpBridge(parseStrictBooleanOption(options, "pipeline.function.httpBridge", false));
+        ctx.setRendererProfile(parseRendererProfile(options));
 
         // Load pipeline aspects
         List<PipelineAspectModel> aspects = loadPipelineAspects(configPath, messager);
@@ -189,6 +192,24 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
 
         throw new IllegalArgumentException(
             "Invalid value for '" + key + "': '" + rawValue + "'. Expected 'true' or 'false'.");
+    }
+
+    private String parseRendererProfile(Map<String, String> options) {
+        String rawValue = options.get(RENDERER_PROFILE_OPTION);
+        if ((rawValue == null || rawValue.isBlank()) && options.containsKey(RENDERER_PROFILE_OPTION_LEGACY)) {
+            rawValue = options.get(RENDERER_PROFILE_OPTION_LEGACY);
+        }
+        if (rawValue == null || rawValue.isBlank()) {
+            return PipelineCompilationContext.DEFAULT_RENDERER_PROFILE;
+        }
+
+        String normalized = rawValue.trim().toLowerCase(java.util.Locale.ROOT);
+        return switch (normalized) {
+            case "quarkus", "spring" -> normalized;
+            default -> throw new IllegalArgumentException(
+                "Invalid value for '" + RENDERER_PROFILE_OPTION + "': '" + rawValue
+                    + "'. Supported values: quarkus, spring.");
+        };
     }
 
     /**

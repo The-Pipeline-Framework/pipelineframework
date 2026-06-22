@@ -25,6 +25,7 @@ import HeroSection from './components/HeroSection.vue'
 import VersionBadge from './components/VersionBadge.vue'
 import LatestReleases from './components/LatestReleases.vue'
 import MermaidDiagramEnhancer from './components/MermaidDiagramEnhancer.vue'
+import SidebarAccordion from './components/SidebarAccordion.vue'
 
 function installReplayViewerHardNavigation() {
   if (typeof window === 'undefined' || window.__tpfReplayViewerHardNavInstalled) {
@@ -63,6 +64,7 @@ export default {
       h(DefaultTheme.Layout, null, {
         'doc-before': () => h(VersionBadge)
       }),
+      h(SidebarAccordion),
       h(MermaidDiagramEnhancer)
     ])
   },

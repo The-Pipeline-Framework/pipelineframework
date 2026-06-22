@@ -19,6 +19,7 @@ import org.pipelineframework.awaitable.spi.AwaitTransportAdapter;
 import org.pipelineframework.awaitable.spi.AwaitUnitStore;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
 import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 
@@ -148,35 +149,57 @@ public class AwaitCoordinator {
     public Uni<AwaitCompletionResult> complete(AwaitCompletionCommand command) {
         AwaitCompletionCommand normalized = normalizeCompletionCommand(command);
         return resolveForCompletion(normalized)
-            .onItem().transformToUni(record -> enforceCompletionPayloadLimitIfUnitPresent(
-                record,
-                normalized.responsePayload()))
-            .onItem().transformToUni(record -> {
-                if (normalized.resumeToken() == null) {
-                    return Uni.createFrom().item(record);
+            .onItem().transformToUni(record -> enforceCompletionPayloadLimitIfUnitPresent(record, normalized)
+                .onItem().transform(safeCommand -> new ValidatedCompletion(record, safeCommand)))
+            .onItem().transformToUni(validated -> {
+                AwaitCompletionCommand safeCommand = validated.command();
+                AwaitInteractionRecord record = validated.record();
+                if (safeCommand.resumeToken() == null) {
+                    return Uni.createFrom().item(withResolvedInteractionId(safeCommand, record));
                 }
                 if (record.status().terminal() && record.status() != AwaitInteractionStatus.COMPLETED) {
                     return Uni.createFrom().failure(
                         new AwaitInteractionTerminalException("Await interaction is terminal: " + record.status()));
                 }
                 return Uni.createFrom().item(() -> {
-                        resumeTokenService.validate(normalized.resumeToken(), record, normalized.nowEpochMs());
-                        return record;
+                        resumeTokenService.validate(safeCommand.resumeToken(), record, safeCommand.nowEpochMs());
+                        return safeCommand;
                     })
                     .runSubscriptionOn(Infrastructure.getDefaultExecutor())
-                    .replaceWith(record);
+                    .replaceWith(withResolvedInteractionId(safeCommand, record));
             })
-            .onItem().transformToUni(ignored -> interactionStore().complete(normalized));
+            .onItem().transformToUni(safeCommand -> interactionStore().complete(safeCommand));
     }
 
-    private Uni<AwaitInteractionRecord> enforceCompletionPayloadLimitIfUnitPresent(
+    private static AwaitCompletionCommand withResolvedInteractionId(
+        AwaitCompletionCommand command,
+        AwaitInteractionRecord record
+    ) {
+        if (command.interactionId() != null) {
+            return command;
+        }
+        return new AwaitCompletionCommand(
+            command.tenantId(),
+            record.interactionId(),
+            command.correlationId(),
+            command.resumeToken(),
+            command.idempotencyKey(),
+            command.responsePayload(),
+            command.actor(),
+            command.nowEpochMs());
+    }
+
+    private Uni<AwaitCompletionCommand> enforceCompletionPayloadLimitIfUnitPresent(
         AwaitInteractionRecord record,
-        Object responsePayload
+        AwaitCompletionCommand command
     ) {
         return unitStore().get(record.tenantId(), record.unitId())
             .onItem().transform(optional -> {
-                optional.ifPresent(unit -> enforceAggregateOutputLimit(unit, responsePayload));
-                return record;
+                if (optional.isEmpty()) {
+                    return command;
+                }
+                Object safePayload = validateAggregateOutputLimit(optional.get(), command.responsePayload());
+                return withResponsePayload(command, safePayload);
             });
     }
 
@@ -259,6 +282,30 @@ public class AwaitCoordinator {
 
     public Uni<List<AwaitInteractionRecord>> findByUnit(String tenantId, String unitId) {
         return interactionStore().findByUnit(tenantId, unitId);
+    }
+
+    public Uni<TransitionAwaitSuspension> suspensionSnapshot(AwaitSuspendedException suspended) {
+        return getUnit(suspended.tenantId(), suspended.unitId())
+            .onItem().transformToUni(unit -> findByUnit(suspended.tenantId(), suspended.unitId())
+                .onItem().transform(interactions -> new TransitionAwaitSuspension(
+                    suspended.tenantId(),
+                    suspended.executionId(),
+                    suspended.unitId(),
+                    suspended.stepIndex(),
+                    unit,
+                    interactions)));
+    }
+
+    public Uni<Void> importSuspension(TransitionAwaitSuspension suspension) {
+        if (suspension == null || suspension.unit() == null) {
+            return Uni.createFrom().voidItem();
+        }
+        List<Uni<Void>> imports = new ArrayList<>();
+        imports.add(unitStore().importRecord(suspension.unit()).replaceWithVoid());
+        for (AwaitInteractionRecord interaction : suspension.interactions()) {
+            imports.add(interactionStore().importRecord(interaction).replaceWithVoid());
+        }
+        return Uni.join().all(imports).andCollectFailures().replaceWithVoid();
     }
 
     public Uni<List<AwaitInteractionRecord>> findTimedOut(long nowEpochMs, int limit) {
@@ -503,9 +550,14 @@ public class AwaitCoordinator {
     }
 
     private Uni<AwaitInteractionRecord> resolveForCompletion(AwaitCompletionCommand command) {
-        Uni<Optional<AwaitInteractionRecord>> lookup = command.interactionId() != null
-            ? interactionStore().get(command.tenantId(), command.interactionId())
-            : interactionStore().findByCorrelation(command.tenantId(), command.correlationId());
+        Uni<Optional<AwaitInteractionRecord>> lookup;
+        if (command.interactionId() != null) {
+            lookup = interactionStore().get(command.tenantId(), command.interactionId());
+        } else if (command.correlationId() != null) {
+            lookup = interactionStore().findByCorrelation(command.tenantId(), command.correlationId());
+        } else {
+            lookup = interactionStore().get(command.tenantId(), resumeTokenService.interactionIdHint(command.resumeToken()));
+        }
         return lookup.onItem().transform(optional -> optional.orElseThrow(
             () -> new AwaitInteractionNotFoundException("No await interaction matches completion")));
     }
@@ -537,6 +589,14 @@ public class AwaitCoordinator {
     }
 
     private Object enforceAggregateOutputLimit(AwaitUnitRecord unit, Object payload) {
+        return checkAndMaterializeAggregateOutput(unit, payload);
+    }
+
+    private Object validateAggregateOutputLimit(AwaitUnitRecord unit, Object payload) {
+        return checkAndMaterializeAggregateOutput(unit, payload);
+    }
+
+    private Object checkAndMaterializeAggregateOutput(AwaitUnitRecord unit, Object payload) {
         if (!materializedOutputCardinality(unit.cardinality())) {
             return payload;
         }
@@ -562,6 +622,21 @@ public class AwaitCoordinator {
             return payload;
         }
         return payload;
+    }
+
+    private static AwaitCompletionCommand withResponsePayload(AwaitCompletionCommand command, Object responsePayload) {
+        return new AwaitCompletionCommand(
+            command.tenantId(),
+            command.interactionId(),
+            command.correlationId(),
+            command.resumeToken(),
+            command.idempotencyKey(),
+            responsePayload,
+            command.actor(),
+            command.nowEpochMs());
+    }
+
+    private record ValidatedCompletion(AwaitInteractionRecord record, AwaitCompletionCommand command) {
     }
 
     private static boolean materializedOutputCardinality(String cardinality) {

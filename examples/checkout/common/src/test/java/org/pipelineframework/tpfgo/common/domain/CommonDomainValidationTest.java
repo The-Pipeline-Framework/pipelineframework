@@ -2,6 +2,7 @@ package org.pipelineframework.tpfgo.common.domain;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -18,10 +19,10 @@ class CommonDomainValidationTest {
                 UUID.randomUUID(),
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                "   ",
+                List.of(),
                 BigDecimal.ONE,
                 "EUR"));
-        assertEquals("items must not be blank", exception.getMessage());
+        assertEquals("items must not be empty", exception.getMessage());
     }
 
     @Test
@@ -30,7 +31,7 @@ class CommonDomainValidationTest {
             UUID.randomUUID(),
             UUID.randomUUID(),
             UUID.randomUUID(),
-            "burger x1",
+            List.of(new OrderItem("burger", 1)),
             BigDecimal.TEN,
             "usd",
             Instant.parse("2026-03-27T10:15:30Z"));

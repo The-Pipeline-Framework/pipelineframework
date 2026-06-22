@@ -35,6 +35,12 @@ import org.pipelineframework.csv.common.mapper.CsvFolderMapper;
 import org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileMapper;
 import org.pipelineframework.csv.util.HybridResourceLoader;
 
+/**
+ * @deprecated This folder expansion step is being replaced by object ingest
+ *     sources for file admission.
+ */
+@Deprecated(since = "26.6.2", forRemoval = true)
+@SuppressWarnings("removal")
 @ApplicationScoped
 @PipelineStep
 public class ProcessFolderService implements org.pipelineframework.service.ReactiveStreamingService<CsvFolder, CsvPaymentsInputFile> {

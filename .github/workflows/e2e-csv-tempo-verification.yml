@@ -20,6 +20,7 @@ on:
       - "framework/**"
       - "examples/csv-payments/**"
       - "plugins/**"
+      - "connectors/**"
       - "pom.xml"
       - "mvnw"
       - ".mvn/**"

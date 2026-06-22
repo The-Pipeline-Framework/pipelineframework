@@ -27,6 +27,7 @@ import org.pipelineframework.config.template.PipelineTemplateRemoteTarget;
 import org.pipelineframework.config.template.PipelineTemplateStepExecution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -223,6 +224,21 @@ class StepDefinitionTest {
     }
 
     @Test
+    void virtualThreadsRejectDelegatedSteps() {
+        assertThrows(IllegalArgumentException.class, () -> new StepDefinition(
+            "delegated-step",
+            StepKind.DELEGATED,
+            EXECUTION_CLASS,
+            null,
+            Map.of(), null, List.of(),
+            null, Map.of(), List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, StreamingShape.UNARY_UNARY,
+            true));
+    }
+
+    @Test
     void rejectsBlankName() {
         assertThrows(IllegalArgumentException.class, () -> new StepDefinition(
             "  ",  // blank name
@@ -307,5 +323,383 @@ class StepDefinitionTest {
         assertEquals(Map.of(), step.awaitConfig());
         assertEquals(List.of(), step.idempotencyKeyFields());
         assertNull(step.timeout());
+    }
+
+    // ---- QUERY kind tests ----
+
+    @Test
+    void constructsQueryStepWithRequiredFields() {
+        StepDefinition step = new StepDefinition(
+            "Load Customer Risk",
+            StepKind.QUERY,
+            null,
+            null,
+            Map.of(),
+            null,
+            List.of(),
+            "customer-risk-by-id",
+            Map.of("source", "risk-db"),
+            List.of("customerId"),
+            null,
+            null,
+            null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            OUTPUT_TYPE,
+            StreamingShape.UNARY_UNARY,
+            false);
+
+        assertEquals("Load Customer Risk", step.name());
+        assertEquals(StepKind.QUERY, step.kind());
+        assertNull(step.executionClass());
+        assertNull(step.remoteExecution());
+        assertEquals("customer-risk-by-id", step.queryId());
+        assertEquals(List.of("customerId"), step.queryKeyFields());
+        assertEquals(Map.of("source", "risk-db"), step.queryConfig());
+        assertEquals(INPUT_TYPE, step.inputType());
+        assertEquals(OUTPUT_TYPE, step.outputType());
+    }
+
+    @Test
+    void queryStepRejectsNullInputType() {
+        assertThrows(NullPointerException.class, () -> new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            null, null,
+            Map.of(), null, List.of(),
+            "query-id", Map.of(), List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            null,  // null inputType
+            OUTPUT_TYPE, null,
+            false));
+    }
+
+    @Test
+    void queryStepRejectsNullOutputType() {
+        assertThrows(NullPointerException.class, () -> new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            null, null,
+            Map.of(), null, List.of(),
+            "query-id", Map.of(), List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            null,  // null outputType
+            null,
+            false));
+    }
+
+    @Test
+    void queryStepRejectsNullQueryId() {
+        assertThrows(NullPointerException.class, () -> new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            null, null,
+            Map.of(), null, List.of(),
+            null,  // null queryId
+            Map.of(), List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null,
+            false));
+    }
+
+    @Test
+    void queryStepRejectsBlankQueryId() {
+        assertThrows(IllegalArgumentException.class, () -> new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            null, null,
+            Map.of(), null, List.of(),
+            "   ",  // blank queryId
+            Map.of(), List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null,
+            false));
+    }
+
+    @Test
+    void queryStepRejectsExecutionClass() {
+        assertThrows(IllegalArgumentException.class, () -> new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            EXECUTION_CLASS,  // must be null
+            null,
+            Map.of(), null, List.of(),
+            "query-id", Map.of(), List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null,
+            false));
+    }
+
+    @Test
+    void queryStepRejectsRemoteExecution() {
+        org.pipelineframework.config.template.PipelineTemplateStepExecution remoteExecution =
+            new org.pipelineframework.config.template.PipelineTemplateStepExecution(
+                "REMOTE", "op-id", "PROTOBUF_HTTP_V1", 3000,
+                org.pipelineframework.config.template.PipelineTemplateRemoteTarget.ofUrlConfigKey("cfg"));
+
+        assertThrows(IllegalArgumentException.class, () -> new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            null,
+            remoteExecution,  // must be null
+            Map.of(), null, List.of(),
+            "query-id", Map.of(), List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null,
+            false));
+    }
+
+    @Test
+    void queryStepDefaultsQueryConfigToEmptyMapWhenNull() {
+        StepDefinition step = new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            null, null,
+            Map.of(), null, List.of(),
+            "query-id",
+            null,  // null queryConfig
+            null,  // null queryKeyFields
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null,
+            false);
+
+        assertEquals(Map.of(), step.queryConfig());
+        assertEquals(List.of(), step.queryKeyFields());
+    }
+
+    @Test
+    void queryStepMakesImmutableCopyOfQueryConfig() {
+        Map<String, Object> config = new HashMap<>();
+        config.put("source", "risk-db");
+        StepDefinition step = new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            null, null,
+            Map.of(), null, List.of(),
+            "query-id", config, List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null,
+            false);
+
+        config.put("extra", "value");
+
+        assertEquals(1, step.queryConfig().size());
+        assertThrows(UnsupportedOperationException.class, () -> step.queryConfig().put("k", "v"));
+    }
+
+    @Test
+    void queryStepMakesImmutableCopyOfQueryKeyFields() {
+        List<String> fields = new ArrayList<>();
+        fields.add("customerId");
+        StepDefinition step = new StepDefinition(
+            "Load Risk",
+            StepKind.QUERY,
+            null, null,
+            Map.of(), null, List.of(),
+            "query-id", Map.of(), fields,
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null,
+            false);
+
+        fields.add("tenantId");
+
+        assertEquals(1, step.queryKeyFields().size());
+        assertThrows(UnsupportedOperationException.class, () -> step.queryKeyFields().add("x"));
+    }
+
+    @Test
+    void convenienceConstructorRejectsQueryKind() {
+        assertThrows(IllegalArgumentException.class, () -> new StepDefinition(
+            "step",
+            StepKind.QUERY,
+            EXECUTION_CLASS,
+            null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null));
+    }
+
+    @Test
+    void internalStepDefaultsQueryFieldsToEmptyCollections() {
+        StepDefinition step = new StepDefinition(
+            "step",
+            StepKind.INTERNAL,
+            EXECUTION_CLASS,
+            null,
+            Map.of(), null, List.of(),
+            null, null, null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE, OUTPUT_TYPE, null);
+
+        assertNull(step.queryId());
+        assertEquals(Map.of(), step.queryConfig());
+        assertEquals(List.of(), step.queryKeyFields());
+    }
+    // ---- runOnVirtualThreads tests ----
+
+    @Test
+    void backwardCompatConstructorDefaultsRunOnVirtualThreadsToFalse() {
+        StepDefinition step = new StepDefinition(
+            "step",
+            StepKind.INTERNAL,
+            EXECUTION_CLASS,
+            null,            // remoteExecution
+            Map.of(),        // awaitConfig
+            null,            // timeout
+            List.of(),       // idempotencyKeyFields
+            null,            // inboundMapper
+            null,            // outboundMapper
+            null,            // externalMapper
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            OUTPUT_TYPE,
+            StreamingShape.UNARY_UNARY
+        );
+
+        assertFalse(step.runOnVirtualThreads());
+    }
+
+    @Test
+    void delegatedStepConvenienceConstructorDefaultsRunOnVirtualThreadsToFalse() {
+        StepDefinition step = new StepDefinition(
+            "step",
+            StepKind.DELEGATED,
+            EXECUTION_CLASS,
+            null,            // externalMapper
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            OUTPUT_TYPE,
+            StreamingShape.UNARY_UNARY
+        );
+
+        assertFalse(step.runOnVirtualThreads());
+    }
+
+    @Test
+    void internalStepWithInboundOutboundMappersConvenienceConstructorDefaultsRunOnVirtualThreadsToFalse() {
+        ClassName inboundMapper = ClassName.get("com.example", "InboundMapper");
+        ClassName outboundMapper = ClassName.get("com.example", "OutboundMapper");
+
+        StepDefinition step = new StepDefinition(
+            "step",
+            StepKind.INTERNAL,
+            EXECUTION_CLASS,
+            inboundMapper,
+            outboundMapper,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            OUTPUT_TYPE,
+            StreamingShape.UNARY_UNARY
+        );
+
+        assertFalse(step.runOnVirtualThreads());
+    }
+
+    @Test
+    void internalStepWithAllMappersConvenienceConstructorDefaultsRunOnVirtualThreadsToFalse() {
+        ClassName inboundMapper = ClassName.get("com.example", "InboundMapper");
+        ClassName outboundMapper = ClassName.get("com.example", "OutboundMapper");
+        ClassName externalMapper = ClassName.get("com.example", "ExternalMapper");
+
+        StepDefinition step = new StepDefinition(
+            "step",
+            StepKind.INTERNAL,
+            EXECUTION_CLASS,
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            OUTPUT_TYPE,
+            StreamingShape.UNARY_UNARY
+        );
+
+        assertFalse(step.runOnVirtualThreads());
+    }
+
+    @Test
+    void canonicalConstructorWithRunOnVirtualThreadsTrueRetainsValue() {
+        StepDefinition step = new StepDefinition(
+            "step",
+            StepKind.INTERNAL,
+            EXECUTION_CLASS,
+            null,            // remoteExecution
+            Map.of(),        // awaitConfig
+            null,            // timeout
+            List.of(),       // idempotencyKeyFields
+            null,            // queryId
+            Map.of(),        // queryConfig
+            List.of(),       // queryKeyFields
+            null,            // inboundMapper
+            null,            // outboundMapper
+            null,            // externalMapper
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            OUTPUT_TYPE,
+            StreamingShape.UNARY_UNARY,
+            true             // runOnVirtualThreads = true
+        );
+
+        assertTrue(step.runOnVirtualThreads());
+    }
+
+    @Test
+    void canonicalConstructorWithRunOnVirtualThreadsFalseRetainsValue() {
+        StepDefinition step = new StepDefinition(
+            "step",
+            StepKind.INTERNAL,
+            EXECUTION_CLASS,
+            null,
+            Map.of(),
+            null,
+            List.of(),
+            null,
+            Map.of(),
+            List.of(),
+            null,
+            null,
+            null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            OUTPUT_TYPE,
+            StreamingShape.UNARY_UNARY,
+            false
+        );
+
+        assertFalse(step.runOnVirtualThreads());
+    }
+
+    @Test
+    void virtualThreadsAreValidOnlyForInternalSteps() {
+        assertThrows(IllegalArgumentException.class, () -> new StepDefinition(
+            "remote-step",
+            StepKind.REMOTE,
+            null,
+            new PipelineTemplateStepExecution(
+                "REMOTE", "op-id", "PROTOBUF_HTTP_V1", 3000,
+                PipelineTemplateRemoteTarget.ofUrlConfigKey("some.config.key")),
+            Map.of(),
+            null,
+            List.of(),
+            null,
+            Map.of(),
+            List.of(),
+            null,
+            null,
+            null,
+            MapperFallbackMode.NONE,
+            INPUT_TYPE,
+            OUTPUT_TYPE,
+            StreamingShape.UNARY_UNARY,
+            true));
     }
 }

@@ -21,9 +21,7 @@ import java.util.function.Supplier;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
-import jakarta.enterprise.inject.Instance;
-import jakarta.enterprise.inject.spi.CDI;
-import org.pipelineframework.annotation.PipelineStep;
+import org.pipelineframework.runtime.core.RuntimeAdapters;
 
 /**
  * Runtime access helpers for blocking step default adapters.
@@ -35,33 +33,43 @@ public final class BlockingExecutions {
     private BlockingExecutions() {
     }
 
+    /**
+     * Offloads a blocking supplier on the default worker pool.
+     *
+     * @param owner retained for source compatibility with existing blocking service defaults; ignored
+     * @param supplier blocking supplier to execute
+     * @return a Uni backed by the offloaded supplier
+     */
     public static <T> Uni<T> supply(Object owner, Supplier<T> supplier) {
-        return support().supply(useVirtualThreads(owner), supplier);
+        return support().supply(false, supplier);
     }
 
+    /**
+     * Offloads a blocking list supplier on the default worker pool.
+     *
+     * @param owner retained for source compatibility with existing blocking service defaults; ignored
+     * @param supplier blocking supplier to execute
+     * @return a Multi over the supplied list
+     */
     public static <T> Multi<T> emitList(Object owner, Supplier<List<T>> supplier) {
-        return support().emitList(useVirtualThreads(owner), supplier);
+        return support().emitList(false, supplier);
     }
 
+    /**
+     * Offloads blocking iterator acquisition and iteration on the default worker pool.
+     *
+     * @param owner retained for source compatibility with existing blocking service defaults; ignored
+     * @param supplier blocking iterator supplier to execute
+     * @return a Multi over the iterator items
+     */
     public static <T> Multi<T> emitIterator(Object owner, Supplier<? extends CloseableIterator<T>> supplier) {
-        return support().emitIterator(useVirtualThreads(owner), supplier);
-    }
-
-    public static boolean useVirtualThreads(Object owner) {
-        if (owner == null) {
-            return false;
-        }
-        PipelineStep annotation = owner.getClass().getAnnotation(PipelineStep.class);
-        return annotation != null && annotation.runOnVirtualThreads();
+        return support().emitIterator(false, supplier);
     }
 
     private static BlockingExecutionSupport support() {
         try {
-            CDI<Object> cdi = CDI.current();
-            Instance<BlockingExecutionSupport> instance = cdi.select(BlockingExecutionSupport.class);
-            if (!instance.isUnsatisfied()) {
-                return instance.get();
-            }
+            return RuntimeAdapters.resolveBean(BlockingExecutionSupport.class)
+                .orElse(FALLBACK_SUPPORT);
         } catch (RuntimeException ignored) {
             // Tests and non-CDI callers fall back to the local support instance.
         }

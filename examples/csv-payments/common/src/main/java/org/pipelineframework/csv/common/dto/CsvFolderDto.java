@@ -22,8 +22,12 @@ import java.nio.file.Path;
 import lombok.*;
 
 /**
- * DTO for CsvFolder
+ * DTO for CsvFolder.
+ *
+ * @deprecated DTO for the legacy folder admission boundary. Object ingest
+ *     sources replace this boundary.
  */
+@Deprecated(since = "26.6.2", forRemoval = true)
 @Value
 @Builder
 @JsonDeserialize(builder = CsvFolderDto.CsvFolderDtoBuilder.class)

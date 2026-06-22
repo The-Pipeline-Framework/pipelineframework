@@ -419,13 +419,320 @@ public final class PipelineTemplateSchemaExporter {
       ],
       "additionalProperties": false
     },
+    "queryDefinition": {
+      "type": "object",
+      "properties": {
+        "connector": {
+          "const": "jpa"
+        },
+        "input": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outputType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "default": "v1"
+        },
+        "jpa": {
+          "$ref": "#/$defs/jpaQueryDefinition"
+        }
+      },
+      "required": [
+        "connector",
+        "jpa"
+      ],
+      "allOf": [
+        {
+          "anyOf": [
+            {
+              "required": [
+                "input"
+              ]
+            },
+            {
+              "required": [
+                "inputType"
+              ]
+            }
+          ]
+        },
+        {
+          "anyOf": [
+            {
+              "required": [
+                "output"
+              ]
+            },
+            {
+              "required": [
+                "outputType"
+              ]
+            }
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "jpaQueryDefinition": {
+      "type": "object",
+      "properties": {
+        "entity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "where": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Za-z_$][A-Za-z\\\\d_$]*(\\\\.[A-Za-z_$][A-Za-z\\\\d_$]*)*$"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "object",
+                "minProperties": 1,
+                "maxProperties": 1,
+                "properties": {
+                  "eq": {
+                    "$ref": "#/$defs/jpaPredicateScalar"
+                  },
+                  "in": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/jpaPredicateScalar"
+                      },
+                      {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "$ref": "#/$defs/jpaPredicateScalar"
+                        }
+                      }
+                    ]
+                  },
+                  "gt": {
+                    "$ref": "#/$defs/jpaPredicateScalar"
+                  },
+                  "gte": {
+                    "$ref": "#/$defs/jpaPredicateScalar"
+                  },
+                  "lt": {
+                    "$ref": "#/$defs/jpaPredicateScalar"
+                  },
+                  "lte": {
+                    "$ref": "#/$defs/jpaPredicateScalar"
+                  },
+                  "between": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                      "$ref": "#/$defs/jpaPredicateScalar"
+                    }
+                  },
+                  "like": {
+                    "$ref": "#/$defs/jpaPredicateScalar"
+                  },
+                  "isNull": {
+                    "oneOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^([Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee])$"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "projection": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Za-z_$][A-Za-z\\\\d_$]*(\\\\.[A-Za-z_$][A-Za-z\\\\d_$]*)*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[A-Za-z_$][A-Za-z\\\\d_$]*(\\\\.[A-Za-z_$][A-Za-z\\\\d_$]*)*$"
+          }
+        },
+        "orderBy": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Za-z_$][A-Za-z\\\\d_$]*(\\\\.[A-Za-z_$][A-Za-z\\\\d_$]*)*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^([Aa][Ss][Cc]|[Dd][Ee][Ss][Cc])$"
+          }
+        },
+        "limit": {
+          "const": 1
+        },
+        "result": {
+          "const": "single",
+          "default": "single"
+        }
+      },
+      "required": [
+        "entity",
+        "where"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "limit"
+            ]
+          },
+          "then": {
+            "required": [
+              "orderBy"
+            ]
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "jpaPredicateScalar": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        }
+      ]
+    },
+    "queryCapture": {
+      "type": "object",
+      "properties": {
+        "keyFields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "pipelineOutputBoundary": {
       "type": "object",
       "properties": {
         "checkpoint": {
           "$ref": "#/$defs/checkpointPublication"
+        },
+        "object": {
+          "$ref": "#/$defs/objectOutputBoundary"
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "consumes": {
+          "$ref": "#/$defs/objectOutputConsume"
         }
       },
+      "oneOf": [
+        {
+          "required": [
+            "checkpoint"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "object"
+                ]
+              },
+              {
+                "required": [
+                  "to"
+                ]
+              },
+              {
+                "required": [
+                  "consumes"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "object"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "checkpoint"
+                ]
+              },
+              {
+                "required": [
+                  "to"
+                ]
+              },
+              {
+                "required": [
+                  "consumes"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "to",
+            "consumes"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "checkpoint"
+                ]
+              },
+              {
+                "required": [
+                  "object"
+                ]
+              }
+            ]
+          }
+        }
+      ],
       "additionalProperties": false
     },
     "checkpointSubscription": {
@@ -445,14 +752,388 @@ public final class PipelineTemplateSchemaExporter {
       ],
       "additionalProperties": false
     },
+    "objectInputEmit": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "typeName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mapper": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+        }
+      },
+      "required": [
+        "type",
+        "mapper"
+      ],
+      "additionalProperties": false
+    },
+    "objectInputBoundary": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "emits": {
+          "$ref": "#/$defs/objectInputEmit"
+        }
+      },
+      "required": [
+        "emits"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "source"
+          ]
+        },
+        {
+          "required": [
+            "from"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "objectOutputConsume": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "typeName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mapper": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+        }
+      },
+      "required": [
+        "type",
+        "mapper"
+      ],
+      "additionalProperties": false
+    },
+    "objectOutputBoundary": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "consumes": {
+          "$ref": "#/$defs/objectOutputConsume"
+        }
+      },
+      "required": [
+        "consumes"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "target"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
     "pipelineInputBoundary": {
       "type": "object",
       "properties": {
         "subscription": {
           "$ref": "#/$defs/checkpointSubscription"
+        },
+        "object": {
+          "$ref": "#/$defs/objectInputBoundary"
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "emits": {
+          "$ref": "#/$defs/objectInputEmit"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "subscription"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "object"
+                ]
+              },
+              {
+                "required": [
+                  "from"
+                ]
+              },
+              {
+                "required": [
+                  "emits"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "object"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "subscription"
+                ]
+              },
+              {
+                "required": [
+                  "from"
+                ]
+              },
+              {
+                "required": [
+                  "emits"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "from",
+            "emits"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "subscription"
+                ]
+              },
+              {
+                "required": [
+                  "object"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "objectSourceFilter": {
+      "type": "object",
+      "properties": {
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       },
       "additionalProperties": false
+    },
+    "objectSourcePoll": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "interval": {
+          "type": "string",
+          "minLength": 1
+        },
+        "batchSize": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "objectSourceIdentity": {
+      "type": "object",
+      "properties": {
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "objectSourcePayload": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "metadata",
+            "reference",
+            "text"
+          ]
+        },
+        "refField": {
+          "type": "string",
+          "minLength": 1
+        },
+        "maxBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "charset": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "objectSource": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "object"
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "filter": {
+          "$ref": "#/$defs/objectSourceFilter"
+        },
+        "poll": {
+          "$ref": "#/$defs/objectSourcePoll"
+        },
+        "identity": {
+          "$ref": "#/$defs/objectSourceIdentity"
+        },
+        "payload": {
+          "$ref": "#/$defs/objectSourcePayload"
+        }
+      },
+      "required": [
+        "kind",
+        "provider"
+      ],
+      "additionalProperties": false
+    },
+    "pipelineSources": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/objectSource"
+      }
+    },
+    "objectPublishNaming": {
+      "type": "object",
+      "properties": {
+        "keyTemplate": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "objectPublishPayload": {
+      "type": "object",
+      "properties": {
+        "contentType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "charset": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "objectPublishGrouping": {
+      "type": "object",
+      "properties": {
+        "maxOpenGroups": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 32
+        }
+      },
+      "additionalProperties": false
+    },
+    "objectPublishTarget": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "object"
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "naming": {
+          "$ref": "#/$defs/objectPublishNaming"
+        },
+        "payload": {
+          "$ref": "#/$defs/objectPublishPayload"
+        },
+        "grouping": {
+          "$ref": "#/$defs/objectPublishGrouping"
+        }
+      },
+      "required": [
+        "kind",
+        "provider"
+      ],
+      "additionalProperties": false
+    },
+    "pipelinePublishTargets": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/objectPublishTarget"
+      }
     },
     "v2Execution": {
       "type": "object",
@@ -474,7 +1155,8 @@ public final class PipelineTemplateSchemaExporter {
         "protocol": {
           "type": "string",
           "enum": [
-            "PROTOBUF_HTTP_V1"
+            "PROTOBUF_HTTP_V1",
+            "ENVELOPE_HTTP_V1"
           ]
         },
         "timeoutMs": {
@@ -822,7 +1504,7 @@ public final class PipelineTemplateSchemaExporter {
         },
         "service": {
           "type": "string",
-          "description": "Fully qualified class name of the internal service annotated with @PipelineStep",
+          "description": "Fully qualified class name of the YAML-declared internal service",
           "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
         },
         "operator": {
@@ -859,6 +1541,10 @@ public final class PipelineTemplateSchemaExporter {
             "none",
             "jackson"
           ]
+        },
+        "runOnVirtualThreads": {
+          "type": "boolean",
+          "description": "Whether this YAML-declared internal blocking step should use virtual-thread offload."
         }
       },
       "oneOf": [
@@ -904,6 +1590,34 @@ public final class PipelineTemplateSchemaExporter {
             "required": [
               "input"
             ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "operator"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "runOnVirtualThreads"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "delegate"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "runOnVirtualThreads"
+              ]
+            }
           }
         },
         {
@@ -1258,6 +1972,86 @@ public final class PipelineTemplateSchemaExporter {
         "timeout",
         "await"
       ]
+    },
+    "queryTemplateStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "query"
+        },
+        "query": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cardinality": {
+          "type": "string",
+          "enum": [
+            "ONE_TO_ONE"
+          ]
+        },
+        "inputTypeName": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "outputTypeName": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "input": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+        },
+        "capture": {
+          "$ref": "#/$defs/queryCapture"
+        },
+        "flowRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "flowBoundaryRationale": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "anyOf": [
+            {
+              "required": [
+                "inputTypeName",
+                "outputTypeName"
+              ]
+            },
+            {
+              "required": [
+                "input",
+                "output"
+              ]
+            }
+          ]
+        }
+      ],
+      "required": [
+        "name",
+        "kind",
+        "query",
+        "cardinality"
+      ]
     }
   },
   "allOf": [
@@ -1278,6 +2072,9 @@ public final class PipelineTemplateSchemaExporter {
             "type": "array",
             "items": {
               "oneOf": [
+                {
+                  "$ref": "#/$defs/queryTemplateStep"
+                },
                 {
                   "$ref": "#/$defs/awaitTemplateStep"
                 },
@@ -1389,6 +2186,17 @@ public final class PipelineTemplateSchemaExporter {
       "type": "array",
       "description": "List of pipeline steps."
     },
+    "queries": {
+      "type": "object",
+      "description": "Captured query connector definitions referenced by kind: query steps.",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/queryDefinition"
+      }
+    },
     "aspects": {
       "type": "object",
       "description": "Pipeline aspects - cross-cutting concerns that apply around pipeline steps. Aspect names must be lower-kebab-case and typically match the plugin module base name (e.g., persistence -> persistence-svc). Cache invalidation aspects (cache-invalidate, cache-invalidate-all) are hosted in cache-invalidation-svc.",
@@ -1441,6 +2249,12 @@ public final class PipelineTemplateSchemaExporter {
     },
     "materialization": {
       "$ref": "#/$defs/materialization"
+    },
+    "sources": {
+      "$ref": "#/$defs/pipelineSources"
+    },
+    "publish": {
+      "$ref": "#/$defs/pipelinePublishTargets"
     },
     "input": {
       "$ref": "#/$defs/pipelineInputBoundary"

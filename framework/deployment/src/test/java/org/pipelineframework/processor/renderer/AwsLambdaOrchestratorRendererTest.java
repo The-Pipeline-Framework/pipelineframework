@@ -227,25 +227,25 @@ class AwsLambdaOrchestratorRendererTest {
 
     @Test
     void handlerFqcnReturnsCorrectPath() {
-        String fqcn = AwsLambdaOrchestratorRenderer.handlerFqcn("com.example");
+        String fqcn = AwsLambdaOrchestratorRenderer.handlerFqcnStatic("com.example");
         assertEquals("com.example.orchestrator.service.PipelineRunFunctionHandler", fqcn);
     }
 
     @Test
     void runAsyncHandlerFqcnReturnsCorrectPath() {
-        String fqcn = AwsLambdaOrchestratorRenderer.runAsyncHandlerFqcn("com.example");
+        String fqcn = AwsLambdaOrchestratorRenderer.runAsyncHandlerFqcnStatic("com.example");
         assertEquals("com.example.orchestrator.service.PipelineRunAsyncFunctionHandler", fqcn);
     }
 
     @Test
     void statusHandlerFqcnReturnsCorrectPath() {
-        String fqcn = AwsLambdaOrchestratorRenderer.statusHandlerFqcn("com.example");
+        String fqcn = AwsLambdaOrchestratorRenderer.statusHandlerFqcnStatic("com.example");
         assertEquals("com.example.orchestrator.service.PipelineExecutionStatusFunctionHandler", fqcn);
     }
 
     @Test
     void resultHandlerFqcnReturnsCorrectPath() {
-        String fqcn = AwsLambdaOrchestratorRenderer.resultHandlerFqcn("com.example");
+        String fqcn = AwsLambdaOrchestratorRenderer.resultHandlerFqcnStatic("com.example");
         assertEquals("com.example.orchestrator.service.PipelineExecutionResultFunctionHandler", fqcn);
     }
 

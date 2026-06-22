@@ -1,15 +1,13 @@
 package org.pipelineframework.awaitable;
 
-import io.vertx.core.Context;
-import io.vertx.core.Vertx;
+import org.pipelineframework.runtime.core.RuntimeAdapters;
 
 /**
- * Holder for internal await execution context using Vert.x local context when available and
- * falling back to thread-local storage otherwise.
+ * Holder for internal await execution context using framework adapter context propagation.
  *
  * <p>Callers that invoke {@link #set(AwaitExecutionContext)} must restore the previous value or call
  * {@link #clear()} in a {@code finally} block when the execution scope ends. This holder is intentionally
- * narrow: it is only safe while framework-managed await execution remains on the same Vert.x context or,
+ * narrow: it is only safe while framework-managed await execution remains on the same adapter context or,
  * when no Vert.x context exists, on the same thread.</p>
  *
  * <p>Because this falls back to {@link ThreadLocal}, pooled threads can leak stale context if cleanup is missed,
@@ -28,48 +26,27 @@ import io.vertx.core.Vertx;
  */
 public final class AwaitExecutionContextHolder {
     private static final String CONTEXT_KEY = AwaitExecutionContextHolder.class.getName() + ".context";
-    private static final ThreadLocal<AwaitExecutionContext> CURRENT = new ThreadLocal<>();
 
     private AwaitExecutionContextHolder() {
     }
 
     public static AwaitExecutionContext get() {
-        Context context = Vertx.currentContext();
-        if (context != null) {
-            try {
-                Object stored = context.getLocal(CONTEXT_KEY);
-                if (stored instanceof AwaitExecutionContext awaitExecutionContext) {
-                    return awaitExecutionContext;
-                }
-            } catch (UnsupportedOperationException ignored) {
-                // Root contexts forbid locals; fall back to thread-local storage.
-            }
+        Object value = RuntimeAdapters.executionContext(CONTEXT_KEY, Object.class);
+        if (value instanceof AwaitExecutionContext awaitExecutionContext) {
+            return awaitExecutionContext;
         }
-        return CURRENT.get();
+        return null;
     }
 
     public static void set(AwaitExecutionContext context) {
-        Context vertxContext = Vertx.currentContext();
-        if (vertxContext != null) {
-            try {
-                vertxContext.putLocal(CONTEXT_KEY, context);
-                return;
-            } catch (UnsupportedOperationException ignored) {
-                // Root contexts forbid locals; fall back to thread-local storage.
-            }
+        if (context == null) {
+            RuntimeAdapters.clearExecutionContext(CONTEXT_KEY);
+            return;
         }
-        CURRENT.set(context);
+        RuntimeAdapters.setExecutionContext(CONTEXT_KEY, context);
     }
 
     public static void clear() {
-        Context context = Vertx.currentContext();
-        if (context != null) {
-            try {
-                context.removeLocal(CONTEXT_KEY);
-            } catch (UnsupportedOperationException ignored) {
-                // Root contexts forbid locals; fall back to thread-local storage.
-            }
-        }
-        CURRENT.remove();
+        RuntimeAdapters.clearExecutionContext(CONTEXT_KEY);
     }
 }

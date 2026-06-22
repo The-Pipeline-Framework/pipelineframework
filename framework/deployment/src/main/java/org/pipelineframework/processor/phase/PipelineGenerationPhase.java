@@ -16,6 +16,7 @@ import org.pipelineframework.processor.ir.*;
 import org.pipelineframework.processor.renderer.*;
 import org.pipelineframework.processor.util.OrchestratorClientPropertiesGenerator;
 import org.pipelineframework.processor.util.CheckpointHandoffMetadataGenerator;
+import org.pipelineframework.processor.util.PipelineContractMetadataGenerator;
 import org.pipelineframework.processor.util.PipelineOrderMetadataGenerator;
 import org.pipelineframework.processor.util.PipelinePlatformMetadataGenerator;
 import org.pipelineframework.processor.util.PipelineTelemetryMetadataGenerator;
@@ -76,24 +77,30 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
 
         // Get the bindings map from the context
         Map<String, Object> bindingsMap = ctx.getRendererBindings();
+        SpringRendererProfileSupport.validateGenerationSupported(ctx);
+        boolean springProfile = SpringRendererProfileSupport.isSpringProfile(ctx);
 
         // Initialize renderers
         GrpcServiceAdapterRenderer grpcRenderer = new GrpcServiceAdapterRenderer(GenerationTarget.GRPC_SERVICE);
         org.pipelineframework.processor.renderer.ClientStepRenderer clientRenderer =
             new org.pipelineframework.processor.renderer.ClientStepRenderer(GenerationTarget.CLIENT_STEP);
-        org.pipelineframework.processor.renderer.LocalClientStepRenderer localClientRenderer =
-            new org.pipelineframework.processor.renderer.LocalClientStepRenderer();
+        PipelineRenderer<LocalBinding> localClientRenderer = springProfile
+            ? new SpringLocalClientStepRenderer()
+            : new org.pipelineframework.processor.renderer.LocalClientStepRenderer();
         RestClientStepRenderer restClientRenderer = new RestClientStepRenderer();
-        RestResourceRenderer restRenderer = new RestResourceRenderer();
+        PipelineRenderer<RestBinding> restRenderer = springProfile
+            ? new SpringRestResourceRenderer()
+            : new RestResourceRenderer();
         RestFunctionHandlerRenderer restFunctionHandlerRenderer = new RestFunctionHandlerRenderer();
         BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer = new BlockingReactiveBridgeRenderer();
         RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer = new RemoteOperatorAdapterRenderer();
         AwaitClientStepRenderer awaitClientStepRenderer = new AwaitClientStepRenderer();
         CommandClientStepRenderer commandClientStepRenderer = new CommandClientStepRenderer();
+        QueryClientStepRenderer queryClientStepRenderer = new QueryClientStepRenderer();
         OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
         OrchestratorRestResourceRenderer orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
         AbstractOrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer =
-            FunctionHandlerRendererFactory.createOrchestratorRenderer();
+            FunctionHandlerRendererFactory.createOrchestratorRenderer(ctx.getRendererProfile());
         OrchestratorCliRenderer orchestratorCliRenderer = new OrchestratorCliRenderer();
         OrchestratorIngestClientRenderer orchestratorIngestClientRenderer = new OrchestratorIngestClientRenderer();
         CheckpointPublicationDescriptorRenderer checkpointPublicationDescriptorRenderer =
@@ -237,10 +244,11 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 restClientRenderer,
                 restRenderer,
                 restFunctionHandlerRenderer,
-                blockingReactiveBridgeRenderer,
-                remoteOperatorAdapterRenderer,
-                awaitClientStepRenderer,
-                commandClientStepRenderer);
+                    blockingReactiveBridgeRenderer,
+                    remoteOperatorAdapterRenderer,
+                    awaitClientStepRenderer,
+                    commandClientStepRenderer,
+                    queryClientStepRenderer);
         }
 
         if (ctx.isTransportModeGrpc() && descriptorSet != null) {
@@ -289,6 +297,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             PipelineOrderMetadataGenerator orderMetadataGenerator =
                 new PipelineOrderMetadataGenerator(ctx.getProcessingEnv());
             orderMetadataGenerator.writeOrderMetadata(ctx);
+            PipelineContractMetadataGenerator contractMetadataGenerator =
+                new PipelineContractMetadataGenerator(ctx.getProcessingEnv());
+            contractMetadataGenerator.writePipelineContract(ctx);
             if (ctx.isOrchestratorGenerated()) {
                 PipelineTelemetryMetadataGenerator telemetryMetadataGenerator =
                     new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv());
@@ -471,14 +482,15 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             RoleMetadataGenerator roleMetadataGenerator,
             GrpcServiceAdapterRenderer grpcRenderer,
             org.pipelineframework.processor.renderer.ClientStepRenderer clientRenderer,
-            org.pipelineframework.processor.renderer.LocalClientStepRenderer localClientRenderer,
+            PipelineRenderer<LocalBinding> localClientRenderer,
             RestClientStepRenderer restClientRenderer,
-            RestResourceRenderer restRenderer,
+            PipelineRenderer<RestBinding> restRenderer,
             RestFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer,
             AwaitClientStepRenderer awaitClientStepRenderer,
-            CommandClientStepRenderer commandClientStepRenderer) throws IOException {
+            CommandClientStepRenderer commandClientStepRenderer,
+            QueryClientStepRenderer queryClientStepRenderer) throws IOException {
         stepArtifactGenerationService.generateArtifactsForModel(
             ctx,
             model,
@@ -499,7 +511,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             blockingReactiveBridgeRenderer,
             remoteOperatorAdapterRenderer,
             awaitClientStepRenderer,
-            commandClientStepRenderer);
+            commandClientStepRenderer,
+            queryClientStepRenderer);
     }
 
     /**
@@ -603,16 +616,16 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                         cacheKeyGenerator,
                         descriptorSet));
                     roleMetadataGenerator.recordClassWithRole(
-                        AwsLambdaOrchestratorRenderer.handlerFqcn(binding.basePackage()),
+                        orchestratorFunctionHandlerRenderer.handlerFqcn(binding.basePackage()),
                         role.name());
                     roleMetadataGenerator.recordClassWithRole(
-                        AwsLambdaOrchestratorRenderer.runAsyncHandlerFqcn(binding.basePackage()),
+                        orchestratorFunctionHandlerRenderer.runAsyncHandlerFqcn(binding.basePackage()),
                         role.name());
                     roleMetadataGenerator.recordClassWithRole(
-                        AwsLambdaOrchestratorRenderer.statusHandlerFqcn(binding.basePackage()),
+                        orchestratorFunctionHandlerRenderer.statusHandlerFqcn(binding.basePackage()),
                         role.name());
                     roleMetadataGenerator.recordClassWithRole(
-                        AwsLambdaOrchestratorRenderer.resultHandlerFqcn(binding.basePackage()),
+                        orchestratorFunctionHandlerRenderer.resultHandlerFqcn(binding.basePackage()),
                         role.name());
                 }
             } else if (!local) {

@@ -108,6 +108,37 @@ public class AwaitResumeTokenService {
         }
     }
 
+    /**
+     * Reads the interaction id from a resume token without trusting it.
+     *
+     * The value is only a lookup hint; callers must still validate the token
+     * against the fetched durable interaction before admitting completion.
+     */
+    public String interactionIdHint(String token) {
+        Map<?, ?> payload = payload(token);
+        Object interactionId = payload.get("interactionId");
+        if (!(interactionId instanceof String value) || value.isBlank()) {
+            throw new AwaitResumeTokenRejectedException("Await resume token does not contain an interaction id");
+        }
+        return value.trim();
+    }
+
+    private Map<?, ?> payload(String token) {
+        if (token == null || token.isBlank()) {
+            throw new AwaitResumeTokenRejectedException("resumeToken must not be blank");
+        }
+        String[] parts = token.split("\\.", -1);
+        if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+            throw new AwaitResumeTokenRejectedException("Malformed await resume token");
+        }
+        try {
+            byte[] payloadBytes = BASE64_URL_DECODER.decode(parts[0]);
+            return PipelineJson.mapper().readValue(payloadBytes, Map.class);
+        } catch (Exception e) {
+            throw new AwaitResumeTokenRejectedException("Malformed await resume token payload", e);
+        }
+    }
+
     private byte[] signBytes(byte[] payload) {
         try {
             Mac mac = Mac.getInstance(HMAC_ALGORITHM);

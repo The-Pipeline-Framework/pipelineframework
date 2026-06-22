@@ -18,9 +18,11 @@ package org.pipelineframework;
 
 import java.text.MessageFormat;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.function.Supplier;
 import jakarta.enterprise.context.ApplicationScoped;
 
+import io.quarkus.arc.ClientProxy;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
@@ -31,11 +33,15 @@ import org.pipelineframework.cache.CachePolicyViolation;
 import org.pipelineframework.cache.CacheReadBypass;
 import org.pipelineframework.cache.CacheStatus;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
-import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.AwaitStreamOneToOneStep;
 import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.invocation.PipelineInvocationRuntime;
+import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
+import org.pipelineframework.service.ReactiveService;
+import org.pipelineframework.service.ReactiveStreamingService;
+import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepManyToMany;
 import org.pipelineframework.step.StepOneToMany;
 import org.pipelineframework.step.StepOneToOne;
@@ -47,7 +53,9 @@ import org.pipelineframework.telemetry.PipelineTelemetry;
 class PipelineStepExecutor {
 
     private static final Logger logger = Logger.getLogger(PipelineStepExecutor.class);
+    private static final PipelineInvocationRuntime DEFAULT_INVOCATION_RUNTIME = new PipelineInvocationRuntime();
 
+    @SuppressWarnings("unchecked")
     Object applyStep(
         Object step,
         Object current,
@@ -58,7 +66,8 @@ class PipelineStepExecutor {
         PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot) {
-        if (step instanceof AwaitStreamOneToOneStep<?, ?> awaitStep && current instanceof Multi<?>) {
+        Object resolvedStep = unwrapClientProxy(step).orElse(step);
+        if (resolvedStep instanceof AwaitStreamOneToOneStep<?, ?> awaitStep && current instanceof Multi<?>) {
             return applyAwaitStreamOneToOneUnchecked(
                 awaitStep,
                 current,
@@ -67,35 +76,103 @@ class PipelineStepExecutor {
                 contextSnapshot,
                 awaitContextSnapshot);
         }
-        if (step instanceof StepOneToOne<?, ?> stepOneToOne) {
+        if (resolvedStep instanceof StepOneToOne<?, ?> stepOneToOne) {
             boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
                 stepOneToOne,
                 parallelismPolicy,
                 PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_ONE);
             return applyOneToOneUnchecked(stepOneToOne, current, parallel, maxConcurrency, telemetry, telemetryContext, cacheReadSupport,
                 contextSnapshot, awaitContextSnapshot);
-        } else if (step instanceof StepOneToOneCompletableFuture<?, ?> stepFuture) {
+        } else if (resolvedStep instanceof StepOneToOneCompletableFuture<?, ?> stepFuture) {
             boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
                 stepFuture,
                 parallelismPolicy,
                 PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_ONE_FUTURE);
             return applyOneToOneFutureUnchecked(stepFuture, current, parallel, maxConcurrency, telemetry, telemetryContext,
                 contextSnapshot, awaitContextSnapshot);
-        } else if (step instanceof StepOneToMany<?, ?> stepOneToMany) {
+        } else if (resolvedStep instanceof StepOneToMany<?, ?> stepOneToMany) {
             boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
                 stepOneToMany,
                 parallelismPolicy,
                 PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_MANY);
             return applyOneToManyUnchecked(stepOneToMany, current, parallel, maxConcurrency, telemetry, telemetryContext,
                 contextSnapshot, awaitContextSnapshot);
-        } else if (step instanceof ManyToOne<?, ?> manyToOne) {
+        } else if (resolvedStep instanceof ManyToOne<?, ?> manyToOne) {
             return applyManyToOneUnchecked(manyToOne, current, telemetry, telemetryContext, contextSnapshot, awaitContextSnapshot);
-        } else if (step instanceof StepManyToMany<?, ?> manyToMany) {
+        } else if (resolvedStep instanceof StepManyToMany<?, ?> manyToMany) {
             return applyManyToManyUnchecked(manyToMany, current, telemetry, telemetryContext,
                 contextSnapshot, awaitContextSnapshot);
+        } else if (resolvedStep instanceof ReactiveService<?, ?> reactiveService) {
+            var adapter = new ReactiveServiceStepAdapter((ReactiveService<Object, Object>) reactiveService);
+            return applyOneToOneUnchecked(adapter, current, false, maxConcurrency, telemetry, telemetryContext, cacheReadSupport,
+                contextSnapshot, awaitContextSnapshot);
+        } else if (resolvedStep instanceof ReactiveStreamingService<?, ?> streamingService) {
+            var adapter = new ReactiveStreamingServiceStepAdapter((ReactiveStreamingService<Object, Object>) streamingService);
+            return applyOneToManyUnchecked(adapter, current, false, maxConcurrency, telemetry, telemetryContext,
+                contextSnapshot, awaitContextSnapshot);
+        } else if (resolvedStep instanceof ReactiveBidirectionalStreamingService<?, ?> bidirectionalStreamingService) {
+            var adapter = new ReactiveBidirectionalStreamingServiceStepAdapter(
+                (ReactiveBidirectionalStreamingService<Object, Object>) bidirectionalStreamingService);
+            return applyManyToManyUnchecked(adapter, current, telemetry, telemetryContext,
+                contextSnapshot, awaitContextSnapshot);
         } else {
-            String stepType = step == null ? "null" : step.getClass().getName();
+            String stepType = resolvedStep == null ? "null" : resolvedStep.getClass().getName();
             throw new IllegalArgumentException("Step not recognised: " + stepType);
+        }
+    }
+
+    private static final class ReactiveServiceStepAdapter extends ConfigurableStep implements StepOneToOne<Object, Object> {
+        private final ReactiveService<Object, Object> service;
+
+        private ReactiveServiceStepAdapter(ReactiveService<Object, Object> service) {
+            this.service = service;
+        }
+
+        @Override
+        public Uni<Object> applyOneToOne(Object in) {
+            return service.process(in);
+        }
+    }
+
+    private static final class ReactiveStreamingServiceStepAdapter extends ConfigurableStep implements StepOneToMany<Object, Object> {
+        private final ReactiveStreamingService<Object, Object> service;
+
+        private ReactiveStreamingServiceStepAdapter(ReactiveStreamingService<Object, Object> service) {
+            this.service = service;
+        }
+
+        @Override
+        public Multi<Object> applyOneToMany(Object in) {
+            return service.process(in);
+        }
+    }
+
+    private static final class ReactiveBidirectionalStreamingServiceStepAdapter extends ConfigurableStep
+        implements StepManyToMany<Object, Object> {
+        private final ReactiveBidirectionalStreamingService<Object, Object> service;
+
+        private ReactiveBidirectionalStreamingServiceStepAdapter(ReactiveBidirectionalStreamingService<Object, Object> service) {
+            this.service = service;
+        }
+
+        @Override
+        public Multi<Object> applyTransform(Multi<Object> input) {
+            return service.process(input);
+        }
+    }
+
+    private Optional<Object> unwrapClientProxy(Object step) {
+        if (step == null) {
+            return Optional.empty();
+        }
+        if (!(step instanceof ClientProxy clientProxy)) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.ofNullable(clientProxy.arc_contextualInstance());
+        } catch (RuntimeException e) {
+            logger.debugf(e, "Failed to unwrap pipeline step client proxy %s", step.getClass().getName());
+            return Optional.empty();
         }
     }
 
@@ -383,40 +460,12 @@ class PipelineStepExecutor {
         }
     }
 
-    private static ExecutionContextScope installExecutionContexts(
-        PipelineContext context,
-        AwaitExecutionContext awaitContext
-    ) {
-        PipelineContext previousPipeline = PipelineContextHolder.get();
-        AwaitExecutionContext previousAwait = AwaitExecutionContextHolder.get();
-        if (context != null) {
-            PipelineContextHolder.set(context);
-        } else {
-            PipelineContextHolder.clear();
-        }
-        if (awaitContext != null) {
-            AwaitExecutionContextHolder.set(awaitContext);
-        } else {
-            AwaitExecutionContextHolder.clear();
-        }
-        return new ExecutionContextScope(previousPipeline, previousAwait);
-    }
-
     static <T> Uni<T> withStepExecutionUni(
         PipelineContext context,
         AwaitExecutionContext awaitContext,
         Supplier<Uni<T>> supplier
     ) {
-        return Uni.createFrom().deferred(() -> {
-            ExecutionContextScope scope = installExecutionContexts(context, awaitContext);
-            try {
-                return supplier.get()
-                    .onTermination().invoke(scope::close);
-            } catch (Throwable failure) {
-                scope.close();
-                return Uni.createFrom().failure(failure);
-            }
-        });
+        return DEFAULT_INVOCATION_RUNTIME.invokeStepUni(context, awaitContext, supplier);
     }
 
     static <T> Multi<T> withStepExecutionMulti(
@@ -424,40 +473,7 @@ class PipelineStepExecutor {
         AwaitExecutionContext awaitContext,
         Supplier<Multi<T>> supplier
     ) {
-        return Multi.createFrom().deferred(() -> {
-            ExecutionContextScope scope = installExecutionContexts(context, awaitContext);
-            try {
-                return supplier.get()
-                    .onTermination().invoke((failure, cancelled) -> scope.close());
-            } catch (Throwable failure) {
-                scope.close();
-                return Multi.createFrom().failure(failure);
-            }
-        });
-    }
-
-    private static final class ExecutionContextScope implements AutoCloseable {
-        private final PipelineContext previousPipeline;
-        private final AwaitExecutionContext previousAwait;
-
-        private ExecutionContextScope(PipelineContext previousPipeline, AwaitExecutionContext previousAwait) {
-            this.previousPipeline = previousPipeline;
-            this.previousAwait = previousAwait;
-        }
-
-        @Override
-        public void close() {
-            if (previousAwait != null) {
-                AwaitExecutionContextHolder.set(previousAwait);
-            } else {
-                AwaitExecutionContextHolder.clear();
-            }
-            if (previousPipeline != null) {
-                PipelineContextHolder.set(previousPipeline);
-            } else {
-                PipelineContextHolder.clear();
-            }
-        }
+        return DEFAULT_INVOCATION_RUNTIME.invokeStepMulti(context, awaitContext, supplier);
     }
 
     @SuppressWarnings("unchecked")

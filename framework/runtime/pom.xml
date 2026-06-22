@@ -21,13 +21,13 @@
     <parent>
         <groupId>org.pipelineframework</groupId>
         <artifactId>framework-parent</artifactId>
-        <version>26.6.1-SNAPSHOT</version>
+        <version>26.6.2-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <groupId>org.pipelineframework</groupId>
     <artifactId>pipelineframework</artifactId>
-    <version>26.6.1-SNAPSHOT</version>
+    <version>26.6.2-SNAPSHOT</version>
     <!-- version is not needed as it is automatically inherited from the parent-->
 
     <name>The Pipeline Framework Extension (Runtime)</name>
@@ -53,10 +53,20 @@
         <connection>scm:git:https://github.com/The-Pipeline-Framework/pipelineframework.git</connection>
         <developerConnection>scm:git:git@github.com:The-Pipeline-Framework/pipelineframework.git</developerConnection>
         <url>https://github.com/The-Pipeline-Framework/pipelineframework</url>
-        <tag>v0.9.2</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <dependencies>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework-runtime-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
@@ -213,6 +223,21 @@
         <dependency>
             <groupId>io.quarkiverse.amazonservices</groupId>
             <artifactId>quarkus-amazon-sqs</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk.crt</groupId>
+            <artifactId>aws-crt</artifactId>
+            <version>0.40.3</version>
         </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>

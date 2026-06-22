@@ -1,0 +1,11 @@
+appName: "Spring REST Smoke"
+basePackage: "com.example.smoke"
+transport: "REST"
+platform: "COMPUTE"
+steps:
+  - name: "payment"
+    service: "com.example.smoke.service.PaymentService"
+    input: "com.example.smoke.domain.PaymentRecord"
+    inboundMapper: "com.example.smoke.mapper.PaymentRecordMapper"
+    output: "com.example.smoke.domain.PaymentStatus"
+    outboundMapper: "com.example.smoke.mapper.PaymentStatusMapper"

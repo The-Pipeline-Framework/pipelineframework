@@ -22,7 +22,7 @@ package org.pipelineframework.processor.ir;
 public enum StepKind {
     /**
      * An internal step where the execution service is implemented within the application
-     * and annotated with @PipelineStep.
+     * and bound from YAML or legacy @PipelineStep metadata.
      */
     INTERNAL,
     
@@ -47,5 +47,11 @@ public enum StepKind {
     /**
      * A command step that executes an idempotent external effect through a managed connector.
      */
-    COMMAND
+    COMMAND,
+
+    /**
+     * A captured query step that reads through an application connector and makes
+     * decision-affecting external state an explicit pipeline input.
+     */
+    QUERY
 }

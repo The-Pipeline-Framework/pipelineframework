@@ -127,7 +127,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final String CONTAINER_KEYSTORE_PATH = "/deployments/server-keystore.jks";
     private static final String CONTAINER_TRUSTSTORE_PATH = "/deployments/client-truststore.jks";
     private static final String RUNTIME_LAYOUT =
-            System.getProperty("csv.runtime.layout", "modular").trim().toLowerCase();
+            firstNonBlank(System.getProperty("csv.runtime.layout"), System.getenv("CSV_RUNTIME_LAYOUT"), "modular")
+                    .trim()
+                    .toLowerCase();
     private static final boolean MONOLITH_LAYOUT = "monolith".equals(RUNTIME_LAYOUT);
     private static final boolean PIPELINE_RUNTIME_LAYOUT = "pipeline-runtime".equals(RUNTIME_LAYOUT);
     private static final long ORCHESTRATOR_WAIT_TIMEOUT_SECONDS =
@@ -241,7 +243,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
             ensureKafkaTopics();
             Startables.deepStart(Stream.of(
                     getPersistenceService(),
-                    getPaymentsProcessingService(),
                     getPipelineRuntimeService())).join();
             return;
         }
@@ -786,6 +787,15 @@ abstract class AbstractCsvPaymentsEndToEnd {
         }
     }
 
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
     private static boolean needsPackagedRefresh(Path jar) throws IOException {
         if (!Files.isRegularFile(jar)) {
             return true;
@@ -843,9 +853,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
     private static void rebuildPackagedOrchestrator() throws IOException {
         Path moduleDir = Paths.get(System.getProperty("user.dir")).toAbsolutePath().normalize();
+        Path processDir = moduleDir;
         String[] command;
         if (MONOLITH_LAYOUT) {
-            command = new String[] {"bash", "../build-monolith.sh", "-DskipTests"};
+            processDir = moduleDir.getParent();
+            command = new String[] {"bash", "build-monolith.sh", "-DskipTests"};
         } else {
             command =
                     new String[] {
@@ -860,7 +872,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
                     };
         }
         ProcessBuilder pb = new ProcessBuilder(command);
-        pb.directory(moduleDir.toFile());
+        pb.directory(processDir.toFile());
+        pb.environment().put("CSV_RUNTIME_LAYOUT", RUNTIME_LAYOUT);
         pb.redirectErrorStream(true);
         Process process = pb.start();
         StringBuilder output = new StringBuilder();

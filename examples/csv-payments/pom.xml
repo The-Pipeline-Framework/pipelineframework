@@ -22,7 +22,7 @@
     <parent>
         <groupId>org.pipelineframework</groupId>
         <artifactId>pipeline-framework-root</artifactId>
-        <version>26.6.1-SNAPSHOT</version>
+        <version>26.6.2-SNAPSHOT</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
@@ -48,13 +48,17 @@
         <maven.compiler.target>21</maven.compiler.target>
         <enablePreview>true</enablePreview>
         <quarkus.platform.version>3.33.1</quarkus.platform.version>
+        <quarkus.amazon.services.bom.version>3.19.0</quarkus.amazon.services.bom.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <grpc.version>1.63.0</grpc.version>
         <version.jandex>3.5.0</version.jandex>
         <spotless.plugin.version>2.44.0</spotless.plugin.version>
+        <argLine />
         <surefireArgLine />
         <pipeline.generatedSourcesArg />
+        <pipeline.configArg />
+        <pipeline.protoConfigArg />
         <pipeline.moduleArg>-Apipeline.module=${project.artifactId}</pipeline.moduleArg>
         <protobuf.descriptor.fileArg />
         <pipeline.parallelism>PARALLEL</pipeline.parallelism>
@@ -68,6 +72,7 @@
         <mapstruct.version>1.5.5.Final</mapstruct.version>
         <assertj.version>3.27.7</assertj.version>
         <skipUnitTests>false</skipUnitTests>
+        <csv.runtime.layout>modular</csv.runtime.layout>
     </properties>
 
     <dependencyManagement>
@@ -77,6 +82,13 @@
                 <groupId>${quarkus.platform.group-id}</groupId>
                 <artifactId>${quarkus.platform.artifact-id}</artifactId>
                 <version>${quarkus.platform.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.quarkiverse.amazonservices</groupId>
+                <artifactId>quarkus-amazon-services-bom</artifactId>
+                <version>${quarkus.amazon.services.bom.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -304,6 +316,7 @@
                             <configuration>
                                 <compilerArgs>
                                     <arg>${pipeline.generatedSourcesArg}</arg>
+                                    <arg>${pipeline.configArg}</arg>
                                     <arg>${pipeline.moduleArg}</arg>
                                     <arg>${protobuf.descriptor.fileArg}</arg>
                                     <arg>-Apipeline.transport=${tpf.build.transport}</arg>
@@ -396,6 +409,7 @@
                     <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-maven-plugin</artifactId>
                     <version>${quarkus.platform.version}</version>
+                    <extensions>true</extensions>
                     <configuration>
                         <jvmArgs>--enable-preview</jvmArgs>
                         <sourceDir>${project.build.directory}/generated-sources/annotations</sourceDir>
@@ -433,9 +447,10 @@
                         <reuseForks>true</reuseForks>
                         <systemPropertyVariables>
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                            <csv.runtime.layout>${csv.runtime.layout}</csv.runtime.layout>
                         </systemPropertyVariables>
                         <!--suppress UnresolvedMavenProperty -->
-                        <argLine>${surefireArgLine} --enable-preview -XX:+EnableDynamicAgentLoading</argLine>
+                        <argLine>@{argLine} ${surefireArgLine} --enable-preview -XX:+EnableDynamicAgentLoading</argLine>
                     </configuration>
                 </plugin>
                 <plugin>
@@ -443,6 +458,9 @@
                     <artifactId>maven-failsafe-plugin</artifactId>
                     <version>3.5.1</version>
                     <configuration>
+                        <systemPropertyVariables>
+                            <csv.runtime.layout>${csv.runtime.layout}</csv.runtime.layout>
+                        </systemPropertyVariables>
                         <!--suppress UnresolvedMavenProperty -->
                         <argLine>@{argLine} ${surefireArgLine} --enable-preview</argLine>
                     </configuration>

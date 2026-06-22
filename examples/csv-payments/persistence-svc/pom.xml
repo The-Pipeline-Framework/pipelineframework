@@ -22,7 +22,7 @@
     <parent>
         <groupId>org.pipelineframework.csv</groupId>
         <artifactId>csv-payments-parent</artifactId>
-        <version>26.6.1-SNAPSHOT</version>
+        <version>26.6.2-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -140,6 +140,7 @@
                 <pipeline.runtime.source.dir.output>${pipeline.runtime.source.root}/output-csv-file-processing-svc/src/main/java</pipeline.runtime.source.dir.output>
                 <pipeline.runtime.source.exclude.executor>org/pipelineframework/csv/service/ExecutorProducer.java</pipeline.runtime.source.exclude.executor>
                 <pipeline.runtime.source.exclude.kafka-mock>org/pipelineframework/csv/service/PaymentProviderKafkaAwaitMock.java</pipeline.runtime.source.exclude.kafka-mock>
+                <pipeline.runtime.source.exclude.sqs-mock>org/pipelineframework/csv/service/PaymentProviderSqsAwaitMock.java</pipeline.runtime.source.exclude.sqs-mock>
                 <pipeline.runtime.duplicate.check.script>${pipeline.runtime.source.root}/build-tools/check-duplicate-sources.sh</pipeline.runtime.duplicate.check.script>
             </properties>
             <build>
@@ -179,6 +180,7 @@
                                             <fileset dir="${pipeline.runtime.source.dir.payments}">
                                                 <exclude name="${pipeline.runtime.source.exclude.executor}" />
                                                 <exclude name="${pipeline.runtime.source.exclude.kafka-mock}" />
+                                                <exclude name="${pipeline.runtime.source.exclude.sqs-mock}" />
                                             </fileset>
                                         </copy>
                                         <copy todir="${project.build.directory}/pipeline-runtime-sources">

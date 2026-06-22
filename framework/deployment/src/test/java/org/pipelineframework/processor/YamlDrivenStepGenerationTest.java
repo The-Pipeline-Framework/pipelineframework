@@ -183,15 +183,667 @@ class YamlDrivenStepGenerationTest {
             triggerSource, delegateSource, libInput, libOutput, appInput, appOutput,
             externalMapperContract, reactiveServiceContract, mapperSource));
 
-        assertFalse(result.success(), "Expected deterministic contract validation failure in this harness");
-        String errors = result.errorSummary();
-        assertTrue(errors.contains("Delegate service 'com.example.lib.EmbeddingService'"),
-            "Expected delegated-service validation diagnostic: " + errors);
+        assertTrue(result.success(), "Expected delegated YAML step with explicit mapper to compile: " + result.errorSummary());
     }
 
     @Test
-    void failsYamlInternalStepWhenServiceIsNotAnnotated() throws IOException {
-        Path yamlFile = tempDir.resolve("pipeline-invalid-internal.yaml");
+    void generatesYamlInternalStepWithoutPipelineStepAnnotation() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-yaml-only.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+            import org.pipelineframework.service.ReactiveService;
+
+            public class PaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
+                @Override
+                public Uni<PaymentStatus> process(PaymentRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path uniStub = writeUniStub();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, paymentStatus, uniStub));
+        assertTrue(result.success(), "Expected annotation-free YAML internal service compilation to succeed: " + result.errorSummary());
+    }
+
+    @Test
+    void generatesYamlInternalStepFromPlainUniProcessMethod() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-plain-uni.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+
+            public class PaymentService {
+                public Uni<PaymentStatus> process(PaymentRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path uniStub = writeUniStub();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, paymentStatus, uniStub));
+        assertTrue(result.success(), "Expected plain Uni process method compilation to succeed: " + result.errorSummary());
+    }
+
+    @Test
+    void generatesYamlInternalStepFromPlainMonoProcessMethodWithSpringProfile() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-plain-mono.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import reactor.core.publisher.Mono;
+
+            public class PaymentService {
+                public Mono<PaymentStatus> process(PaymentRecord input) {
+                    return Mono.just(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path monoStub = writeMonoStub();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus, monoStub),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertTrue(result.success(), "Expected plain Mono process method compilation to succeed: " + result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepFromPlainMonoProcessMethodWithoutSpringProfile() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-plain-mono-quarkus.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import reactor.core.publisher.Mono;
+
+            public class PaymentService {
+                public Mono<PaymentStatus> process(PaymentRecord input) {
+                    return Mono.just(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path monoStub = writeMonoStub();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, paymentStatus, monoStub));
+        assertFalse(result.success(), "Expected default renderer profile to reject plain Mono process methods");
+        assertTrue(
+            result.errorSummary().contains("must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out> method"),
+            result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenPlainMonoProcessMethodIsRaw() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-raw-plain-mono.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import reactor.core.publisher.Mono;
+
+            public class PaymentService {
+                @SuppressWarnings("rawtypes")
+                public Mono process(PaymentRecord input) {
+                    return Mono.just(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path monoStub = writeMonoStub();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus, monoStub),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected raw Mono process method compilation to fail");
+        assertTrue(
+            result.errorSummary().contains("process(In): Mono<Out>"),
+            result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenMultiplePlainReactiveProcessMethodsExist() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-multiple-plain-reactive.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+            import reactor.core.publisher.Mono;
+
+            public class PaymentService {
+                public Uni<PaymentStatus> process(PaymentRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+
+                public Mono<PaymentStatus> process(AlternatePaymentRecord input) {
+                    return Mono.just(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path alternatePaymentRecord = writeSource("AlternatePaymentRecord.java", """
+            package com.example.app;
+
+            public class AlternatePaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path uniStub = writeUniStub();
+        Path monoStub = writeMonoStub();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, alternatePaymentRecord, paymentStatus, uniStub, monoStub),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected multiple plain reactive process methods to fail");
+        assertAll(
+            () -> assertTrue(result.errorSummary().contains("multiple public"), result.errorSummary()),
+            () -> assertTrue(result.errorSummary().contains("processBlocking(In): Out"), result.errorSummary()));
+    }
+
+    @Test
+    void generatesYamlInternalStepFromPlainBlockingProcessMethodWithSpringProfile() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-plain-blocking.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeBlockingPaymentService();
+        Path paymentRecord = writePaymentRecord();
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertTrue(result.success(), "Expected plain blocking process method compilation to succeed: " + result.errorSummary());
+    }
+
+    @Test
+    void generatesYamlInternalStepFromPlainBlockingProcessMethodWithVirtualThreads() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-plain-blocking-virtual.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+                runOnVirtualThreads: true
+            """);
+
+        Path paymentService = writeBlockingPaymentService();
+        Path paymentRecord = writePaymentRecord();
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertTrue(result.success(), "Expected virtual-thread blocking service compilation to succeed: " + result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalReactiveProcessMethodWithVirtualThreads() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-plain-uni-virtual.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+                runOnVirtualThreads: true
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+
+            public class PaymentService {
+                public Uni<PaymentStatus> process(PaymentRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writePaymentRecord();
+        Path paymentStatus = writePaymentStatus();
+        Path uniStub = writeUniStub();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, paymentStatus, uniStub));
+        assertFalse(result.success(), "Expected reactive virtual-thread service compilation to fail");
+        assertAll(
+            () -> assertTrue(result.errorSummary().contains("runOnVirtualThreads"), result.errorSummary()),
+            () -> assertTrue(result.errorSummary().contains("blocking internal services"), result.errorSummary()));
+    }
+
+    @Test
+    void failsYamlInternalStepFromPlainBlockingProcessMethodWithoutSpringProfile() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-plain-blocking-quarkus.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeBlockingPaymentService();
+        Path paymentRecord = writePaymentRecord();
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, paymentStatus));
+        assertFalse(result.success(), "Expected default renderer profile to reject plain blocking process methods");
+        assertTrue(
+            result.errorSummary().contains("must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out> method"),
+            result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenPlainBlockingProcessMethodIsStatic() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-static-plain-blocking.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            public class PaymentService {
+                public static PaymentStatus processBlocking(PaymentRecord input) {
+                    return new PaymentStatus();
+                }
+            }
+            """);
+        Path paymentRecord = writePaymentRecord();
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected static plain blocking process method compilation to fail");
+        assertTrue(result.errorSummary().contains("processBlocking(In): Out"), result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenPlainBlockingProcessMethodIsPrivate() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-private-plain-blocking.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            public class PaymentService {
+                private PaymentStatus processBlocking(PaymentRecord input) {
+                    return new PaymentStatus();
+                }
+            }
+            """);
+        Path paymentRecord = writePaymentRecord();
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected private plain blocking process method compilation to fail");
+        assertTrue(result.errorSummary().contains("processBlocking(In): Out"), result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenPlainBlockingProcessMethodHasWrongArity() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-wrong-arity-plain-blocking.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            public class PaymentService {
+                public PaymentStatus processBlocking(PaymentRecord input, String unused) {
+                    return new PaymentStatus();
+                }
+            }
+            """);
+        Path paymentRecord = writePaymentRecord();
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected wrong-arity plain blocking process method compilation to fail");
+        assertTrue(result.errorSummary().contains("processBlocking(In): Out"), result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenPlainBlockingProcessMethodReturnsVoid() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-void-plain-blocking.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            public class PaymentService {
+                public void processBlocking(PaymentRecord input) {
+                }
+            }
+            """);
+        Path paymentRecord = writePaymentRecord();
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected void plain blocking process method compilation to fail");
+        assertTrue(result.errorSummary().contains("processBlocking(In): Out"), result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenMultiplePlainBlockingProcessMethodsExist() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-multiple-plain-blocking.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            public class PaymentService {
+                public PaymentStatus processBlocking(PaymentRecord input) {
+                    return new PaymentStatus();
+                }
+
+                public PaymentStatus processBlocking(AlternatePaymentRecord input) {
+                    return new PaymentStatus();
+                }
+            }
+            """);
+        Path paymentRecord = writePaymentRecord();
+        Path alternatePaymentRecord = writeSource("AlternatePaymentRecord.java", """
+            package com.example.app;
+
+            public class AlternatePaymentRecord {
+            }
+            """);
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, alternatePaymentRecord, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected multiple plain blocking process methods to fail");
+        assertAll(
+            () -> assertTrue(result.errorSummary().contains("multiple public"), result.errorSummary()),
+            () -> assertTrue(result.errorSummary().contains("processBlocking(In): Out"), result.errorSummary()));
+    }
+
+    @Test
+    void failsYamlInternalStepWhenPlainUniProcessMethodIsStatic() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-static-plain-uni.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+
+            public class PaymentService {
+                public static Uni<PaymentStatus> process(PaymentRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path uniStub = writeUniStub();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, paymentStatus, uniStub));
+        assertFalse(result.success(), "Expected static plain Uni process method compilation to fail");
+        assertTrue(
+            result.errorSummary().contains("must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out> method"),
+            result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenServiceClassIsMissing() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-missing-internal.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.MissingPaymentService"
+            """);
+
+        Path markerSource = writeSource("MarkerMissingService.java", """
+            package com.example.app;
+
+            public class MarkerMissingService {
+            }
+            """);
+
+        CompilationResult result = compile(yamlFile, List.of(markerSource));
+        assertFalse(result.success(), "Expected missing YAML internal service class to fail");
+        assertTrue(result.errorSummary().contains("not found for step 'pay'"), result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenServiceDoesNotImplementSupportedContract() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-bad-internal-shape.yaml");
         Files.writeString(yamlFile, """
             appName: "Test App"
             basePackage: "com.example"
@@ -201,26 +853,21 @@ class YamlDrivenStepGenerationTest {
                 service: "com.example.app.PaymentService"
             """);
 
-        Path triggerSource = writeSource("TriggerStep2.java", """
-            package com.example.app;
-
-            import org.pipelineframework.annotation.PipelineStep;
-
-            @PipelineStep(inputType = String.class, outputType = String.class)
-            public class TriggerStep2 {
-            }
-            """);
-        Path nonAnnotatedService = writeSource("PaymentService.java", """
+        Path nonService = writeSource("PaymentService.java", """
             package com.example.app;
 
             public class PaymentService {
+                public String process(String input) {
+                    return input;
+                }
             }
             """);
 
-        CompilationResult result = compile(yamlFile, List.of(triggerSource, nonAnnotatedService));
-        assertFalse(result.success(), "Expected failure when YAML internal service lacks @PipelineStep");
-        String errors = result.errorSummary().toLowerCase(Locale.ROOT);
-        assertTrue(errors.contains("must be annotated with @pipelinestep"), result.errorSummary());
+        CompilationResult result = compile(yamlFile, List.of(nonService));
+        assertFalse(result.success(), "Expected unsupported internal service contract to fail");
+        assertTrue(
+            result.errorSummary().contains("must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out> method"),
+            result.errorSummary());
     }
 
     @Test
@@ -244,10 +891,8 @@ class YamlDrivenStepGenerationTest {
             package com.example.app;
 
             import io.smallrye.mutiny.Uni;
-            import org.pipelineframework.annotation.PipelineStep;
             import org.pipelineframework.service.ReactiveService;
 
-            @PipelineStep
             public class PaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
                 @Override
                 public Uni<PaymentStatus> process(PaymentRecord input) {
@@ -340,10 +985,8 @@ class YamlDrivenStepGenerationTest {
             package com.example.app;
 
             import io.smallrye.mutiny.Uni;
-            import org.pipelineframework.annotation.PipelineStep;
             import org.pipelineframework.service.ReactiveService;
 
-            @PipelineStep
             public class PaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
                 @Override
                 public Uni<PaymentStatus> process(PaymentRecord input) {
@@ -392,10 +1035,8 @@ class YamlDrivenStepGenerationTest {
             package com.example.app;
 
             import io.smallrye.mutiny.Uni;
-            import org.pipelineframework.annotation.PipelineStep;
             import org.pipelineframework.service.ReactiveService;
 
-            @PipelineStep
             public class PaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
                 @Override
                 public Uni<PaymentStatus> process(PaymentRecord input) {
@@ -453,6 +1094,109 @@ class YamlDrivenStepGenerationTest {
         assertTrue(
             result.errorSummary().contains("must declare Mapper<"),
             "Expected mapper mismatch diagnostic: " + result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenYamlTypesConflictWithServiceContract() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-bad-type.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+            import org.pipelineframework.service.ReactiveService;
+
+            public class PaymentService implements ReactiveService<WrongRecord, PaymentStatus> {
+                @Override
+                public Uni<PaymentStatus> process(WrongRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path wrongRecord = writeSource("WrongRecord.java", """
+            package com.example.app;
+
+            public class WrongRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path uniStub = writeUniStub();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, wrongRecord, paymentStatus, uniStub));
+        assertFalse(result.success(), "Expected YAML/code type mismatch to fail");
+        assertTrue(
+            result.errorSummary().contains("declares input type 'com.example.app.PaymentRecord' in YAML"),
+            "Expected YAML/code type mismatch diagnostic: " + result.errorSummary());
+    }
+
+    @Test
+    void warnsWhenYamlOverridesDeprecatedPipelineStepMetadata() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-annotation-secondary.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+            import org.pipelineframework.annotation.PipelineStep;
+            import org.pipelineframework.service.ReactiveService;
+
+            @PipelineStep(inputType = String.class, outputType = String.class)
+            public class PaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
+                @Override
+                public Uni<PaymentStatus> process(PaymentRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path uniStub = writeUniStub();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, paymentStatus, uniStub));
+        assertTrue(result.success(), "Expected YAML to override annotation metadata without failing: " + result.errorSummary());
+        String warnings = result.messagesOfKind(Diagnostic.Kind.WARNING);
+        assertTrue(warnings.contains("YAML is authoritative"), "Expected YAML-authoritative warning: " + warnings);
     }
 
     @Test
@@ -702,6 +1446,48 @@ class YamlDrivenStepGenerationTest {
             """);
     }
 
+    private Path writeMonoStub() throws IOException {
+        return writeSource("Mono.java", """
+            package reactor.core.publisher;
+
+            public class Mono<T> {
+                public static <U> Mono<U> just(U value) {
+                    return new Mono<>();
+                }
+            }
+            """);
+    }
+
+    private Path writeBlockingPaymentService() throws IOException {
+        return writeSource("PaymentService.java", """
+            package com.example.app;
+
+            public class PaymentService {
+                public PaymentStatus processBlocking(PaymentRecord input) {
+                    return new PaymentStatus();
+                }
+            }
+            """);
+    }
+
+    private Path writePaymentRecord() throws IOException {
+        return writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+    }
+
+    private Path writePaymentStatus() throws IOException {
+        return writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+    }
+
     private CompilationResult compile(Path yamlFile, List<Path> sources) throws IOException {
         return compile(yamlFile, sources, List.of());
     }
@@ -710,7 +1496,7 @@ class YamlDrivenStepGenerationTest {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         assertNotNull(compiler, "JavaCompiler should be available");
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
-        Path generatedDir = tempDir.resolve("generated");
+        Path generatedDir = tempDir.resolve("target").resolve("generated-sources").resolve("pipeline");
         Path classesDir = tempDir.resolve("classes");
         Files.createDirectories(generatedDir);
         Files.createDirectories(classesDir);
@@ -739,7 +1525,10 @@ class YamlDrivenStepGenerationTest {
         }
     }
 
-    private record CompilationResult(boolean success, List<Diagnostic<? extends JavaFileObject>> diagnostics) {
+    private record CompilationResult(
+        boolean success,
+        List<Diagnostic<? extends JavaFileObject>> diagnostics
+    ) {
         private String errorSummary() {
             List<String> errors = new ArrayList<>();
             for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics) {

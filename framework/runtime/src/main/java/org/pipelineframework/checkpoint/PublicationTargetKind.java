@@ -5,5 +5,6 @@ package org.pipelineframework.checkpoint;
  */
 public enum PublicationTargetKind {
     GRPC,
-    HTTP
+    HTTP,
+    KAFKA
 }

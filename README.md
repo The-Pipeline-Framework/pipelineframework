@@ -6,20 +6,23 @@
 [![Quarkus](https://img.shields.io/badge/Quarkus-3.33.1-orange)](https://quarkus.io)
 [![CodeRabbit](https://img.shields.io/coderabbit/prs/github/The-Pipeline-Framework/pipelineframework?label=CodeRabbit&color=purple)](https://coderabbit.ai)
 
-The Pipeline Framework (TPF) is a Java framework on Quarkus for building reliable applications from fast, forward-only chains of business functions. You write focused Java code such as "validate this payment", "enrich this record", "parse this document", or "call this existing operator"; TPF turns that code into a runnable Quarkus application with generated REST, gRPC, local, and function-style entry points.
+The Pipeline Framework (TPF) is a Java framework for strongly typed application flows.
+Keep the core pure. Connect to reality.
 
-TPF is for teams that want clean function-style business logic without hand-building the same transport, retry, failure, observability, and deployment glue in every service. The business flow stays portable Java and YAML; TPF generates the repeated Quarkus code, checks the flow at build time, and runs the generated pipeline runtime reliably.
+You write focused Java transformations such as "validate this payment", "enrich this record", "parse this document", or "call this existing operator". TPF keeps those transformations isolated from persistence, transport, replay, observability, retries, await boundaries, connectors, and deployment concerns.
+
+Quarkus is the mature production runtime today. Spring support has started behind the same semantic model with limited local/REST unary smoke coverage; it is not production parity yet. See [Spring support status](https://pipelineframework.org/develop/spring-support) for the current boundary.
 
 ## What TPF Means by Pipeline
 
-In TPF, a pipeline is not a CI/CD or batch pipeline made of coarse, long-running jobs. It is a low-latency, high-throughput flow of small Java functions.
+In TPF, a pipeline is not a CI/CD or batch pipeline made of coarse, long-running jobs. It is a typed application flow where each step transforms an explicit business contract.
 
 - A **step** is one function in that flow.
 - A **typed** step has explicit Java input and output types.
 - A **reactive** flow can keep many items moving without blocking one thread per item.
 - The flow moves forward through declared functions with explicit boundaries.
 - The shape is simpler than an arbitrary graph because order, progress, and handoff points stay visible.
-- TPF generates, validates, and runs the Quarkus code around that flow.
+- TPF generates, validates, and runs the shell around that flow.
 
 ## Key Terms in Plain English
 
@@ -34,14 +37,15 @@ In TPF, a pipeline is not a CI/CD or batch pipeline made of coarse, long-running
 - **Runtime layout**: where TPF logically places the orchestrator, steps, and plugin side effects.
 - **Build topology**: the Maven modules, JARs, and containers that physically create deployables.
 - **Transport mode**: how generated components call each other: gRPC, REST, or local in-process calls.
-- **Platform mode**: whether the app runs as a normal Quarkus service or through function-style entry points.
+- **Connector**: a framework-owned I/O shell that admits external reality, such as files, object stores, APIs, human decisions, or provider callbacks.
+- **Platform mode**: whether the app runs as a normal service runtime or through function-style entry points.
 
 ## How TPF Splits Responsibilities
 
 TPF splits responsibility between your application code and the framework runtime.
 
 - **You define the business flow**: typed functions, input/output contracts, operators, mappers, and domain decisions such as "validate this payment", "reject this bad record", "index this document", or "handoff this checkout checkpoint".
-- **TPF generates the repeated code**: REST endpoints, gRPC services, local clients, function-style handlers, client calls, and runtime descriptions that would otherwise become hand-written service glue.
+- **TPF generates the repeated shell**: REST endpoints, gRPC services, local clients, function-style handlers, client calls, connectors, and runtime descriptions that would otherwise become hand-written service glue.
 - **TPF runs the generated runtime**: it starts the flow, calls each step, records progress when configured, retries failed work, recovers leased work after crashes, and sends terminal failures to the configured failure channel.
 - **You choose the runtime shape**: `modular`, `pipeline-runtime`, or `monolith`, plus the Maven and container topology that physically builds the deployables.
 - **TPF validates the flow before startup**: function shape, mapper compatibility, operator references, transport requirements, and generated runtime files are checked during the build.
@@ -51,11 +55,12 @@ The result is that application code stays focused on business behaviour while th
 
 ## Why TPF
 
+- **Strongly typed pipelines**: Model business flows as explicit transformations between typed contracts.
 - **One flow, multiple ways to call it**: Generate gRPC, REST, local, and function-style entry points from the same ordered function chain.
 - **Build-time safety**: Catch mismatched operators, mappers, input/output types, and generated call paths before the application starts.
 - **Operator reuse**: Reuse a local Java `Class::method` operator or remote IDL v2 operator without hiding it behind ad-hoc service glue.
 - **Layout flexibility**: Run the same pipeline in `modular`, `pipeline-runtime`, or `monolith` layouts as your team and deployment model evolve.
-- **Platform flexibility**: Run as a normal Quarkus service or through function-style entry points without changing the business functions.
+- **Transport and platform flexibility**: Run as a normal service runtime or through function-style entry points without changing the business functions.
 - **Operational readiness**: Built-in health checks, tracing/metrics/logging hooks, crash-surviving background execution, retries, and dead-letter handling.
 - **Plugin extensibility**: Add persistence, caching, telemetry, and other cross-cutting work declaratively instead of repeating side-effect code in every function.
 
@@ -63,7 +68,7 @@ The result is that application code stays focused on business behaviour while th
 
 ### Model-driven pipeline generation
 
-TPF is YAML-driven first. You declare the function chain and write the business functions; TPF generates the Quarkus code that exposes, calls, validates, and runs them.
+TPF is YAML-driven first. You declare the function chain and write the business functions; TPF generates the code that exposes, calls, validates, and runs them.
 
 - Pipeline order is written at build time to `META-INF/pipeline/order.json`.
 - Telemetry descriptions are written at build time to `META-INF/pipeline/telemetry.json`.
@@ -102,10 +107,11 @@ TPF separates where the flow logically runs from how the deployable files are bu
 
 That separation lets teams start with a monolith or grouped runtime, then move toward more distributed layouts when ownership, throughput, or deployment constraints justify it.
 
-### Plugins, aspects, and side effects
+### Connectors, plugins, aspects, and side effects
 
-Cross-cutting capabilities are configured declaratively through aspects and implemented by plugins.
+TPF uses connectors for I/O admission and plugins/aspects for cross-cutting work.
 
+- Connectors model external input or external waiting without pushing correlation, polling, or payload-admission code into a business function.
 - You declare concerns such as persistence, cache, telemetry, or logging around the pipeline.
 - TPF generates and runs the transport-aware side-effect integration for gRPC, REST, and local execution paths.
 - Business functions stay focused on domain transformations instead of repeating infrastructure code.
@@ -131,7 +137,7 @@ TPF's crash-surviving execution path is configured with `pipeline.orchestrator.m
 
 ### Function and cloud deployment
 
-TPF supports function-style deployment paths in addition to standard Quarkus service runtimes.
+TPF supports function-style deployment paths in addition to standard service runtimes.
 
 - `FUNCTION` and `COMPUTE` are first-class platform modes.
 - Function-oriented flows use the same business functions and generated runtime rules rather than becoming a separate programming model.
@@ -153,28 +159,29 @@ This keeps the domain flow stable while generated endpoints, clients, handlers, 
 
 ### Design flow
 
-The fastest way to start is the Canvas designer:
+Canvas can help sketch and scaffold a baseline flow:
 
 1. Open [app.pipelineframework.org](https://app.pipelineframework.org).
 2. Design the pipeline visually.
 3. Download the generated application scaffold.
-4. Build and run it with Quarkus and Maven.
+4. Build and run it with Maven.
 
-Canvas is the preferred onboarding path, but TPF also supports template- and YAML-driven flows for automation, CI, and deeper framework usage.
+YAML is the canonical path for current advanced features such as await boundaries, object ingest, checkpoint handoff, and runtime configuration. Use Canvas as a visual baseline, then refine through YAML and code.
 
 ### Core docs
 
 - [Documentation home](https://pipelineframework.org)
-- [Getting started](https://pipelineframework.org/guide/getting-started/)
-- [Runtime layouts and build topologies](https://pipelineframework.org/guide/build/runtime-layouts/)
-- [Using plugins](https://pipelineframework.org/guide/development/using-plugins)
-- [Orchestrator runtime](https://pipelineframework.org/guide/development/orchestrator-runtime)
-- [Testing](https://pipelineframework.org/guide/development/testing)
-- [Observability](https://pipelineframework.org/guide/operations/observability/)
-- [Operators](https://pipelineframework.org/guide/development/operators)
-- [Operator operations](https://pipelineframework.org/guide/operations/operators)
-- [Error handling and DLQ](https://pipelineframework.org/guide/operations/error-handling)
-- [TPFGo example](https://pipelineframework.org/guide/development/tpfgo-example)
+- [Functional Core, Imperative Shell](https://pipelineframework.org/design/fcis)
+- [Pipeline Studio](https://pipelineframework.org/design/pipeline-studio/)
+- [Runtime layouts and build topologies](https://pipelineframework.org/deploy/runtime-layouts/)
+- [Using plugins](https://pipelineframework.org/develop/using-plugins)
+- [Orchestrator runtime](https://pipelineframework.org/deploy/orchestrator-runtime/)
+- [Testing](https://pipelineframework.org/develop/testing)
+- [Observability](https://pipelineframework.org/operate/observability/)
+- [Operators](https://pipelineframework.org/design/operators)
+- [Error handling and DLQ](https://pipelineframework.org/operate/error-handling)
+- [TPFGo example](https://pipelineframework.org/develop/tpfgo-example)
+- [MCP and template generation](https://pipelineframework.org/develop/mcp-template-generation)
 
 ## Reference Examples
 
@@ -190,7 +197,7 @@ Canvas is the preferred onboarding path, but TPF also supports template- and YAM
 - [`plugins`](plugins/) contains foundational cross-cutting capabilities such as persistence and cache.
 - [`docs`](docs/) contains the VitePress documentation site.
 - [`web-ui`](web-ui/) contains the Canvas/web UI.
-- [`tpf-mcp-bridge`](https://github.com/The-Pipeline-Framework/tpf-mcp-bridge) contains the MCP bridge and template-generation snapshot. `framework/deployment` remains the schema authority and exports `META-INF/pipeline/pipeline-template-schema.json` for that generator.
+- [`tpf-mcp-bridge`](https://github.com/The-Pipeline-Framework/tpf-mcp-bridge) hosts the MCP bridge and template-generation snapshot, while `framework/deployment` remains the schema authority through `META-INF/pipeline/pipeline-template-schema.json`; the [MCP and template generation guide](https://pipelineframework.org/develop/mcp-template-generation) explains how the two repositories stay aligned.
 - [`ai-sdk`](ai-sdk/) contains the standalone Java SDK used for AI/delegation and transport exercises.
 
 ## Build and Validation

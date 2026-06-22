@@ -33,6 +33,7 @@ bin/
 /.idea/
 .idea/workspace.xml
 target/
+.m2/
 *.out
 
 # Generated files
@@ -89,6 +90,9 @@ pom.xml.releaseBackup
 # Local classpath dumps
 *-cp.txt
 *deliver-cp.txt
+
+# Python cache files
+__pycache__/
 
 # Qwen Code local config
 .qwen/

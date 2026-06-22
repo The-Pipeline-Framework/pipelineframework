@@ -28,6 +28,8 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution;
 @Getter
 public class PipelineCompilationContext {
 
+    public static final String DEFAULT_RENDERER_PROFILE = "quarkus";
+
     // Getters
     private final ProcessingEnvironment processingEnv;
     private final RoundEnvironment roundEnv;
@@ -54,6 +56,9 @@ public class PipelineCompilationContext {
     // Renderer-specific bindings (keyed by transport or target)
     @Setter
     private Map<String, Object> rendererBindings;
+
+    @Setter
+    private String rendererProfile;
     
     // Output paths and module information
     @Setter
@@ -102,6 +107,8 @@ public class PipelineCompilationContext {
         this.pluginHost = false;
         this.orchestratorGenerated = false;
         this.functionHttpBridge = false;
+        this.transportMode = PipelineTransport.GRPC;
+        this.rendererProfile = DEFAULT_RENDERER_PROFILE;
         this.transportMode = PipelineTransport.GRPC;
         this.platformMode = PlatformMode.COMPUTE;
     }
@@ -290,6 +297,15 @@ public class PipelineCompilationContext {
     }
 
     /**
+     * Returns the selected renderer profile used during handler rendering.
+     *
+     * @return renderer profile, defaults to {@link #DEFAULT_RENDERER_PROFILE}
+     */
+    public String getRendererProfile() {
+        return rendererProfile == null || rendererProfile.isBlank() ? DEFAULT_RENDERER_PROFILE : rendererProfile;
+    }
+
+    /**
      * Returns the loaded protobuf descriptor set, if available.
      *
      * @return the loaded protobuf descriptor set, if available
@@ -388,6 +404,18 @@ public class PipelineCompilationContext {
      */
     public void setRendererBindings(Map<String, Object> rendererBindings) {
         this.rendererBindings = rendererBindings;
+    }
+
+    /**
+     * Sets the renderer profile used for selecting deployment-specific renderers.
+     *
+     * @param rendererProfile renderer profile (for example, {@code quarkus} or {@code spring});
+     *                        blank values are treated as the default
+     */
+    public void setRendererProfile(String rendererProfile) {
+        this.rendererProfile = (rendererProfile == null || rendererProfile.isBlank())
+            ? DEFAULT_RENDERER_PROFILE
+            : rendererProfile;
     }
 
     /**

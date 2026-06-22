@@ -25,6 +25,7 @@ import org.pipelineframework.processor.ir.PipelineTransport;
 public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
     public static final String AWAIT_STEP_DESCRIPTOR_CLASS = "org.pipelineframework.awaitable.AwaitStepDescriptor";
     public static final String COMMAND_STEP_DESCRIPTOR_CLASS = "org.pipelineframework.command.CommandStepDescriptor";
+    public static final String QUERY_STEP_DESCRIPTOR_CLASS = "org.pipelineframework.query.QueryStepDescriptor";
 
     private final EnumMap<DeploymentRole, TargetResolutionStrategy> strategiesByRole;
 
@@ -72,7 +73,7 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
         // Apply transport targets and resolve client/server roles for each step model
         List<PipelineStepModel> updatedModels = new ArrayList<>();
         for (PipelineStepModel model : ctx.getStepModels()) {
-            Set<GenerationTarget> targets = resolveTargetsForModel(model, transportMode);
+            Set<GenerationTarget> targets = resolveTargetsForModel(ctx, model, transportMode);
             PipelineStepModel updatedModel = model.toBuilder()
                 .enabledTargets(targets)
                 .build();
@@ -114,7 +115,10 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
      * @param transportMode the transport mode used to influence resolution (may be null if caller applies a default)
      * @return a set of GenerationTarget values applicable to the given step model
      */
-    private Set<GenerationTarget> resolveTargetsForModel(PipelineStepModel model, PipelineTransport transportMode) {
+    private Set<GenerationTarget> resolveTargetsForModel(
+            PipelineCompilationContext ctx,
+            PipelineStepModel model,
+            PipelineTransport transportMode) {
         if (model.serviceClassName() != null
             && AWAIT_STEP_DESCRIPTOR_CLASS.equals(model.serviceClassName().canonicalName())) {
             return Set.of(GenerationTarget.AWAIT_CLIENT_STEP);
@@ -122,6 +126,10 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
         if (model.serviceClassName() != null
             && COMMAND_STEP_DESCRIPTOR_CLASS.equals(model.serviceClassName().canonicalName())) {
             return Set.of(GenerationTarget.COMMAND_CLIENT_STEP);
+        }
+        if (model.serviceClassName() != null
+            && QUERY_STEP_DESCRIPTOR_CLASS.equals(model.serviceClassName().canonicalName())) {
+            return Set.of(GenerationTarget.QUERY_CLIENT_STEP);
         }
         var remoteExecution = model.remoteExecution();
         if (remoteExecution != null && remoteExecution.isRemote()) {
@@ -138,6 +146,18 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
             && model.sideEffect()
             && model.deploymentRole() == DeploymentRole.PLUGIN_SERVER) {
             return Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
+        }
+        if (SpringRendererProfileSupport.isSpringProfile(ctx)
+            && transportMode == PipelineTransport.LOCAL
+            && !model.sideEffect()
+            && model.deploymentRole() == DeploymentRole.PIPELINE_SERVER) {
+            return Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
+        }
+        if (SpringRendererProfileSupport.isSpringProfile(ctx)
+            && transportMode == PipelineTransport.REST
+            && !model.sideEffect()
+            && model.deploymentRole() == DeploymentRole.PIPELINE_SERVER) {
+            return Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.LOCAL_CLIENT_STEP);
         }
         LinkedHashSet<GenerationTarget> targets = new LinkedHashSet<>(resolveTargetsForRole(model.deploymentRole(), transportMode));
         if (model.serviceApiKind() != ServiceApiKind.REACTIVE

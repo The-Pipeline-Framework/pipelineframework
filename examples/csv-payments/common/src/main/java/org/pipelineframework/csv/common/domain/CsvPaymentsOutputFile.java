@@ -32,11 +32,18 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 
+/**
+ * Legacy CSV output-file domain object used by the direct output-file pipeline step.
+ *
+ * @deprecated Use Object Publish with {@code CsvPaymentOutputPublishMapper}; terminal output files are now
+ *             framework-owned object writes instead of business-step domain outputs.
+ */
 @Entity
 @Getter
 @Setter
 @Accessors(chain = true)
 @NoArgsConstructor
+@Deprecated(forRemoval = false)
 public class CsvPaymentsOutputFile extends BaseCsvPaymentsFile implements AutoCloseable {
 
   @Transient private List<PaymentOutput> paymentOutputs = new ArrayList<>();

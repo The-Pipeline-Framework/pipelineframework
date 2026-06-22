@@ -6,10 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.tpfgo.checkout.grpc.PipelineTypes;
+import org.pipelineframework.tpfgo.common.domain.OrderItem;
 import org.pipelineframework.tpfgo.common.domain.ValidatedOrderRequest;
 
 class ValidatedOrderRequestMapperTest {
@@ -31,7 +33,7 @@ class ValidatedOrderRequestMapperTest {
                 .setRequestId(requestId.toString())
                 .setCustomerId(customerId.toString())
                 .setRestaurantId(restaurantId.toString())
-                .setItems("pasta x2")
+                .addItems(orderItem("pasta", 2))
                 .setTotalAmount(totalAmount.toPlainString())
                 .setCurrency("USD")
                 .setValidatedAt(validatedAt.toString())
@@ -43,7 +45,7 @@ class ValidatedOrderRequestMapperTest {
         assertEquals(requestId, domain.requestId());
         assertEquals(customerId, domain.customerId());
         assertEquals(restaurantId, domain.restaurantId());
-        assertEquals("pasta x2", domain.items());
+        assertEquals(List.of(new OrderItem("pasta", 2)), domain.items());
         assertEquals(totalAmount, domain.totalAmount());
         assertEquals("USD", domain.currency());
         assertEquals(validatedAt, domain.validatedAt());
@@ -56,7 +58,7 @@ class ValidatedOrderRequestMapperTest {
                 .setRequestId("")
                 .setCustomerId("")
                 .setRestaurantId("")
-                .setItems("item")
+                .addItems(orderItem("item", 1))
                 .setTotalAmount("")
                 .setCurrency("EUR")
                 .setValidatedAt("")
@@ -82,7 +84,7 @@ class ValidatedOrderRequestMapperTest {
                 .setRequestId(UUID.randomUUID().toString())
                 .setCustomerId(UUID.randomUUID().toString())
                 .setRestaurantId(UUID.randomUUID().toString())
-                .setItems("item")
+                .addItems(orderItem("item", 1))
                 .setTotalAmount("10.00")
                 .setCurrency("USD")
                 .setValidatedAt("bad-timestamp")
@@ -98,7 +100,7 @@ class ValidatedOrderRequestMapperTest {
                 .setRequestId(UUID.randomUUID().toString())
                 .setCustomerId(UUID.randomUUID().toString())
                 .setRestaurantId(UUID.randomUUID().toString())
-                .setItems("item")
+                .addItems(orderItem("item", 1))
                 .setTotalAmount("not-a-number")
                 .setCurrency("USD")
                 .setValidatedAt(Instant.now().toString())
@@ -118,8 +120,13 @@ class ValidatedOrderRequestMapperTest {
         Instant validatedAt = Instant.parse("2026-04-01T09:00:00Z");
 
         ValidatedOrderRequest domain = new ValidatedOrderRequest(
-            requestId, customerId, restaurantId,
-            "salad x1", totalAmount, "GBP", validatedAt);
+            requestId,
+            customerId,
+            restaurantId,
+            List.of(new OrderItem("salad", 1)),
+            totalAmount,
+            "GBP",
+            validatedAt);
 
         PipelineTypes.ValidatedOrderRequest grpc = mapper.toExternal(domain);
 
@@ -127,7 +134,7 @@ class ValidatedOrderRequestMapperTest {
         assertEquals(requestId.toString(), grpc.getRequestId());
         assertEquals(customerId.toString(), grpc.getCustomerId());
         assertEquals(restaurantId.toString(), grpc.getRestaurantId());
-        assertEquals("salad x1", grpc.getItems());
+        assertEquals(List.of(orderItem("salad", 1)), grpc.getItemsList());
         assertEquals(totalAmount.toPlainString(), grpc.getTotalAmount());
         assertEquals("GBP", grpc.getCurrency());
         assertEquals(validatedAt.toString(), grpc.getValidatedAt());
@@ -136,7 +143,7 @@ class ValidatedOrderRequestMapperTest {
     @Test
     void validatedOrderRequestRejectsNullRequiredFields() {
         assertThrows(NullPointerException.class, () -> new ValidatedOrderRequest(
-            null, null, null, "item", null, "USD", null));
+            null, null, null, List.of(new OrderItem("item", 1)), null, "USD", null));
     }
 
     // --- round-trip ---
@@ -150,8 +157,13 @@ class ValidatedOrderRequestMapperTest {
         Instant validatedAt = Instant.parse("2026-03-20T11:15:00Z");
 
         ValidatedOrderRequest original = new ValidatedOrderRequest(
-            requestId, customerId, restaurantId,
-            "ramen x2", totalAmount, "JPY", validatedAt);
+            requestId,
+            customerId,
+            restaurantId,
+            List.of(new OrderItem("ramen", 2)),
+            totalAmount,
+            "JPY",
+            validatedAt);
 
         ValidatedOrderRequest roundTripped = mapper.fromExternal(mapper.toExternal(original));
 
@@ -176,7 +188,7 @@ class ValidatedOrderRequestMapperTest {
                 .setRequestId(requestId.toString())
                 .setCustomerId(customerId.toString())
                 .setRestaurantId(restaurantId.toString())
-                .setItems("steak x1")
+                .addItems(orderItem("steak", 1))
                 .setTotalAmount("45.00")
                 .setCurrency("EUR")
                 .setValidatedAt(validatedAt.toString())
@@ -188,22 +200,39 @@ class ValidatedOrderRequestMapperTest {
         assertEquals(original.getRequestId(), roundTripped.getRequestId());
         assertEquals(original.getCustomerId(), roundTripped.getCustomerId());
         assertEquals(original.getRestaurantId(), roundTripped.getRestaurantId());
-        assertEquals(original.getItems(), roundTripped.getItems());
+        assertEquals(original.getItemsList(), roundTripped.getItemsList());
         assertEquals(original.getTotalAmount(), roundTripped.getTotalAmount());
         assertEquals(original.getCurrency(), roundTripped.getCurrency());
         assertEquals(original.getValidatedAt(), roundTripped.getValidatedAt());
     }
 
-    // Regression: items string with Unicode characters survives round-trip
+    // Regression: unicode item text in a round-trip payload stays intact
     @Test
-    void roundTripPreservesUnicodeItemsString() {
+    void roundTripPreservesUnicodeItems() {
         ValidatedOrderRequest domain = new ValidatedOrderRequest(
-            UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-            "拉面 x2, 饺子 x4", new BigDecimal("30.00"), "CNY",
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            List.of(new OrderItem("拉面", 2), new OrderItem("饺子", 4)),
+            new BigDecimal("30.00"),
+            "CNY",
             Instant.parse("2026-07-01T00:00:00Z"));
 
         ValidatedOrderRequest roundTripped = mapper.fromExternal(mapper.toExternal(domain));
 
-        assertEquals("拉面 x2, 饺子 x4", roundTripped.items());
+        assertEquals(
+            List.of(
+                new OrderItem("拉面", 2),
+                new OrderItem("饺子", 4)
+            ),
+            roundTripped.items());
+    }
+
+    private static PipelineTypes.OrderItem orderItem(String sku, int quantity) {
+        return PipelineTypes.OrderItem.newBuilder()
+            .setSku(sku)
+            .setQuantity(quantity)
+            .build();
     }
 }
+

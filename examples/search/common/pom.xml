@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.pipelineframework.search</groupId>
         <artifactId>search-pipeline</artifactId>
-        <version>26.6.1-SNAPSHOT</version>
+        <version>26.6.2-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -314,7 +314,7 @@
         <profile>
             <id>native</id>
             <properties>
-                <quarkus.native.enabled>true</quarkus.native.enabled>
+                <quarkus.build.skip>true</quarkus.build.skip>
                 <skipITs>false</skipITs>
             </properties>
         </profile>

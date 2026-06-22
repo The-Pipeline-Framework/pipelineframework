@@ -2,6 +2,7 @@ package org.pipelineframework.tpfgo.common.domain;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -9,7 +10,7 @@ public record ValidatedOrderRequest(
     UUID requestId,
     UUID customerId,
     UUID restaurantId,
-    String items,
+    List<OrderItem> items,
     BigDecimal totalAmount,
     String currency,
     Instant validatedAt
@@ -18,7 +19,7 @@ public record ValidatedOrderRequest(
         Objects.requireNonNull(requestId, "requestId must not be null");
         Objects.requireNonNull(customerId, "customerId must not be null");
         Objects.requireNonNull(restaurantId, "restaurantId must not be null");
-        items = CommonDomainValidation.requireNonBlank(items, "items");
+        items = CommonDomainValidation.requireNonEmptyList(items, "items");
         totalAmount = CommonDomainValidation.requireNonNegative(totalAmount, "totalAmount");
         currency = CommonDomainValidation.requireCurrencyCode(currency, "currency");
         Objects.requireNonNull(validatedAt, "validatedAt must not be null");

@@ -53,9 +53,11 @@ class PipelineStepOrdererTest {
         TestSteps.TestStepOneToMany stepA = new TestSteps.TestStepOneToMany();
         TestSteps.TestStepManyToMany stepC = new TestSteps.TestStepManyToMany();
 
-        List<Object> ordered = orderer.applyConfiguredOrder(
-            List.of(stepB, stepA, stepC),
-            List.of(stepA.getClass().getName(), stepB.getClass().getName(), stepC.getClass().getName()));
+        List<Object> ordered = withContextClassLoader(
+            tempDir,
+            () -> orderer.applyConfiguredOrder(
+                List.of(stepB, stepA, stepC),
+                List.of(stepA.getClass().getName(), stepB.getClass().getName(), stepC.getClass().getName())));
 
         assertEquals(List.of(stepA, stepB, stepC), ordered);
     }
@@ -65,9 +67,11 @@ class PipelineStepOrdererTest {
         TestSteps.TestStepOneToOneProcessed stepB = new TestSteps.TestStepOneToOneProcessed();
         TestSteps.TestStepOneToMany stepA = new TestSteps.TestStepOneToMany();
 
-        List<Object> ordered = orderer.applyConfiguredOrder(
-            List.of(stepB, stepA),
-            List.of(stepB.getClass().getName()));
+        List<Object> ordered = withContextClassLoader(
+            tempDir,
+            () -> orderer.applyConfiguredOrder(
+                List.of(stepB, stepA),
+                List.of(stepB.getClass().getName())));
 
         assertEquals(List.of(stepB, stepA), ordered);
     }
@@ -77,9 +81,11 @@ class PipelineStepOrdererTest {
         TestSteps.TestStepOneToOneProcessed first = new TestSteps.TestStepOneToOneProcessed();
         TestSteps.TestStepOneToOneProcessed second = new TestSteps.TestStepOneToOneProcessed();
 
-        List<Object> ordered = orderer.applyConfiguredOrder(
-            List.of(first, second),
-            List.of(first.getClass().getName(), second.getClass().getName()));
+        List<Object> ordered = withContextClassLoader(
+            tempDir,
+            () -> orderer.applyConfiguredOrder(
+                List.of(first, second),
+                List.of(first.getClass().getName(), second.getClass().getName())));
 
         assertEquals(List.of(first, second), ordered);
     }

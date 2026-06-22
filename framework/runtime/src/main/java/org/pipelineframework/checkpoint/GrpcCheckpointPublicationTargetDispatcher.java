@@ -22,6 +22,8 @@ import org.pipelineframework.telemetry.GrpcClientTracing;
 @Unremovable
 public class GrpcCheckpointPublicationTargetDispatcher implements CheckpointPublicationTargetDispatcher {
 
+    private static final long PUBLISH_DEADLINE_SECONDS = 5L;
+
     private final Map<String, ManagedChannel> channels = new ConcurrentHashMap<>();
     private final Map<String, MutinyCheckpointPublicationServiceGrpc.MutinyCheckpointPublicationServiceStub> stubs =
         new ConcurrentHashMap<>();
@@ -29,6 +31,39 @@ public class GrpcCheckpointPublicationTargetDispatcher implements CheckpointPubl
     @Override
     public PublicationTargetKind kind() {
         return PublicationTargetKind.GRPC;
+    }
+
+    @Override
+    public ResolvedCheckpointPublicationTarget resolveTarget(
+        String publication,
+        String targetId,
+        PipelineHandoffConfig.TargetConfig target
+    ) {
+        String host = target.host()
+            .map(String::trim)
+            .filter(value -> !value.isBlank())
+            .orElseThrow(() -> new IllegalStateException(
+                "Checkpoint publication '" + publication + "' target '" + targetId
+                    + "' requires host for GRPC delivery"));
+        if (host.contains(":")) {
+            throw new IllegalStateException(
+                "Checkpoint publication '" + publication + "' target '" + targetId
+                    + "' does not support colon-containing GRPC hosts; use a DNS name or IPv4 address");
+        }
+        int port = target.port()
+            .filter(value -> value > 0)
+            .orElseThrow(() -> new IllegalStateException(
+                "Checkpoint publication '" + publication + "' target '" + targetId
+                    + "' requires port for GRPC delivery"));
+        return new ResolvedCheckpointPublicationTarget(
+            publication,
+            targetId,
+            PublicationTargetKind.GRPC,
+            PublicationEncoding.PROTO,
+            null,
+            null,
+            host + ":" + port,
+            target.plaintext() ? "PLAINTEXT" : "TLS");
     }
 
     @Override
@@ -42,7 +77,10 @@ public class GrpcCheckpointPublicationTargetDispatcher implements CheckpointPubl
             return GrpcClientTracing.traceUnary(
                 CheckpointPublicationGrpcService.SERVICE,
                 CheckpointPublicationGrpcService.METHOD,
-                stubFor(target).publish(CheckpointPublicationProtoSupport.toProtoRequest(request, tenantId, idempotencyKey)))
+                stubFor(target)
+                    .withWaitForReady()
+                    .withDeadlineAfter(PUBLISH_DEADLINE_SECONDS, TimeUnit.SECONDS)
+                    .publish(CheckpointPublicationProtoSupport.toProtoRequest(request, tenantId, idempotencyKey)))
                 .replaceWithVoid();
         } catch (IOException e) {
             return Uni.createFrom().failure(e);

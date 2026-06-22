@@ -1,7 +1,6 @@
 package org.pipelineframework.processor;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -59,8 +58,8 @@ class PipelineCompilerTest {
         boolean firstResult = compiler.process(Set.<TypeElement>of(), roundOne);
         boolean secondResult = compiler.process(Set.<TypeElement>of(), roundTwo);
 
-        assertTrue(firstResult, "First YAML-driven round should execute compilation");
-        assertFalse(secondResult, "Subsequent rounds should not execute compilation again");
+        assertFalse(firstResult, "YAML-driven compilation should not claim annotations from other processors");
+        assertFalse(secondResult, "Subsequent rounds should not claim annotations either");
         verify(phase, times(1)).execute(org.mockito.ArgumentMatchers.any(PipelineCompilationContext.class));
     }
 }

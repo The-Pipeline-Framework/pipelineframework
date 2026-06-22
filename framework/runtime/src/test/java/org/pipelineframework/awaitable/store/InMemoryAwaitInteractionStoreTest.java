@@ -154,6 +154,23 @@ class InMemoryAwaitInteractionStoreTest {
     }
 
     @Test
+    void queryPendingTreatsBlankFiltersAsUnset() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        store.createOrGet(createCommand("idem-1", 10_000L, 70_000L)).await().indefinitely();
+        store.createOrGet(new AwaitCreateCommand(
+            "tenant", "execution-2", "review", 0, String.class.getName(),
+            "cause-2", "idem-2", "corr-2", Map.of("orderId", "o-2"),
+            "bob", "finance", "interaction-api", "unit-2", null,
+            10_000L, 70_000L, Long.MAX_VALUE)).await().indefinitely();
+
+        var noAssignee = store.queryPending("tenant", "", null, "", 10).await().indefinitely();
+        var whitespaceAssignee = store.queryPending("tenant", "   ", "   ", " ", 10).await().indefinitely();
+
+        assertEquals(2, noAssignee.size());
+        assertEquals(2, whitespaceAssignee.size());
+    }
+
+    @Test
     void getReturnsEmptyForUnknownInteractionId() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
 

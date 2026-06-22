@@ -3,9 +3,7 @@ package org.pipelineframework.checkpoint;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import jakarta.enterprise.inject.Instance;
@@ -40,7 +38,7 @@ class CheckpointPublicationServiceTest {
     void publishFansOutToConfiguredTargets() {
         CheckpointPublicationService service = new CheckpointPublicationService();
         service.publicationDescriptors = descriptors(new TestDescriptor("orders-ready", List.of("orderId")));
-        TestDispatcher dispatcher = new TestDispatcher();
+        TestDispatcher dispatcher = new TestDispatcher(PublicationTargetKind.HTTP);
         service.targetDispatchers = dispatchers(dispatcher);
         service.orchestratorConfig = orchestratorConfig();
         service.handoffConfig = handoffConfig(Map.of(
@@ -55,6 +53,26 @@ class CheckpointPublicationServiceTest {
         assertEquals(2, dispatcher.targetIds.size());
         assertTrue(dispatcher.targetIds.containsAll(List.of("deliver", "audit")));
         assertEquals(List.of("o-1", "o-1"), dispatcher.idempotencyKeys);
+    }
+
+    @Test
+    void publishDispatchesKafkaTarget() {
+        CheckpointPublicationService service = new CheckpointPublicationService();
+        service.publicationDescriptors = descriptors(new TestDescriptor("orders-ready", List.of("orderId")));
+        TestDispatcher dispatcher = new TestDispatcher(PublicationTargetKind.KAFKA);
+        service.targetDispatchers = dispatchers(dispatcher);
+        service.orchestratorConfig = orchestratorConfig();
+        service.handoffConfig = handoffConfig(Map.of(
+            "orders-ready",
+            publicationBinding(Map.of(
+                "deliver", kafkaTarget("checkout.orders.ready.v1")))));
+        service.initialize();
+
+        service.publishIfConfigured(record(), new PublishedOrder("o-1", "c-1")).await().indefinitely();
+
+        assertEquals(List.of("deliver"), dispatcher.targetIds);
+        assertEquals(List.of("checkout.orders.ready.v1"), dispatcher.endpoints);
+        assertEquals(List.of("o-1"), dispatcher.idempotencyKeys);
     }
 
     @SuppressWarnings("unchecked")
@@ -102,6 +120,13 @@ class CheckpointPublicationServiceTest {
         return target;
     }
 
+    private PipelineHandoffConfig.TargetConfig kafkaTarget(String topic) {
+        PipelineHandoffConfig.TargetConfig target = mock(PipelineHandoffConfig.TargetConfig.class);
+        when(target.kind()).thenReturn(PublicationTargetKind.KAFKA);
+        when(target.topic()).thenReturn(java.util.Optional.of(topic));
+        return target;
+    }
+
     private ExecutionRecord<Object, Object> record() {
         return new ExecutionRecord<>(
             "tenant-1",
@@ -135,11 +160,36 @@ class CheckpointPublicationServiceTest {
 
     private static final class TestDispatcher implements CheckpointPublicationTargetDispatcher {
         private final java.util.List<String> targetIds = new java.util.ArrayList<>();
+        private final java.util.List<String> endpoints = new java.util.ArrayList<>();
         private final java.util.List<String> idempotencyKeys = new java.util.ArrayList<>();
+        private final PublicationTargetKind kind;
+
+        private TestDispatcher(PublicationTargetKind kind) {
+            this.kind = kind;
+        }
 
         @Override
         public PublicationTargetKind kind() {
-            return PublicationTargetKind.HTTP;
+            return kind;
+        }
+
+        @Override
+        public ResolvedCheckpointPublicationTarget resolveTarget(
+            String publication,
+            String targetId,
+            PipelineHandoffConfig.TargetConfig target
+        ) {
+            return new ResolvedCheckpointPublicationTarget(
+                publication,
+                targetId,
+                kind,
+                kind == PublicationTargetKind.KAFKA ? PublicationEncoding.JSON : PublicationEncoding.PROTO,
+                kind == PublicationTargetKind.HTTP
+                    ? org.pipelineframework.transport.http.ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF
+                    : null,
+                null,
+                kind == PublicationTargetKind.KAFKA ? target.topic().orElseThrow() : target.baseUrl().orElseThrow(),
+                kind == PublicationTargetKind.KAFKA ? "PUBLISH" : "POST");
         }
 
         @Override
@@ -150,6 +200,7 @@ class CheckpointPublicationServiceTest {
             String idempotencyKey
         ) {
             targetIds.add(target.targetId());
+            endpoints.add(target.endpoint());
             idempotencyKeys.add(idempotencyKey);
             return Uni.createFrom().voidItem();
         }

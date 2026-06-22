@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.pipelineframework.tpfgo</groupId>
         <artifactId>tpfgo-example</artifactId>
-        <version>26.6.1-SNAPSHOT</version>
+        <version>26.6.2-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
     <artifactId>kitchen-preparation-orchestrator-svc</artifactId>
@@ -104,6 +104,7 @@
                             <compilerArgs>
                                 <arg>${pipeline.generatedSourcesArg}</arg>
                                 <arg>${pipeline.moduleArg}</arg>
+                                <arg>${pipeline.warnUnreferencedStepsArg}</arg>
                                 <arg>-Apipeline.config=${project.basedir}/pipeline.yaml</arg>
                                 <arg>${protobuf.descriptor.fileArg}</arg>
                             </compilerArgs>
@@ -199,7 +200,8 @@
                         <quarkus.generate-code.grpc.descriptor-set.generate>true</quarkus.generate-code.grpc.descriptor-set.generate>
                     </properties>
                 </configuration>
-            </plugin>
+                        <extensions>true</extensions>
+</plugin>
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>

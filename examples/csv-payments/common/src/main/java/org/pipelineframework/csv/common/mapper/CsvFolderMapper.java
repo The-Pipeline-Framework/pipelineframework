@@ -25,7 +25,12 @@ import org.pipelineframework.csv.common.domain.CsvFolder;
 import org.pipelineframework.csv.common.dto.CsvFolderDto;
 import org.pipelineframework.csv.grpc.PipelineTypes;
 
-@SuppressWarnings("unused")
+/**
+ * @deprecated Mapper for the legacy ProcessFolderService admission boundary.
+ *     Object ingest sources replace folder-to-file expansion.
+ */
+@Deprecated(since = "26.6.2", forRemoval = true)
+@SuppressWarnings({"unused", "removal"})
 @Mapper(componentModel = "jakarta", uses = {CommonConverters.class}, unmappedTargetPolicy = ReportingPolicy.WARN)
 public interface CsvFolderMapper extends org.pipelineframework.mapper.Mapper<CsvFolder, PipelineTypes.CsvFolder> {
 

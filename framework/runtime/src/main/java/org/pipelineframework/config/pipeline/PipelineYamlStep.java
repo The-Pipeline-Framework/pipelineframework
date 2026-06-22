@@ -20,7 +20,7 @@ package org.pipelineframework.config.pipeline;
  * Pipeline step entry parsed from pipeline.yaml.
  *
  * @param name the step name
- * @param kind the step kind, for example internal, delegated, remote, or await
+ * @param kind the step kind, for example internal, delegated, remote, await, command, or query
  * @param cardinality the declared cardinality
  * @param inputType the input type name
  * @param inboundMapper the optional inbound mapper class name
@@ -33,6 +33,8 @@ package org.pipelineframework.config.pipeline;
  * @param commandIdGenerator command id generator class, if this is a command step
  * @param duplicatePolicy duplicate handling policy, if this is a command step
  * @param commandConfig connector configuration for command steps
+ * @param queryId referenced query definition id, if this is a query step
+ * @param queryCapture query capture settings, if this is a query step
  */
 public record PipelineYamlStep(
     String name,
@@ -48,13 +50,36 @@ public record PipelineYamlStep(
     String command,
     String commandIdGenerator,
     String duplicatePolicy,
-    java.util.Map<String, Object> commandConfig
+    java.util.Map<String, Object> commandConfig,
+    String queryId,
+    PipelineYamlQueryCapture queryCapture
 ) {
     public PipelineYamlStep {
         kind = kind == null || kind.isBlank() ? "internal" : kind;
         cardinality = cardinality == null || cardinality.isBlank() ? "ONE_TO_ONE" : cardinality;
-        idempotencyKeyFields = idempotencyKeyFields == null ? java.util.List.of() : java.util.List.copyOf(idempotencyKeyFields);
+        idempotencyKeyFields = idempotencyKeyFields == null
+            ? java.util.List.of()
+            : java.util.List.copyOf(idempotencyKeyFields);
         commandConfig = commandConfig == null ? java.util.Map.of() : java.util.Map.copyOf(commandConfig);
+        queryCapture = queryCapture == null ? new PipelineYamlQueryCapture(java.util.List.of()) : queryCapture;
+    }
+
+    public PipelineYamlStep(
+        String name,
+        String kind,
+        String cardinality,
+        String inputType,
+        String inboundMapper,
+        String outputType,
+        String outboundMapper,
+        String timeout,
+        java.util.List<?> idempotencyKeyFields,
+        PipelineYamlAwaitConfig awaitConfig,
+        String queryId,
+        PipelineYamlQueryCapture queryCapture
+    ) {
+        this(name, kind, cardinality, inputType, inboundMapper, outputType, outboundMapper, timeout,
+            copyStringList(idempotencyKeyFields), awaitConfig, null, null, null, java.util.Map.of(), queryId, queryCapture);
     }
 
     public PipelineYamlStep(
@@ -65,11 +90,20 @@ public record PipelineYamlStep(
         String outboundMapper
     ) {
         this(name, "internal", "ONE_TO_ONE", inputType, inboundMapper, outputType, outboundMapper, null,
-            java.util.List.of(), null, null, null, null, java.util.Map.of());
+            java.util.List.of(), null, null, null, null, java.util.Map.of(), null, null);
     }
 
     public PipelineYamlStep(String name, String inputType, String outputType) {
         this(name, "internal", "ONE_TO_ONE", inputType, null, outputType, null, null,
-            java.util.List.of(), null, null, null, null, java.util.Map.of());
+            java.util.List.of(), null, null, null, null, java.util.Map.of(), null, null);
+    }
+
+    private static java.util.List<String> copyStringList(java.util.List<?> values) {
+        if (values == null) {
+            return java.util.List.of();
+        }
+        return values.stream()
+            .map(value -> value == null ? null : value.toString())
+            .toList();
     }
 }

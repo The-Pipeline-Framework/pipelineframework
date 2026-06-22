@@ -22,12 +22,20 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import io.quarkus.arc.ClientProxy;
+import io.quarkus.arc.InjectableBean;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.awaitable.AwaitExecutionContext;
+import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.awaitable.AwaitStreamOneToOneStep;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
+import org.pipelineframework.service.ReactiveService;
+import org.pipelineframework.service.ReactiveStreamingService;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepManyToMany;
 import org.pipelineframework.step.StepOneToMany;
@@ -41,6 +49,8 @@ import org.pipelineframework.step.functional.ManyToOne;
 import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineStepExecutorTest {
@@ -72,6 +82,108 @@ class PipelineStepExecutorTest {
     }
 
     @Test
+    void applyStepUnwrapsArcClientProxyBeforeDispatch() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+
+        Object result = executor.applyStep(
+            new ArcProxyOnlyStep(new SuffixOneToOneStep("-done")),
+            Uni.createFrom().item("a"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null);
+
+        assertEquals("a-done", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void applyStepExecutesReactiveServiceContract() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+
+        Object result = executor.applyStep(
+            (ReactiveService<String, String>) input -> Uni.createFrom().item(input + "-service"),
+            Uni.createFrom().item("a"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null);
+
+        assertEquals("a-service", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void applyStepExecutesReactiveStreamingServiceContract() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+
+        Object result = executor.applyStep(
+            (ReactiveStreamingService<String, String>) input -> Multi.createFrom().items(input + "-1", input + "-2"),
+            Uni.createFrom().item("a"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null);
+
+        assertEquals(List.of("a-1", "a-2"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void applyStepExecutesReactiveBidirectionalStreamingServiceContract() {
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+
+        Object result = executor.applyStep(
+            (ReactiveBidirectionalStreamingService<String, String>) input -> input.map(item -> item + "-mapped"),
+            Multi.createFrom().items("a", "b"),
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null);
+
+        assertEquals(List.of("a-mapped", "b-mapped"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void oneToOneStepInvocationInstallsAndRestoresPipelineAndAwaitContext() {
+        PipelineContext previousPipeline = new PipelineContext("previous", "previous-tenant", "previous-cache");
+        AwaitExecutionContext previousAwait = new AwaitExecutionContext("previous-tenant", "previous-exec", 1);
+        PipelineContext currentPipeline = new PipelineContext("current", "tenant-1", "prefer-cache");
+        AwaitExecutionContext currentAwait = new AwaitExecutionContext("tenant-1", "exec-1", 2);
+        PipelineContextHolder.set(previousPipeline);
+        AwaitExecutionContextHolder.set(previousAwait);
+
+        try {
+            Object result = PipelineStepExecutor.applyOneToOneUnchecked(
+                new ContextCapturingOneToOneStep(),
+                Uni.createFrom().item("payload"),
+                false,
+                16,
+                null,
+                null,
+                null,
+                currentPipeline,
+                currentAwait);
+
+            assertEquals("tenant-1:exec-1:payload", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
+            assertSame(previousPipeline, PipelineContextHolder.get());
+            assertSame(previousAwait, AwaitExecutionContextHolder.get());
+        } finally {
+            PipelineContextHolder.clear();
+            AwaitExecutionContextHolder.clear();
+        }
+    }
+
+    @Test
     void oneToOneFutureOnMultiParallelProducesAllItems() {
         Object result = PipelineStepExecutor.applyOneToOneFutureUnchecked(
             new FutureSuffixStep("-future"),
@@ -83,7 +195,8 @@ class PipelineStepExecutorTest {
             null);
 
         List<String> values = ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5));
-        assertTrue(values.containsAll(Set.of("a-future", "b-future")));
+        values.sort(String::compareTo);
+        assertEquals(List.of("a-future", "b-future"), values);
     }
 
     @Test
@@ -97,7 +210,7 @@ class PipelineStepExecutorTest {
             null,
             null);
 
-        assertEquals(List.of("x-1", "x-2"), ((Multi<String>) result).collect().asList().await().indefinitely());
+        assertEquals(List.of("x-1", "x-2"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
     }
 
     @Test
@@ -149,7 +262,7 @@ class PipelineStepExecutorTest {
             null,
             null);
 
-        assertEquals("a,b", ((Uni<String>) result).await().indefinitely());
+        assertEquals("a,b", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
     }
 
     @Test
@@ -161,7 +274,36 @@ class PipelineStepExecutorTest {
             null,
             null);
 
-        assertEquals(List.of("x-mapped"), ((Multi<String>) result).collect().asList().await().indefinitely());
+        assertEquals(List.of("x-mapped"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void awaitStreamOneToOneInvocationUsesSharedStepContextRuntime() {
+        PipelineContext context = new PipelineContext("v1", "tenant-stream", "prefer-cache");
+        AwaitExecutionContext awaitContext = new AwaitExecutionContext("tenant-stream", "exec-stream", 3);
+
+        try {
+            PipelineStepExecutor executor = new PipelineStepExecutor();
+            Object result = executor.applyStep(
+                new ContextCapturingAwaitStreamStep(),
+                Multi.createFrom().items("a", "b"),
+                org.pipelineframework.config.ParallelismPolicy.SEQUENTIAL,
+                16,
+                null,
+                null,
+                null,
+                context,
+                awaitContext);
+
+            assertEquals(
+                List.of("tenant-stream:exec-stream:a", "tenant-stream:exec-stream:b"),
+                ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
+            assertNull(PipelineContextHolder.get());
+            assertNull(AwaitExecutionContextHolder.get());
+        } finally {
+            PipelineContextHolder.clear();
+            AwaitExecutionContextHolder.clear();
+        }
     }
 
     @Test
@@ -170,7 +312,7 @@ class PipelineStepExecutorTest {
             new BlockingSuffixOneToOneStep("-blocking"),
             Uni.createFrom().item("x"));
 
-        assertEquals("x-blocking", ((Uni<String>) result).await().indefinitely());
+        assertEquals("x-blocking", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
     }
 
     @Test
@@ -184,7 +326,7 @@ class PipelineStepExecutorTest {
             null,
             null);
 
-        assertEquals(List.of("x-1", "x-2"), ((Multi<String>) result).collect().asList().await().indefinitely());
+        assertEquals(List.of("x-1", "x-2"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
     }
 
     @Test
@@ -198,7 +340,7 @@ class PipelineStepExecutorTest {
             null,
             null);
 
-        assertEquals(List.of("x-1", "x-2"), ((Multi<String>) result).collect().asList().await().indefinitely());
+        assertEquals(List.of("x-1", "x-2"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
     }
 
     @Test
@@ -210,7 +352,7 @@ class PipelineStepExecutorTest {
             null,
             null);
 
-        assertEquals("a,b", ((Uni<String>) result).await().indefinitely());
+        assertEquals("a,b", ((Uni<String>) result).await().atMost(Duration.ofSeconds(5)));
     }
 
     @Test
@@ -222,7 +364,7 @@ class PipelineStepExecutorTest {
             null,
             null);
 
-        assertEquals(List.of("a-mapped", "b-mapped"), ((Multi<String>) result).collect().asList().await().indefinitely());
+        assertEquals(List.of("a-mapped", "b-mapped"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
     }
 
     static final class SuffixOneToOneStep extends ConfigurableStep implements StepOneToOne<String, String> {
@@ -235,6 +377,45 @@ class PipelineStepExecutorTest {
         @Override
         public Uni<String> applyOneToOne(String input) {
             return Uni.createFrom().item(input + suffix);
+        }
+    }
+
+    static final class ArcProxyOnlyStep implements ClientProxy {
+        private final Object delegate;
+
+        ArcProxyOnlyStep(Object delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public Object arc_contextualInstance() {
+            return delegate;
+        }
+
+        @Override
+        public InjectableBean<?> arc_bean() {
+            throw new UnsupportedOperationException("arc_bean is not used by this test proxy");
+        }
+    }
+
+    static final class ContextCapturingOneToOneStep extends ConfigurableStep implements StepOneToOne<String, String> {
+        @Override
+        public Uni<String> applyOneToOne(String input) {
+            PipelineContext pipelineContext = PipelineContextHolder.get();
+            AwaitExecutionContext awaitContext = AwaitExecutionContextHolder.get();
+            return Uni.createFrom().item(
+                pipelineContext.replayMode() + ":" + awaitContext.executionId() + ":" + input);
+        }
+    }
+
+    static final class ContextCapturingAwaitStreamStep implements AwaitStreamOneToOneStep<String, String> {
+        @Override
+        public Multi<String> applyAwaitPerItem(Multi<String> input) {
+            return input.onItem().transform(item -> {
+                PipelineContext pipelineContext = PipelineContextHolder.get();
+                AwaitExecutionContext awaitContext = AwaitExecutionContextHolder.get();
+                return pipelineContext.replayMode() + ":" + awaitContext.executionId() + ":" + item;
+            });
         }
     }
 

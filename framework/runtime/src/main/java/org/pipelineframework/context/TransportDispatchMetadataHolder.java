@@ -16,8 +16,7 @@
 
 package org.pipelineframework.context;
 
-import io.vertx.core.Context;
-import io.vertx.core.Vertx;
+import org.pipelineframework.runtime.core.RuntimeAdapters;
 
 /**
  * Holds transport dispatch metadata using Vert.x context when available, and falls back to thread-local storage.
@@ -25,7 +24,6 @@ import io.vertx.core.Vertx;
 public final class TransportDispatchMetadataHolder {
 
     private static final String CONTEXT_KEY = TransportDispatchMetadataHolder.class.getName() + ".context";
-    private static final ThreadLocal<TransportDispatchMetadata> THREAD_LOCAL = new ThreadLocal<>();
 
     private TransportDispatchMetadataHolder() {
     }
@@ -36,18 +34,11 @@ public final class TransportDispatchMetadataHolder {
      * @return metadata, or null when absent
      */
     public static TransportDispatchMetadata get() {
-        Context context = Vertx.currentContext();
-        if (context != null) {
-            try {
-                Object stored = context.getLocal(CONTEXT_KEY);
-                if (stored instanceof TransportDispatchMetadata metadata) {
-                    return metadata;
-                }
-            } catch (UnsupportedOperationException ignored) {
-                // Root contexts forbid locals; fall back to thread-local storage.
-            }
+        Object value = RuntimeAdapters.executionContext(CONTEXT_KEY, Object.class);
+        if (value instanceof TransportDispatchMetadata metadata) {
+            return metadata;
         }
-        return THREAD_LOCAL.get();
+        return null;
     }
 
     /**
@@ -56,31 +47,17 @@ public final class TransportDispatchMetadataHolder {
      * @param metadata metadata to store
      */
     public static void set(TransportDispatchMetadata metadata) {
-        Context context = Vertx.currentContext();
-        if (context != null) {
-            try {
-                context.putLocal(CONTEXT_KEY, metadata);
-                THREAD_LOCAL.remove();
-                return;
-            } catch (UnsupportedOperationException ignored) {
-                // Root contexts forbid locals; fall back to thread-local storage.
-            }
+        if (metadata == null) {
+            RuntimeAdapters.clearExecutionContext(CONTEXT_KEY);
+            return;
         }
-        THREAD_LOCAL.set(metadata);
+        RuntimeAdapters.setExecutionContext(CONTEXT_KEY, metadata);
     }
 
     /**
      * Clears transport dispatch metadata.
      */
     public static void clear() {
-        Context context = Vertx.currentContext();
-        if (context != null) {
-            try {
-                context.removeLocal(CONTEXT_KEY);
-            } catch (UnsupportedOperationException ignored) {
-                // Root contexts forbid locals; fall back to thread-local storage.
-            }
-        }
-        THREAD_LOCAL.remove();
+        RuntimeAdapters.clearExecutionContext(CONTEXT_KEY);
     }
 }

@@ -20,7 +20,7 @@
     <parent>
         <groupId>org.pipelineframework.csv</groupId>
         <artifactId>csv-payments-parent</artifactId>
-        <version>26.6.1-SNAPSHOT</version>
+        <version>26.6.2-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -200,6 +200,7 @@
                             <mainClass>org.pipelineframework.proto.PipelineProtoGenerator</mainClass>
                             <arguments>
                                 <argument>--module-dir=${project.basedir}</argument>
+                                <argument>${pipeline.protoConfigArg}</argument>
                                 <argument>--output-dir=${generated.proto.dir}</argument>
                             </arguments>
                             <addOutputToClasspath>true</addOutputToClasspath>

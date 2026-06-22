@@ -5,10 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.tpfgo.checkout.grpc.PipelineTypes;
+import org.pipelineframework.tpfgo.common.domain.OrderItem;
 import org.pipelineframework.tpfgo.common.domain.PlaceOrderRequest;
 
 class PlaceOrderRequestMapperTest {
@@ -29,7 +31,8 @@ class PlaceOrderRequestMapperTest {
                 .setRequestId(requestId.toString())
                 .setCustomerId(customerId.toString())
                 .setRestaurantId(restaurantId.toString())
-                .setItems("burger x1, fries x1")
+                .addItems(orderItem("burger", 1))
+                .addItems(orderItem("fries", 2))
                 .setTotalAmount(totalAmount.toPlainString())
                 .setCurrency("USD")
                 .build();
@@ -40,7 +43,10 @@ class PlaceOrderRequestMapperTest {
         assertEquals(requestId, domain.requestId());
         assertEquals(customerId, domain.customerId());
         assertEquals(restaurantId, domain.restaurantId());
-        assertEquals("burger x1, fries x1", domain.items());
+        assertEquals(List.of(
+            new OrderItem("burger", 1),
+            new OrderItem("fries", 2)
+        ), domain.items());
         assertEquals(totalAmount, domain.totalAmount());
         assertEquals("USD", domain.currency());
     }
@@ -52,7 +58,7 @@ class PlaceOrderRequestMapperTest {
                 .setRequestId("")
                 .setCustomerId("")
                 .setRestaurantId("")
-                .setItems("some items")
+                .addItems(orderItem("item", 1))
                 .setTotalAmount("")
                 .setCurrency("EUR")
                 .build();
@@ -77,7 +83,7 @@ class PlaceOrderRequestMapperTest {
                 .setRequestId(UUID.randomUUID().toString())
                 .setCustomerId(UUID.randomUUID().toString())
                 .setRestaurantId(UUID.randomUUID().toString())
-                .setItems("item")
+                .addItems(orderItem("item", 1))
                 .setTotalAmount("not-a-decimal")
                 .setCurrency("USD")
                 .build();
@@ -86,20 +92,20 @@ class PlaceOrderRequestMapperTest {
     }
 
     @Test
-    void fromExternalPreservesItemsStringWithSpecialCharacters() {
+    void fromExternalPreservesSkuWhitespaceAsCanonicalValue() {
         PipelineTypes.PlaceOrderRequest grpc =
             PipelineTypes.PlaceOrderRequest.newBuilder()
                 .setRequestId(UUID.randomUUID().toString())
                 .setCustomerId(UUID.randomUUID().toString())
                 .setRestaurantId(UUID.randomUUID().toString())
-                .setItems("  item with spaces & commas,  more items  ")
+                .addItems(orderItem("  sku with spaces  ", 3))
                 .setTotalAmount("5.00")
                 .setCurrency("USD")
                 .build();
 
         PlaceOrderRequest domain = mapper.fromExternal(grpc);
 
-        assertEquals("item with spaces & commas,  more items", domain.items());
+        assertEquals("sku with spaces", domain.items().get(0).sku());
     }
 
     // --- toExternal ---
@@ -112,8 +118,12 @@ class PlaceOrderRequestMapperTest {
         BigDecimal totalAmount = new BigDecimal("7.25");
 
         PlaceOrderRequest domain = new PlaceOrderRequest(
-            requestId, customerId, restaurantId,
-            "pizza x2", totalAmount, "GBP");
+            requestId,
+            customerId,
+            restaurantId,
+            List.of(new OrderItem("pizza", 2)),
+            totalAmount,
+            "GBP");
 
         PipelineTypes.PlaceOrderRequest grpc = mapper.toExternal(domain);
 
@@ -121,7 +131,7 @@ class PlaceOrderRequestMapperTest {
         assertEquals(requestId.toString(), grpc.getRequestId());
         assertEquals(customerId.toString(), grpc.getCustomerId());
         assertEquals(restaurantId.toString(), grpc.getRestaurantId());
-        assertEquals("pizza x2", grpc.getItems());
+        assertEquals(List.of(orderItem("pizza", 2)), grpc.getItemsList());
         assertEquals(totalAmount.toPlainString(), grpc.getTotalAmount());
         assertEquals("GBP", grpc.getCurrency());
     }
@@ -129,7 +139,7 @@ class PlaceOrderRequestMapperTest {
     @Test
     void placeOrderRequestRejectsNullRequiredFields() {
         assertThrows(NullPointerException.class, () -> new PlaceOrderRequest(
-            null, null, null, "items", null, "USD"));
+            null, null, null, List.of(new OrderItem("item", 1)), null, "USD"));
     }
 
     // --- round-trip ---
@@ -142,8 +152,12 @@ class PlaceOrderRequestMapperTest {
         BigDecimal totalAmount = new BigDecimal("33.33");
 
         PlaceOrderRequest original = new PlaceOrderRequest(
-            requestId, customerId, restaurantId,
-            "sushi x3", totalAmount, "JPY");
+            requestId,
+            customerId,
+            restaurantId,
+            List.of(new OrderItem("sushi", 3)),
+            totalAmount,
+            "JPY");
 
         PlaceOrderRequest roundTripped = mapper.fromExternal(mapper.toExternal(original));
 
@@ -166,7 +180,7 @@ class PlaceOrderRequestMapperTest {
                 .setRequestId(requestId.toString())
                 .setCustomerId(customerId.toString())
                 .setRestaurantId(restaurantId.toString())
-                .setItems("tacos x4")
+                .addItems(orderItem("tacos", 4))
                 .setTotalAmount("12.00")
                 .setCurrency("EUR")
                 .build();
@@ -177,7 +191,7 @@ class PlaceOrderRequestMapperTest {
         assertEquals(original.getRequestId(), roundTripped.getRequestId());
         assertEquals(original.getCustomerId(), roundTripped.getCustomerId());
         assertEquals(original.getRestaurantId(), roundTripped.getRestaurantId());
-        assertEquals(original.getItems(), roundTripped.getItems());
+        assertEquals(original.getItemsList(), roundTripped.getItemsList());
         assertEquals(original.getTotalAmount(), roundTripped.getTotalAmount());
         assertEquals(original.getCurrency(), roundTripped.getCurrency());
     }
@@ -187,10 +201,18 @@ class PlaceOrderRequestMapperTest {
     void roundTripZeroAmountPreservesValue() {
         PlaceOrderRequest domain = new PlaceOrderRequest(
             UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-            "free item", BigDecimal.ZERO, "USD");
+            List.of(new OrderItem("item", 1)), BigDecimal.ZERO, "USD");
 
         PlaceOrderRequest roundTripped = mapper.fromExternal(mapper.toExternal(domain));
 
         assertEquals(0, BigDecimal.ZERO.compareTo(roundTripped.totalAmount()));
     }
+
+    private static PipelineTypes.OrderItem orderItem(String sku, int quantity) {
+        return PipelineTypes.OrderItem.newBuilder()
+            .setSku(sku)
+            .setQuantity(quantity)
+            .build();
+    }
 }
+

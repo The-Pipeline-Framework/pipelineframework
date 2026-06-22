@@ -77,6 +77,36 @@ class PipelineTargetResolutionPhaseTest {
     }
 
     @Test
+    void springProfileResolvesLocalServerStepToLocalClientStep() throws Exception {
+        PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        context.setRendererProfile("spring");
+        context.setTransportMode(PipelineTransport.LOCAL);
+        context.setStepModels(List.of(step("SpringLocalStep", DeploymentRole.PIPELINE_SERVER)));
+
+        phase.execute(context);
+
+        PipelineStepModel updated = context.getStepModels().getFirst();
+        assertEquals(Set.of(GenerationTarget.LOCAL_CLIENT_STEP), updated.enabledTargets());
+        assertEquals(Set.of(GenerationTarget.LOCAL_CLIENT_STEP), context.getResolvedTargets());
+    }
+
+    @Test
+    void springProfileResolvesRestServerStepToRestResourceAndUnaryStep() throws Exception {
+        PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        context.setRendererProfile("spring");
+        context.setTransportMode(PipelineTransport.REST);
+        context.setStepModels(List.of(step("SpringRestStep", DeploymentRole.PIPELINE_SERVER)));
+
+        phase.execute(context);
+
+        PipelineStepModel updated = context.getStepModels().getFirst();
+        assertEquals(Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.LOCAL_CLIENT_STEP), updated.enabledTargets());
+        assertEquals(Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.LOCAL_CLIENT_STEP), context.getResolvedTargets());
+    }
+
+    @Test
     void defaultsToGrpcWhenTransportModeIsNull() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(null, null);
@@ -350,6 +380,82 @@ class PipelineTargetResolutionPhaseTest {
         PipelineStepModel updated = context.getStepModels().getFirst();
         assertEquals(expectedTargets, updated.enabledTargets());
         assertEquals(expectedTargets, context.getResolvedTargets());
+    }
+
+    @Test
+    void queryStepDescriptorClassNameIsAccessible() {
+        assertEquals(
+            "org.pipelineframework.query.QueryStepDescriptor",
+            PipelineTargetResolutionPhase.QUERY_STEP_DESCRIPTOR_CLASS);
+    }
+
+    @Test
+    void queryStepDescriptorResolvesToQueryClientStepTarget() throws Exception {
+        PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineStepModel queryModel = new PipelineStepModel(
+            "LoadCustomerRisk",
+            "LoadCustomerRiskService",
+            "com.example.risk",
+            ClassName.get("org.pipelineframework.query", "QueryStepDescriptor"),
+            new TypeMapping(ClassName.get("com.example.risk", "CustomerRiskLookup"), null, false),
+            new TypeMapping(ClassName.get("com.example.risk", "CustomerRiskSnapshot"), null, false),
+            StreamingShape.UNARY_UNARY,
+            Set.of(),
+            ExecutionMode.DEFAULT,
+            DeploymentRole.ORCHESTRATOR_CLIENT,
+            false,
+            null);
+        context.setStepModels(List.of(queryModel));
+        context.setTransportMode(PipelineTransport.GRPC);
+
+        phase.execute(context);
+
+        PipelineStepModel updated = context.getStepModels().getFirst();
+        assertEquals(Set.of(GenerationTarget.QUERY_CLIENT_STEP), updated.enabledTargets());
+        assertEquals(Set.of(GenerationTarget.QUERY_CLIENT_STEP), context.getResolvedTargets());
+    }
+
+    @Test
+    void queryStepDescriptorResolvesToQueryClientStepTargetRegardlessOfTransport() throws Exception {
+        for (PipelineTransport transport : PipelineTransport.values()) {
+            PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+            PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+            PipelineStepModel queryModel = new PipelineStepModel(
+                "LoadRisk",
+                "LoadRiskService",
+                "com.example.risk",
+                ClassName.get("org.pipelineframework.query", "QueryStepDescriptor"),
+                new TypeMapping(ClassName.get("com.example.risk", "RiskLookup"), null, false),
+                new TypeMapping(ClassName.get("com.example.risk", "RiskSnapshot"), null, false),
+                StreamingShape.UNARY_UNARY,
+                Set.of(),
+                ExecutionMode.DEFAULT,
+                DeploymentRole.ORCHESTRATOR_CLIENT,
+                false,
+                null);
+            context.setStepModels(List.of(queryModel));
+            context.setTransportMode(transport);
+
+            phase.execute(context);
+
+            PipelineStepModel updated = context.getStepModels().getFirst();
+            assertEquals(
+                Set.of(GenerationTarget.QUERY_CLIENT_STEP),
+                updated.enabledTargets(),
+                "Expected QUERY_CLIENT_STEP for transport " + transport);
+        }
+    }
+
+    @Test
+    void awaitStepDescriptorClassNameIsAccessibleAndDistinctFromQueryStepDescriptor() {
+        assertEquals(
+            "org.pipelineframework.awaitable.AwaitStepDescriptor",
+            PipelineTargetResolutionPhase.AWAIT_STEP_DESCRIPTOR_CLASS);
+        assertFalse(
+            PipelineTargetResolutionPhase.AWAIT_STEP_DESCRIPTOR_CLASS.equals(
+                PipelineTargetResolutionPhase.QUERY_STEP_DESCRIPTOR_CLASS),
+            "AWAIT and QUERY descriptor class names must be distinct");
     }
 
     private PipelineStepModel step(String serviceName, DeploymentRole role) {

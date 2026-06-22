@@ -139,6 +139,40 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     }
 
     @Override
+    public Uni<AwaitInteractionRecord> importRecord(AwaitInteractionRecord record) {
+        return blocking(() -> {
+            try {
+                dynamoClient().transactWriteItems(TransactWriteItemsRequest.builder()
+                    .transactItems(
+                        TransactWriteItem.builder().put(Put.builder()
+                            .tableName(interactionTable())
+                            .item(toItem(record))
+                            .conditionExpression("attribute_not_exists(#tenant) AND attribute_not_exists(#interaction)")
+                            .expressionAttributeNames(Map.of("#tenant", TENANT_ID, "#interaction", INTERACTION_ID))
+                            .build()).build(),
+                        TransactWriteItem.builder().put(lookupPut(
+                            "idempotency",
+                            record.tenantId(),
+                            record.stepId() + ":" + record.idempotencyKey(),
+                            record.interactionId(),
+                            record.ttlEpochS())).build(),
+                        TransactWriteItem.builder().put(lookupPut(
+                            "correlation",
+                            record.tenantId(),
+                            record.correlationId(),
+                            record.interactionId(),
+                            record.ttlEpochS())).build())
+                    .build());
+                return record;
+            } catch (TransactionCanceledException | ConditionalCheckFailedException ignored) {
+                return getBlocking(record.tenantId(), record.interactionId(), System.currentTimeMillis())
+                    .orElseThrow(() -> new IllegalStateException(
+                        "Await interaction import lost race but no interaction was found"));
+            }
+        });
+    }
+
+    @Override
     public Uni<Optional<AwaitInteractionRecord>> findByCorrelation(String tenantId, String correlationId) {
         return blocking(() -> findByLookup(
             lookupKey("correlation", tenantId, correlationId),
@@ -614,9 +648,6 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         Map<String, String> names = new HashMap<>();
         names.put("#version", VERSION);
         names.put("#status", STATUS);
-        names.put("#response", RESPONSE_PAYLOAD_JSON);
-        names.put("#actor", ACTOR);
-        names.put("#metadata", TRANSPORT_METADATA_JSON);
         names.put("#updated", UPDATED_AT_EPOCH_MS);
         names.put("#ttl", TTL_EPOCH_S);
         Map<String, AttributeValue> values = new HashMap<>();
@@ -629,12 +660,15 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             values.put(":requiredStatus", avS(requiredStatus.name()));
         }
         if (responsePayload != null) {
+            names.put("#response", RESPONSE_PAYLOAD_JSON);
             values.put(":response", avS(toJson(responsePayload)));
         }
         if (actor != null && !actor.isBlank()) {
+            names.put("#actor", ACTOR);
             values.put(":actor", avS(actor));
         }
         if (transportMetadata != null) {
+            names.put("#metadata", TRANSPORT_METADATA_JSON);
             values.put(":metadata", avS(toJson(transportMetadata)));
         }
         if (status.terminal()) {

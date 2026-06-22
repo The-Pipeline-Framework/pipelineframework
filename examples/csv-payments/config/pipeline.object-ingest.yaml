@@ -1,0 +1,210 @@
+version: 2
+appName: csv-payments
+basePackage: org.pipelineframework.csv
+transport: GRPC
+sources:
+  csv-payment-files:
+    kind: object
+    provider: filesystem
+    location:
+      root: ../input-csv-file-processing-svc/csv
+      prefix: ""
+    filter:
+      include: ["*.csv"]
+    poll:
+      enabled: true
+      interval: PT10S
+      batchSize: 50
+    identity:
+      fields: [provider, container, key, etag]
+    payload:
+      mode: reference
+input:
+  from: csv-payment-files
+  emits:
+    type: org.pipelineframework.csv.common.domain.CsvPaymentsInputFile
+    typeName: CsvPaymentsInputFile
+    mapper: org.pipelineframework.csv.common.mapper.CsvPaymentFileObjectMapper
+publish:
+  csv-payment-output-files:
+    kind: object
+    provider: filesystem
+    location:
+      root: ../input-csv-file-processing-svc/csv
+    naming:
+      keyTemplate: "{groupKey}.out"
+    payload:
+      contentType: text/csv
+    grouping:
+      maxOpenGroups: 1
+output:
+  to: csv-payment-output-files
+  consumes:
+    type: org.pipelineframework.csv.common.domain.PaymentOutput
+    typeName: PaymentOutput
+    mapper: org.pipelineframework.csv.common.mapper.CsvPaymentOutputPublishMapper
+aspects:
+  persistence:
+    enabled: true
+    scope: STEPS
+    position: AFTER_STEP
+    config:
+      targetSteps:
+        - ProcessCsvPaymentsInputService
+        - ProcessPaymentStatusService
+      pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
+      enabledTargets:
+        - GRPC_SERVICE
+        - CLIENT_STEP
+messages:
+  CsvFolder:
+    fields:
+      - number: 1
+        name: path
+        type: path
+  CsvPaymentsInputFile:
+    fields:
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: filepath
+        type: path
+      - number: 3
+        name: csvFolderPath
+        type: path
+  PaymentRecord:
+    fields:
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: csvId
+        type: string
+      - number: 3
+        name: recipient
+        type: string
+      - number: 4
+        name: amount
+        type: decimal
+      - number: 5
+        name: currency
+        type: currency
+      - number: 6
+        name: csvPaymentsInputFilePath
+        type: path
+  PaymentStatus:
+    fields:
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: reference
+        type: string
+      - number: 3
+        name: status
+        type: string
+      - number: 4
+        name: message
+        type: string
+      - number: 5
+        name: fee
+        type: decimal
+      - number: 6
+        name: conversationId
+        type: uuid
+      - number: 7
+        name: statusCode
+        type: int64
+      - number: 8
+        name: paymentRecordId
+        type: uuid
+      - number: 9
+        name: paymentRecord
+        type: PaymentRecord
+  PaymentOutput:
+    fields:
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: csvPaymentsOutputFilename
+        type: string
+      - number: 3
+        name: csvId
+        type: string
+      - number: 4
+        name: recipient
+        type: string
+      - number: 5
+        name: amount
+        type: decimal
+      - number: 6
+        name: currency
+        type: currency
+      - number: 7
+        name: conversationId
+        type: uuid
+      - number: 8
+        name: status
+        type: int64
+      - number: 9
+        name: message
+        type: string
+      - number: 10
+        name: fee
+        type: decimal
+      - number: 11
+        name: paymentStatus
+        type: PaymentStatus
+  CsvPaymentsOutputFile:
+    fields:
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: filepath
+        type: path
+      - number: 3
+        name: csvFolderPath
+        type: path
+steps:
+  - name: Process Csv Payments Input
+    service: org.pipelineframework.csv.service.ProcessCsvPaymentsInputService
+    cardinality: EXPANSION
+    input: org.pipelineframework.csv.common.domain.CsvPaymentsInputFile
+    inputTypeName: CsvPaymentsInputFile
+    inboundMapper: org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileMapper
+    output: org.pipelineframework.csv.common.domain.PaymentRecord
+    outputTypeName: PaymentRecord
+    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentRecordMapper
+  - name: Await Payment Provider
+    kind: await
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.csv.common.domain.PaymentRecord
+    inputTypeName: PaymentRecord
+    output: org.pipelineframework.csv.common.domain.PaymentStatus
+    outputTypeName: PaymentStatus
+    timeout: PT5M
+    idempotencyKeyFields: ["csvId", "recipient", "amount", "currency"]
+    await:
+      correlation:
+        strategy: signedResumeToken
+      transport:
+        type: kafka
+        request:
+          topic: csv-payments.payment.requests
+          key: correlationId
+        response:
+          topic: csv-payments.payment.results
+        consumer:
+          group: csv-payments-orchestrator
+  - name: Process Payment Status
+    service: org.pipelineframework.csv.service.ProcessPaymentStatusService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.csv.common.domain.PaymentStatus
+    inputTypeName: PaymentStatus
+    inboundMapper: org.pipelineframework.csv.common.mapper.PaymentStatusMapper
+    output: org.pipelineframework.csv.common.domain.PaymentOutput
+    outputTypeName: PaymentOutput
+    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputMapper

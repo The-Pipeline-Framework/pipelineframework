@@ -56,6 +56,7 @@ public class InMemoryAwaitUnitStore implements AwaitUnitStore {
                     null,
                     null,
                     0,
+                    java.util.Set.of(),
                     false,
                     command.nowEpochMs(),
                     command.nowEpochMs(),
@@ -72,6 +73,26 @@ public class InMemoryAwaitUnitStore implements AwaitUnitStore {
             synchronized (lock) {
                 purgeExpired(System.currentTimeMillis());
                 return Optional.ofNullable(unitsByScopedId.get(scopedUnitId(tenantId, unitId)));
+            }
+        });
+    }
+
+    @Override
+    public Uni<AwaitUnitRecord> importRecord(AwaitUnitRecord record) {
+        return Uni.createFrom().item(() -> {
+            if (record == null) {
+                throw new IllegalArgumentException("Await unit record is required");
+            }
+            synchronized (lock) {
+                purgeExpired(System.currentTimeMillis());
+                String scopedId = scopedUnitId(record.tenantId(), record.unitId());
+                AwaitUnitRecord existing = unitsByScopedId.get(scopedId);
+                if (existing != null) {
+                    return existing;
+                }
+                unitsByScopedId.put(scopedId, record);
+                completedItemsByScopedId.put(scopedId, new HashSet<>(record.completedItemKeys()));
+                return record;
             }
         });
     }
@@ -94,6 +115,7 @@ public class InMemoryAwaitUnitStore implements AwaitUnitStore {
             interactionId,
             current.expectedItemCount(),
             current.completedItemCount(),
+            current.completedItemKeys(),
             current.dispatchComplete(),
             current.createdAtEpochMs(),
             nowEpochMs,
@@ -122,6 +144,7 @@ public class InMemoryAwaitUnitStore implements AwaitUnitStore {
                 current.primaryInteractionId(),
                 expectedItemCount,
                 current.completedItemCount(),
+                current.completedItemKeys(),
                 true,
                 current.createdAtEpochMs(),
                 nowEpochMs,
@@ -166,6 +189,7 @@ public class InMemoryAwaitUnitStore implements AwaitUnitStore {
                     current.primaryInteractionId(),
                     current.expectedItemCount(),
                     completed,
+                    java.util.Set.copyOf(completedItems),
                     current.dispatchComplete(),
                     current.createdAtEpochMs(),
                     nowEpochMs,
@@ -190,6 +214,7 @@ public class InMemoryAwaitUnitStore implements AwaitUnitStore {
             current.primaryInteractionId(),
             current.expectedItemCount(),
             current.completedItemCount(),
+            current.completedItemKeys(),
             current.dispatchComplete(),
             current.createdAtEpochMs(),
             nowEpochMs,
@@ -214,6 +239,7 @@ public class InMemoryAwaitUnitStore implements AwaitUnitStore {
             current.primaryInteractionId(),
             current.expectedItemCount(),
             current.completedItemCount(),
+            current.completedItemKeys(),
             current.dispatchComplete(),
             current.createdAtEpochMs(),
             nowEpochMs,

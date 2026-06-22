@@ -1,0 +1,217 @@
+# Object Ingest And Publish
+
+Object ingest lets TPF admit files or object-store keys into a queue-async pipeline without making a business step list folders, poll S3, dedupe keys, or construct async execution ids.
+
+Use it when an object arrival or object listing is the pipeline input. Business steps should receive a domain input such as `CsvPaymentsInputFile` or `RawDocument`; the object shell owns listing, filtering, payload references, identity, and async admission.
+
+Object publish is the output-side counterpart. It lets terminal pipeline values become durable objects without making the final business step group records, name files, write to S3, retry duplicate writes, or report object-write lifecycle state.
+
+## Ingest DSL
+
+Declare the source at top level, then bind it to the pipeline input.
+
+```yaml
+sources:
+  csv-payment-files:
+    kind: object
+    provider: filesystem
+    location:
+      root: ../input-csv-file-processing-svc/csv
+      prefix: ""
+    filter:
+      include: ["*.csv"]
+    poll:
+      enabled: true
+      interval: PT10S
+      batchSize: 50
+    identity:
+      fields: [provider, container, key, etag]
+    payload:
+      mode: reference
+
+input:
+  from: csv-payment-files
+  emits:
+    type: org.pipelineframework.csv.common.domain.CsvPaymentsInputFile
+    typeName: CsvPaymentsInputFile
+    mapper: org.pipelineframework.csv.common.mapper.CsvPaymentFileObjectMapper
+```
+
+The first pipeline step input must match `input.emits.type` or `input.emits.typeName`.
+
+```yaml
+steps:
+  - name: Process Csv Payments Input
+    service: org.pipelineframework.csv.service.ProcessCsvPaymentsInputService
+    cardinality: EXPANSION
+    input: org.pipelineframework.csv.common.domain.CsvPaymentsInputFile
+    inputTypeName: CsvPaymentsInputFile
+```
+
+## Projection Mapper
+
+The mapper is explicit application code. TPF owns the object shell; the application owns how an object snapshot becomes a domain input.
+
+```java
+public final class CsvPaymentFileObjectMapper
+    implements ObjectSnapshotMapper<CsvPaymentsInputFile> {
+
+  @Override
+  public CsvPaymentsInputFile map(ObjectSnapshot snapshot) {
+    return new CsvPaymentsInputFile(new File(snapshot.localPath()));
+  }
+}
+```
+
+## Publish DSL
+
+Declare the target at top level, then bind terminal pipeline output to it.
+
+```yaml
+publish:
+  csv-payment-output-files:
+    kind: object
+    provider: filesystem
+    location:
+      root: ../input-csv-file-processing-svc/csv
+    naming:
+      keyTemplate: "{groupKey}.out"
+    payload:
+      contentType: text/csv
+    grouping:
+      maxOpenGroups: 1
+
+output:
+  to: csv-payment-output-files
+  consumes:
+    type: org.pipelineframework.csv.common.domain.PaymentOutput
+    typeName: PaymentOutput
+    mapper: org.pipelineframework.csv.common.mapper.CsvPaymentOutputPublishMapper
+```
+
+`output.to` attaches Object Publish to terminal pipeline output. It is not a user-authored step, so the pipeline still ends at the last business transition.
+
+```yaml
+steps:
+  - name: ProcessPaymentStatus
+    service: org.pipelineframework.csv.service.ProcessPaymentStatusService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.csv.common.domain.PaymentStatus
+    inputTypeName: PaymentStatus
+    output: org.pipelineframework.csv.common.domain.PaymentOutput
+    outputTypeName: PaymentOutput
+```
+
+The output binding type must match the last step output type.
+
+## Publish Mapper
+
+Application code renders terminal values into object payload chunks. TPF owns grouping, key templating, provider selection, write idempotency, backpressure, telemetry, and lifecycle reporting.
+
+```java
+public final class CsvPaymentOutputPublishMapper
+    implements StreamingObjectPublishMapper<PaymentOutput> {
+
+  @Override
+  public String groupKey(PaymentOutput item) {
+    return item.getCsvPaymentsOutputFilename();
+  }
+
+  @Override
+  public ObjectPublishGroupRenderer<PaymentOutput> openGroup(String groupKey, PaymentOutput firstItem) {
+    return new ObjectPublishGroupRenderer<>() {
+      private long count;
+
+      @Override
+      public String contentType() {
+        return "text/csv";
+      }
+
+      @Override
+      public ObjectPayloadChunk onItem(PaymentOutput item) {
+        count++;
+        return new ObjectPayloadChunk(renderCsvRow(item));
+      }
+
+      @Override
+      public Map<String, String> finalMetadata() {
+        return Map.of("recordCount", String.valueOf(count));
+      }
+    };
+  }
+}
+```
+
+## Connectors
+
+Add the connector library where object ingest or publish runs:
+
+```xml
+<dependency>
+    <groupId>org.pipelineframework</groupId>
+    <artifactId>object-ingest-connector</artifactId>
+    <version>${pipelineframework.version}</version>
+</dependency>
+```
+
+V1 object source and target connectors:
+
+| Connector | Purpose |
+| --- | --- |
+| `filesystem` | Local folders, tests, CSV-style batch inputs and output files. |
+| `s3` | AWS S3-compatible object listing, text/reference payload admission, and object publication. |
+
+The YAML field remains `provider` in v1 because it selects the Java `ObjectSourceProvider`
+or `ObjectTargetProvider` implementation behind the connector. `ObjectTargetProvider` uses JDK
+`CompletionStage`, not Mutiny or Quarkus types. The user-facing category is connectors because these
+libraries own I/O boundary behavior, not pipeline side-effect semantics.
+
+S3 text ingest example:
+
+```yaml
+sources:
+  search-documents:
+    kind: object
+    provider: s3
+    location:
+      bucket: tpf-search-documents
+      prefix: raw/
+    filter:
+      include: ["**/*.txt", "**/*.md", "**/*.html"]
+    payload:
+      mode: text
+      maxBytes: 1048576
+      charset: UTF-8
+```
+
+S3 publish example:
+
+```yaml
+publish:
+  search-results:
+    kind: object
+    provider: s3
+    location:
+      bucket: tpf-search-results
+      prefix: rendered/
+      region: us-east-1
+    naming:
+      keyTemplate: "{groupKey}.json"
+    payload:
+      contentType: application/json
+```
+
+## Runtime Requirements
+
+Object ingest v1 requires `pipeline.orchestrator.mode=QUEUE_ASYNC`. TPF submits each mapped input with a deterministic idempotency key derived from object identity, so duplicate listing results resolve to existing async executions.
+
+Object Publish also targets queue-async terminal output. Streaming terminal output must use `StreamingObjectPublishMapper<T>`; the batch `ObjectPublishMapper<T>` remains for unary/small compatibility only.
+
+FUNCTION pipelines are rejected in v1. Quarkus currently hosts the bootstrap, but the ingest runner and provider SPI are plain Java so a Spring Boot host can wire the same semantics later.
+
+## Example Configs
+
+- CSV Payments folder replacement: `examples/csv-payments/config/pipeline.object-ingest.yaml`
+- Search S3 text ingest: `examples/search/config/pipeline.s3-object-ingest.yaml`
+
+See [Field Materialization](/design/materialization) for related claim-check payload representation.

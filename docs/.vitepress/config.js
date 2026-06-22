@@ -38,215 +38,373 @@ const mainSidebar = [
         ]
     },
     {
-        text: 'Build',
-        collapsed: true,
-        items: [
-            {
-                text: 'Getting Started',
-                collapsed: true,
-                items: [
-                    {text: 'Quick Start', link: '/guide/getting-started/'},
-                    {text: 'Canvas Guide', link: '/guide/getting-started/canvas-guide'}
-                ]
-            },
-            {text: 'Pipeline Compilation', link: '/guide/build/pipeline-compilation'},
-            {text: 'Operators', link: '/guide/build/operators'},
-            {
-                text: 'Runtime Layouts',
-                link: '/guide/build/runtime-layouts/',
-                collapsed: true,
-                items: [
-                    {text: 'Using Runtime Mapping', link: '/guide/build/runtime-layouts/using-runtime-mapping'},
-                    {text: 'Maven Migration Playbook', link: '/guide/build/runtime-layouts/maven-migration'},
-                    {text: 'Search Lambda Verification Lane', link: '/guide/build/runtime-layouts/search-lambda'},
-                    {text: 'Search Azure Functions Testing Guide', link: '/guide/build/runtime-layouts/search-azure-functions'},
-                    {text: 'Multi-Cloud Function Providers', link: '/guide/build/runtime-layouts/function-providers'},
-                    {text: 'POM vs Layout Matrix', link: '/guide/build/runtime-layouts/pom-layout-matrix'},
-                    {text: 'CSV Payments Pipeline-Runtime Walkthrough', link: '/guide/build/runtime-layouts/csv-payments-pipeline-runtime'},
-                    {text: 'CSV Payments Monolith Walkthrough', link: '/guide/build/runtime-layouts/csv-payments-monolith'}
-                ]
-            },
-            {text: 'Configuration Reference', link: '/guide/build/configuration/'},
-            {text: 'Application Configuration', link: '/guide/application/configuration'},
-            {text: 'Using Plugins', link: '/guide/development/using-plugins'},
-            {text: 'Dependency Management', link: '/guide/build/dependency-management'},
-            {text: 'Pipeline Parent POM Lifecycle', link: '/guide/build/pipeline-parent-pom-lifecycle'},
-            {text: 'CSV Payments POM Lifecycle', link: '/guide/build/csv-payments-pom-lifecycle'},
-            {text: 'Best Practices', link: '/guide/operations/best-practices'}
-        ]
-    },
-    {
         text: 'Design',
         collapsed: true,
         items: [
-            {text: 'Application Structure', link: '/guide/design/application-structure'},
-            {text: 'Common Module Structure', link: '/guide/design/common-module-structure'},
-            {text: 'Operator Reuse Strategy', link: '/guide/design/operator-reuse-strategy'},
-            {text: 'Expansion and Reduction', link: '/guide/design/expansion-and-reduction'},
-            {text: 'Runtime Topology Strategy', link: '/guide/design/runtime-topology-strategy'}
+            {text: 'Overview', link: '/design/'},
+            {
+                text: 'Pipeline Studio',
+                link: '/design/pipeline-studio/',
+                collapsed: true,
+                items: [
+                    {text: 'Quick Start', link: '/design/pipeline-studio/'},
+                    {text: 'Canvas Guide', link: '/design/pipeline-studio/canvas-guide'}
+                ]
+            },
+            {text: 'Functional Core, Imperative Shell', link: '/design/fcis'},
+            {text: 'State Model', link: '/design/state-model'},
+            {text: 'Application Structure', link: '/design/application-structure'},
+            {text: 'Common Module Structure', link: '/design/common-module-structure'},
+            {text: 'Operators', link: '/design/operators'},
+            {text: 'Await Boundaries', link: '/design/await-boundaries'},
+            {text: 'Object Ingest', link: '/design/object-ingest'},
+            {
+                text: 'JPA Query Connector',
+                link: '/design/jpa-query-connector/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/design/jpa-query-connector/'},
+                    {text: 'Setup and YAML', link: '/design/jpa-query-connector/setup'},
+                    {text: 'Predicates and Selection', link: '/design/jpa-query-connector/predicates'},
+                    {text: 'Capture and Persistence', link: '/design/jpa-query-connector/capture-and-persistence'}
+                ]
+            },
+            {
+                text: 'Caching',
+                link: '/design/caching/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/design/caching/'},
+                    {text: 'Configuration', link: '/design/caching/configuration'},
+                    {text: 'Policies', link: '/design/caching/policies'},
+                    {text: 'Invalidation', link: '/design/caching/invalidation'},
+                    {text: 'Replay Walkthrough', link: '/design/caching/replay-walkthrough'},
+                    {text: 'Key Strategy', link: '/design/caching/key-strategy'},
+                    {text: 'Cache vs Persistence', link: '/design/caching/cache-vs-persistence'}
+                ]
+            },
+            {text: 'Persistence', link: '/design/persistence'},
+            {text: 'Field Materialization', link: '/design/materialization'},
+            {text: 'Expansion and Reduction', link: '/design/expansion-and-reduction'},
+            {text: 'Operator Reuse Strategy', link: '/design/operator-reuse-strategy'},
+            {text: 'Runtime Topology Strategy', link: '/design/runtime-topology-strategy'},
+            {text: 'Design Best Practices', link: '/design/best-practices'}
         ]
     },
     {
         text: 'Develop',
         collapsed: true,
         items: [
-            {text: '@PipelineStep Annotation', link: '/guide/development/pipeline-step'},
-            {text: 'Code a Step', link: '/guide/development/code-a-step'},
-            {text: 'Typed Union Outputs', link: '/guide/development/typed-union-outputs'},
-            {text: 'Item Reject Sink', link: '/guide/development/item-reject-sink'},
-            {text: 'Operators', link: '/guide/development/operators'},
-            {text: 'Operator Build Troubleshooting', link: '/guide/development/operators-build-troubleshooting'},
-            {text: 'Extending Operator Libraries', link: '/guide/development/extension/operator-libraries'},
-            {text: 'Mappers and DTOs', link: '/guide/development/mappers-and-dtos'},
-            {text: 'Handling File Operations', link: '/guide/development/handling-file-operations'},
-            {text: 'Testing with Testcontainers', link: '/guide/development/testing'},
+            {text: 'Overview', link: '/develop/'},
+            {text: 'Spring Support Status', link: '/develop/spring-support'},
+            {text: 'MCP and Template Generation', link: '/develop/mcp-template-generation'},
             {
-                text: 'Orchestrator Runtime',
-                link: '/guide/development/orchestrator-runtime/',
-                collapsed: false,
+                text: 'Pipeline Compilation',
+                link: '/develop/pipeline-compilation/',
+                collapsed: true,
                 items: [
-                    {text: 'Overview', link: '/guide/development/orchestrator-runtime/'},
-                    {text: 'Queue-Async Runtime', link: '/guide/development/orchestrator-runtime/queue-async'},
-                    {text: 'Checkpoint Handoff', link: '/guide/development/orchestrator-runtime/checkpoint-handoff'},
-                    {text: 'Await Boundaries', link: '/guide/development/orchestrator-runtime/await'}
+                    {text: 'Overview', link: '/develop/pipeline-compilation/'},
+                    {text: 'Generated Artifacts', link: '/develop/pipeline-compilation/generated-artifacts'},
+                    {text: 'Module Ownership', link: '/develop/pipeline-compilation/module-ownership'},
+                    {text: 'Build Integration', link: '/develop/pipeline-compilation/build-integration'},
+                    {text: 'Verification and Troubleshooting', link: '/develop/pipeline-compilation/verification-and-troubleshooting'}
                 ]
             },
-            {text: 'TPFGo Example', link: '/guide/development/tpfgo-example'},
-            {text: 'AWS Lambda Platform', link: '/guide/development/aws-lambda'},
-            {text: 'Azure Functions Platform', link: '/guide/development/azure-functions'},
-            {text: 'Google Cloud Run Functions Platform', link: '/guide/development/google-cloud-run-functions'},
-            {text: 'Performance', link: '/guide/development/performance'},
-            {text: 'Customization Points', link: '/guide/development/customization-points'}
+            {
+                text: 'Configuration',
+                link: '/develop/configuration/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/develop/configuration/'},
+                    {text: 'Build-Time Settings', link: '/develop/configuration/build-time'},
+                    {text: 'Runtime Settings', link: '/develop/configuration/runtime'},
+                    {text: 'Await and Checkpoint', link: '/develop/configuration/await-and-checkpoint'},
+                    {text: 'Transport and Platform', link: '/develop/configuration/transport-and-platform'},
+                    {text: 'Providers and Plugins', link: '/develop/configuration/providers-and-plugins'},
+                    {text: 'All Settings', link: '/develop/configuration/all-settings'},
+                    {text: 'Application Configuration', link: '/develop/configuration/application'},
+                    {text: 'Replay Viewer Parameters', link: '/develop/configuration/replay-viewer-parameters'},
+                    {text: 'Lambda-Focused Configuration', link: '/develop/configuration/lambda-focused'}
+                ]
+            },
+            {text: '@PipelineStep Annotation', link: '/develop/pipeline-step'},
+            {text: 'Code a Step', link: '/develop/code-a-step'},
+            {text: 'Typed Union Outputs', link: '/develop/typed-union-outputs'},
+            {text: 'Item Reject Sink', link: '/develop/item-reject-sink'},
+            {text: 'Operators', link: '/develop/operators'},
+            {text: 'Operator Build Troubleshooting', link: '/develop/operators-build-troubleshooting'},
+            {
+                text: 'Delegation and Extension',
+                collapsed: true,
+                items: [
+                    {text: 'External Library Delegation', link: '/develop/external-library-delegation'},
+                    {text: 'Use Existing Java Methods', link: '/develop/extension/use-existing-java-methods'},
+                    {text: 'Operator Service Contracts', link: '/develop/extension/operator-service-contracts'},
+                    {text: 'Legacy Delegation Migration', link: '/develop/extension/legacy-delegation-migration'},
+                    {text: 'Operator Delegation Reference', link: '/develop/extension/operator-delegation-reference'},
+                    {text: 'Operator Libraries', link: '/develop/extension/operator-libraries'},
+                    {text: 'Client Steps', link: '/develop/extension/client-steps'},
+                    {text: 'Orchestrator Runtime Extensions', link: '/develop/extension/orchestrator-runtime'},
+                    {text: 'Reactive Services', link: '/develop/extension/reactive-services'},
+                    {text: 'REST Resources', link: '/develop/extension/rest-resources'}
+                ]
+            },
+            {text: 'Mappers and DTOs', link: '/develop/mappers-and-dtos'},
+            {text: 'Handling File Operations', link: '/develop/handling-file-operations'},
+            {text: 'Testing with Testcontainers', link: '/develop/testing'},
+            {text: 'Modularity', link: '/develop/modularity'},
+            {text: 'Using Plugins', link: '/develop/using-plugins'},
+            {text: 'Writing a Plugin', link: '/develop/writing-a-plugin'},
+            {text: 'TPFGo Example', link: '/develop/tpfgo-example'},
+            {text: 'Performance', link: '/develop/performance'},
+            {text: 'Customization Points', link: '/develop/customization-points'}
+        ]
+    },
+    {
+        text: 'Deploy',
+        collapsed: true,
+        items: [
+            {text: 'Overview', link: '/deploy/'},
+            {
+                text: 'Runtime Layouts',
+                link: '/deploy/runtime-layouts/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/deploy/runtime-layouts/'},
+                    {text: 'Using Runtime Mapping', link: '/deploy/runtime-layouts/using-runtime-mapping'},
+                    {text: 'Maven Migration Playbook', link: '/deploy/runtime-layouts/maven-migration'},
+                    {text: 'POM vs Layout Matrix', link: '/deploy/runtime-layouts/pom-layout-matrix'},
+                    {text: 'CSV Payments Pipeline-Runtime', link: '/deploy/runtime-layouts/csv-payments-pipeline-runtime'},
+                    {text: 'CSV Payments Monolith', link: '/deploy/runtime-layouts/csv-payments-monolith'}
+                ]
+            },
+            {
+                text: 'Orchestrator Runtime',
+                link: '/deploy/orchestrator-runtime/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/deploy/orchestrator-runtime/'},
+                    {text: 'Queue-Async Runtime', link: '/deploy/orchestrator-runtime/queue-async'},
+                    {text: 'Checkpoint Handoff', link: '/deploy/orchestrator-runtime/checkpoint-handoff'},
+                    {text: 'Await Runtime Setup', link: '/deploy/orchestrator-runtime/await'}
+                ]
+            },
+            {
+                text: 'Function Platforms',
+                collapsed: true,
+                items: [
+                    {text: 'AWS Lambda Platform', link: '/deploy/aws-lambda'},
+                    {text: 'Azure Functions Platform', link: '/deploy/azure-functions'},
+                    {text: 'Google Cloud Run Functions Platform', link: '/deploy/google-cloud-run-functions'},
+                    {text: 'Multi-Cloud Function Providers', link: '/deploy/function-providers'},
+                    {text: 'Search Lambda Verification Lane', link: '/deploy/search-lambda'},
+                    {text: 'Search Azure Verification Lane', link: '/deploy/search-azure-functions'},
+                    {text: 'Azure Deployment Walkthrough', link: '/deploy/azure-functions-deployment-walkthrough'},
+                    {text: 'Azure Troubleshooting', link: '/deploy/azure-functions-troubleshooting'},
+                    {text: 'Search Azure Reference', link: '/deploy/search-azure-functions-reference'}
+                ]
+            },
+            {text: 'Dependency Management', link: '/deploy/dependency-management'},
+            {text: 'Pipeline Parent POM Lifecycle', link: '/deploy/pipeline-parent-pom-lifecycle'},
+            {text: 'CSV Payments POM Lifecycle', link: '/deploy/csv-payments-pom-lifecycle'},
+            {text: 'Checkpoint Handoff', link: '/deploy/orchestrator-runtime/checkpoint-handoff'},
+            {text: 'Concurrency and Backpressure Sizing', link: '/deploy/concurrency-and-backpressure'}
         ]
     },
     {
         text: 'Operate',
         collapsed: true,
         items: [
-            {text: 'Orchestrator Runtime Modes', link: '/guide/development/orchestrator-runtime/'},
-            {text: 'Await Boundaries', link: '/guide/operations/await-boundaries'},
-            {text: 'Error Handling & DLQ', link: '/guide/operations/error-handling'},
-            {text: 'Queue-Async Crash Semantics', link: '/guide/operations/error-handling#queue-async-crash-matrix'},
-            {text: 'In-flight Probe', link: '/guide/operations/in-flight-probe'},
-            {text: 'Operators', link: '/guide/operations/operators'},
-            {text: 'Operator Playbook', link: '/guide/operations/operators-playbook'},
-            {text: 'Operator Troubleshooting', link: '/guide/operations/operators-troubleshooting'},
-            {text: 'AWS Lambda SnapStart', link: '/guide/operations/aws-lambda-snapstart'},
+            {text: 'Overview', link: '/operate/'},
+            {text: 'Await Boundaries', link: '/operate/await-boundaries'},
+            {text: 'Error Handling & DLQ', link: '/operate/error-handling'},
+            {text: 'In-flight Probe', link: '/operate/in-flight-probe'},
+            {text: 'AWS Lambda SnapStart', link: '/operate/aws-lambda-snapstart'},
             {
-                text: 'Observability',
-                collapsed: false,
-                items: [
-                    {text: 'Overview', link: '/guide/operations/observability/'},
-                    {text: 'Metrics', link: '/guide/operations/observability/metrics'},
-                    {text: 'Tracing', link: '/guide/operations/observability/tracing'},
-                    {text: 'Replay & Live Topology', link: '/guide/operations/observability/replay'},
-                    {text: 'Replay Viewer', link: '/replay-viewer/'},
-                    {text: 'Logging', link: '/guide/operations/observability/logging'},
-                    {text: 'Health Checks', link: '/guide/operations/observability/health-checks'},
-                    {text: 'Alerting', link: '/guide/operations/observability/alerting'},
-                    {text: 'NewRelic OTel', link: '/guide/operations/observability/newrelic'},
-                    {text: 'Using Quarkus LGTM', link: '/guide/operations/observability/lgtm'},
-                    {text: 'Security Notes', link: '/guide/operations/observability/security'}
-                ]
-            }
-        ]
-    },
-    {
-        text: 'Plugins',
-        collapsed: true,
-        items: [
-            {text: 'Writing a Plugin', link: '/guide/plugins/writing-a-plugin'},
-            {text: 'Persistence Plugin', link: '/guide/plugins/persistence'},
-            {text: 'Field Materialization', link: '/guide/plugins/materialization'},
-            {
-                text: 'Caching',
+                text: 'Operators',
                 collapsed: true,
                 items: [
-                    {text: 'Caching Configuration', link: '/guide/plugins/caching/configuration'},
-                    {text: 'Caching Policies', link: '/guide/plugins/caching/policies'},
-                    {text: 'Caching Invalidation', link: '/guide/plugins/caching/invalidation'},
-                    {text: 'Search Replay Walkthrough', link: '/guide/plugins/caching/replay-walkthrough'},
-                    {text: 'Cache Key Strategy', link: '/guide/plugins/caching/key-strategy'},
-                    {text: 'Cache vs Persistence', link: '/guide/plugins/caching/cache-vs-persistence'}
+                    {text: 'Runtime Operations', link: '/operate/operators'},
+                    {text: 'Operator Playbook', link: '/operate/operators-playbook'},
+                    {text: 'Operator Troubleshooting', link: '/operate/operators-troubleshooting'}
                 ]
-            }
+            },
+            {
+                text: 'Observability',
+                link: '/operate/observability/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/operate/observability/'},
+                    {text: 'Metrics', link: '/operate/observability/metrics'},
+                    {text: 'Tracing', link: '/operate/observability/tracing'},
+                    {text: 'Replay & Live Topology', link: '/operate/observability/replay'},
+                    {text: 'Replay Viewer', link: '/replay-viewer/'},
+                    {text: 'Logging', link: '/operate/observability/logging'},
+                    {text: 'Health Checks', link: '/operate/observability/health-checks'},
+                    {text: 'Alerting', link: '/operate/observability/alerting'},
+                    {text: 'Scalability', link: '/operate/observability/scalability'},
+                    {text: 'Best Practices', link: '/operate/observability/best-practices'},
+                    {text: 'NewRelic OTel', link: '/operate/observability/newrelic'},
+                    {text: 'Using Quarkus LGTM', link: '/operate/observability/lgtm'},
+                    {text: 'Security Notes', link: '/operate/observability/security'}
+                ]
+            },
+            {text: 'Best Practices Index', link: '/operate/best-practices'}
         ]
     },
     {
         text: 'Evolve',
         collapsed: true,
         items: [
-            {text: 'Architecture', link: '/guide/evolve/architecture'},
-            {text: 'I/O Shell Absorption', link: '/guide/evolve/io-shell-absorption'},
-            {text: 'Orchestrator Control Plane', link: '/guide/evolve/architecture#orchestrator-control-plane-current'},
+            {text: 'Overview', link: '/evolve/'},
+            {text: 'Architecture', link: '/evolve/architecture'},
+            {text: 'Architecture Reference', link: '/evolve/architecture-reference'},
+            {text: 'I/O Shell Absorption', link: '/evolve/io-shell-absorption'},
             {
-                text: 'Await Unit Runtime',
-                link: '/guide/evolve/await-unit-runtime/',
-                collapsed: false,
+                text: 'Operators',
+                link: '/evolve/operators/',
+                collapsed: true,
                 items: [
-                    {text: 'Model', link: '/guide/evolve/await-unit-runtime/'},
-                    {text: 'Sequences', link: '/guide/evolve/await-unit-runtime/sequences'},
-                    {text: 'Patterns', link: '/guide/evolve/await-unit-runtime/patterns'},
-                    {text: 'Limitations And Debt', link: '/guide/evolve/await-unit-runtime/operations-and-debt'}
+                    {text: 'Overview', link: '/evolve/operators/'},
+                    {text: 'Architecture', link: '/evolve/operators/architecture'},
+                    {text: 'Invocation Internals', link: '/evolve/operators/internals'}
+                ]
+            },
+            {
+                text: 'Runtime Mapping',
+                link: '/evolve/runtime-mapping/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/evolve/runtime-mapping/'},
+                    {text: 'Schema', link: '/evolve/runtime-mapping/schema'},
+                    {text: 'Cheat Sheet', link: '/evolve/runtime-mapping/cheat-sheet'},
+                    {text: 'Build Topologies', link: '/evolve/runtime-mapping/build-topologies'},
+                    {text: 'Annotation Processing', link: '/evolve/runtime-mapping/annotation-processing'},
+                    {text: 'Synthetics', link: '/evolve/runtime-mapping/synthetics'},
+                    {text: 'Implementation Plan', link: '/evolve/runtime-mapping/implementation-plan'},
+                    {text: 'TDD Plan', link: '/evolve/runtime-mapping/tdd-plan'},
+                    {text: 'Validation & Migration Examples', link: '/evolve/runtime-mapping/validation-migration-examples'}
+                ]
+            },
+            {
+                text: 'TPFGo',
+                link: '/evolve/tpfgo/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/evolve/tpfgo/'},
+                    {text: 'Design Spectrum', link: '/evolve/tpfgo/design-spectrum'},
+                    {text: 'DDD Alignment', link: '/evolve/tpfgo/ddd-alignment'},
+                    {text: 'Observer and Tap Contract', link: '/evolve/tpfgo/observer-tap-contract'},
+                    {text: 'Roadmap', link: '/evolve/tpfgo/roadmap'},
+                    {text: 'Roadmap Archive', link: '/evolve/tpfgo/roadmap-archive'}
+                ]
+            },
+            {
+                text: 'Durable Coordinator',
+                link: '/evolve/durable-coordinator/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/evolve/durable-coordinator/'},
+                    {text: 'Coordinator And Worker Topology', link: '/evolve/durable-coordinator/coordinator-worker-topology'},
+                    {text: 'Worker Protocols', link: '/evolve/durable-coordinator/worker-protocols'},
+                    {text: 'Step-Aware Invocation Runtime', link: '/evolve/durable-coordinator/boundary-invocation-model'},
+                    {text: 'Bundle Contract', link: '/evolve/durable-coordinator/bundle-contract'},
+                    {text: 'Pipeline Contract And Release Model', link: '/evolve/durable-coordinator/pipeline-contract-release-model'},
+                    {text: 'Runtime Boundaries And Performance', link: '/evolve/durable-coordinator/runtime-boundaries-performance'},
+                    {text: 'Local APIs', link: '/evolve/durable-coordinator/local-apis'},
+                    {text: 'Self-Hosted Deployment', link: '/evolve/durable-coordinator/self-hosted-deployment'},
+                    {text: 'Self-Hosted HA Roadmap', link: '/evolve/durable-coordinator/self-hosted-ha-roadmap'},
+                    {text: 'Self-Hosted Milestone', link: '/evolve/durable-coordinator/self-hosted-milestone'}
+                ]
+            },
+            {
+                text: 'Brokered Boundaries',
+                link: '/evolve/brokered-boundaries/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/evolve/brokered-boundaries/'},
+                    {text: 'Boundary Taxonomy', link: '/evolve/brokered-boundaries/boundary-taxonomy'},
+                    {text: 'Dispatch Substrates', link: '/evolve/brokered-boundaries/dispatch-substrates'},
+                    {text: 'Envelope And Data Policy', link: '/evolve/brokered-boundaries/envelope-and-data-policy'},
+                    {text: 'Adoption And Slices', link: '/evolve/brokered-boundaries/adoption-and-slices'}
+                ]
+            },
+            {
+                text: 'Framework Portability Assessment',
+                link: '/evolve/framework-portability-assessment/',
+                collapsed: true,
+                items: [
+                    {text: 'Guide Overview', link: '/evolve/framework-portability-assessment/'},
+                    {text: 'Full Assessment Snapshot', link: '/evolve/framework-portability-assessment'},
+                    {text: 'Coupling Inventory', link: '/evolve/framework-portability-assessment/coupling-inventory'},
+                    {text: 'Quarkus Coupling', link: '/evolve/framework-portability-assessment/quarkus-coupling'},
+                    {text: 'Vert.x Coupling', link: '/evolve/framework-portability-assessment/vertx-coupling'},
+                    {text: 'Runtime Split', link: '/evolve/framework-portability-assessment/runtime-split'},
+                    {text: 'Reactive Portability', link: '/evolve/framework-portability-assessment/reactive-portability'},
+                    {text: 'Persistence Portability', link: '/evolve/framework-portability-assessment/persistence'},
+                    {text: 'Annotation Removal', link: '/evolve/framework-portability-assessment/annotation-removal'},
+                    {text: 'Code Generation Portability', link: '/evolve/framework-portability-assessment/code-generation'},
+                    {text: 'Maven And Scaffolding', link: '/evolve/framework-portability-assessment/maven-and-scaffolding'},
+                    {text: 'Roadmap And Guardrails', link: '/evolve/framework-portability-assessment/roadmap-and-guardrails'}
                 ]
             },
             {
                 text: 'Annotation Processor Guide',
-                link: '/guide/evolve/annotation-processor/',
+                link: '/evolve/annotation-processor/',
                 collapsed: true,
                 items: [
-                    {text: 'Overview', link: '/guide/evolve/annotation-processor/'},
-                    {text: 'Phases and Flow', link: '/guide/evolve/annotation-processor/phases-and-flow'},
-                    {text: 'Models and Bindings', link: '/guide/evolve/annotation-processor/models-and-bindings'},
-                    {text: 'Generation and Rendering', link: '/guide/evolve/annotation-processor/generation-and-rendering'},
-                    {text: 'Current Architecture', link: '/guide/evolve/annotation-processor/current-architecture'}
+                    {text: 'Overview', link: '/evolve/annotation-processor/'},
+                    {text: 'Phases and Flow', link: '/evolve/annotation-processor/phases-and-flow'},
+                    {text: 'Models and Bindings', link: '/evolve/annotation-processor/models-and-bindings'},
+                    {text: 'Generation and Rendering', link: '/evolve/annotation-processor/generation-and-rendering'},
+                    {text: 'Current Architecture', link: '/evolve/annotation-processor/current-architecture'}
                 ]
             },
-            {text: 'Annotation Processor Architecture (Compat)', link: '/guide/evolve/annotation-processor-architecture'},
-            {text: 'Compiler Pipeline Architecture', link: '/guide/evolve/compiler-pipeline-architecture'},
-            {text: 'Operators Internals', link: '/guide/evolve/operators-internals'},
-            {text: 'Data Types', link: '/guide/evolve/data-types'},
-            {text: 'Typed Union Output Contracts', link: '/guide/evolve/typed-union-output-contracts'},
+            {text: 'Annotation Processor Architecture (Compat)', link: '/evolve/annotation-processor-architecture'},
+            {text: 'Compiler Pipeline Architecture', link: '/evolve/compiler-pipeline-architecture'},
+            {text: 'Runtime Core Decoupling', link: '/evolve/runtime-core-decoupling'},
+            {text: 'I/O Shell Absorption', link: '/evolve/io-shell-absorption'},
+            {text: 'Data Types', link: '/evolve/data-types'},
+            {text: 'Typed Union Output Contracts', link: '/evolve/typed-union-output-contracts'},
+            {text: 'Plugins Architecture', link: '/evolve/plugins-architecture'},
+            {text: 'Reference Implementation', link: '/evolve/reference-implementation'},
+            {text: 'Reference Implementation Archive', link: '/evolve/reference-implementation-archive'},
+            {text: 'Template Generator', link: '/evolve/template-generator'},
             {
-                text: 'Runtime Mapping',
+                text: 'Release And Publishing',
+                link: '/evolve/publishing',
                 collapsed: true,
                 items: [
-                    {text: 'Schema', link: '/guide/evolve/runtime-mapping/schema'},
-                    {text: 'Cheat Sheet', link: '/guide/evolve/runtime-mapping/cheat-sheet'},
-                    {text: 'Build Topologies', link: '/guide/evolve/runtime-mapping/build-topologies'},
-                    {text: 'Annotation Processing', link: '/guide/evolve/runtime-mapping/annotation-processing'},
-                    {text: 'Synthetics', link: '/guide/evolve/runtime-mapping/synthetics'},
-                    {text: 'Implementation Plan', link: '/guide/evolve/runtime-mapping/implementation-plan'},
-                    {text: 'TDD Plan', link: '/guide/evolve/runtime-mapping/tdd-plan'},
-                    {text: 'Validation & Migration Examples', link: '/guide/evolve/runtime-mapping/validation-migration-examples'}
+                    {text: 'Overview', link: '/evolve/publishing'},
+                    {text: 'Framework Release Process', link: '/evolve/framework-release-process'},
+                    {text: 'Docs Snapshot Process', link: '/evolve/docs-snapshot-process'},
+                    {text: 'Bridge Release Coordination', link: '/evolve/bridge-release-coordination'},
+                    {text: 'Publishing Reference', link: '/evolve/publishing-reference'}
                 ]
             },
-            {text: 'Plugins Architecture', link: '/guide/evolve/plugins-architecture'},
-            {text: 'Reference Implementation', link: '/guide/evolve/reference-implementation'},
-            {text: 'Template Generator (Reference)', link: '/guide/evolve/template-generator'},
-            {text: 'Publishing', link: '/guide/evolve/publishing'},
-            {text: 'CI Guidelines', link: '/guide/evolve/ci-guidelines'},
-            {text: 'Testing Guidelines', link: '/guide/evolve/testing-guidelines'},
-            {text: 'Gotchas & Pitfalls', link: '/guide/evolve/gotchas-pitfalls'},
-            {text: 'Proto Descriptor Integration', link: '/guide/evolve/protobuf-integration-descriptor-res'},
-            {text: 'Protobuf-over-HTTP Dispatch Design', link: '/guide/evolve/protobuf-over-http-dispatch-design'},
+            {text: 'CI Guidelines', link: '/evolve/ci-guidelines'},
+            {text: 'Testing Guidelines', link: '/evolve/testing-guidelines'},
+            {text: 'Gotchas & Pitfalls', link: '/evolve/gotchas-pitfalls'},
+            {text: 'Proto Descriptor Integration', link: '/evolve/protobuf-integration-descriptor-res'},
+            {text: 'Protobuf-over-HTTP Dispatch Design', link: '/evolve/protobuf-over-http-dispatch-design'},
             {
                 text: 'Aspects',
                 collapsed: true,
                 items: [
-                    {text: 'Aspect Semantics', link: '/guide/evolve/aspects/semantics'},
-                    {text: 'Aspect Ordering', link: '/guide/evolve/aspects/ordering'},
-                    {text: 'Aspect Warnings', link: '/guide/evolve/aspects/warnings'}
+                    {text: 'Aspect Semantics', link: '/evolve/aspects/semantics'},
+                    {text: 'Aspect Ordering', link: '/evolve/aspects/ordering'},
+                    {text: 'Aspect Warnings', link: '/evolve/aspects/warnings'}
                 ]
             },
             {
-                text: 'TPF Go',
+                text: 'Await Unit Runtime',
+                link: '/evolve/await-unit-runtime/',
                 collapsed: true,
                 items: [
-                    {text: 'TPF Go Overview', link: '/guide/evolve/tpfgo/'},
-                    {text: 'TPF Go Design Spectrum', link: '/guide/evolve/tpfgo/design-spectrum'},
-                    {text: 'TPF Go DDD Alignment', link: '/guide/evolve/tpfgo/ddd-alignment'},
-                    {text: 'TPF Go Roadmap', link: '/guide/evolve/tpfgo/roadmap'}
+                    {text: 'Model', link: '/evolve/await-unit-runtime/'},
+                    {text: 'Sequences', link: '/evolve/await-unit-runtime/sequences'},
+                    {text: 'Patterns', link: '/evolve/await-unit-runtime/patterns'},
+                    {text: 'Limitations And Debt', link: '/evolve/await-unit-runtime/operations-and-debt'}
                 ]
             }
         ]
@@ -260,23 +418,62 @@ const mainSidebar = [
     },
 ]
 
-const toNavItems = (items = []) =>
+const withCollapsedGuideGroups = (items = []) =>
     items.map((item) => {
+        if (!item.items?.length) {
+            return item
+        }
+        return {
+            ...item,
+            collapsed: item.collapsed ?? true,
+            items: withCollapsedGuideGroups(item.items),
+        }
+    })
+
+const guideSidebar = withCollapsedGuideGroups(mainSidebar)
+
+const isTopNavOverviewItem = (item) => item.text === 'Overview'
+
+const flattenTopNavItems = (items = []) =>
+    items.flatMap((item) => {
+        if (isTopNavOverviewItem(item)) {
+            return []
+        }
+        if (item.items?.length) {
+            return {
+                text: item.text,
+                items: item.items.flatMap((child) => {
+                    if (isTopNavOverviewItem(child)) {
+                        return []
+                    }
+                    if (!child.items?.length) {
+                        return {text: child.text, link: child.link}
+                    }
+                    const childOverview = child.link
+                        ? [{text: child.text, link: child.link}]
+                        : []
+                    return [
+                        ...childOverview,
+                        ...child.items.map((grandchild) => ({
+                            text: `${child.text}: ${grandchild.text}`,
+                            link: grandchild.link,
+                        }))
+                    ]
+                }).filter((child) => child.link && !isTopNavOverviewItem(child)),
+            }
+        }
         const navItem = {text: item.text}
         if (item.link) {
             navItem.link = item.link
         }
-        if (item.items?.length) {
-            navItem.items = toNavItems(item.items)
-        }
         return navItem
     })
 
-const topNavSections = mainSidebar
+const topNavSections = guideSidebar
     .filter((section) => section.text !== ADDITIONAL_RESOURCES_LABEL)
     .map((section) => ({
         text: section.text,
-        items: toNavItems(section.items ?? []),
+        items: flattenTopNavItems(section.items ?? []),
     }))
 
 export default withMermaid(
@@ -332,7 +529,7 @@ export default withMermaid(
                     ]
                 }
             ],
-            '/': mainSidebar
+            '/': guideSidebar
         },
 
       // Add search functionality
@@ -451,6 +648,15 @@ export default withMermaid(
 
     sitemap: {
       hostname: 'https://pipelineframework.org',
+      transformItems(items) {
+        return items.filter((item) => {
+          const pathname = new URL(item.url, 'https://pipelineframework.org').pathname
+          // Exclude redirect stubs from route migrations; keep their canonical targets.
+          return !pathname.startsWith('/guide/')
+            && !pathname.startsWith('/design/runtime-layouts')
+            && pathname !== '/design/await'
+        })
+      }
     },
 
     head: [

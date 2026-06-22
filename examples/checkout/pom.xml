@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.pipelineframework</groupId>
         <artifactId>pipeline-framework-root</artifactId>
-        <version>26.6.1-SNAPSHOT</version>
+        <version>26.6.2-SNAPSHOT</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
@@ -33,6 +33,7 @@
     <properties>
         <protobuf.version>3.25.8</protobuf.version>
         <pipeline.moduleArg>-Apipeline.module=${project.artifactId}</pipeline.moduleArg>
+        <pipeline.warnUnreferencedStepsArg>-Apipeline.warnUnreferencedSteps=false</pipeline.warnUnreferencedStepsArg>
     </properties>
 
     <dependencyManagement>

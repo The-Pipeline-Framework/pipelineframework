@@ -6,11 +6,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
@@ -31,14 +34,14 @@ import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.ReactiveReturnKind;
 import org.pipelineframework.processor.ir.ServiceApiKind;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 
 /**
- * Extracts semantic models from annotated elements.
- * This phase discovers and extracts PipelineStepModel instances from @PipelineStep annotated classes.
+ * Extracts semantic models from YAML step definitions and legacy {@code @PipelineStep} annotations.
  */
 public class ModelExtractionPhase implements PipelineCompilationPhase {
     public static final String NO_YAML_DEFINITIONS_MESSAGE =
@@ -152,7 +155,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Fallback extraction path for annotation-driven internal steps.
+     * Fallback extraction path for legacy annotation-driven internal steps.
      *
      * @param ctx the compilation context containing the current round environment
      * @return list of extracted step models from @PipelineStep-annotated classes
@@ -179,9 +182,10 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     /**
      * Builds a PipelineStepModel that represents the provided StepDefinition.
      *
-     * For INTERNAL steps, verifies the referenced service class exists and is annotated with
-     * @PipelineStep, extracts semantic information from the class, and applies the YAML-derived
-     * identity. For DELEGATED steps, constructs a delegated model via createDelegatedStepModel.
+     * For INTERNAL steps, verifies the referenced service class exists, extracts the implemented
+     * service contract, and applies YAML-derived identity and mappings. {@code @PipelineStep}
+     * metadata remains a compatibility source when present, but YAML is authoritative.
+     * For DELEGATED steps, constructs a delegated model via createDelegatedStepModel.
      * For REMOTE steps, constructs a generated remote-adapter model from template contract metadata.
      *
      * @param ctx the compilation context
@@ -214,6 +218,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             case COMMAND -> {
                 yield createCommandStepModel(ctx, stepDef, ctxWarningLogger);
             }
+            case QUERY -> {
+                yield createQueryStepModel(ctx, stepDef, ctxWarningLogger);
+            }
         };
     }
 
@@ -227,8 +234,21 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 "Command step '" + stepDef.name() + "' must resolve both input and output domain types");
             return null;
         }
-        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage(ctx), ctx);
-        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage(ctx), ctx);
+        StreamingShape streamingShape = stepDef.streamingShapeHint() != null
+            ? stepDef.streamingShapeHint()
+            : StreamingShape.UNARY_UNARY;
+        if (streamingShape != StreamingShape.UNARY_UNARY) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Command step '" + stepDef.name() + "' supports only ONE_TO_ONE cardinality in v1");
+            return null;
+        }
+
+        String templateBasePackage = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            ? config.basePackage()
+            : null;
+        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage, ctx);
+        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage, ctx);
 
         String serviceName = toYamlServiceName(stepDef.name());
         String servicePackage = deriveYamlServicePackage(inputType, ctxWarningLogger);
@@ -250,6 +270,52 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .build();
     }
 
+    private PipelineStepModel createQueryStepModel(
+            PipelineCompilationContext ctx,
+            org.pipelineframework.processor.ir.StepDefinition stepDef,
+            Consumer<String> ctxWarningLogger) {
+        if (stepDef.inputType() == null || stepDef.outputType() == null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Query step '" + stepDef.name() + "' must resolve both input and output domain types");
+            return null;
+        }
+        StreamingShape streamingShape = stepDef.streamingShapeHint() != null
+            ? stepDef.streamingShapeHint()
+            : StreamingShape.UNARY_UNARY;
+        if (streamingShape != StreamingShape.UNARY_UNARY) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Query step '" + stepDef.name() + "' supports only ONE_TO_ONE cardinality in v1");
+            return null;
+        }
+
+        String templateBasePackage = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            ? config.basePackage()
+            : null;
+        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage, ctx);
+        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage, ctx);
+
+        String serviceName = toYamlServiceName(stepDef.name());
+        String servicePackage = deriveYamlServicePackage(inputType, ctxWarningLogger);
+        return new PipelineStepModel.Builder()
+            .serviceName(serviceName)
+            .generatedName(serviceName)
+            .servicePackage(servicePackage)
+            .serviceClassName(ClassName.get("org.pipelineframework.query", "QueryStepDescriptor"))
+            .inputMapping(new TypeMapping(inputType, null, false, inputType))
+            .outputMapping(new TypeMapping(outputType, null, false, outputType))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(java.util.Set.of(GenerationTarget.QUERY_CLIENT_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .sideEffect(false)
+            .cacheKeyGenerator(null)
+            .orderingRequirement(OrderingRequirement.RELAXED)
+            .threadSafety(ThreadSafety.SAFE)
+            .build();
+    }
+
     private PipelineStepModel createAwaitStepModel(
             PipelineCompilationContext ctx,
             org.pipelineframework.processor.ir.StepDefinition stepDef,
@@ -264,7 +330,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ? stepDef.streamingShapeHint()
             : StreamingShape.UNARY_UNARY;
 
-        String templateBasePackage = templateBasePackage(ctx);
+        String templateBasePackage = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            ? config.basePackage()
+            : null;
         TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage, ctx);
         TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage, ctx);
 
@@ -286,12 +354,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .orderingRequirement(OrderingRequirement.RELAXED)
             .threadSafety(ThreadSafety.SAFE)
             .build();
-    }
-
-    private String templateBasePackage(PipelineCompilationContext ctx) {
-        return ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
-            ? config.basePackage()
-            : null;
     }
 
     private PipelineStepModel createRemoteStepModel(
@@ -367,21 +429,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return null;
         }
 
-        if (serviceClass.getAnnotation(PipelineStep.class) == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
-                "Internal step service class '" + stepDef.executionClass().canonicalName() +
-                    "' must be annotated with @PipelineStep for step '" + stepDef.name() + "'");
-            return null;
-        }
-
-        var extracted = irExtractor.extract(serviceClass);
-        if (extracted == null) {
-            return null;
-        }
-        PipelineStepModel extractedModel = extracted.model();
-
         SupportedServiceSignature serviceSignature = resolveSupportedInternalSignature(
+            ctx,
             serviceClass,
             ctx.getProcessingEnv().getTypeUtils(),
             ctx.getProcessingEnv().getMessager());
@@ -389,9 +438,17 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Internal step service '" + stepDef.executionClass().canonicalName()
-                    + "' must implement exactly one supported service interface for step '" + stepDef.name() + "'");
+                    + "' must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out>"
+                    + springPlainMethodHint(ctx) + " method for step '"
+                    + stepDef.name() + "'");
             return null;
         }
+
+        PipelineStepModel extractedModel = createYamlInternalBaseModel(ctx, serviceClass, serviceSignature, irExtractor);
+        if (extractedModel == null) {
+            return null;
+        }
+        boolean annotationBacked = serviceClass.getAnnotation(PipelineStep.class) != null;
 
         StreamingShape yamlShape = stepDef.streamingShapeHint();
         if (yamlShape != null && yamlShape != serviceSignature.shape()) {
@@ -408,7 +465,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             stepDef.name(),
             "input",
             stepDef.inputType(),
-            extractedModel.inboundDomainType(),
+            annotationBacked ? extractedModel.inboundDomainType() : null,
             serviceSignature.inputType());
         if (inputType == null) {
             return null;
@@ -418,7 +475,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             stepDef.name(),
             "output",
             stepDef.outputType(),
-            extractedModel.outboundDomainType(),
+            annotationBacked ? extractedModel.outboundDomainType() : null,
             serviceSignature.outputType());
         if (outputType == null) {
             return null;
@@ -429,7 +486,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             stepDef.name(),
             "inboundMapper",
             stepDef.inboundMapper(),
-            extractedModel.inputMapping() == null ? null : castToClassName(extractedModel.inputMapping().mapperType()),
+            annotationBacked && extractedModel.inputMapping() != null ? castToClassName(extractedModel.inputMapping().mapperType()) : null,
             inputType);
         if (inboundMapper == INVALID_CLASS_NAME) {
             return null;
@@ -439,20 +496,70 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             stepDef.name(),
             "outboundMapper",
             stepDef.outboundMapper(),
-            extractedModel.outputMapping() == null ? null : castToClassName(extractedModel.outputMapping().mapperType()),
+            annotationBacked && extractedModel.outputMapping() != null ? castToClassName(extractedModel.outputMapping().mapperType()) : null,
             outputType);
         if (outboundMapper == INVALID_CLASS_NAME) {
             return null;
         }
 
         String serviceName = toYamlServiceName(stepDef.name());
+        ExecutionMode resolvedExecutionMode = executionMode(ctx, stepDef, serviceSignature.apiKind());
         return extractedModel.toBuilder()
             .serviceName(serviceName)
             .generatedName(serviceName)
             .inputMapping(new TypeMapping(inputType, inboundMapper, inboundMapper != null, inputType))
             .outputMapping(new TypeMapping(outputType, outboundMapper, outboundMapper != null, outputType))
             .streamingShape(serviceSignature.shape())
+            .executionMode(resolvedExecutionMode)
             .serviceApiKind(serviceSignature.apiKind())
+            .reactiveReturnKind(serviceSignature.reactiveReturnKind())
+            .build();
+    }
+
+    private PipelineStepModel createYamlInternalBaseModel(
+            PipelineCompilationContext ctx,
+            TypeElement serviceClass,
+            SupportedServiceSignature serviceSignature,
+            PipelineStepIRExtractor irExtractor) {
+        if (serviceClass.getAnnotation(PipelineStep.class) != null) {
+            var extracted = irExtractor.extract(serviceClass);
+            return extracted == null ? null : extracted.model();
+        }
+
+        String qualifiedServiceName = serviceClass.getQualifiedName().toString();
+        ClassName serviceClassName = null;
+        try {
+            serviceClassName = ClassName.get(serviceClass);
+        } catch (Exception e) {
+            if (qualifiedServiceName != null && !qualifiedServiceName.isBlank()) {
+                serviceClassName = ClassName.bestGuess(qualifiedServiceName);
+            }
+        }
+        if (serviceClassName == null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Could not resolve service class name for YAML internal step service '"
+                    + qualifiedServiceName + "'");
+            return null;
+        }
+
+        return new PipelineStepModel.Builder()
+            .serviceName(serviceClass.getSimpleName().toString())
+            .generatedName(serviceClass.getSimpleName().toString())
+            .servicePackage(ctx.getProcessingEnv().getElementUtils().getPackageOf(serviceClass).getQualifiedName().toString())
+            .serviceClassName(serviceClassName)
+            .inputMapping(new TypeMapping(serviceSignature.inputType(), null, false, serviceSignature.inputType()))
+            .outputMapping(new TypeMapping(serviceSignature.outputType(), null, false, serviceSignature.outputType()))
+            .streamingShape(serviceSignature.shape())
+            .enabledTargets(EnumSet.of(GenerationTarget.GRPC_SERVICE, GenerationTarget.CLIENT_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .orderingRequirement(OrderingRequirement.RELAXED)
+            .threadSafety(ThreadSafety.SAFE)
+            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+            .sideEffect(false)
+            .cacheKeyGenerator(null)
+            .serviceApiKind(serviceSignature.apiKind())
+            .reactiveReturnKind(serviceSignature.reactiveReturnKind())
             .build();
     }
 
@@ -496,6 +603,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ? DeploymentRole.PLUGIN_CLIENT
             : DeploymentRole.ORCHESTRATOR_CLIENT;
 
+        ExecutionMode resolvedExecutionMode = executionMode(ctx, stepDef, null);
         return new PipelineStepModel.Builder()
             .serviceName(serviceName)
             .generatedName(serviceName)
@@ -513,7 +621,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 outputType))
             .streamingShape(streamingShape)
             .enabledTargets(targets)
-            .executionMode(ExecutionMode.DEFAULT)
+            .executionMode(resolvedExecutionMode)
             .deploymentRole(crossModuleRole)
             .sideEffect(false)
             .cacheKeyGenerator(null)
@@ -1045,6 +1153,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     }
 
     private SupportedServiceSignature resolveSupportedInternalSignature(
+            PipelineCompilationContext ctx,
             TypeElement serviceElement,
             Types typeUtils,
             javax.annotation.processing.Messager messager) {
@@ -1120,7 +1229,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return null;
         }
         if (combinedMatches.isEmpty()) {
-            return null;
+            return resolvePlainUnaryProcessSignature(ctx, serviceElement, messager).orElse(null);
         }
         SupportedServiceSignature match = combinedMatches.get(0);
         if (match.materializingWarning() != null) {
@@ -1130,6 +1239,107 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 serviceElement);
         }
         return match;
+    }
+
+    private Optional<SupportedServiceSignature> resolvePlainUnaryProcessSignature(
+            PipelineCompilationContext ctx,
+            TypeElement serviceElement,
+            javax.annotation.processing.Messager messager) {
+        List<SupportedServiceSignature> matches = new ArrayList<>();
+        boolean springProfile = isSpringRendererProfile(ctx);
+        for (Element enclosed : serviceElement.getEnclosedElements()) {
+            if (!(enclosed instanceof ExecutableElement method)) {
+                continue;
+            }
+            if (!method.getModifiers().contains(Modifier.PUBLIC)
+                || method.getModifiers().contains(Modifier.STATIC)
+                || method.getParameters().size() != 1) {
+                continue;
+            }
+            String methodName = method.getSimpleName().toString();
+            TypeMirror returnType = method.getReturnType();
+            if ("processBlocking".equals(methodName) && springProfile && returnType.getKind() != TypeKind.VOID) {
+                matches.add(new SupportedServiceSignature(
+                    ServiceApiKind.BLOCKING,
+                    StreamingShape.UNARY_UNARY,
+                    TypeName.get(method.getParameters().getFirst().asType()),
+                    TypeName.get(returnType),
+                    // Blocking services do not have a reactive return. Renderers branch on
+                    // ServiceApiKind first; this value is retained only for model compatibility.
+                    ReactiveReturnKind.MUTINY_UNI,
+                    null));
+                continue;
+            }
+            if (!"process".equals(methodName)
+                || !(returnType instanceof DeclaredType declaredReturn)
+                || declaredReturn.getTypeArguments().size() != 1) {
+                continue;
+            }
+            ReactiveReturnKind reactiveReturnKind;
+            if (isDeclaredType(declaredReturn, "io.smallrye.mutiny.Uni")) {
+                reactiveReturnKind = ReactiveReturnKind.MUTINY_UNI;
+            } else if (springProfile && isDeclaredType(declaredReturn, "reactor.core.publisher.Mono")) {
+                reactiveReturnKind = ReactiveReturnKind.REACTOR_MONO;
+            } else {
+                continue;
+            }
+            matches.add(new SupportedServiceSignature(
+                ServiceApiKind.REACTIVE,
+                StreamingShape.UNARY_UNARY,
+                TypeName.get(method.getParameters().getFirst().asType()),
+                TypeName.get(declaredReturn.getTypeArguments().getFirst()),
+                reactiveReturnKind,
+                null));
+        }
+
+        if (matches.size() > 1) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Internal service '" + serviceElement.getQualifiedName()
+                    + "' declares multiple public process(In): Uni<Out>" + springPlainMethodHint(ctx)
+                    + " methods. Please declare exactly one.");
+            return Optional.empty();
+        }
+        return matches.isEmpty() ? Optional.empty() : Optional.of(matches.getFirst());
+    }
+
+    private ExecutionMode executionMode(
+            PipelineCompilationContext ctx,
+            org.pipelineframework.processor.ir.StepDefinition stepDef,
+            ServiceApiKind serviceApiKind) {
+        ExecutionMode mode = stepDef.runOnVirtualThreads() ? ExecutionMode.VIRTUAL_THREADS : ExecutionMode.DEFAULT;
+        if (mode == ExecutionMode.VIRTUAL_THREADS && serviceApiKind == ServiceApiKind.REACTIVE) {
+            printVirtualThreadError(
+                ctx,
+                "Internal step '" + stepDef.name()
+                    + "' sets runOnVirtualThreads, but virtual-thread offload is valid only for blocking internal services.");
+        } else if (mode == ExecutionMode.VIRTUAL_THREADS && serviceApiKind == null) {
+            printVirtualThreadError(
+                ctx,
+                "Internal step '" + stepDef.name()
+                    + "' sets runOnVirtualThreads, but the service class must be available at build time to verify blocking execution.");
+        }
+        return mode;
+    }
+
+    private void printVirtualThreadError(PipelineCompilationContext ctx, String message) {
+        if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
+            ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR, message);
+        }
+    }
+
+    private boolean isSpringRendererProfile(PipelineCompilationContext ctx) {
+        return ctx != null && "spring".equalsIgnoreCase(ctx.getRendererProfile());
+    }
+
+    private String springPlainMethodHint(PipelineCompilationContext ctx) {
+        return isSpringRendererProfile(ctx) ? " or process(In): Mono<Out> or processBlocking(In): Out" : "";
+    }
+
+    private boolean isDeclaredType(DeclaredType declaredType, String qualifiedName) {
+        Element element = declaredType.asElement();
+        return element instanceof TypeElement typeElement
+            && typeElement.getQualifiedName().contentEquals(qualifiedName);
     }
 
     private List<String> directSupportedInterfaceNames(Types typeUtils, TypeElement serviceElement) {
@@ -1174,6 +1384,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             shape,
             TypeName.get(declared.getTypeArguments().get(0)),
             TypeName.get(declared.getTypeArguments().get(1)),
+            ReactiveReturnKind.MUTINY_UNI,
             materializingWarning));
         matchNames.add(interfaceName);
     }
@@ -1188,12 +1399,19 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             TypeName annotationType,
             TypeName reactiveType) {
         if (yamlType != null) {
-            if (annotationType != null && !yamlType.equals(annotationType)) {
+            if (reactiveType != null && !yamlType.equals(reactiveType)) {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.ERROR,
                     "Internal step '" + stepName + "' declares " + direction + " type '" + yamlType
-                        + "' in YAML, but deprecated @PipelineStep metadata still declares '" + annotationType + "'.");
+                        + "' in YAML, but service implementation declares '" + reactiveType + "'.");
                 return null;
+            }
+            if (annotationType != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.WARNING,
+                    "Internal step '" + stepName + "' declares " + direction + " type '" + yamlType
+                        + "' in YAML and deprecated @PipelineStep metadata declares '" + annotationType
+                        + "'. YAML is authoritative.");
             }
             return yamlType;
         }
@@ -1218,13 +1436,12 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ClassName yamlMapper,
             ClassName annotationMapper,
             TypeName expectedDomainType) {
-        if (yamlMapper != null && annotationMapper != null && !yamlMapper.equals(annotationMapper)) {
+        if (yamlMapper != null && annotationMapper != null) {
             ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
+                javax.tools.Diagnostic.Kind.WARNING,
                 "Internal step '" + stepName + "' declares " + fieldName + " '" + yamlMapper.canonicalName()
-                    + "' in YAML, but deprecated @PipelineStep metadata still declares '"
-                    + annotationMapper.canonicalName() + "'.");
-            return INVALID_CLASS_NAME;
+                    + "' in YAML and deprecated @PipelineStep metadata declares '"
+                    + annotationMapper.canonicalName() + "'. YAML is authoritative.");
         }
         ClassName effective = yamlMapper != null ? yamlMapper : annotationMapper;
         if (effective == null) {
@@ -1371,6 +1588,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         StreamingShape shape,
         TypeName inputType,
         TypeName outputType,
+        ReactiveReturnKind reactiveReturnKind,
         String materializingWarning
     ) {
     }

@@ -20,7 +20,7 @@
 
     <groupId>org.pipelineframework</groupId>
     <artifactId>pipeline-framework-root</artifactId>
-    <version>26.6.1-SNAPSHOT</version>
+    <version>26.6.2-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>The Pipeline Framework - Root POM</name>
     <description>The root POM for the Pipeline Framework project, managing both framework components and example applications</description>
@@ -45,7 +45,7 @@
         <connection>scm:git:https://github.com/The-Pipeline-Framework/pipelineframework.git</connection>
         <developerConnection>scm:git:git@github.com:The-Pipeline-Framework/pipelineframework.git</developerConnection>
         <url>https://github.com/The-Pipeline-Framework/pipelineframework</url>
-        <tag>v26.2.2</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <properties>
@@ -70,6 +70,7 @@
         <maven.deploy.skip>true</maven.deploy.skip>
         <skipTests>false</skipTests>
         <skipUnitTests>false</skipUnitTests>
+        <argLine />
         <surefireArgLine />
         <tpf.build.parallelism>AUTO</tpf.build.parallelism>
         <tpf.build.transport>GRPC</tpf.build.transport>
@@ -86,6 +87,9 @@
         <module>plugins/foundational/persistence</module>
         <module>plugins/foundational/cache</module>
         <module>plugins/foundational/repository</module>
+        <!-- Connectors -->
+        <module>connectors/object-ingest</module>
+        <module>connectors/query-jpa</module>
     </modules>
 
     <dependencyManagement>
@@ -107,6 +111,14 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.jboss.logmanager</groupId>
+            <artifactId>jboss-logmanager</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 
     <build>
         <defaultGoal>clean install</defaultGoal>
@@ -188,7 +200,7 @@
                         <systemPropertyVariables>
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         </systemPropertyVariables>
-                        <argLine>${surefireArgLine} -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar --enable-preview -XX:+EnableDynamicAgentLoading</argLine>
+                        <argLine>@{argLine} ${surefireArgLine} -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar --enable-preview -XX:+EnableDynamicAgentLoading</argLine>
                     </configuration>
                 </plugin>
 

@@ -8,6 +8,7 @@ on:
     paths:
       - 'framework/**'
       - 'plugins/**'
+      - 'connectors/**'
       - 'examples/**'
       - 'mvnw'
       - '.mvn/**'

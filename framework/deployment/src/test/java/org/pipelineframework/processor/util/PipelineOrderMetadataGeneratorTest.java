@@ -322,6 +322,143 @@ class PipelineOrderMetadataGeneratorTest {
             "Expected class to end with FraudCheckAwaitClientStep but was: " + firstStep);
     }
 
+    @Test
+    void writesQueryClientStepToOrchestratorOrderMetadata() throws IOException {
+        Path classOutput = tempDir.resolve("class-output-query-orch");
+        Path moduleDir = tempDir.resolve("module-query-orch");
+        Files.createDirectories(moduleDir);
+        Files.writeString(moduleDir.resolve("pipeline.yaml"), """
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            transport: "GRPC"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                capture:
+                  keyFields: ["customerId"]
+            """);
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(java.util.Map.of());
+        when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
+        RoundEnvironment roundEnv = mock(RoundEnvironment.class);
+
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        ctx.setTransportMode(PipelineTransport.GRPC);
+        ctx.setOrchestratorGenerated(true);
+        ctx.setModuleDir(moduleDir);
+
+        PipelineStepModel queryModel = new PipelineStepModel.Builder()
+            .serviceName("LoadCustomerRisk")
+            .generatedName("LoadCustomerRiskService")
+            .servicePackage("com.example.risk")
+            .serviceClassName(ClassName.get("org.pipelineframework.query", "QueryStepDescriptor"))
+            .inputMapping(new TypeMapping(ClassName.get("com.example.risk", "CustomerRiskLookup"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("com.example.risk", "CustomerRiskSnapshot"), null, false))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(Set.of(GenerationTarget.QUERY_CLIENT_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .build();
+
+        ctx.setStepModels(List.of(queryModel));
+
+        new PipelineOrderMetadataGenerator(processingEnv).writeOrderMetadata(ctx);
+
+        Path orderFile = classOutput.resolve("META-INF/pipeline/order.json");
+        assertTrue(Files.exists(orderFile), "order.json should be written");
+
+        JsonObject metadata = new Gson().fromJson(Files.readString(orderFile), JsonObject.class);
+        JsonArray order = metadata.getAsJsonArray("order");
+        assertTrue(order.size() > 0, "Expected at least one ordered step");
+
+        String firstStep = order.get(0).getAsString();
+        assertTrue(firstStep.endsWith("LoadCustomerRiskQueryClientStep"),
+            "Expected generated class to end with LoadCustomerRiskQueryClientStep but was: " + firstStep);
+        assertTrue(firstStep.contains("com.example.risk.pipeline"),
+            "Expected generated class to be in pipeline package but was: " + firstStep);
+    }
+
+    @Test
+    void writesQueryClientStepToLocalExecutionOrderMetadata() throws IOException {
+        Path classOutput = tempDir.resolve("class-output-query-local");
+        Path moduleDir = tempDir.resolve("module-query-local");
+        Files.createDirectories(moduleDir);
+        Files.writeString(moduleDir.resolve("pipeline.yaml"), """
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            transport: "GRPC"
+            queries:
+              order-history:
+                connector: "jpa"
+                input: "com.example.OrderHistoryLookup"
+                output: "com.example.OrderHistorySnapshot"
+                jpa:
+                  entity: "com.example.OrderHistoryEntity"
+                  where:
+                    orderId: "input.orderId"
+            steps:
+              - name: "Load Order History"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "order-history"
+                input: "com.example.OrderHistoryLookup"
+                output: "com.example.OrderHistorySnapshot"
+            """);
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(java.util.Map.of());
+        when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
+        RoundEnvironment roundEnv = mock(RoundEnvironment.class);
+
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        ctx.setTransportMode(PipelineTransport.GRPC);
+        ctx.setOrchestratorGenerated(false);
+        ctx.setModuleDir(moduleDir);
+
+        PipelineStepModel queryModel = new PipelineStepModel.Builder()
+            .serviceName("LoadOrderHistory")
+            .generatedName("LoadOrderHistoryService")
+            .servicePackage("com.example.order")
+            .serviceClassName(ClassName.get("org.pipelineframework.query", "QueryStepDescriptor"))
+            .inputMapping(new TypeMapping(ClassName.get("com.example.order", "OrderHistoryLookup"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("com.example.order", "OrderHistorySnapshot"), null, false))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(Set.of(GenerationTarget.QUERY_CLIENT_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .build();
+
+        ctx.setStepModels(List.of(queryModel));
+
+        new PipelineOrderMetadataGenerator(processingEnv).writeOrderMetadata(ctx);
+
+        Path orderFile = classOutput.resolve("META-INF/pipeline/order.json");
+        assertTrue(Files.exists(orderFile), "order.json should be written");
+
+        JsonObject metadata = new Gson().fromJson(Files.readString(orderFile), JsonObject.class);
+        JsonArray order = metadata.getAsJsonArray("order");
+        assertEquals(1, order.size(), "Expected only the query client step in local execution order");
+
+        String firstStep = order.get(0).getAsString();
+        assertEquals("com.example.order.pipeline.LoadOrderHistoryQueryClientStep", firstStep);
+    }
+
     // ---- Helper classes (reused from PipelinePlatformMetadataGeneratorTest pattern) ----
 
     private static final class PathResourceFiler implements Filer {

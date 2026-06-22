@@ -2,73 +2,54 @@ package org.pipelineframework.config.template;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.composition.PipelineCompositionHandoff;
+import org.pipelineframework.config.composition.PipelineCompositionIr;
+import org.pipelineframework.config.composition.PipelineCompositionConfigLoader;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class CheckoutReferenceContractTest {
 
-    private static final String CHECKOUT_CONFIG = "examples/checkout/checkout-orchestrator-svc/pipeline.yaml";
-    private static final String CONSUMER_VALIDATION_CONFIG =
-        "examples/checkout/consumer-validation-orchestrator-svc/pipeline.yaml";
+    private static final String CHECKOUT_COMPOSITION =
+        "examples/checkout/config/canonical/pipeline-composition.yaml";
 
     @Test
-    void checkpointOutputMatchesNextPipelineInputContract() {
-        PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader();
+    void canonicalCheckoutCompositionResolvesTypedHandoffs() {
+        PipelineCompositionIr ir = new PipelineCompositionConfigLoader()
+            .loadIr(resolveFromWorkspaceRoot(CHECKOUT_COMPOSITION));
 
-        PipelineTemplateConfig checkout = loader.load(resolveFromWorkspaceRoot(CHECKOUT_CONFIG));
-        PipelineTemplateConfig consumerValidation =
-            loader.load(resolveFromWorkspaceRoot(CONSUMER_VALIDATION_CONFIG));
-
-        assertEquals("GRPC", checkout.transport(), "Checkout transport should be GRPC.");
-        assertEquals("GRPC", consumerValidation.transport(), "Consumer-validation transport should be GRPC.");
-        assertFalse(checkout.steps().isEmpty(), "Checkout pipeline must define steps.");
-        assertFalse(consumerValidation.steps().isEmpty(), "Consumer-validation pipeline must define steps.");
-
-        PipelineTemplateStep checkoutTerminalStep = checkout.steps().getLast();
-        PipelineTemplateStep consumerValidationEntryStep = consumerValidation.steps().getFirst();
-
-        assertEquals(checkoutTerminalStep.outputTypeName(), consumerValidationEntryStep.inputTypeName(),
-            "Pipeline handoff type mismatch between checkout output and consumer-validation input.");
-
-        Map<String, PipelineTemplateField> checkoutOutputFields = byFieldName(checkoutTerminalStep.outputFields());
-        Map<String, PipelineTemplateField> consumerValidationInputFields =
-            byFieldName(consumerValidationEntryStep.inputFields());
-
-        assertEquals(checkoutOutputFields.keySet(), consumerValidationInputFields.keySet(),
-            "Pipeline handoff fields mismatch between checkout output and consumer-validation input.");
-
-        for (Map.Entry<String, PipelineTemplateField> entry : checkoutOutputFields.entrySet()) {
-            String fieldName = entry.getKey();
-            PipelineTemplateField outputField = entry.getValue();
-            PipelineTemplateField inputField = consumerValidationInputFields.get(fieldName);
-            assertEquals(outputField.number(), inputField.number(),
-                "Semantic-v2 field number mismatch for handoff field: " + fieldName);
-            assertEquals(outputField.type(), inputField.type(),
-                "Java type mismatch for handoff field: " + fieldName);
-            assertEquals(outputField.protoType(), inputField.protoType(),
-                "Proto type mismatch for handoff field: " + fieldName);
-        }
+        assertEquals("tpfgo-checkout", ir.config().name());
+        assertEquals(8, ir.nodes().size());
+        assertEquals(7, ir.handoffs().size());
+        assertEquals(List.of("checkout"), ir.entrypointPipelineIds());
+        assertEquals(List.of("tpfgo.compensation.terminal-state.v1"), ir.terminalPublications());
+        assertTrue(ir.nodes().stream().allMatch(node -> "GRPC".equals(node.config().transport())),
+            "Canonical checkout pipelines should use GRPC transport.");
+        assertEquals(
+            List.of(
+                "checkout->consumer-validation:tpfgo.checkout.order-pending.v1",
+                "consumer-validation->restaurant-acceptance:tpfgo.consumer.order-approved.v1",
+                "restaurant-acceptance->kitchen-preparation:tpfgo.restaurant.order-accepted.v1",
+                "kitchen-preparation->dispatch:tpfgo.kitchen.order-ready.v1",
+                "dispatch->delivery-execution:tpfgo.dispatch.delivery-assigned.v1",
+                "delivery-execution->payment-capture:tpfgo.delivery.order-delivered.v1",
+                "payment-capture->compensation-failure:tpfgo.payment.capture-result.v1"),
+            ir.handoffs().stream().map(this::describe).toList());
+        assertEquals("MANY_TO_ONE",
+            ir.nodes().stream()
+                .filter(node -> "kitchen-preparation".equals(node.id()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected kitchen-preparation node in checkout composition"))
+                .terminalStep()
+                .cardinality());
     }
 
-    private Map<String, PipelineTemplateField> byFieldName(List<PipelineTemplateField> fields) {
-        Map<String, PipelineTemplateField> byName = new LinkedHashMap<>();
-        for (int i = 0; i < fields.size(); i++) {
-            PipelineTemplateField field = fields.get(i);
-            if (field == null || field.name() == null || field.name().isBlank()) {
-                throw new IllegalStateException("Invalid field definition at index " + i + ": " + field);
-            }
-            if (byName.containsKey(field.name())) {
-                throw new IllegalStateException("Duplicate field name: " + field.name());
-            }
-            byName.put(field.name(), field);
-        }
-        return byName;
+    private String describe(PipelineCompositionHandoff handoff) {
+        return handoff.producerPipelineId() + "->" + handoff.consumerPipelineId() + ":" + handoff.publication();
     }
 
     private Path resolveFromWorkspaceRoot(String relativePath) {

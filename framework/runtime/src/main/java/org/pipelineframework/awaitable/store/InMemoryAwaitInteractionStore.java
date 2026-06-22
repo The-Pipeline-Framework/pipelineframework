@@ -107,6 +107,29 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
     }
 
     @Override
+    public Uni<AwaitInteractionRecord> importRecord(AwaitInteractionRecord record) {
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                long now = System.currentTimeMillis();
+                purgeExpired(now);
+                String scopedId = scopedInteractionId(record.tenantId(), record.interactionId());
+                AwaitInteractionRecord existing = interactionsByScopedId.get(scopedId);
+                if (existing != null) {
+                    return existing;
+                }
+                interactionsByScopedId.put(scopedId, record);
+                interactionIdByScopedIdempotencyKey.put(
+                    scopedIdempotencyKey(record.tenantId(), record.stepId(), record.idempotencyKey()),
+                    record.interactionId());
+                interactionIdByScopedCorrelation.put(
+                    scopedCorrelation(record.tenantId(), record.correlationId()),
+                    record.interactionId());
+                return record;
+            }
+        });
+    }
+
+    @Override
     public Uni<Optional<AwaitInteractionRecord>> findByCorrelation(String tenantId, String correlationId) {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
@@ -298,18 +321,21 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
             synchronized (lock) {
                 long now = System.currentTimeMillis();
                 purgeExpired(now);
+                String normalizedAssignee = normalizeFilter(assignee);
+                String normalizedGroup = normalizeFilter(group);
+                String normalizedStepId = normalizeFilter(stepId);
                 List<AwaitInteractionRecord> records = new ArrayList<>();
                 for (AwaitInteractionRecord record : interactionsByScopedId.values()) {
                     if (record.status().terminal() || !Objects.equals(record.tenantId(), tenantId)) {
                         continue;
                     }
-                    if (assignee != null && !Objects.equals(assignee, record.assignee())) {
+                    if (normalizedAssignee != null && !Objects.equals(normalizedAssignee, record.assignee())) {
                         continue;
                     }
-                    if (group != null && !Objects.equals(group, record.group())) {
+                    if (normalizedGroup != null && !Objects.equals(normalizedGroup, record.group())) {
                         continue;
                     }
-                    if (stepId != null && !Objects.equals(stepId, record.stepId())) {
+                    if (normalizedStepId != null && !Objects.equals(normalizedStepId, record.stepId())) {
                         continue;
                     }
                     records.add(record);
@@ -422,5 +448,13 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
 
     private static String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    private static String normalizeFilter(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

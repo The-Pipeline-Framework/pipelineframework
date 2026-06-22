@@ -84,6 +84,7 @@ public class DynamoAwaitUnitStore implements AwaitUnitStore {
                 null,
                 null,
                 0,
+                java.util.Set.of(),
                 false,
                 command.nowEpochMs(),
                 command.nowEpochMs(),
@@ -108,6 +109,27 @@ public class DynamoAwaitUnitStore implements AwaitUnitStore {
     @Override
     public Uni<Optional<AwaitUnitRecord>> get(String tenantId, String unitId) {
         return blocking(() -> getBlocking(tenantId, unitId, System.currentTimeMillis()));
+    }
+
+    @Override
+    public Uni<AwaitUnitRecord> importRecord(AwaitUnitRecord record) {
+        return blocking(() -> {
+            if (record == null) {
+                throw new IllegalArgumentException("Await unit record is required");
+            }
+            try {
+                dynamoClient().putItem(PutItemRequest.builder()
+                    .tableName(unitTable())
+                    .item(toItem(record))
+                    .conditionExpression("attribute_not_exists(#tenant) AND attribute_not_exists(#unit)")
+                    .expressionAttributeNames(Map.of("#tenant", TENANT_ID, "#unit", UNIT_ID))
+                    .build());
+                return record;
+            } catch (ConditionalCheckFailedException ignored) {
+                return getBlocking(record.tenantId(), record.unitId(), System.currentTimeMillis())
+                    .orElseThrow(() -> new IllegalStateException("Await unit import lost race but no unit was found"));
+            }
+        });
     }
 
     @Override
@@ -331,6 +353,9 @@ public class DynamoAwaitUnitStore implements AwaitUnitStore {
             item.put(EXPECTED_ITEM_COUNT, avN(record.expectedItemCount()));
         }
         item.put(COMPLETED_ITEM_COUNT, avN(record.completedItemCount()));
+        if (!record.completedItemKeys().isEmpty()) {
+            item.put(COMPLETED_ITEM_KEYS, AttributeValue.builder().ss(record.completedItemKeys()).build());
+        }
         item.put(DISPATCH_COMPLETE, AttributeValue.builder().bool(record.dispatchComplete()).build());
         item.put(CREATED_AT_EPOCH_MS, avN(record.createdAtEpochMs()));
         item.put(UPDATED_AT_EPOCH_MS, avN(record.updatedAtEpochMs()));
@@ -351,6 +376,7 @@ public class DynamoAwaitUnitStore implements AwaitUnitStore {
             readString(item, PRIMARY_INTERACTION_ID),
             readNullableInt(item, EXPECTED_ITEM_COUNT),
             readInt(item, COMPLETED_ITEM_COUNT),
+            readStringSet(item, COMPLETED_ITEM_KEYS),
             item.containsKey(DISPATCH_COMPLETE) && Boolean.TRUE.equals(item.get(DISPATCH_COMPLETE).bool()),
             readLong(item, CREATED_AT_EPOCH_MS),
             readLong(item, UPDATED_AT_EPOCH_MS),
@@ -436,6 +462,14 @@ public class DynamoAwaitUnitStore implements AwaitUnitStore {
     private static Integer readNullableInt(Map<String, AttributeValue> item, String name) {
         AttributeValue value = item.get(name);
         return value == null ? null : Integer.parseInt(value.n());
+    }
+
+    private static java.util.Set<String> readStringSet(Map<String, AttributeValue> item, String name) {
+        AttributeValue value = item.get(name);
+        if (value == null || value.ss() == null || value.ss().isEmpty()) {
+            return java.util.Set.of();
+        }
+        return java.util.Set.copyOf(value.ss());
     }
 
     private static <T> Uni<T> blocking(java.util.concurrent.Callable<T> callable) {

@@ -1,11 +1,11 @@
-# Developer Joy
+# Developer Experience
 
-<p class="value-lead">TPF lets teams write focused Java business functions while the framework builds, checks, and runs the repeated Quarkus pieces around them.</p>
+<p class="value-lead">TPF lets teams write focused Java business transformations while the framework builds, checks, and runs the shell around them.</p>
 
 ## At a Glance
 
 <div class="value-glance">
-  <div class="value-glance-item"><strong>Start Fast</strong> &middot; Design in Canvas or YAML and generate a runnable Quarkus baseline.</div>
+  <div class="value-glance-item"><strong>Start Fast</strong> &middot; Model the flow in YAML or sketch a baseline in Pipeline Studio.</div>
   <div class="value-glance-item"><strong>Type Safety</strong> &middot; Explicit input/output types catch function, mapper, and operator mismatches at build time.</div>
   <div class="value-glance-item"><strong>Less Boilerplate</strong> &middot; REST, gRPC, local, and cloud-function callers are generated for you.</div>
 </div>
@@ -16,7 +16,9 @@
 - Refactors are becoming risky because Java types and API shapes drift across modules.
 - Teams are spending too much time on repeated integration glue.
 
-In practice, developers write the domain function and the supporting code that matters: Java types, optional mappers, and clear business decisions. TPF handles the repeated Quarkus pieces around that function, including generated callers, generated runtime files, and build-time validation.
+In practice, developers write the domain function and the supporting code that matters: Java types, optional mappers, and clear business decisions. TPF handles the repeated shell around that function, including generated callers, generated runtime files, connector boundaries, and build-time validation.
+
+Quarkus is the mature production runtime today. Spring support has started for a limited local/REST unary path; see [Spring Support Status](/develop/spring-support) before planning Spring-based applications.
 
 ## Operator Reuse
 
@@ -33,11 +35,11 @@ This avoids custom side channels and keeps recovery logic explicit in step code.
 
 <div class="value-links">
 
-- [Quick Start](/guide/getting-started/)
-- [Canvas Guide](/guide/getting-started/canvas-guide)
-- [Operators](/guide/build/operators)
-- [Item Reject Sink](/guide/development/item-reject-sink)
-- [Mappers and DTOs](/guide/development/mappers-and-dtos)
-- [Testing with Testcontainers](/guide/development/testing)
+- [Quick Start](/design/pipeline-studio/)
+- [Functional Core, Imperative Shell](/design/fcis)
+- [Operators](/design/operators)
+- [Item Reject Sink](/develop/item-reject-sink)
+- [Mappers and DTOs](/develop/mappers-and-dtos)
+- [Testing](/develop/testing)
 
 </div>

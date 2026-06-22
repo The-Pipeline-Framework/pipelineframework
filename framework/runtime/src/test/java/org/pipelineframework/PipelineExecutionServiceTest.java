@@ -1,5 +1,8 @@
 package org.pipelineframework;
 
+import java.util.List;
+import java.util.Optional;
+
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -7,11 +10,23 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
+import org.pipelineframework.orchestrator.ExecutionResultShape;
+import org.pipelineframework.orchestrator.PipelineReleaseIdentityResolver;
+import org.pipelineframework.orchestrator.PipelineControlPlane;
+import org.pipelineframework.orchestrator.PipelineTransitionWorker;
+import org.pipelineframework.orchestrator.PipelineTransitionWorkerSelector;
+import org.pipelineframework.orchestrator.TransitionCommandEnvelope;
+import org.pipelineframework.orchestrator.TransitionResultEnvelope;
+import org.pipelineframework.orchestrator.TransitionWorkerOutcome;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -21,12 +36,20 @@ class PipelineExecutionServiceTest {
     private PipelineExecutionService service;
 
     @Mock
-    private QueueAsyncCoordinator queueAsyncCoordinator;
+    private PipelineControlPlane controlPlane;
+
+    @Mock
+    private PipelineTransitionWorkerSelector transitionWorkerSelector;
+
+    @Mock
+    private PipelineReleaseIdentityResolver releaseIdentityResolver;
 
     @BeforeEach
     void setUp() {
         service = new PipelineExecutionService();
-        service.queueAsyncCoordinator = queueAsyncCoordinator;
+        service.controlPlane = controlPlane;
+        service.transitionWorkerSelector = transitionWorkerSelector;
+        service.releaseIdentityResolver = releaseIdentityResolver;
     }
 
     @Test
@@ -37,55 +60,155 @@ class PipelineExecutionServiceTest {
     @Test
     void executePipelineAsyncDefaultsToUnaryOutputMode() {
         RunAsyncAcceptedDto expected = new RunAsyncAcceptedDto("exec-1", false, "/pipeline/executions/exec-1", 1L);
-        when(queueAsyncCoordinator.executePipelineAsync("input", "tenant-1", "idem-1", false))
+        when(controlPlane.executePipelineAsync("input", "tenant-1", "idem-1", false))
             .thenReturn(Uni.createFrom().item(expected));
 
         RunAsyncAcceptedDto actual = service.executePipelineAsync("input", "tenant-1", "idem-1")
             .await().indefinitely();
 
         assertEquals(expected.executionId(), actual.executionId());
-        verify(queueAsyncCoordinator).executePipelineAsync("input", "tenant-1", "idem-1", false);
+        verify(controlPlane).executePipelineAsync("input", "tenant-1", "idem-1", false);
     }
 
     @Test
     void executePipelineAsyncPassesOutputStreamingFlag() {
         RunAsyncAcceptedDto expected = new RunAsyncAcceptedDto("exec-2", false, "/pipeline/executions/exec-2", 2L);
-        when(queueAsyncCoordinator.executePipelineAsync("input", "tenant-1", "idem-1", true))
+        when(controlPlane.executePipelineAsync("input", "tenant-1", "idem-1", true))
             .thenReturn(Uni.createFrom().item(expected));
 
         RunAsyncAcceptedDto actual = service.executePipelineAsync("input", "tenant-1", "idem-1", true)
             .await().indefinitely();
 
         assertEquals(expected.executionId(), actual.executionId());
-        verify(queueAsyncCoordinator).executePipelineAsync("input", "tenant-1", "idem-1", true);
+        verify(controlPlane).executePipelineAsync("input", "tenant-1", "idem-1", true);
     }
 
     @Test
-    void getExecutionStatusDelegatesToCoordinator() {
+    void getExecutionStatusDelegatesToControlPlane() {
         ExecutionStatusDto expected = new ExecutionStatusDto("exec-3", null, 0, 0, 1L, 0L, 0L, null, null);
-        when(queueAsyncCoordinator.getExecutionStatus("tenant-1", "exec-3"))
+        when(controlPlane.getExecutionStatus("tenant-1", "exec-3"))
             .thenReturn(Uni.createFrom().item(expected));
 
         ExecutionStatusDto actual = service.getExecutionStatus("tenant-1", "exec-3").await().indefinitely();
 
         assertEquals("exec-3", actual.executionId());
-        verify(queueAsyncCoordinator).getExecutionStatus("tenant-1", "exec-3");
+        verify(controlPlane).getExecutionStatus("tenant-1", "exec-3");
     }
 
     @Test
-    void processExecutionWorkItemDelegatesToCoordinator() {
+    void processExecutionWorkItemDelegatesToControlPlane() {
         ExecutionWorkItem item = new ExecutionWorkItem("tenant-1", "exec-4");
-        when(queueAsyncCoordinator.processExecutionWorkItem(
+        PipelineTransitionWorker selectedWorker = service;
+        when(transitionWorkerSelector.select(service)).thenReturn(selectedWorker);
+        when(controlPlane.processExecutionWorkItem(
                 eq(item),
-                org.mockito.ArgumentMatchers.any(),
+                eq(selectedWorker),
                 org.mockito.ArgumentMatchers.any()))
             .thenReturn(Uni.createFrom().voidItem());
 
         service.processExecutionWorkItem(item).await().indefinitely();
 
-        verify(queueAsyncCoordinator).processExecutionWorkItem(
+        verify(controlPlane).processExecutionWorkItem(
             eq(item),
-            org.mockito.ArgumentMatchers.any(),
+            eq(selectedWorker),
             org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void queryPendingAwaitInteractionsNormalizesBlankFilters() {
+        when(controlPlane.queryPendingAwaitInteractions(
+                eq("tenant-1"),
+                isNull(),
+                isNull(),
+                isNull(),
+                eq(42)))
+            .thenReturn(Uni.createFrom().item(List.of()));
+
+        service.queryPendingAwaitInteractions(
+            "tenant-1",
+            " ",
+            "",
+            "\t",
+            42).await().indefinitely();
+
+        verify(controlPlane).queryPendingAwaitInteractions(
+            eq("tenant-1"),
+            isNull(),
+            isNull(),
+            isNull(),
+            eq(42));
+    }
+
+    @Test
+    void executeTransitionRejectsMismatchedReleaseIdentityBeforePayloadDecode() {
+        TransitionCommandEnvelope command = new TransitionCommandEnvelope(
+            "tenant-1",
+            "exec-5",
+            "other-pipeline",
+            "sha256:other",
+            0,
+            0,
+            ExecutionResultShape.SINGLE,
+            0L,
+            "exec-5:0:0",
+            "trace-5",
+            "java.io.File",
+            "application/tpf-transition+json",
+            "{not-json");
+        when(releaseIdentityResolver.validateCommandIdentity(command, null))
+            .thenReturn(Optional.of("identity mismatch sentinel"));
+
+        TransitionResultEnvelope result = service.executeTransition(command).await().indefinitely();
+
+        assertEquals(TransitionWorkerOutcome.FAILED, result.outcome());
+        assertTrue(result.failure().message().contains("identity mismatch sentinel"));
+    }
+
+    @Test
+    void executeTransitionAllowsLocalFallbackIdentityForInProcessWorker() {
+        TransitionCommandEnvelope command = new TransitionCommandEnvelope(
+            "tenant-1",
+            "exec-6",
+            "local-pipeline",
+            "local-contract",
+            0,
+            0,
+            ExecutionResultShape.SINGLE,
+            0L,
+            "exec-6:0:0",
+            "trace-6",
+            "java.lang.String",
+            "application/tpf-transition+json",
+            "\"input\"");
+        TransitionResultEnvelope result = service.executeTransition(command).await().indefinitely();
+
+        assertEquals(TransitionWorkerOutcome.FAILED, result.outcome());
+        assertFalse(result.failure().message().contains("identity mismatch sentinel"));
+        verify(releaseIdentityResolver, never()).validateCommandIdentity(command, null);
+    }
+
+    @Test
+    void executePortableTransitionRejectsLocalFallbackIdentity() {
+        TransitionCommandEnvelope command = new TransitionCommandEnvelope(
+            "tenant-1",
+            "exec-7",
+            "local-pipeline",
+            "local-contract",
+            0,
+            0,
+            ExecutionResultShape.SINGLE,
+            0L,
+            "exec-7:0:0",
+            "trace-7",
+            "java.lang.String",
+            "application/tpf-transition+json",
+            "\"input\"");
+        when(releaseIdentityResolver.validateCommandIdentity(command, null))
+            .thenReturn(Optional.of("identity mismatch sentinel"));
+
+        TransitionResultEnvelope result = service.executePortableTransition(command).await().indefinitely();
+
+        assertEquals(TransitionWorkerOutcome.FAILED, result.outcome());
+        assertTrue(result.failure().message().contains("identity mismatch sentinel"));
     }
 }

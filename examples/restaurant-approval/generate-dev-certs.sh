@@ -25,6 +25,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CERT_DIR="${ROOT_DIR}/target/dev-certs-tmp"
 OUTPUT_DIR="${ROOT_DIR}/target/dev-certs"
+CERT_FILE_PERMISSIONS="${CERT_FILE_PERMISSIONS:-640}"
 rm -rf "${CERT_DIR}"
 mkdir -p "${CERT_DIR}"
 
@@ -63,12 +64,12 @@ keytool -import -file "${CERT_DIR}/quarkus-cert.pem" -keystore "${CERT_DIR}/clie
 for svc in validate-order-request-svc create-pending-approval-svc finalize-restaurant-decision-svc orchestrator-svc pipeline-runtime-svc monolith-svc; do
     mkdir -p "${OUTPUT_DIR}/${svc}"
     cp "${CERT_DIR}/server-keystore.p12" "${OUTPUT_DIR}/${svc}/server-keystore.p12"
-    chmod 600 "${OUTPUT_DIR}/${svc}/server-keystore.p12"
+    chmod "${CERT_FILE_PERMISSIONS}" "${OUTPUT_DIR}/${svc}/server-keystore.p12"
 done
 
 mkdir -p "${OUTPUT_DIR}/orchestrator-svc"
 cp "${CERT_DIR}/client-truststore.jks" "${OUTPUT_DIR}/orchestrator-svc/client-truststore.jks"
-chmod 600 "${OUTPUT_DIR}/orchestrator-svc/client-truststore.jks"
+chmod "${CERT_FILE_PERMISSIONS}" "${OUTPUT_DIR}/orchestrator-svc/client-truststore.jks"
 
 rm -rf "${CERT_DIR}"
 

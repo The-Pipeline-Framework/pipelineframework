@@ -32,45 +32,60 @@ class PipelineCacheSupportFactory {
 
     private static final Logger logger = Logger.getLogger(PipelineCacheSupportFactory.class);
 
-    @Inject
-    Instance<CacheKeyStrategy> cacheKeyStrategies;
+    private final Instance<CacheKeyStrategy> cacheKeyStrategies;
+    private final Instance<PipelineCacheReader> cacheReaders;
+    private final String cachePolicyDefault;
 
     @Inject
-    Instance<PipelineCacheReader> cacheReaders;
-
-    @ConfigProperty(name = "pipeline.cache.policy", defaultValue = "prefer-cache")
-    String cachePolicyDefault;
+    PipelineCacheSupportFactory(
+        Instance<CacheKeyStrategy> cacheKeyStrategies,
+        Instance<PipelineCacheReader> cacheReaders,
+        @ConfigProperty(name = "pipeline.cache.policy", defaultValue = "prefer-cache") String cachePolicyDefault) {
+        this.cacheKeyStrategies = cacheKeyStrategies;
+        this.cacheReaders = cacheReaders;
+        this.cachePolicyDefault = cachePolicyDefault;
+    }
 
     PipelineRunner.CacheReadSupport buildCacheReadSupport() {
-        if (cacheReaders == null || cacheReaders.isUnsatisfied()) {
+        if (cacheReaders.isUnsatisfied()) {
             return null;
         }
         List<PipelineCacheReader> readers = cacheReaders.stream()
             .sorted(Comparator.comparingInt(PipelineCacheReader::priority).reversed()
-                .thenComparing(cacheReader -> cacheReader.getClass().getName()))
+                .thenComparing(this::beanTypeName))
             .toList();
-        if (readers.isEmpty() || cacheKeyStrategies == null || cacheKeyStrategies.isUnsatisfied()) {
+        if (readers.isEmpty() || cacheKeyStrategies.isUnsatisfied()) {
             return null;
         }
         if (readers.size() > 1) {
             String readerNames = String.join(
                 ", ",
                 readers.stream()
-                    .map(cacheReader -> cacheReader.getClass().getName() + "(priority=" + cacheReader.priority() + ")")
+                    .map(cacheReader -> beanTypeName(cacheReader) + "(priority=" + cacheReader.priority() + ")")
                     .toList());
             logger.warnf(
                 "Multiple PipelineCacheReader beans found (%s). Using %s based on priority ordering.",
                 readerNames,
-                readers.get(0).getClass().getName());
+                beanTypeName(readers.get(0)));
         }
         PipelineCacheReader reader = readers.get(0);
         List<CacheKeyStrategy> ordered = cacheKeyStrategies.stream()
             .sorted(Comparator.comparingInt(CacheKeyStrategy::priority).reversed()
-                .thenComparing(strategy -> strategy.getClass().getName()))
+                .thenComparing(this::beanTypeName))
             .toList();
         if (ordered.isEmpty()) {
             return null;
         }
         return new PipelineRunner.CacheReadSupport(reader, ordered, cachePolicyDefault);
+    }
+
+    private String beanTypeName(Object bean) {
+        String beanClassName = bean.getClass().getName();
+        Class<?> beanClass = bean.getClass();
+        if (beanClass.getSuperclass() != null
+            && (beanClassName.contains("_Subclass") || beanClassName.contains("$$") || beanClassName.contains("_ClientProxy"))) {
+            return beanClass.getSuperclass().getName();
+        }
+        return beanClassName;
     }
 }

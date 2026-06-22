@@ -49,9 +49,12 @@ import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
  * <p>
  * The service uses the iterator-based write method from OpenCSV which provides better
  * streaming characteristics than list-based writing.
+ *
+ * @deprecated Prefer Object Publish with {@code CsvPaymentOutputPublishMapper} for framework-owned terminal output I/O.
  */
 @PipelineStep
 @ApplicationScoped
+@Deprecated(forRemoval = false)
 public class ProcessCsvPaymentsOutputFileService
     implements ReactiveBidirectionalStreamingService<PaymentOutput, CsvPaymentsOutputFile> {
 

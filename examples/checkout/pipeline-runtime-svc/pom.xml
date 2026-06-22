@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.pipelineframework.tpfgo</groupId>
         <artifactId>tpfgo-example</artifactId>
-        <version>26.6.1-SNAPSHOT</version>
+        <version>26.6.2-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -70,6 +70,11 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-smallrye-health</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -115,6 +120,7 @@
                             <compilerArgs>
                                 <arg>${pipeline.generatedSourcesArg}</arg>
                                 <arg>${pipeline.moduleArg}</arg>
+                                <arg>${pipeline.warnUnreferencedStepsArg}</arg>
                                 <arg>${protobuf.descriptor.fileArg}</arg>
                             </compilerArgs>
                         </configuration>
@@ -305,7 +311,8 @@
                         <quarkus.generate-code.grpc.descriptor-set.generate>true</quarkus.generate-code.grpc.descriptor-set.generate>
                     </properties>
                 </configuration>
-            </plugin>
+                        <extensions>true</extensions>
+</plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-antrun-plugin</artifactId>

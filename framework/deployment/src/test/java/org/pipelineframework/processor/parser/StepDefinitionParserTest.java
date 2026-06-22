@@ -104,6 +104,145 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void parsesRunOnVirtualThreadsForInternalStep() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "blocking-payment"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+                runOnVirtualThreads: true
+            """, diagnostics);
+
+        assertEquals(1, steps.size(), diagnostics.toString());
+        assertTrue(steps.getFirst().runOnVirtualThreads());
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsNonBooleanRunOnVirtualThreads() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "blocking-payment"
+                service: "com.example.app.PaymentService"
+                runOnVirtualThreads: "true"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("runOnVirtualThreads must be a boolean")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsRunOnVirtualThreadsForDelegatedStep() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "delegate-payment"
+                operator: "com.example.PaymentOperators::approve"
+                input: "com.example.PaymentRecord"
+                output: "com.example.PaymentStatus"
+                runOnVirtualThreads: true
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("valid only for internal service steps")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void parsesExplicitFalseRunOnVirtualThreadsForInternalStep() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "blocking-payment"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+                runOnVirtualThreads: false
+            """, diagnostics);
+
+        assertEquals(1, steps.size(), diagnostics.toString());
+        assertFalse(steps.getFirst().runOnVirtualThreads(),
+            "runOnVirtualThreads: false must be stored as false");
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+            diagnostics.toString());
+    }
+
+    @Test
+    void internalStepWithoutRunOnVirtualThreadsDefaultsToFalse() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "payment"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """, diagnostics);
+
+        assertEquals(1, steps.size(), diagnostics.toString());
+        assertFalse(steps.getFirst().runOnVirtualThreads(),
+            "runOnVirtualThreads must default to false when not specified");
+    }
+
+    @Test
+    void rejectsRunOnVirtualThreadsAsIntegerValue() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "blocking-payment"
+                service: "com.example.app.PaymentService"
+                runOnVirtualThreads: 1
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("runOnVirtualThreads must be a boolean")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void skipsOnlyInvalidStepWhenMultipleStepsAreDeclared() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "valid-internal"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+                runOnVirtualThreads: true
+              - name: "invalid-delegated"
+                operator: "com.example.PaymentOperators::approve"
+                input: "com.example.PaymentRecord"
+                output: "com.example.PaymentStatus"
+                runOnVirtualThreads: true
+            """, diagnostics);
+
+        // The valid INTERNAL step is retained; the DELEGATED step with runOnVirtualThreads is skipped
+        assertEquals(1, steps.size(), "Only the valid internal step should be parsed");
+        assertEquals("valid-internal", steps.getFirst().name());
+        assertTrue(steps.getFirst().runOnVirtualThreads());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("valid only for internal service steps")),
+            diagnostics.toString());
+    }
+
+    @Test
     void parsesAwaitStepDefinition() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
@@ -514,6 +653,156 @@ class StepDefinitionParserTest {
 
         assertTrue(steps.isEmpty());
         assertTrue(diagnostics.stream().anyMatch(message -> message.contains("request.key")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void parsesSqsAwaitStepDefinition() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Sqs Fraud Check"
+                kind: "await"
+                input: "com.example.FraudCheckRequest"
+                output: "com.example.FraudCheckDecision"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "signedResumeToken"
+                  transport:
+                    type: "sqs"
+                    request:
+                      queueUrl: "http://localhost:4566/000000000000/fraud-check-requests"
+                    response:
+                      queueUrl: "http://localhost:4566/000000000000/fraud-check-decisions"
+            """, diagnostics);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.AWAIT, step.kind());
+        java.util.Map<?, ?> transport = (java.util.Map<?, ?>) step.awaitConfig().get("transport");
+        assertEquals("sqs", transport.get("type"));
+        assertEquals("http://localhost:4566/000000000000/fraud-check-requests",
+            ((java.util.Map<?, ?>) transport.get("request")).get("queueUrl"));
+        assertEquals("http://localhost:4566/000000000000/fraud-check-decisions",
+            ((java.util.Map<?, ?>) transport.get("response")).get("queueUrl"));
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
+    }
+
+    @Test
+    void rejectsSqsAwaitStepWithoutRequestQueueUrl() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Sqs Missing Request Queue"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "signedResumeToken"
+                  transport:
+                    type: "sqs"
+                    request: {}
+                    response:
+                      queueUrl: "http://localhost:4566/000000000000/responses"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("request.queueUrl")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsSqsAwaitStepWithoutResponseQueueUrl() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Sqs Missing Response Queue"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "signedResumeToken"
+                  transport:
+                    type: "sqs"
+                    request:
+                      queueUrl: "http://localhost:4566/000000000000/requests"
+                    response: {}
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("response.queueUrl")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsSqsAwaitStepWithFifoQueueUrl() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Sqs Fifo Queue"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "signedResumeToken"
+                  transport:
+                    type: "sqs"
+                    request:
+                      queueUrl: "http://localhost:4566/000000000000/requests.fifo"
+                    response:
+                      queueUrl: "http://localhost:4566/000000000000/responses"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("standard queues only")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsSqsAwaitStepWithNormalizedFifoQueueUrl() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Sqs Fifo Queue"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "signedResumeToken"
+                  transport:
+                    type: "sqs"
+                    request:
+                      queueUrl: "http://localhost:4566/000000000000/requests.fifo?ignored=true "
+                    response:
+                      queueUrl: "http://localhost:4566/000000000000/responses"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("standard queues only")),
             diagnostics.toString());
     }
 
@@ -1186,6 +1475,33 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void acceptsEnvelopeHttpRemoteExecutionProtocol() throws IOException {
+        Path file = tempDir.resolve("pipeline.yaml");
+        Files.writeString(file, """
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "chunk"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "com.example.contract.ParsedDocument"
+                outputTypeName: "com.example.contract.ChunkResult"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "chunker"
+                  protocol: "ENVELOPE_HTTP_V1"
+                  target:
+                    url: "https://example.com/operators/chunker"
+            """);
+
+        List<StepDefinition> steps = new StepDefinitionParser().parseStepDefinitions(file);
+
+        assertEquals(1, steps.size());
+        assertEquals("ENVELOPE_HTTP_V1", steps.getFirst().remoteExecution().protocol());
+        assertEquals("chunker", steps.getFirst().remoteExecution().operatorId());
+    }
+
+    @Test
     void rejectsRemoteExecutionWhenMixedWithLocalServiceFields() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         Path file = tempDir.resolve("pipeline.yaml");
@@ -1319,6 +1635,460 @@ class StepDefinitionParserTest {
         String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
         assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
         assertTrue(errorSummary.contains("expected REMOTE"));
+    }
+
+    @Test
+    void parsesQueryStepDefinition() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                version: "v1"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                capture:
+                  keyFields: ["customerId"]
+            """, diagnostics);
+
+        assertEquals(1, steps.size(), diagnostics.toString());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.QUERY, step.kind());
+        assertNull(step.executionClass());
+        assertEquals("customer-risk-by-id", step.queryId());
+        assertEquals(List.of("customerId"), step.queryKeyFields());
+        assertEquals(ClassName.get("com.example", "CustomerRiskLookup"), step.inputType());
+        assertEquals(ClassName.get("com.example", "CustomerRiskSnapshot"), step.outputType());
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+            diagnostics.toString());
+    }
+
+    @Test
+    void parsesQueryStepDefinitionWithJpaPredicatesOrderAndLimit() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              latest-active-risk:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                version: "v2"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+                    status:
+                      eq: ACTIVE
+                    score:
+                      gte: 80
+                    deletedAt:
+                      isNull: true
+                    account.riskBand:
+                      in: [HIGH, CRITICAL]
+                  orderBy:
+                    updatedAt: desc
+                  limit: 1
+                  projection:
+                    accountStatus: account.status
+                  result: single
+            steps:
+              - name: "Load Latest Active Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "latest-active-risk"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertEquals(1, steps.size(), diagnostics.toString());
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryDefinitionWithUnsupportedJpaPredicateOperator() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    riskBand:
+                      contains: HIGH
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("jpa.where entries must use supported predicate shapes")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryDefinitionWithInvalidJpaDottedPath() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    account..riskBand: HIGH
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("jpa.where entries must use supported predicate shapes")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryDefinitionWithJpaLimitWithoutOrderBy() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+                  limit: 1
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("jpa.limit supports only 1 and requires orderBy")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryDefinitionWithJpaLimitAndEmptyOrderBy() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+                  orderBy: {}
+                  limit: 1
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("jpa.limit supports only 1 and requires orderBy")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryCaptureModeBecauseCapturedIsTheOnlyV1Behavior() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                capture:
+                  mode: "CAPTURED"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("capture.mode is not supported in v1")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryStepWithoutQueryReference() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("must reference a top-level query id")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsUndefinedQueryReference() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "missing-query"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("is not defined under top-level queries")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryTypeMismatch() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.other.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("do not match query")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryStepWithNonOneToOneCardinalityOrServiceBinding() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps:
+              - name: "Load Customer Risk Stream"
+                kind: "query"
+                cardinality: "ONE_TO_MANY"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+              - name: "Load Customer Risk Bound"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                service: "com.example.CustomerRiskService"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("support only ONE_TO_ONE")),
+            diagnostics.toString());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("cannot declare 'service'")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsQueryStepWhenOperatorIsAlsoDeclared() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                operator: "com.example.CustomerRiskOperator"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
+        assertTrue(errorSummary.contains("query steps are framework-owned read boundaries"));
+    }
+
+    @Test
+    void rejectsQueryStepWhenRemoteExecutionIsAlsoDeclared() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                connector: "jpa"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                jpa:
+                  entity: "com.example.CustomerRiskEntity"
+                  where:
+                    customerId: "input.customerId"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "customer-risk"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  target:
+                    url: "https://risk.example/query"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
+        assertTrue(errorSummary.contains("query steps are framework-owned read boundaries"));
+    }
+
+    @Test
+    void rejectsIncompleteQueryDefinition() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            queries:
+              customer-risk-by-id:
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            steps:
+              - name: "Load Customer Risk"
+                kind: "query"
+                cardinality: "ONE_TO_ONE"
+                query: "customer-risk-by-id"
+                input: "com.example.CustomerRiskLookup"
+                output: "com.example.CustomerRiskSnapshot"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("connector, input, and output must be declared")),
+            diagnostics.toString());
     }
 
     private List<StepDefinition> parse(String yaml) throws IOException {

@@ -21,6 +21,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
+import org.pipelineframework.config.boundary.PipelineObjectPublishConfig;
+import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
 import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
 
 /**
@@ -33,6 +35,8 @@ import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
  * @param platform runtime/deployment platform mode
  * @param messages top-level named messages
  * @param unions top-level named closed unions
+ * @param sources top-level named I/O sources
+ * @param publish top-level named object publish targets
  * @param steps pipeline steps
  * @param aspects aspect configurations keyed by aspect name
  * @param input reliable pipeline input boundary
@@ -47,6 +51,8 @@ public record PipelineTemplateConfig(
     PipelinePlatform platform,
     Map<String, PipelineTemplateMessage> messages,
     Map<String, PipelineTemplateUnion> unions,
+    Map<String, PipelineObjectSourceConfig> sources,
+    Map<String, PipelineObjectPublishConfig> publish,
     List<PipelineTemplateStep> steps,
     Map<String, PipelineTemplateAspect> aspects,
     PipelineInputBoundaryConfig input,
@@ -65,9 +71,13 @@ public record PipelineTemplateConfig(
         }
         validateMap(messages, "messages");
         validateMap(unions, "unions");
+        validateMap(sources, "sources");
+        validateMap(publish, "publish");
         validateMap(aspects, "aspects");
         messages = messages == null ? Map.of() : Map.copyOf(messages);
         unions = unions == null ? Map.of() : Map.copyOf(unions);
+        sources = sources == null ? Map.of() : Map.copyOf(sources);
+        publish = publish == null ? Map.of() : Map.copyOf(publish);
         // Preserve null step placeholders so downstream phases/tests can explicitly skip them.
         steps = steps == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(steps));
         aspects = aspects == null ? Map.of() : Map.copyOf(aspects);
@@ -127,7 +137,7 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), Map.of(), steps, aspects, null, null, null);
+        this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), Map.of(), Map.of(), Map.of(), steps, aspects, null, null, null);
     }
 
     /**
@@ -148,7 +158,7 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(1, appName, basePackage, transport, platform, Map.of(), Map.of(), steps, aspects, null, null, null);
+        this(1, appName, basePackage, transport, platform, Map.of(), Map.of(), Map.of(), Map.of(), steps, aspects, null, null, null);
     }
 
     public PipelineTemplateConfig(
@@ -163,6 +173,23 @@ public record PipelineTemplateConfig(
         PipelineInputBoundaryConfig input,
         PipelineOutputBoundaryConfig output
     ) {
-        this(version, appName, basePackage, transport, platform, messages, Map.of(), steps, aspects, input, output, null);
+        this(version, appName, basePackage, transport, platform, messages, Map.of(), Map.of(), Map.of(), steps, aspects, input, output, null);
+    }
+
+    public PipelineTemplateConfig(
+        int version,
+        String appName,
+        String basePackage,
+        String transport,
+        PipelinePlatform platform,
+        Map<String, PipelineTemplateMessage> messages,
+        Map<String, PipelineTemplateUnion> unions,
+        List<PipelineTemplateStep> steps,
+        Map<String, PipelineTemplateAspect> aspects,
+        PipelineInputBoundaryConfig input,
+        PipelineOutputBoundaryConfig output,
+        PipelineTemplateMaterialization materialization
+    ) {
+        this(version, appName, basePackage, transport, platform, messages, unions, Map.of(), Map.of(), steps, aspects, input, output, materialization);
     }
 }

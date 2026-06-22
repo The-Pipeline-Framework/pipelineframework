@@ -28,7 +28,7 @@ import org.pipelineframework.config.template.PipelineTemplateStepExecution;
  * This model drives the generation of step clients based on YAML declarations.
  *
  * @param name The name of the step
- * @param kind The kind of step (INTERNAL, DELEGATED, or REMOTE)
+ * @param kind The kind of step (INTERNAL, DELEGATED, REMOTE, AWAIT, COMMAND, or QUERY)
  * @param executionClass The class that provides the execution implementation
  * @param remoteExecution remote execution metadata for REMOTE steps
  * @param awaitConfig raw await configuration for AWAIT steps
@@ -38,6 +38,9 @@ import org.pipelineframework.config.template.PipelineTemplateStepExecution;
  * @param commandIdGenerator command id generator class for COMMAND steps
  * @param duplicatePolicy duplicate policy for COMMAND steps
  * @param commandConfig connector config for COMMAND steps
+ * @param queryId referenced query id for QUERY steps
+ * @param queryConfig raw capture configuration for QUERY steps
+ * @param queryKeyFields fields used to derive captured query keys
  * @param inboundMapper The inbound mapper class for internal service steps (nullable)
  * @param outboundMapper The outbound mapper class for internal service steps (nullable)
  * @param externalMapper The operator mapper class for mapping between domain and operator types (nullable)
@@ -45,6 +48,7 @@ import org.pipelineframework.config.template.PipelineTemplateStepExecution;
  * @param inputType The input type for the step
  * @param outputType The output type for the step
  * @param streamingShapeHint Optional streaming shape hint parsed from YAML cardinality
+ * @param runOnVirtualThreads Whether blocking execution should use virtual threads
  */
 public record StepDefinition(
         String name,
@@ -58,13 +62,17 @@ public record StepDefinition(
         @Nullable ClassName commandIdGenerator,
         @Nullable String duplicatePolicy,
         Map<String, Object> commandConfig,
+        @Nullable String queryId,
+        Map<String, Object> queryConfig,
+        List<String> queryKeyFields,
         @Nullable ClassName inboundMapper,
         @Nullable ClassName outboundMapper,
         @Nullable ClassName externalMapper,
         MapperFallbackMode mapperFallback,
         @Nullable ClassName inputType,
         @Nullable ClassName outputType,
-        @Nullable StreamingShape streamingShapeHint
+        @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads
 ) {
     public StepDefinition(
         String name,
@@ -94,13 +102,62 @@ public record StepDefinition(
             null,
             null,
             Map.of(),
+            null,
+            Map.of(),
+            List.of(),
             inboundMapper,
             outboundMapper,
             externalMapper,
             mapperFallback,
             inputType,
             outputType,
-            streamingShapeHint);
+            streamingShapeHint,
+            false);
+    }
+
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        @Nullable ClassName executionClass,
+        @Nullable PipelineTemplateStepExecution remoteExecution,
+        Map<?, ?> awaitConfig,
+        @Nullable String timeout,
+        List<?> idempotencyKeyFields,
+        @Nullable String queryId,
+        Map<?, ?> queryConfig,
+        List<?> queryKeyFields,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads
+    ) {
+        this(
+            name,
+            kind,
+            executionClass,
+            remoteExecution,
+            copyObjectMap(awaitConfig),
+            timeout,
+            copyStringList(idempotencyKeyFields),
+            null,
+            null,
+            null,
+            Map.of(),
+            queryId,
+            copyObjectMap(queryConfig),
+            copyStringList(queryKeyFields),
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint,
+            runOnVirtualThreads);
     }
 
     public StepDefinition(
@@ -126,12 +183,16 @@ public record StepDefinition(
             null,
             Map.of(),
             null,
+            Map.of(),
+            List.of(),
+            null,
             null,
             externalMapper,
             mapperFallback,
             inputType,
             outputType,
-            streamingShapeHint);
+            streamingShapeHint,
+            false);
     }
 
     public StepDefinition(
@@ -157,13 +218,17 @@ public record StepDefinition(
             null,
             null,
             Map.of(),
+            null,
+            Map.of(),
+            List.of(),
             inboundMapper,
             outboundMapper,
             null,
             mapperFallback,
             inputType,
             outputType,
-            streamingShapeHint);
+            streamingShapeHint,
+            false);
     }
 
     public StepDefinition(
@@ -190,13 +255,17 @@ public record StepDefinition(
             null,
             null,
             Map.of(),
+            null,
+            Map.of(),
+            List.of(),
             inboundMapper,
             outboundMapper,
             externalMapper,
             mapperFallback,
             inputType,
             outputType,
-            streamingShapeHint);
+            streamingShapeHint,
+            false);
     }
 
     public StepDefinition {
@@ -205,27 +274,32 @@ public record StepDefinition(
             throw new IllegalArgumentException("Name cannot be blank");
         }
         Objects.requireNonNull(kind, "Kind cannot be null");
+        if (runOnVirtualThreads && kind != StepKind.INTERNAL) {
+            throw new IllegalArgumentException("runOnVirtualThreads is valid only for INTERNAL steps");
+        }
         if (executionClass != null && remoteExecution != null) {
             throw new IllegalArgumentException("executionClass and remoteExecution are mutually exclusive");
         }
         if (kind == StepKind.REMOTE) {
             Objects.requireNonNull(remoteExecution, "Remote execution cannot be null for REMOTE steps");
-        } else if (kind == StepKind.AWAIT) {
+        } else if (kind == StepKind.AWAIT || kind == StepKind.COMMAND || kind == StepKind.QUERY) {
             if (executionClass != null || remoteExecution != null) {
-                throw new IllegalArgumentException("AWAIT steps cannot declare executionClass or remoteExecution");
+                throw new IllegalArgumentException(kind + " steps cannot declare executionClass or remoteExecution");
             }
-            Objects.requireNonNull(inputType, "Input type cannot be null for AWAIT steps");
-            Objects.requireNonNull(outputType, "Output type cannot be null for AWAIT steps");
-        } else if (kind == StepKind.COMMAND) {
-            if (executionClass != null || remoteExecution != null) {
-                throw new IllegalArgumentException("COMMAND steps cannot declare executionClass or remoteExecution");
+            Objects.requireNonNull(inputType, "Input type cannot be null for " + kind + " steps");
+            Objects.requireNonNull(outputType, "Output type cannot be null for " + kind + " steps");
+            if (kind == StepKind.COMMAND) {
+                if (command == null || command.isBlank()) {
+                    throw new IllegalArgumentException("Command cannot be blank for COMMAND steps");
+                }
+                Objects.requireNonNull(commandIdGenerator, "Command id generator cannot be null for COMMAND steps");
             }
-            Objects.requireNonNull(inputType, "Input type cannot be null for COMMAND steps");
-            Objects.requireNonNull(outputType, "Output type cannot be null for COMMAND steps");
-            if (command == null || command.isBlank()) {
-                throw new IllegalArgumentException("Command cannot be blank for COMMAND steps");
+            if (kind == StepKind.QUERY) {
+                Objects.requireNonNull(queryId, "Query id cannot be null for QUERY steps");
+                if (queryId.isBlank()) {
+                    throw new IllegalArgumentException("Query id cannot be blank for QUERY steps");
+                }
             }
-            Objects.requireNonNull(commandIdGenerator, "Command id generator cannot be null for COMMAND steps");
         } else {
             Objects.requireNonNull(executionClass, "Execution class cannot be null");
         }
@@ -233,12 +307,34 @@ public record StepDefinition(
         awaitConfig = awaitConfig == null ? Map.of() : Map.copyOf(awaitConfig);
         idempotencyKeyFields = idempotencyKeyFields == null ? List.of() : List.copyOf(idempotencyKeyFields);
         commandConfig = commandConfig == null ? Map.of() : Map.copyOf(commandConfig);
+        queryConfig = queryConfig == null ? Map.of() : Map.copyOf(queryConfig);
+        queryKeyFields = queryKeyFields == null ? List.of() : List.copyOf(queryKeyFields);
     }
 
     private static StepKind requireNonRemoteKind(StepKind kind) {
-        if (kind == StepKind.REMOTE || kind == StepKind.AWAIT || kind == StepKind.COMMAND) {
+        if (kind == StepKind.REMOTE || kind == StepKind.AWAIT || kind == StepKind.COMMAND || kind == StepKind.QUERY) {
             throw new IllegalArgumentException("Convenience constructor cannot be used for " + kind);
         }
         return kind;
+    }
+
+    private static Map<String, Object> copyObjectMap(Map<?, ?> values) {
+        if (values == null) {
+            return Map.of();
+        }
+        java.util.LinkedHashMap<String, Object> copy = new java.util.LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : values.entrySet()) {
+            copy.put(entry.getKey() == null ? null : entry.getKey().toString(), entry.getValue());
+        }
+        return Map.copyOf(copy);
+    }
+
+    private static List<String> copyStringList(List<?> values) {
+        if (values == null) {
+            return List.of();
+        }
+        return values.stream()
+            .map(value -> value == null ? null : value.toString())
+            .toList();
     }
 }

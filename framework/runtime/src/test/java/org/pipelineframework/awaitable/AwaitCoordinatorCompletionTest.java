@@ -80,6 +80,27 @@ class AwaitCoordinatorCompletionTest {
     }
 
     @Test
+    void completesUsingResumeTokenOnly() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AwaitInteractionRecord record = store.createOrGet(createCommand(20_000L)).await().indefinitely().record();
+        String token = coordinator.resumeTokenService.sign(record, 10_000L);
+
+        AwaitCompletionResult result = coordinator.complete(new AwaitCompletionCommand(
+            "tenant-1",
+            null,
+            null,
+            token,
+            "completion-token-only",
+            java.util.Map.of("decision", "approved"),
+            "alice",
+            11_000L)).await().indefinitely();
+
+        assertEquals(AwaitInteractionStatus.COMPLETED, result.record().status());
+        assertEquals(record.interactionId(), result.record().interactionId());
+    }
+
+    @Test
     void rejectsTokenForWrongInteraction() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
