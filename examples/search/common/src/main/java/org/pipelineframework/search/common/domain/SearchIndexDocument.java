@@ -21,13 +21,18 @@ public class SearchIndexDocument extends BaseEntity implements Serializable {
   @Id
   @Column(nullable = false)
   public String externalId;
+  @Column(nullable = false)
   public Integer batchIndex;
   public Integer tokenCount;
   public String tokens;
+  @Column(nullable = false)
   public String tokensHash;
   public String contentHash;
+  @Column(nullable = false)
   public String vectorHash;
+  @Column(nullable = false)
   public String vectorVersion;
+  @Column(nullable = false)
   public String indexName;
   public Instant preparedAt;
 

@@ -1827,7 +1827,7 @@ public final class PipelineTemplateSchemaExporter {
       },
       "allOf": [
         {
-          "anyOf": [
+          "oneOf": [
             {
               "required": [
                 "inputTypeName",

@@ -7,7 +7,7 @@ import io.smallrye.mutiny.Uni;
  */
 public interface CommandConnector<I, O> {
     /**
-     * Stable connector command name used by YAML command steps.
+     * Stable non-null, non-blank connector command name used by YAML command steps.
      */
     String command();
 

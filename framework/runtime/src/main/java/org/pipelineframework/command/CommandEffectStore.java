@@ -6,6 +6,9 @@ import io.smallrye.mutiny.Uni;
 
 /**
  * Stores managed command effect state.
+ *
+ * Implementations must preserve the output type recorded by {@link #markSucceeded}
+ * so replayed command results can be returned without lossy casts or schema drift.
  */
 public interface CommandEffectStore {
     Uni<Optional<CommandEffectRecord>> find(String tenantId, String commandId);

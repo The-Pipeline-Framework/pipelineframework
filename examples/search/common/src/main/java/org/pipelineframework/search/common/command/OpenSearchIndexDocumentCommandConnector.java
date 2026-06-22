@@ -1,9 +1,11 @@
 package org.pipelineframework.search.common.command;
 
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -62,7 +64,9 @@ public class OpenSearchIndexDocumentCommandConnector
   private void putOpenSearchDocument(String endpoint, String indexName, IndexedDocument document) {
     try {
       String base = endpoint.endsWith("/") ? endpoint.substring(0, endpoint.length() - 1) : endpoint;
-      URI uri = URI.create(base + "/" + indexName + "/_doc/" + document.externalId());
+      String encodedExternalId = URLEncoder.encode(document.externalId(), StandardCharsets.UTF_8)
+          .replace("+", "%20");
+      URI uri = URI.create(base + "/" + indexName + "/_doc/" + encodedExternalId);
       Map<String, Object> payload = new LinkedHashMap<>();
       payload.put("docId", document.docId().toString());
       payload.put("externalId", document.externalId());
@@ -81,11 +85,16 @@ public class OpenSearchIndexDocumentCommandConnector
           .build();
       HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
       if (response.statusCode() < 200 || response.statusCode() >= 300) {
+        if (response.statusCode() >= 400 && response.statusCode() < 500) {
+          throw new IllegalArgumentException("OpenSearch index write rejected with HTTP " + response.statusCode());
+        }
         throw new IllegalStateException("OpenSearch index write failed with HTTP " + response.statusCode());
       }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new IllegalStateException("OpenSearch index write interrupted", e);
+    } catch (IllegalArgumentException e) {
+      throw e;
     } catch (Exception e) {
       throw new IllegalStateException("OpenSearch index write failed", e);
     }

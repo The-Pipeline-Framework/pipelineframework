@@ -105,8 +105,11 @@ public class CommandClientStepRenderer {
     }
 
     private PipelineConfigHints resolveConfigHints(GenerationContext ctx) {
-        if (ctx.transportMode() != null && ctx.pipelineBasePackage() != null && !ctx.pipelineBasePackage().isBlank()) {
-            return new PipelineConfigHints(ctx.transportMode(), ctx.pipelineBasePackage());
+        if (ctx.transportMode() != null) {
+            String basePackage = ctx.pipelineBasePackage() == null || ctx.pipelineBasePackage().isBlank()
+                ? null
+                : ctx.pipelineBasePackage();
+            return new PipelineConfigHints(ctx.transportMode(), basePackage);
         }
         Map<String, String> options = ctx.processingEnv() == null ? Map.of() : ctx.processingEnv().getOptions();
         PipelineTransport configuredTransport = PipelineTransport.fromStringOptional(

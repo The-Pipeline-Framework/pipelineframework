@@ -297,7 +297,7 @@ public class PipelineYamlConfigLoader {
             return Map.of();
         }
         if (!(configObj instanceof Map<?, ?> configMap)) {
-            throw new IllegalArgumentException("step '" + stepName + "' command config must be defined as a map");
+            throw new IllegalArgumentException("step '" + stepName + "' command config key 'config' must be defined as a map");
         }
         @SuppressWarnings("unchecked")
         Map<String, Object> normalized = (Map<String, Object>) normalizeConfigValue(configMap);

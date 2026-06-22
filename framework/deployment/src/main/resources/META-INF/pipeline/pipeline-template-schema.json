@@ -1793,7 +1793,7 @@
       },
       "allOf": [
         {
-          "anyOf": [
+          "oneOf": [
             {
               "required": [
                 "inputTypeName",

@@ -342,7 +342,8 @@ public class PipelineOrderMetadataGenerator {
      *
      * @param className the fully-qualified or simple class name of the step
      * @return the normalized alphanumeric token derived from the class's simple name with known
-     *         suffixes (Service, GrpcClientStep, RestClientStep, LocalClientStep and optional _Subclass)
+     *         suffixes (Service, GrpcClientStep, RestClientStep, LocalClientStep, AwaitClientStep,
+     *         CommandClientStep, QueryClientStep and optional _Subclass)
      *         removed; returns an empty string if the result contains no alphanumeric characters
      */
     private String normalizeStepToken(String className) {
@@ -351,7 +352,7 @@ public class PipelineOrderMetadataGenerator {
         if (lastDot != -1) {
             simple = simple.substring(lastDot + 1);
         }
-        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep|AwaitClientStep|QueryClientStep)(_Subclass)?$", "");
+        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep|AwaitClientStep|CommandClientStep|QueryClientStep)(_Subclass)?$", "");
         return toClassToken(simple);
     }
 

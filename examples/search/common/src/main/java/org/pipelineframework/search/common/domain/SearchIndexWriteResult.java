@@ -21,7 +21,9 @@ public class SearchIndexWriteResult extends BaseEntity implements Serializable {
   @Id
   @Column(nullable = false)
   public String externalId;
+  @Column(nullable = false)
   public String commandId;
+  @Column(nullable = false)
   public String indexName;
   public String resultStatus;
   public Boolean createdOrUpdated;
