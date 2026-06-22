@@ -23,7 +23,7 @@ import org.pipelineframework.config.pipeline.PipelineYamlStep;
  */
 @ApplicationScoped
 public class CommandStepDescriptorFactory {
-    private static final int DESCRIPTOR_LOADER_THREADS = Math.max(2, Runtime.getRuntime().availableProcessors());
+    private static final int DESCRIPTOR_LOADER_THREADS = 4;
     private static final int DESCRIPTOR_LOADER_QUEUE_SIZE = 256;
 
     private final Map<String, CommandDescriptor> descriptors = new ConcurrentHashMap<>();

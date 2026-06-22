@@ -204,21 +204,37 @@ public class CommandStepSupport {
         throw new IllegalStateException("No CommandConnector found for command '" + command + "'");
     }
 
+    /**
+     * Returns the single configured effect store. Command v1 does not support store routing;
+     * multiple stores are treated as a misconfiguration rather than silently picking one.
+     */
     private CommandEffectStore selectStore() {
-        if (fixedStores != null) {
-            for (CommandEffectStore store : fixedStores) {
-                if (store != null) {
-                    return store;
-                }
-            }
+        CommandEffectStore fixedStore = selectSingleStore(fixedStores);
+        if (fixedStore != null) {
+            return fixedStore;
         }
-        if (stores != null) {
-            for (CommandEffectStore store : stores) {
-                if (store != null) {
-                    return store;
-                }
-            }
+        CommandEffectStore injectedStore = selectSingleStore(stores);
+        if (injectedStore != null) {
+            return injectedStore;
         }
         throw new IllegalStateException("No CommandEffectStore configured for command step");
+    }
+
+    private CommandEffectStore selectSingleStore(Iterable<CommandEffectStore> candidates) {
+        if (candidates == null) {
+            return null;
+        }
+        CommandEffectStore selected = null;
+        for (CommandEffectStore store : candidates) {
+            if (store == null) {
+                continue;
+            }
+            if (selected != null) {
+                throw new IllegalStateException(
+                    "Multiple CommandEffectStore instances configured; command steps support a single effect store");
+            }
+            selected = store;
+        }
+        return selected;
     }
 }

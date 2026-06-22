@@ -121,6 +121,25 @@ class CommandStepSupportTest {
   }
 
   @Test
+  void rejectsMultipleEffectStores() {
+    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    CommandStepSupport duplicateStoreSupport = new CommandStepSupport(
+        List.of(connector),
+        List.of(store, new InMemoryCommandEffectStore()),
+        config(OrchestratorMode.QUEUE_ASYNC));
+
+    IllegalStateException error = assertThrows(IllegalStateException.class,
+        () -> duplicateStoreSupport.<CommandInput, CommandOutput>execute(
+                descriptor,
+                new StaticCommandIdGenerator(),
+                new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+
+    assertEquals("Multiple CommandEffectStore instances configured; command steps support a single effect store",
+        error.getMessage());
+  }
+
+  @Test
   void rejectsCommandIdWithLeadingOrTrailingWhitespace() {
     AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
 

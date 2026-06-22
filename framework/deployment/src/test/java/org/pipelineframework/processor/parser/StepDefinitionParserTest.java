@@ -282,6 +282,34 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void parsesAwaitOneToManyAsUnaryStreaming() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Fraud Check"
+                kind: "await"
+                cardinality: "ONE_TO_MANY"
+                input: "com.example.FraudCheckRequest"
+                output: "com.example.FraudCheckDecision"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "interactionId"
+                  transport:
+                    type: "webhook"
+                    request:
+                      url: "https://partner.example/check"
+            """, diagnostics);
+
+        assertEquals(1, steps.size());
+        assertEquals(StreamingShape.UNARY_STREAMING, steps.getFirst().streamingShapeHint());
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
+    }
+
+    @Test
     void parsesCommandStepDefinition() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
