@@ -182,7 +182,9 @@ public class PipelineOrderMetadataGenerator {
             }
             String resolvedSuffix = model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)
                 ? "AwaitClientStep"
-                : suffix;
+                : model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)
+                    ? "CommandClientStep"
+                    : suffix;
             String className = model.servicePackage() + ".pipeline." +
                 stripTrailingService(model.generatedName()) + resolvedSuffix;
             ordered.add(className);
@@ -203,6 +205,11 @@ public class PipelineOrderMetadataGenerator {
             if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
                 ordered.add(model.servicePackage() + ".pipeline."
                     + stripTrailingService(model.generatedName()) + "AwaitClientStep");
+                continue;
+            }
+            if (model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)) {
+                ordered.add(model.servicePackage() + ".pipeline."
+                    + stripTrailingService(model.generatedName()) + "CommandClientStep");
                 continue;
             }
             ordered.add(model.serviceClassName().canonicalName());
@@ -226,6 +233,11 @@ public class PipelineOrderMetadataGenerator {
             if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
                 generated.add(model.servicePackage() + ".pipeline."
                     + stripTrailingService(model.generatedName()) + "AwaitClientStep");
+                continue;
+            }
+            if (model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)) {
+                generated.add(model.servicePackage() + ".pipeline."
+                    + stripTrailingService(model.generatedName()) + "CommandClientStep");
                 continue;
             }
             if (clientTarget != null && !model.enabledTargets().contains(clientTarget)) {

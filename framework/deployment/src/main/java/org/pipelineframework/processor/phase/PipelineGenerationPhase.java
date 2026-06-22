@@ -89,6 +89,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer = new BlockingReactiveBridgeRenderer();
         RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer = new RemoteOperatorAdapterRenderer();
         AwaitClientStepRenderer awaitClientStepRenderer = new AwaitClientStepRenderer();
+        CommandClientStepRenderer commandClientStepRenderer = new CommandClientStepRenderer();
         OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
         OrchestratorRestResourceRenderer orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
         AbstractOrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer =
@@ -238,7 +239,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 restFunctionHandlerRenderer,
                 blockingReactiveBridgeRenderer,
                 remoteOperatorAdapterRenderer,
-                awaitClientStepRenderer);
+                awaitClientStepRenderer,
+                commandClientStepRenderer);
         }
 
         if (ctx.isTransportModeGrpc() && descriptorSet != null) {
@@ -475,7 +477,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             RestFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer,
-            AwaitClientStepRenderer awaitClientStepRenderer) throws IOException {
+            AwaitClientStepRenderer awaitClientStepRenderer,
+            CommandClientStepRenderer commandClientStepRenderer) throws IOException {
         stepArtifactGenerationService.generateArtifactsForModel(
             ctx,
             model,
@@ -495,7 +498,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             restFunctionHandlerRenderer,
             blockingReactiveBridgeRenderer,
             remoteOperatorAdapterRenderer,
-            awaitClientStepRenderer);
+            awaitClientStepRenderer,
+            commandClientStepRenderer);
     }
 
     /**

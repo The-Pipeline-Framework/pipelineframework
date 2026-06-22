@@ -177,6 +177,7 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Architecture', link: '/guide/evolve/architecture'},
+            {text: 'I/O Shell Absorption', link: '/guide/evolve/io-shell-absorption'},
             {text: 'Orchestrator Control Plane', link: '/guide/evolve/architecture#orchestrator-control-plane-current'},
             {
                 text: 'Await Unit Runtime',

@@ -1037,6 +1037,106 @@ public final class PipelineTemplateSchemaExporter {
       ],
       "additionalProperties": true
     },
+    "commandTemplateStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "command"
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cardinality": {
+          "const": "ONE_TO_ONE"
+        },
+        "inputTypeName": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "inputFields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/v2FieldDefinition"
+          }
+        },
+        "outputTypeName": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "outputFields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/v2FieldDefinition"
+          }
+        },
+        "input": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+        },
+        "output": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+        },
+        "commandIdGenerator": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+        },
+        "duplicatePolicy": {
+          "type": "string",
+          "enum": [
+            "RETURN_RECORDED",
+            "FAIL",
+            "return_recorded",
+            "fail"
+          ]
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "flowRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "flowBoundaryRationale": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "anyOf": [
+            {
+              "required": [
+                "inputTypeName",
+                "outputTypeName"
+              ]
+            },
+            {
+              "required": [
+                "input",
+                "output"
+              ]
+            }
+          ]
+        }
+      ],
+      "required": [
+        "name",
+        "kind",
+        "command",
+        "cardinality",
+        "commandIdGenerator"
+      ]
+    },
     "awaitTemplateStep": {
       "type": "object",
       "additionalProperties": false,
@@ -1180,6 +1280,9 @@ public final class PipelineTemplateSchemaExporter {
               "oneOf": [
                 {
                   "$ref": "#/$defs/awaitTemplateStep"
+                },
+                {
+                  "$ref": "#/$defs/commandTemplateStep"
                 },
                 {
                   "$ref": "#/$defs/v2TemplateStep"

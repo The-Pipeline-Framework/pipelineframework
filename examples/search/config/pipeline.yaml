@@ -154,6 +154,85 @@ messages:
       - number: 9
         name: embeddedAt
         type: timestamp
+  SearchIndexDocument:
+    fields:
+      - number: 1
+        name: docId
+        type: uuid
+      - number: 2
+        name: externalId
+        type: string
+      - number: 3
+        name: batchIndex
+        type: int32
+      - number: 4
+        name: tokenCount
+        type: int32
+      - number: 5
+        name: tokens
+        type: string
+      - number: 6
+        name: tokensHash
+        type: string
+      - number: 7
+        name: contentHash
+        type: string
+      - number: 8
+        name: vectorHash
+        type: string
+      - number: 9
+        name: vectorVersion
+        type: string
+      - number: 10
+        name: indexName
+        type: string
+      - number: 11
+        name: preparedAt
+        type: timestamp
+  SearchIndexWriteResult:
+    fields:
+      - number: 1
+        name: docId
+        type: uuid
+      - number: 2
+        name: externalId
+        type: string
+      - number: 3
+        name: commandId
+        type: string
+      - number: 4
+        name: indexName
+        type: string
+      - number: 5
+        name: resultStatus
+        type: string
+      - number: 6
+        name: createdOrUpdated
+        type: bool
+      - number: 7
+        name: recordedDuplicate
+        type: bool
+      - number: 8
+        name: batchIndex
+        type: int32
+      - number: 9
+        name: tokenCount
+        type: int32
+      - number: 10
+        name: tokens
+        type: string
+      - number: 11
+        name: tokensHash
+        type: string
+      - number: 12
+        name: vectorHash
+        type: string
+      - number: 13
+        name: vectorVersion
+        type: string
+      - number: 14
+        name: indexedAt
+        type: timestamp
   IndexAck:
     fields:
       - number: 1
@@ -217,12 +296,31 @@ steps:
     output: org.pipelineframework.search.common.domain.EmbeddedChunk
     outputTypeName: EmbeddedChunk
     outboundMapper: org.pipelineframework.search.common.mapper.EmbeddedChunkMapper
-  - name: Index Document
-    service: org.pipelineframework.search.index_document.service.ProcessIndexDocumentService
-    cardinality: MANY_TO_ONE
+  - name: Build Search Index Document
+    service: org.pipelineframework.search.index_document.service.ProcessBuildSearchIndexDocumentService
+    cardinality: ONE_TO_ONE
     input: org.pipelineframework.search.common.domain.EmbeddedChunk
     inputTypeName: EmbeddedChunk
     inboundMapper: org.pipelineframework.search.common.mapper.EmbeddedChunkMapper
+    output: org.pipelineframework.search.common.domain.SearchIndexDocument
+    outputTypeName: SearchIndexDocument
+    outboundMapper: org.pipelineframework.search.common.mapper.SearchIndexDocumentMapper
+  - name: Write Search Index Document
+    kind: command
+    command: opensearch-index-document
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.search.common.domain.SearchIndexDocument
+    inputTypeName: SearchIndexDocument
+    output: org.pipelineframework.search.common.domain.SearchIndexWriteResult
+    outputTypeName: SearchIndexWriteResult
+    commandIdGenerator: org.pipelineframework.search.common.command.SearchIndexDocumentCommandIdGenerator
+    duplicatePolicy: RETURN_RECORDED
+  - name: Summarize Index Writes
+    service: org.pipelineframework.search.index_document.service.ProcessSummarizeIndexWritesService
+    cardinality: MANY_TO_ONE
+    input: org.pipelineframework.search.common.domain.SearchIndexWriteResult
+    inputTypeName: SearchIndexWriteResult
+    inboundMapper: org.pipelineframework.search.common.mapper.SearchIndexWriteResultMapper
     output: org.pipelineframework.search.common.domain.IndexAck
     outputTypeName: IndexAck
     outboundMapper: org.pipelineframework.search.common.mapper.IndexAckMapper

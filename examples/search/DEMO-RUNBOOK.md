@@ -10,8 +10,10 @@ TPF's Search demo shows the framework-native answer instead:
 
 1. `Tokenize Content` emits typed `TokenBatch` stream elements.
 2. `Embed Content` consumes each batch one at a time and can be slowed with `search.embed.delay-ms`.
-3. `Index Document` reduces the resulting `EmbeddedChunk` stream back into one document-level `IndexAck`.
-4. Persistence/cache side effects, lineage, backpressure, and replay are part of the runtime path rather than an external buffering convention.
+3. `Build Search Index Document` projects each `EmbeddedChunk` into a deterministic external write intent.
+4. `Write Search Index Document` sends that intent through the command shell, recording the effect result.
+5. `Summarize Index Writes` reduces recorded write results back into one document-level `IndexAck`.
+6. Persistence/cache side effects, lineage, backpressure, command replay, and duplicate suppression are part of the runtime path rather than an external buffering convention.
 
 ## Capture
 
@@ -42,7 +44,7 @@ Load either generated replay through the replay viewer's Custom replay option:
 
 - Start with the warm-cache dataset to show the full typed stream path.
 - Pause around `Tokenize Content -> Embed Content` to call out one-to-many chunk emission followed by a slower one-to-one consumer.
-- Let playback continue into `Index Document` to show many-to-one aggregation back to one document result.
+- Let playback continue through `Build Search Index Document -> Write Search Index Document -> Summarize Index Writes` to show the side-effecting sink separated from the pure document-level aggregation.
 - Switch to the cache-hit dataset to show replayable runtime behavior and reused upstream outputs without changing the pipeline code.
 
 ## Knobs

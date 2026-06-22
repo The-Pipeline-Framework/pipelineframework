@@ -117,7 +117,9 @@ public class OrchestratorClientPropertiesGenerator {
             case GRPC -> GenerationTarget.CLIENT_STEP;
         };
         return models.stream()
-            .filter(model -> model.enabledTargets().contains(target))
+            .filter(model -> model.enabledTargets().contains(target)
+                || model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)
+                || model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP))
             .toList();
     }
 

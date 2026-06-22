@@ -42,5 +42,10 @@ public enum StepKind {
      * An await step that dispatches external work, stores durable interaction state,
      * and resumes from a correlated completion.
      */
-    AWAIT
+    AWAIT,
+
+    /**
+     * A command step that executes an idempotent external effect through a managed connector.
+     */
+    COMMAND
 }

@@ -72,7 +72,11 @@ public class StepDefinitionParser {
         "kind",
         "await",
         "timeout",
-        "idempotencyKeyFields");
+        "idempotencyKeyFields",
+        "command",
+        "commandIdGenerator",
+        "duplicatePolicy",
+        "config");
     private final BiConsumer<Diagnostic.Kind, String> diagnosticReporter;
     private final String legacyInternalPackageSuffix;
 
@@ -187,6 +191,7 @@ public class StepDefinitionParser {
         String serviceClassName = getStringValue(stepData, "service");
         String rawKind = getStringValue(stepData, "kind");
         boolean awaitStep = "await".equalsIgnoreCase(rawKind);
+        boolean commandStep = "command".equalsIgnoreCase(rawKind);
         String delegatedClassName = null;
 
         if (!isBlank(operatorClassName) && !isBlank(delegateClassName)) {
@@ -216,14 +221,23 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
+        if (commandStep && (!isBlank(delegatedClassName) || !isBlank(serviceClassName) || remoteExecution != null)) {
+            String message = "Skipping step '" + name
+                + "': command steps are managed external effects and cannot declare 'service', 'operator', 'delegate',"
+                + " or remote 'execution'";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
         if (!isBlank(rawKind)
             && !awaitStep
+            && !commandStep
             && !"internal".equalsIgnoreCase(rawKind)
             && !"delegated".equalsIgnoreCase(rawKind)
             && !"delegate".equalsIgnoreCase(rawKind)
             && !"remote".equalsIgnoreCase(rawKind)) {
             String message = "Skipping step '" + name + "': unsupported kind '" + rawKind
-                + "'. Allowed values: internal, delegated, remote, await";
+                + "'. Allowed values: internal, delegated, remote, await, command";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             return null;
@@ -235,13 +249,16 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
-        boolean inferredLegacyInternal = !awaitStep && isBlank(delegatedClassName) && isBlank(serviceClassName);
+        boolean inferredLegacyInternal = !awaitStep && !commandStep && isBlank(delegatedClassName) && isBlank(serviceClassName);
 
         StepKind kind;
         String executionClassName;
 
         if (awaitStep) {
             kind = StepKind.AWAIT;
+            executionClassName = null;
+        } else if (commandStep) {
+            kind = StepKind.COMMAND;
             executionClassName = null;
         } else if (remoteExecution != null) {
             kind = StepKind.REMOTE;
@@ -408,6 +425,10 @@ public class StepDefinitionParser {
                 null,
                 null,
                 null,
+                Map.of(),
+                null,
+                null,
+                null,
                 MapperFallbackMode.NONE,
                 inputType,
                 outputType,
@@ -456,10 +477,88 @@ public class StepDefinitionParser {
                 null,
                 null,
                 null,
+                Map.of(),
+                null,
+                null,
+                null,
                 MapperFallbackMode.NONE,
                 inputType,
                 outputType,
-                resolvedShape);
+                StreamingShape.UNARY_UNARY);
+        }
+
+        if (kind == StepKind.COMMAND) {
+            if (inboundMapper != null || outboundMapper != null || externalMapper != null || mapperFallback != MapperFallbackMode.NONE) {
+                String message = "Skipping step '" + name
+                    + "': command steps cannot declare mapper fields in this slice; use typed input/output contracts";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            if (inputType == null || outputType == null) {
+                String message = "Skipping step '" + name + "': command steps must provide input and output types";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            StreamingShape shape = parseStreamingShapeHint(stepData, name);
+            if (shape != null && shape != StreamingShape.UNARY_UNARY) {
+                String message = "Skipping step '" + name
+                    + "': command steps currently support only ONE_TO_ONE cardinality";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            String command = getStringValue(stepData, "command");
+            if (isBlank(command)) {
+                String message = "Skipping step '" + name + "': command steps must declare command";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            String commandIdGeneratorName = getStringValue(stepData, "commandIdGenerator");
+            ClassName commandIdGenerator = parseClassName(commandIdGeneratorName);
+            if (commandIdGenerator == null) {
+                String message = "Skipping step '" + name
+                    + "': command steps must declare a valid commandIdGenerator class";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            String duplicatePolicy = getStringValue(stepData, "duplicatePolicy");
+            if (!isBlank(duplicatePolicy)
+                && !"RETURN_RECORDED".equalsIgnoreCase(duplicatePolicy)
+                && !"FAIL".equalsIgnoreCase(duplicatePolicy)) {
+                String message = "Skipping step '" + name + "': unsupported duplicatePolicy '" + duplicatePolicy
+                    + "'. Allowed values: RETURN_RECORDED, FAIL";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            duplicatePolicy = isBlank(duplicatePolicy) ? null : duplicatePolicy.trim().toUpperCase(java.util.Locale.ROOT);
+            Map<String, Object> commandConfig = parseCommandConfig(stepData, name);
+            if (commandConfig == null) {
+                return null;
+            }
+            return new StepDefinition(
+                name,
+                StepKind.COMMAND,
+                null,
+                null,
+                Map.of(),
+                null,
+                List.of(),
+                command,
+                commandIdGenerator,
+                duplicatePolicy,
+                commandConfig,
+                null,
+                null,
+                null,
+                MapperFallbackMode.NONE,
+                inputType,
+                outputType,
+                StreamingShape.UNARY_UNARY);
         }
 
         // Create the execution class name
@@ -543,6 +642,21 @@ public class StepDefinitionParser {
             return null;
         }
         return (Map<String, Object>) normalizeMap(awaitMap);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseCommandConfig(Map<String, Object> stepData, String stepName) {
+        Object configObj = stepData.get("config");
+        if (configObj == null) {
+            return Map.of();
+        }
+        if (!(configObj instanceof Map<?, ?> configMap)) {
+            String message = "Skipping step '" + stepName + "': command config must be a map";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        return (Map<String, Object>) normalizeMap(configMap);
     }
 
     private boolean hasWebhookUrl(Map<?, ?> transportMap) {

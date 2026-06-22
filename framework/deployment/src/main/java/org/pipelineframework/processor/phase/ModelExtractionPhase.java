@@ -211,7 +211,43 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             case AWAIT -> {
                 yield createAwaitStepModel(ctx, stepDef, ctxWarningLogger);
             }
+            case COMMAND -> {
+                yield createCommandStepModel(ctx, stepDef, ctxWarningLogger);
+            }
         };
+    }
+
+    private PipelineStepModel createCommandStepModel(
+            PipelineCompilationContext ctx,
+            org.pipelineframework.processor.ir.StepDefinition stepDef,
+            Consumer<String> ctxWarningLogger) {
+        if (stepDef.inputType() == null || stepDef.outputType() == null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Command step '" + stepDef.name() + "' must resolve both input and output domain types");
+            return null;
+        }
+        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage(ctx), ctx);
+        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage(ctx), ctx);
+
+        String serviceName = toYamlServiceName(stepDef.name());
+        String servicePackage = deriveYamlServicePackage(inputType, ctxWarningLogger);
+        return new PipelineStepModel.Builder()
+            .serviceName(serviceName)
+            .generatedName(serviceName)
+            .servicePackage(servicePackage)
+            .serviceClassName(ClassName.get("org.pipelineframework.command", "CommandStepDescriptor"))
+            .inputMapping(new TypeMapping(inputType, null, false, inputType))
+            .outputMapping(new TypeMapping(outputType, null, false, outputType))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(java.util.Set.of(GenerationTarget.COMMAND_CLIENT_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .sideEffect(false)
+            .cacheKeyGenerator(stepDef.commandIdGenerator())
+            .orderingRequirement(OrderingRequirement.RELAXED)
+            .threadSafety(ThreadSafety.SAFE)
+            .build();
     }
 
     private PipelineStepModel createAwaitStepModel(
@@ -228,9 +264,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ? stepDef.streamingShapeHint()
             : StreamingShape.UNARY_UNARY;
 
-        String templateBasePackage = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
-            ? config.basePackage()
-            : null;
+        String templateBasePackage = templateBasePackage(ctx);
         TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage, ctx);
         TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage, ctx);
 
@@ -252,6 +286,12 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .orderingRequirement(OrderingRequirement.RELAXED)
             .threadSafety(ThreadSafety.SAFE)
             .build();
+    }
+
+    private String templateBasePackage(PipelineCompilationContext ctx) {
+        return ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            ? config.basePackage()
+            : null;
     }
 
     private PipelineStepModel createRemoteStepModel(

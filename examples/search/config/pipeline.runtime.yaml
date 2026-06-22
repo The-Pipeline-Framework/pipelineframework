@@ -35,5 +35,9 @@ steps:
     module: tokenize-content-svc
   ProcessEmbedContentService:
     module: embed-content-svc
-  ProcessIndexDocumentService:
+  ProcessBuildSearchIndexDocumentService:
+    module: index-document-svc
+  ProcessWriteSearchIndexDocumentService:
+    module: orchestrator-svc
+  ProcessSummarizeIndexWritesService:
     module: index-document-svc

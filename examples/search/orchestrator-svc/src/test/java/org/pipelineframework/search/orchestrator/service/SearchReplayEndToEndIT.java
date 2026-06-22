@@ -252,17 +252,22 @@ class SearchReplayEndToEndIT {
             .withEnv("QUARKUS_REST_CLIENT_PROCESS_PARSE_DOCUMENT_URL", "http://parse-document-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_PROCESS_TOKENIZE_CONTENT_URL", "http://tokenize-content-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_PROCESS_EMBED_CONTENT_URL", "http://embed-content-svc:8080")
-            .withEnv("QUARKUS_REST_CLIENT_PROCESS_INDEX_DOCUMENT_URL", "http://index-document-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_PROCESS_BUILD_SEARCH_INDEX_DOCUMENT_URL", "http://index-document-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_PROCESS_SUMMARIZE_INDEX_WRITES_URL", "http://index-document-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_ORCHESTRATOR_SERVICE_URL", "http://orchestrator-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_RAW_DOCUMENT_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_PARSED_DOCUMENT_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_TOKEN_BATCH_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_EMBEDDED_CHUNK_SIDE_EFFECT_URL", "http://persistence-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_SEARCH_INDEX_DOCUMENT_SIDE_EFFECT_URL", "http://persistence-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_SEARCH_INDEX_WRITE_RESULT_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_INDEX_ACK_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_RAW_DOCUMENT_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_PARSED_DOCUMENT_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_TOKEN_BATCH_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_EMBEDDED_CHUNK_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_SEARCH_INDEX_DOCUMENT_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_SEARCH_INDEX_WRITE_RESULT_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_INDEX_ACK_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_INVALIDATE_CRAWL_REQUEST_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_INVALIDATE_RAW_DOCUMENT_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
@@ -350,8 +355,16 @@ class SearchReplayEndToEndIT {
             "Expected Tokenize Content -> Embed Content replay transition");
         assertTrue(hasAnyPrimaryTransition(warmCache,
             List.of("Embed Content", "EmbedContent", "ProcessEmbedContent"),
-            List.of("Index Document", "IndexDocument", "ProcessIndexDocument")),
-            "Expected Embed Content -> Index Document replay transition");
+            List.of("Build Search Index Document", "BuildSearchIndexDocument", "ProcessBuildSearchIndexDocument")),
+            "Expected Embed Content -> Build Search Index Document replay transition");
+        assertTrue(hasAnyPrimaryTransition(warmCache,
+            List.of("Build Search Index Document", "BuildSearchIndexDocument", "ProcessBuildSearchIndexDocument"),
+            List.of("Write Search Index Document", "WriteSearchIndexDocument", "ProcessWriteSearchIndexDocument")),
+            "Expected Build Search Index Document -> Write Search Index Document replay transition");
+        assertTrue(hasAnyPrimaryTransition(warmCache,
+            List.of("Write Search Index Document", "WriteSearchIndexDocument", "ProcessWriteSearchIndexDocument"),
+            List.of("Summarize Index Writes", "SummarizeIndexWrites", "ProcessSummarizeIndexWrites")),
+            "Expected Write Search Index Document -> Summarize Index Writes replay transition");
         assertTrue(warmCache.events().stream().anyMatch(event ->
                 (event.step() != null && event.step().contains("EmbedContent"))
                     || (event.service() != null && event.service().contains("ProcessEmbedContentService"))),

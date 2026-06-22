@@ -29,6 +29,10 @@ package org.pipelineframework.config.pipeline;
  * @param timeout the await timeout, if this is an await step
  * @param idempotencyKeyFields fields used to derive await idempotency keys
  * @param awaitConfig await-step configuration, if this is an await step
+ * @param command command connector name, if this is a command step
+ * @param commandIdGenerator command id generator class, if this is a command step
+ * @param duplicatePolicy duplicate handling policy, if this is a command step
+ * @param commandConfig connector configuration for command steps
  */
 public record PipelineYamlStep(
     String name,
@@ -40,12 +44,17 @@ public record PipelineYamlStep(
     String outboundMapper,
     String timeout,
     java.util.List<String> idempotencyKeyFields,
-    PipelineYamlAwaitConfig awaitConfig
+    PipelineYamlAwaitConfig awaitConfig,
+    String command,
+    String commandIdGenerator,
+    String duplicatePolicy,
+    java.util.Map<String, Object> commandConfig
 ) {
     public PipelineYamlStep {
         kind = kind == null || kind.isBlank() ? "internal" : kind;
         cardinality = cardinality == null || cardinality.isBlank() ? "ONE_TO_ONE" : cardinality;
         idempotencyKeyFields = idempotencyKeyFields == null ? java.util.List.of() : java.util.List.copyOf(idempotencyKeyFields);
+        commandConfig = commandConfig == null ? java.util.Map.of() : java.util.Map.copyOf(commandConfig);
     }
 
     public PipelineYamlStep(
@@ -55,10 +64,12 @@ public record PipelineYamlStep(
         String outputType,
         String outboundMapper
     ) {
-        this(name, "internal", "ONE_TO_ONE", inputType, inboundMapper, outputType, outboundMapper, null, java.util.List.of(), null);
+        this(name, "internal", "ONE_TO_ONE", inputType, inboundMapper, outputType, outboundMapper, null,
+            java.util.List.of(), null, null, null, null, java.util.Map.of());
     }
 
     public PipelineYamlStep(String name, String inputType, String outputType) {
-        this(name, "internal", "ONE_TO_ONE", inputType, null, outputType, null, null, java.util.List.of(), null);
+        this(name, "internal", "ONE_TO_ONE", inputType, null, outputType, null, null,
+            java.util.List.of(), null, null, null, null, java.util.Map.of());
     }
 }

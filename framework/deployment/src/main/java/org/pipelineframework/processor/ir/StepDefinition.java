@@ -34,6 +34,10 @@ import org.pipelineframework.config.template.PipelineTemplateStepExecution;
  * @param awaitConfig raw await configuration for AWAIT steps
  * @param timeout await timeout string for AWAIT steps
  * @param idempotencyKeyFields fields used to derive await idempotency keys
+ * @param command command connector name for COMMAND steps
+ * @param commandIdGenerator command id generator class for COMMAND steps
+ * @param duplicatePolicy duplicate policy for COMMAND steps
+ * @param commandConfig connector config for COMMAND steps
  * @param inboundMapper The inbound mapper class for internal service steps (nullable)
  * @param outboundMapper The outbound mapper class for internal service steps (nullable)
  * @param externalMapper The operator mapper class for mapping between domain and operator types (nullable)
@@ -50,6 +54,10 @@ public record StepDefinition(
         Map<String, Object> awaitConfig,
         @Nullable String timeout,
         List<String> idempotencyKeyFields,
+        @Nullable String command,
+        @Nullable ClassName commandIdGenerator,
+        @Nullable String duplicatePolicy,
+        Map<String, Object> commandConfig,
         @Nullable ClassName inboundMapper,
         @Nullable ClassName outboundMapper,
         @Nullable ClassName externalMapper,
@@ -58,6 +66,43 @@ public record StepDefinition(
         @Nullable ClassName outputType,
         @Nullable StreamingShape streamingShapeHint
 ) {
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        @Nullable ClassName executionClass,
+        @Nullable PipelineTemplateStepExecution remoteExecution,
+        Map<String, Object> awaitConfig,
+        @Nullable String timeout,
+        List<String> idempotencyKeyFields,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint
+    ) {
+        this(
+            name,
+            kind,
+            executionClass,
+            remoteExecution,
+            awaitConfig,
+            timeout,
+            idempotencyKeyFields,
+            null,
+            null,
+            null,
+            Map.of(),
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint);
+    }
+
     public StepDefinition(
         String name,
         StepKind kind,
@@ -76,6 +121,10 @@ public record StepDefinition(
             Map.of(),
             null,
             List.of(),
+            null,
+            null,
+            null,
+            Map.of(),
             null,
             null,
             externalMapper,
@@ -104,6 +153,10 @@ public record StepDefinition(
             Map.of(),
             null,
             List.of(),
+            null,
+            null,
+            null,
+            Map.of(),
             inboundMapper,
             outboundMapper,
             null,
@@ -133,6 +186,10 @@ public record StepDefinition(
             Map.of(),
             null,
             List.of(),
+            null,
+            null,
+            null,
+            Map.of(),
             inboundMapper,
             outboundMapper,
             externalMapper,
@@ -159,16 +216,27 @@ public record StepDefinition(
             }
             Objects.requireNonNull(inputType, "Input type cannot be null for AWAIT steps");
             Objects.requireNonNull(outputType, "Output type cannot be null for AWAIT steps");
+        } else if (kind == StepKind.COMMAND) {
+            if (executionClass != null || remoteExecution != null) {
+                throw new IllegalArgumentException("COMMAND steps cannot declare executionClass or remoteExecution");
+            }
+            Objects.requireNonNull(inputType, "Input type cannot be null for COMMAND steps");
+            Objects.requireNonNull(outputType, "Output type cannot be null for COMMAND steps");
+            if (command == null || command.isBlank()) {
+                throw new IllegalArgumentException("Command cannot be blank for COMMAND steps");
+            }
+            Objects.requireNonNull(commandIdGenerator, "Command id generator cannot be null for COMMAND steps");
         } else {
             Objects.requireNonNull(executionClass, "Execution class cannot be null");
         }
         mapperFallback = mapperFallback == null ? MapperFallbackMode.NONE : mapperFallback;
         awaitConfig = awaitConfig == null ? Map.of() : Map.copyOf(awaitConfig);
         idempotencyKeyFields = idempotencyKeyFields == null ? List.of() : List.copyOf(idempotencyKeyFields);
+        commandConfig = commandConfig == null ? Map.of() : Map.copyOf(commandConfig);
     }
 
     private static StepKind requireNonRemoteKind(StepKind kind) {
-        if (kind == StepKind.REMOTE || kind == StepKind.AWAIT) {
+        if (kind == StepKind.REMOTE || kind == StepKind.AWAIT || kind == StepKind.COMMAND) {
             throw new IllegalArgumentException("Convenience constructor cannot be used for " + kind);
         }
         return kind;
