@@ -64,6 +64,8 @@ import org.pipelineframework.orchestrator.TransitionWorkerCommand;
 import org.pipelineframework.orchestrator.TransitionWorkerExecutor;
 import org.pipelineframework.orchestrator.TransitionWorkerOutcome;
 import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
+import org.pipelineframework.step.ConfigFactory;
+import org.pipelineframework.step.Configurable;
 import org.pipelineframework.step.StepManyToMany;
 import org.pipelineframework.step.functional.ManyToOne;
 
@@ -94,6 +96,9 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
 
   @Inject
   PipelineStepResolver pipelineStepResolver;
+
+  @Inject
+  ConfigFactory configFactory;
 
   @Inject
   ExecutionHooks executionHooks;
@@ -726,10 +731,23 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
 
   private List<Object> loadStepsForExecution() {
     try {
-      return loadPipelineSteps();
+      List<Object> steps = loadPipelineSteps();
+      initialiseConfigurableSteps(steps);
+      return steps;
     } catch (PipelineConfigurationException e) {
       LOG.errorf(e, "Failed to load pipeline configuration: %s", e.getMessage());
       return null;
+    }
+  }
+
+  private void initialiseConfigurableSteps(List<Object> steps) {
+    if (steps == null) {
+      return;
+    }
+    for (Object step : steps) {
+      if (step instanceof Configurable configurable) {
+        configurable.initialiseWithConfig(configFactory.buildConfig(step.getClass(), pipelineConfig));
+      }
     }
   }
 

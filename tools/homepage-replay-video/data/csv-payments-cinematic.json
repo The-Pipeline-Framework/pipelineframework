@@ -50,8 +50,8 @@
       "sourceId": "AwaitPaymentProvider",
       "role": "await",
       "tier": "primary",
-      "x": 0,
-      "y": 1.55,
+      "x": -2.033,
+      "y": 1.73,
       "z": 1.15,
       "scale": 1.22
     },
@@ -59,6 +59,16 @@
       "id": "ProcessPaymentStatus",
       "sourceId": "ProcessPaymentStatus",
       "role": "primary-b",
+      "tier": "primary",
+      "x": 2.033,
+      "y": 1.73,
+      "z": 0.755,
+      "scale": 1.08
+    },
+    {
+      "id": "ObjectPublish",
+      "sourceId": "ObjectPublish",
+      "role": "primary-c",
       "tier": "primary",
       "x": 6.1,
       "y": 2.09,
@@ -70,7 +80,7 @@
       "sourceId": "AwaitPaymentProviderKafkaBroker",
       "role": "broker",
       "tier": "support",
-      "x": -1.9,
+      "x": -3.933,
       "y": 4.18,
       "z": 0.92,
       "scale": 0.84,
@@ -81,7 +91,7 @@
       "sourceId": "PaymentProvider",
       "role": "provider",
       "tier": "support",
-      "x": 2.05,
+      "x": 0.017,
       "y": 4.52,
       "z": 0.22,
       "scale": 0.92,
@@ -491,6 +501,69 @@
       "color": "#6fd9ff"
     },
     {
+      "id": "ProcessPaymentStatus->Database:store:store:2",
+      "edgeId": "ProcessPaymentStatus->Database:store",
+      "kind": "store",
+      "start": 6.533,
+      "duration": 1.08,
+      "size": 0.115,
+      "color": "#6fd9ff"
+    },
+    {
+      "id": "ProcessPaymentStatus->Database:store:store:3",
+      "edgeId": "ProcessPaymentStatus->Database:store",
+      "kind": "store",
+      "start": 6.536,
+      "duration": 1.08,
+      "size": 0.115,
+      "color": "#6fd9ff"
+    },
+    {
+      "id": "ProcessPaymentStatus->Database:store:store:4",
+      "edgeId": "ProcessPaymentStatus->Database:store",
+      "kind": "store",
+      "start": 6.539,
+      "duration": 1.08,
+      "size": 0.115,
+      "color": "#6fd9ff"
+    },
+    {
+      "id": "ProcessPaymentStatus->Database:store:store:5",
+      "edgeId": "ProcessPaymentStatus->Database:store",
+      "kind": "store",
+      "start": 6.541,
+      "duration": 1.08,
+      "size": 0.115,
+      "color": "#6fd9ff"
+    },
+    {
+      "id": "ProcessPaymentStatus->Database:store:store:6",
+      "edgeId": "ProcessPaymentStatus->Database:store",
+      "kind": "store",
+      "start": 6.544,
+      "duration": 1.08,
+      "size": 0.115,
+      "color": "#6fd9ff"
+    },
+    {
+      "id": "ProcessPaymentStatus->Database:store:store:7",
+      "edgeId": "ProcessPaymentStatus->Database:store",
+      "kind": "store",
+      "start": 6.547,
+      "duration": 1.08,
+      "size": 0.115,
+      "color": "#6fd9ff"
+    },
+    {
+      "id": "ProcessPaymentStatus->Database:store:store:8",
+      "edgeId": "ProcessPaymentStatus->Database:store",
+      "kind": "store",
+      "start": 6.55,
+      "duration": 1.08,
+      "size": 0.115,
+      "color": "#6fd9ff"
+    },
+    {
       "id": "AwaitPaymentProvider->ProcessPaymentStatus:primary:primary:2",
       "edgeId": "AwaitPaymentProvider->ProcessPaymentStatus:primary",
       "kind": "primary",
@@ -563,15 +636,6 @@
       "color": "#c1b4ff"
     },
     {
-      "id": "ProcessPaymentStatus->Database:store:store:2",
-      "edgeId": "ProcessPaymentStatus->Database:store",
-      "kind": "store",
-      "start": 7.147,
-      "duration": 1.08,
-      "size": 0.115,
-      "color": "#6fd9ff"
-    },
-    {
       "id": "AwaitPaymentProvider->ProcessPaymentStatus:primary:primary:5",
       "edgeId": "AwaitPaymentProvider->ProcessPaymentStatus:primary",
       "kind": "primary",
@@ -624,15 +688,6 @@
       "duration": 0.96,
       "size": 0.118,
       "color": "#c1b4ff"
-    },
-    {
-      "id": "ProcessPaymentStatus->Database:store:store:3",
-      "edgeId": "ProcessPaymentStatus->Database:store",
-      "kind": "store",
-      "start": 7.764,
-      "duration": 1.08,
-      "size": 0.115,
-      "color": "#6fd9ff"
     },
     {
       "id": "AwaitPaymentProvider->ProcessPaymentStatus:primary:primary:7",
@@ -696,15 +751,6 @@
       "duration": 0.86,
       "size": 0.13,
       "color": "#8eeeff"
-    },
-    {
-      "id": "ProcessPaymentStatus->Database:store:store:4",
-      "edgeId": "ProcessPaymentStatus->Database:store",
-      "kind": "store",
-      "start": 8.381,
-      "duration": 1.08,
-      "size": 0.115,
-      "color": "#6fd9ff"
     },
     {
       "id": "AwaitPaymentProviderKafkaBroker->AwaitPaymentProvider:completion:completion:8",
@@ -777,42 +823,6 @@
       "duration": 0.92,
       "size": 0.12,
       "color": "#8fa9ff"
-    },
-    {
-      "id": "ProcessPaymentStatus->Database:store:store:5",
-      "edgeId": "ProcessPaymentStatus->Database:store",
-      "kind": "store",
-      "start": 8.999,
-      "duration": 1.08,
-      "size": 0.115,
-      "color": "#6fd9ff"
-    },
-    {
-      "id": "ProcessPaymentStatus->Database:store:store:6",
-      "edgeId": "ProcessPaymentStatus->Database:store",
-      "kind": "store",
-      "start": 9.616,
-      "duration": 1.08,
-      "size": 0.115,
-      "color": "#6fd9ff"
-    },
-    {
-      "id": "ProcessPaymentStatus->Database:store:store:7",
-      "edgeId": "ProcessPaymentStatus->Database:store",
-      "kind": "store",
-      "start": 10.233,
-      "duration": 1.08,
-      "size": 0.115,
-      "color": "#6fd9ff"
-    },
-    {
-      "id": "ProcessPaymentStatus->Database:store:store:8",
-      "edgeId": "ProcessPaymentStatus->Database:store",
-      "kind": "store",
-      "start": 10.85,
-      "duration": 1.08,
-      "size": 0.115,
-      "color": "#6fd9ff"
     }
   ],
   "highlights": [

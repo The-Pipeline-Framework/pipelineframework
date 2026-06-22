@@ -1,8 +1,8 @@
 {
   "generatedBy": "tools/homepage-replay-video/build_homepage_replay_video.sh",
   "sources": {
-    "tools/replay-viewer/datasets/csv-payments-built-in.json": "1343f4582e8212ab40e74d04a95dbf42b911363eb8d329db138b6490b8ca7013",
-    "tools/homepage-replay-video/data/csv-payments-cinematic.json": "c062792cd38167b877afa691bffe2b2bd1597dd363783f363dfc3422eeb6ea5e",
+    "tools/replay-viewer/datasets/csv-payments-built-in.json": "9eeb692ce5e49cb96260dce50dc828c98c4882df176f55b49a855f2c607e634f",
+    "tools/homepage-replay-video/data/csv-payments-cinematic.json": "5ed679b11bd4a6d789bfd2b87017af23ffd5129e2a10e80ccf30845cb57eb993",
     "tools/homepage-replay-video/prepare_replay_data.cjs": "17d481b8386969d47afa094c8cf1716fc099756cd7efdce0d3c72b54d8706918",
     "tools/homepage-replay-video/render_scene.html": "3475f81ab194920feb2c0fb4d1c8ed2374c8eccbc4da6e1ced6d47c6b4b240b6",
     "tools/homepage-replay-video/render_scene.js": "3a11553c980955d7600e13127515ad0df308ec3b31be913a051533e07fa1933a",

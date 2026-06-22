@@ -1441,26 +1441,49 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private static void ensureKafkaTopics() {
-        Map<String, Object> config = Map.of(
-            AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG,
-            getKafkaContainer().getBootstrapServers());
-        try (AdminClient admin = AdminClient.create(config)) {
-            admin.createTopics(List.of(
-                new NewTopic(PAYMENT_REQUEST_TOPIC, 1, (short) 1),
-                new NewTopic(PAYMENT_RESULT_TOPIC, 1, (short) 1)))
-                .all()
-                .get(30, TimeUnit.SECONDS);
-        } catch (ExecutionException e) {
-            if (e.getCause() instanceof TopicExistsException) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(120);
+        Throwable lastFailure = null;
+        int attempt = 0;
+
+        while (System.nanoTime() < deadline) {
+            attempt++;
+            Map<String, Object> config = Map.of(
+                AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG,
+                getKafkaContainer().getBootstrapServers(),
+                AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG,
+                "10000",
+                AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG,
+                "15000");
+            try (AdminClient admin = AdminClient.create(config)) {
+                admin.createTopics(List.of(
+                    new NewTopic(PAYMENT_REQUEST_TOPIC, 1, (short) 1),
+                    new NewTopic(PAYMENT_RESULT_TOPIC, 1, (short) 1)))
+                    .all()
+                    .get(15, TimeUnit.SECONDS);
                 return;
+            } catch (ExecutionException e) {
+                if (e.getCause() instanceof TopicExistsException) {
+                    return;
+                }
+                lastFailure = e;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", e);
+            } catch (Exception e) {
+                lastFailure = e;
             }
-            throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", e);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", e);
+
+            if (System.nanoTime() < deadline) {
+                LOG.warnf(lastFailure, "Kafka topic creation attempt %d failed; retrying.", attempt);
+                try {
+                    Thread.sleep(2_000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", e);
+                }
+            }
         }
+        throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", lastFailure);
     }
 
     private static boolean isExpectedClosedStream(IOException e) {

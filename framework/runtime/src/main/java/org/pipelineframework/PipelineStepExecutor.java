@@ -18,6 +18,7 @@ package org.pipelineframework;
 
 import java.text.MessageFormat;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -707,6 +708,30 @@ class PipelineStepExecutor {
                         output);
                 }
                 return output;
+            })
+            .onFailure(step::shouldRetry)
+            .invoke(t -> PipelineTelemetry.recordRetry(step.getClass(), t))
+            .onFailure(step::shouldRetry)
+            .retry()
+            .withBackOff(step.retryWait(), step.maxBackoff())
+            .withJitter(step.jitter() ? 0.5 : 0.0)
+            .atMost(step.retryLimit())
+            .onFailure().recoverWithMulti(t -> {
+                if (step.shouldPropagateWithoutRecovery(t)) {
+                    return Multi.createFrom().failure(t);
+                }
+                logger.infof(
+                    "Step %s completed all retries (%s attempts) with failure: %s",
+                    step.getClass().getSimpleName(),
+                    step.retryLimit(),
+                    t.getMessage()
+                );
+                if (step.recoverOnFailure()) {
+                    List<I> sample = item == null ? List.of() : List.of(item);
+                    return step.rejectStream(sample, item == null ? 0L : 1L, t)
+                        .onItem().transformToMulti(ignored -> Multi.createFrom().empty());
+                }
+                return Multi.createFrom().failure(t);
             }));
     }
 

@@ -267,7 +267,7 @@ class PipelineStepExecutorTest {
     }
 
     @Test
-    void oneToManyAwaitParentBypassesStepApplyRetryRecoveryAndRejectPolicies() {
+    void oneToManyAwaitParentAppliesRetryRecoveryAndRejectPoliciesWithoutSyntheticBuffer() {
         RecoveringOneToManyStep step = new RecoveringOneToManyStep();
 
         try {
@@ -284,12 +284,12 @@ class PipelineStepExecutorTest {
             AssertSubscriber<String> subscriber = ((Multi<String>) result)
                 .subscribe()
                 .withSubscriber(AssertSubscriber.create(Long.MAX_VALUE));
-            subscriber.awaitFailure(Duration.ofSeconds(5));
+            subscriber.awaitCompletion(Duration.ofSeconds(5));
 
-            assertTrue(subscriber.getFailure() instanceof RuntimeException);
-            assertEquals("stream boom", subscriber.getFailure().getMessage());
+            subscriber.assertCompleted();
+            subscriber.assertHasNotReceivedAnyItem();
             assertEquals(1, step.applyOneToManyCalls());
-            assertTrue(!step.rejectCalled());
+            assertTrue(step.rejectCalled());
         } finally {
             AwaitExecutionContextHolder.clear();
         }
