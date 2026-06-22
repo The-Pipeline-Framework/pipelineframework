@@ -61,6 +61,7 @@ import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -208,6 +209,40 @@ abstract class AbstractCsvPaymentsEndToEnd {
         return "localhost/csv-payments/" + serviceName + ":" + MODULAR_IMAGE_TAG;
     }
 
+    private static void verifyModularServiceImagesMatchDockerArchitecture() {
+        if (!Boolean.parseBoolean(System.getProperty("csv.e2e.verify.image.architecture", "true"))) {
+            return;
+        }
+        String dockerArchitecture = normalizeDockerArchitecture(
+                DockerClientFactory.instance().getInfo().getArchitecture());
+        for (String image : List.of(
+                modularImage("persistence-svc"),
+                modularImage("input-csv-file-processing-svc"),
+                modularImage("payments-processing-svc"),
+                modularImage("payment-status-svc"))) {
+            String imageArchitecture = normalizeDockerArchitecture(
+                    DockerClientFactory.instance().client().inspectImageCmd(image).exec().getArch());
+            assertEquals(
+                    dockerArchitecture,
+                    imageArchitecture,
+                    "Image architecture for " + image + " must match Docker server architecture. "
+                            + "Rebuild the CSV Payments modular images with "
+                            + "./examples/csv-payments/build-modular-telemetry-images.sh "
+                            + "-Dmaven.repo.local=\"$PWD/.m2/repository\" or set csv.e2e.image.tag to a matching image tag.");
+        }
+    }
+
+    private static String normalizeDockerArchitecture(String architecture) {
+        if (architecture == null || architecture.isBlank()) {
+            return "";
+        }
+        return switch (architecture.trim().toLowerCase()) {
+            case "x86_64" -> "amd64";
+            case "aarch64" -> "arm64";
+            default -> architecture.trim().toLowerCase();
+        };
+    }
+
     /**
          * Prepare test artifacts and start the containers required for the end-to-end CSV payments tests.
          *
@@ -251,6 +286,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
             Startables.deepStart(Stream.of(getPostgresContainer(), getKafkaContainer())).join();
         }
         ensureKafkaTopics();
+        verifyModularServiceImagesMatchDockerArchitecture();
 
         Stream.Builder<GenericContainer<?>> services = Stream.builder();
         services.add(getPersistenceService());
@@ -839,26 +875,39 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static void rebuildPackagedOrchestrator() throws IOException {
         Path moduleDir = Paths.get(System.getProperty("user.dir")).toAbsolutePath().normalize();
         Path processDir = moduleDir;
-        String[] command;
+        List<String> command = new ArrayList<>();
+        String mavenRepoLocal = System.getProperty("maven.repo.local", "").trim();
         if (MONOLITH_LAYOUT) {
             processDir = moduleDir.getParent();
-            command = new String[] {"bash", "build-monolith.sh", "-DskipTests"};
+            command.add("bash");
+            command.add("build-monolith.sh");
+            command.add("-DskipTests");
+            if (!mavenRepoLocal.isBlank()) {
+                command.add("-Dmaven.repo.local=" + mavenRepoLocal);
+            }
         } else {
-            command =
-                    new String[] {
-                        "../../../mvnw",
-                        "-f",
-                        "../pom.xml",
-                        "-pl",
-                        "orchestrator-svc",
-                        "-am",
-                        "-DskipTests",
-                        "package"
-                    };
+            command.add("../../../mvnw");
+            command.add("-f");
+            command.add("../pom.xml");
+            command.add("-pl");
+            command.add("orchestrator-svc");
+            command.add("-am");
+            command.add("-DskipTests");
+            if (!mavenRepoLocal.isBlank()) {
+                command.add("-Dmaven.repo.local=" + mavenRepoLocal);
+            }
+            command.add("package");
         }
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.directory(processDir.toFile());
         pb.environment().put("CSV_RUNTIME_LAYOUT", RUNTIME_LAYOUT);
+        if (!mavenRepoLocal.isBlank()) {
+            String existingMavenArgs = pb.environment().getOrDefault("MAVEN_ARGS", "").trim();
+            String repoArg = "-Dmaven.repo.local=" + mavenRepoLocal;
+            pb.environment().put(
+                    "MAVEN_ARGS",
+                    existingMavenArgs.isBlank() ? repoArg : existingMavenArgs + " " + repoArg);
+        }
         pb.redirectErrorStream(true);
         Process process = pb.start();
         StringBuilder output = new StringBuilder();
@@ -1141,6 +1190,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         pb.environment().put("QUARKUS_PROFILE", "test");
         pb.environment().put("PIPELINE_CONFIG", writeE2ePipelineConfig().toString());
+        pb.environment().put("PIPELINE_OBJECT_INGEST_AUTOSTART", "false");
         pb.environment().put("QUARKUS_JIB_JVM_ADDITIONAL_ARGUMENTS", "--enable-preview");
         pb.environment().put("PIPELINE_ORCHESTRATOR_MODE", "QUEUE_ASYNC");
         pb.environment().put("PIPELINE_ORCHESTRATOR_RESUME_TOKEN_SECRET", E2E_RESUME_TOKEN_SECRET);
@@ -2427,14 +2477,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
     private void assertReplayCoverage(PipelineReplayDocument replayDocument) {
         assertEquals("completed", replayDocument.status(), "Expected merged replay to complete successfully.");
-        assertReplayStepEvents(replayDocument, "ProcessFolder");
         assertReplayStepEvents(replayDocument, "ProcessCsvPaymentsInput");
+        assertReplayStepEvents(replayDocument, "AwaitPaymentProvider");
         assertReplayStepEvents(replayDocument, "ProcessPaymentStatus");
-        assertReplayStepEvents(replayDocument, "ProcessCsvPaymentsOutputFile");
-        assertReplayStepEvents(replayDocument, "PersistenceCsvPaymentsInputFileSideEffect");
         assertReplayStepEvents(replayDocument, "PersistencePaymentRecordSideEffect");
         assertReplayStepEvents(replayDocument, "PersistencePaymentOutputSideEffect");
-        assertReplayStepEvents(replayDocument, "PersistenceCsvPaymentsOutputFileSideEffect");
+        assertNoReplayStepEvents(replayDocument, "ProcessFolder");
+        assertNoReplayStepEvents(replayDocument, "ProcessCsvPaymentsOutputFile");
+        assertNoReplayStepEvents(replayDocument, "PersistenceCsvPaymentsOutputFileSideEffect");
         assertTrue(
                 replayDocument.events().stream().anyMatch(event ->
                         "ProcessCsvPaymentsInput".equals(event.step())
@@ -2521,6 +2571,15 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertTrue(
                 replayDocument.events().stream().anyMatch(event -> eventName.equals(event.event())),
                 "Expected merged replay to contain " + eventName + " events.");
+    }
+
+    private void assertNoReplayStepEvents(PipelineReplayDocument replayDocument, String stepName) {
+        assertFalse(
+                replayDocument.events().stream().anyMatch(event ->
+                        stepName.equals(event.step())
+                                || stepName.equals(event.from())
+                                || stepName.equals(event.to())),
+                "Expected connector-first replay to omit legacy " + stepName + " events.");
     }
 
     private static boolean isAwaitSuspensionFragment(PipelineReplayDocument document) {

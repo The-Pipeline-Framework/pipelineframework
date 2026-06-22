@@ -5,6 +5,8 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Set;
 
+import io.smallrye.mutiny.CompositeException;
+
 /**
  * Shared helpers for locating await control-flow signals through wrapper exceptions.
  */
@@ -46,6 +48,13 @@ public final class AwaitThrowableSupport {
             for (Throwable suppressed : current.getSuppressed()) {
                 if (suppressed != null && suppressed != current) {
                     queue.addLast(suppressed);
+                }
+            }
+            if (current instanceof CompositeException composite) {
+                for (Throwable causeItem : composite.getCauses()) {
+                    if (causeItem != null && causeItem != current) {
+                        queue.addLast(causeItem);
+                    }
                 }
             }
         }

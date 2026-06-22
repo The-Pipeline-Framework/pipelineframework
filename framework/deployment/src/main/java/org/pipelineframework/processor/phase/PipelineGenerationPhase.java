@@ -357,7 +357,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         DescriptorProtos.FileDescriptorSet descriptorSet
     ) {
         Optional<ObjectPublishGenerationConfig> objectPublishConfig = objectPublishGenerationConfig(ctx);
-        if (objectPublishConfig.isEmpty() || ctx.isTransportModeLocal()) {
+        if (objectPublishConfig.isEmpty() || ctx.isTransportModeLocal() || ctx.isPluginHost()) {
             return;
         }
         PipelineStepModel terminalModel = terminalBusinessStepWithOutputMapper(ctx)
@@ -398,7 +398,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         DescriptorProtos.FileDescriptorSet descriptorSet
     ) {
         Optional<ObjectIngestGenerationConfig> objectIngestConfig = objectIngestGenerationConfig(ctx);
-        if (objectIngestConfig.isEmpty() || ctx.isTransportModeLocal()) {
+        if (objectIngestConfig.isEmpty() || ctx.isTransportModeLocal() || ctx.isPluginHost()) {
             return;
         }
         PipelineStepModel firstModel = firstBusinessStepWithInputMapper(ctx)

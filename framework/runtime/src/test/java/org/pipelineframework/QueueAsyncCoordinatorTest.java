@@ -60,7 +60,6 @@ import org.pipelineframework.awaitable.AwaitUnitRecord;
 import org.pipelineframework.awaitable.AwaitUnitStatus;
 import org.pipelineframework.checkpoint.CheckpointPublicationService;
 import org.pipelineframework.invocation.PipelineInvocationRuntime;
-import org.pipelineframework.objectpublish.ObjectPublishCompletionService;
 import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 
@@ -76,6 +75,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -108,9 +108,6 @@ class QueueAsyncCoordinatorTest {
 
     @Mock
     private CheckpointPublicationService checkpointPublicationService;
-
-    @Mock
-    private ObjectPublishCompletionService objectPublishCompletionService;
 
     @Mock
     private PipelineTelemetry telemetry;
@@ -148,7 +145,6 @@ class QueueAsyncCoordinatorTest {
         coordinator.transitionPayloadCodec = payloadCodec;
         coordinator.telemetry = telemetry;
         coordinator.checkpointPublicationService = checkpointPublicationService;
-        coordinator.objectPublishCompletionService = objectPublishCompletionService;
         coordinator.executionStateStores = executionStateStores;
         coordinator.workDispatchers = workDispatchers;
         coordinator.deadLetterPublishers = deadLetterPublishers;
@@ -160,7 +156,6 @@ class QueueAsyncCoordinatorTest {
         lenient().when(workerConfig.maxInFlight()).thenReturn(64);
         lenient().when(workerConfig.saturatedDelay()).thenReturn(Duration.ofSeconds(1));
         lenient().when(awaitCoordinator.importSuspension(any())).thenReturn(Uni.createFrom().voidItem());
-        lenient().when(objectPublishCompletionService.publishIfConfigured(any())).thenReturn(Uni.createFrom().voidItem());
     }
 
     @Test
@@ -1240,6 +1235,174 @@ class QueueAsyncCoordinatorTest {
             org.mockito.ArgumentMatchers.anyInt(),
             org.mockito.ArgumentMatchers.anyLong());
         verify(workDispatcher, never()).enqueueNow(any());
+    }
+
+    @Test
+    void completeAwaitDoesNotDispatchItemContinuationUntilParentIsWaitingExternal() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitInteractionRecord completed = itemAwaitRecord(0, AwaitInteractionStatus.COMPLETED, "approved");
+        AwaitCompletionCommand command = new AwaitCompletionCommand(
+            "tenant-1",
+            completed.interactionId(),
+            null,
+            null,
+            java.util.Map.of("value", "approved"),
+            "user-1",
+            System.currentTimeMillis());
+        ExecutionRecord<Object, Object> runningParent = createRecord("tenant-1", "exec-1", "key-1");
+        AwaitItemContinuationHandler handler = mock(AwaitItemContinuationHandler.class);
+        when(awaitCoordinator.complete(command))
+            .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(completed, false)));
+        when(awaitCoordinator.recordCompletion(org.mockito.ArgumentMatchers.eq(completed), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(awaitUnit("unit-1", AwaitUnitStatus.COMPLETED, 1, 1, true, null)));
+        when(executionStateStore.getExecution("tenant-1", "exec-1"))
+            .thenReturn(Uni.createFrom().item(Optional.of(runningParent)));
+
+        AwaitCompletionResult result = coordinator.completeAwait(command, handler).await().indefinitely();
+
+        assertEquals(completed.interactionId(), result.record().interactionId());
+        verify(handler, never()).continueAwaitItem(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyInt(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyLong());
+        verify(workDispatcher, never()).enqueueNow(any());
+    }
+
+    @Test
+    void awaitItemContinuationDispatchAttemptRechecksParentWaitingExternalState() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitInteractionRecord completed = itemAwaitRecord(0, AwaitInteractionStatus.COMPLETED, "approved");
+        AwaitCompletionCommand command = new AwaitCompletionCommand(
+            "tenant-1",
+            completed.interactionId(),
+            null,
+            null,
+            java.util.Map.of("value", "approved"),
+            "user-1",
+            System.currentTimeMillis());
+        ExecutionRecord<Object, Object> waitingParent = new ExecutionRecord<>(
+            "tenant-1",
+            "exec-1",
+            "key-1",
+            ExecutionResultShape.MATERIALIZED_MULTI,
+            ExecutionStatus.WAITING_EXTERNAL,
+            1L,
+            2,
+            0,
+            null,
+            0L,
+            Long.MAX_VALUE,
+            "exec-1:0:0",
+            "input",
+            "unit-1",
+            null,
+            null,
+            null,
+            1L,
+            2L,
+            99999999L);
+        ExecutionRecord<Object, Object> runningParent = createRecord("tenant-1", "exec-1", "key-1");
+        AwaitItemContinuationHandler handler = mock(AwaitItemContinuationHandler.class);
+        when(awaitCoordinator.complete(command))
+            .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(completed, false)));
+        when(awaitCoordinator.recordCompletion(org.mockito.ArgumentMatchers.eq(completed), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(awaitUnit("unit-1", AwaitUnitStatus.COMPLETED, 1, 1, true, null)));
+        when(executionStateStore.getExecution("tenant-1", "exec-1"))
+            .thenReturn(Uni.createFrom().item(Optional.of(waitingParent)))
+            .thenReturn(Uni.createFrom().item(Optional.of(runningParent)));
+
+        AwaitCompletionResult result = coordinator.completeAwait(command, handler).await().indefinitely();
+
+        assertEquals(completed.interactionId(), result.record().interactionId());
+        verify(handler, after(300).never()).continueAwaitItem(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyInt(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
+    void processExecutionWorkItemDispatchesEarlyCompletedItemContinuationsAfterParentIsWaitingExternal() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.leaseMs()).thenReturn(1000L);
+        ExecutionRecord<Object, Object> claimed = createRecord("tenant-1", "exec-await", "key-await");
+        ExecutionRecord<Object, Object> waiting = new ExecutionRecord<>(
+            "tenant-1",
+            "exec-await",
+            "key-await",
+            ExecutionResultShape.MATERIALIZED_MULTI,
+            ExecutionStatus.WAITING_EXTERNAL,
+            1L,
+            2,
+            0,
+            null,
+            0L,
+            Long.MAX_VALUE,
+            "exec-await:0:0",
+            "input",
+            "unit-1",
+            null,
+            null,
+            null,
+            1L,
+            2L,
+            99999999L);
+        AwaitUnitRecord completedUnit = awaitUnit("unit-1", AwaitUnitStatus.COMPLETED, 2, 2, true, null);
+        AwaitItemContinuationHandler handler = mock(AwaitItemContinuationHandler.class);
+        when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(executionStateStore.markWaitingExternal(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-await"),
+                org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq("exec-await:0:0"),
+                org.mockito.ArgumentMatchers.eq("unit-1"),
+                org.mockito.ArgumentMatchers.eq(2),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(waiting)));
+        when(awaitCoordinator.getUnit("tenant-1", "unit-1"))
+            .thenReturn(Uni.createFrom().item(completedUnit));
+        when(awaitCoordinator.suspensionSnapshot(any(AwaitSuspendedException.class)))
+            .thenReturn(Uni.createFrom().item(new TransitionAwaitSuspension("tenant-1", "exec-await", "unit-1", 2)));
+        when(awaitCoordinator.findByUnit("tenant-1", "unit-1"))
+            .thenReturn(Uni.createFrom().item(List.of(
+                itemAwaitRecord("exec-await", 0, AwaitInteractionStatus.COMPLETED, "approved-0"),
+                itemAwaitRecord("exec-await", 1, AwaitInteractionStatus.COMPLETED, "approved-1"))));
+        when(executionStateStore.getExecution("tenant-1", "exec-await"))
+            .thenReturn(Uni.createFrom().item(Optional.of(waiting)));
+        when(handler.continueAwaitItem(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(completedUnit),
+                org.mockito.ArgumentMatchers.eq(3),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().voidItem());
+        when(handler.releaseAwaitParentIfReady(
+                org.mockito.ArgumentMatchers.eq(waiting),
+                org.mockito.ArgumentMatchers.eq(completedUnit),
+                org.mockito.ArgumentMatchers.eq(3),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().voidItem());
+
+        coordinator.processExecutionWorkItem(
+                new ExecutionWorkItem("tenant-1", "exec-await"),
+                command -> Uni.createFrom().failure(new AwaitSuspendedException(
+                    "tenant-1",
+                    "exec-await",
+                    "unit-1",
+                    2)),
+                handler)
+            .await().indefinitely();
+
+        verify(handler, timeout(1000).times(2)).continueAwaitItem(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.eq(completedUnit),
+            org.mockito.ArgumentMatchers.eq(3),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyLong());
     }
 
     @Test

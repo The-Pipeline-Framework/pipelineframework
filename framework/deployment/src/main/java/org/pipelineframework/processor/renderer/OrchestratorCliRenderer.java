@@ -143,6 +143,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
             .returns(void.class)
             .addParameter(String[].class, "args")
+            .addStatement("disableObjectIngestAutostartForIngestOnce(args)")
             .addStatement("$T.run($T.class, args)", ClassName.get("io.quarkus.runtime", "Quarkus"), appClassName)
             .build();
 
@@ -412,6 +413,23 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .addStatement("return trimmed.startsWith(\"[\")")
             .build();
 
+        MethodSpec disableObjectIngestAutostartForIngestOnceMethod = MethodSpec.methodBuilder("disableObjectIngestAutostartForIngestOnce")
+            .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
+            .returns(void.class)
+            .addParameter(String[].class, "args")
+            .addCode("""
+                if (args == null) {
+                    return;
+                }
+                for (String arg : args) {
+                    if ("--ingest-once".equals(arg)) {
+                        System.setProperty("pipeline.object-ingest.autostart", "false");
+                        return;
+                    }
+                }
+                """)
+            .build();
+
         MethodSpec sanitizeErrorMessageMethod = MethodSpec.methodBuilder("sanitizeErrorMessage")
             .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
             .returns(String.class)
@@ -478,6 +496,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .addMethod(firstNonBlankMethod)
             .addMethod(looksLikeJsonObjectMethod)
             .addMethod(looksLikeJsonArrayMethod)
+            .addMethod(disableObjectIngestAutostartForIngestOnceMethod)
             .addMethod(deriveCliIdempotencyKeyMethod)
             .addMethod(sanitizeErrorMessageMethod);
 

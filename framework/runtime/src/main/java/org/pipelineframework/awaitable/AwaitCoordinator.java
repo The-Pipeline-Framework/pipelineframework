@@ -140,10 +140,21 @@ public class AwaitCoordinator {
                     claimedInteraction.version(),
                     result.metadata(),
                     System.currentTimeMillis()))
-                .onItem().transform(optional -> optional.orElseThrow(() ->
-                    new IllegalStateException("Await interaction metadata update lost OCC race: "
-                        + claimedInteraction.interactionId())))
+                .onItem().transformToUni(optional -> optional
+                    .map(Uni.createFrom()::item)
+                    .orElseGet(() -> resolvedAfterDispatchMetadataRace(claimedInteraction)))
                 .onItem().invoke(this::recordInteractionDispatched));
+    }
+
+    private Uni<AwaitInteractionRecord> resolvedAfterDispatchMetadataRace(AwaitInteractionRecord claimedInteraction) {
+        return interactionStore().get(claimedInteraction.tenantId(), claimedInteraction.interactionId())
+            .onItem().transform(optional -> {
+                if (optional.isPresent() && optional.get().status().terminal()) {
+                    return optional.get();
+                }
+                throw new IllegalStateException("Await interaction metadata update lost OCC race: "
+                    + claimedInteraction.interactionId());
+            });
     }
 
     public Uni<AwaitCompletionResult> complete(AwaitCompletionCommand command) {

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
@@ -168,6 +169,48 @@ class BlockingExecutionSupportTest {
         subscriber.awaitItems(1);
         subscriber.cancel();
         assertTrue(closed.await(5, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void emitIteratorReadsOnlyWhenDownstreamRequestsItems() {
+        AtomicInteger nextCalls = new AtomicInteger();
+        AtomicInteger hasNextCalls = new AtomicInteger();
+
+        AssertSubscriber<String> subscriber = support.emitIterator(false, () -> new CloseableIterator<String>() {
+            private int index;
+
+            @Override
+            public boolean hasNext() {
+                hasNextCalls.incrementAndGet();
+                return index < 3;
+            }
+
+            @Override
+            public String next() {
+                nextCalls.incrementAndGet();
+                return "item-" + ++index;
+            }
+
+            @Override
+            public void close() {
+            }
+        }).subscribe().withSubscriber(AssertSubscriber.create(0));
+
+        subscriber.assertHasNotReceivedAnyItem();
+        assertTrue(nextCalls.get() == 0);
+        assertTrue(hasNextCalls.get() == 0);
+
+        subscriber.request(1).awaitItems(1);
+        assertTrue(nextCalls.get() == 1);
+        subscriber.assertItems("item-1");
+
+        subscriber.request(1).awaitItems(2);
+        assertTrue(nextCalls.get() == 2);
+        subscriber.assertItems("item-1", "item-2");
+
+        subscriber.request(1).awaitItems(3);
+        assertTrue(nextCalls.get() == 3);
+        subscriber.assertItems("item-1", "item-2", "item-3");
     }
 
     @Test

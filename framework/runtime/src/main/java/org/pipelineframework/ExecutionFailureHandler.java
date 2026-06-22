@@ -6,6 +6,7 @@ import java.util.concurrent.TimeUnit;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import io.smallrye.mutiny.CompositeException;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.pipeline.PipelinePlatformResourceLoader;
@@ -18,6 +19,7 @@ import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.step.NonRetryableException;
+import org.pipelineframework.step.PipelineControlFlowException;
 
 /**
  * Retry and terminal-failure policy for async execution transitions.
@@ -148,6 +150,10 @@ class ExecutionFailureHandler {
     if (nonRetryable != null) {
       return new FailureClassification(false, nonRetryable);
     }
+    Throwable controlFlow = findThrowable(failure, PipelineControlFlowException.class);
+    if (controlFlow != null) {
+      return new FailureClassification(false, controlFlow);
+    }
     return new FailureClassification(true, failure);
   }
 
@@ -166,6 +172,18 @@ class ExecutionFailureHandler {
       Throwable cause = current.getCause();
       if (cause != null && cause != current) {
         queue.add(cause);
+      }
+      for (Throwable suppressed : current.getSuppressed()) {
+        if (suppressed != null && suppressed != current) {
+          queue.add(suppressed);
+        }
+      }
+      if (current instanceof CompositeException composite) {
+        for (Throwable causeItem : composite.getCauses()) {
+          if (causeItem != null && causeItem != current) {
+            queue.add(causeItem);
+          }
+        }
       }
     }
     return null;

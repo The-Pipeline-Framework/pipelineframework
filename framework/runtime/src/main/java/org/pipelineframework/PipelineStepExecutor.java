@@ -340,7 +340,7 @@ class PipelineStepExecutor {
         if (telemetry != null) {
             input = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, input);
         }
-        Multi<I> finalInput = input;
+        Multi<I> finalInput = scopedMultiInput(input, contextSnapshot, awaitContextSnapshot);
         Multi<O> result = withStepExecutionMulti(
             contextSnapshot,
             awaitContextSnapshot,
@@ -518,7 +518,7 @@ class PipelineStepExecutor {
             if (telemetry != null) {
                 finalInput = finalInput.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item));
             }
-            Uni<I> replayInput = finalInput;
+            Uni<I> replayInput = scopedUniInput(finalInput, contextSnapshot, awaitContextSnapshot);
             Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> step.apply(replayInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
@@ -625,8 +625,13 @@ class PipelineStepExecutor {
             if (telemetry != null) {
                 finalInput = finalInput.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item));
             }
-            Uni<I> replayInput = finalInput;
-            Multi<O> result = withStepExecutionMulti(contextSnapshot, awaitContextSnapshot, () -> step.apply(replayInput))
+            Uni<I> replayInput = scopedUniInput(finalInput, contextSnapshot, awaitContextSnapshot);
+            Multi<O> result = withStepExecutionMulti(
+                contextSnapshot,
+                awaitContextSnapshot,
+                () -> awaitContextSnapshot == null
+                    ? step.apply(replayInput)
+                    : applyOneToManyForAwaitParent(step, replayInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
                         telemetry.recordReplayOutput(replayScope, output);
@@ -692,6 +697,19 @@ class PipelineStepExecutor {
             current == null ? "null" : current.getClass().getName()));
     }
 
+    private static <I, O> Multi<O> applyOneToManyForAwaitParent(StepOneToMany<I, O> step, Uni<I> input) {
+        return input.onItem().transformToMulti(item -> step.applyOneToMany(item)
+            .onItem().transform(output -> {
+                if (logger.isDebugEnabled()) {
+                    logger.debugf(
+                        "Step %s emitted item: %s",
+                        step.getClass().getSimpleName(),
+                        output);
+                }
+                return output;
+            }));
+    }
+
     @SuppressWarnings("unchecked")
     static <I, O> Object applyManyToOneUnchecked(
         ManyToOne<I, O> step,
@@ -721,7 +739,8 @@ class PipelineStepExecutor {
             Multi<I> finalInput = telemetry == null
                 ? input
                 : input.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item));
-            Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> step.apply(finalInput))
+            Multi<I> scopedInput = scopedMultiInput(finalInput, contextSnapshot, awaitContextSnapshot);
+            Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> step.apply(scopedInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
                         telemetry.recordReplayOutput(replayScope, output);
@@ -743,7 +762,8 @@ class PipelineStepExecutor {
             Multi<I> finalInput = telemetry == null
                 ? input.toMulti()
                 : input.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item)).toMulti();
-            Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> step.apply(finalInput))
+            Multi<I> scopedInput = scopedMultiInput(finalInput, contextSnapshot, awaitContextSnapshot);
+            Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> step.apply(scopedInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
                         telemetry.recordReplayOutput(replayScope, output);
@@ -790,7 +810,8 @@ class PipelineStepExecutor {
             Multi<I> finalInput = telemetry == null
                 ? input.toMulti()
                 : input.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item)).toMulti();
-            Multi<O> result = withStepExecutionMulti(contextSnapshot, awaitContextSnapshot, () -> step.apply(finalInput))
+            Multi<I> scopedInput = scopedMultiInput(finalInput, contextSnapshot, awaitContextSnapshot);
+            Multi<O> result = withStepExecutionMulti(contextSnapshot, awaitContextSnapshot, () -> step.apply(scopedInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
                         telemetry.recordReplayOutput(replayScope, output);
@@ -813,7 +834,8 @@ class PipelineStepExecutor {
             Multi<I> finalInput = telemetry == null
                 ? typedInput
                 : typedInput.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item));
-            Multi<O> result = withStepExecutionMulti(contextSnapshot, awaitContextSnapshot, () -> step.apply(finalInput))
+            Multi<I> scopedInput = scopedMultiInput(finalInput, contextSnapshot, awaitContextSnapshot);
+            Multi<O> result = withStepExecutionMulti(contextSnapshot, awaitContextSnapshot, () -> step.apply(scopedInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
                         telemetry.recordReplayOutput(replayScope, output);
@@ -829,5 +851,25 @@ class PipelineStepExecutor {
             "Unsupported current type for StepManyToMany: type={0} value={1}",
             current == null ? "null" : current.getClass().getName(),
             current));
+    }
+
+    private static <T> Uni<T> scopedUniInput(
+        Uni<T> input,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot) {
+        if (contextSnapshot == null && awaitContextSnapshot == null) {
+            return input;
+        }
+        return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> input);
+    }
+
+    private static <T> Multi<T> scopedMultiInput(
+        Multi<T> input,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot) {
+        if (contextSnapshot == null && awaitContextSnapshot == null) {
+            return input;
+        }
+        return withStepExecutionMulti(contextSnapshot, awaitContextSnapshot, () -> input);
     }
 }

@@ -183,7 +183,7 @@ public class PipelineRunner implements AutoCloseable {
             index -> logger.warnf("Warning: Found null step at index %d in configuration, skipping...", index));
 
         // Terminal object publish only runs after a full pipeline execution, not for partial/early-stop runs.
-        Object terminal = stopBeforeStepIndex == orderedSteps.size()
+        Object terminal = stopBeforeStepIndex == orderedSteps.size() && awaitContext == null
             ? objectPublishRunner().publish(current)
             : current;
         return new ExecutionResult(telemetry.instrumentRunCompletion(terminal, telemetryContext), telemetryContext);

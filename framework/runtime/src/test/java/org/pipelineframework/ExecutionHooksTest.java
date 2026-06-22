@@ -2,6 +2,7 @@ package org.pipelineframework;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.CompositeException;
 import io.smallrye.mutiny.Uni;
 import org.apache.commons.lang3.time.StopWatch;
 import org.junit.jupiter.api.BeforeEach;
@@ -62,5 +63,18 @@ class ExecutionHooksTest {
                 new StopWatch()).collect().asList().await().indefinitely());
 
         assertInstanceOf(AwaitSuspendedException.class, failure);
+    }
+
+    @Test
+    void attachMultiHooksClassifiesCompositeAwaitSuspensionAsControlFlow() {
+        CompositeException failure = org.junit.jupiter.api.Assertions.assertThrows(
+            CompositeException.class,
+            () -> hooks.attachMultiHooks(
+                Multi.createFrom().failure(new CompositeException(
+                    new RuntimeException("wrapper"),
+                    new AwaitSuspendedException("tenant", "execution", "interaction", 1))),
+                new StopWatch()).collect().asList().await().indefinitely());
+
+        assertNotNull(failure);
     }
 }
