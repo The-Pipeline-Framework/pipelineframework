@@ -43,7 +43,7 @@ import lombok.experimental.Accessors;
 @Setter
 @Accessors(chain = true)
 @NoArgsConstructor
-@Deprecated(forRemoval = false)
+@Deprecated(since = "26.6.2", forRemoval = true)
 public class CsvPaymentsOutputFile extends BaseCsvPaymentsFile implements AutoCloseable {
 
   @Transient private List<PaymentOutput> paymentOutputs = new ArrayList<>();

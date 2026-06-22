@@ -59,6 +59,7 @@ class ObjectIngestRunnerTest {
         assertEquals(1, result.listed());
         assertEquals(1, result.submitted());
         assertEquals(0, result.failed());
+        assertEquals(List.of("execution-1"), result.executionIds());
         assertEquals("alpha.txt", ((TestInput) inputs.getFirst()).key());
         assertEquals("object:documents:test:bucket:alpha.txt:v1:etag-1", keys.getFirst());
     }

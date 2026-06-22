@@ -60,6 +60,7 @@ import org.pipelineframework.awaitable.AwaitUnitRecord;
 import org.pipelineframework.awaitable.AwaitUnitStatus;
 import org.pipelineframework.checkpoint.CheckpointPublicationService;
 import org.pipelineframework.invocation.PipelineInvocationRuntime;
+import org.pipelineframework.objectpublish.ObjectPublishCompletionService;
 import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 
@@ -109,6 +110,9 @@ class QueueAsyncCoordinatorTest {
     private CheckpointPublicationService checkpointPublicationService;
 
     @Mock
+    private ObjectPublishCompletionService objectPublishCompletionService;
+
+    @Mock
     private PipelineTelemetry telemetry;
 
     @Mock
@@ -144,6 +148,7 @@ class QueueAsyncCoordinatorTest {
         coordinator.transitionPayloadCodec = payloadCodec;
         coordinator.telemetry = telemetry;
         coordinator.checkpointPublicationService = checkpointPublicationService;
+        coordinator.objectPublishCompletionService = objectPublishCompletionService;
         coordinator.executionStateStores = executionStateStores;
         coordinator.workDispatchers = workDispatchers;
         coordinator.deadLetterPublishers = deadLetterPublishers;
@@ -155,6 +160,7 @@ class QueueAsyncCoordinatorTest {
         lenient().when(workerConfig.maxInFlight()).thenReturn(64);
         lenient().when(workerConfig.saturatedDelay()).thenReturn(Duration.ofSeconds(1));
         lenient().when(awaitCoordinator.importSuspension(any())).thenReturn(Uni.createFrom().voidItem());
+        lenient().when(objectPublishCompletionService.publishIfConfigured(any())).thenReturn(Uni.createFrom().voidItem());
     }
 
     @Test

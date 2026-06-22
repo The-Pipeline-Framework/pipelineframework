@@ -109,23 +109,15 @@ services:
         -Dcsv-payments.payment-provider.sqs.response-queue-url=http://localstack:4566/000000000000/csv-payment-await-results
         -Dcsv-payments.payment-provider.sqs.region=${AWS_REGION:-us-east-1}
         -Dcsv-payments.payment-provider.sqs.endpoint-override=http://localstack:4566
-        -Dcsv-payments.reader-demand-pacer.rows-per-period=20
-        -Dcsv-payments.reader-demand-pacer.millis-period=100
         -Dcsv-payments.payment-provider.permits-per-second=250.0
         -Dcsv-payments.payment-provider.timeout-millis=5000
         -Dcsv-payments.payment-provider.response-delay-millis=3000
-        -Dquarkus.grpc.clients.process-folder.host=localhost
-        -Dquarkus.grpc.clients.process-folder.port=8183
-        -Dquarkus.grpc.clients.process-folder.plain-text=true
         -Dquarkus.grpc.clients.process-csv-payments-input.host=localhost
         -Dquarkus.grpc.clients.process-csv-payments-input.port=8183
         -Dquarkus.grpc.clients.process-csv-payments-input.plain-text=true
         -Dquarkus.grpc.clients.process-payment-status.host=localhost
         -Dquarkus.grpc.clients.process-payment-status.port=8183
         -Dquarkus.grpc.clients.process-payment-status.plain-text=true
-        -Dquarkus.grpc.clients.process-csv-payments-output-file.host=localhost
-        -Dquarkus.grpc.clients.process-csv-payments-output-file.port=8183
-        -Dquarkus.grpc.clients.process-csv-payments-output-file.plain-text=true
 
   worker:
     image: "${TPF_CSV_WORKER_IMAGE:-localhost/csv-payments/orchestrator-svc:latest}"
@@ -178,11 +170,6 @@ services:
         -Dpipeline.orchestrator.sqs.region=${AWS_REGION:-us-east-1}
         -Dpipeline.orchestrator.sqs.endpoint-override=http://localstack:4566
         -Dpipeline.health.enabled=false
-        -Dquarkus.grpc.clients.process-folder.host=runtime
-        -Dquarkus.grpc.clients.process-folder.port=8183
-        -Dquarkus.grpc.clients.process-folder.plain-text=true
-        -Dquarkus.grpc.clients.process-folder.tls.enabled=false
-        -Dquarkus.grpc.clients.process-folder.tls-configuration-name=
         -Dquarkus.grpc.clients.process-csv-payments-input.host=runtime
         -Dquarkus.grpc.clients.process-csv-payments-input.port=8183
         -Dquarkus.grpc.clients.process-csv-payments-input.plain-text=true
@@ -193,11 +180,6 @@ services:
         -Dquarkus.grpc.clients.process-payment-status.plain-text=true
         -Dquarkus.grpc.clients.process-payment-status.tls.enabled=false
         -Dquarkus.grpc.clients.process-payment-status.tls-configuration-name=
-        -Dquarkus.grpc.clients.process-csv-payments-output-file.host=runtime
-        -Dquarkus.grpc.clients.process-csv-payments-output-file.port=8183
-        -Dquarkus.grpc.clients.process-csv-payments-output-file.plain-text=true
-        -Dquarkus.grpc.clients.process-csv-payments-output-file.tls.enabled=false
-        -Dquarkus.grpc.clients.process-csv-payments-output-file.tls-configuration-name=
         -Dquarkus.grpc.clients.observe-persistence-csv-payments-input-file-side-effect.host=persistence
         -Dquarkus.grpc.clients.observe-persistence-csv-payments-input-file-side-effect.port=8282
         -Dquarkus.grpc.clients.observe-persistence-csv-payments-input-file-side-effect.plain-text=true
@@ -308,11 +290,6 @@ services:
         -Dtpf.await.sqs.response-queue-url=http://localstack:4566/000000000000/csv-payment-await-results
         -Dtpf.await.sqs.visibility-timeout=PT30S
         -Dtpf.await.sqs.wait-time-seconds=1
-        -Dquarkus.grpc.clients.process-folder.host=runtime
-        -Dquarkus.grpc.clients.process-folder.port=8183
-        -Dquarkus.grpc.clients.process-folder.plain-text=true
-        -Dquarkus.grpc.clients.process-folder.tls.enabled=false
-        -Dquarkus.grpc.clients.process-folder.tls-configuration-name=
         -Dquarkus.grpc.clients.process-csv-payments-input.host=runtime
         -Dquarkus.grpc.clients.process-csv-payments-input.port=8183
         -Dquarkus.grpc.clients.process-csv-payments-input.plain-text=true
@@ -323,11 +300,6 @@ services:
         -Dquarkus.grpc.clients.process-payment-status.plain-text=true
         -Dquarkus.grpc.clients.process-payment-status.tls.enabled=false
         -Dquarkus.grpc.clients.process-payment-status.tls-configuration-name=
-        -Dquarkus.grpc.clients.process-csv-payments-output-file.host=runtime
-        -Dquarkus.grpc.clients.process-csv-payments-output-file.port=8183
-        -Dquarkus.grpc.clients.process-csv-payments-output-file.plain-text=true
-        -Dquarkus.grpc.clients.process-csv-payments-output-file.tls.enabled=false
-        -Dquarkus.grpc.clients.process-csv-payments-output-file.tls-configuration-name=
         -Dquarkus.grpc.clients.observe-persistence-csv-payments-input-file-side-effect.host=persistence
         -Dquarkus.grpc.clients.observe-persistence-csv-payments-input-file-side-effect.port=8282
         -Dquarkus.grpc.clients.observe-persistence-csv-payments-input-file-side-effect.plain-text=true

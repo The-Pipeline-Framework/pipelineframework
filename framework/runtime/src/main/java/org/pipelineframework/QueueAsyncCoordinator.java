@@ -68,6 +68,7 @@ import org.pipelineframework.orchestrator.TransitionWorkerOutcome;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
+import org.pipelineframework.objectpublish.ObjectPublishCompletionService;
 
 /**
  * Coordinates queue-mode orchestration lifecycle and provider interactions.
@@ -124,6 +125,9 @@ class QueueAsyncCoordinator {
 
   @Inject
   CheckpointPublicationService checkpointPublicationService;
+
+  @Inject
+  ObjectPublishCompletionService objectPublishCompletionService;
 
   @Inject
   AwaitCoordinator awaitCoordinator;
@@ -824,6 +828,7 @@ class QueueAsyncCoordinator {
     }
     return checkpointPublicationService
         .publishIfConfigured(record, singleResult(outputItems))
+        .chain(() -> publishTerminalOutputsIfConfigured(outputItems))
         .replaceWith(outputItems)
         .onItem().transformToUni(payload -> executionStateStore.markSucceeded(
             record.tenantId(),
@@ -833,6 +838,10 @@ class QueueAsyncCoordinator {
             payload,
             System.currentTimeMillis()))
         .replaceWithVoid();
+  }
+
+  private Uni<Void> publishTerminalOutputsIfConfigured(List<?> outputItems) {
+    return objectPublishCompletionService.publishIfConfigured(outputItems);
   }
 
   private Uni<Void> markWaitingExternal(

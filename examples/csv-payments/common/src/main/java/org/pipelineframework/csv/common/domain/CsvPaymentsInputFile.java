@@ -16,6 +16,7 @@
 
 package org.pipelineframework.csv.common.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.opencsv.bean.HeaderColumnNameMappingStrategy;
 import jakarta.persistence.Entity;
 import java.io.*;
@@ -41,6 +42,7 @@ public class CsvPaymentsInputFile extends BaseCsvPaymentsFile {
     return new BufferedReader(new FileReader(filepath.toFile(), StandardCharsets.UTF_8));
   }
 
+  @JsonIgnore
   public String getSourceName() {
     return filepath.toString();
   }

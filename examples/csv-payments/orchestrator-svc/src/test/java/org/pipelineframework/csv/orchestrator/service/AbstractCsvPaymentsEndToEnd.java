@@ -70,6 +70,8 @@ import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.utility.DockerImageName;
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.Yaml;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -153,10 +155,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final String MODULAR_IMAGE_TAG = resolveModularImageTag();
     private static final String CSV_E2E_INPUT_FILE = System.getProperty("csv.e2e.input.file", "").trim();
     private static final boolean CUSTOM_INPUT_FILE = !CSV_E2E_INPUT_FILE.isBlank();
-    private static final String READER_DEMAND_PACER_ROWS_PER_PERIOD =
-            System.getProperty("csv.e2e.reader-demand-pacer.rows-per-period", "").trim();
-    private static final String READER_DEMAND_PACER_MILLIS_PERIOD =
-            System.getProperty("csv.e2e.reader-demand-pacer.millis-period", "").trim();
     private static volatile boolean orchestratorPackagingVerified;
 
     // Containers are lazily created so monolith mode does not require service cert binds.
@@ -259,7 +257,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
         services.add(getInputCsvService());
         services.add(getPaymentsProcessingService());
         services.add(getPaymentStatusService());
-        services.add(getOutputCsvService());
 
         Startables.deepStart(services.build()).join();
         logObservabilityEndpoints();
@@ -656,12 +653,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
         env.put("PIPELINE_TELEMETRY_REPLAY_ENABLED", "true");
         env.put("PIPELINE_TELEMETRY_REPLAY_EXPORTER", "file");
         env.put("PIPELINE_TELEMETRY_REPLAY_FILE_PATH", replayCapturePath);
-        if (!READER_DEMAND_PACER_ROWS_PER_PERIOD.isBlank()) {
-            env.put("CSV_PAYMENTS_READER_DEMAND_PACER_ROWS_PER_PERIOD", READER_DEMAND_PACER_ROWS_PER_PERIOD);
-        }
-        if (!READER_DEMAND_PACER_MILLIS_PERIOD.isBlank()) {
-            env.put("CSV_PAYMENTS_READER_DEMAND_PACER_MILLIS_PERIOD", READER_DEMAND_PACER_MILLIS_PERIOD);
-        }
         putOptionalEnvOverride(
                 env,
                 "csv-payments.payment-provider.permits-per-second",
@@ -699,12 +690,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
         env.put("PIPELINE_TELEMETRY_TRACING_ENABLED", "true");
         env.put("PIPELINE_TELEMETRY_TRACING_PER_ITEM", "true");
         env.put("PIPELINE_TELEMETRY_METRICS_ENABLED", "false");
-        if (!READER_DEMAND_PACER_ROWS_PER_PERIOD.isBlank()) {
-            env.put("CSV_PAYMENTS_READER_DEMAND_PACER_ROWS_PER_PERIOD", READER_DEMAND_PACER_ROWS_PER_PERIOD);
-        }
-        if (!READER_DEMAND_PACER_MILLIS_PERIOD.isBlank()) {
-            env.put("CSV_PAYMENTS_READER_DEMAND_PACER_MILLIS_PERIOD", READER_DEMAND_PACER_MILLIS_PERIOD);
-        }
         putOptionalEnvOverride(
                 env,
                 "csv-payments.payment-provider.permits-per-second",
@@ -989,10 +974,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         // Create test CSV files as the shell script does
         createTestCsvFiles();
 
-        // Trigger the orchestrator to process the input directory
-        String inputPath = MONOLITH_LAYOUT ? TEST_E2E_DIR : TEST_E2E_TARGET_DIR;
-        String inputDirJson = "{ \"path\": \"" + inputPath + "\" }";
-        orchestratorTriggerRun(inputDirJson);
+        orchestratorTriggerRun();
 
         // Wait for the pipeline to complete
         waitForPipelineComplete();
@@ -1024,10 +1006,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         createValidAndMalformedCsvFiles();
 
-        String inputPath = MONOLITH_LAYOUT ? TEST_E2E_DIR : TEST_E2E_TARGET_DIR;
-        String inputDirJson = "{ \"path\": \"" + inputPath + "\" }";
         ProcessRunResult runResult = orchestratorTriggerRun(
-            inputDirJson,
             Map.of(
                 "PIPELINE_DEFAULTS_RECOVER_ON_FAILURE", "true",
                 "PIPELINE_DEFAULTS_RETRY_LIMIT", "1",
@@ -1075,9 +1054,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         resetDatabasePersistence();
         createTestCsvFiles();
 
-        String inputPath = MONOLITH_LAYOUT ? TEST_E2E_DIR : TEST_E2E_TARGET_DIR;
-        String inputDirJson = "{ \"path\": \"" + inputPath + "\" }";
-        ProcessRunResult runResult = orchestratorTriggerRun(inputDirJson);
+        ProcessRunResult runResult = orchestratorTriggerRun();
 
         waitForPipelineComplete();
 
@@ -1121,18 +1098,16 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     /**
-     * Start the orchestrator JAR in a separate JVM configured to use the test services and process CSV files from the given input directory.
+     * Start the orchestrator JAR in a separate JVM configured to run one object ingest poll.
      *
-     * @param inputDir path to the directory containing input CSV files to process
      * @throws Exception if the process cannot be started, times out, or exits with a non-zero exit code
      */
-    @SuppressWarnings("SameParameterValue")
-    private ProcessRunResult orchestratorTriggerRun(String inputDir) throws Exception {
-        return orchestratorTriggerRun(inputDir, Map.of());
+    private ProcessRunResult orchestratorTriggerRun() throws Exception {
+        return orchestratorTriggerRun(Map.of());
     }
 
-    private ProcessRunResult orchestratorTriggerRun(String inputDir, Map<String, String> envOverrides) throws Exception {
-        LOG.infof("Triggering Orchestrator with input dir: %s", inputDir);
+    private ProcessRunResult orchestratorTriggerRun(Map<String, String> envOverrides) throws Exception {
+        LOG.info("Triggering Orchestrator object ingest once");
 
         String jarPath =
                 MONOLITH_LAYOUT
@@ -1162,9 +1137,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         "--enable-preview",
                         "-jar",
                         jar.toString(),
-                        "-i=" + inputDir);
+                        "--ingest-once");
 
         pb.environment().put("QUARKUS_PROFILE", "test");
+        pb.environment().put("PIPELINE_CONFIG", writeE2ePipelineConfig().toString());
         pb.environment().put("QUARKUS_JIB_JVM_ADDITIONAL_ARGUMENTS", "--enable-preview");
         pb.environment().put("PIPELINE_ORCHESTRATOR_MODE", "QUEUE_ASYNC");
         pb.environment().put("PIPELINE_ORCHESTRATOR_RESUME_TOKEN_SECRET", E2E_RESUME_TOKEN_SECRET);
@@ -1293,17 +1269,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         String localhost = "localhost";
         String grpcPort = "8443";
-        putGrpcClient(pb, "PROCESS_FOLDER", localhost, grpcPort);
         putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", localhost, grpcPort);
         putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", localhost, grpcPort);
         putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", localhost, grpcPort);
         putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", localhost, grpcPort);
-        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_OUTPUT_FILE", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT", localhost, grpcPort);
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", localhost, grpcPort);
     }
 
@@ -1320,7 +1293,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
         GenericContainer<?> inputService = getInputCsvService();
         GenericContainer<?> paymentsService = getPaymentsProcessingService();
         GenericContainer<?> statusService = getPaymentStatusService();
-        GenericContainer<?> outputService = getOutputCsvService();
         GenericContainer<?> persistence = getPersistenceService();
         pb.environment()
             .put(
@@ -1330,17 +1302,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
             .put(
                 "CLIENT_TRUSTSTORE_PATH",
                 DEV_CERTS_DIR.resolve("orchestrator-svc/client-truststore.jks").toString());
-        putGrpcClient(pb, "PROCESS_FOLDER", inputService.getHost(), String.valueOf(inputService.getMappedPort(8444)), "/q/health/live");
         putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", inputService.getHost(), String.valueOf(inputService.getMappedPort(8444)), "/q/health/live");
         putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)), "/q/health/live");
         putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)), "/q/health/live");
         putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
-        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_OUTPUT_FILE", outputService.getHost(), String.valueOf(outputService.getMappedPort(8447)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
     }
 
@@ -1366,19 +1335,59 @@ abstract class AbstractCsvPaymentsEndToEnd {
         String persistenceHost = persistence.getHost();
         String persistencePort = String.valueOf(persistence.getMappedPort(8448));
 
-        putGrpcClient(pb, "PROCESS_FOLDER", pipelineHost, pipelinePort);
         putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", pipelineHost, pipelinePort);
         putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", pipelineHost, pipelinePort);
         putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", pipelineHost, pipelinePort);
         putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", pipelineHost, pipelinePort);
-        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_OUTPUT_FILE", pipelineHost, pipelinePort);
 
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", persistenceHost, persistencePort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", persistenceHost, persistencePort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", persistenceHost, persistencePort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT", persistenceHost, persistencePort);
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT", persistenceHost, persistencePort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", persistenceHost, persistencePort);
+    }
+
+    private static Path writeE2ePipelineConfig() throws IOException {
+        Path config = Paths.get(TEST_E2E_DIR, "pipeline-e2e.yaml");
+        Path canonical = Paths.get(System.getProperty("user.dir"))
+                .resolve("../config/pipeline.yaml")
+                .normalize()
+                .toAbsolutePath();
+        String root = Paths.get(TEST_E2E_DIR).toAbsolutePath().normalize().toString();
+        Map<String, Object> yaml = loadYamlMap(canonical);
+        Map<String, Object> source = childMap(childMap(yaml, "sources"), "csv-payment-files");
+        childMap(source, "location").put("root", root);
+        childMap(source, "poll").put("enabled", false);
+
+        Map<String, Object> publish = childMap(childMap(yaml, "publish"), "csv-payment-output-files");
+        childMap(publish, "location").put("root", root);
+
+        if (!MONOLITH_LAYOUT) {
+            childMap(source, "location").put("localPathRoot", TEST_E2E_TARGET_DIR);
+        }
+        DumperOptions options = new DumperOptions();
+        options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+        options.setPrettyFlow(true);
+        Files.writeString(config, new Yaml(options).dump(yaml), StandardCharsets.UTF_8);
+        return config.toAbsolutePath().normalize();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> loadYamlMap(Path path) throws IOException {
+        Object loaded = new Yaml().load(Files.newBufferedReader(path, StandardCharsets.UTF_8));
+        if (loaded instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        throw new IllegalStateException("Expected YAML object in " + path);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> childMap(Map<String, Object> parent, String key) {
+        Object child = parent.get(key);
+        if (child instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        throw new IllegalStateException("Expected YAML object at key '" + key + "'");
     }
 
     private static void ensureKafkaTopics() {

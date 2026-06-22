@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Properties;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
 
@@ -23,18 +24,28 @@ class CsvPaymentsAwaitPersistenceScopeTest {
 
         assertTrue(pipelineYaml.contains("aspects:\n  persistence:"), "Expected persistence aspect in pipeline.yaml");
         assertTrue(pipelineYaml.contains("scope: STEPS"), "Persistence should be scoped to selected steps");
-        assertTrue(
+        assertFalse(
                 pipelineYaml.contains("- ProcessFolderService"),
-                "Persistence should include the folder ingestion step");
+                "Default persistence should not target the legacy folder ingestion step");
         assertTrue(
                 pipelineYaml.contains("- ProcessCsvPaymentsInputService"),
                 "Persistence should include the CSV parsing step");
         assertTrue(
                 pipelineYaml.contains("- ProcessPaymentStatusService"),
                 "Persistence should include post-await status processing with idempotent entity keys");
-        assertTrue(
+        assertFalse(
                 pipelineYaml.contains("- ProcessCsvPaymentsOutputFileService"),
-                "Persistence should include output generation with idempotent entity keys");
+                "Default persistence should not target the legacy output-file step");
+        assertTrue(
+                Pattern.compile("(?m)^\\s*input\\s*:\\s*\\R\\s*from\\s*:\\s*csv-payment-files\\s*$")
+                        .matcher(pipelineYaml)
+                        .find(),
+                "Default pipeline should use object ingest");
+        assertTrue(
+                Pattern.compile("(?m)^\\s*output\\s*:\\s*\\R\\s*to\\s*:\\s*csv-payment-output-files\\s*$")
+                        .matcher(pipelineYaml)
+                        .find(),
+                "Default pipeline should use object publish");
         assertFalse(
                 pipelineYaml.contains("- Await Payment Provider"),
                 "Persistence should not target the replayable await boundary");

@@ -211,7 +211,8 @@ FUNCTION pipelines are rejected in v1. Quarkus currently hosts the bootstrap, bu
 
 ## Example Configs
 
-- CSV Payments folder replacement: `examples/csv-payments/config/pipeline.object-ingest.yaml`
+- CSV Payments connector-owned input/output path: `examples/csv-payments/config/pipeline.yaml`
+- CSV Payments legacy file-step reference: `examples/csv-payments/config/pipeline.legacy-file-steps.yaml`
 - Search S3 text ingest: `examples/search/config/pipeline.s3-object-ingest.yaml`
 
 See [Field Materialization](/design/materialization) for related claim-check payload representation.

@@ -70,6 +70,8 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
         ClassName telemetryFlush = ClassName.get("org.pipelineframework.telemetry", "TelemetryFlush");
         ClassName grpcStatus = ClassName.get("io.grpc", "Status");
         ClassName grpcStatusCode = grpcStatus.nestedClass("Code");
+        ClassName objectIngestRunner = ClassName.get("org.pipelineframework.objectingest", "ObjectIngestRunner");
+        ClassName objectIngestTelemetry = ClassName.get("org.pipelineframework.objectingest", "ObjectIngestTelemetry");
 
         ClassName inputDtoType = ClassName.get(binding.basePackage() + ".common.dto", binding.inputTypeName() + "Dto");
         TypeName inputType;
@@ -103,6 +105,13 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 .addMember("names", "{$S}", "--async-timeout-minutes")
                 .addMember("description", "$S", "Maximum minutes to wait for QUEUE_ASYNC pipeline completion")
                 .addMember("defaultValue", "$S", "30")
+                .build())
+            .build();
+
+        FieldSpec ingestOnceField = FieldSpec.builder(boolean.class, "ingestOnce", Modifier.PUBLIC)
+            .addAnnotation(AnnotationSpec.builder(option)
+                .addMember("names", "{$S}", "--ingest-once")
+                .addMember("description", "$S", "Run configured Object Ingest source once and wait for accepted executions")
                 .build())
             .build();
 
@@ -157,6 +166,9 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .addCode("""
                 String actualInputList = firstNonBlank(inputList, System.getenv("PIPELINE_INPUT_LIST"));
                 String actualInput = firstNonBlank(input, System.getenv("PIPELINE_INPUT"));
+                if (ingestOnce) {
+                    return runObjectIngestOnce();
+                }
                 if (isBlank(actualInputList) && isBlank(actualInput)) {
                     System.out.println("Input parameter is empty");
                     return $T.ExitCode.USAGE;
@@ -267,6 +279,60 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 "grpc.server.requests.received",
                 "grpc.server.processing.duration",
                 telemetryFlush)
+            .build();
+
+        MethodSpec runObjectIngestOnceMethod = MethodSpec.methodBuilder("runObjectIngestOnce")
+            .addModifiers(Modifier.PRIVATE)
+            .returns(Integer.class)
+            .addCode("""
+                if (asyncTimeoutMinutes <= 0) {
+                    System.err.println("--async-timeout-minutes must be greater than zero.");
+                    return $T.ExitCode.USAGE;
+                }
+                pipelineExecutionService.awaitStartupHealth($T.ofMinutes(2));
+                java.util.Optional<$T> maybeRunner = $T.loadFromDefaultConfig(
+                    (input, tenantId, idempotencyKey) -> pipelineExecutionService.executePipelineAsync(input, tenantId, idempotencyKey),
+                    $T.NOOP);
+                if (maybeRunner.isEmpty()) {
+                    System.err.println("Object Ingest is not configured.");
+                    return $T.ExitCode.USAGE;
+                }
+                try ($T runner = maybeRunner.get()) {
+                    $T.PollResult poll = runner.pollOnce();
+                    if (poll.failed() > 0) {
+                        System.err.println("Object Ingest failed for " + poll.failed() + " object(s).");
+                        return $T.ExitCode.SOFTWARE;
+                    }
+                    for (String executionId : poll.executionIds()) {
+                        $T status = waitForAsyncExecution(executionId, $T.ofMinutes(asyncTimeoutMinutes));
+                        if (status.status() != $T.SUCCEEDED) {
+                            System.err.println("Pipeline execution failed: " + status.status()
+                                + " " + sanitizeErrorMessage(status.errorMessage()));
+                            return $T.ExitCode.SOFTWARE;
+                        }
+                    }
+                    System.out.println("Object Ingest submitted " + poll.submitted() + " execution(s)");
+                    return $T.ExitCode.OK;
+                } catch (Exception e) {
+                    System.err.println("Object Ingest failed: " + sanitizeErrorMessage(e.getMessage()));
+                    return $T.ExitCode.SOFTWARE;
+                }
+                """,
+                commandLine,
+                duration,
+                objectIngestRunner,
+                objectIngestRunner,
+                objectIngestTelemetry,
+                commandLine,
+                objectIngestRunner,
+                objectIngestRunner,
+                commandLine,
+                executionStatusDto,
+                duration,
+                executionStatus,
+                commandLine,
+                commandLine,
+                commandLine)
             .build();
 
         MethodSpec waitForAsyncExecutionMethod = MethodSpec.methodBuilder("waitForAsyncExecution")
@@ -398,6 +464,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .addField(inputField)
             .addField(inputListField)
             .addField(asyncTimeoutMinutesField)
+            .addField(ingestOnceField)
             .addField(pipelineExecutionServiceField)
             .addField(orchestratorConfigField)
             .addField(meterRegistryField)
@@ -405,6 +472,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .addMethod(mainMethod)
             .addMethod(runMethod)
             .addMethod(callMethod)
+            .addMethod(runObjectIngestOnceMethod)
             .addMethod(waitForAsyncExecutionMethod)
             .addMethod(isBlankMethod)
             .addMethod(firstNonBlankMethod)

@@ -44,8 +44,8 @@ below the limit while `tpf.step.buffer.queued` spikes.
 
 ### Retry amplification example (real-world)
 
-When an upstream step relies on a demand pacer (for example a non-reactive CSV reader) and a downstream step calls a
-slow third-party (avg 250 ms per item), it is easy to misconfigure pacing and trigger retry amplification.
+When an upstream source can admit work faster than a downstream step can call a slow third-party
+(avg 250 ms per item), it is easy to misconfigure concurrency and trigger retry amplification.
 
 Observed pattern:
 - Retries climb while `tpf.step.inflight` on the third-party step grows steadily (for example +1,000 every 5 minutes).
@@ -55,13 +55,13 @@ Observed pattern:
 Mitigations:
 - Lower per-step concurrency on the third-party step.
 - Increase retry wait/backoff to reduce retry pressure.
-- Align the demand pacer with the downstream throughput.
+- Align source admission, per-step concurrency, and downstream throughput.
 - Consider enabling the retry amplification guard in `log-only` mode first, then switch to `fail-fast`
   once you have stable thresholds for inflight slope and retry rate.
 
 ```mermaid
 flowchart LR
-    A[CSV Reader<br/>Non-reactive + Demand Pacer] -->|items| B[Input Step Buffer]
+    A[Object Ingest<br/>Source Admission] -->|items| B[Input Step Buffer]
     B --> C[Third-party Step<br/>Throttle + Retries]
     C --> D[Third-party API]
     C -. retry amplification .-> C

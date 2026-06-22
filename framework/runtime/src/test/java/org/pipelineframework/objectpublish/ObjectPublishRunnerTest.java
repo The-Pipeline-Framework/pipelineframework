@@ -50,6 +50,40 @@ class ObjectPublishRunnerTest {
     }
 
     @Test
+    void publishItemsAdaptsTerminalTransportOutputBackToDomain() {
+        PipelineObjectPublishConfig target = target(false);
+        List<ObjectWriteRequest> writes = new ArrayList<>();
+        ObjectPublishRunner runner = new ObjectPublishRunner(
+            config(target, TestMapper.class.getName()),
+            new ObjectTargetRegistry(List.of(new RecordingProvider(writes))),
+            ObjectPublishTelemetry.NOOP,
+            List.of(new ExternalTestOutputAdapter()));
+
+        runner.publishItems(List.of(new ExternalTestOutput("a", "one")))
+            .await().indefinitely();
+
+        assertEquals(1, writes.size());
+        assertEquals("a.out", writes.getFirst().objectKey());
+        assertEquals("one", new String(writes.getFirst().bytes(), StandardCharsets.UTF_8));
+
+        StreamingRecordingProvider streamingProvider = new StreamingRecordingProvider();
+        ObjectPublishRunner streamingRunner = new ObjectPublishRunner(
+            config(target(false), StreamingTestMapper.class.getName()),
+            new ObjectTargetRegistry(List.of(streamingProvider)),
+            ObjectPublishTelemetry.NOOP,
+            List.of(new ExternalTestOutputAdapter()));
+
+        @SuppressWarnings("unchecked")
+        Multi<ExternalTestOutput> streamed = (Multi<ExternalTestOutput>) streamingRunner.publish(
+            Multi.createFrom().items(new ExternalTestOutput("b", "two")));
+        List<ExternalTestOutput> emitted = streamed.collect().asList().await().indefinitely();
+
+        assertEquals(List.of(new ExternalTestOutput("b", "two")), emitted);
+        assertEquals(List.of("b.out"), streamingProvider.sessions.keySet().stream().toList());
+        assertEquals("two\n", streamingProvider.sessions.get("b.out").body());
+    }
+
+    @Test
     void publishItemsSkipsEmptyOutput() {
         List<ObjectWriteRequest> writes = new ArrayList<>();
         ObjectPublishRunner runner = new ObjectPublishRunner(
@@ -174,7 +208,8 @@ class ObjectPublishRunnerTest {
             ObjectTargetProvider.class,
             ObjectWriteSession.class,
             StreamingObjectPublishMapper.class,
-            ObjectPublishGroupRenderer.class);
+            ObjectPublishGroupRenderer.class,
+            TerminalOutputAdapter.class);
 
         for (Class<?> spiType : spiTypes) {
             assertFalse(Arrays.stream(spiType.getMethods())
@@ -279,6 +314,22 @@ class ObjectPublishRunnerTest {
     }
 
     record TestOutput(String group, String value) {
+    }
+
+    record ExternalTestOutput(String group, String value) {
+    }
+
+    private static final class ExternalTestOutputAdapter implements TerminalOutputAdapter {
+        @Override
+        public Class<?> domainType() {
+            return TestOutput.class;
+        }
+
+        @Override
+        public Object toDomain(Object item) {
+            ExternalTestOutput external = (ExternalTestOutput) item;
+            return new TestOutput(external.group(), external.value());
+        }
     }
 
     private static final class RecordingProvider implements ObjectTargetProvider {

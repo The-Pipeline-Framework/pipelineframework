@@ -32,7 +32,7 @@ import lombok.Value;
 @Value
 @Builder
 @JsonDeserialize(builder = CsvPaymentsOutputFileDto.CsvPaymentsInputFileDtoBuilder.class)
-@Deprecated(forRemoval = false)
+@Deprecated(since = "26.6.2", forRemoval = true)
 public class CsvPaymentsOutputFileDto {
   UUID id;
   Path filepath;

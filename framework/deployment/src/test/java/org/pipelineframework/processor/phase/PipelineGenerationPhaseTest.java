@@ -257,12 +257,13 @@ class PipelineGenerationPhaseTest {
         org.pipelineframework.processor.PipelineCompilationContext context =
             new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
 
-        com.squareup.javapoet.ClassName keyGenerator =
-            (com.squareup.javapoet.ClassName) method.invoke(phase, context);
+        @SuppressWarnings("unchecked")
+        java.util.Optional<com.squareup.javapoet.ClassName> keyGenerator =
+            (java.util.Optional<com.squareup.javapoet.ClassName>) method.invoke(phase, context);
 
-        assertNotNull(keyGenerator);
-        assertEquals("CustomKeyGenerator", keyGenerator.simpleName());
-        assertEquals("com.example", keyGenerator.packageName());
+        assertTrue(keyGenerator.isPresent());
+        assertEquals("CustomKeyGenerator", keyGenerator.orElseThrow().simpleName());
+        assertEquals("com.example", keyGenerator.orElseThrow().packageName());
     }
 
     @Test
@@ -278,10 +279,11 @@ class PipelineGenerationPhaseTest {
         org.pipelineframework.processor.PipelineCompilationContext context =
             new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
 
-        com.squareup.javapoet.ClassName keyGenerator =
-            (com.squareup.javapoet.ClassName) method.invoke(phase, context);
+        @SuppressWarnings("unchecked")
+        java.util.Optional<com.squareup.javapoet.ClassName> keyGenerator =
+            (java.util.Optional<com.squareup.javapoet.ClassName>) method.invoke(phase, context);
 
-        assertNull(keyGenerator);
+        assertTrue(keyGenerator.isEmpty());
     }
 
     @Test
