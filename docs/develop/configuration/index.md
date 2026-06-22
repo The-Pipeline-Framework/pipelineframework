@@ -14,7 +14,7 @@ Use this guide to choose the right configuration surface first. Use [All Setting
 | --- | --- |
 | Generated artifacts, annotation processor options, REST path overrides | [Build-Time Settings](/develop/configuration/build-time) |
 | Runtime execution, clients, telemetry, health, in-flight probe | [Runtime Settings](/develop/configuration/runtime) |
-| Await, queue-async, checkpoint handoff, background execution | [Await and Checkpoint Settings](/develop/configuration/await-and-checkpoint) |
+| Await, command steps, queue-async, checkpoint handoff, background execution | [Await, Command, and Checkpoint Settings](/develop/configuration/await-and-checkpoint) |
 | REST, gRPC, LOCAL transport modes; `FUNCTION` platform and generated entry points | [Transport and Platform Settings](/develop/configuration/transport-and-platform) |
 | Persistence, caching, materialization, reject sinks | [Providers and Plugins](/develop/configuration/providers-and-plugins) |
 | Replay Viewer URL/query parameter behavior | [Replay Viewer Parameters](/develop/configuration/replay-viewer-parameters) |

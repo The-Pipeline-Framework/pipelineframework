@@ -145,6 +145,29 @@ Await signal:
 
 Await execution logs include the parked await unit when a `QUEUE_ASYNC` execution waits or resumes. Replay and trace events expose await unit lifecycle transitions, including dispatch, waiting, item completion, unit completion, resume release, and terminal timeout/failure states. The metrics surface intentionally remains limited to dropped-completion counting plus provider-native backlog/latency signals.
 
+Command signal:
+
+- command steps participate in normal `tpf.step.*` metrics and `tpf.step` spans,
+- effect lifecycle state is recorded in the configured `CommandEffectStore`,
+- provider backlog, throttling, and external latency should come from the provider connector or platform telemetry.
+
+Replay topology marks command steps with `renderRole: "command"` and `actorKind` equal to the command name. That topology signal is for inspection and playback; it is not a replacement for provider-native command metrics.
+
+Command step SLO examples:
+
+| SLO | Primary signal | Example objective |
+| --- | --- | --- |
+| Command effect completion | command effect store status | 99.9% of command effects reach `SUCCEEDED` within 5 minutes. |
+| Terminal command failure budget | command effect store `DLQ` status | Fewer than 0.1% of command effects enter terminal DLQ over 30 days. |
+| Command step latency | `tpf.step` latency for the command step | p95 under the service target for the provider, such as 2 seconds for search indexing. |
+| Replay duplicate safety | effect store plus connector/provider telemetry | `RETURN_RECORDED` duplicates return stored output with zero extra provider writes. |
+| Provider health | connector or provider metrics | Provider throttling and backlog stay below the connector's retry budget. |
+
+For a Search/OpenSearch indexing command, use the command effect store to count `SUCCEEDED`,
+`FAILED_RETRYABLE`, and `DLQ` effects by command name. Use the `Write Search Index Document`
+step span for pipeline latency, and use OpenSearch client or cluster metrics for provider latency,
+throttling, and indexing failures.
+
 Backlog signal note:
 
 1. TPF emits `tpf.step.reject.total` for reject throughput.

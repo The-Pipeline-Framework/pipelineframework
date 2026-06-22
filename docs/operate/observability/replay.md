@@ -37,6 +37,8 @@ It is emitted by the framework replay exporter and contains:
 
 Replay JSON is the supported offline input for the TPF replay viewer.
 
+Command steps are included in the topology as authored pipeline nodes with `renderRole: "command"` and `actorKind` set to the command name. This keeps managed external effects visible in playback even when the connector hides provider details such as endpoint, credentials, index name, or SDK configuration.
+
 ## Live versus offline
 
 ### Live
@@ -88,6 +90,19 @@ TPF emits:
 Replay JSON is written from the same runtime semantics by the framework replay exporter.
 
 Await boundaries park the owning `QUEUE_ASYNC` execution on a durable await unit and resume from that unit after completion admission. Replay events include await unit ids, execution ids, interaction ids, step ids, unit status, and expected/completed item counts where the runtime knows them. For operations, see [Await Boundary Operations](/operate/await-boundaries); for the implementation model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
+
+Command telemetry has two layers:
+
+1. the pipeline layer, where the command appears in `tpf.step` spans, step metrics, and replay topology like other authored steps;
+2. the effect layer, where the command effect store records pending, dispatching, succeeded, retryable failure, or terminal DLQ state for the command id.
+
+That split is intentional. The step span shows where the pipeline spent time. The effect record shows whether the external effect was recorded, replayed, retried, or dead-lettered. Use provider telemetry for external backlog and provider-side latency.
+
+Example command replay checks:
+
+- The topology contains `renderRole: "command"` for the command step.
+- `actorKind` is the authored command name, such as `opensearch-index-document`.
+- For `RETURN_RECORDED`, a replayed duplicate should return the recorded output and should not require another provider write.
 
 ## Replay exporter configuration
 

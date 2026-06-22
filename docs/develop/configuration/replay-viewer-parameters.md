@@ -11,4 +11,4 @@ The replay viewer surfaces that subset in its `Run parameters` pane. The initial
 - retry-amplification guardrail settings
 - item-reject sink provider
 
-The full key catalog still lives in the build configuration reference. Replay export does not mirror arbitrary application configuration or secrets into the artifact.
+The full key reference still lives in the build configuration reference. Replay export does not mirror arbitrary application configuration or secrets into the artifact.

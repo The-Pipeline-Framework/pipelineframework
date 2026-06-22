@@ -145,6 +145,7 @@ const mainSidebar = [
                     {text: 'Operator Libraries', link: '/develop/extension/operator-libraries'},
                     {text: 'Client Steps', link: '/develop/extension/client-steps'},
                     {text: 'Orchestrator Runtime Extensions', link: '/develop/extension/orchestrator-runtime'},
+                    {text: 'Command Connectors', link: '/develop/extension/command-connectors'},
                     {text: 'Reactive Services', link: '/develop/extension/reactive-services'},
                     {text: 'REST Resources', link: '/develop/extension/rest-resources'}
                 ]
@@ -186,6 +187,7 @@ const mainSidebar = [
                     {text: 'Overview', link: '/deploy/orchestrator-runtime/'},
                     {text: 'Queue-Async Runtime', link: '/deploy/orchestrator-runtime/queue-async'},
                     {text: 'Checkpoint Handoff', link: '/deploy/orchestrator-runtime/checkpoint-handoff'},
+                    {text: 'Command Steps', link: '/deploy/orchestrator-runtime/command'},
                     {text: 'Await Runtime Setup', link: '/deploy/orchestrator-runtime/await'}
                 ]
             },

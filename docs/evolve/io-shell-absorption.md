@@ -301,7 +301,7 @@ Estimated effort:
 
 - Current first-class MVP: medium-large, covering DSL parsing, generated query client step, first-party JPA connector runtime, in-memory capture store, and captured replay semantics.
 - Durable production stores beyond memory: medium per store.
-- Provider-specific query catalogs/connectors: medium per provider family.
+- Provider-specific query connectors: medium per provider family.
 - Query observability and replay tooling polish: medium.
 
 MCP-friendliness:
@@ -373,7 +373,7 @@ Estimated effort:
 MCP-friendliness:
 
 - High. Agents can generate provider-specific job specs from intent, then bind request/result DTOs.
-- The capability benefits from a provider catalog, because users should not hand-author every provider's status and terminal states.
+- The capability benefits from provider templates, because users should not hand-author every provider's status and terminal states.
 
 Third-party integration priorities:
 
@@ -437,6 +437,8 @@ This proof separates three concerns that are easy to collapse accidentally:
 The deterministic external id and command id derive from `docId + batchIndex + vectorVersion + vectorHash`, with the command name included to avoid cross-command collisions. The write result records `commandId`, `externalId`, `indexName`, `resultStatus`, `createdOrUpdated`, and `recordedDuplicate`.
 
 This proof indexes text/hash metadata only. It should not be described as vector-search support until Search carries actual vector arrays.
+
+Future command connector catalog: promote OpenSearch first because it already demonstrates typed command input/output, deterministic external identity, result recording, duplicate replay, and provider failure mapping. Email delivery is a strong second candidate after the command result model settles; SMTP or AWS SES are better first baselines than Gmail because they represent service-oriented delivery without starting from user-mailbox OAuth. A connector belongs here only when TPF semantics remove effect logging, duplicate suppression, retry/DLQ, replay, or observability code that application teams would otherwise write.
 
 Examples and inspiration:
 
@@ -541,4 +543,4 @@ The adoption wedge should stay narrow:
 4. Treat idempotent commands/outbox as a separate reliability primitive with strong safety language.
 5. Use object ingest as a practical example path that connects source handling, materialization, reject sinks, replay, and background execution.
 
-Do not build a broad connector catalog before these semantics are clear. A connector without replay, identity, idempotency, or continuation semantics is usually just ordinary Java/Quarkus integration code.
+Do not broaden provider packaging before these semantics are clear. A connector without replay, identity, idempotency, or continuation semantics is usually just ordinary Java/Quarkus integration code.
