@@ -127,6 +127,12 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .addAnnotation(inject)
             .build();
 
+        FieldSpec objectIngestTelemetryField = FieldSpec.builder(
+                ParameterizedTypeName.get(instance, objectIngestTelemetry),
+                "objectIngestTelemetry")
+            .addAnnotation(inject)
+            .build();
+
         FieldSpec inputDeserializerField = FieldSpec.builder(pipelineInputDeserializer, "inputDeserializer")
             .addAnnotation(inject)
             .build();
@@ -293,7 +299,9 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 pipelineExecutionService.awaitStartupHealth($T.ofMinutes(2));
                 java.util.Optional<$T> maybeRunner = $T.loadFromDefaultConfig(
                     (input, tenantId, idempotencyKey) -> pipelineExecutionService.executePipelineAsync(input, tenantId, idempotencyKey),
-                    $T.NOOP);
+                    objectIngestTelemetry != null && objectIngestTelemetry.isResolvable()
+                        ? objectIngestTelemetry.get()
+                        : $T.NOOP);
                 if (maybeRunner.isEmpty()) {
                     System.err.println("Object Ingest is not configured.");
                     return $T.ExitCode.USAGE;
@@ -486,6 +494,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .addField(pipelineExecutionServiceField)
             .addField(orchestratorConfigField)
             .addField(meterRegistryField)
+            .addField(objectIngestTelemetryField)
             .addField(inputDeserializerField)
             .addMethod(mainMethod)
             .addMethod(runMethod)

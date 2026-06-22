@@ -3,6 +3,8 @@ package org.pipelineframework.objectpublish;
 import java.util.List;
 import java.util.Objects;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 
@@ -11,6 +13,9 @@ import io.smallrye.mutiny.Uni;
  */
 @ApplicationScoped
 public class ObjectPublishCompletionService {
+    @Inject
+    Instance<ObjectPublishTelemetry> telemetry;
+
     private volatile ObjectPublishRunner runner;
 
     public Uni<Void> publishIfConfigured(List<?> outputItems) {
@@ -30,7 +35,8 @@ public class ObjectPublishCompletionService {
             active = runner;
             if (active == null) {
                 active = Objects.requireNonNull(
-                    ObjectPublishRunner.loadFromDefaultConfig(),
+                    ObjectPublishRunner.loadFromDefaultConfig(
+                        telemetry != null && telemetry.isResolvable() ? telemetry.get() : ObjectPublishTelemetry.NOOP),
                     "ObjectPublishRunner.loadFromDefaultConfig() must not return null");
                 runner = active;
             }

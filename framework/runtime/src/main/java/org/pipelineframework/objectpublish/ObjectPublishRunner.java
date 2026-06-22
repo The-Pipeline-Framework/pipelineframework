@@ -80,12 +80,16 @@ public final class ObjectPublishRunner {
     }
 
     public static ObjectPublishRunner loadFromDefaultConfig() {
+        return loadFromDefaultConfig(ObjectPublishTelemetry.NOOP);
+    }
+
+    public static ObjectPublishRunner loadFromDefaultConfig(ObjectPublishTelemetry telemetry) {
         Optional<Path> configPath = locateConfig();
         if (configPath.isEmpty()) {
             return disabled();
         }
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath.get());
-        return new ObjectPublishRunner(config, ObjectTargetRegistry.load(), ObjectPublishTelemetry.NOOP);
+        return new ObjectPublishRunner(config, ObjectTargetRegistry.load(), telemetry);
     }
 
     public boolean enabled() {

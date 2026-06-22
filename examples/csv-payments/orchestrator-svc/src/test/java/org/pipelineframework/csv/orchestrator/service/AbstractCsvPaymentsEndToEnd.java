@@ -654,6 +654,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private static void configureObservabilityContainerEnv(Map<String, String> env) {
+        configureProviderOverrideEnv(env);
         if (TEMPO_VERIFICATION_ACTIVE) {
             configureTempoEnv(env, lgtmCollectorContainerEndpoint());
             return;
@@ -662,11 +663,31 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private static void configureObservabilityProcessEnv(Map<String, String> env) {
+        configureProviderOverrideEnv(env);
         if (TEMPO_VERIFICATION_ACTIVE) {
             configureTempoEnv(env, lgtmCollectorHostEndpoint());
             return;
         }
         configureReplayCaptureEnv(env, REPLAY_CAPTURE_DIR.toAbsolutePath().toString());
+    }
+
+    private static void configureProviderOverrideEnv(Map<String, String> env) {
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.permits-per-second",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_PERMITS_PER_SECOND");
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.timeout-millis",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_TIMEOUT_MILLIS");
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.provider-timeout-probability",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_PROVIDER_TIMEOUT_PROBABILITY");
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.provider-reject-probability",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_PROVIDER_REJECT_PROBABILITY");
     }
 
     private static void configureReplayCaptureEnv(Map<String, String> env, String replayCapturePath) {
@@ -689,22 +710,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
         env.put("PIPELINE_TELEMETRY_REPLAY_ENABLED", "true");
         env.put("PIPELINE_TELEMETRY_REPLAY_EXPORTER", "file");
         env.put("PIPELINE_TELEMETRY_REPLAY_FILE_PATH", replayCapturePath);
-        putOptionalEnvOverride(
-                env,
-                "csv-payments.payment-provider.permits-per-second",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_PERMITS_PER_SECOND");
-        putOptionalEnvOverride(
-                env,
-                "csv-payments.payment-provider.timeout-millis",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_TIMEOUT_MILLIS");
-        putOptionalEnvOverride(
-                env,
-                "csv-payments.payment-provider.provider-timeout-probability",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_PROVIDER_TIMEOUT_PROBABILITY");
-        putOptionalEnvOverride(
-                env,
-                "csv-payments.payment-provider.provider-reject-probability",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_PROVIDER_REJECT_PROBABILITY");
     }
 
     private static void configureTempoEnv(Map<String, String> env, String otlpEndpoint) {
@@ -726,14 +731,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
         env.put("PIPELINE_TELEMETRY_TRACING_ENABLED", "true");
         env.put("PIPELINE_TELEMETRY_TRACING_PER_ITEM", "true");
         env.put("PIPELINE_TELEMETRY_METRICS_ENABLED", "false");
-        putOptionalEnvOverride(
-                env,
-                "csv-payments.payment-provider.permits-per-second",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_PERMITS_PER_SECOND");
-        putOptionalEnvOverride(
-                env,
-                "csv-payments.payment-provider.timeout-millis",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_TIMEOUT_MILLIS");
     }
 
     private static String lgtmCollectorContainerEndpoint() {
@@ -2482,6 +2479,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertReplayStepEvents(replayDocument, "ProcessPaymentStatus");
         assertReplayStepEvents(replayDocument, "PersistencePaymentRecordSideEffect");
         assertReplayStepEvents(replayDocument, "PersistencePaymentOutputSideEffect");
+        assertReplayStepEvents(replayDocument, "ObjectIngest");
+        assertReplayStepEvents(replayDocument, "ObjectPublish");
+        assertReplayEvent(replayDocument, "object_ingest_submitted");
+        assertReplayEvent(replayDocument, "object_publish_published");
         assertNoReplayStepEvents(replayDocument, "ProcessFolder");
         assertNoReplayStepEvents(replayDocument, "ProcessCsvPaymentsOutputFile");
         assertNoReplayStepEvents(replayDocument, "PersistenceCsvPaymentsOutputFileSideEffect");
@@ -2508,7 +2509,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         "store".equals(transition.relationKind())),
                 "Expected store transitions in merged replay topology.");
         assertReplayLifecycleEvents(replayDocument);
-        assertItemizedAwaitContinuationsStartBeforeUnitCompletes(replayDocument);
+        assertItemizedAwaitContinuationsStartAfterExecutionWaits(replayDocument);
     }
 
     private void assertReplayLifecycleEvents(PipelineReplayDocument replayDocument) {
@@ -2550,7 +2551,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "Expected await lifecycle events to include expected item count once dispatch size is known.");
     }
 
-    private void assertItemizedAwaitContinuationsStartBeforeUnitCompletes(PipelineReplayDocument replayDocument) {
+    private void assertItemizedAwaitContinuationsStartAfterExecutionWaits(PipelineReplayDocument replayDocument) {
         Comparator<PipelineExecutionEvent> playbackOrder = Comparator
                 .comparingDouble(AbstractCsvPaymentsEndToEnd::playbackTimeForEvent)
                 .thenComparingLong(event -> event.sequence() == null ? Long.MAX_VALUE : event.sequence());
@@ -2558,13 +2559,20 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 .filter(event -> "ProcessPaymentStatus".equals(event.step()))
                 .min(playbackOrder)
                 .orElseThrow(() -> new AssertionError("Expected ProcessPaymentStatus replay events."));
-        PipelineExecutionEvent awaitUnitCompletedEvent = replayDocument.events().stream()
-                .filter(event -> AWAIT_UNIT_COMPLETED.equals(event.event()))
+        PipelineExecutionEvent awaitExecutionWaitingEvent = replayDocument.events().stream()
+                .filter(event -> AWAIT_EXECUTION_WAITING.equals(event.event()))
                 .min(playbackOrder)
-                .orElseThrow(() -> new AssertionError("Expected await_unit_completed replay events."));
+                .orElseThrow(() -> new AssertionError("Expected await_execution_waiting replay events."));
+        PipelineExecutionEvent awaitUnitDispatchCompleteEvent = replayDocument.events().stream()
+                .filter(event -> AWAIT_UNIT_DISPATCH_COMPLETE.equals(event.event()))
+                .min(playbackOrder)
+                .orElseThrow(() -> new AssertionError("Expected await_unit_dispatch_complete replay events."));
         assertTrue(
-                playbackOrder.compare(firstPaymentStatusEvent, awaitUnitCompletedEvent) < 0,
-                "Expected ONE_TO_ONE await item continuations to reach ProcessPaymentStatus before the full await unit completes.");
+                playbackOrder.compare(awaitExecutionWaitingEvent, firstPaymentStatusEvent) < 0,
+                "Expected ONE_TO_ONE await item continuations to start only after the parent execution is durably waiting.");
+        assertTrue(
+                playbackOrder.compare(awaitUnitDispatchCompleteEvent, firstPaymentStatusEvent) < 0,
+                "Expected ONE_TO_ONE await item continuations to start only after await item dispatch completes.");
     }
 
     private void assertReplayEvent(PipelineReplayDocument replayDocument, String eventName) {

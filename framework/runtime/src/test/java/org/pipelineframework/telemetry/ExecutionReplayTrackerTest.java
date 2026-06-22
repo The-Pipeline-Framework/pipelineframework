@@ -131,19 +131,67 @@ class ExecutionReplayTrackerTest {
         assertTrue(forwardStart.startTime() >= 0d);
     }
 
+    @Test
+    void connectorLifecycleEventsAreExportedAsReplayControlEvents() {
+        CollectingExporter exporter = new CollectingExporter();
+        ExecutionReplayTracker tracker = new ExecutionReplayTracker(
+            GlobalOpenTelemetry.getTracer("replay-test"),
+            exporter,
+            topology(),
+            null,
+            null);
+
+        tracker.recordConnectorEvent(
+            "ObjectIngest",
+            "ObjectIngestConnector",
+            "object_ingest_submitted",
+            "ObjectIngest",
+            "SourceA",
+            java.util.Map.of("connector", "object-ingest", "key", "payments.csv"),
+            Instant.now());
+        tracker.recordConnectorEvent(
+            "ObjectPublish",
+            "ObjectPublishConnector",
+            "object_publish_published",
+            "Merge",
+            "ObjectPublish",
+            java.util.Map.of("connector", "object-publish", "key", "payments.out"),
+            Instant.now());
+
+        PipelineExecutionEvent ingest = exporter.find("object_ingest_submitted", null);
+        assertEquals("ObjectIngest", ingest.step());
+        assertEquals("ObjectIngestConnector", ingest.service());
+        assertEquals("object-ingest", ingest.attributes().get("connector"));
+        assertEquals("payments.csv", ingest.attributes().get("key"));
+
+        PipelineExecutionEvent publish = exporter.find("object_publish_published", null);
+        assertEquals("ObjectPublish", publish.step());
+        assertEquals("ObjectPublishConnector", publish.service());
+        assertEquals("object-publish", publish.attributes().get("connector"));
+        assertEquals("payments.out", publish.attributes().get("key"));
+    }
+
     private PipelineReplayTopology topology() {
         return new PipelineReplayTopology(
             "csv-payments",
             List.of(
+                new PipelineReplayTopology.Step("object-ingest", "ObjectIngest", "ObjectIngestConnector",
+                    "one-to-one", -1, false, null, null, "object-ingest", null),
                 new PipelineReplayTopology.Step("source-a", "SourceA", "SourceAService", "one-to-one", 0, false, null, null),
                 new PipelineReplayTopology.Step("source-b", "SourceB", "SourceBService", "one-to-one", 1, false, null, null),
-                new PipelineReplayTopology.Step("merge-step", "Merge", "MergeService", "many-to-one", 2, false, null, null)
+                new PipelineReplayTopology.Step("merge-step", "Merge", "MergeService", "many-to-one", 2, false, null, null),
+                new PipelineReplayTopology.Step("object-publish", "ObjectPublish", "ObjectPublishConnector",
+                    "one-to-one", 3, false, null, null, "object-publish", null)
             ),
             List.of(
+                new PipelineReplayTopology.Transition("ingest->a", "object-ingest", "source-a", "ObjectIngest", "SourceA",
+                    "ObjectIngestConnector", "SourceAService", "one-to-one"),
                 new PipelineReplayTopology.Transition("a->merge", "source-a", "merge-step", "SourceA", "Merge",
                     "SourceAService", "MergeService", "one-to-one"),
                 new PipelineReplayTopology.Transition("b->merge", "source-b", "merge-step", "SourceB", "Merge",
-                    "SourceBService", "MergeService", "one-to-one")
+                    "SourceBService", "MergeService", "one-to-one"),
+                new PipelineReplayTopology.Transition("merge->publish", "merge-step", "object-publish", "Merge", "ObjectPublish",
+                    "MergeService", "ObjectPublishConnector", "one-to-one")
             ));
     }
 
@@ -155,9 +203,20 @@ class ExecutionReplayTrackerTest {
             events.add(event);
         }
 
+        @Override
+        public void emitControlEvent(
+            String pipeline,
+            Instant occurredAt,
+            PipelineReplayTopology topology,
+            PipelineExecutionEvent event
+        ) {
+            events.add(event);
+        }
+
         private PipelineExecutionEvent find(String eventName, String spanId) {
             return events.stream()
-                .filter(event -> eventName.equals(event.event()) && spanId.equals(event.spanId()))
+                .filter(event -> eventName.equals(event.event())
+                    && (spanId == null || spanId.equals(event.spanId())))
                 .findFirst()
                 .orElseThrow();
         }
