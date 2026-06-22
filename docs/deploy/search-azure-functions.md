@@ -18,8 +18,8 @@ Azure Functions support for `examples/search` is preview, manual, and optional f
 ```bash
 ./mvnw -f examples/search/pom.xml \
   -pl orchestrator-svc -am \
-  -Dpipeline.platform=FUNCTION \
-  -Dpipeline.transport=REST \
+  -Dtpf.build.platform=FUNCTION \
+  -Dtpf.build.transport=REST \
   -Dpipeline.rest.naming.strategy=RESOURCEFUL \
   -DskipTests compile
 ```
@@ -29,8 +29,8 @@ Azure Functions support for `examples/search` is preview, manual, and optional f
 ```bash
 ./mvnw -f examples/search/pom.xml \
   -pl orchestrator-svc \
-  -Dpipeline.platform=FUNCTION \
-  -Dpipeline.transport=REST \
+  -Dtpf.build.platform=FUNCTION \
+  -Dtpf.build.transport=REST \
   -Dpipeline.rest.naming.strategy=RESOURCEFUL \
   -Dtest=AzureFunctionsBootstrapSmokeTest test
 ```

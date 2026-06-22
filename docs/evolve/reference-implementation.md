@@ -7,7 +7,7 @@ TPF reference material now lives in concrete examples and focused guides rather 
 | Example | Use it for |
 | --- | --- |
 | `examples/csv-payments` | runtime layouts, topology POMs, pipeline-runtime and monolith build paths |
-| `examples/search` | function platform smoke paths, REST/function handler verification, provider-specific deployment lanes |
+| `examples/search` | function platform deployment verification, generated handlers, REST transport, and provider-specific deployment lanes |
 | `examples/checkout` | checkpoint-oriented business flow and durable handoff exploration |
 | `examples/restaurant-approval` | human approval and await-style external reality patterns |
 

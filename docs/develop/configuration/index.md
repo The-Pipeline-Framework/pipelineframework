@@ -15,7 +15,7 @@ Use this guide to choose the right configuration surface first. Use [All Setting
 | Generated artifacts, annotation processor options, REST path overrides | [Build-Time Settings](/develop/configuration/build-time) |
 | Runtime execution, clients, telemetry, health, in-flight probe | [Runtime Settings](/develop/configuration/runtime) |
 | Await, queue-async, checkpoint handoff, background execution | [Await and Checkpoint Settings](/develop/configuration/await-and-checkpoint) |
-| REST, gRPC, local, function-style entry points | [Transport and Platform Settings](/develop/configuration/transport-and-platform) |
+| REST, gRPC, LOCAL transport modes; `FUNCTION` platform and generated entry points | [Transport and Platform Settings](/develop/configuration/transport-and-platform) |
 | Persistence, caching, materialization, reject sinks | [Providers and Plugins](/develop/configuration/providers-and-plugins) |
 | Replay Viewer URL/query parameter behavior | [Replay Viewer Parameters](/develop/configuration/replay-viewer-parameters) |
 | Lambda-specific configuration slice | [Lambda-Focused Configuration](/develop/configuration/lambda-focused) |

@@ -19,7 +19,6 @@ The mapper is the important boundary. It prevents external provider shape from l
 - the operator is reused across applications,
 - the operator model differs from the application domain model,
 - the operator may later move from local to remote transport,
-- pair-accurate mapper selection matters for build-time validation.
+- pair-accurate mapper selection enables proper mapper pair validation.
 
 For implementation details, see [Operator Delegation Reference](/develop/extension/operator-delegation-reference#option-2--use-domain-types).
-

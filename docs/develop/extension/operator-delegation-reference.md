@@ -152,7 +152,7 @@ Requirements:
 
 ### Option 2 — Use Domain Types
 
-When you want to abstract away operator types using an operator mapper:
+When delegating with separate domain types:
 
 ```yaml
 steps:

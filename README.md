@@ -197,7 +197,7 @@ YAML is the canonical path for current advanced features such as await boundarie
 - [`plugins`](plugins/) contains foundational cross-cutting capabilities such as persistence and cache.
 - [`docs`](docs/) contains the VitePress documentation site.
 - [`web-ui`](web-ui/) contains the Canvas/web UI.
-- [`tpf-mcp-bridge`](https://github.com/The-Pipeline-Framework/tpf-mcp-bridge) contains the MCP bridge and template-generation snapshot. `framework/deployment` remains the schema authority and exports `META-INF/pipeline/pipeline-template-schema.json` for that generator. See [MCP and template generation](https://pipelineframework.org/develop/mcp-template-generation).
+- [`tpf-mcp-bridge`](https://github.com/The-Pipeline-Framework/tpf-mcp-bridge) hosts the MCP bridge and template-generation snapshot, while `framework/deployment` remains the schema authority through `META-INF/pipeline/pipeline-template-schema.json`; the [MCP and template generation guide](https://pipelineframework.org/develop/mcp-template-generation) explains how the two repositories stay aligned.
 - [`ai-sdk`](ai-sdk/) contains the standalone Java SDK used for AI/delegation and transport exercises.
 
 ## Build and Validation

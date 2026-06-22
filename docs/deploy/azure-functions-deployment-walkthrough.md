@@ -20,8 +20,8 @@ Build the Search orchestrator with the function platform settings:
 ```bash
 ./mvnw -f examples/search/pom.xml \
   -pl orchestrator-svc -am \
-  -Dpipeline.platform=FUNCTION \
-  -Dpipeline.transport=REST \
+  -Dtpf.build.platform=FUNCTION \
+  -Dtpf.build.transport=REST \
   -Dpipeline.rest.naming.strategy=RESOURCEFUL \
   -DskipTests package
 ```
@@ -35,4 +35,3 @@ The deployment walkthrough uses Terraform to provision Azure resources, then dep
 Keep credentials and resource names out of committed configuration. Store CI credentials in GitHub Secrets and keep local values in local-only shell or Terraform variable files.
 
 For detailed command history and the original long-form notes, see [Search Azure Functions Reference](/deploy/search-azure-functions-reference#cloud-deployment-with-terraform).
-

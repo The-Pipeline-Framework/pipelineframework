@@ -10,7 +10,7 @@ This page is the current roadmap front door. The older detailed notebook is arch
 - Keep unhappy business paths explicit instead of encoding them as operational failures.
 - Preserve backpressure when pipelines are chained synchronously.
 - Treat durable queue/HA delivery as a separate compatibility epic from synchronous business correctness.
-- Keep transport-contract parity visible across REST, gRPC, function, and protobuf-over-HTTP paths.
+- Keep transport-contract parity visible across REST, gRPC, LOCAL, and protobuf-over-HTTP paths, while treating `FUNCTION` as a platform mode that generates function entry points and provider-specific handlers.
 
 ## Current Reading Path
 

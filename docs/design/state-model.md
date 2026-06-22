@@ -13,12 +13,12 @@ TPF uses several state surfaces. They solve different problems and should not be
 
 ## Decision Path
 
-1. Need to query business data later? Use [Persistence](/design/persistence).
-2. Need to avoid recomputing a deterministic output? Use [Caching](/design/caching/).
-3. Need to carry large content safely? Use [Field Materialization](/design/materialization).
-4. Need work to survive crashes? Use [Queue-Async Runtime](/deploy/orchestrator-runtime/queue-async).
-5. Need to wait for external reality? Use [Await Boundaries](/design/await-boundaries).
-6. Need to hand off stable ownership to another pipeline? Use [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff).
+1. Query business data later? Use [Persistence](/design/persistence).
+2. Want to avoid recomputing a deterministic output? Use [Caching](/design/caching/).
+3. Carrying large content across boundaries? Use [Field Materialization](/design/materialization).
+4. Should work survive crashes? Use [Queue-Async Runtime](/deploy/orchestrator-runtime/queue-async).
+5. Waiting for external reality? Use [Await Boundaries](/design/await-boundaries).
+6. Handing off stable ownership to another pipeline? Use [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff).
 
 ## Replay Boundary
 
@@ -27,4 +27,3 @@ Replay is easier when each state surface has a single job.
 Persistence is the durable business record. Cache is an optimization and replay accelerator. Execution state is runtime bookkeeping. Await state records external waiting and completion snapshots. Checkpoint handoff records a stable boundary between two pipeline owners.
 
 When these responsibilities are mixed in application code, retries and replay become harder to reason about. Keep them explicit.
-
