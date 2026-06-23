@@ -158,9 +158,9 @@ Command effect metrics:
 
 | OpenTelemetry metric | Prometheus name | Type | Key attributes |
 | --- | --- | --- | --- |
-| `tpf.command.effect.transition.total` | `tpf_command_effect_transition_total` | counter | `tpf_command`, `tpf_command_step`, `tpf_command_status` |
-| `tpf.command.effect.duplicate.total` | `tpf_command_effect_duplicate_total` | counter | `tpf_command`, `tpf_command_step`, `tpf_command_duplicate_policy`, `tpf_command_duplicate_result` |
-| `tpf.command.effect.duration` | `tpf_command_effect_duration_*` | histogram | `tpf_command`, `tpf_command_step`, `tpf_command_status` |
+| `tpf.command.effect.transition.total` | `tpf_command_effect_transition_total` | counter | `tpf.command`, `tpf.command.step`, `tpf.command.status` |
+| `tpf.command.effect.duplicate.total` | `tpf_command_effect_duplicate_total` | counter | `tpf.command`, `tpf.command.step`, `tpf.command.duplicate_policy`, `tpf.command.duplicate_result` |
+| `tpf.command.effect.duration` | `tpf_command_effect_duration_*` | histogram | `tpf.command`, `tpf.command.step`, `tpf.command.status` |
 
 Command status values are `pending`, `dispatching`, `succeeded`, `failed_retryable`, and `dlq`.
 Duplicate result values are `returned_recorded`, `rejected`, and `in_progress`.

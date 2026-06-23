@@ -767,6 +767,11 @@ button:disabled {
   box-shadow: 0 0 14px rgb(92 200 255 / 42%);
 }
 
+.legend-node--primary {
+  background: #5cc8ff;
+  box-shadow: 0 0 14px rgb(92 200 255 / 42%);
+}
+
 .legend-node--await {
   background: #78c8ff;
   box-shadow: 0 0 14px rgb(120 200 255 / 42%);

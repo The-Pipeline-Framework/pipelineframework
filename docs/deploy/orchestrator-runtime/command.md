@@ -15,7 +15,7 @@ Use `kind: command` when the step:
 
 Good fits include search indexing, ticket creation, email submission, provider provisioning, or payment-provider commands with idempotency keys.
 
-Use a normal `ReactiveService`, operator, or generated adapter when the call is just application logic and does not need an effect record. Use [Await Runtime Setup](/deploy/orchestrator-runtime/await) when the external system completes later through a callback, broker response, or human action. Use [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff) when a completed pipeline hands work to another pipeline.
+For application logic that does not need an effect record, keep using a normal `ReactiveService`, operator, or generated adapter. If the external system completes later through a callback, broker response, or human action, configure [Await Runtime Setup](/deploy/orchestrator-runtime/await). When a completed pipeline hands work to another pipeline, model that boundary with [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff).
 
 ## YAML
 
