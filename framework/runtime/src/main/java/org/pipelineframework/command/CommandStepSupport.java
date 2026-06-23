@@ -13,6 +13,7 @@ import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.step.NonRetryableException;
+import org.pipelineframework.telemetry.PipelineTelemetry;
 
 /**
  * Runtime bridge used by generated command step beans.
@@ -28,6 +29,9 @@ public class CommandStepSupport {
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
 
+    @Inject
+    PipelineTelemetry telemetry;
+
     private Collection<CommandConnector<?, ?>> fixedConnectors;
     private Collection<CommandEffectStore> fixedStores;
 
@@ -39,9 +43,19 @@ public class CommandStepSupport {
         Collection<CommandEffectStore> stores,
         PipelineOrchestratorConfig orchestratorConfig
     ) {
+        this(connectors, stores, orchestratorConfig, null);
+    }
+
+    public CommandStepSupport(
+        Collection<CommandConnector<?, ?>> connectors,
+        Collection<CommandEffectStore> stores,
+        PipelineOrchestratorConfig orchestratorConfig,
+        PipelineTelemetry telemetry
+    ) {
         this.fixedConnectors = connectors == null ? List.of() : connectors;
         this.fixedStores = stores == null ? List.of() : stores;
         this.orchestratorConfig = orchestratorConfig;
+        this.telemetry = telemetry;
     }
 
     public <I, O> Uni<O> execute(
@@ -109,33 +123,33 @@ public class CommandStepSupport {
             CommandEffectRecord record = existing.get();
             if (record.status() == CommandEffectStatus.SUCCEEDED) {
                 if (request.descriptor().duplicatePolicy() == CommandDuplicatePolicy.FAIL) {
-                    CommandEffectMetrics.recordDuplicate(request.descriptor(), "rejected");
+                    recordDuplicate(request.descriptor(), "rejected");
                     return Uni.createFrom().failure(new NonRetryableException(
                         "Duplicate command completion for commandId " + request.commandId()));
                 }
                 @SuppressWarnings("unchecked")
                 O recorded = (O) record.output();
                 CommandRecordedDuplicateMarker.mark(recorded);
-                CommandEffectMetrics.recordDuplicate(request.descriptor(), "returned_recorded");
+                recordDuplicate(request.descriptor(), "returned_recorded");
                 return Uni.createFrom().item(recorded);
             }
             if (record.status() == CommandEffectStatus.PENDING || record.status() == CommandEffectStatus.DISPATCHING) {
-                CommandEffectMetrics.recordDuplicate(request.descriptor(), "in_progress");
+                recordDuplicate(request.descriptor(), "in_progress");
                 return Uni.createFrom().failure(new CommandInProgressException(
                     "Command already in progress for commandId " + request.commandId()));
             }
         }
         // Each effect transition records its own wall-clock time so the store can show dispatch/write duration.
-        long effectStartNanos = CommandEffectMetrics.startNanos();
+        long effectStartNanos = commandEffectStartNanos();
         return store.createPending(request, System.currentTimeMillis())
-            .invoke(ignored -> CommandEffectMetrics.recordTransition(
+            .invoke(ignored -> recordTransition(
                 request.descriptor(),
                 CommandEffectStatus.PENDING))
             .onItem().transformToUni(ignored -> store.markDispatching(
                 request.executionContext().tenantId(),
                 request.commandId(),
                 System.currentTimeMillis()))
-            .invoke(ignored -> CommandEffectMetrics.recordTransition(
+            .invoke(ignored -> recordTransition(
                 request.descriptor(),
                 CommandEffectStatus.DISPATCHING))
             .onItem().transformToUni(ignored -> connector.execute(request))
@@ -144,7 +158,7 @@ public class CommandStepSupport {
                     request.commandId(),
                     output,
                     System.currentTimeMillis())
-                .invoke(ignored -> CommandEffectMetrics.recordTerminalTransition(
+                .invoke(ignored -> recordTerminalTransition(
                     request.descriptor(),
                     CommandEffectStatus.SUCCEEDED,
                     effectStartNanos))
@@ -171,7 +185,7 @@ public class CommandStepSupport {
                 request.commandId(),
                 failure,
                 nowEpochMs)
-                .invoke(ignored -> CommandEffectMetrics.recordTerminalTransition(
+                .invoke(ignored -> recordTerminalTransition(
                     request.descriptor(),
                     CommandEffectStatus.DLQ,
                     effectStartNanos));
@@ -181,10 +195,36 @@ public class CommandStepSupport {
             request.commandId(),
             failure,
             nowEpochMs)
-            .invoke(ignored -> CommandEffectMetrics.recordTerminalTransition(
+            .invoke(ignored -> recordTerminalTransition(
                 request.descriptor(),
                 CommandEffectStatus.FAILED_RETRYABLE,
                 effectStartNanos));
+    }
+
+    private long commandEffectStartNanos() {
+        return telemetry == null ? System.nanoTime() : telemetry.commandEffectStartNanos();
+    }
+
+    private void recordTransition(CommandDescriptor descriptor, CommandEffectStatus status) {
+        if (telemetry != null) {
+            telemetry.recordCommandEffectTransition(descriptor, status);
+        }
+    }
+
+    private void recordTerminalTransition(
+        CommandDescriptor descriptor,
+        CommandEffectStatus status,
+        long effectStartNanos
+    ) {
+        if (telemetry != null) {
+            telemetry.recordCommandEffectTerminalTransition(descriptor, status, effectStartNanos);
+        }
+    }
+
+    private void recordDuplicate(CommandDescriptor descriptor, String duplicateResult) {
+        if (telemetry != null) {
+            telemetry.recordCommandEffectDuplicate(descriptor, duplicateResult);
+        }
     }
 
     private boolean isNonRetryable(Throwable failure) {

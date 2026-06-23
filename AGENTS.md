@@ -190,6 +190,7 @@ Prefer the split annotation-processor guide under `docs/guide/evolve/annotation-
 - Treat `examples/` and `ai-sdk/` as compatibility/reference surfaces, not disposable demos, when framework semantics change.
 - Keep user-facing docs (`build`/`development`/`operations`) free of internal planning terminology unless the topic is explicitly implementation-internal (`docs/guide/evolve/`).
 - Prefer enriching existing guide pages over introducing standalone “feature islands” that duplicate navigation.
+- Do not edit existing files under `docs/versions/` during feature or documentation work; they are historical release snapshots. Only create a new version snapshot through the documented release snapshot process when cutting a release.
 - Do not add “audience declaration” sections in user-facing docs. Make docs audience-fit by placing content in the right guide area:
   - `development`: implementation and usage
   - `operations`: observability and response

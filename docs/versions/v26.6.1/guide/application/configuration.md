@@ -8,7 +8,7 @@ This page maps the most-used configuration entry points and where to manage them
 
 ## Primary References
 
-- [Configuration Reference](/versions/v26.6.1/guide/build/configuration/) for full build-time and runtime key reference
+- [Configuration Reference](/versions/v26.6.1/guide/build/configuration/) for full build-time and runtime key catalog
 - [Performance](/versions/v26.6.1/guide/development/performance) for throughput/latency tuning
 
 ## Replay Viewer Parameter Snapshot
@@ -24,7 +24,7 @@ The replay viewer surfaces that subset in its `Run parameters` pane. The initial
 - retry-amplification guardrail settings
 - item-reject sink provider
 
-The full key reference still lives in the build configuration reference. Replay export does not mirror arbitrary application configuration or secrets into the artifact.
+The full key catalog still lives in the build configuration reference. Replay export does not mirror arbitrary application configuration or secrets into the artifact.
 
 ## Lambda-Focused Configuration
 

@@ -8,7 +8,7 @@ This page maps the most-used configuration entry points and where to manage them
 
 ## Primary References
 
-- [Configuration Reference](/versions/v26.5.1/guide/build/configuration/) for full build-time and runtime key reference
+- [Configuration Reference](/versions/v26.5.1/guide/build/configuration/) for full build-time and runtime key catalog
 - [Performance](/versions/v26.5.1/guide/development/performance) for throughput/latency tuning
 
 ## Lambda-Focused Configuration

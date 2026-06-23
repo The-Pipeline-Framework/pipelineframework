@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -65,6 +66,8 @@ import io.smallrye.mutiny.Uni;
 import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineStepConfig;
 import org.pipelineframework.config.pipeline.PipelineTelemetryResourceLoader;
+import org.pipelineframework.command.CommandDescriptor;
+import org.pipelineframework.command.CommandEffectStatus;
 
 /**
  * Records pipeline-level spans and metrics for step execution.
@@ -82,6 +85,13 @@ public class PipelineTelemetry {
     private static final AttributeKey<String> STEP_CLASS = AttributeKey.stringKey("tpf.step.class");
     private static final AttributeKey<String> STEP_PARENT = AttributeKey.stringKey("tpf.step.parent");
     private static final AttributeKey<String> ITEM_TYPE = AttributeKey.stringKey("tpf.item.type");
+    private static final AttributeKey<String> COMMAND = AttributeKey.stringKey("tpf.command");
+    private static final AttributeKey<String> COMMAND_STEP = AttributeKey.stringKey("tpf.command.step");
+    private static final AttributeKey<String> COMMAND_STATUS = AttributeKey.stringKey("tpf.command.status");
+    private static final AttributeKey<String> COMMAND_DUPLICATE_POLICY =
+        AttributeKey.stringKey("tpf.command.duplicate_policy");
+    private static final AttributeKey<String> COMMAND_DUPLICATE_RESULT =
+        AttributeKey.stringKey("tpf.command.duplicate_result");
     private static final AttributeKey<Long> PARALLEL_MAX_IN_FLIGHT =
         AttributeKey.longKey("tpf.parallel.max_in_flight");
     private static final AttributeKey<Double> PARALLEL_AVG_IN_FLIGHT =
@@ -128,9 +138,12 @@ public class PipelineTelemetry {
     private final LongCounter stepRetryCounter;
     private final LongCounter transitionCounter;
     private final LongCounter killSwitchCounter;
+    private final LongCounter commandEffectTransitionCounter;
+    private final LongCounter commandEffectDuplicateCounter;
     private final DoubleHistogram pipelineRunDuration;
     private final DoubleHistogram stepDuration;
     private final DoubleHistogram transitionLatency;
+    private final DoubleHistogram commandEffectDuration;
     private final ConcurrentMap<String, AtomicLong> inflightByStep;
     private final ConcurrentMap<String, LongAdder> retryByStep;
     private final AtomicLong maxConcurrency;
@@ -289,6 +302,14 @@ public class PipelineTelemetry {
                 .setDescription("Pipeline kill switch triggers")
                 .setUnit("1")
                 .build();
+            this.commandEffectTransitionCounter = meter.counterBuilder("tpf.command.effect.transition.total")
+                .setDescription("Total command effect lifecycle transitions recorded by TPF")
+                .setUnit("events")
+                .build();
+            this.commandEffectDuplicateCounter = meter.counterBuilder("tpf.command.effect.duplicate.total")
+                .setDescription("Total duplicate command ids resolved by TPF duplicate policy")
+                .setUnit("events")
+                .build();
             this.pipelineRunDuration = meter.histogramBuilder("tpf.pipeline.run.duration")
                 .setDescription("Pipeline run duration")
                 .setUnit("ms")
@@ -299,6 +320,10 @@ public class PipelineTelemetry {
                 .build();
             this.transitionLatency = meter.histogramBuilder("tpf.transition.latency")
                 .setDescription("Pipeline transition latency")
+                .setUnit("ms")
+                .build();
+            this.commandEffectDuration = meter.histogramBuilder("tpf.command.effect.duration")
+                .setDescription("Command effect duration from pending record creation to terminal effect state")
                 .setUnit("ms")
                 .build();
             meter.gaugeBuilder("tpf.step.inflight")
@@ -324,9 +349,12 @@ public class PipelineTelemetry {
             this.stepRetryCounter = null;
             this.transitionCounter = null;
             this.killSwitchCounter = null;
+            this.commandEffectTransitionCounter = null;
+            this.commandEffectDuplicateCounter = null;
             this.pipelineRunDuration = null;
             this.stepDuration = null;
             this.transitionLatency = null;
+            this.commandEffectDuration = null;
         }
         this.replayTracker = this.replayEnabled
             ? new ExecutionReplayTracker(tracer, replayExporter, replayTopology, this.transitionCounter, this.transitionLatency)
@@ -753,6 +781,66 @@ public class PipelineTelemetry {
         return span;
     }
 
+    /**
+     * Capture the start time for a managed command effect.
+     *
+     * @return monotonic start timestamp
+     */
+    public long commandEffectStartNanos() {
+        return System.nanoTime();
+    }
+
+    /**
+     * Record a non-terminal command effect lifecycle transition.
+     *
+     * @param descriptor command descriptor
+     * @param status effect status
+     */
+    public void recordCommandEffectTransition(CommandDescriptor descriptor, CommandEffectStatus status) {
+        if (!metricsEnabled || descriptor == null || status == null) {
+            return;
+        }
+        commandEffectTransitionCounter.add(1, commandEffectTransitionAttributes(descriptor, status));
+    }
+
+    /**
+     * Record a terminal command effect transition and total effect duration.
+     *
+     * @param descriptor command descriptor
+     * @param status terminal effect status
+     * @param startNanos start timestamp from {@link #commandEffectStartNanos()}
+     */
+    public void recordCommandEffectTerminalTransition(
+        CommandDescriptor descriptor,
+        CommandEffectStatus status,
+        long startNanos
+    ) {
+        if (!metricsEnabled || descriptor == null || status == null) {
+            return;
+        }
+        Attributes attributes = commandEffectTransitionAttributes(descriptor, status);
+        commandEffectTransitionCounter.add(1, attributes);
+        commandEffectDuration.record(commandEffectElapsedMillis(startNanos), attributes);
+    }
+
+    /**
+     * Record command duplicate policy handling.
+     *
+     * @param descriptor command descriptor
+     * @param duplicateResult duplicate handling result
+     */
+    public void recordCommandEffectDuplicate(CommandDescriptor descriptor, String duplicateResult) {
+        if (!metricsEnabled || descriptor == null) {
+            return;
+        }
+        commandEffectDuplicateCounter.add(1, Attributes.builder()
+            .put(COMMAND, normalizeMetricValue(descriptor.command()))
+            .put(COMMAND_STEP, normalizeMetricValue(descriptor.stepId()))
+            .put(COMMAND_DUPLICATE_POLICY, descriptor.duplicatePolicy().name())
+            .put(COMMAND_DUPLICATE_RESULT, normalizeMetricValue(duplicateResult))
+            .build());
+    }
+
     private void recordStepOutcome(Class<?> stepClass, long startNanos, Throwable failure) {
         if (!metricsEnabled) {
             return;
@@ -950,6 +1038,17 @@ public class PipelineTelemetry {
         return builder.build();
     }
 
+    private Attributes commandEffectTransitionAttributes(
+        CommandDescriptor descriptor,
+        CommandEffectStatus status
+    ) {
+        return Attributes.builder()
+            .put(COMMAND, normalizeMetricValue(descriptor.command()))
+            .put(COMMAND_STEP, normalizeMetricValue(descriptor.stepId()))
+            .put(COMMAND_STATUS, status.name().toLowerCase(Locale.ROOT))
+            .build();
+    }
+
     private Attributes runAttributes(String inputKind) {
         AttributesBuilder builder = Attributes.builder()
             .put(INPUT_KIND, inputKind == null ? "unknown" : inputKind);
@@ -1118,6 +1217,20 @@ public class PipelineTelemetry {
 
     private double nanosToMillis(long startNanos) {
         return (System.nanoTime() - startNanos) / 1_000_000d;
+    }
+
+    private double commandEffectElapsedMillis(long startNanos) {
+        if (startNanos <= 0) {
+            return 0.0d;
+        }
+        return Math.max(0.0d, nanosToMillis(startNanos));
+    }
+
+    private static String normalizeMetricValue(String value) {
+        if (value == null || value.isBlank()) {
+            return "unknown";
+        }
+        return value;
     }
 
     @PreDestroy

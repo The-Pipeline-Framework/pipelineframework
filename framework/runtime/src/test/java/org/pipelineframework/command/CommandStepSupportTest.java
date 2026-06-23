@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import io.smallrye.mutiny.Uni;
@@ -24,19 +25,22 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.config.PipelineStepConfig;
 import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.step.NonRetryableException;
+import org.pipelineframework.telemetry.PipelineTelemetry;
 
 class CommandStepSupportTest {
+  private static final String TRANSITION_TOTAL = "tpf.command.effect.transition.total";
+  private static final String DUPLICATE_TOTAL = "tpf.command.effect.duplicate.total";
+  private static final String DURATION = "tpf.command.effect.duration";
+
   private final InMemoryCommandEffectStore store = new InMemoryCommandEffectStore();
   private final RecordingConnector connector = new RecordingConnector();
   private InMemoryMetricReader metricReader;
   private SdkMeterProvider meterProvider;
-  private final CommandStepSupport support = new CommandStepSupport(
-      List.of(connector),
-      List.of(store),
-      config(OrchestratorMode.QUEUE_ASYNC));
+  private CommandStepSupport support;
   private final CommandDescriptor descriptor = new CommandDescriptor(
       "ProcessWriteSearchIndexDocumentService",
       "opensearch-index-document",
@@ -57,7 +61,11 @@ class CommandStepSupportTest {
         .build();
     GlobalOpenTelemetry.resetForTest();
     GlobalOpenTelemetry.set(sdk);
-    CommandEffectMetrics.resetForTest();
+    support = new CommandStepSupport(
+        List.of(connector),
+        List.of(store),
+        config(OrchestratorMode.QUEUE_ASYNC),
+        telemetry(true));
   }
 
   @AfterEach
@@ -67,7 +75,6 @@ class CommandStepSupportTest {
       meterProvider.shutdown();
     }
     GlobalOpenTelemetry.resetForTest();
-    CommandEffectMetrics.resetForTest();
   }
 
   @Test
@@ -163,7 +170,8 @@ class CommandStepSupportTest {
     CommandStepSupport syncSupport = new CommandStepSupport(
         List.of(connector),
         List.of(store),
-        config(OrchestratorMode.SYNC));
+        config(OrchestratorMode.SYNC),
+        telemetry(true));
 
     IllegalStateException error = assertThrows(IllegalStateException.class,
         () -> syncSupport.<CommandInput, CommandOutput>execute(
@@ -181,7 +189,8 @@ class CommandStepSupportTest {
     CommandStepSupport duplicateStoreSupport = new CommandStepSupport(
         List.of(connector),
         List.of(store, new InMemoryCommandEffectStore()),
-        config(OrchestratorMode.QUEUE_ASYNC));
+        config(OrchestratorMode.QUEUE_ASYNC),
+        telemetry(true));
 
     IllegalStateException error = assertThrows(IllegalStateException.class,
         () -> duplicateStoreSupport.<CommandInput, CommandOutput>execute(
@@ -247,7 +256,7 @@ class CommandStepSupportTest {
 
   private void assertTransitionCount(String status, long expected) {
     long actual = longSumPointValue(
-        CommandEffectMetrics.TRANSITION_TOTAL,
+        TRANSITION_TOTAL,
         Map.of(
             "tpf.command", "opensearch-index-document",
             "tpf.command.step", "ProcessWriteSearchIndexDocumentService",
@@ -257,7 +266,7 @@ class CommandStepSupportTest {
 
   private void assertDuplicateCount(String duplicatePolicy, String duplicateResult, long expected) {
     long actual = longSumPointValue(
-        CommandEffectMetrics.DUPLICATE_TOTAL,
+        DUPLICATE_TOTAL,
         Map.of(
             "tpf.command", "opensearch-index-document",
             "tpf.command.step", "ProcessWriteSearchIndexDocumentService",
@@ -269,7 +278,7 @@ class CommandStepSupportTest {
   private void assertDurationCount(String status, long expected) {
     Collection<MetricData> metrics = metricReader.collectAllMetrics();
     MetricData metric = metrics.stream()
-        .filter(candidate -> CommandEffectMetrics.DURATION.equals(candidate.getName()))
+        .filter(candidate -> DURATION.equals(candidate.getName()))
         .findFirst()
         .orElseThrow();
     long actual = metric.getHistogramData().getPoints().stream()
@@ -308,6 +317,27 @@ class CommandStepSupportTest {
     PipelineOrchestratorConfig config = mock(PipelineOrchestratorConfig.class);
     when(config.mode()).thenReturn(mode);
     return config;
+  }
+
+  private PipelineTelemetry telemetry(boolean metricsEnabled) {
+    PipelineStepConfig stepConfig = mock(PipelineStepConfig.class);
+    PipelineStepConfig.TelemetryConfig telemetryConfig = mock(PipelineStepConfig.TelemetryConfig.class);
+    PipelineStepConfig.TracingConfig tracingConfig = mock(PipelineStepConfig.TracingConfig.class);
+    PipelineStepConfig.MetricsConfig metricsConfig = mock(PipelineStepConfig.MetricsConfig.class);
+    PipelineStepConfig.ReplayConfig replayConfig = mock(PipelineStepConfig.ReplayConfig.class);
+    when(stepConfig.telemetry()).thenReturn(telemetryConfig);
+    when(stepConfig.killSwitch()).thenReturn(null);
+    when(telemetryConfig.enabled()).thenReturn(true);
+    when(telemetryConfig.tracing()).thenReturn(tracingConfig);
+    when(telemetryConfig.metrics()).thenReturn(metricsConfig);
+    when(telemetryConfig.replay()).thenReturn(replayConfig);
+    when(tracingConfig.enabled()).thenReturn(false);
+    when(tracingConfig.perItem()).thenReturn(false);
+    when(metricsConfig.enabled()).thenReturn(metricsEnabled);
+    when(replayConfig.enabled()).thenReturn(false);
+    when(replayConfig.exporter()).thenReturn("none");
+    when(replayConfig.filePath()).thenReturn(Optional.empty());
+    return new PipelineTelemetry(stepConfig);
   }
 
   record CommandInput(String id) {
