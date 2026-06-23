@@ -866,7 +866,7 @@
       "edgeId": "ProcessPaymentStatus->ObjectPublish:publish",
       "kind": "publish",
       "start": 10.75,
-      "duration": 0.95,
+      "duration": 0.45,
       "size": 0.135,
       "color": "#ffe08a"
     },
@@ -884,7 +884,7 @@
       "edgeId": "ProcessPaymentStatus->ObjectPublish:publish",
       "kind": "publish",
       "start": 11.55,
-      "duration": 0.95,
+      "duration": 0.45,
       "size": 0.135,
       "color": "#ffe08a"
     }

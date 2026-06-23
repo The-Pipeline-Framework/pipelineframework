@@ -308,11 +308,16 @@ function createConnectorNode(role, scale) {
 }
 
 function createNode(node) {
-  const group = node.tier === "connector"
-    ? createConnectorNode(node.role, node.scale)
-    : node.tier === "primary"
-      ? createPrimaryNode(node.role, node.scale)
-      : createSupportNode(node.role, node.scale);
+  let group;
+  if (node.tier === "connector") {
+    group = createConnectorNode(node.role, node.scale);
+  } else if (node.tier === "primary") {
+    group = createPrimaryNode(node.role, node.scale);
+  } else if (node.tier === "support") {
+    group = createSupportNode(node.role, node.scale);
+  } else {
+    throw new Error(`Unknown node tier: ${node.tier}`);
+  }
   group.position.set(node.x, node.y, node.z);
   group.userData.baseScale = node.scale;
   group.userData.role = node.role;

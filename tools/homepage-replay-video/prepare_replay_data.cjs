@@ -425,7 +425,7 @@ function buildPulses(replay, edges, mainline, awaitStep, persistenceSteps, objec
       sampleEvenly(publishEvents, 3),
       SEGMENTS.publish[0],
       SEGMENTS.publish[1],
-      0.95,
+      0.45,
       0.135,
       "#ffe08a"
     ));
