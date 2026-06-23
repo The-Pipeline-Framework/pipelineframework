@@ -22,7 +22,7 @@ Client spans can be forced for selected services via:
 
 ```properties
 pipeline.telemetry.tracing.client-spans.force=true
-pipeline.telemetry.tracing.client-spans.allowlist=ProcessCsvPaymentsInputService,ProcessCsvPaymentsOutputFileService
+pipeline.telemetry.tracing.client-spans.allowlist=ProcessCsvPaymentsInputService
 ```
 
 ## Custom Spans

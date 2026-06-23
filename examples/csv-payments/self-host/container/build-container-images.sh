@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXAMPLE_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 REPO_ROOT="$(cd "${EXAMPLE_DIR}/../.." && pwd)"
 MVN_BIN="${MVN_BIN:-${REPO_ROOT}/mvnw}"
+read -r -a EXTRA_MAVEN_ARGS <<< "${TPF_MAVEN_ARGS:-}"
 
 if [[ ! -x "${MVN_BIN}" ]]; then
   echo "ERROR: Maven wrapper not found or not executable at ${MVN_BIN}" >&2
@@ -56,15 +57,13 @@ require_matching_image "TPF_CSV_PERSISTENCE_IMAGE" "${TPF_CSV_PERSISTENCE_IMAGE}
 
 if [[ "${TPF_SKIP_FRAMEWORK_INSTALL}" != "true" ]]; then
   echo "Installing root project POM for local SNAPSHOT parent resolution..."
-  "${MVN_BIN}" -N install
+  "${MVN_BIN}" "${EXTRA_MAVEN_ARGS[@]}" -N install
   echo "Installing current framework SNAPSHOT for the CSV example build..."
-  "${MVN_BIN}" -f "${REPO_ROOT}/pom.xml" -N install
-  "${MVN_BIN}" -f "${REPO_ROOT}/framework/pom.xml" clean install
+  "${MVN_BIN}" "${EXTRA_MAVEN_ARGS[@]}" -f "${REPO_ROOT}/pom.xml" -N install
+  "${MVN_BIN}" "${EXTRA_MAVEN_ARGS[@]}" -f "${REPO_ROOT}/framework/pom.xml" clean install
 fi
 
-COMMON_BUILD_PROPS=(
-  -Dpipeline.config="${TPF_CSV_PIPELINE_CONFIG}"
-)
+COMMON_BUILD_PROPS=()
 
 if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "sqs" ]]; then
   COMMON_BUILD_PROPS+=(
@@ -90,6 +89,7 @@ IMAGE_TAG="${IMAGE_TAG}" \
 PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT}" \
 PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG}" \
 "${EXAMPLE_DIR}/build-pipeline-runtime.sh" \
+  "${EXTRA_MAVEN_ARGS[@]}" \
   "${COMMON_BUILD_PROPS[@]}" \
   -DskipTests \
   -Dquarkus.container-image.build=true \
@@ -102,6 +102,7 @@ IMAGE_TAG="${IMAGE_TAG}" \
 PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT}" \
 PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG}" \
 "${EXAMPLE_DIR}/build-pipeline-runtime.sh" \
+  "${EXTRA_MAVEN_ARGS[@]}" \
   -pl orchestrator-svc \
   "${COMMON_BUILD_PROPS[@]}" \
   -DskipTests \

@@ -1,5 +1,7 @@
 package org.pipelineframework.objectpublish;
 
+import java.time.Duration;
+
 /**
  * Telemetry hook for Object Publish lifecycle events.
  */
@@ -17,5 +19,8 @@ public interface ObjectPublishTelemetry {
     }
 
     default void failed(String targetName, String provider, String objectKey, Throwable failure) {
+    }
+
+    default void writeDuration(String targetName, String provider, Duration duration) {
     }
 }

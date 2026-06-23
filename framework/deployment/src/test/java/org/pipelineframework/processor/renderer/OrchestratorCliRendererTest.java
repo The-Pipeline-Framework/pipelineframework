@@ -41,6 +41,8 @@ class OrchestratorCliRendererTest {
         assertTrue(source.contains(".map(inputTypeMapper::toGrpc)"));
         assertTrue(source.contains("deriveCliIdempotencyKey(actualInputList, actualInput)"));
         assertTrue(source.contains("executePipelineAsync(inputMulti, null, idempotencyKey, false)"));
+        assertTrue(source.contains("disableObjectIngestAutostartForIngestOnce(args)"));
+        assertTrue(source.contains("System.setProperty(\"pipeline.object-ingest.autostart\", \"false\")"));
     }
 
     @Test

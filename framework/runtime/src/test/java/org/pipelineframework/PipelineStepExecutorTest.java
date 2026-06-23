@@ -21,16 +21,22 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import io.quarkus.arc.ClientProxy;
 import io.quarkus.arc.InjectableBean;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.helpers.test.AssertSubscriber;
+import io.smallrye.mutiny.subscription.BackPressureStrategy;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.AwaitStreamOneToOneStep;
+import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.blocking.CloseableIterator;
+import org.pipelineframework.blocking.BlockingExecutionSupport;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
@@ -54,6 +60,11 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineStepExecutorTest {
+    @AfterEach
+    void clearCapturedContexts() {
+        PipelineContextHolder.clear();
+        AwaitExecutionContextHolder.clear();
+    }
 
     @Test
     void oneToOneOnUniExecutesAndPropagatesContext() {
@@ -211,6 +222,155 @@ class PipelineStepExecutorTest {
             null);
 
         assertEquals(List.of("x-1", "x-2"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void oneToManyAwaitParentUsesDemandWithoutSyntheticOverflowBuffer() {
+        AtomicInteger emitted = new AtomicInteger();
+        class DemandAwareStep extends ConfigurableStep implements StepOneToMany<String, String> {
+            @Override
+            public Multi<String> applyOneToMany(String input) {
+                return Multi.createFrom().emitter(emitter -> emitter.onRequest(requested -> {
+                    for (long i = 0; i < requested && emitted.get() < 10; i++) {
+                        int next = emitted.incrementAndGet();
+                        emitter.emit(input + "-" + next);
+                    }
+                    if (emitted.get() == 10) {
+                        emitter.complete();
+                    }
+                }), BackPressureStrategy.ERROR);
+            }
+        }
+        StepOneToMany<String, String> step = new DemandAwareStep();
+
+        Object result = PipelineStepExecutor.applyOneToManyUnchecked(
+            step,
+            Uni.createFrom().item("x"),
+            false,
+            16,
+            null,
+            null,
+            null,
+            new AwaitExecutionContext("tenant", "execution", 0));
+
+        AssertSubscriber<String> subscriber = ((Multi<String>) result)
+            .subscribe()
+            .withSubscriber(AssertSubscriber.create(0));
+
+        subscriber.assertHasNotReceivedAnyItem();
+        assertEquals(0, emitted.get());
+
+        subscriber.request(1).awaitItems(1, Duration.ofSeconds(5));
+
+        subscriber.assertItems("x-1");
+        assertEquals(1, emitted.get());
+    }
+
+    @Test
+    void oneToManyAwaitParentAppliesRetryRecoveryAndRejectPoliciesWithoutSyntheticBuffer() {
+        RecoveringOneToManyStep step = new RecoveringOneToManyStep();
+
+        try {
+            Object result = PipelineStepExecutor.applyOneToManyUnchecked(
+                step,
+                Uni.createFrom().item("bad"),
+                false,
+                16,
+                null,
+                null,
+                null,
+                new AwaitExecutionContext("tenant", "execution", 0));
+
+            AssertSubscriber<String> subscriber = ((Multi<String>) result)
+                .subscribe()
+                .withSubscriber(AssertSubscriber.create(Long.MAX_VALUE));
+            subscriber.awaitCompletion(Duration.ofSeconds(5));
+
+            subscriber.assertCompleted();
+            subscriber.assertHasNotReceivedAnyItem();
+            assertEquals(1, step.applyOneToManyCalls());
+            assertTrue(step.rejectCalled());
+        } finally {
+            AwaitExecutionContextHolder.clear();
+        }
+    }
+
+    @Test
+    void oneToManyAwaitParentIteratorSourceIsRequestedBeforeAwaitSuspension() {
+        AtomicInteger opened = new AtomicInteger();
+        AtomicInteger nextCalls = new AtomicInteger();
+        BlockingExecutionSupport blocking = new BlockingExecutionSupport();
+        class IteratorSourceStep extends ConfigurableStep implements StepOneToMany<String, String> {
+            @Override
+            public Multi<String> applyOneToMany(String input) {
+                return blocking.emitIterator(false, () -> {
+                    opened.incrementAndGet();
+                    return new CloseableIterator<>() {
+                        private int index;
+
+                        @Override
+                        public boolean hasNext() {
+                            return index < 3;
+                        }
+
+                        @Override
+                        public String next() {
+                            index++;
+                            nextCalls.incrementAndGet();
+                            return input + "-" + index;
+                        }
+
+                        @Override
+                        public void close() {
+                            // no-op
+                        }
+                    };
+                });
+            }
+        }
+        class SuspendingAwaitStep implements AwaitStreamOneToOneStep<String, String> {
+            @Override
+            public Multi<String> applyAwaitPerItem(Multi<String> input) {
+                return input.onItem()
+                    .transformToUniAndConcatenate(item -> Uni.createFrom().item(item))
+                    .collect()
+                    .asList()
+                    .onItem()
+                    .transformToMulti(ignored -> Multi.createFrom().failure(
+                        new AwaitSuspendedException("tenant", "execution", "unit", 1)));
+            }
+        }
+
+        AwaitExecutionContext awaitContext = new AwaitExecutionContext("tenant", "execution", 0);
+        Object source = PipelineStepExecutor.applyOneToManyUnchecked(
+            new IteratorSourceStep(),
+            Uni.createFrom().item("x"),
+            false,
+            16,
+            null,
+            null,
+            null,
+            awaitContext);
+        Object awaited = new PipelineStepExecutor().applyStep(
+            new SuspendingAwaitStep(),
+            source,
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            null,
+            null,
+            null,
+            null,
+            new AwaitExecutionContext("tenant", "execution", 1));
+
+        AssertSubscriber<String> subscriber = ((Multi<String>) awaited)
+            .subscribe()
+            .withSubscriber(AssertSubscriber.create(Long.MAX_VALUE));
+
+        Throwable failure = subscriber.awaitFailure(Duration.ofSeconds(5)).getFailure();
+
+        assertTrue(failure instanceof AwaitSuspendedException);
+        assertEquals(1, opened.get());
+        assertEquals(3, nextCalls.get());
     }
 
     @Test
@@ -441,9 +601,11 @@ class PipelineStepExecutorTest {
 
     static final class RecoveringOneToManyStep extends ConfigurableStep implements StepOneToMany<String, String> {
         private final AtomicBoolean rejectCalled = new AtomicBoolean(false);
+        private final AtomicInteger applyOneToManyCalls = new AtomicInteger();
 
         @Override
         public Multi<String> applyOneToMany(String in) {
+            applyOneToManyCalls.incrementAndGet();
             if ("bad".equals(in)) {
                 return Multi.createFrom().failure(new RuntimeException("stream boom"));
             }
@@ -481,6 +643,10 @@ class PipelineStepExecutorTest {
 
         boolean rejectCalled() {
             return rejectCalled.get();
+        }
+
+        int applyOneToManyCalls() {
+            return applyOneToManyCalls.get();
         }
     }
 

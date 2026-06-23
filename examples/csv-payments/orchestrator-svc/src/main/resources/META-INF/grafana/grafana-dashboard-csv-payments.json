@@ -2306,12 +2306,781 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 85
+        "y": 110
       },
       "id": 24,
       "panels": [],
       "title": "Topology & Replay Metrics",
       "type": "row"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 85
+      },
+      "id": 28,
+      "panels": [],
+      "title": "Connector-First Object I/O And Await Gates",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 86
+      },
+      "id": 29,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_object_ingest_source, tpf_object_ingest_provider) (rate(tpf_object_ingest_listed_objects_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "listed {{tpf_object_ingest_source}}/{{tpf_object_ingest_provider}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_object_ingest_source, tpf_object_ingest_provider) (rate(tpf_object_ingest_submitted_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "submitted {{tpf_object_ingest_source}}/{{tpf_object_ingest_provider}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_object_ingest_source, tpf_object_ingest_provider) (rate(tpf_object_ingest_duplicate_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "duplicate {{tpf_object_ingest_source}}/{{tpf_object_ingest_provider}}",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_object_ingest_source, tpf_object_ingest_provider) (rate(tpf_object_ingest_failed_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "failed {{tpf_object_ingest_source}}/{{tpf_object_ingest_provider}}",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Object Ingest Admission",
+      "type": "timeseries",
+      "description": "Object source listing, accepted submissions, duplicates, and failures. Object keys live in replay/span events, not metric labels.",
+      "minInterval": "10s"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 86
+      },
+      "id": 30,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_await_step_id, tpf_await_transport) (rate(tpf_await_interaction_dispatched_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "dispatched {{tpf_await_step_id}}/{{tpf_await_transport}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_await_step_id) (rate(tpf_await_unit_dispatch_complete_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "dispatch complete {{tpf_await_step_id}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_await_step_id, tpf_await_transport) (rate(tpf_await_completion_admitted_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "admitted {{tpf_await_step_id}}/{{tpf_await_transport}}",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_await_step_id, tpf_await_transport) (rate(tpf_await_item_completed_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "item completed {{tpf_await_step_id}}/{{tpf_await_transport}}",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_await_step_id) (rate(tpf_await_resume_released_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "resume released {{tpf_await_step_id}}",
+          "range": true,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_await_step_id) (rate(tpf_await_unit_terminal_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "unit terminal {{tpf_await_step_id}}",
+          "range": true,
+          "refId": "F"
+        }
+      ],
+      "title": "Await Gate Health",
+      "type": "timeseries",
+      "description": "QUEUE_ASYNC itemized await gates: dispatch completion, admitted completions, item completions, resume release, and terminal units.",
+      "minInterval": "10s"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 94
+      },
+      "id": 31,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_await_step_id, tpf_await_transport) (rate(tpf_await_completion_early_held_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "early held {{tpf_await_step_id}}/{{tpf_await_transport}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_await_transport, tpf_await_completion_reason) (rate(tpf_await_completion_dropped_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "dropped {{tpf_await_transport}}/{{tpf_await_completion_reason}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_await_step_id) (rate(tpf_await_resume_released_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "resume released {{tpf_await_step_id}}",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Await Held And Dropped Completions",
+      "type": "timeseries",
+      "description": "Early-held completions should drain after parent WAITING_EXTERNAL and dispatch-complete gates are true. Dropped completions indicate stale, duplicate, or non-admissible completions.",
+      "minInterval": "10s"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 94
+      },
+      "id": 32,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_object_publish_target) (rate(tpf_object_publish_grouped_items_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "grouped items {{tpf_object_publish_target}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_object_publish_target, tpf_object_publish_provider) (rate(tpf_object_publish_published_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "published {{tpf_object_publish_target}}/{{tpf_object_publish_provider}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_object_publish_target, tpf_object_publish_provider) (rate(tpf_object_publish_published_bytes_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "bytes {{tpf_object_publish_target}}/{{tpf_object_publish_provider}}",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_object_publish_target) (rate(tpf_object_publish_skipped_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "skipped {{tpf_object_publish_target}}",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_object_publish_target, tpf_object_publish_provider) (rate(tpf_object_publish_failed_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "failed {{tpf_object_publish_target}}/{{tpf_object_publish_provider}}",
+          "range": true,
+          "refId": "E"
+        }
+      ],
+      "title": "Object Publish Success And Bytes",
+      "type": "timeseries",
+      "description": "Terminal Object Publish grouping, successful writes, bytes, skips, and failures. Publication must complete before execution success.",
+      "minInterval": "10s"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 102
+      },
+      "id": 33,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, tpf_object_publish_target, tpf_object_publish_provider) (rate(tpf_object_publish_write_duration_milliseconds_bucket[$__rate_interval])) or sum by (le, tpf_object_publish_target, tpf_object_publish_provider) (rate(tpf_object_publish_write_duration_bucket[$__rate_interval])))",
+          "instant": false,
+          "legendFormat": "p95 {{tpf_object_publish_target}}/{{tpf_object_publish_provider}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Object Publish Write Duration p95",
+      "type": "timeseries",
+      "description": "Provider write duration by target/provider. For filesystem this includes temp-file write and final move; for S3 it includes multipart session close as exposed by the provider.",
+      "minInterval": "10s"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 102
+      },
+      "id": 34,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_object_publish_target) (increase(tpf_object_publish_grouped_items_total[$__range]))",
+          "instant": false,
+          "legendFormat": "grouped items {{tpf_object_publish_target}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_object_publish_target, tpf_object_publish_provider) (increase(tpf_object_publish_published_total[$__range]))",
+          "instant": false,
+          "legendFormat": "published objects {{tpf_object_publish_target}}/{{tpf_object_publish_provider}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_object_publish_target, tpf_object_publish_provider) (increase(tpf_object_publish_failed_total[$__range]))",
+          "instant": false,
+          "legendFormat": "publish failures {{tpf_object_publish_target}}/{{tpf_object_publish_provider}}",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "CSV Output Completeness",
+      "type": "timeseries",
+      "description": "Run-window comparison between terminal items grouped for publish and successfully published output objects. Use replay for exact object keys and checksums.",
+      "minInterval": "10s"
     },
     {
       "datasource": {
@@ -2344,7 +3113,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 86
+        "y": 111
       },
       "id": 25,
       "options": {
@@ -2408,7 +3177,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 86
+        "y": 111
       },
       "id": 26,
       "options": {
@@ -2472,7 +3241,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 94
+        "y": 119
       },
       "id": 27,
       "options": {

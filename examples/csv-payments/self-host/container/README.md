@@ -11,7 +11,7 @@ This directory runs the CSV Payments example as the advanced provider-portabilit
 
 Restaurant approval remains the base human-await reference. This stack proves the same coordinator model against stream input plus broker-backed await completions. SQS is the default AWS-shaped self-host HA lane; Kafka is an explicit second lane that proves the await abstraction is not tied to one provider.
 
-`orchestrator-svc` is the generated module/artifact name. In this reference, one `orchestrator-svc` container runs as the durable coordinator and another runs as the REST transition worker. The grouped `pipeline-runtime-svc` remains the step/runtime service. For the general role model, see [Coordinator And Worker Topology](/guide/evolve/durable-coordinator/coordinator-worker-topology).
+`orchestrator-svc` is the generated module/artifact name. In this reference, one `orchestrator-svc` container runs as the durable coordinator and another runs as the REST transition worker. The grouped `pipeline-runtime-svc` remains the step/runtime service. For the general role model, see [Coordinator And Worker Topology](/evolve/durable-coordinator/coordinator-worker-topology).
 
 ## Run The Demo
 
@@ -73,4 +73,4 @@ This is still a local reference stack, not a production deployment package.
 
 ## Runtime Boundary Note
 
-SQS and Kafka await completions resume item continuations through the same bounded transition-worker seam used for normal queue-async work. The REST transition worker executes the continuation segment up to the aggregate boundary, while generated gRPC step calls target the runtime and persistence containers.
+SQS and Kafka await completions resume item continuations through the same bounded transition-worker seam used for normal queue-async work. The REST transition worker executes each continuation segment until the itemized unit reaches the next aggregate or terminal boundary. In the connector-first path, Object Publish owns the terminal object write before the execution is marked successful, while generated gRPC step calls target the runtime and persistence containers.

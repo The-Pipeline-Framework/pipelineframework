@@ -37,6 +37,10 @@ public class ObjectIngestBootstrap {
     private volatile ObjectIngestRunner runner;
 
     void onStartup(@Observes StartupEvent event) {
+        if (!autostartEnabled()) {
+            LOG.info("Object ingest autostart disabled; waiting for explicit runner invocation.");
+            return;
+        }
         if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
             LOG.debugf("Object ingest skipped: orchestrator mode is %s (requires QUEUE_ASYNC)", orchestratorConfig.mode());
             return;
@@ -98,5 +102,24 @@ public class ObjectIngestBootstrap {
             return Optional.of(primary.trim());
         }
         return fallback == null || fallback.isBlank() ? Optional.empty() : Optional.of(fallback.trim());
+    }
+
+    private boolean autostartEnabled() {
+        if (processCommandRequestsIngestOnce()) {
+            return false;
+        }
+        return firstNonBlank(
+                System.getProperty("pipeline.object-ingest.autostart"),
+                System.getenv("PIPELINE_OBJECT_INGEST_AUTOSTART"))
+            .map(Boolean::parseBoolean)
+            .orElse(true);
+    }
+
+    private boolean processCommandRequestsIngestOnce() {
+        String command = System.getProperty("sun.java.command", "");
+        if (command == null || command.isBlank()) {
+            return false;
+        }
+        return java.util.Arrays.asList(command.trim().split("\\s+")).contains("--ingest-once");
     }
 }

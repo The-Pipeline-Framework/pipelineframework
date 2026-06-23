@@ -3,6 +3,9 @@ package org.pipelineframework.objectpublish;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -10,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.ServiceLoader;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletionStage;
 import java.util.regex.Pattern;
@@ -31,31 +35,45 @@ public final class ObjectPublishRunner {
     private static final Logger LOG = Logger.getLogger(ObjectPublishRunner.class);
     private static final Pattern JAVA_CLASS_NAME = Pattern.compile("[a-zA-Z0-9._$]+");
     private static final ObjectPublishRunner DISABLED =
-        new ObjectPublishRunner(null, new ObjectTargetRegistry(List.of()), ObjectPublishTelemetry.NOOP, true);
+        new ObjectPublishRunner(null, new ObjectTargetRegistry(List.of()), ObjectPublishTelemetry.NOOP, List.of(), true);
 
     private final PipelineYamlConfig config;
     private final ObjectTargetRegistry registry;
     private final ObjectPublishTelemetry telemetry;
+    private final List<TerminalOutputAdapter<?, ?>> terminalOutputAdapters;
     private final boolean disabled;
     private volatile Object resolvedMapper;
+    private volatile Class<?> resolvedOutputType;
+    private volatile TerminalOutputAdapter<?, ?> resolvedTerminalOutputAdapter;
 
     public ObjectPublishRunner(
         PipelineYamlConfig config,
         ObjectTargetRegistry registry,
         ObjectPublishTelemetry telemetry
     ) {
-        this(config, registry, telemetry, false);
+        this(config, registry, telemetry, loadTerminalOutputAdapters(), false);
+    }
+
+    public ObjectPublishRunner(
+        PipelineYamlConfig config,
+        ObjectTargetRegistry registry,
+        ObjectPublishTelemetry telemetry,
+        List<TerminalOutputAdapter<?, ?>> terminalOutputAdapters
+    ) {
+        this(config, registry, telemetry, terminalOutputAdapters, false);
     }
 
     private ObjectPublishRunner(
         PipelineYamlConfig config,
         ObjectTargetRegistry registry,
         ObjectPublishTelemetry telemetry,
+        List<TerminalOutputAdapter<?, ?>> terminalOutputAdapters,
         boolean disabled
     ) {
         this.config = config;
         this.registry = Objects.requireNonNull(registry, "registry");
         this.telemetry = telemetry == null ? ObjectPublishTelemetry.NOOP : telemetry;
+        this.terminalOutputAdapters = terminalOutputAdapters == null ? List.of() : List.copyOf(terminalOutputAdapters);
         this.disabled = disabled;
     }
 
@@ -64,12 +82,16 @@ public final class ObjectPublishRunner {
     }
 
     public static ObjectPublishRunner loadFromDefaultConfig() {
+        return loadFromDefaultConfig(ObjectPublishTelemetry.NOOP);
+    }
+
+    public static ObjectPublishRunner loadFromDefaultConfig(ObjectPublishTelemetry telemetry) {
         Optional<Path> configPath = locateConfig();
         if (configPath.isEmpty()) {
             return disabled();
         }
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath.get());
-        return new ObjectPublishRunner(config, ObjectTargetRegistry.load(), ObjectPublishTelemetry.NOOP);
+        return new ObjectPublishRunner(config, ObjectTargetRegistry.load(), telemetry);
     }
 
     public boolean enabled() {
@@ -96,7 +118,7 @@ public final class ObjectPublishRunner {
         StreamingObjectPublishMapper<Object> mapper = streamingMapper();
         StreamingPublishState state = new StreamingPublishState(target, registry.require(target.provider()), mapper);
         return multi.onItem()
-            .transformToUniAndConcatenate(item -> state.publishItem(item))
+            .transformToUniAndConcatenate(item -> state.publishItem(adaptTerminalItem(item)).replaceWith(item))
             .onCompletion().call(state::closeAll)
             .onFailure().call(state::abortAll)
             .onCancellation().call(() -> state.abortAll(new CancellationException("Object publish stream cancelled")));
@@ -106,10 +128,6 @@ public final class ObjectPublishRunner {
         return uni.onItem().transformToUni(item -> {
             if (item == null) {
                 return Uni.createFrom().nullItem();
-            }
-            Object mapper = mapper();
-            if (mapper instanceof StreamingObjectPublishMapper<?>) {
-                return publishStreamingItems(List.of(item)).replaceWith(item);
             }
             return publishItems(List.of(item)).replaceWith(item);
         });
@@ -123,8 +141,16 @@ public final class ObjectPublishRunner {
             telemetry.skipped(target.name());
             return Uni.createFrom().voidItem();
         }
+        if (mapper() instanceof StreamingObjectPublishMapper<?>) {
+            return publishStreamingItems(items);
+        }
+        return publishBatchItems(target, items);
+    }
+
+    private Uni<Void> publishBatchItems(PipelineObjectPublishConfig target, List<?> items) {
         ObjectPublishMapper<Object> mapper = batchMapper();
-        Map<String, List<Object>> groups = group(items, mapper);
+        List<Object> domainItems = items.stream().map(this::adaptTerminalItem).toList();
+        Map<String, List<Object>> groups = group(domainItems, mapper);
         telemetry.grouped(target.name(), items.size(), groups.size());
         Uni<Void> chain = Uni.createFrom().voidItem();
         for (Map.Entry<String, List<Object>> entry : groups.entrySet()) {
@@ -145,9 +171,28 @@ public final class ObjectPublishRunner {
         StreamingPublishState state = new StreamingPublishState(target, registry.require(target.provider()), mapper);
         Uni<Void> chain = Uni.createFrom().voidItem();
         for (Object item : items) {
-            chain = chain.chain(() -> state.publishItem(item).replaceWithVoid());
+            chain = chain.chain(() -> state.publishItem(adaptTerminalItem(item)).replaceWithVoid());
         }
         return chain.chain(state::closeAll).onFailure().call(state::abortAll);
+    }
+
+    private Object adaptTerminalItem(Object item) {
+        Objects.requireNonNull(item, "Object Publish terminal item must not be null");
+        Class<?> outputType = outputType();
+        if (outputType.isInstance(item)) {
+            return item;
+        }
+        TerminalOutputAdapter<?, ?> adapter = terminalOutputAdapter(outputType)
+            .orElseThrow(() -> new IllegalStateException(
+                "Object Publish received terminal item type '" + item.getClass().getName()
+                    + "' but output.consumes.type is '" + outputType.getName()
+                    + "' and no " + TerminalOutputAdapter.class.getName() + " is available"));
+        return toDomain(adapter, item);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object toDomain(TerminalOutputAdapter<?, ?> adapter, Object item) {
+        return ((TerminalOutputAdapter<Object, Object>) adapter).toDomain(item);
     }
 
     private Map<String, List<Object>> group(List<?> items, ObjectPublishMapper<Object> mapper) {
@@ -193,9 +238,14 @@ public final class ObjectPublishRunner {
             checksum,
             "object-publish:" + target.name() + ":" + objectKey + ":" + checksum);
         ObjectTargetProvider provider = registry.require(target.provider());
+        Instant writeStarted = Instant.now();
         return toUni(provider.write(request))
-            .invoke(result -> telemetry.published(target.name(), target.provider(), objectKey, result.bytes()))
+            .invoke(result -> {
+                telemetry.writeDuration(target.name(), target.provider(), Duration.between(writeStarted, Instant.now()));
+                telemetry.published(target.name(), target.provider(), objectKey, result.bytes());
+            })
             .onFailure().invoke(failure -> {
+                telemetry.writeDuration(target.name(), target.provider(), Duration.between(writeStarted, Instant.now()));
                 telemetry.failed(target.name(), target.provider(), objectKey, failure);
                 LOG.warnf(failure, "Object publish failed for target=%s key=%s", target.name(), objectKey);
             })
@@ -269,19 +319,60 @@ public final class ObjectPublishRunner {
         }
     }
 
+    private Class<?> outputType() {
+        Class<?> outputType = resolvedOutputType;
+        if (outputType != null) {
+            return outputType;
+        }
+        PipelineObjectOutputConfig output = objectOutput()
+            .orElseThrow(() -> new IllegalStateException("pipeline output object binding is not configured"));
+        String outputTypeName = normalize(output.type())
+            .orElseThrow(() -> new IllegalStateException("Object output consumes type must not be blank"));
+        validateOutputTypeClassName(outputTypeName);
+        try {
+            outputType = Class.forName(outputTypeName, false, Thread.currentThread().getContextClassLoader());
+            resolvedOutputType = outputType;
+            return outputType;
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException("Object output consumes type not found: " + outputTypeName, e);
+        }
+    }
+
+    private Optional<TerminalOutputAdapter<?, ?>> terminalOutputAdapter(Class<?> outputType) {
+        TerminalOutputAdapter<?, ?> adapter = resolvedTerminalOutputAdapter;
+        if (adapter != null && Objects.equals(adapter.domainType(), outputType)) {
+            return Optional.of(adapter);
+        }
+        for (TerminalOutputAdapter<?, ?> candidate : terminalOutputAdapters) {
+            if (candidate != null && Objects.equals(candidate.domainType(), outputType)) {
+                resolvedTerminalOutputAdapter = candidate;
+                return Optional.of(candidate);
+            }
+        }
+        return Optional.empty();
+    }
+
     private void validateMapperClassName(String mapperClassName) {
+        validateConfiguredClassName("Object output mapper", mapperClassName);
+    }
+
+    private void validateOutputTypeClassName(String outputTypeName) {
+        validateConfiguredClassName("Object output consumes type", outputTypeName);
+    }
+
+    private void validateConfiguredClassName(String label, String className) {
         String basePackage = normalize(config.basePackage())
             .orElseThrow(() -> new IllegalStateException(
-                "Object output mapper requires pipeline basePackage for runtime class loading"));
-        if (!JAVA_CLASS_NAME.matcher(mapperClassName).matches()
-            || mapperClassName.contains("..")
-            || mapperClassName.contains("/")
-            || mapperClassName.contains("\\")) {
-            throw new IllegalStateException("Object output mapper class name is invalid: " + mapperClassName);
+                label + " requires pipeline basePackage for runtime class loading"));
+        if (!JAVA_CLASS_NAME.matcher(className).matches()
+            || className.contains("..")
+            || className.contains("/")
+            || className.contains("\\")) {
+            throw new IllegalStateException(label + " class name is invalid: " + className);
         }
-        if (!mapperClassName.startsWith(basePackage + ".")) {
+        if (!className.startsWith(basePackage + ".")) {
             throw new IllegalStateException(
-                "Object output mapper '" + mapperClassName + "' must be under basePackage '" + basePackage + "'");
+                label + " '" + className + "' must be under basePackage '" + basePackage + "'");
         }
     }
 
@@ -309,6 +400,18 @@ public final class ObjectPublishRunner {
         } catch (RuntimeException e) {
             return Optional.empty();
         }
+    }
+
+    private static List<TerminalOutputAdapter<?, ?>> loadTerminalOutputAdapters() {
+        List<TerminalOutputAdapter<?, ?>> adapters = new ArrayList<>();
+        ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        ServiceLoader<TerminalOutputAdapter> serviceLoader = loader == null
+            ? ServiceLoader.load(TerminalOutputAdapter.class)
+            : ServiceLoader.load(TerminalOutputAdapter.class, loader);
+        for (TerminalOutputAdapter<?, ?> adapter : serviceLoader) {
+            adapters.add(adapter);
+        }
+        return List.copyOf(adapters);
     }
 
     private static Optional<String> firstNonBlank(String primary, String fallback) {
@@ -464,11 +567,16 @@ public final class ObjectPublishRunner {
                 return Uni.createFrom().voidItem();
             }
             closed = true;
+            Instant writeStarted = Instant.now();
             return writeChunk(renderer.onClose())
                 .chain(() -> open())
                 .chain(session -> toUni(session.close(new ObjectWriteCloseRequest(bytes, checksum(), finalMetadata()))))
-                .invoke(result -> telemetry.published(target.name(), target.provider(), openRequest.objectKey(), result.bytes()))
+                .invoke(result -> {
+                    telemetry.writeDuration(target.name(), target.provider(), Duration.between(writeStarted, Instant.now()));
+                    telemetry.published(target.name(), target.provider(), openRequest.objectKey(), result.bytes());
+                })
                 .onFailure().invoke(failure -> {
+                    telemetry.writeDuration(target.name(), target.provider(), Duration.between(writeStarted, Instant.now()));
                     telemetry.failed(target.name(), target.provider(), openRequest.objectKey(), failure);
                     LOG.warnf(failure, "Object publish failed for target=%s key=%s", target.name(), openRequest.objectKey());
                 })

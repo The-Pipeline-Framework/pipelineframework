@@ -41,6 +41,7 @@ class ApmCompatibilityMetricsTest {
             .build();
         GlobalOpenTelemetry.resetForTest();
         GlobalOpenTelemetry.set(sdk);
+        ApmCompatibilityMetrics.resetForTest();
 
         try {
             ApmCompatibilityMetrics.recordOrchestratorSuccess(123.0);
@@ -65,6 +66,7 @@ class ApmCompatibilityMetricsTest {
         } finally {
             meterProvider.shutdown();
             GlobalOpenTelemetry.resetForTest();
+            ApmCompatibilityMetrics.resetForTest();
         }
     }
 }

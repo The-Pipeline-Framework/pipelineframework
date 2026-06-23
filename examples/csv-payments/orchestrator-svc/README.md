@@ -1,22 +1,23 @@
 # Orchestrator Service
 
-A Quarkus-based microservice that processes CSV payment files by orchestrating a pipeline of operations through gRPC communications.
+A Quarkus-based service that coordinates CSV payment processing through generated TPF adapters, Object Ingest, Object Publish, and gRPC step clients.
 
 ## Overview
 
-The orchestrator-svc is responsible for processing CSV files containing payment records. It reads these files from a specified folder, processes each payment record through a multi-step pipeline, and generates output files with the results.
+The orchestrator-svc is responsible for admitting CSV object inputs, coordinating payment processing, and publishing terminal output objects. In the default path, folder scanning and output-file writing are connector-owned framework behavior rather than authored business steps.
 
 ```mermaid
 graph TD
     A[Orchestrator Service] --> B[OrchestratorApplication]
     B --> C[OrchestratorService]
-    C --> D[ProcessFolderService]
-    C --> E[ProcessFileService]
-    E --> F[Send Payment Record Service]
-    E --> G[Process Ack Payment Sent Service]
-    E --> H[Process Payment Status Service]
-    D --> I[CSV Folder]
-    E --> J[Output CSV Files]
+    C --> D[Object Ingest]
+    C --> E[Process CSV Payments Input]
+    E --> F[Await Payment Provider]
+    F --> G[Kafka Completion]
+    G --> H[Process Payment Status Service]
+    H --> I[Object Publish]
+    D --> J[CSV Objects]
+    I --> K[Output CSV Files]
     
     style A fill:#4CAF50,stroke:#388E3C
     style B fill:#2196F3,stroke:#0D47A1
@@ -26,36 +27,40 @@ graph TD
     style F fill:#9C27B0,stroke:#4A148C
     style G fill:#9C27B0,stroke:#4A148C
     style H fill:#9C27B0,stroke:#4A148C
-    style I fill:#FFEB3B,stroke:#F57F17
+    style I fill:#FF9800,stroke:#E65100
     style J fill:#FFEB3B,stroke:#F57F17
+    style K fill:#FFEB3B,stroke:#F57F17
 ```
 
 ## Functionality
 
 ### Main Purpose
-The service processes CSV files containing payment records, coordinating with other services via gRPC to handle each step of the payment processing pipeline.
+The service processes CSV files containing payment records, coordinating with other services via generated adapters and gRPC clients while object I/O is handled by connector runtime code.
 
 ### Entry Point
-The main entry point is `OrchestratorApplication.java`, which uses Picocli for command-line argument parsing. It accepts a folder path containing CSV files as input via the `-i` or `--input` option.
+The main entry point is `OrchestratorApplication.java`, which uses Picocli for command-line argument parsing. In the connector-owned path, `--ingest-once` polls configured object sources once and waits for admitted executions to finish.
 
 #### Input Configuration Options
 The application supports multiple ways to specify the input:
 
-1. **Command-line argument** (highest priority):
+1. **Object ingest once**:
+   ```bash
+   java -jar app.jar --ingest-once
+   ```
+
+2. **Legacy command-line argument**:
    ```bash
    java -jar app.jar -i /path/to/input
    ```
 
-2. **Environment variable** (fallback when command-line argument not provided):
+3. **Legacy environment variable**:
    ```bash
    PIPELINE_INPUT=/path/to/input java -jar app.jar
    # Or when running with quarkus:dev
    PIPELINE_INPUT=/path/to/input ./mvnw quarkus:dev
    ```
 
-The application checks for these options in the following priority:
-1. Command-line argument (`-i` or `--input`) - highest priority
-2. Environment variable (`PIPELINE_INPUT`) - used when command-line argument is not provided
+The legacy `-i`/`--input` and `PIPELINE_INPUT` paths are retained for compatibility with older file-step examples.
 
 When running in dev mode via IDE, make sure the environment variable is properly set in your run configuration.
 
@@ -65,40 +70,55 @@ When running in dev mode via IDE, make sure the environment variable is properly
 sequenceDiagram
     participant User
     participant Orchestrator
-    participant FileService
-    participant PaymentService
-    participant AckService
+    participant ObjectIngest
+    participant InputService
+    participant AwaitUnit
+    participant Kafka
+    participant Provider
     participant StatusService
+    participant ObjectPublish
     
-    User->>Orchestrator: Start processing
-    Orchestrator->>FileService: Process folder
-    FileService-->>Orchestrator: CSV files list
+    User->>Orchestrator: --ingest-once
+    Orchestrator->>ObjectIngest: Poll configured source
+    ObjectIngest-->>Orchestrator: Admit CSV object execution
+    Orchestrator->>InputService: Process CSV object
     loop For each payment record
-        Orchestrator->>PaymentService: Send payment record
-        PaymentService-->>Orchestrator: Payment ack
-        Orchestrator->>AckService: Process ack
-        AckService-->>Orchestrator: Status update
+        Orchestrator->>AwaitUnit: Create item interaction
+        AwaitUnit->>Kafka: Publish await request
+        Kafka->>Provider: Deliver request
+        Provider-->>Kafka: Payment completion
+        Kafka-->>AwaitUnit: Admit completion
+        AwaitUnit-->>Orchestrator: Release item continuation
         Orchestrator->>StatusService: Process status
-        StatusService-->>Orchestrator: Final status
+        StatusService-->>Orchestrator: PaymentOutput
     end
-    Orchestrator->>User: Output files generated
+    Orchestrator->>ObjectPublish: Publish terminal output
+    ObjectPublish-->>User: Output files generated
 ```
 
 ### Processing Pipeline Details
-1. **File Discovery**: `ProcessFolderService` scans the folder for CSV files and creates corresponding input/output file objects
-2. **Record Processing**: For each file, `ProcessFileService` processes individual payment records through a multi-step pipeline:
-   - Sending the payment record to the payment service
-   - Processing an acknowledgment from the ack service
-   - Processing the final payment status from the status service
-3. **Concurrency**: Processing is done concurrently using virtual threads for efficiency
+1. **File Admission**: Object Ingest lists the configured object source and admits accepted objects into queue-async executions.
+2. **Record Processing**: The input service parses each admitted CSV file into payment records.
+3. **Awaited Provider Completion**: The await adapter dispatches provider requests and resumes the execution from correlated completions.
+4. **Output Publication**: Object Publish streams terminal `PaymentOutput` records into grouped output files.
+
+### Connector-First Observability
+
+The orchestrator owns the framework-side metrics for Object Ingest, await gates, and Object Publish.
+
+Use the Grafana CSV Payments dashboard to confirm:
+
+1. Object Ingest listed and submitted the expected source object.
+2. Await completions are admitted, early-held completions drain, and resume releases follow dispatch completion.
+3. Object Publish grouped the terminal `PaymentOutput` count and wrote the expected output bytes before execution success.
+4. Legacy `ProcessFolderService` and `ProcessCsvPaymentsOutputFileService` are absent from the default replay/order path.
+
+Use replay JSON for the high-cardinality details: source object key, await unit id, interaction ids, correlation ids, and published output key.
 
 ### gRPC Communication
 The service communicates with other services via gRPC, using clients injected with `@GrpcClient`:
 - Processing input CSV files
-- Sending payment records
-- Processing acknowledgments
 - Processing payment statuses
-- Processing output CSV files
 
 ### Error Handling
 - Implements retry mechanisms with exponential backoff for transient errors (like throttling)

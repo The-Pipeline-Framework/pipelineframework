@@ -25,13 +25,14 @@ This application demonstrates modern microservices architecture patterns using g
 
 The canonical modular flow is:
 
-1. `Process Csv Payments Input` incrementally reads CSV rows with the blocking iterator pacer.
-2. `Await Payment Provider` is an authored `ONE_TO_ONE` await step that creates one durable await interaction per `PaymentRecord` as rows arrive.
-3. The Kafka await adapter publishes request envelopes to `csv-payments.payment.requests`.
-4. `payments-processing-svc` acts as the external mock provider, consumes those envelopes, calls `PaymentProviderServiceMock`, and publishes completion envelopes to `csv-payments.payment.results`.
-5. The TPF Kafka completion consumer admits each completion idempotently, resumes the owning queue-async execution when the await unit is complete, and passes ordered `PaymentStatus` items downstream.
-6. `Process Payment Status` rejects provider terminal status `Rejected` into the normal reject path and maps accepted statuses to `PaymentOutput`.
-7. `Process Csv Payments Output File` writes the final output files.
+1. Object Ingest admits matching CSV objects into queue-async executions.
+2. `Process Csv Payments Input` incrementally reads CSV rows from the admitted object reference.
+3. `Await Payment Provider` is an authored `ONE_TO_ONE` await step that creates one durable await interaction per `PaymentRecord` as rows arrive.
+4. The Kafka await adapter publishes request envelopes to `csv-payments.payment.requests`.
+5. `payments-processing-svc` acts as the external mock provider, consumes those envelopes, calls `PaymentProviderServiceMock`, and publishes completion envelopes to `csv-payments.payment.results`.
+6. The TPF Kafka completion consumer admits each completion idempotently, resumes the owning queue-async execution when the await unit is complete, and passes ordered `PaymentStatus` items downstream.
+7. `Process Payment Status` rejects provider terminal status `Rejected` into the normal reject path and maps accepted statuses to `PaymentOutput`.
+8. Object Publish streams terminal `PaymentOutput` values into grouped CSV output files.
 
 This is durable brokered completion, not polling. Kafka delivery remains at-least-once; TPF handles idempotent completion admission and ordered await-unit reconstruction for the resumed pipeline.
 
@@ -100,15 +101,13 @@ The replay artifact is written to:
 
 - `examples/csv-payments/orchestrator-svc/target/test-e2e/replay/csv-payments-replay.json`
 
-For a smaller first pass, use the 1k input and relax the reader pacer:
+For a smaller first pass, use the 1k input:
 
 ```bash
 cd <repo-root>
 ./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
   -Dcsv.e2e.telemetry.enabled=true \
   -Dquarkus.otel.traces.sampler.arg=1 \
-  -Dcsv.e2e.reader-demand-pacer.rows-per-period=20 \
-  -Dcsv.e2e.reader-demand-pacer.millis-period=1000 \
   -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
   -Dcsv.e2e.pipeline.wait.seconds=1800 \
   -Dcsv.e2e.orchestrator.wait.seconds=1800 \
@@ -141,8 +140,6 @@ Baseline typed runtime flow:
 ./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
   -Dcsv.e2e.telemetry.enabled=true \
   -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
-  -Dcsv.e2e.reader-demand-pacer.rows-per-period=10 \
-  -Dcsv.e2e.reader-demand-pacer.millis-period=100 \
   -Dcsv-payments.payment-provider.permits-per-second=250 \
   -Dcsv-payments.payment-provider.timeout-millis=5000 \
   -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
@@ -156,8 +153,6 @@ Await/Kafka/provider close-up:
 ./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
   -Dcsv.e2e.telemetry.enabled=true \
   -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_12.csv \
-  -Dcsv.e2e.reader-demand-pacer.rows-per-period=5 \
-  -Dcsv.e2e.reader-demand-pacer.millis-period=500 \
   -Dcsv-payments.payment-provider.permits-per-second=25 \
   -Dcsv-payments.payment-provider.timeout-millis=5000 \
   -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
@@ -195,8 +190,6 @@ cd <repo-root>
 ./examples/csv-payments/build-modular-observability-images.sh
 ./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
   -Dcsv.e2e.tempo.enabled=true \
-  -Dcsv.e2e.reader-demand-pacer.rows-per-period=20 \
-  -Dcsv.e2e.reader-demand-pacer.millis-period=1000 \
   -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
   -Dtest=CsvPaymentsTempoVerificationEndToEndIT \
   -Dsurefire.failIfNoSpecifiedTests=false \
@@ -205,27 +198,33 @@ cd <repo-root>
 
 That lane starts a dedicated LGTM stack, points the modular services and packaged orchestrator at its OTLP collector, and then queries Tempo directly to prove traces arrived and are queryable.
 
-### Blocking CSV Input Demand Pacing
+### Object I/O Backpressure
 
-The input CSV step is authored as a blocking iterator service. It still reads rows incrementally from OpenCSV, and it also applies demand pacing before each row is pulled from the iterator.
+The default CSV Payments path uses Object Ingest and Object Publish. Object Ingest admits one source object into a queue-async execution, the CSV parser emits rows incrementally, and Object Publish writes terminal rows through a streaming target session. The default path does not configure the CSV reader demand pacer.
 
-This pacing uses the framework-provided `BlockingIteratorPacer`. It is a blocking-thread throttle, not end-to-end reactive backpressure. The framework offloads the iterator to worker or virtual threads, and the pacer deliberately blocks that offloaded thread when the configured item budget is exhausted. In this example, that budget is expressed as CSV rows.
+The deprecated file-step path can still use `BlockingIteratorPacer` as a legacy fallback. It is a blocking-thread throttle, not end-to-end reactive backpressure, and should not be used as the primary CSV Payments proof path.
 
-Configure the default row budget in the input service:
+Use provider concurrency and retry settings to shape the payment-provider portion of the demo. Use the object I/O connector settings to shape file admission and terminal object writes.
 
-```properties
-csv-payments.reader-demand-pacer.rows-per-period=10
-csv-payments.reader-demand-pacer.millis-period=100
-```
+Operational proof for the connector-first path comes from three surfaces:
 
-The E2E harness can override those settings for large-input observability runs:
+1. Grafana metrics show Object Ingest admission, await gate health, provider/request pressure, Object Publish writes, and output completeness.
+2. Tempo traces show the live service topology and step spans.
+3. Replay JSON shows the high-cardinality details: object keys, await unit ids, interaction ids, item completions, resume release, and published output keys.
 
-```bash
--Dcsv.e2e.reader-demand-pacer.rows-per-period=20
--Dcsv.e2e.reader-demand-pacer.millis-period=1000
-```
+### Performance Expectations
 
-Use lower rates when you need the demo to expose pipeline timing, retry, and tracing behaviour clearly. Use higher rates when you want throughput-oriented local validation.
+Do not read the 1k demo duration as only `record-count / permits-per-second`. The mock payment provider also has per-item processing delay, and the first few items pay cold-path costs for the packaged Quarkus app, gRPC clients, Kafka channels, persistence, telemetry export, and provider warmup.
+
+The connector-first path proves that the CSV reader demand pacer is not the mechanism keeping the run alive. It does not remove the provider as the bottleneck. If await dispatch exceeds provider capacity, pending interactions, broker lag, retries, timeouts, or DLQ events are the expected pressure signals. For performance comparisons, separate:
+
+1. cold first-item latency,
+2. warm first-item latency,
+3. steady-state provider permits/sec and provider processing delay,
+4. completion-to-continuation latency,
+5. terminal Object Publish close latency.
+
+Only compare full-run wall time after those components are visible in metrics, traces, or replay.
 
 For local manual inspection before teardown:
 
@@ -233,8 +232,6 @@ For local manual inspection before teardown:
 ./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
   -Dcsv.e2e.tempo.enabled=true \
   -Dcsv.e2e.tempo.pause.before.teardown=true \
-  -Dcsv.e2e.reader-demand-pacer.rows-per-period=20 \
-  -Dcsv.e2e.reader-demand-pacer.millis-period=1000 \
   -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
   -Dtest=CsvPaymentsTempoVerificationEndToEndIT \
   -Dsurefire.failIfNoSpecifiedTests=false \
@@ -270,7 +267,6 @@ The services use the following ports:
 - input-csv-file-processing-svc: 8444
 - payments-processing-svc: 8445
 - payment-status-svc: 8446
-- output-csv-file-processing-svc: 8447
 - persistence-svc: 8448
 
 All services communicate over HTTPS with self-signed certificates.
@@ -289,7 +285,7 @@ graph TD
     D --> L[Kafka Await Completion]
     L --> B
     B --> E[Payment Status Service]
-    B --> F[Output CSV Processing Service]
+    B --> F[Object Publish]
     D --> G[Mock Payment Provider]
     
     subgraph "Microservices"
@@ -322,7 +318,7 @@ This project consists of Maven submodules, each containing a microservice that r
 - [**Input CSV File Processing Service**](./input-csv-file-processing-svc/README.md): Reads and parses input CSV files
 - [**Payments Processing Service**](./payments-processing-svc/README.md): Interacts with the mock payment provider
 - [**Payment Status Service**](./payment-status-svc/README.md): Processes payment statuses
-- [**Output CSV File Processing Service**](./output-csv-file-processing-svc/README.md): Generates output CSV files
+- [**Output CSV File Processing Service**](./output-csv-file-processing-svc/README.md): Deprecated legacy file-step output service
 - [**Common Module**](./common/README.md): Shared domain models and utilities
 
 ## Motivation
@@ -379,31 +375,37 @@ The CSV Payments Processing Application follows a complex end-to-end data flow t
 sequenceDiagram
     participant User
     participant Orchestrator
+    participant ObjectIngest
     participant InputService
-    participant PaymentsService
+    participant AwaitUnit
+    participant Kafka
     participant StatusService
-    participant OutputService
+    participant ObjectPublish
     participant PaymentProvider
 
     User->>Orchestrator: Start processing
-    Orchestrator->>InputService: Process CSV files
+    Orchestrator->>ObjectIngest: Poll object source
+    ObjectIngest-->>Orchestrator: Admit source object execution
+    Orchestrator->>InputService: Process CSV file
     InputService-->>Orchestrator: Stream payment records
     loop For each payment record
-        Orchestrator->>PaymentsService: Await payment provider
-        PaymentsService->>PaymentProvider: Mock API call
-        PaymentProvider-->>PaymentsService: PaymentStatus
-        PaymentsService-->>Orchestrator: PaymentStatus
-        PaymentsService->>StatusService: Process status
+        Orchestrator->>AwaitUnit: Create item interaction
+        AwaitUnit->>Kafka: Publish await request
+        Kafka->>PaymentProvider: Deliver payment request
+        PaymentProvider-->>Kafka: PaymentStatus
+        Kafka-->>AwaitUnit: Admit completion
+        AwaitUnit-->>Orchestrator: Release item continuation
+        Orchestrator->>StatusService: Process status
         StatusService-->>Orchestrator: PaymentOutput
     end
-    Orchestrator->>OutputService: Generate output file
-    OutputService-->>Orchestrator: CsvPaymentsOutputFile
+    Orchestrator->>ObjectPublish: Stream terminal output
+    ObjectPublish-->>Orchestrator: Published object result
     Orchestrator->>User: Processing complete
 ```
 
 ### Detailed Processing Steps
 
-1. **Input Processing**: The Orchestrator Service reads CSV payment input files from a specified folder using the Input CSV File Processing Service.
+1. **Input Processing**: Object Ingest admits CSV files from the configured source, then the Input CSV File Processing Service parses each admitted file.
 
 2. **Payment Record Extraction**: Each input file is processed, extracting individual payment records as a stream.
 
@@ -413,7 +415,7 @@ sequenceDiagram
 
 5. **Status Processing**: Final payment statuses are processed by the Payment Status Service to generate standardized output records.
 
-6. **Output Generation**: The Output CSV File Processing Service generates CSV payment output files based on the processed payment records.
+6. **Output Generation**: Object Publish streams terminal payment output records into grouped CSV output files.
 
 7. **Completion**: The Orchestrator Service coordinates the entire workflow and provides console output for debugging purposes.
 
@@ -538,10 +540,9 @@ mvn clean package
 java -jar input-csv-file-processing-svc/target/input-csv-file-processing-svc-1.0.jar
 java -jar payments-processing-svc/target/payments-processing-svc-1.0.jar
 java -jar payment-status-svc/target/payment-status-svc-1.0.jar
-java -jar output-csv-file-processing-svc/target/output-csv-file-processing-svc-1.0.jar
 
 # Run the orchestrator-svc as a CLI application (after all services are up)
-java -jar orchestrator-svc/target/orchestrator-svc-1.0.jar --csv-folder=/path/to/csv/files
+java -jar orchestrator-svc/target/orchestrator-svc-1.0.jar --ingest-once
 
 # Note: You'll need to stop each service manually in each terminal
 ```
@@ -558,10 +559,9 @@ mvn clean package -Pnative
 ./input-csv-file-processing-svc/target/input-csv-file-processing-svc-1.0-runner
 ./payments-processing-svc/target/payments-processing-svc-1.0-runner
 ./payment-status-svc/target/payment-status-svc-1.0-runner
-./output-csv-file-processing-svc/target/output-csv-file-processing-svc-1.0-runner
 
 # Run the orchestrator-svc as a CLI application (after all services are up)
-./orchestrator-svc/target/orchestrator-svc-1.0-runner --csv-folder=/path/to/csv/files
+./orchestrator-svc/target/orchestrator-svc-1.0-runner --ingest-once
 
 # Note: You'll need to stop each service manually in each terminal
 ```
@@ -641,8 +641,6 @@ The build generates a self-signed certificate under `examples/csv-payments/targe
    # Terminal 3:
    cd payment-status-svc && mvn quarkus:dev
 
-   # Terminal 4:
-   cd output-csv-file-processing-svc && mvn quarkus:dev
    ```
 
 ### Troubleshooting Certificate Issues
@@ -692,19 +690,44 @@ The telemetry harness launches the packaged orchestrator application. If the pac
 
 The application ships separate observability surfaces:
 
-1. **Grafana metrics dashboard**: Prometheus-backed throughput, latency, queue depth, inflight, and retry panels
+1. **Grafana metrics dashboard**: Prometheus-backed throughput, latency, queue depth, inflight, retry, Object Ingest, await-gate, and Object Publish panels
 2. **Tempo tracing surface**: live topology and trace drill-down
 3. **Replay viewer**: deterministic playback from `csv-payments-replay.json`
 
 Dashboards are discovered from `META-INF/grafana/grafana-dashboard-*.json` resources when LGTM Dev Services are active.
 
-### Custom Metrics
+### Connector-First Metrics
 
-The application exposes custom metrics to demonstrate reactive programming concepts:
+The connector-first path is healthy when:
 
-- **Backpressure Events**: Count of backpressure events triggered by rate limiting
-- **Retry Attempts**: Number of retry attempts with exponential back-off
-- **Lazy Evaluation**: Metrics showing the benefits of lazy stream processing
+1. Object Ingest listed and submitted the expected source object count.
+2. Await completions are admitted, early-held completions drain, and resume releases follow completed await units.
+3. Object Publish grouped the same terminal item count the run produced and published the expected `.out` object.
+4. Object Publish failures and await dropped completions remain zero outside intentional duplicate/retry tests.
+
+The relevant TPF metrics are:
+
+- `tpf.object_ingest.listed.objects.total`
+- `tpf.object_ingest.submitted.total`
+- `tpf.object_ingest.duplicate.total`
+- `tpf.object_ingest.failed.total`
+- `tpf.await.interaction.dispatched.total`
+- `tpf.await.unit.dispatch_complete.total`
+- `tpf.await.completion.admitted.total`
+- `tpf.await.item.completed.total`
+- `tpf.await.completion.early_held.total`
+- `tpf.await.resume.released.total`
+- `tpf.await.unit.terminal.total`
+- `tpf.await.completion.dropped.total`
+- `tpf.object_publish.grouped.items.total`
+- `tpf.object_publish.grouped.groups.total`
+- `tpf.object_publish.published.total`
+- `tpf.object_publish.published.bytes.total`
+- `tpf.object_publish.skipped.total`
+- `tpf.object_publish.failed.total`
+- `tpf.object_publish.write.duration`
+
+Object keys, await unit ids, interaction ids, and execution ids are intentionally visible in replay and traces, not metric labels.
 
 ### Distributed Tracing
 
@@ -724,7 +747,6 @@ Each service exposes a `/q/metrics` endpoint that provides Prometheus-formatted 
 - Input CSV File Processing Service: http://localhost:8081/q/metrics
 - Payments Processing Service: http://localhost:8082/q/metrics
 - Payment Status Service: http://localhost:8083/q/metrics
-- Output CSV File Processing Service: http://localhost:8084/q/metrics
 - Data Persistence Service: http://localhost:8085/q/metrics
 
 ## Related Services
@@ -733,7 +755,7 @@ Each service exposes a `/q/metrics` endpoint that provides Prometheus-formatted 
 - [Input CSV File Processing Service](./input-csv-file-processing-svc/README.md): Reads and parses input CSV files
 - [Payments Processing Service](./payments-processing-svc/README.md): Interacts with the mock payment provider
 - [Payment Status Service](./payment-status-svc/README.md): Processes payment statuses
-- [Output CSV File Processing Service](./output-csv-file-processing-svc/README.md): Generates output CSV files
+- [Output CSV File Processing Service](./output-csv-file-processing-svc/README.md): Deprecated legacy file-step output service
 - [Common Module](./common/README.md): Shared domain models and utilities
 
 ## Documentation

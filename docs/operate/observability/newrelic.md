@@ -32,7 +32,7 @@ of gRPC client spans for selected services:
 
 ```properties
 pipeline.telemetry.tracing.client-spans.force=true
-pipeline.telemetry.tracing.client-spans.allowlist=ProcessCsvPaymentsInputService,ProcessCsvPaymentsOutputFileService
+pipeline.telemetry.tracing.client-spans.allowlist=ProcessCsvPaymentsInputService
 ```
 
 When enabled, the orchestrator will always emit client spans for the allowlisted

@@ -18,21 +18,15 @@ modules:
     runtime: local
   payment-status-svc:
     runtime: local
-  output-csv-file-processing-svc:
-    runtime: local
   persistence-svc:
     runtime: local
   orchestrator-svc:
     runtime: local
 
 steps:
-  process-folder:
-    module: input-csv-file-processing-svc
   process-csv-payments-input:
     module: input-csv-file-processing-svc
   await-payment-provider:
     module: orchestrator-svc
   process-payment-status:
     module: payment-status-svc
-  process-csv-payments-output-file:
-    module: output-csv-file-processing-svc

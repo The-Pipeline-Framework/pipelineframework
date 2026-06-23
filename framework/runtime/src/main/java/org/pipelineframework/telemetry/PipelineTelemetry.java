@@ -730,6 +730,20 @@ public class PipelineTelemetry {
         replayTracker.recordAwaitLifecycle(lifecycleEvent, Instant.now());
     }
 
+    public void recordConnectorReplayEvent(
+        String connectorStep,
+        String service,
+        String eventName,
+        String from,
+        String to,
+        Map<String, String> attributes
+    ) {
+        if (!replayEnabled || replayTracker == null) {
+            return;
+        }
+        replayTracker.recordConnectorEvent(connectorStep, service, eventName, from, to, attributes, Instant.now());
+    }
+
     private Span startStepSpan(Class<?> stepClass, RunContext runContext, boolean perItemOperation) {
         if (!tracingEnabled || runContext == null || !runContext.enabled()) {
             return null;

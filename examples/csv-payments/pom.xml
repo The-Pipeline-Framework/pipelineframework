@@ -66,7 +66,7 @@
         <quarkus.container-image.registry>localhost</quarkus.container-image.registry>
         <quarkus.container-image.tag>latest</quarkus.container-image.tag>
         <quarkus.container-image.group>csv-payments</quarkus.container-image.group>
-        <quarkus.container-image.platforms>linux/amd64,linux/arm64/v8</quarkus.container-image.platforms>
+        <quarkus.jib.platforms>linux/amd64,linux/arm64/v8</quarkus.jib.platforms>
         <quarkus.jib.jvm-additional-arguments>--enable-preview</quarkus.jib.jvm-additional-arguments>
         <lombok.version>1.18.36</lombok.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>

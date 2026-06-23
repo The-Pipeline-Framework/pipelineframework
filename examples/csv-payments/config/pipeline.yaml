@@ -2,19 +2,56 @@ version: 2
 appName: csv-payments
 basePackage: org.pipelineframework.csv
 transport: GRPC
+sources:
+  csv-payment-files:
+    kind: object
+    provider: filesystem
+    location:
+      root: ../input-csv-file-processing-svc/csv
+      prefix: ""
+    filter:
+      include: ["*.csv"]
+    poll:
+      enabled: true
+      interval: PT10S
+      batchSize: 50
+    identity:
+      fields: [provider, container, key, etag]
+    payload:
+      mode: reference
+input:
+  from: csv-payment-files
+  emits:
+    type: org.pipelineframework.csv.common.domain.CsvPaymentsInputFile
+    typeName: CsvPaymentsInputFile
+    mapper: org.pipelineframework.csv.common.mapper.CsvPaymentFileObjectMapper
+publish:
+  csv-payment-output-files:
+    kind: object
+    provider: filesystem
+    location:
+      root: ../input-csv-file-processing-svc/csv
+    naming:
+      keyTemplate: "{groupKey}.out"
+    payload:
+      contentType: text/csv
+    grouping:
+      maxOpenGroups: 1
+output:
+  to: csv-payment-output-files
+  consumes:
+    type: org.pipelineframework.csv.common.domain.PaymentOutput
+    typeName: PaymentOutput
+    mapper: org.pipelineframework.csv.common.mapper.CsvPaymentOutputPublishMapper
 aspects:
   persistence:
     enabled: true
     scope: STEPS
     position: AFTER_STEP
     config:
-      # Queue-async resume is at-least-once from the await boundary onward. Persisted CSV entities
-      # use stable business IDs and duplicate-key=ignore so replayed side effects stay idempotent.
       targetSteps:
-        - ProcessFolderService
         - ProcessCsvPaymentsInputService
         - ProcessPaymentStatusService
-        - ProcessCsvPaymentsOutputFileService
       pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
       enabledTargets:
         - GRPC_SERVICE
@@ -132,15 +169,6 @@ messages:
         name: csvFolderPath
         type: path
 steps:
-  - name: Process Folder
-    service: org.pipelineframework.csv.service.ProcessFolderService
-    cardinality: EXPANSION
-    input: org.pipelineframework.csv.common.domain.CsvFolder
-    inputTypeName: CsvFolder
-    inboundMapper: org.pipelineframework.csv.common.mapper.CsvFolderMapper
-    output: org.pipelineframework.csv.common.domain.CsvPaymentsInputFile
-    outputTypeName: CsvPaymentsInputFile
-    outboundMapper: org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileMapper
   - name: Process Csv Payments Input
     service: org.pipelineframework.csv.service.ProcessCsvPaymentsInputService
     cardinality: EXPANSION
@@ -180,12 +208,3 @@ steps:
     output: org.pipelineframework.csv.common.domain.PaymentOutput
     outputTypeName: PaymentOutput
     outboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputMapper
-  - name: Process Csv Payments Output File
-    service: org.pipelineframework.csv.service.ProcessCsvPaymentsOutputFileService
-    cardinality: MANY_TO_MANY
-    input: org.pipelineframework.csv.common.domain.PaymentOutput
-    inputTypeName: PaymentOutput
-    inboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputMapper
-    output: org.pipelineframework.csv.common.domain.CsvPaymentsOutputFile
-    outputTypeName: CsvPaymentsOutputFile
-    outboundMapper: org.pipelineframework.csv.common.mapper.CsvPaymentsOutputFileMapper

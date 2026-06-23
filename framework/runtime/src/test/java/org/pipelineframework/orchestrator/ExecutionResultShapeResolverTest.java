@@ -30,19 +30,45 @@ class ExecutionResultShapeResolverTest {
         assertEquals(ExecutionResultShape.SINGLE, resolver.resolve());
     }
 
+    @Test
+    void resolvePreservesFanOutThroughOneToOneTerminalSteps() throws Exception {
+        Path explicit = tempDir.resolve("pipeline.yaml");
+        Files.writeString(explicit, pipelineYaml("ONE_TO_MANY", "ONE_TO_ONE"));
+        System.setProperty("pipeline.config", explicit.toString());
+
+        ExecutionResultShapeResolver resolver = new ExecutionResultShapeResolver();
+
+        assertEquals(ExecutionResultShape.MATERIALIZED_MULTI, resolver.resolve());
+    }
+
+    @Test
+    void resolveTreatsFanInAsSingleTerminalShape() throws Exception {
+        Path explicit = tempDir.resolve("pipeline.yaml");
+        Files.writeString(explicit, pipelineYaml("ONE_TO_MANY", "MANY_TO_ONE"));
+        System.setProperty("pipeline.config", explicit.toString());
+
+        ExecutionResultShapeResolver resolver = new ExecutionResultShapeResolver();
+
+        assertEquals(ExecutionResultShape.SINGLE, resolver.resolve());
+    }
+
     private static String pipelineYaml(String terminalCardinality) {
+        return pipelineYaml("ONE_TO_ONE", terminalCardinality);
+    }
+
+    private static String pipelineYaml(String firstCardinality, String terminalCardinality) {
         return """
             basePackage: org.example
             transport: GRPC
             steps:
               - name: Process Input
-                cardinality: ONE_TO_ONE
+                cardinality: %s
                 input: org.example.Input
                 output: org.example.Intermediate
               - name: Process Output
                 cardinality: %s
                 input: org.example.Intermediate
                 output: org.example.Output
-            """.formatted(terminalCardinality);
+            """.formatted(firstCardinality, terminalCardinality);
     }
 }

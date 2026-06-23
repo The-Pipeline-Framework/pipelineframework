@@ -54,7 +54,7 @@ import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
  */
 @PipelineStep
 @ApplicationScoped
-@Deprecated(forRemoval = false)
+@Deprecated(since = "26.6.2", forRemoval = true)
 public class ProcessCsvPaymentsOutputFileService
     implements ReactiveBidirectionalStreamingService<PaymentOutput, CsvPaymentsOutputFile> {
 

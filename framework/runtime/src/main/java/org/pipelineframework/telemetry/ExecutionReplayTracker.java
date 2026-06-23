@@ -157,6 +157,51 @@ final class ExecutionReplayTracker {
         addAwaitSpanEvent(lifecycleEvent);
     }
 
+    void recordConnectorEvent(
+        String connectorStep,
+        String service,
+        String eventName,
+        String from,
+        String to,
+        Map<String, String> attributes,
+        Instant occurredAt
+    ) {
+        if (!enabled() || connectorStep == null || connectorStep.isBlank() || eventName == null || eventName.isBlank()) {
+            return;
+        }
+        PipelineReplayTopology.Step step = topology.steps() == null
+            ? null
+            : topology.steps().stream()
+                .filter(candidate -> connectorStep.equals(candidate.step()))
+                .findFirst()
+                .orElse(null);
+        String resolvedService = service == null || service.isBlank()
+            ? (step == null ? connectorStep : step.service())
+            : service;
+        PipelineExecutionEvent event = new PipelineExecutionEvent(
+            null,
+            null,
+            null,
+            null,
+            topology.pipeline(),
+            connectorStep,
+            resolvedService,
+            eventName,
+            0d,
+            0d,
+            0L,
+            from,
+            to,
+            step == null ? "one-to-one" : step.cardinality(),
+            List.of(),
+            null,
+            null,
+            null,
+            null,
+            attributes == null ? Map.of() : Map.copyOf(attributes));
+        exporter.emitControlEvent(topology.pipeline(), occurredAt, topology, event);
+    }
+
     StepExecutionScope beginStep(
         String runtimeStepClass,
         PipelineTelemetry.RunContext runContext,

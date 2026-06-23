@@ -23,6 +23,7 @@ import javax.lang.model.SourceVersion;
 import javax.tools.FileObject;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardLocation;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
 
@@ -30,6 +31,7 @@ import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -163,6 +165,53 @@ class PipelineGenerationPhaseTest {
     }
 
     @Test
+    void skipsObjectIoBoundaryAdaptersForPluginHostModules(@TempDir Path tempDir) throws Exception {
+        PipelineGenerationPhase phase = new PipelineGenerationPhase();
+        Path config = tempDir.resolve("pipeline-object-io.yaml");
+        Files.writeString(config, """
+            version: 2
+            basePackage: com.example
+            transport: GRPC
+            sources:
+              input-files:
+                kind: object
+                provider: filesystem
+                location:
+                  root: /tmp/input
+            input:
+              from: input-files
+              emits:
+                type: com.example.Input
+                typeName: Input
+                mapper: com.example.InputMapper
+            publish:
+              output-files:
+                kind: object
+                provider: filesystem
+                location:
+                  root: /tmp/output
+                naming:
+                  keyTemplate: "{groupKey}.out"
+            output:
+              to: output-files
+              consumes:
+                type: com.example.Output
+                typeName: Output
+                mapper: com.example.OutputMapper
+            steps: []
+            """);
+        when(processingEnv.getOptions()).thenReturn(java.util.Map.of("pipeline.config", config.toString()));
+        org.pipelineframework.processor.PipelineCompilationContext context =
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+        context.setPluginHost(true);
+        context.setGeneratedSourcesRoot(Path.of("target/generated-sources-test"));
+        context.setRendererBindings(java.util.Map.of());
+        context.setStepModels(java.util.List.of());
+
+        assertDoesNotThrow(() -> phase.execute(context));
+    }
+
+    @Test
     void externalAdapterGenerationContextPropagatesEnabledAspects() throws Exception {
         PipelineGenerationPhase phase = new PipelineGenerationPhase();
         org.pipelineframework.processor.PipelineCompilationContext context =
@@ -257,12 +306,13 @@ class PipelineGenerationPhaseTest {
         org.pipelineframework.processor.PipelineCompilationContext context =
             new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
 
-        com.squareup.javapoet.ClassName keyGenerator =
-            (com.squareup.javapoet.ClassName) method.invoke(phase, context);
+        @SuppressWarnings("unchecked")
+        java.util.Optional<com.squareup.javapoet.ClassName> keyGenerator =
+            (java.util.Optional<com.squareup.javapoet.ClassName>) method.invoke(phase, context);
 
-        assertNotNull(keyGenerator);
-        assertEquals("CustomKeyGenerator", keyGenerator.simpleName());
-        assertEquals("com.example", keyGenerator.packageName());
+        assertTrue(keyGenerator.isPresent());
+        assertEquals("CustomKeyGenerator", keyGenerator.orElseThrow().simpleName());
+        assertEquals("com.example", keyGenerator.orElseThrow().packageName());
     }
 
     @Test
@@ -278,10 +328,11 @@ class PipelineGenerationPhaseTest {
         org.pipelineframework.processor.PipelineCompilationContext context =
             new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
 
-        com.squareup.javapoet.ClassName keyGenerator =
-            (com.squareup.javapoet.ClassName) method.invoke(phase, context);
+        @SuppressWarnings("unchecked")
+        java.util.Optional<com.squareup.javapoet.ClassName> keyGenerator =
+            (java.util.Optional<com.squareup.javapoet.ClassName>) method.invoke(phase, context);
 
-        assertNull(keyGenerator);
+        assertTrue(keyGenerator.isEmpty());
     }
 
     @Test

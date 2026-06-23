@@ -19,8 +19,10 @@ In `QUEUE_ASYNC` mode:
 1. committed execution state transitions are exactly-once (OCC/conditional-write guarded),
 2. dispatch and operator invocation are at-least-once,
 3. duplicate invocation can occur and must be handled with idempotency keys,
-4. streaming outputs are rejected for async execution in the current release line,
+4. generic async result payloads are still persisted as bounded terminal payloads,
 5. persisted protobuf payload descriptors store `_tpf_message` as the protobuf schema full name.
+
+Terminal Object Publish is the connector-owned exception to the older "materialize then write a final file" pattern. When `output.to` is configured, queue-async terminal output is published through the Object Publish connector before the execution is marked successful. The persisted execution result may still keep a compatibility payload, but the external object write is not a user-authored final business step.
 
 ## Crash Behaviour
 
@@ -101,6 +103,7 @@ Submit(run-async)
   -> enqueue work item
   -> worker claimLease (OCC + lease expiry)
   -> execute transition
+  -> publish terminal connector output when configured
   -> commit transition (markSucceeded / scheduleRetry / markTerminalFailure)
   -> enqueue next transition OR finalize terminal state
 ```
@@ -112,6 +115,8 @@ Recovery points:
 3. worker death while leased: lease expiry allows takeover.
 
 These guarantees are deterministic for orchestrator state, not for external side effects; downstream step boundaries must accept at-least-once invocation.
+
+Await steps add one more durable boundary. An itemized await continuation is not released just because a completion envelope arrived. The coordinator waits until the await unit dispatch is complete and the parent execution is durably `WAITING_EXTERNAL` for that unit. That is the handoff point where in-memory backpressure ends and durable coordination takes over.
 
 ## HA Baseline
 

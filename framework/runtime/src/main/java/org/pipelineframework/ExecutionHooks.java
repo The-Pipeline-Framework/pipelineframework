@@ -14,6 +14,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.grpc.Status;
+import io.smallrye.mutiny.CompositeException;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.operators.multi.AbstractMultiOperator;
@@ -229,12 +230,36 @@ class ExecutionHooks {
   }
 
   private boolean isControlFlow(Throwable failure) {
-    Throwable current = failure;
-    while (current != null) {
+    if (failure == null) {
+      return false;
+    }
+    java.util.ArrayDeque<Throwable> queue = new java.util.ArrayDeque<>();
+    java.util.Set<Throwable> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+    queue.add(failure);
+    while (!queue.isEmpty()) {
+      Throwable current = queue.removeFirst();
+      if (!seen.add(current)) {
+        continue;
+      }
       if (current instanceof PipelineControlFlowException) {
         return true;
       }
-      current = current.getCause();
+      Throwable cause = current.getCause();
+      if (cause != null && cause != current) {
+        queue.add(cause);
+      }
+      for (Throwable suppressed : current.getSuppressed()) {
+        if (suppressed != null) {
+          queue.add(suppressed);
+        }
+      }
+      if (current instanceof CompositeException composite) {
+        for (Throwable causeItem : composite.getCauses()) {
+          if (causeItem != null) {
+            queue.add(causeItem);
+          }
+        }
+      }
     }
     return false;
   }

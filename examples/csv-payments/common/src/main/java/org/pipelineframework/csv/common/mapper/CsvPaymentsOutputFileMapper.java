@@ -34,7 +34,7 @@ import org.pipelineframework.csv.common.dto.CsvPaymentsOutputFileDto;
     componentModel = "jakarta",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-@Deprecated(forRemoval = false)
+@Deprecated(since = "26.6.2", forRemoval = true)
 public interface CsvPaymentsOutputFileMapper extends org.pipelineframework.mapper.Mapper<CsvPaymentsOutputFile, org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsOutputFile> {
 
   CsvPaymentsOutputFileMapper INSTANCE = Mappers.getMapper( CsvPaymentsOutputFileMapper.class );

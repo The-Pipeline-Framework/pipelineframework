@@ -16,6 +16,47 @@ For modeling guidance, start with [Await Boundaries](/design/await-boundaries). 
 
 `csv-payments` uses authored `ONE_TO_ONE` await over a stream of `PaymentRecord` items. That is a stream of unary await interactions, not a hidden dispatch mode.
 
+## Itemized Queue-Async Mechanics
+
+When `ONE_TO_ONE` await receives a stream, TPF creates one owning await unit and one interaction per input item. Completion admission is intentionally stricter than "a response arrived, continue now":
+
+1. the source stream must finish dispatching the unit and persist `dispatchComplete`,
+2. the parent execution must be durably parked as `WAITING_EXTERNAL` for the same await unit,
+3. the item completion must be recorded against the expected interaction,
+4. only then can the queue-async coordinator dispatch that item's continuation.
+
+This handles fast providers and broker redelivery safely. A completion that arrives before the parent wait is persisted is recorded, but it does not start item continuation work until the parent execution is actually waiting on that unit. Duplicate completions resolve through the same interaction record instead of re-running the continuation.
+
+For `csv-payments`, `Process Csv Payments Input` can emit `PaymentRecord` rows incrementally, `Await Payment Provider` dispatches each row as an item interaction, and `Process Payment Status` can run per admitted completion. The parent execution is released after the itemized unit is complete; terminal Object Publish then writes the final `PaymentOutput` objects before the execution is marked successful.
+
+```mermaid
+sequenceDiagram
+    participant Input as "Input stream"
+    participant Await as "AwaitStepSupport"
+    participant Unit as "Await unit store"
+    participant Exec as "Execution store"
+    participant Provider as "Provider response"
+    participant Queue as "QueueAsyncCoordinator"
+    participant Status as "Item continuation"
+
+    Input->>Await: item 0
+    Await->>Unit: create interaction itemIndex=0
+    Await-->>Provider: dispatch request 0
+    Provider-->>Queue: completion item 0 arrives early
+    Queue->>Unit: record item 0 completed
+    Queue->>Exec: check parent waiting
+    Exec-->>Queue: not WAITING_EXTERNAL yet
+    Queue-->>Queue: do not continue item 0
+
+    Input->>Await: source exhausted
+    Await->>Unit: mark dispatchComplete(expected count)
+    Await-->>Queue: suspend parent await unit
+    Queue->>Exec: mark WAITING_EXTERNAL(awaitUnitId)
+    Queue->>Unit: find completed unreleased items
+    Queue->>Status: continue item 0
+    Status-->>Queue: collect item output
+```
+
 The built-in `interaction-api` adapter is for human/UI inboxes and mock-provider style flows where another client queries pending interactions and later calls the generated completion API. The built-in `webhook` adapter dispatches an HTTP request to an external system and includes a signed resume token in the envelope. The built-in `kafka` adapter publishes a request envelope to Kafka and admits completion envelopes from a configured response channel. The built-in `sqs` adapter does the same request/completion pattern with SQS standard queues.
 
 For runnable examples, use [`examples/restaurant-approval`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/restaurant-approval) for human/UI await and [`examples/csv-payments`](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/csv-payments) for brokered unary await over a stream.

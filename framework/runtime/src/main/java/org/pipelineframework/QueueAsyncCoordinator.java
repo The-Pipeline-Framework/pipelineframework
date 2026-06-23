@@ -25,9 +25,11 @@ import org.pipelineframework.checkpoint.CheckpointPublicationService;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionAdmissionFailures;
+import org.pipelineframework.awaitable.AwaitCompletionMetrics;
 import org.pipelineframework.awaitable.AwaitCompletionTenantMismatchException;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCoordinator;
+import org.pipelineframework.awaitable.AwaitInteractionStatus;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitThrowableSupport;
 import org.pipelineframework.awaitable.AwaitUnitStatus;
@@ -68,6 +70,7 @@ import org.pipelineframework.orchestrator.TransitionWorkerOutcome;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
+import org.pipelineframework.objectpublish.ObjectPublishCompletionService;
 
 /**
  * Coordinates queue-mode orchestration lifecycle and provider interactions.
@@ -124,6 +127,9 @@ class QueueAsyncCoordinator {
 
   @Inject
   CheckpointPublicationService checkpointPublicationService;
+
+  @Inject
+  ObjectPublishCompletionService objectPublishCompletionService;
 
   @Inject
   AwaitCoordinator awaitCoordinator;
@@ -632,12 +638,19 @@ class QueueAsyncCoordinator {
               return awaitCoordinator.recordCompletion(validated.record(), normalized.nowEpochMs())
                   .onItem().transformToUni(unit -> {
                     if (usesItemContinuations(validated.record(), unit)) {
-                      dispatchAwaitItemContinuation(
-                          validated.record(),
-                          unit,
-                          itemContinuationHandler,
-                          normalized.nowEpochMs());
-                      return Uni.createFrom().item(validated);
+                      return awaitItemContinuationReady(validated.record(), unit)
+                          .onItem().invoke(ready -> {
+                            if (ready) {
+                              dispatchAwaitItemContinuation(
+                                  validated.record(),
+                                  unit,
+                                  itemContinuationHandler,
+                                  normalized.nowEpochMs());
+                            } else {
+                              AwaitCompletionMetrics.recordEarlyCompletionHeld(validated.record(), unit);
+                            }
+                          })
+                          .replaceWith(validated);
                     }
                     return unit.status() == AwaitUnitStatus.COMPLETED
                         ? releaseAwaitResume(validated.record(), unit.unitId(), normalized.nowEpochMs()).replaceWith(validated)
@@ -655,6 +668,51 @@ class QueueAsyncCoordinator {
       return;
     }
     dispatchAwaitItemContinuationAttempt(record, unit, itemContinuationHandler, nowEpochMs, 1);
+  }
+
+  private Uni<Boolean> awaitItemContinuationReady(
+      AwaitInteractionRecord record,
+      org.pipelineframework.awaitable.AwaitUnitRecord unit) {
+    if (record == null || unit == null || !unit.dispatchComplete()) {
+      return Uni.createFrom().item(false);
+    }
+    Uni<Optional<ExecutionRecord<Object, Object>>> parentLookup =
+        executionStateStore.getExecution(record.tenantId(), record.executionId());
+    if (parentLookup == null) {
+      return Uni.createFrom().item(false);
+    }
+    return parentLookup
+        .onItem().transform(parent -> awaitItemContinuationReady(parent, unit));
+  }
+
+  private static boolean awaitItemContinuationReady(
+      Optional<ExecutionRecord<Object, Object>> parent,
+      org.pipelineframework.awaitable.AwaitUnitRecord unit) {
+    return parent.isPresent()
+        && parent.get().status() == ExecutionStatus.WAITING_EXTERNAL
+        && unit.unitId().equals(parent.get().awaitUnitId());
+  }
+
+  private Uni<Void> dispatchCompletedAwaitItemContinuations(
+      ExecutionRecord<Object, Object> parent,
+      org.pipelineframework.awaitable.AwaitUnitRecord unit,
+      AwaitItemContinuationHandler itemContinuationHandler,
+      long nowEpochMs) {
+    if (parent == null || unit == null || !usesItemContinuations(unit) || !unit.dispatchComplete()
+        || itemContinuationHandler == NOOP_ITEM_CONTINUATION_HANDLER) {
+      return Uni.createFrom().voidItem();
+    }
+    return awaitCoordinator.findByUnit(parent.tenantId(), unit.unitId())
+        .onItem().invoke(records -> records.stream()
+            .filter(record -> record.itemInteraction()
+                && record.itemIndex() != null
+                && record.status() == AwaitInteractionStatus.COMPLETED)
+            .forEach(record -> dispatchAwaitItemContinuation(
+                record,
+                unit,
+                itemContinuationHandler,
+                nowEpochMs)))
+        .replaceWithVoid();
   }
 
   private void dispatchAwaitItemContinuationAttempt(
@@ -675,12 +733,17 @@ class QueueAsyncCoordinator {
     Infrastructure.getDefaultExecutor().execute(() ->
         executionStateStore
             .getExecution(record.tenantId(), record.executionId())
-            .onItem().transformToUni(parent -> itemContinuationHandler.continueAwaitItem(
-                record,
-                unit,
-                record.stepIndex() + 1,
-                parent,
-                nowEpochMs))
+            .onItem().transformToUni(parent -> {
+              if (!awaitItemContinuationReady(parent, unit)) {
+                return Uni.createFrom().voidItem();
+              }
+              return itemContinuationHandler.continueAwaitItem(
+                  record,
+                  unit,
+                  record.stepIndex() + 1,
+                  parent,
+                  nowEpochMs);
+            })
             .subscribe().with(
                 ignored -> {
                   permit.close();
@@ -798,7 +861,7 @@ class QueueAsyncCoordinator {
           deadLetterPublisher);
     }
     if (result.outcome() == TransitionWorkerOutcome.COMPLETED) {
-      return handleCompletedTransition(record, transitionKey, result.coordinatorOutputItems());
+      return handleCompletedTransition(record, transitionKey, result);
     }
     if (result.outcome() == TransitionWorkerOutcome.WAITING_EXTERNAL) {
       return markWaitingExternal(record, result.awaitSuspension(), transitionKey, itemContinuationHandler);
@@ -815,7 +878,8 @@ class QueueAsyncCoordinator {
   private Uni<Void> handleCompletedTransition(
       ExecutionRecord<Object, Object> record,
       String transitionKey,
-      List<?> outputItems) {
+      TransitionResultEnvelope result) {
+    List<?> outputItems = result.coordinatorOutputItems();
     if (record.resultShape() == ExecutionResultShape.SINGLE && outputItems.size() > 1) {
       return Uni.createFrom().failure(new IllegalStateException(
           "Async queue execution " + record.executionId()
@@ -824,6 +888,7 @@ class QueueAsyncCoordinator {
     }
     return checkpointPublicationService
         .publishIfConfigured(record, singleResult(outputItems))
+        .chain(() -> publishTerminalOutputsIfConfigured(result))
         .replaceWith(outputItems)
         .onItem().transformToUni(payload -> executionStateStore.markSucceeded(
             record.tenantId(),
@@ -833,6 +898,13 @@ class QueueAsyncCoordinator {
             payload,
             System.currentTimeMillis()))
         .replaceWithVoid();
+  }
+
+  private Uni<Void> publishTerminalOutputsIfConfigured(TransitionResultEnvelope result) {
+    if (objectPublishCompletionService == null) {
+      return Uni.createFrom().voidItem();
+    }
+    return objectPublishCompletionService.publishIfConfigured(() -> result.decodeOutputItems(payloadCodec()));
   }
 
   private Uni<Void> markWaitingExternal(
@@ -873,7 +945,7 @@ class QueueAsyncCoordinator {
                       null,
                       null,
                       null));
-                  return releaseAlreadyCompletedAwaitUnit(record, suspended, nowEpochMs, itemContinuationHandler);
+                  return releaseAlreadyCompletedAwaitUnit(updated.get(), suspended, nowEpochMs, itemContinuationHandler);
                 }
                 return Uni.createFrom().failure(new IllegalStateException(
                     "Failed to persist WAITING_EXTERNAL state for execution "
@@ -1176,14 +1248,17 @@ class QueueAsyncCoordinator {
     return awaitCoordinator.getUnit(record.tenantId(), suspended.unitId())
         .onItem().transformToUni(unit -> {
           if (unit == null || unit.status() != AwaitUnitStatus.COMPLETED) {
-            return Uni.createFrom().voidItem();
+            return unit != null && usesItemContinuations(unit)
+                ? dispatchCompletedAwaitItemContinuations(record, unit, itemContinuationHandler, nowEpochMs)
+                : Uni.createFrom().voidItem();
           }
           if (usesItemContinuations(unit)) {
-            return itemContinuationHandler.releaseAwaitParentIfReady(
-                record,
-                unit,
-                suspended.stepIndex() + 1,
-                nowEpochMs);
+            return dispatchCompletedAwaitItemContinuations(record, unit, itemContinuationHandler, nowEpochMs)
+                .onItem().transformToUni(ignored -> itemContinuationHandler.releaseAwaitParentIfReady(
+                    record,
+                    unit,
+                    suspended.stepIndex() + 1,
+                    nowEpochMs));
           }
           return releaseAwaitResume(
               record.tenantId(),
@@ -1324,6 +1399,7 @@ class QueueAsyncCoordinator {
                     unit.expectedItemCount(),
                     unit.completedItemCount(),
                     unit.dispatchComplete()));
+                AwaitCompletionMetrics.recordResumeReleased(unit);
                 return workDispatcher.enqueueNow(new ExecutionWorkItem(
                         updated.get().tenantId(),
                         updated.get().executionId()))
@@ -1395,6 +1471,20 @@ class QueueAsyncCoordinator {
                 awaitUnitId,
                 updated.get().currentStepIndex());
             recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
+                AwaitReplayLifecycleEvent.RESUME_RELEASED,
+                executionId,
+                awaitUnitId,
+                stepId,
+                stepIndex,
+                updated.get().status().name(),
+                interactionId,
+                correlationId,
+                transportType,
+                itemIndex,
+                null,
+                null,
+                null));
+            AwaitCompletionMetrics.recordResumeReleased(new AwaitReplayLifecycleEvent(
                 AwaitReplayLifecycleEvent.RESUME_RELEASED,
                 executionId,
                 awaitUnitId,

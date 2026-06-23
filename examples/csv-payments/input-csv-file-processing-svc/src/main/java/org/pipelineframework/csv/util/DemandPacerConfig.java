@@ -20,6 +20,7 @@ import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
 
 @ConfigMapping(prefix = "csv-payments.reader-demand-pacer")
+@Deprecated(since = "26.6.2", forRemoval = true)
 public interface DemandPacerConfig {
   /**
    * Number of rows permitted in each rate-limiting period.

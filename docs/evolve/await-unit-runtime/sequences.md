@@ -40,6 +40,8 @@ sequenceDiagram
     participant Adapter as AwaitTransportAdapter
     participant UnitStore as AwaitUnitStore
     participant ExecStore as ExecutionStateStore
+    participant Queue as QueueAsyncCoordinator
+    participant Suffix as Item continuation suffix
 
     Source->>Step: item 0
     Step->>Coord: createOrGetItem(unitId, itemIndex=0)
@@ -51,16 +53,41 @@ sequenceDiagram
     Step-->>ExecStore: park execution with awaitUnitId
     Adapter-->>Coord: complete item 1
     Coord->>UnitStore: recordItemCompleted
+    Coord->>Queue: ask whether item 1 may continue
+    Queue->>UnitStore: require dispatchComplete
+    Queue->>ExecStore: require parent WAITING_EXTERNAL(awaitUnitId)
+    Queue->>Suffix: continue item 1 when both gates pass
     Adapter-->>Coord: complete item 0
     Coord->>UnitStore: recordItemCompleted -> COMPLETED
-    Coord-->>ExecStore: resume execution from ordered unit outputs
+    Coord->>Queue: release parent after item continuations complete
 ```
 
 Completion may arrive out of order. Replay preserves input order by reading completed item interactions by `itemIndex`.
 
+## Await Unit Gatekeeper
+
+The await unit is both a durability gate and a unit-shape gate. It prevents completions from racing ahead of parent suspension, and it defines what must be replayed together.
+
+```mermaid
+flowchart TD
+    A["Authored await step"] --> B{"Cardinality + input shape"}
+    B -->|ONE_TO_ONE scalar| C["One unit<br/>one primary interaction"]
+    B -->|ONE_TO_ONE stream| D["One unit<br/>ordered item interactions"]
+    B -->|ONE_TO_MANY| E["One unit<br/>one input, materialized output items"]
+    B -->|MANY_TO_ONE| F["One unit<br/>materialized input items, one output"]
+    B -->|MANY_TO_MANY| G["One unit<br/>materialized input and output items"]
+    C --> H["Release when completion recorded<br/>and parent waits on unit"]
+    D --> I["Release item continuations only after<br/>dispatchComplete + parent WAITING_EXTERNAL"]
+    E --> J["Replay whole output unit"]
+    F --> K["Replay one aggregate output"]
+    G --> L["Replay whole output unit"]
+```
+
+For `ONE_TO_ONE` over a stream, the unit groups item interactions for ordering, dedupe, and release. It is not provider-side batching. For aggregate cardinalities, the unit is the batch because the runtime materializes the relevant side of the boundary.
+
 ## CSV Payments Itemized Await
 
-This is the concrete `csv-payments` shape. `Await Payment Provider` owns the Kafka boundary, but `Process Payment Status` can run per completed item. The parent execution only waits for the next aggregate boundary, `Process Csv Payments Output File`.
+This is the concrete connector-first `csv-payments` shape. `Await Payment Provider` owns the Kafka boundary, but `Process Payment Status` can run per completed item. The parent execution is released after the itemized unit reaches the next aggregate or terminal boundary, then terminal Object Publish writes the output objects before success is committed.
 
 ```mermaid
 sequenceDiagram
@@ -73,13 +100,18 @@ sequenceDiagram
     participant Exec as PipelineExecutionService
     participant Queue as QueueAsyncCoordinator
     participant Status as Process Payment Status
-    participant Output as Process Csv Payments Output File
+    participant Publish as Object Publish
 
     Input-->>Runner: PaymentRecord item 0
     Runner->>Await: execute item 0
     Await->>AwaitCoord: create item interaction(itemIndex=0)
     AwaitCoord->>Kafka: publish request envelope
     Kafka->>Provider: deliver payment request
+    Provider-->>Kafka: PaymentStatus item 0 early
+    Kafka-->>Exec: complete by correlationId
+    Exec->>Queue: complete await interaction
+    Queue->>AwaitCoord: record item 0 completed
+    Queue->>Queue: hold continuation until parent is WAITING_EXTERNAL
 
     Input-->>Runner: PaymentRecord item 1
     Runner->>Await: execute item 1
@@ -87,12 +119,10 @@ sequenceDiagram
     AwaitCoord->>Kafka: publish request envelope
     Kafka->>Provider: deliver payment request
 
+    Await->>AwaitCoord: mark dispatchComplete(expectedItemCount=2)
     Await-->>Queue: suspend parent execution(awaitUnitId)
-    Queue->>Queue: mark WAITING_EXTERNAL
-
-    Provider-->>Kafka: PaymentStatus item 0
-    Kafka-->>Exec: complete by correlationId
-    Exec->>Queue: complete await interaction
+    Queue->>Queue: mark WAITING_EXTERNAL(awaitUnitId)
+    Queue->>Queue: release already completed item 0
     Queue->>Status: continue item 0
     Status-->>Queue: PaymentOutput item 0
 
@@ -103,10 +133,13 @@ sequenceDiagram
     Status-->>Queue: PaymentOutput item 1
 
     Queue->>Queue: all item continuations collected in itemIndex order
-    Queue->>Output: resume parent at aggregate boundary
+    Queue->>Queue: release parent execution at terminal boundary
+    Queue->>Publish: publish terminal PaymentOutput objects
+    Publish-->>Queue: write sessions closed
+    Queue->>Queue: mark execution succeeded
 ```
 
-The model is itemized until the next aggregate step. If an authored downstream step is `MANY_TO_ONE` or `MANY_TO_MANY`, the parent execution resumes there with the collected ordered item outputs.
+The model is itemized until the next aggregate or terminal boundary. If an authored downstream step is `MANY_TO_ONE` or `MANY_TO_MANY`, the parent execution resumes there with the collected ordered item outputs. If the suffix remains itemized through the terminal output, Object Publish owns final grouping and object writes.
 
 ## Aggregate Unit
 

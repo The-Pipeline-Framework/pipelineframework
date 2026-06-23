@@ -13,7 +13,7 @@ import zipfile
 from pathlib import Path
 
 PAYLOAD_ENCODING = "application/tpf-transition+json"
-CSV_FOLDER_TYPE = "org.pipelineframework.csv.grpc.PipelineTypes$CsvFolder"
+CSV_INPUT_FILE_TYPE = "org.pipelineframework.csv.grpc.PipelineTypes$CsvPaymentsInputFile"
 
 
 def request(method, url, token=None, body=None, timeout=10):
@@ -153,24 +153,30 @@ def encoded_payload(payload, payload_type):
     }
 
 
-def default_idempotency_key(args, folder):
+def default_idempotency_key(args, input_file):
     """Build a stable key for safe command retries; callers may override it explicitly."""
-    input_dir = Path(folder)
-    parts = [args.pipeline_id, str(input_dir)]
-    for path in sorted(input_dir.glob("*.csv")):
-        content = path.read_bytes()
-        parts.append(f"{path.name}:{len(content)}:{hashlib.sha256(content).hexdigest()}")
+    path = Path(input_file).resolve()
+    content = path.read_bytes()
+    parts = [
+        args.pipeline_id,
+        str(path),
+        f"{path.name}:{len(content)}:{hashlib.sha256(content).hexdigest()}",
+    ]
     digest = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
     return f"csv-{digest[:24]}"
 
 
-def submit_csv_folder(args):
-    folder = str(Path(args.input_dir).resolve())
+def submit_csv_input_file(args, input_file):
+    path = Path(input_file).resolve()
+    folder = path.parent
     body = {
         "pipelineId": args.pipeline_id,
         "inputShape": "UNI",
-        "inputPayload": encoded_payload({"path": folder}, CSV_FOLDER_TYPE),
-        "idempotencyKey": args.idempotency_key or default_idempotency_key(args, folder),
+        "inputPayload": encoded_payload({
+            "filepath": str(path),
+            "csvFolderPath": str(folder),
+        }, CSV_INPUT_FILE_TYPE),
+        "idempotencyKey": args.idempotency_key or default_idempotency_key(args, path),
         "outputStreaming": False,
     }
     accepted = request(
@@ -180,7 +186,7 @@ def submit_csv_folder(args):
         body=body,
         timeout=30,
     )
-    print(f"Submitted CSV execution {accepted['executionId']} for folder {folder}")
+    print(f"Submitted CSV execution {accepted['executionId']} for file {path}")
     return accepted["executionId"]
 
 
@@ -227,20 +233,18 @@ def prepare_input(args):
     shutil.copyfile(source, target)
     target.chmod(0o666)
     print(f"Prepared CSV input {target}")
-    return input_dir
+    return target
 
 
-def wait_output(input_dir, timeout_seconds):
+def wait_output(output_dir, output_name, timeout_seconds):
     deadline = time.time() + timeout_seconds
+    output = Path(output_dir).resolve() / output_name
     while time.time() < deadline:
-        outputs = sorted(Path(input_dir).glob("*.out"))
-        non_empty = [path for path in outputs if path.stat().st_size > 0]
-        if non_empty:
-            for output in non_empty:
-                print(f"Observed CSV output {output} ({output.stat().st_size} bytes)")
-            return non_empty
+        if output.is_file() and output.stat().st_size > 0:
+            print(f"Observed CSV output {output} ({output.stat().st_size} bytes)")
+            return output
         time.sleep(1)
-    raise RuntimeError(f"No non-empty .out files appeared under {input_dir}")
+    raise RuntimeError(f"No non-empty CSV output appeared at {output}")
 
 
 def inspect_result(args, execution_id):
@@ -255,11 +259,17 @@ def inspect_result(args, execution_id):
 
 
 def run_flow(args):
-    input_dir = prepare_input(args)
-    execution_id = submit_csv_folder(args)
+    input_file = prepare_input(args)
+    output_dir = Path(args.output_dir).resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_file_name = f"{input_file.name}.out"
+    output_file = output_dir / output_file_name
+    if output_file.exists():
+        output_file.unlink()
+    execution_id = submit_csv_input_file(args, input_file)
     wait_status(args, execution_id, args.timeout_seconds)
     inspect_result(args, execution_id)
-    wait_output(input_dir, args.timeout_seconds)
+    wait_output(output_dir, output_file_name, args.timeout_seconds)
 
 
 def main():
@@ -301,6 +311,7 @@ def main():
     run.add_argument("--pipeline-id", required=True)
     run.add_argument("--control-plane-token", required=True)
     run.add_argument("--input-dir", required=True)
+    run.add_argument("--output-dir", required=True)
     run.add_argument("--source-csv", required=True)
     run.add_argument("--idempotency-key")
     run.add_argument("--timeout-seconds", type=int, default=240)

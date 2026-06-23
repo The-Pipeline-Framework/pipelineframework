@@ -37,6 +37,11 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>object-ingest-connector</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-picocli</artifactId>
         </dependency>
@@ -168,7 +173,6 @@
                                     <arg value="${project.basedir}/../input-csv-file-processing-svc/src/main/java"/>
                                     <arg value="${project.basedir}/../payments-processing-svc/src/main/java"/>
                                     <arg value="${project.basedir}/../payment-status-svc/src/main/java"/>
-                                    <arg value="${project.basedir}/../output-csv-file-processing-svc/src/main/java"/>
                                     <arg value="${project.basedir}/../orchestrator-svc/src/main/java"/>
                                 </exec>
                                 <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
@@ -181,11 +185,6 @@
                                 </copy>
                                 <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
                                     <fileset dir="${project.basedir}/../payment-status-svc/src/main/java"/>
-                                </copy>
-                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
-                                    <fileset dir="${project.basedir}/../output-csv-file-processing-svc/src/main/java">
-                                        <exclude name="org/pipelineframework/csv/service/ExecutorProducer.java"/>
-                                    </fileset>
                                 </copy>
                                 <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
                                     <fileset dir="${project.basedir}/../orchestrator-svc/src/main/java"/>

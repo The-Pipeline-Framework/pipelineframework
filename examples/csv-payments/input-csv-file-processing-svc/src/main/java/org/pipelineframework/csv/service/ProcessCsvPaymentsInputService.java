@@ -17,7 +17,6 @@
 package org.pipelineframework.csv.service;
 
 import java.io.Reader;
-import java.time.Duration;
 import java.util.Iterator;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -28,7 +27,6 @@ import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.blocking.CloseableIterator;
-import org.pipelineframework.blocking.BlockingIteratorPacer;
 import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.util.DemandPacerConfig;
@@ -44,22 +42,21 @@ public class ProcessCsvPaymentsInputService
   private final long rowsPerPeriod;
   private final long millisPeriod;
 
-    /**
-     * Create a service instance configured with demand-pacing parameters.
-     *
-     * Initialises the instance fields retained for example-level diagnostics and logs the configured values.
-     *
-     * @param config configuration supplying the number of rows per pacing period and the period duration in milliseconds
-     */
     @Inject
-    public ProcessCsvPaymentsInputService(DemandPacerConfig config) {
-        rowsPerPeriod = config.rowsPerPeriod();
-        millisPeriod = config.millisPeriod();
+    public ProcessCsvPaymentsInputService() {
+        rowsPerPeriod = 0L;
+        millisPeriod = 0L;
+        LOG.info("ProcessCsvPaymentsInputService initialized without legacy demand pacing");
+    }
 
-        LOG.infof(
-                "ProcessCsvPaymentsInputService initialized: rowsPerPeriod=%d, periodMillis=%d",
-                config.rowsPerPeriod(),
-                config.millisPeriod());
+    /**
+     * @deprecated CSV reader demand pacing is a legacy fallback and is no longer used by this step.
+     */
+    @Deprecated(since = "26.6.2", forRemoval = true)
+    public ProcessCsvPaymentsInputService(DemandPacerConfig config) {
+        rowsPerPeriod = config == null ? 0L : config.rowsPerPeriod();
+        millisPeriod = config == null ? 0L : config.millisPeriod();
+        LOG.warn("Legacy CSV reader demand pacing configuration is ignored by ProcessCsvPaymentsInputService");
     }
 
   /**
@@ -79,10 +76,7 @@ public class ProcessCsvPaymentsInputService
                     .withIgnoreEmptyLine(true)
                     .build()
                     .iterator();
-            return new BlockingIteratorPacer<>(
-                new OpenCsvPaymentRecordIterator(reader, delegate, input, rowsPerPeriod, millisPeriod),
-                rowsPerPeriod,
-                Duration.ofMillis(millisPeriod));
+            return new OpenCsvPaymentRecordIterator(reader, delegate, input, rowsPerPeriod, millisPeriod);
         } catch (Exception e) {
             reader.close();
             throw e;

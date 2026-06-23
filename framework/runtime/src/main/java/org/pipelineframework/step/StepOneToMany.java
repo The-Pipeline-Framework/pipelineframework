@@ -24,6 +24,7 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.step.functional.OneToMany;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 import org.pipelineframework.telemetry.BackpressureBufferMetrics;
+import org.pipelineframework.invocation.TransportBoundaryInvocation;
 
 /**
  * 1 -> N
@@ -67,7 +68,7 @@ public interface StepOneToMany<I, O> extends OneToMany<I, O>, Configurable, Item
                 multi = BackpressureBufferMetrics.buffer(multi, this.getClass(), 128);
             }
 
-            return multi.onItem().transform(o -> {
+            Multi<O> output = multi.onItem().transform(o -> {
                 if (LOG.isDebugEnabled()) {
                     LOG.debugf(
                         "Step %s emitted item: %s",
@@ -75,7 +76,11 @@ public interface StepOneToMany<I, O> extends OneToMany<I, O>, Configurable, Item
                     );
                 }
                 return o;
-            })
+            });
+            if (this instanceof TransportBoundaryInvocation) {
+                return output;
+            }
+            return output
             .onFailure(this::shouldRetry)
             .invoke(t -> PipelineTelemetry.recordRetry(this.getClass(), t))
             .onFailure(this::shouldRetry)

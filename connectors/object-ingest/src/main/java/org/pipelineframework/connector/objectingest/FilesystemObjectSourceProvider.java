@@ -95,7 +95,7 @@ public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
                 contentType,
                 Map.of(),
                 reference,
-                path.toString());
+                localPath(source, root, key));
         } catch (IOException e) {
             throw new IllegalStateException("Failed reading filesystem object metadata: " + path, e);
         }
@@ -125,6 +125,29 @@ public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
         return prefix == null || prefix.toString().isBlank()
             ? Path.of("")
             : Path.of(prefix.toString()).normalize();
+    }
+
+    /**
+     * Resolves the path presented to downstream object-ingest mappers for a discovered object.
+     *
+     * <p>By default the presented path is resolved under the actual filesystem source {@code root}.
+     * When {@code location.localPathRoot} is configured, the same object key is resolved under that
+     * presentation root instead. This is useful when the source is discovered on the host but read
+     * inside a mounted container path. In both cases the resolved path must remain under the selected
+     * root, preventing path traversal through object keys.</p>
+     *
+     * @param source source configuration containing optional {@code location.localPathRoot}
+     * @param root actual filesystem root used to discover source objects
+     * @param key object key relative to the source root
+     * @return path string presented in the object snapshot
+     */
+    private String localPath(PipelineObjectSourceConfig source, Path root, String key) {
+        Object localPathRoot = source.location().get("localPathRoot");
+        if (localPathRoot == null || localPathRoot.toString().isBlank()) {
+            return requireUnderRoot(root, root.resolve(key).normalize()).toString();
+        }
+        Path localRoot = Path.of(localPathRoot.toString()).toAbsolutePath().normalize();
+        return requireUnderRoot(localRoot, localRoot.resolve(key).normalize()).toString();
     }
 
     private Path requireUnderRoot(Path root, Path path) {

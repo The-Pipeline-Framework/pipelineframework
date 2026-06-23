@@ -3,6 +3,7 @@ package org.pipelineframework.awaitable;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
@@ -214,6 +215,75 @@ class AwaitStepSupportTest {
             () -> support.awaitOneToOneStream(testDescriptor, Multi.createFrom().items("first", "second"))
                 .collect().asList()
                 .await().indefinitely());
+    }
+
+    @Test
+    void awaitOneToOneStreamSubscribesColdSourceOnceWhenSuspendingAfterDispatch() {
+        AwaitStepSupport support = support();
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
+
+        AwaitStepDescriptor testDescriptor = descriptor();
+        AtomicInteger subscriptions = new AtomicInteger();
+        Multi<String> coldSource = Multi.createFrom().deferred(() -> {
+            subscriptions.incrementAndGet();
+            return Multi.createFrom().items("first", "second", "third");
+        });
+        when(awaitCoordinator.createOrGetItem(
+            org.mockito.ArgumentMatchers.eq(testDescriptor),
+            org.mockito.ArgumentMatchers.eq("tenant1"),
+            org.mockito.ArgumentMatchers.eq("exec123"),
+            org.mockito.ArgumentMatchers.eq(2),
+            any(),
+            any(),
+            any(),
+            anyInt(),
+            org.mockito.ArgumentMatchers.isNull(),
+            org.mockito.ArgumentMatchers.isNull()))
+            .thenAnswer(invocation -> {
+                Integer index = invocation.getArgument(7, Integer.class);
+                AwaitInteractionRecord record = new AwaitInteractionRecord(
+                    "tenant1", "exec123", "review", 2, String.class.getName(),
+                    "interaction-" + index, "correlation-" + index, "causation-" + index, "idem-" + index,
+                    0L, AwaitInteractionStatus.WAITING,
+                    invocation.getArgument(5), null, invocation.getArgument(6), index, null,
+                    null, null,
+                    "interaction-api", Map.of(), System.currentTimeMillis() + 300000, System.currentTimeMillis(),
+                    System.currentTimeMillis(), System.currentTimeMillis() + 86400);
+                return Uni.createFrom().item(new AwaitCreateResult(record, false));
+            });
+        when(awaitCoordinator.dispatch(org.mockito.ArgumentMatchers.eq(testDescriptor), any()))
+            .thenAnswer(invocation -> Uni.createFrom().item(invocation.getArgument(1, AwaitInteractionRecord.class)));
+        when(awaitCoordinator.markDispatchComplete(
+            org.mockito.ArgumentMatchers.eq("tenant1"),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.eq(3),
+            anyLong()))
+            .thenAnswer(invocation -> Uni.createFrom().item(new AwaitUnitRecord(
+                "tenant1",
+                invocation.getArgument(1, String.class),
+                "exec123",
+                testDescriptor.stepId(),
+                2,
+                testDescriptor.cardinality(),
+                1L,
+                AwaitUnitStatus.WAITING_EXTERNAL,
+                null,
+                3,
+                0,
+                java.util.Set.of(),
+                true,
+                System.currentTimeMillis(),
+                System.currentTimeMillis(),
+                System.currentTimeMillis() + 86400)));
+
+        assertThrows(
+            AwaitSuspendedException.class,
+            () -> support.<String, String>awaitOneToOneStream(testDescriptor, coldSource)
+                .collect().asList()
+                .await().indefinitely());
+
+        assertEquals(1, subscriptions.get());
     }
 
     @Test

@@ -36,17 +36,19 @@ public class ExecutionResultShapeResolver {
     private ExecutionResultShape loadShape() {
         Path configPath = resolveConfigPath();
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath);
-        PipelineYamlStep step = config.steps().isEmpty()
-            ? null
-            : config.steps().get(config.steps().size() - 1);
-        if (step == null) {
+        if (config.steps().isEmpty()) {
             throw new IllegalStateException("Queue-async result-shape resolution requires at least one pipeline step");
         }
-        CardinalitySemantics cardinality = CardinalitySemantics.fromString(step.cardinality());
-        return switch (cardinality) {
-            case ONE_TO_ONE, MANY_TO_ONE -> ExecutionResultShape.SINGLE;
-            case ONE_TO_MANY, MANY_TO_MANY -> ExecutionResultShape.MATERIALIZED_MULTI;
-        };
+        ExecutionResultShape shape = ExecutionResultShape.SINGLE;
+        for (PipelineYamlStep step : config.steps()) {
+            CardinalitySemantics cardinality = CardinalitySemantics.fromString(step.cardinality());
+            shape = switch (cardinality) {
+                case ONE_TO_ONE -> shape;
+                case ONE_TO_MANY, MANY_TO_MANY -> ExecutionResultShape.MATERIALIZED_MULTI;
+                case MANY_TO_ONE -> ExecutionResultShape.SINGLE;
+            };
+        }
+        return shape;
     }
 
     private static Path resolveConfigPath() {

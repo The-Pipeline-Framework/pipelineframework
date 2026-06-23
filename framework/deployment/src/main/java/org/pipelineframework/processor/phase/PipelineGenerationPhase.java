@@ -16,6 +16,8 @@ import org.pipelineframework.processor.ir.*;
 import org.pipelineframework.processor.renderer.*;
 import org.pipelineframework.processor.util.OrchestratorClientPropertiesGenerator;
 import org.pipelineframework.processor.util.CheckpointHandoffMetadataGenerator;
+import org.pipelineframework.processor.util.DtoTypeUtils;
+import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
 import org.pipelineframework.processor.util.PipelineContractMetadataGenerator;
 import org.pipelineframework.processor.util.PipelineOrderMetadataGenerator;
 import org.pipelineframework.processor.util.PipelinePlatformMetadataGenerator;
@@ -108,6 +110,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         CheckpointSubscriptionHandlerRenderer checkpointSubscriptionHandlerRenderer =
             new CheckpointSubscriptionHandlerRenderer();
         ExternalAdapterRenderer externalAdapterRenderer = new ExternalAdapterRenderer(GenerationTarget.EXTERNAL_ADAPTER);
+        ObjectIngestInputAdapterRenderer objectIngestInputAdapterRenderer = new ObjectIngestInputAdapterRenderer();
+        TerminalOutputAdapterRenderer terminalOutputAdapterRenderer = new TerminalOutputAdapterRenderer();
 
         // Initialize role metadata generator
         RoleMetadataGenerator roleMetadataGenerator = new RoleMetadataGenerator(ctx.getProcessingEnv());
@@ -115,13 +119,19 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             new PipelinePlatformMetadataGenerator(ctx.getProcessingEnv());
 
         // Get the cache key generator
-        ClassName cacheKeyGenerator = resolveCacheKeyGenerator(ctx);
+        ClassName cacheKeyGenerator = resolveCacheKeyGenerator(ctx).orElse(null);
 
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.getDescriptorSet();
         generateCheckpointBoundaryArtifacts(
             ctx,
             checkpointPublicationDescriptorRenderer,
             checkpointSubscriptionHandlerRenderer,
+            roleMetadataGenerator,
+            cacheKeyGenerator,
+            descriptorSet);
+        generateObjectIngestInputAdapter(
+            ctx,
+            objectIngestInputAdapterRenderer,
             roleMetadataGenerator,
             cacheKeyGenerator,
             descriptorSet);
@@ -255,6 +265,13 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             protobufParserService.generateProtobufParsers(ctx, descriptorSet);
         }
 
+        generateObjectPublishTerminalAdapter(
+            ctx,
+            terminalOutputAdapterRenderer,
+            roleMetadataGenerator,
+            cacheKeyGenerator,
+            descriptorSet);
+
         // Generate orchestrator artifacts if needed
         if (ctx.isOrchestratorGenerated()) {
             OrchestratorBinding orchestratorBinding = (OrchestratorBinding) bindingsMap.get(ORCHESTRATOR_BINDING_KEY);
@@ -332,6 +349,213 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 javax.tools.Diagnostic.Kind.WARNING,
                 "Failed to write step definitions: " + e.getMessage());
         }
+    }
+
+    private void generateObjectPublishTerminalAdapter(
+        PipelineCompilationContext ctx,
+        TerminalOutputAdapterRenderer renderer,
+        RoleMetadataGenerator roleMetadataGenerator,
+        ClassName cacheKeyGenerator,
+        DescriptorProtos.FileDescriptorSet descriptorSet
+    ) {
+        Optional<ObjectPublishGenerationConfig> objectPublishConfig = objectPublishGenerationConfig(ctx);
+        if (objectPublishConfig.isEmpty() || ctx.isTransportModeLocal() || ctx.isPluginHost()) {
+            return;
+        }
+        PipelineStepModel terminalModel = terminalBusinessStepWithOutputMapper(ctx)
+            .orElseThrow(() -> new IllegalStateException(
+                "Object Publish requires a terminal business step with an outbound mapper"));
+        TypeName domainType = terminalModel.outputMapping().domainType();
+        TypeName mapperType = terminalModel.outputMapping().mapperType();
+        TypeName externalType = objectPublishExternalType(ctx, terminalModel);
+        GenerationContext adapterContext = new GenerationContext(
+            ctx.getProcessingEnv(),
+            generationPathResolver.resolveRoleOutputDir(ctx, resolveClientRole(terminalModel.deploymentRole())),
+            resolveClientRole(terminalModel.deploymentRole()),
+            Set.of(),
+            cacheKeyGenerator,
+            descriptorSet,
+            ctx.getTransportMode(),
+            objectPublishConfig.get().basePackage());
+        try {
+            ClassName generatedClass = renderer.render(
+                objectPublishConfig.get().basePackage(), domainType, externalType, mapperType, adapterContext);
+            roleMetadataGenerator.recordClassWithRole(
+                generatedClass.canonicalName(),
+                resolveClientRole(terminalModel.deploymentRole()).name());
+        } catch (IOException | RuntimeException e) {
+            String message = "Failed to generate Object Publish terminal output adapter: " + e.getMessage();
+            if (ctx.getProcessingEnv() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR, message);
+            }
+            throw new RuntimeException(message, e);
+        }
+    }
+
+    private void generateObjectIngestInputAdapter(
+        PipelineCompilationContext ctx,
+        ObjectIngestInputAdapterRenderer renderer,
+        RoleMetadataGenerator roleMetadataGenerator,
+        ClassName cacheKeyGenerator,
+        DescriptorProtos.FileDescriptorSet descriptorSet
+    ) {
+        Optional<ObjectIngestGenerationConfig> objectIngestConfig = objectIngestGenerationConfig(ctx);
+        if (objectIngestConfig.isEmpty() || ctx.isTransportModeLocal() || ctx.isPluginHost()) {
+            return;
+        }
+        PipelineStepModel firstModel = firstBusinessStepWithInputMapper(ctx)
+            .orElseThrow(() -> new IllegalStateException(
+                "Object Ingest requires the first business step to declare an inbound mapper"));
+        TypeName domainType = firstModel.inputMapping().domainType();
+        TypeName mapperType = firstModel.inputMapping().mapperType();
+        TypeName externalType = objectIngestExternalType(ctx, firstModel);
+        GenerationContext adapterContext = new GenerationContext(
+            ctx.getProcessingEnv(),
+            generationPathResolver.resolveRoleOutputDir(ctx, resolveClientRole(firstModel.deploymentRole())),
+            resolveClientRole(firstModel.deploymentRole()),
+            Set.of(),
+            cacheKeyGenerator,
+            descriptorSet,
+            ctx.getTransportMode(),
+            objectIngestConfig.get().basePackage());
+        try {
+            ClassName generatedClass = renderer.render(
+                objectIngestConfig.get().basePackage(), domainType, externalType, mapperType, adapterContext);
+            roleMetadataGenerator.recordClassWithRole(
+                generatedClass.canonicalName(),
+                resolveClientRole(firstModel.deploymentRole()).name());
+        } catch (IOException | RuntimeException e) {
+            String message = "Failed to generate Object Ingest input adapter: " + e.getMessage();
+            if (ctx.getProcessingEnv() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR, message);
+            }
+            throw new RuntimeException(message, e);
+        }
+    }
+
+    private Optional<ObjectPublishGenerationConfig> objectPublishGenerationConfig(PipelineCompilationContext ctx) {
+        if (ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig templateConfig) {
+            if (templateConfig.output() != null && templateConfig.output().object() != null) {
+                return Optional.of(new ObjectPublishGenerationConfig(templateConfig.basePackage()));
+            }
+        }
+        return loadPipelineYamlConfig(ctx)
+            .filter(yamlConfig -> yamlConfig.output() != null && yamlConfig.output().object() != null)
+            .map(yamlConfig -> new ObjectPublishGenerationConfig(yamlConfig.basePackage()));
+    }
+
+    private Optional<ObjectIngestGenerationConfig> objectIngestGenerationConfig(PipelineCompilationContext ctx) {
+        if (ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig templateConfig) {
+            if (templateConfig.input() != null && templateConfig.input().object() != null) {
+                return Optional.of(new ObjectIngestGenerationConfig(templateConfig.basePackage()));
+            }
+        }
+        return loadPipelineYamlConfig(ctx)
+            .filter(yamlConfig -> yamlConfig.input() != null && yamlConfig.input().object() != null)
+            .map(yamlConfig -> new ObjectIngestGenerationConfig(yamlConfig.basePackage()));
+    }
+
+    private Optional<org.pipelineframework.config.pipeline.PipelineYamlConfig> loadPipelineYamlConfig(PipelineCompilationContext ctx) {
+        Optional<java.nio.file.Path> configPath = resolvePipelineConfigPath(ctx);
+        if (configPath.isEmpty()) {
+            return Optional.empty();
+        }
+        org.pipelineframework.config.pipeline.PipelineYamlConfigLoader loader = ctx.getProcessingEnv() != null
+            ? new org.pipelineframework.config.pipeline.PipelineYamlConfigLoader(ctx.getProcessingEnv().getOptions()::get, System::getenv)
+            : new org.pipelineframework.config.pipeline.PipelineYamlConfigLoader(key -> null, System::getenv);
+        return Optional.of(loader.load(configPath.get()));
+    }
+
+    private Optional<java.nio.file.Path> resolvePipelineConfigPath(PipelineCompilationContext ctx) {
+        Map<String, String> options = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getOptions() : Map.of();
+        String explicit = options.get("pipeline.config");
+        if (explicit != null && !explicit.isBlank()) {
+            java.nio.file.Path explicitPath = java.nio.file.Path.of(explicit.trim());
+            if (!explicitPath.isAbsolute()) {
+                if (ctx.getModuleDir() == null) {
+                    return Optional.empty();
+                }
+                explicitPath = ctx.getModuleDir().resolve(explicitPath).normalize();
+            }
+            if (java.nio.file.Files.exists(explicitPath)) {
+                return Optional.of(explicitPath);
+            }
+        }
+        if (ctx.getModuleDir() == null) {
+            return Optional.empty();
+        }
+        return new org.pipelineframework.config.pipeline.PipelineYamlConfigLocator().locate(ctx.getModuleDir());
+    }
+
+    private record ObjectPublishGenerationConfig(String basePackage) {
+    }
+
+    private record ObjectIngestGenerationConfig(String basePackage) {
+    }
+
+    private Optional<PipelineStepModel> firstBusinessStepWithInputMapper(PipelineCompilationContext ctx) {
+        List<PipelineStepModel> models = ctx.getStepModels() == null ? List.of() : ctx.getStepModels();
+        for (PipelineStepModel model : models) {
+            if (model != null
+                && !model.sideEffect()
+                && model.inputMapping() != null
+                && model.inputMapping().mapperType() != null) {
+                return Optional.of(model);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<PipelineStepModel> terminalBusinessStepWithOutputMapper(PipelineCompilationContext ctx) {
+        List<PipelineStepModel> models = ctx.getStepModels() == null ? List.of() : ctx.getStepModels();
+        for (int i = models.size() - 1; i >= 0; i--) {
+            PipelineStepModel model = models.get(i);
+            if (model != null
+                && !model.sideEffect()
+                && model.outputMapping() != null
+                && model.outputMapping().mapperType() != null) {
+                return Optional.of(model);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private TypeName objectPublishExternalType(
+        PipelineCompilationContext ctx,
+        PipelineStepModel terminalModel
+    ) {
+        if (ctx.isTransportModeRest()) {
+            return DtoTypeUtils.toDtoType(terminalModel.outputMapping().domainType());
+        }
+        Object binding = ctx.getRendererBindings().get(terminalModel.serviceName() + "_grpc");
+        if (binding instanceof GrpcBinding grpcBinding) {
+            if (ctx.getProcessingEnv() == null) {
+                throw new IllegalStateException(
+                    "Object Publish terminal adapter requires a processing environment in gRPC mode");
+            }
+            return new GrpcJavaTypeResolver().resolve(grpcBinding, ctx.getProcessingEnv().getMessager()).grpcReturnType();
+        }
+        throw new IllegalStateException(
+            "Object Publish terminal adapter requires a gRPC binding for step " + terminalModel.serviceName());
+    }
+
+    private TypeName objectIngestExternalType(
+        PipelineCompilationContext ctx,
+        PipelineStepModel firstModel
+    ) {
+        if (ctx.isTransportModeRest()) {
+            return DtoTypeUtils.toDtoType(firstModel.inputMapping().domainType());
+        }
+        Object binding = ctx.getRendererBindings().get(firstModel.serviceName() + "_grpc");
+        if (binding instanceof GrpcBinding grpcBinding) {
+            if (ctx.getProcessingEnv() == null) {
+                throw new IllegalStateException(
+                    "Object Ingest input adapter requires a processing environment in gRPC mode");
+            }
+            return new GrpcJavaTypeResolver().resolve(grpcBinding, ctx.getProcessingEnv().getMessager()).grpcParameterType();
+        }
+        throw new IllegalStateException(
+            "Object Ingest input adapter requires a gRPC binding for step " + firstModel.serviceName());
     }
 
     private void generateCheckpointBoundaryArtifacts(
@@ -670,14 +894,17 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
      * Resolves the cache key generator from processing environment options.
      * 
      * @param ctx the compilation context
-     * @return the cache key generator class name or null
+     * @return the configured cache key generator class name
      */
-    private ClassName resolveCacheKeyGenerator(PipelineCompilationContext ctx) {
+    private Optional<ClassName> resolveCacheKeyGenerator(PipelineCompilationContext ctx) {
+        if (ctx.getProcessingEnv() == null) {
+            return Optional.empty();
+        }
         String configured = ctx.getProcessingEnv().getOptions().get("pipeline.cache.keyGenerator");
         if (configured == null || configured.isBlank()) {
-            return null;
+            return Optional.empty();
         }
-        return ClassName.bestGuess(configured);
+        return Optional.of(ClassName.bestGuess(configured));
     }
 
     /**

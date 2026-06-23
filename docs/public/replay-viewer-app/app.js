@@ -175,7 +175,10 @@ const STEP_LABELS = {
 const STEP_ROLE_LABELS = {
   broker: "Kafka Broker",
   "external-provider": "Payment Provider",
-  store: "Database"
+  store: "Database",
+  "object-ingest": "Object Ingest",
+  "object-publish": "Object Publish",
+  "query-connector": "JPA Query"
 };
 const AWAIT_LIFECYCLE_EVENTS = new Set([
   "await_interaction_dispatched",
@@ -380,7 +383,10 @@ function emptyAnimationPolicy() {
     awaitCompletionByResumeStep: new Map(),
     awaitCompletionByAwaitStep: new Map(),
     outputResumeByTargetStep: new Map(),
-    storeWriteByRawStep: new Map()
+    storeWriteByRawStep: new Map(),
+    connectorIngestByTargetStep: new Map(),
+    connectorPublishBySourceStep: new Map(),
+    queryConnectorByTargetStep: new Map()
   };
 }
 
@@ -395,8 +401,9 @@ function normalizeReplayDocument(document) {
         return (left.sequence ?? 0) - (right.sequence ?? 0);
       })
     : [];
+  const connectorTopology = augmentTopologyWithConnectorNodes(document.topology, document.connectors);
   const topology = augmentTopologyWithDisplayNodes(
-    document.topology,
+    connectorTopology,
     events.some((event) => event.event === "reject")
   );
   const { topology: displayTopology, aliases } = normalizeTopologyForDisplay(topology, events);
@@ -628,6 +635,124 @@ function computeReplayDurationSeconds(document) {
   return Math.max(declaredDurationSeconds, maxEventTimeSeconds);
 }
 
+function augmentTopologyWithConnectorNodes(topology, connectors = []) {
+  if (!topology || !Array.isArray(topology.steps) || !Array.isArray(topology.transitions) || !Array.isArray(connectors)) {
+    return topology;
+  }
+  if (connectors.length === 0) {
+    return topology;
+  }
+  const steps = [...topology.steps];
+  const transitions = [...topology.transitions];
+  const stepNames = new Set(steps.map((step) => step.step));
+  const transitionIds = new Set(transitions.map((transition) => transition.id));
+  const runtimeStepClasses = new Set(steps.map((step) => step.runtimeStepClass).filter(Boolean));
+  const businessSteps = steps.filter((step) => !step.sideEffect);
+  const firstBusinessStep = businessSteps[0]?.step ?? null;
+  const lastBusinessStep = [...businessSteps].reverse().find((step) => resolveDisplayRole(step) === "primary")?.step
+    ?? businessSteps[businessSteps.length - 1]?.step
+    ?? null;
+
+  for (const connector of connectors) {
+    const role = connectorRenderRole(connector);
+    if (!role) {
+      continue;
+    }
+    const connectorStepName = connector.step
+      ?? connector.name
+      ?? (role === "object-ingest" ? "ObjectIngest" : role === "object-publish" ? "ObjectPublish" : "JpaQuery");
+    const targetStep = connector.targetStep
+      ?? connector.attachesTo
+      ?? (role === "object-ingest" ? firstBusinessStep : lastBusinessStep);
+    if (!targetStep) {
+      continue;
+    }
+    let connectorRuntimeStepClass = steps.find((step) => step.step === connectorStepName)?.runtimeStepClass;
+    if (!stepNames.has(connectorStepName)) {
+      connectorRuntimeStepClass = uniqueSyntheticRuntimeClass(
+        connector.runtimeStepClass ?? `runtime::${connectorStepName}`,
+        "ConnectorDisplayStep",
+        runtimeStepClasses);
+      steps.push({
+        runtimeStepClass: connectorRuntimeStepClass,
+        step: connectorStepName,
+        service: connector.service ?? connector.label ?? connectorStepName,
+        cardinality: connector.cardinality ?? "one-to-one",
+        index: Number.isFinite(connector.index) ? connector.index : connectorDisplayIndex(role, steps),
+        sideEffect: true,
+        parentStep: targetStep,
+        pluginKind: connector.pluginKind ?? null,
+        connectorKind: connector.kind ?? role,
+        connectorProvider: connector.provider ?? null,
+        connectorTarget: connector.target ?? connector.source ?? null,
+        renderRole: role,
+        actorKind: connector.actorKind ?? connectorActorKind(role, connector.provider)
+      });
+      stepNames.add(connectorStepName);
+      runtimeStepClasses.add(connectorRuntimeStepClass);
+    }
+    const relationKind = connector.relationKind ?? role;
+    const from = role === "object-ingest" || role === "query-connector" ? connectorStepName : targetStep;
+    const to = role === "object-ingest" || role === "query-connector" ? targetStep : connectorStepName;
+    const transitionId = connector.transitionId ?? `${from}->${to}`;
+    if (!transitionIds.has(transitionId)) {
+      transitions.push({
+        id: transitionId,
+        fromRuntimeStepClass: steps.find((step) => step.step === from)?.runtimeStepClass,
+        toRuntimeStepClass: steps.find((step) => step.step === to)?.runtimeStepClass,
+        from,
+        to,
+        fromService: steps.find((step) => step.step === from)?.service,
+        toService: steps.find((step) => step.step === to)?.service,
+        cardinality: connector.cardinality ?? "one-to-one",
+        relationKind
+      });
+      transitionIds.add(transitionId);
+    }
+  }
+
+  return Object.assign({}, topology, {
+    steps,
+    transitions
+  });
+}
+
+function connectorRenderRole(connector) {
+  const kind = String(connector?.kind ?? connector?.connectorKind ?? "").toLowerCase();
+  const role = String(connector?.renderRole ?? "").toLowerCase();
+  if (role === "object-ingest" || kind === "object-ingest" || kind === "object-ingest-connector") {
+    return "object-ingest";
+  }
+  if (role === "object-publish" || kind === "object-publish" || kind === "object-publish-connector") {
+    return "object-publish";
+  }
+  if (role === "query-connector" || kind === "jpa-query" || kind === "jpa-query-connector" || kind === "query") {
+    return "query-connector";
+  }
+  return null;
+}
+
+function connectorDisplayIndex(role, steps) {
+  if (role === "object-ingest" || role === "query-connector") {
+    return -10 - steps.length;
+  }
+  return 1000 + steps.length;
+}
+
+function connectorActorKind(role, provider) {
+  if (role === "query-connector") {
+    return "database";
+  }
+  const normalizedProvider = String(provider ?? "").toLowerCase();
+  if (normalizedProvider.includes("s3")) {
+    return "object-storage";
+  }
+  if (normalizedProvider.includes("file")) {
+    return "filesystem";
+  }
+  return "object";
+}
+
 function augmentTopologyWithDisplayNodes(topology, includeRejectNodes = true) {
   if (!topology || !Array.isArray(topology.steps) || !Array.isArray(topology.transitions)) {
     return topology;
@@ -806,6 +931,10 @@ function resolveDisplayRole(step) {
   if (!step) {
     return "primary";
   }
+  const connectorRole = connectorRenderRole(step);
+  if (connectorRole) {
+    return connectorRole;
+  }
   if (step.renderRole) {
     return step.renderRole;
   }
@@ -830,6 +959,12 @@ function resolveDisplayIconKind(step) {
       return "broker";
     case "external-provider":
       return "provider";
+    case "object-ingest":
+      return "object-ingest";
+    case "object-publish":
+      return "object-publish";
+    case "query-connector":
+      return "query";
     default:
       return "plugin";
   }
@@ -837,7 +972,12 @@ function resolveDisplayIconKind(step) {
 
 function isNamedSupportActor(step) {
   const role = resolveDisplayRole(step);
-  return role === "broker" || role === "external-provider" || role === "store";
+  return role === "broker"
+    || role === "external-provider"
+    || role === "store"
+    || role === "object-ingest"
+    || role === "object-publish"
+    || role === "query-connector";
 }
 
 function resolveDisplayStepName(event) {
@@ -901,6 +1041,12 @@ function buildSupportAnimationPolicy(displayTopology, rawTopology = displayTopol
   const awaitCompletionTransitions = transitionsByRelation.get("await-completion") ?? [];
   const primaryTransitions = transitionsByRelation.get("primary") ?? [];
   const storeTransitions = transitionsByRelation.get("store") ?? [];
+  const objectIngestTransitions = transitionsByRelation.get("object-ingest") ?? [];
+  const objectPublishTransitions = transitionsByRelation.get("object-publish") ?? [];
+  const queryTransitions = [
+    ...(transitionsByRelation.get("query-connector") ?? []),
+    ...(transitionsByRelation.get("query") ?? [])
+  ];
 
   for (const awaitStep of stepsByRole.get("await") ?? []) {
     const firstRequest = findTransitionByFrom(awaitRequestTransitions, awaitStep.step);
@@ -956,6 +1102,16 @@ function buildSupportAnimationPolicy(displayTopology, rawTopology = displayTopol
         || (displayTargetStep?.cardinality?.toLowerCase()?.includes("many") ?? false)
         || storeTransition?.cardinality?.toLowerCase()?.includes("many") === true
     });
+  }
+
+  for (const transition of objectIngestTransitions) {
+    policy.connectorIngestByTargetStep.set(transition.to, transition);
+  }
+  for (const transition of objectPublishTransitions) {
+    policy.connectorPublishBySourceStep.set(transition.from, transition);
+  }
+  for (const transition of queryTransitions) {
+    policy.queryConnectorByTargetStep.set(transition.to, transition);
   }
 
   return policy;
@@ -1658,7 +1814,16 @@ function computeAutomaticLayoutPositions(topology) {
     }
     let offsetX = 0;
     let offsetY = BRANCH_ROW_OFFSET_Y;
-    if (role === "broker") {
+    if (role === "object-ingest") {
+      offsetX = -2.05;
+      offsetY = 0.02;
+    } else if (role === "object-publish") {
+      offsetX = 2.05;
+      offsetY = 0.02;
+    } else if (role === "query-connector") {
+      offsetX = -1.42;
+      offsetY = -1.18;
+    } else if (role === "broker") {
       offsetX = -1.52;
       offsetY = -1.45;
     } else if (role === "external-provider") {
@@ -1733,13 +1898,19 @@ function buildTopology(topology) {
     if (!source || !target) {
       return;
     }
-    const isBranch = steps.find((step) => step.step === transition.to)?.sideEffect === true;
-    const material = isBranch
-      ? new THREE.LineDashedMaterial({ color: 0x8f7aea, transparent: true, opacity: 0.55, dashSize: 0.32, gapSize: 0.18 })
-      : new THREE.LineBasicMaterial({ color: 0x34527f, transparent: true, opacity: 0.8 });
+    const edgeStyle = edgeStyleForTransition(transition, steps);
+    const material = edgeStyle.dashed
+      ? new THREE.LineDashedMaterial({
+          color: edgeStyle.baseColor,
+          transparent: true,
+          opacity: edgeStyle.baseOpacity,
+          dashSize: edgeStyle.dashSize,
+          gapSize: edgeStyle.gapSize
+        })
+      : new THREE.LineBasicMaterial({ color: edgeStyle.baseColor, transparent: true, opacity: edgeStyle.baseOpacity });
     const geometry = new THREE.BufferGeometry().setFromPoints([source.clone(), target.clone()]);
     const line = new THREE.Line(geometry, material);
-    if (isBranch) {
+    if (edgeStyle.dashed) {
       line.computeLineDistances();
     }
     scene.add(line);
@@ -1747,16 +1918,50 @@ function buildTopology(topology) {
       line,
       from: transition.from,
       to: transition.to,
-      baseColor: isBranch ? 0x8f7aea : 0x34527f,
-      accentColor: isBranch ? 0xcf9cff : 0x7ad7ff,
-      baseOpacity: isBranch ? 0.55 : 0.8,
+      baseColor: edgeStyle.baseColor,
+      accentColor: edgeStyle.accentColor,
+      baseOpacity: edgeStyle.baseOpacity,
       intensity: 0,
       shimmerPhase: Math.random() * Math.PI * 2,
-      branch: isBranch
+      branch: edgeStyle.dashed
     });
   });
 
   fitCameraToTopology(steps);
+}
+
+function edgeStyleForTransition(transition, steps) {
+  const relationKind = transition?.relationKind ?? "primary";
+  const targetStep = steps.find((step) => step.step === transition.to);
+  if (relationKind === "object-ingest" || relationKind === "object-publish") {
+    return {
+      dashed: true,
+      baseColor: 0x7bdcb5,
+      accentColor: 0x9fffd2,
+      baseOpacity: 0.72,
+      dashSize: 0.28,
+      gapSize: 0.14
+    };
+  }
+  if (relationKind === "query" || relationKind === "query-connector") {
+    return {
+      dashed: true,
+      baseColor: 0x67b2f3,
+      accentColor: 0x9bd6ff,
+      baseOpacity: 0.68,
+      dashSize: 0.22,
+      gapSize: 0.12
+    };
+  }
+  const isBranch = targetStep?.sideEffect === true;
+  return {
+    dashed: isBranch,
+    baseColor: isBranch ? 0x8f7aea : 0x34527f,
+    accentColor: isBranch ? 0xcf9cff : 0x7ad7ff,
+    baseOpacity: isBranch ? 0.55 : 0.8,
+    dashSize: 0.32,
+    gapSize: 0.18
+  };
 }
 
 function registerNode(step, position) {
@@ -2135,6 +2340,15 @@ function buildIconSprite(pluginKind, height = 0.28) {
     case "provider":
       drawProviderIcon(context);
       break;
+    case "object-ingest":
+      drawObjectIngestIcon(context);
+      break;
+    case "object-publish":
+      drawObjectPublishIcon(context);
+      break;
+    case "query":
+      drawQueryIcon(context);
+      break;
     case "cache":
       drawCacheIcon(context);
       break;
@@ -2211,6 +2425,50 @@ function drawProviderIcon(context) {
   context.lineTo(78, 58);
   context.moveTo(58, 80);
   context.lineTo(78, 80);
+  context.stroke();
+}
+
+function drawObjectIngestIcon(context) {
+  drawObjectBucketIcon(context);
+  context.beginPath();
+  context.moveTo(50, 82);
+  context.lineTo(92, 82);
+  context.moveTo(78, 66);
+  context.lineTo(94, 82);
+  context.lineTo(78, 98);
+  context.stroke();
+}
+
+function drawObjectPublishIcon(context) {
+  drawObjectBucketIcon(context);
+  context.beginPath();
+  context.moveTo(110, 82);
+  context.lineTo(68, 82);
+  context.moveTo(82, 66);
+  context.lineTo(66, 82);
+  context.lineTo(82, 98);
+  context.stroke();
+}
+
+function drawObjectBucketIcon(context) {
+  roundRectPath(context, 42, 48, 76, 68, 12);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(52, 66);
+  context.lineTo(108, 66);
+  context.moveTo(56, 100);
+  context.lineTo(104, 100);
+  context.stroke();
+}
+
+function drawQueryIcon(context) {
+  drawDatabaseIcon(context);
+  context.beginPath();
+  context.moveTo(58, 120);
+  context.lineTo(104, 120);
+  context.moveTo(90, 106);
+  context.lineTo(106, 120);
+  context.lineTo(90, 134);
   context.stroke();
 }
 
@@ -2338,6 +2596,12 @@ function nodeColorForStep(step) {
       return 0x8f7aea;
     case "provider":
       return 0xb08cff;
+    case "object-ingest":
+      return 0x8bffa5;
+    case "object-publish":
+      return 0x86f0cf;
+    case "query":
+      return 0x67b2f3;
     case "persistence":
       return 0x7ed0ff;
     case "cache":
@@ -3056,6 +3320,15 @@ function animateDataBackedStartEdge(event) {
   spawnSupportTransit(event.from, event.step, event.startTime, 0x79dfff, 0.72, 0.1);
 }
 
+function animateConnectorFlow(edge, timeSeconds, color) {
+  if (!edge?.from || !edge?.to) {
+    return;
+  }
+  highlightStep(edge.from, 0.95, timeSeconds);
+  highlightStep(edge.to, 0.95, timeSeconds + 0.06);
+  spawnSupportTransit(edge.from, edge.to, timeSeconds + 0.04, color, 0.82, 0.11);
+}
+
 function processEvent(rawEvent) {
   const event = mapEventForDisplay(rawEvent);
   const key = resolveEventKey(rawEvent);
@@ -3077,6 +3350,21 @@ function processEvent(rawEvent) {
   if (!replayHasAwaitLifecycleEvents && rawEvent.event === "start" && awaitCompletionFlow && event.from === awaitCompletionFlow.awaitStep
       && shouldSampleSupportFlow(`await-completion:${awaitCompletionFlow.awaitStep}`)) {
     animateAwaitCompletion(awaitCompletionFlow, rawEvent.startTime);
+  }
+  const connectorIngestEdge = event?.step ? activeAnimationPolicy.connectorIngestByTargetStep.get(event.step) : null;
+  if (rawEvent.event === "start" && connectorIngestEdge
+      && shouldSampleSupportFlow(`object-ingest:${connectorIngestEdge.from}->${connectorIngestEdge.to}`, 12)) {
+    animateConnectorFlow(connectorIngestEdge, rawEvent.startTime, 0x8bffa5);
+  }
+  const queryConnectorEdge = event?.step ? activeAnimationPolicy.queryConnectorByTargetStep.get(event.step) : null;
+  if (rawEvent.event === "start" && queryConnectorEdge
+      && shouldSampleSupportFlow(`query:${queryConnectorEdge.from}->${queryConnectorEdge.to}`, 16)) {
+    animateConnectorFlow(queryConnectorEdge, rawEvent.startTime + 0.04, 0x9bd6ff);
+  }
+  const objectPublishEdge = event?.step ? activeAnimationPolicy.connectorPublishBySourceStep.get(event.step) : null;
+  if (rawEvent.event === "success" && objectPublishEdge
+      && shouldSampleSupportFlow(`object-publish:${objectPublishEdge.from}->${objectPublishEdge.to}`, 12)) {
+    animateConnectorFlow(objectPublishEdge, rawEvent.endTime ?? rawEvent.startTime, 0x86f0cf);
   }
   const storeWriteFlow = activeAnimationPolicy.storeWriteByRawStep.get(rawEvent.step);
   if (rawEvent.event === "success" && storeWriteFlow && isPersistenceSideEffectStep(rawEvent.step)
