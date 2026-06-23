@@ -18,6 +18,7 @@ The shell is where distributed-system concerns live.
 | Expose or call a step over REST, gRPC, local, or function entry points | generated transport adapters |
 | Admit files, object-store entries, or external payloads | connectors such as [Object Ingest](/design/object-ingest) |
 | Wait for human approval, webhook callbacks, provider responses, or long-running jobs | [Await Boundaries](/design/await-boundaries) |
+| Record and replay-safe external effects such as indexing, tickets, emails, or provisioning | [Command Steps](/deploy/orchestrator-runtime/command) |
 | Call a synchronous existing method or remote request/response endpoint | [Operators](/design/operators) |
 | Store business outputs for later query or audit | [Persistence](/design/persistence) |
 | Reuse expensive derived outputs | [Caching](/design/caching/) |
@@ -35,6 +36,8 @@ Object ingest keeps directory scans, S3 listings, ETags, duplicate admission, an
 
 Await keeps pending interaction state, resume tokens, timeout handling, duplicate completion, and callback admission out of a business approval step. The step sees an explicit typed outcome.
 
+Command keeps effect ids, recorded outputs, duplicate policy, retry classification, and DLQ state out of a business projection step. The connector executes the external write, but the pipeline owns the effect boundary.
+
 Checkpoint handoff keeps downstream admission, handoff idempotency, and publication envelopes out of application bridge code. The source pipeline publishes a stable typed checkpoint; the target pipeline receives a typed input.
 
 ## What TPF Does Not Hide
@@ -48,4 +51,3 @@ TPF does not remove architectural decisions. It makes them explicit:
 - operational state is observable.
 
 That is the point of "Keep the core pure. Connect to reality."
-

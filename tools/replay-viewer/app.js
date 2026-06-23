@@ -2326,6 +2326,9 @@ function nodeColorForStep(step) {
     if (role === "await") {
       return 0x78c8ff;
     }
+    if (role === "command") {
+      return 0xffd166;
+    }
     return 0x5cc8ff;
   }
   switch (resolveDisplayIconKind(step)) {

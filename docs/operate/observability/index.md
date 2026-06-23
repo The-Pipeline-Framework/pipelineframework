@@ -13,3 +13,5 @@ Observability in The Pipeline Framework is designed for distributed pipelines: y
 - [Security Notes](/operate/observability/security): Prevent accidental leakage of sensitive information
 - [Working with NewRelic OTel](/operate/observability/newrelic): Enabling OTel export to use NewRelic
 - [Test locally using LGTM](/operate/observability/lgtm): Enabling Prometheus metrics for Grafana dashboards on Quarkus LGTM stack
+
+Managed external boundaries appear as first-class nodes. Await steps expose suspend/resume lifecycle events. Command steps appear as command nodes in replay topology and participate in normal step spans and metrics while their effect lifecycle is recorded by the command effect store.

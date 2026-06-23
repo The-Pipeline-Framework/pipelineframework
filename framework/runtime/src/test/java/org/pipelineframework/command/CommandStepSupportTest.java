@@ -7,12 +7,20 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import io.smallrye.mutiny.Uni;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.metrics.SdkMeterProvider;
+import io.opentelemetry.sdk.metrics.data.MetricData;
+import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
@@ -23,6 +31,8 @@ import org.pipelineframework.step.NonRetryableException;
 class CommandStepSupportTest {
   private final InMemoryCommandEffectStore store = new InMemoryCommandEffectStore();
   private final RecordingConnector connector = new RecordingConnector();
+  private InMemoryMetricReader metricReader;
+  private SdkMeterProvider meterProvider;
   private final CommandStepSupport support = new CommandStepSupport(
       List.of(connector),
       List.of(store),
@@ -36,9 +46,28 @@ class CommandStepSupportTest {
       CommandDuplicatePolicy.RETURN_RECORDED,
       Map.of());
 
+  @BeforeEach
+  void setUpMetrics() {
+    metricReader = InMemoryMetricReader.create();
+    meterProvider = SdkMeterProvider.builder()
+        .registerMetricReader(metricReader)
+        .build();
+    OpenTelemetrySdk sdk = OpenTelemetrySdk.builder()
+        .setMeterProvider(meterProvider)
+        .build();
+    GlobalOpenTelemetry.resetForTest();
+    GlobalOpenTelemetry.set(sdk);
+    CommandEffectMetrics.resetForTest();
+  }
+
   @AfterEach
   void clearContext() {
     AwaitExecutionContextHolder.clear();
+    if (meterProvider != null) {
+      meterProvider.shutdown();
+    }
+    GlobalOpenTelemetry.resetForTest();
+    CommandEffectMetrics.resetForTest();
   }
 
   @Test
@@ -54,6 +83,10 @@ class CommandStepSupportTest {
     CommandEffectRecord record = store.find("tenant", "cmd-doc-1").await().atMost(Duration.ofSeconds(5)).orElseThrow();
     assertEquals(CommandEffectStatus.SUCCEEDED, record.status());
     assertSame(output, record.output());
+    assertTransitionCount("pending", 1);
+    assertTransitionCount("dispatching", 1);
+    assertTransitionCount("succeeded", 1);
+    assertDurationCount("succeeded", 1);
   }
 
   @Test
@@ -68,6 +101,7 @@ class CommandStepSupportTest {
 
     assertEquals(1, connector.calls.get());
     assertEquals(Boolean.TRUE, duplicate.recordedDuplicate);
+    assertDuplicateCount("RETURN_RECORDED", "returned_recorded", 1);
   }
 
   @Test
@@ -91,6 +125,27 @@ class CommandStepSupportTest {
 
     assertEquals("Duplicate command completion for commandId cmd-doc-1", error.getMessage());
     assertEquals(1, connector.calls.get());
+    assertDuplicateCount("FAIL", "rejected", 1);
+  }
+
+  @Test
+  void inProgressDuplicateEmitsDuplicateMetric() {
+    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    CommandRequest<CommandInput> request = new CommandRequest<>(
+        descriptor,
+        "cmd-doc-1",
+        new CommandInput("doc-1"),
+        new AwaitExecutionContext("tenant", "exec-1", 4),
+        Map.of());
+    store.createPending(request, System.currentTimeMillis()).await().atMost(Duration.ofSeconds(5));
+
+    CommandInProgressException error = assertThrows(CommandInProgressException.class,
+        () -> support.<CommandInput, CommandOutput>execute(descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+
+    assertEquals("Command already in progress for commandId cmd-doc-1", error.getMessage());
+    assertEquals(0, connector.calls.get());
+    assertDuplicateCount("RETURN_RECORDED", "in_progress", 1);
   }
 
   @Test
@@ -168,6 +223,8 @@ class CommandStepSupportTest {
     assertEquals(CommandEffectStatus.FAILED_RETRYABLE, record.status());
     assertEquals(IllegalStateException.class.getName(), record.errorClass());
     assertEquals("opensearch unavailable", record.errorMessage());
+    assertTransitionCount("failed_retryable", 1);
+    assertDurationCount("failed_retryable", 1);
   }
 
   @Test
@@ -184,6 +241,67 @@ class CommandStepSupportTest {
     assertEquals(CommandEffectStatus.DLQ, record.status());
     assertEquals(NonRetryableException.class.getName(), record.errorClass());
     assertEquals("invalid index document", record.errorMessage());
+    assertTransitionCount("dlq", 1);
+    assertDurationCount("dlq", 1);
+  }
+
+  private void assertTransitionCount(String status, long expected) {
+    long actual = longSumPointValue(
+        CommandEffectMetrics.TRANSITION_TOTAL,
+        Map.of(
+            "tpf.command", "opensearch-index-document",
+            "tpf.command.step", "ProcessWriteSearchIndexDocumentService",
+            "tpf.command.status", status));
+    assertEquals(expected, actual);
+  }
+
+  private void assertDuplicateCount(String duplicatePolicy, String duplicateResult, long expected) {
+    long actual = longSumPointValue(
+        CommandEffectMetrics.DUPLICATE_TOTAL,
+        Map.of(
+            "tpf.command", "opensearch-index-document",
+            "tpf.command.step", "ProcessWriteSearchIndexDocumentService",
+            "tpf.command.duplicate_policy", duplicatePolicy,
+            "tpf.command.duplicate_result", duplicateResult));
+    assertEquals(expected, actual);
+  }
+
+  private void assertDurationCount(String status, long expected) {
+    Collection<MetricData> metrics = metricReader.collectAllMetrics();
+    MetricData metric = metrics.stream()
+        .filter(candidate -> CommandEffectMetrics.DURATION.equals(candidate.getName()))
+        .findFirst()
+        .orElseThrow();
+    long actual = metric.getHistogramData().getPoints().stream()
+        .filter(point -> attributesMatch(point.getAttributes().asMap(), Map.of(
+            "tpf.command", "opensearch-index-document",
+            "tpf.command.step", "ProcessWriteSearchIndexDocumentService",
+            "tpf.command.status", status)))
+        .findFirst()
+        .orElseThrow()
+        .getCount();
+    assertEquals(expected, actual);
+  }
+
+  private long longSumPointValue(String metricName, Map<String, String> expectedAttributes) {
+    Collection<MetricData> metrics = metricReader.collectAllMetrics();
+    MetricData metric = metrics.stream()
+        .filter(candidate -> metricName.equals(candidate.getName()))
+        .findFirst()
+        .orElseThrow();
+    return metric.getLongSumData().getPoints().stream()
+        .filter(point -> attributesMatch(point.getAttributes().asMap(), expectedAttributes))
+        .findFirst()
+        .orElseThrow()
+        .getValue();
+  }
+
+  private boolean attributesMatch(
+      Map<AttributeKey<?>, Object> actualAttributes,
+      Map<String, String> expectedAttributes
+  ) {
+    return expectedAttributes.entrySet().stream()
+        .allMatch(entry -> entry.getValue().equals(actualAttributes.get(AttributeKey.stringKey(entry.getKey()))));
   }
 
   private PipelineOrchestratorConfig config(OrchestratorMode mode) {

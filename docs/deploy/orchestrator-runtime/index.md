@@ -10,6 +10,7 @@ Current applications host their own generated orchestrator. For implementation n
 2. [Queue-Async Runtime](/deploy/orchestrator-runtime/queue-async) covers durable execution, crash behaviour, idempotency, providers, and HA baseline configuration.
 3. [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff) covers reliable cross-pipeline publication and admission.
 4. [Await Runtime Setup](/deploy/orchestrator-runtime/await) covers durable external suspend/resume adapters and runtime configuration.
+5. [Command Steps](/deploy/orchestrator-runtime/command) covers replay-safe external effects with command ids, effect logging, duplicate policy, and connector execution.
 
 ## Runtime Modes
 
@@ -27,6 +28,8 @@ pipeline.orchestrator.mode=QUEUE_ASYNC
 ```
 
 Use [Queue-Async Runtime](/deploy/orchestrator-runtime/queue-async) before relying on background execution in production-style environments.
+
+`kind: await` and `kind: command` are framework-owned I/O shells on top of `QUEUE_ASYNC`. Await owns suspend/resume around a deferred external result. Command owns idempotent external effects that should be recorded, retried, replayed, or dead-lettered as part of the pipeline lifecycle.
 
 ## Generated Transport Entry Points
 
