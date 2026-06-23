@@ -197,6 +197,7 @@ Prefer the split annotation-processor guide under `docs/guide/evolve/annotation-
   - `evolve`: internals, design notes, and backlog-oriented material
 - Keep risk registers, update reports, and future-work tracking out of user-facing docs unless they are actionable operator runbooks; place backlog/planning artifacts under `docs/guide/evolve/` or external issue trackers.
 - When changing operator or mapper semantics, update code + tests + docs together in the same change set.
+- When adding or changing a semantic step kind (`kind: await`, `kind: command`, query steps, object I/O, or future DSL-owned I/O shells), update compiler/runtime support, validation tests, user docs, telemetry/replay metadata, replay-viewer node rendering/legend, and any affected example replay datasets or generation paths in the same change set.
 - When changing runtime-layout, generator, or Canvas/web UI semantics, update `web-ui`, affected docs, tests, and the separate `The-Pipeline-Framework/tpf-mcp-bridge` repository when applicable.
 
 ## PR Slicing Criteria

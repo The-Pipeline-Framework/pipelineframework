@@ -38,6 +38,8 @@ Think about `QUEUE_ASYNC` in terms of safe re-execution:
 
 The important boundary is this: TPF makes the orchestrator state crash-surviving, but your business-side effects must still be safe when the same work is attempted again.
 
+Use [Command Steps](/deploy/orchestrator-runtime/command) when the external side effect itself should be a managed pipeline boundary with a deterministic command id, effect log, duplicate policy, and recorded output replay.
+
 ## Re-execution, Re-entrancy, And Idempotency
 
 These three ideas are related but not identical:

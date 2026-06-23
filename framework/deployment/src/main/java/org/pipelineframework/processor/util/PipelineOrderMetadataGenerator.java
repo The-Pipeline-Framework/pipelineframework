@@ -203,6 +203,11 @@ public class PipelineOrderMetadataGenerator {
                     + stripTrailingService(model.generatedName()) + "AwaitClientStep");
                 continue;
             }
+            if (model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)) {
+                ordered.add(model.servicePackage() + ".pipeline."
+                    + stripTrailingService(model.generatedName()) + "CommandClientStep");
+                continue;
+            }
             if (model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)) {
                 ordered.add(model.servicePackage() + ".pipeline."
                     + stripTrailingService(model.generatedName()) + "QueryClientStep");
@@ -229,6 +234,11 @@ public class PipelineOrderMetadataGenerator {
             if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
                 generated.add(model.servicePackage() + ".pipeline."
                     + stripTrailingService(model.generatedName()) + "AwaitClientStep");
+                continue;
+            }
+            if (model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)) {
+                generated.add(model.servicePackage() + ".pipeline."
+                    + stripTrailingService(model.generatedName()) + "CommandClientStep");
                 continue;
             }
             if (model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)) {
@@ -258,6 +268,9 @@ public class PipelineOrderMetadataGenerator {
     private String specialClientSuffix(PipelineStepModel model, String defaultSuffix) {
         if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
             return "AwaitClientStep";
+        }
+        if (model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)) {
+            return "CommandClientStep";
         }
         if (model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)) {
             return "QueryClientStep";
@@ -329,7 +342,8 @@ public class PipelineOrderMetadataGenerator {
      *
      * @param className the fully-qualified or simple class name of the step
      * @return the normalized alphanumeric token derived from the class's simple name with known
-     *         suffixes (Service, GrpcClientStep, RestClientStep, LocalClientStep and optional _Subclass)
+     *         suffixes (Service, GrpcClientStep, RestClientStep, LocalClientStep, AwaitClientStep,
+     *         CommandClientStep, QueryClientStep and optional _Subclass)
      *         removed; returns an empty string if the result contains no alphanumeric characters
      */
     private String normalizeStepToken(String className) {
@@ -338,7 +352,7 @@ public class PipelineOrderMetadataGenerator {
         if (lastDot != -1) {
             simple = simple.substring(lastDot + 1);
         }
-        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep|AwaitClientStep|QueryClientStep)(_Subclass)?$", "");
+        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep|AwaitClientStep|CommandClientStep|QueryClientStep)(_Subclass)?$", "");
         return toClassToken(simple);
     }
 

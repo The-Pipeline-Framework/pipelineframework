@@ -97,6 +97,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer = new BlockingReactiveBridgeRenderer();
         RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer = new RemoteOperatorAdapterRenderer();
         AwaitClientStepRenderer awaitClientStepRenderer = new AwaitClientStepRenderer();
+        CommandClientStepRenderer commandClientStepRenderer = new CommandClientStepRenderer();
         QueryClientStepRenderer queryClientStepRenderer = new QueryClientStepRenderer();
         OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
         OrchestratorRestResourceRenderer orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
@@ -256,6 +257,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     blockingReactiveBridgeRenderer,
                     remoteOperatorAdapterRenderer,
                     awaitClientStepRenderer,
+                    commandClientStepRenderer,
                     queryClientStepRenderer);
         }
 
@@ -711,6 +713,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer,
             AwaitClientStepRenderer awaitClientStepRenderer,
+            CommandClientStepRenderer commandClientStepRenderer,
             QueryClientStepRenderer queryClientStepRenderer) throws IOException {
         stepArtifactGenerationService.generateArtifactsForModel(
             ctx,
@@ -732,6 +735,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             blockingReactiveBridgeRenderer,
             remoteOperatorAdapterRenderer,
             awaitClientStepRenderer,
+            commandClientStepRenderer,
             queryClientStepRenderer);
     }
 

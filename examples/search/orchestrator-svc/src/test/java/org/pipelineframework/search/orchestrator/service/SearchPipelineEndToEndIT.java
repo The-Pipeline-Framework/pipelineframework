@@ -253,16 +253,21 @@ class SearchPipelineEndToEndIT {
             .withEnv("QUARKUS_REST_CLIENT_PROCESS_PARSE_DOCUMENT_URL", "http://parse-document-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_PROCESS_TOKENIZE_CONTENT_URL", "http://tokenize-content-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_PROCESS_EMBED_CONTENT_URL", "http://embed-content-svc:8080")
-            .withEnv("QUARKUS_REST_CLIENT_PROCESS_INDEX_DOCUMENT_URL", "http://index-document-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_PROCESS_BUILD_SEARCH_INDEX_DOCUMENT_URL", "http://index-document-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_PROCESS_SUMMARIZE_INDEX_WRITES_URL", "http://index-document-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_ORCHESTRATOR_SERVICE_URL", "http://orchestrator-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_RAW_DOCUMENT_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_PARSED_DOCUMENT_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_TOKEN_BATCH_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_EMBEDDED_CHUNK_SIDE_EFFECT_URL", "http://persistence-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_SEARCH_INDEX_DOCUMENT_SIDE_EFFECT_URL", "http://persistence-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_SEARCH_INDEX_WRITE_RESULT_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_PERSISTENCE_INDEX_ACK_SIDE_EFFECT_URL", "http://persistence-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_RAW_DOCUMENT_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_PARSED_DOCUMENT_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_TOKEN_BATCH_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_SEARCH_INDEX_DOCUMENT_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
+            .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_SEARCH_INDEX_WRITE_RESULT_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_EMBEDDED_CHUNK_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_INDEX_ACK_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
             .withEnv("QUARKUS_REST_CLIENT_OBSERVE_CACHE_INVALIDATE_CRAWL_REQUEST_SIDE_EFFECT_URL", "http://cache-invalidation-svc:8080")
@@ -444,6 +449,8 @@ class SearchPipelineEndToEndIT {
         assertTrue(countRows("parseddocument") > 0, "Expected ParsedDocument persistence");
         assertTrue(countRows("tokenbatch") > 0, "Expected TokenBatch persistence");
         assertTrue(countRows("embeddedchunk") > 0, "Expected EmbeddedChunk persistence");
+        assertTrue(countRows("searchindexdocument") > 0, "Expected SearchIndexDocument persistence");
+        assertTrue(countRows("searchindexwriteresult") > 0, "Expected SearchIndexWriteResult persistence");
         assertTrue(countRows("indexack") > 0, "Expected IndexAck persistence");
     }
 
@@ -459,6 +466,10 @@ class SearchPipelineEndToEndIT {
         int parsedDocumentCount = awaitRowCountAtLeastForDocId("parseddocument", docId, 1, Duration.ofSeconds(10));
         int tokenBatchCount = awaitRowCountAtLeastForDocId("tokenbatch", docId, 1, Duration.ofSeconds(10));
         int embeddedChunkCount = awaitRowCountAtLeastForDocId("embeddedchunk", docId, tokenBatchCount, Duration.ofSeconds(30));
+        int searchIndexDocumentCount =
+            awaitRowCountAtLeastForDocId("searchindexdocument", docId, embeddedChunkCount, Duration.ofSeconds(30));
+        int searchIndexWriteResultCount =
+            awaitRowCountAtLeastForDocId("searchindexwriteresult", docId, searchIndexDocumentCount, Duration.ofSeconds(30));
         int indexAckCount = awaitRowCountAtLeastForDocId("indexack", docId, 1, Duration.ofSeconds(10));
 
         assertEquals(1, rawDocumentCount,
@@ -472,6 +483,10 @@ class SearchPipelineEndToEndIT {
             () -> "Expected embed step to persist exactly one EmbeddedChunk per TokenBatch for docId " + docId
                 + " but found " + embeddedChunkCount
                 + diagnosticRowsForDocId("embeddedchunk", docId));
+        assertEquals(embeddedChunkCount, searchIndexDocumentCount,
+            "Expected one SearchIndexDocument per EmbeddedChunk for docId " + docId);
+        assertEquals(searchIndexDocumentCount, searchIndexWriteResultCount,
+            "Expected one SearchIndexWriteResult per SearchIndexDocument command for docId " + docId);
         assertEquals(1, indexAckCount,
             "Expected MANY_TO_ONE fan-in to persist exactly one IndexAck row for docId " + docId
                 + " but found " + indexAckCount);

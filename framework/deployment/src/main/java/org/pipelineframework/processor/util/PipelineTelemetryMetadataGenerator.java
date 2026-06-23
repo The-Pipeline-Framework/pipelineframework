@@ -212,7 +212,8 @@ public class PipelineTelemetryMetadataGenerator {
         }
         GenerationTarget target = resolveClientTarget(ctx.getTransportMode());
         return models.stream()
-            .filter(model -> model.enabledTargets().contains(target))
+            .filter(model -> model.enabledTargets().contains(target)
+                || model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP))
             .toList();
     }
 
@@ -612,10 +613,16 @@ public class PipelineTelemetryMetadataGenerator {
         if (configStep != null && "await".equalsIgnoreCase(configStep.kind())) {
             return "await";
         }
+        if (configStep != null && "command".equalsIgnoreCase(configStep.kind())) {
+            return "command";
+        }
         return logicalStep != null && logicalStep.toLowerCase(Locale.ROOT).contains("await") ? "await" : "primary";
     }
 
     private String resolveBaseActorKind(PipelineYamlStep configStep) {
+        if (configStep != null && "command".equalsIgnoreCase(configStep.kind())) {
+            return configStep.command();
+        }
         if (configStep == null || configStep.awaitConfig() == null || configStep.awaitConfig().transport() == null) {
             return null;
         }
@@ -1059,7 +1066,9 @@ public class PipelineTelemetryMetadataGenerator {
      * @return the fully-qualified client step class name (package + ".pipeline." + generated name without "Service" + transport suffix)
      */
     private String resolveClientStepClassName(PipelineStepModel model, PipelineTransport transportMode) {
-        String suffix = transportMode.clientStepSuffix();
+        String suffix = model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)
+            ? "CommandClientStep"
+            : transportMode.clientStepSuffix();
         return model.servicePackage() + ".pipeline." +
             model.generatedName().replace("Service", "") + suffix;
     }

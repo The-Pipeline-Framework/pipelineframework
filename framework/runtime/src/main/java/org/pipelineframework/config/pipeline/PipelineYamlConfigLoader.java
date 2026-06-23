@@ -262,6 +262,10 @@ public class PipelineYamlConfigLoader {
             String timeout = readString(stepMap, "timeout");
             List<String> idempotencyKeyFields = readStringList(stepMap, "idempotencyKeyFields");
             PipelineYamlAwaitConfig awaitConfig = readAwaitConfig(stepMap, name);
+            String command = readString(stepMap, "command");
+            String commandIdGenerator = readString(stepMap, "commandIdGenerator");
+            String duplicatePolicy = readString(stepMap, "duplicatePolicy");
+            Map<String, Object> commandConfig = readCommandConfig(stepMap, name);
             String queryId = trimToNull(readString(stepMap, "query"));
             PipelineYamlQueryCapture queryCapture = readQueryCapture(stepMap, name);
             if (name != null && !name.isBlank()) {
@@ -276,11 +280,28 @@ public class PipelineYamlConfigLoader {
                     timeout,
                     idempotencyKeyFields,
                     awaitConfig,
+                    command,
+                    commandIdGenerator,
+                    duplicatePolicy,
+                    commandConfig,
                     queryId,
                     queryCapture));
             }
         }
         return stepInfos;
+    }
+
+    private Map<String, Object> readCommandConfig(Map<?, ?> stepMap, String stepName) {
+        Object configObj = stepMap.get("config");
+        if (configObj == null) {
+            return Map.of();
+        }
+        if (!(configObj instanceof Map<?, ?> configMap)) {
+            throw new IllegalArgumentException("step '" + stepName + "' command config key 'config' must be defined as a map");
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> normalized = (Map<String, Object>) normalizeConfigValue(configMap);
+        return normalized;
     }
 
     private Map<String, PipelineYamlQuery> readQueries(Map<?, ?> rootMap) {

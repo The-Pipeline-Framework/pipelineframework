@@ -1,6 +1,10 @@
-# Testing with Testcontainers
+# Testing
 
-This guide covers how to test TPF applications with a focus on unit tests and integration tests using Testcontainers.
+This guide covers application-level TPF testing: fast step tests, Quarkus integration tests, and container-backed tests when real dependencies are needed.
+
+::: tip Runtime Scope
+Quarkus is the mature production test surface today. Spring support currently has limited smoke coverage for generated local/REST unary flows; see [Spring Support Status](/develop/spring-support) before relying on Spring tests for production applications.
+:::
 
 ## Goals
 
@@ -8,7 +12,11 @@ This guide covers how to test TPF applications with a focus on unit tests and in
 - Use Testcontainers only when you need real dependencies (Postgres, Redis, external services).
 - Separate framework development tests from application tests.
 
-## `@QuarkusTest` Tests (No Containers)
+## Plain Unit Tests
+
+Use plain JUnit for pure business transformations whenever the step logic can be isolated from runtime wiring.
+
+## Quarkus Integration Tests Without Containers
 
 Use `@QuarkusTest` when you need CDI/configuration lifecycle without external containers. For pure unit tests, keep the step logic isolated and mock dependencies with plain JUnit.
 
@@ -114,4 +122,4 @@ Application tests (this guide) focus on your pipeline behavior. If you are contr
 - Validate mapper correctness
 - Test error scenarios
 - Implement integration tests with Testcontainers
-- Use Quarkus Dev Mode in your IDE for development
+- Use Quarkus Dev Mode for Quarkus-targeted application development

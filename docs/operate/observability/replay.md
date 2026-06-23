@@ -39,6 +39,8 @@ It is emitted by the framework replay exporter and contains:
 
 Replay JSON is the supported offline input for the TPF replay viewer.
 
+Command steps are included in the topology as authored pipeline nodes with `renderRole: "command"` and `actorKind` set to the command name. This keeps managed external effects visible in playback even when the connector hides provider details such as endpoint, credentials, index name, or SDK configuration.
+
 ## Live versus offline
 
 ### Live
@@ -105,6 +107,19 @@ Connector replay events include:
 - `object_publish_skipped`
 
 Use these events to debug a single object key or output object. Use `tpf.object_ingest.*`, `tpf.object_publish.*`, and `tpf.await.*` metrics to alert on aggregate health.
+
+Command telemetry has two layers:
+
+1. the pipeline layer, where the command appears in `tpf.step` spans, step metrics, and replay topology like other authored steps;
+2. the effect layer, where `tpf.command.effect.*` metrics and the command effect store record pending, dispatching, succeeded, retryable failure, duplicate handling, or terminal DLQ state.
+
+That split is intentional. The step span shows where the pipeline spent time. Command effect metrics support dashboards and SLOs. The effect record preserves command-id detail for investigation and replay. Use provider telemetry for external backlog and provider-side latency.
+
+Example command replay checks:
+
+- The topology contains `renderRole: "command"` for the command step.
+- `actorKind` is the authored command name, such as `opensearch-index-document`.
+- For `RETURN_RECORDED`, a replayed duplicate should return the recorded output and should not require another provider write.
 
 ## Replay exporter configuration
 

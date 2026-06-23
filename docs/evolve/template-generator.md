@@ -1,5 +1,9 @@
 # Template Generator (Reference)
 
+::: tip Repository Boundary
+The generator-facing schema is exported from this repository, but the MCP bridge and Node template generator live in [`tpf-mcp-bridge`](https://github.com/The-Pipeline-Framework/tpf-mcp-bridge). For the current user-facing entry point, see [MCP and Template Generation](/develop/mcp-template-generation).
+:::
+
 This guide explains how to use the Pipeline Framework template generator to create complete pipeline applications from YAML configuration files.
 
 <Callout type="tip" title="Canvas Is the Default">

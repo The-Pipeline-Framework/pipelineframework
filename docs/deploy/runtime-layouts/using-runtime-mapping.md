@@ -58,7 +58,7 @@ Transport remains a pipeline decision (`GRPC`, `REST`, or `LOCAL`) and is orthog
 
 ## FUNCTION Invocation Contract Baseline
 
-For `pipeline.platform=FUNCTION` (serverless/function runtime target; see [Configuration Reference](/develop/configuration/)), runtime mapping and function transport contract metadata work together:
+For `pipeline.platform=FUNCTION` (serverless/function runtime target; see [Configuration](/develop/configuration/)), runtime mapping and function transport contract metadata work together:
 
 - runtime mapping still decides placement (`orchestrator`, step modules, plugin/synthetic modules)
 - function invocation metadata in `FunctionTransportContext` expresses invocation intent. `FunctionTransportContext` is the per-invocation metadata object (invocation id, caller/stage, attributes, routing intent) passed through the function transport path:

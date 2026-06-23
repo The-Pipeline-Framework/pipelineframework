@@ -45,6 +45,11 @@ public enum StepKind {
     AWAIT,
 
     /**
+     * A command step that executes an idempotent external effect through a managed connector.
+     */
+    COMMAND,
+
+    /**
      * A captured query step that reads through an application connector and makes
      * decision-affecting external state an explicit pipeline input.
      */

@@ -58,7 +58,7 @@ TPFGo reference command paths:
 
 ### Compute/REST mode
 
-- Build transport and platform defaults from `pipeline.yaml` (the pipeline manifest, typically at the repo root or a service `config/` directory; see [Configuration Reference](/develop/configuration/)).
+- Build transport and platform defaults from `pipeline.yaml` (the pipeline manifest, typically at the repo root or a service `config/` directory; see [Configuration](/develop/configuration/)).
 - Use module-local Quarkus run/test commands for step services and orchestrator.
 - Expect generated REST handlers/resources for configured steps.
 

@@ -1,5 +1,9 @@
 # I/O Shell Absorption Priorities
 
+::: tip Strategic Context
+This page is the internal strategy companion to the public [Functional Core, Imperative Shell](/design/fcis) guide. Keep public docs focused on typed boundaries and connector usage; use this page for evolution decisions about which I/O shells TPF should absorb next.
+:::
+
 This note explores where TPF should absorb imperative I/O plumbing into framework semantics. It is an evolve document: it is useful for architecture and prioritisation, but it is not a public commitment that every capability below exists today.
 
 The working value proposition is:
@@ -297,7 +301,7 @@ Estimated effort:
 
 - Current first-class MVP: medium-large, covering DSL parsing, generated query client step, first-party JPA connector runtime, in-memory capture store, and captured replay semantics.
 - Durable production stores beyond memory: medium per store.
-- Provider-specific query catalogs/connectors: medium per provider family.
+- Provider-specific query connectors: medium per provider family.
 - Query observability and replay tooling polish: medium.
 
 MCP-friendliness:
@@ -369,7 +373,7 @@ Estimated effort:
 MCP-friendliness:
 
 - High. Agents can generate provider-specific job specs from intent, then bind request/result DTOs.
-- The capability benefits from a provider catalog, because users should not hand-author every provider's status and terminal states.
+- The capability benefits from provider templates, because users should not hand-author every provider's status and terminal states.
 
 Third-party integration priorities:
 
@@ -392,33 +396,49 @@ Benefits to the user:
 
 Capability design:
 
-- Introduce a command boundary with command id fields, dispatch policy, replay policy, and provider idempotency requirements.
-- TPF owns command admission, effect record, retry scheduling, terminal failure routing, and observability.
+- V1 uses `kind: command` for `ONE_TO_ONE` effects. Bulk writes are a later capability, after one-command-per-effect semantics are proven.
+- Authored YAML names the semantic command, the deterministic command id generator, and the duplicate policy.
+- Endpoint, credentials, index names, provider timeouts, and provider retry tuning live in connector/runtime config, not in authored pipeline steps.
+- Generated command steps call framework command support. Business services and `ReactiveService` stay unchanged.
+- TPF owns command admission, effect records, duplicate policy, recorded-output replay, failure recording, and observability.
+- Queue-async retry/DLQ remains the failure-policy owner for v1 connector failures.
 - The target system must still provide or tolerate idempotency. TPF cannot guarantee exactly-once effects in a third-party system.
 - A transactional outbox form should be available when the command is coupled to local durable state.
-- Command result shape should distinguish accepted, completed, duplicate, rejected, and unknown outcomes.
+- Command result shape should distinguish accepted, completed, duplicate, rejected, and unknown outcomes as the model grows.
 
 DSL illustration:
 
 ```yaml
-steps:
-  - name: "Create Payment Charge"
-    kind: "command"
-    cardinality: "ONE_TO_ONE"
-    input: "com.example.PaymentCommand"
-    output: "com.example.PaymentCommandResult"
-    command:
-      provider: "stripe"
-      idempotencyKeyFields: ["paymentId"]
-      dispatch:
-        retry:
-          maxAttempts: 5
-          backoff: "EXPONENTIAL_JITTER"
-      replay:
-        mode: "RECORDED_RESULT"
-      failure:
-        terminalSink: "execution-dlq"
+- name: Write Search Index Document
+  kind: command
+  command: opensearch-index-document
+  cardinality: ONE_TO_ONE
+  input: org.pipelineframework.search.common.domain.SearchIndexDocument
+  output: org.pipelineframework.search.common.domain.SearchIndexWriteResult
+  commandIdGenerator: org.pipelineframework.search.common.command.SearchIndexDocumentCommandIdGenerator
+  duplicatePolicy: RETURN_RECORDED
 ```
+
+OpenSearch proof lane:
+
+```text
+Embed Content
+  -> Build Search Index Document        ONE_TO_ONE, pure
+  -> Write Search Index Document        ONE_TO_ONE, command
+  -> Summarize Index Writes             MANY_TO_ONE, pure
+```
+
+This proof separates three concerns that are easy to collapse accidentally:
+
+- `Build` deterministically projects `EmbeddedChunk` into `SearchIndexDocument`.
+- `Write` performs the OpenSearch upsert through a command connector with deterministic command id, effect log, duplicate policy, and recorded output.
+- `Summarize` purely reduces recorded `SearchIndexWriteResult` values back to the existing `IndexAck` output shape.
+
+The deterministic external id and command id derive from `docId + batchIndex + vectorVersion + vectorHash`, with the command name included to avoid cross-command collisions. The write result records `commandId`, `externalId`, `indexName`, `resultStatus`, `createdOrUpdated`, and `recordedDuplicate`.
+
+This proof indexes text/hash metadata only. It should not be described as vector-search support until Search carries actual vector arrays.
+
+Future command connector catalog: promote OpenSearch first because it already demonstrates typed command input/output, deterministic external identity, result recording, duplicate replay, and provider failure mapping. Email delivery is a strong second candidate after the command result model settles; SMTP or AWS SES are better first baselines than Gmail because they represent service-oriented delivery without starting from user-mailbox OAuth. A connector belongs here only when TPF semantics remove effect logging, duplicate suppression, retry/DLQ, replay, or observability code that application teams would otherwise write.
 
 Examples and inspiration:
 
@@ -523,4 +543,4 @@ The adoption wedge should stay narrow:
 4. Treat idempotent commands/outbox as a separate reliability primitive with strong safety language.
 5. Use object ingest as a practical example path that connects source handling, materialization, reject sinks, replay, and background execution.
 
-Do not build a broad connector catalog before these semantics are clear. A connector without replay, identity, idempotency, or continuation semantics is usually just ordinary Java/Quarkus integration code.
+Do not broaden provider packaging before these semantics are clear. A connector without replay, identity, idempotency, or continuation semantics is usually just ordinary Java/Quarkus integration code.

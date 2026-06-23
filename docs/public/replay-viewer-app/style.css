@@ -774,6 +774,32 @@ button:disabled {
   box-shadow: 0 0 12px rgb(139 255 165 / 40%);
 }
 
+.legend-node {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #5cc8ff;
+  box-shadow: 0 0 14px rgb(92 200 255 / 42%);
+}
+
+.legend-node-primary {
+  background: `#5cc8ff`;
+  box-shadow: 0 0 14px rgb(92 200 255 / 42%);
+}
+  background: #5cc8ff;
+  box-shadow: 0 0 14px rgb(92 200 255 / 42%);
+}
+
+.legend-node--await {
+  background: #78c8ff;
+  box-shadow: 0 0 14px rgb(120 200 255 / 42%);
+}
+
+.legend-node--command {
+  background: #ffd166;
+  box-shadow: 0 0 14px rgb(255 209 102 / 40%);
+}
+
 .legend-list--support {
   gap: 9px;
 }

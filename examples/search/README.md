@@ -47,7 +47,7 @@ The harness keeps the current process-scoped replay limitation explicit:
 - it does not claim true overlapping multi-run replay capture yet
 
 The cache-hit dataset is produced by running the same URLs twice with the same pipeline version after the cache has been warmed.
-The replay topology now shows `Crawl -> Parse -> Tokenize -> Embed -> Index`, including token fan-out, slower one-to-one embedding, persistence/cache side effects, and document-level fan-in.
+The replay topology now shows `Crawl -> Parse -> Tokenize -> Embed -> Build Search Index Document -> Write Search Index Document -> Summarize Index Writes`, including token fan-out, slower one-to-one embedding, a replay-safe command sink, persistence/cache side effects, and document-level fan-in.
 
 Open the supported replay viewer from the docs site at `/replay-viewer/index.html` and either:
 
@@ -157,7 +157,9 @@ The search FUNCTION lane now includes explicit fan-out/fan-in path coverage.
 - `examples/search/config/pipeline.yaml` now includes:
   - `Tokenize Content`: `ONE_TO_MANY` (runtime/generation shape: `UNARY_STREAMING`)
   - `Embed Content`: `ONE_TO_ONE` over each `TokenBatch`
-  - `Index Document`: `MANY_TO_ONE` over `EmbeddedChunk` (runtime/generation shape: `STREAMING_UNARY`)
+  - `Build Search Index Document`: `ONE_TO_ONE` over each `EmbeddedChunk`
+  - `Write Search Index Document`: `ONE_TO_ONE` command write with deterministic command id and recorded output
+  - `Summarize Index Writes`: `MANY_TO_ONE` over `SearchIndexWriteResult` (runtime/generation shape: `STREAMING_UNARY`)
 
 In this lane:
 
@@ -181,8 +183,9 @@ Cardinality guarantees covered by tests:
 
 - `SearchPipelineEndToEndIT#tokenizeEmbedAndIndexPersistFanoutBatchesPerDocId` verifies one `docId` flows
   through `RawDocument`/`ParsedDocument`, fans out into multiple persisted `TokenBatch` rows, embeds each
-  batch into an `EmbeddedChunk`, then merges into exactly one `IndexAck`.
-- `ProcessIndexDocumentServiceReliabilityTest#rejectsMixedDocIdsBeforeAggregation` verifies fan-in rejects mixed `docId` input.
+  batch into an `EmbeddedChunk`, writes one recorded `SearchIndexWriteResult` per `SearchIndexDocument`, then
+  merges into exactly one `IndexAck`.
+- `ProcessSummarizeIndexWritesServiceTest#rejectsMixedDocIds` verifies fan-in rejects mixed `docId` input.
 
 ### Branching Reference Lane (Business Semantics)
 
@@ -190,15 +193,19 @@ The search pipeline includes a non-unary business lane:
 
 1. `Tokenize Content` (`ONE_TO_MANY`) expands one `ParsedDocument` into multiple `TokenBatch` units.
 2. `Embed Content` (`ONE_TO_ONE`) deterministically embeds each `TokenBatch` into one `EmbeddedChunk`.
-3. `Index Document` (`MANY_TO_ONE`) reduces all embedded chunks for the same `docId` into one meaningful `IndexAck`.
+3. `Build Search Index Document` (`ONE_TO_ONE`) deterministically projects each `EmbeddedChunk` into a `SearchIndexDocument`.
+4. `Write Search Index Document` (`ONE_TO_ONE`, command) records an idempotent external write result.
+5. `Summarize Index Writes` (`MANY_TO_ONE`) reduces all recorded writes for the same `docId` into one meaningful `IndexAck`.
 
 The reduced `IndexAck` now carries aggregate document signals:
 
 - `tokenBatchCount`: how many batches participated in fan-in.
 - `uniqueTokenCount`: unique vocabulary size for the reduced document.
 - `topToken`: most frequent token across all batches; when frequencies tie, the lexicographically smallest token is selected.
-- fan-in input invariants: each `EmbeddedChunk` must have `batchIndex >= 0`, `tokenCount > 0`,
-  `vectorHash`, and `vectorVersion`; malformed chunks fail fast before aggregation.
+- command id/external id invariants: each `SearchIndexDocument` derives its external identity from
+  `docId + batchIndex + vectorVersion + vectorHash`; malformed documents fail fast before command dispatch.
+- fan-in input invariants: each `SearchIndexWriteResult` must have `batchIndex >= 0`, `tokenCount > 0`,
+  `vectorHash`, and `vectorVersion`; malformed write results fail fast before aggregation.
 
 This keeps the lane business-relevant (document-level indexing summary), not just structural fan-out/fan-in.
 
