@@ -72,7 +72,9 @@ sequenceDiagram
     participant Orchestrator
     participant ObjectIngest
     participant InputService
-    participant PaymentService
+    participant AwaitUnit
+    participant Kafka
+    participant Provider
     participant StatusService
     participant ObjectPublish
     
@@ -81,8 +83,12 @@ sequenceDiagram
     ObjectIngest-->>Orchestrator: Admit CSV object execution
     Orchestrator->>InputService: Process CSV object
     loop For each payment record
-        Orchestrator->>PaymentService: Await payment provider
-        PaymentService-->>Orchestrator: Payment completion
+        Orchestrator->>AwaitUnit: Create item interaction
+        AwaitUnit->>Kafka: Publish await request
+        Kafka->>Provider: Deliver request
+        Provider-->>Kafka: Payment completion
+        Kafka-->>AwaitUnit: Admit completion
+        AwaitUnit-->>Orchestrator: Release item continuation
         Orchestrator->>StatusService: Process status
         StatusService-->>Orchestrator: PaymentOutput
     end

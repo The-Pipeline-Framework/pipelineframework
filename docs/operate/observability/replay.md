@@ -89,6 +89,8 @@ Replay JSON is written from the same runtime semantics by the framework replay e
 
 Await boundaries park the owning `QUEUE_ASYNC` execution on a durable await unit and resume from that unit after completion admission. Replay events include await unit ids, execution ids, interaction ids, step ids, unit status, and expected/completed item counts where the runtime knows them. For operations, see [Await Boundary Operations](/operate/await-boundaries); for the implementation model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
 
+Connector-first pipelines add framework-owned nodes that are not user-authored business steps. In CSV Payments, replay should show Object Ingest as source admission, `Await Payment Provider` as the durable external boundary, item continuations through `Process Payment Status`, and Object Publish as terminal object output. The old folder and output-file services should only appear when the legacy file-step config is being replayed.
+
 ## Replay exporter configuration
 
 Replay export is gated behind framework configuration:

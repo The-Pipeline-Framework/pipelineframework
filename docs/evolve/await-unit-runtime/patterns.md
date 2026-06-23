@@ -32,3 +32,11 @@ The important simplification is not that await became smaller. It became layered
 4. adapters own protocol-specific dispatch and admission.
 
 Each layer has one job and one persistence shape.
+
+## Why CSV Backpressure Was Hard
+
+CSV Payments exposed a gap between ordinary reactive backpressure and durable distributed coordination. The input parser could be made lazy, but the await step introduces an external chasm: requests leave the process, completions can arrive through a broker before the parent transition is parked, and a worker retry can resubscribe a cold source if suspension is misclassified as failure.
+
+The current design fixes that by making the await unit the release gate. A completed item is not enough to continue. The unit must finish dispatch, the parent execution must be durably `WAITING_EXTERNAL`, and the completion must be recorded against its item interaction. Only then does the queue-async coordinator dispatch the item continuation.
+
+Object Publish removes the old final-file aggregate step from the default CSV path. Terminal rows can be written through a connector-owned streaming session, while the parent execution still commits success only after publication completes. This does not make one `Multi` demand signal cross the external provider boundary; it replaces that impossible promise with durable gates that prevent duplicate source reads and premature continuations.

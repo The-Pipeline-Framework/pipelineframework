@@ -104,6 +104,30 @@ steps:
 
 The output binding type must match the last step output type.
 
+## CSV Payments Shape
+
+CSV Payments uses both sides of the object shell in the default path.
+
+| Concern | Legacy file-step path | Connector-first path |
+| --- | --- | --- |
+| Source discovery | `ProcessFolderService` listed folders as a business step. | Object Ingest lists and admits source objects, then submits deterministic queue-async executions. |
+| CSV parsing | `ProcessCsvPaymentsInputService` parsed the selected file. | `ProcessCsvPaymentsInputService` still parses the source object domain input. |
+| Provider wait | `Await Payment Provider` dispatched one interaction per row. | Same authored await step; TPF coordinates itemized completion through await units. |
+| Output file | `ProcessCsvPaymentsOutputFileService` grouped and wrote final files. | Object Publish groups terminal `PaymentOutput` values and writes `{groupKey}.out`. |
+| Reader pacing | `BlockingIteratorPacer` throttled the old path as a fallback. | Runtime backpressure plus durable await coordination and streaming publish carry the default path. |
+
+The business pipeline therefore ends at the last domain transition, not at a file-writing step:
+
+```text
+Object Ingest
+  -> Process Csv Payments Input
+  -> Await Payment Provider
+  -> Process Payment Status
+  -> Object Publish
+```
+
+`Object Ingest` and `Object Publish` are framework-owned I/O shells around the pipeline. They are not replacement names for user-authored steps.
+
 ## Publish Mapper
 
 Application code renders terminal values into object payload chunks. TPF owns grouping, key templating, provider selection, write idempotency, backpressure, telemetry, and lifecycle reporting.
@@ -205,7 +229,7 @@ publish:
 
 Object ingest v1 requires `pipeline.orchestrator.mode=QUEUE_ASYNC`. TPF submits each mapped input with a deterministic idempotency key derived from object identity, so duplicate listing results resolve to existing async executions.
 
-Object Publish also targets queue-async terminal output. Streaming terminal output must use `StreamingObjectPublishMapper<T>`; the batch `ObjectPublishMapper<T>` remains for unary/small compatibility only.
+Object Publish also targets queue-async terminal output. Streaming terminal output must use `StreamingObjectPublishMapper<T>`; the batch `ObjectPublishMapper<T>` remains for unary/small compatibility only. Publication happens before the queue-async execution is marked successful, so a successful execution does not silently miss its configured output object.
 
 FUNCTION pipelines are rejected in v1. Quarkus currently hosts the bootstrap, but the ingest runner and provider SPI are plain Java so a Spring Boot host can wire the same semantics later.
 

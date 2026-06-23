@@ -30,9 +30,10 @@ sequenceDiagram
     Coordinator->>Worker: TransitionCommandEnvelope
     alt await boundary
         Worker-->>Coordinator: WAITING_EXTERNAL await unit id
-        Coordinator->>Store: park execution
+        Coordinator->>Store: park execution as WAITING_EXTERNAL
         Client->>Coordinator: complete interaction
-        Coordinator->>Store: admit completion + resume
+        Coordinator->>Store: admit completion into await unit
+        Coordinator->>Store: release only if unit complete and parent waits
     else completed transition
         Worker-->>Coordinator: COMPLETED payload
         Coordinator->>Store: commit result / enqueue next

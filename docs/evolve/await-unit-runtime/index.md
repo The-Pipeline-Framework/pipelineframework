@@ -93,7 +93,8 @@ classDiagram
 2. `Await Payment Provider` is authored as `kind: await` with `cardinality: ONE_TO_ONE`.
 3. Because the await step receives a stream, TPF creates one owning await unit with one item interaction per `PaymentRecord`.
 4. The Kafka adapter publishes requests to `csv-payments.payment.requests`; the mock provider publishes completions to `csv-payments.payment.results`.
-5. Completed item outputs are `PaymentStatus` records. The runtime can continue per-item work through `Process Payment Status`, then release the parent execution at the next aggregate boundary.
+5. Completed item outputs are `PaymentStatus` records. The runtime can continue per-item work through `Process Payment Status`, then release the parent execution when the itemized unit reaches the next aggregate or terminal boundary.
+6. In the connector-first default path, terminal `PaymentOutput` records are published by Object Publish rather than by a `ProcessCsvPaymentsOutputFileService` business step.
 
 ```mermaid
 classDiagram

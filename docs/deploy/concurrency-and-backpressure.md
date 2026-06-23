@@ -42,6 +42,17 @@ Always validate in your environment using the in-flight and buffer metrics and a
 Tune downward if the buffer stays high or GC increases, and upward only when `tpf.step.inflight` is consistently
 below the limit while `tpf.step.buffer.queued` spikes.
 
+### Durable boundaries
+
+Backpressure only propagates through a live reactive segment. It does not cross an external await boundary, because the request has left the current process and the completion may return later through Kafka, SQS, a webhook, or a human/API completion.
+
+For await-heavy pipelines, size the system around two kinds of pressure:
+
+- live segment pressure: step inflight counts, step buffers, terminal publish write latency, and source admission;
+- durable boundary pressure: pending await interactions, completed-but-not-released items, work-queue depth, provider permits, broker lag, retry rate, and DLQ events.
+
+In connector-first CSV Payments, Object Ingest controls source-object admission and Object Publish accepts terminal chunks through a target session. The old CSV reader demand pacer is a legacy fallback for the deprecated file-step path; it is not the main backpressure mechanism for the connector-owned path.
+
 ### Retry amplification example (real-world)
 
 When an upstream source can admit work faster than a downstream step can call a slow third-party

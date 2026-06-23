@@ -165,7 +165,8 @@ sequenceDiagram
         Worker-->>Coord: WAITING_EXTERNAL
         Coord->>Await: persist await unit + pending interaction
         Client->>Coord: complete await interaction
-        Coord->>Queue: enqueue resume
+        Coord->>Await: record completion against unit
+        Coord->>Queue: enqueue resume only after unit/parent gates pass
         Coord->>Worker: TransitionCommandEnvelope with resume payload
     else completes transition
         Worker-->>Coord: COMPLETED outputs

@@ -157,7 +157,7 @@ The SQS lane is the default AWS-shaped proof. The Kafka lane proves the same awa
 TPF_CSV_AWAIT_TRANSPORT=kafka ./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
 ```
 
-CSV await item continuations use the same bounded transition-worker seam as normal queue-async work. The worker executes each item continuation segment up to the aggregate boundary, while generated step clients target the runtime and persistence containers.
+CSV await item continuations use the same bounded transition-worker seam as normal queue-async work. The worker executes each item continuation segment until the itemized unit reaches the next aggregate or terminal boundary. In the connector-first CSV path, terminal Object Publish owns output object writes before execution success is committed, while generated step clients target the runtime and persistence containers.
 
 ## Startup Checklist
 

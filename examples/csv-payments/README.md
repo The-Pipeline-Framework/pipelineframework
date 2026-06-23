@@ -355,21 +355,27 @@ The CSV Payments Processing Application follows a complex end-to-end data flow t
 sequenceDiagram
     participant User
     participant Orchestrator
+    participant ObjectIngest
     participant InputService
-    participant PaymentsService
+    participant AwaitUnit
+    participant Kafka
     participant StatusService
     participant ObjectPublish
     participant PaymentProvider
 
     User->>Orchestrator: Start processing
-    Orchestrator->>InputService: Process CSV files
+    Orchestrator->>ObjectIngest: Poll object source
+    ObjectIngest-->>Orchestrator: Admit source object execution
+    Orchestrator->>InputService: Process CSV file
     InputService-->>Orchestrator: Stream payment records
     loop For each payment record
-        Orchestrator->>PaymentsService: Await payment provider
-        PaymentsService->>PaymentProvider: Mock API call
-        PaymentProvider-->>PaymentsService: PaymentStatus
-        PaymentsService-->>Orchestrator: PaymentStatus
-        PaymentsService->>StatusService: Process status
+        Orchestrator->>AwaitUnit: Create item interaction
+        AwaitUnit->>Kafka: Publish await request
+        Kafka->>PaymentProvider: Deliver payment request
+        PaymentProvider-->>Kafka: PaymentStatus
+        Kafka-->>AwaitUnit: Admit completion
+        AwaitUnit-->>Orchestrator: Release item continuation
+        Orchestrator->>StatusService: Process status
         StatusService-->>Orchestrator: PaymentOutput
     end
     Orchestrator->>ObjectPublish: Stream terminal output
