@@ -148,25 +148,64 @@ Await execution logs include the parked await unit when a `QUEUE_ASYNC` executio
 Command signal:
 
 - command steps participate in normal `tpf.step.*` metrics and `tpf.step` spans,
-- effect lifecycle state is recorded in the configured `CommandEffectStore`,
+- command effect lifecycle is exposed through `tpf.command.effect.*` metrics,
+- effect lifecycle state is also recorded in the configured `CommandEffectStore`,
 - provider backlog, throttling, and external latency should come from the provider connector or platform telemetry.
 
 Replay topology marks command steps with `renderRole: "command"` and `actorKind` equal to the command name. That topology signal is for inspection and playback; it is not a replacement for provider-native command metrics.
+
+Command effect metrics:
+
+| OpenTelemetry metric | Prometheus name | Type | Key attributes |
+| --- | --- | --- | --- |
+| `tpf.command.effect.transition.total` | `tpf_command_effect_transition_total` | counter | `tpf_command`, `tpf_command_step`, `tpf_command_status` |
+| `tpf.command.effect.duplicate.total` | `tpf_command_effect_duplicate_total` | counter | `tpf_command`, `tpf_command_step`, `tpf_command_duplicate_policy`, `tpf_command_duplicate_result` |
+| `tpf.command.effect.duration` | `tpf_command_effect_duration_*` | histogram | `tpf_command`, `tpf_command_step`, `tpf_command_status` |
+
+Command status values are `pending`, `dispatching`, `succeeded`, `failed_retryable`, and `dlq`.
+Duplicate result values are `returned_recorded`, `rejected`, and `in_progress`.
 
 Command step SLO examples:
 
 | SLO | Primary signal | Example objective |
 | --- | --- | --- |
-| Command effect completion | command effect store status | 99.9% of command effects reach `SUCCEEDED` within 5 minutes. |
-| Terminal command failure budget | command effect store `DLQ` status | Fewer than 0.1% of command effects enter terminal DLQ over 30 days. |
+| Command effect completion | `tpf.command.effect.transition.total{tpf_command_status="succeeded"}` | 99.9% of command effects reach `SUCCEEDED` within 5 minutes. |
+| Terminal command failure budget | `tpf.command.effect.transition.total{tpf_command_status="dlq"}` | Fewer than 0.1% of command effects enter terminal DLQ over 30 days. |
 | Command step latency | `tpf.step` latency for the command step | p95 under the service target for the provider, such as 2 seconds for search indexing. |
-| Replay duplicate safety | effect store plus connector/provider telemetry | `RETURN_RECORDED` duplicates return stored output with zero extra provider writes. |
+| Replay duplicate safety | `tpf.command.effect.duplicate.total{tpf_command_duplicate_result="returned_recorded"}` plus provider write count | `RETURN_RECORDED` duplicates return stored output with zero extra provider writes. |
 | Provider health | connector or provider metrics | Provider throttling and backlog stay below the connector's retry budget. |
 
-For a Search/OpenSearch indexing command, use the command effect store to count `SUCCEEDED`,
-`FAILED_RETRYABLE`, and `DLQ` effects by command name. Use the `Write Search Index Document`
-step span for pipeline latency, and use OpenSearch client or cluster metrics for provider latency,
-throttling, and indexing failures.
+PromQL examples:
+
+```text
+# Success ratio by command over 5 minutes.
+sum by (tpf_command) (rate(tpf_command_effect_transition_total{tpf_command_status="succeeded"}[5m]))
+/
+sum by (tpf_command) (rate(tpf_command_effect_transition_total{tpf_command_status=~"succeeded|failed_retryable|dlq"}[5m]))
+```
+
+```text
+# Terminal DLQ rate by command.
+sum by (tpf_command) (rate(tpf_command_effect_transition_total{tpf_command_status="dlq"}[5m]))
+```
+
+```text
+# Recorded duplicate replays by command.
+sum by (tpf_command) (increase(tpf_command_effect_duplicate_total{tpf_command_duplicate_result="returned_recorded"}[1h]))
+```
+
+```text
+# p95 command effect duration by command.
+histogram_quantile(
+  0.95,
+  sum by (le, tpf_command) (rate(tpf_command_effect_duration_bucket{tpf_command_status="succeeded"}[5m]))
+)
+```
+
+For a Search/OpenSearch indexing command, use `tpf.command.effect.transition.total` to count
+`succeeded`, `failed_retryable`, and `dlq` effects by `tpf_command="opensearch-index-document"`.
+Use `tpf.step.duration` for the `Write Search Index Document` step's pipeline latency, and use
+OpenSearch client or cluster metrics for provider latency, throttling, and indexing failures.
 
 Backlog signal note:
 

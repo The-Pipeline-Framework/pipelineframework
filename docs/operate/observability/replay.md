@@ -94,9 +94,9 @@ Await boundaries park the owning `QUEUE_ASYNC` execution on a durable await unit
 Command telemetry has two layers:
 
 1. the pipeline layer, where the command appears in `tpf.step` spans, step metrics, and replay topology like other authored steps;
-2. the effect layer, where the command effect store records pending, dispatching, succeeded, retryable failure, or terminal DLQ state for the command id.
+2. the effect layer, where `tpf.command.effect.*` metrics and the command effect store record pending, dispatching, succeeded, retryable failure, duplicate handling, or terminal DLQ state.
 
-That split is intentional. The step span shows where the pipeline spent time. The effect record shows whether the external effect was recorded, replayed, retried, or dead-lettered. Use provider telemetry for external backlog and provider-side latency.
+That split is intentional. The step span shows where the pipeline spent time. Command effect metrics support dashboards and SLOs. The effect record preserves command-id detail for investigation and replay. Use provider telemetry for external backlog and provider-side latency.
 
 Example command replay checks:
 

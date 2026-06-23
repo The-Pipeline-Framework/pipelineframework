@@ -109,37 +109,52 @@ public class CommandStepSupport {
             CommandEffectRecord record = existing.get();
             if (record.status() == CommandEffectStatus.SUCCEEDED) {
                 if (request.descriptor().duplicatePolicy() == CommandDuplicatePolicy.FAIL) {
+                    CommandEffectMetrics.recordDuplicate(request.descriptor(), "rejected");
                     return Uni.createFrom().failure(new NonRetryableException(
                         "Duplicate command completion for commandId " + request.commandId()));
                 }
                 @SuppressWarnings("unchecked")
                 O recorded = (O) record.output();
                 CommandRecordedDuplicateMarker.mark(recorded);
+                CommandEffectMetrics.recordDuplicate(request.descriptor(), "returned_recorded");
                 return Uni.createFrom().item(recorded);
             }
             if (record.status() == CommandEffectStatus.PENDING || record.status() == CommandEffectStatus.DISPATCHING) {
+                CommandEffectMetrics.recordDuplicate(request.descriptor(), "in_progress");
                 return Uni.createFrom().failure(new CommandInProgressException(
                     "Command already in progress for commandId " + request.commandId()));
             }
         }
         // Each effect transition records its own wall-clock time so the store can show dispatch/write duration.
+        long effectStartNanos = CommandEffectMetrics.startNanos();
         return store.createPending(request, System.currentTimeMillis())
+            .invoke(ignored -> CommandEffectMetrics.recordTransition(
+                request.descriptor(),
+                CommandEffectStatus.PENDING))
             .onItem().transformToUni(ignored -> store.markDispatching(
                 request.executionContext().tenantId(),
                 request.commandId(),
                 System.currentTimeMillis()))
+            .invoke(ignored -> CommandEffectMetrics.recordTransition(
+                request.descriptor(),
+                CommandEffectStatus.DISPATCHING))
             .onItem().transformToUni(ignored -> connector.execute(request))
             .onItem().transformToUni(output -> store.markSucceeded(
                     request.executionContext().tenantId(),
                     request.commandId(),
                     output,
                     System.currentTimeMillis())
+                .invoke(ignored -> CommandEffectMetrics.recordTerminalTransition(
+                    request.descriptor(),
+                    CommandEffectStatus.SUCCEEDED,
+                    effectStartNanos))
                 .replaceWith(output))
             .onFailure().call(failure -> recordFailure(
                     store,
                     request,
                     failure,
-                    System.currentTimeMillis())
+                    System.currentTimeMillis(),
+                    effectStartNanos)
                 .replaceWithVoid());
     }
 
@@ -147,20 +162,29 @@ public class CommandStepSupport {
         CommandEffectStore store,
         CommandRequest<?> request,
         Throwable failure,
-        long nowEpochMs
+        long nowEpochMs,
+        long effectStartNanos
     ) {
         if (isNonRetryable(failure)) {
             return store.markDlq(
                 request.executionContext().tenantId(),
                 request.commandId(),
                 failure,
-                nowEpochMs);
+                nowEpochMs)
+                .invoke(ignored -> CommandEffectMetrics.recordTerminalTransition(
+                    request.descriptor(),
+                    CommandEffectStatus.DLQ,
+                    effectStartNanos));
         }
         return store.markFailed(
             request.executionContext().tenantId(),
             request.commandId(),
             failure,
-            nowEpochMs);
+            nowEpochMs)
+            .invoke(ignored -> CommandEffectMetrics.recordTerminalTransition(
+                request.descriptor(),
+                CommandEffectStatus.FAILED_RETRYABLE,
+                effectStartNanos));
     }
 
     private boolean isNonRetryable(Throwable failure) {
