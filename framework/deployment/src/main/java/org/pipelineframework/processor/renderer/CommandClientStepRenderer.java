@@ -44,8 +44,11 @@ public class CommandClientStepRenderer {
         String className = baseName + "CommandClientStep";
         PipelineConfigHints configHints = resolveConfigHints(ctx);
         PipelineTransport transportMode = configHints.transportMode();
-        TypeName inputType = clientStepType(model.inboundDomainType(), transportMode, configHints.basePackage());
-        TypeName outputType = clientStepType(model.outboundDomainType(), transportMode, configHints.basePackage());
+        TypeName domainInputType = model.inboundDomainType();
+        TypeName domainOutputType = model.outboundDomainType();
+        TypeName inputType = clientStepType(domainInputType, transportMode, configHints.basePackage());
+        TypeName outputType = clientStepType(domainOutputType, transportMode, configHints.basePackage());
+        boolean transportMapped = transportMode != PipelineTransport.LOCAL;
 
         FieldSpec support = FieldSpec.builder(ClassName.get("org.pipelineframework.command", "CommandStepSupport"), "support")
             .addAnnotation(ClassName.get("jakarta.inject", "Inject"))
@@ -58,8 +61,18 @@ public class CommandClientStepRenderer {
         FieldSpec commandIdGenerator = FieldSpec.builder(model.cacheKeyGenerator(), "commandIdGenerator")
             .addAnnotation(ClassName.get("jakarta.inject", "Inject"))
             .build();
+        FieldSpec inputMapper = null;
+        FieldSpec outputMapper = null;
+        if (transportMapped) {
+            inputMapper = FieldSpec.builder(mapperType(domainInputType, configHints.basePackage()), "inputMapper")
+                .addAnnotation(ClassName.get("jakarta.inject", "Inject"))
+                .build();
+            outputMapper = FieldSpec.builder(mapperType(domainOutputType, configHints.basePackage()), "outputMapper")
+                .addAnnotation(ClassName.get("jakarta.inject", "Inject"))
+                .build();
+        }
 
-        TypeSpec type = TypeSpec.classBuilder(className)
+        TypeSpec.Builder typeBuilder = TypeSpec.classBuilder(className)
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.enterprise.context", "Dependent")).build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get(Unremovable.class)).build())
@@ -77,7 +90,14 @@ public class CommandClientStepRenderer {
             .addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheKeyTarget"))
             .addField(support)
             .addField(descriptorFactory)
-            .addField(commandIdGenerator)
+            .addField(commandIdGenerator);
+        if (inputMapper != null) {
+            typeBuilder.addField(inputMapper);
+        }
+        if (outputMapper != null) {
+            typeBuilder.addField(outputMapper);
+        }
+        TypeSpec type = typeBuilder
             .addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC).build())
             .addMethod(MethodSpec.methodBuilder("cacheKeyTargetType")
                 .addAnnotation(Override.class)
@@ -91,17 +111,58 @@ public class CommandClientStepRenderer {
                 .addModifiers(Modifier.PUBLIC)
                 .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputType))
                 .addParameter(inputType, "input")
-                .addStatement("return support.execute(descriptorFactory.descriptor($S, null, $S, $S, $S), commandIdGenerator, input)",
-                    model.serviceName(),
-                    inputType.toString(),
-                    outputType.toString(),
-                    model.cacheKeyGenerator().canonicalName())
+                .addCode(applyBody(
+                    model,
+                    transportMode,
+                    domainInputType,
+                    domainOutputType,
+                    model.cacheKeyGenerator().canonicalName()))
                 .build())
             .build();
 
         JavaFile.builder(model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX, type)
             .build()
             .writeTo(ctx.outputDir());
+    }
+
+    private com.squareup.javapoet.CodeBlock applyBody(
+        PipelineStepModel model,
+        PipelineTransport transportMode,
+        TypeName domainInputType,
+        TypeName domainOutputType,
+        String commandIdGeneratorName
+    ) {
+        com.squareup.javapoet.CodeBlock.Builder body = com.squareup.javapoet.CodeBlock.builder();
+        if (transportMode == PipelineTransport.LOCAL) {
+            body.addStatement("return support.execute(descriptorFactory.descriptor($S, null, $S, $S, $S), commandIdGenerator, input)",
+                model.serviceName(),
+                domainInputType.toString(),
+                domainOutputType.toString(),
+                commandIdGeneratorName);
+            return body.build();
+        }
+        if (transportMode == PipelineTransport.REST) {
+            body.addStatement("$T commandInput = inputMapper.fromExternal(input)", domainInputType)
+                .addStatement("return support.<$T, $T>execute(descriptorFactory.descriptor($S, null, $S, $S, $S), commandIdGenerator, commandInput)\n"
+                        + "    .map(commandOutput -> outputMapper.toExternal(commandOutput))",
+                    domainInputType,
+                    domainOutputType,
+                    model.serviceName(),
+                    domainInputType.toString(),
+                    domainOutputType.toString(),
+                    commandIdGeneratorName);
+            return body.build();
+        }
+        body.addStatement("$T commandInput = inputMapper.fromGrpcFromDto(input)", domainInputType)
+            .addStatement("return support.<$T, $T>execute(descriptorFactory.descriptor($S, null, $S, $S, $S), commandIdGenerator, commandInput)\n"
+                    + "    .map(commandOutput -> outputMapper.toDtoToGrpc(commandOutput))",
+                domainInputType,
+                domainOutputType,
+                model.serviceName(),
+                domainInputType.toString(),
+                domainOutputType.toString(),
+                commandIdGeneratorName);
+        return body.build();
     }
 
     private PipelineConfigHints resolveConfigHints(GenerationContext ctx) {
@@ -179,6 +240,15 @@ public class CommandClientStepRenderer {
             return packageName.substring(0, packageName.length() - ".service".length());
         }
         return packageName;
+    }
+
+    private TypeName mapperType(TypeName domainType, String pipelineBasePackage) {
+        if (!(domainType instanceof ClassName className)) {
+            throw new IllegalArgumentException(
+                "Cannot infer command mapper for non-class command type " + domainType);
+        }
+        String basePackage = basePackage(className, pipelineBasePackage);
+        return ClassName.get(basePackage + ".common.mapper", className.simpleName() + "Mapper");
     }
 
     private record PipelineConfigHints(PipelineTransport transportMode, String basePackage) {

@@ -56,7 +56,17 @@ class CommandClientStepRendererTest {
 
         assertTrue(source.contains("import com.example.search.common.dto.SearchIndexDocumentDto;"));
         assertTrue(source.contains("import com.example.search.common.dto.SearchIndexWriteResultDto;"));
+        assertTrue(source.contains("import com.example.search.common.mapper.SearchIndexDocumentMapper;"));
+        assertTrue(source.contains("import com.example.search.common.mapper.SearchIndexWriteResultMapper;"));
         assertTrue(source.contains("implements StepOneToOne<SearchIndexDocumentDto, SearchIndexWriteResultDto>"));
+        assertTrue(source.contains("SearchIndexDocumentMapper inputMapper"));
+        assertTrue(source.contains("SearchIndexWriteResultMapper outputMapper"));
+        assertTrue(source.contains("SearchIndexDocument commandInput = inputMapper.fromExternal(input)"));
+        assertTrue(source.contains("\"com.example.search.SearchIndexDocument\""));
+        assertTrue(source.contains("\"com.example.search.SearchIndexWriteResult\""));
+        assertTrue(source.contains("support.<SearchIndexDocument, SearchIndexWriteResult>execute"));
+        assertTrue(source.contains("commandIdGenerator, commandInput)"));
+        assertTrue(source.contains(".map(commandOutput -> outputMapper.toExternal(commandOutput))"));
     }
 
     @Test
@@ -66,7 +76,12 @@ class CommandClientStepRendererTest {
         String source = generatedSource();
 
         assertTrue(source.contains("import com.example.search.grpc.PipelineTypes;"));
+        assertTrue(source.contains("import com.example.search.common.mapper.SearchIndexDocumentMapper;"));
+        assertTrue(source.contains("import com.example.search.common.mapper.SearchIndexWriteResultMapper;"));
         assertTrue(source.contains("implements StepOneToOne<PipelineTypes.SearchIndexDocument, PipelineTypes.SearchIndexWriteResult>"));
+        assertTrue(source.contains("SearchIndexDocument commandInput = inputMapper.fromGrpcFromDto(input)"));
+        assertTrue(source.contains("support.<SearchIndexDocument, SearchIndexWriteResult>execute"));
+        assertTrue(source.contains(".map(commandOutput -> outputMapper.toDtoToGrpc(commandOutput))"));
     }
 
     private PipelineStepModel commandStepModel() {
