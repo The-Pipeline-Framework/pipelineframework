@@ -8,6 +8,8 @@ TPF exposes three different observability surfaces:
 
 They answer different questions. Do not treat them as interchangeable.
 
+Metrics are the aggregate SLO layer. Replay is the high-cardinality diagnostic layer. Object keys, execution ids, await unit ids, interaction ids, correlation ids, and connector lifecycle details belong in spans/replay events; metric labels should stay limited to low-cardinality dimensions such as source, target, provider, step, status, and transport.
+
 ## Replay artifact
 
 The offline artifact is **replay JSON**.
@@ -90,6 +92,19 @@ Replay JSON is written from the same runtime semantics by the framework replay e
 Await boundaries park the owning `QUEUE_ASYNC` execution on a durable await unit and resume from that unit after completion admission. Replay events include await unit ids, execution ids, interaction ids, step ids, unit status, and expected/completed item counts where the runtime knows them. For operations, see [Await Boundary Operations](/operate/await-boundaries); for the implementation model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
 
 Connector-first pipelines add framework-owned nodes that are not user-authored business steps. In CSV Payments, replay should show Object Ingest as source admission, `Await Payment Provider` as the durable external boundary, item continuations through `Process Payment Status`, and Object Publish as terminal object output. The old folder and output-file services should only appear when the legacy file-step config is being replayed.
+
+Connector replay events include:
+
+- `object_ingest_listed`
+- `object_ingest_submitted`
+- `object_ingest_duplicate`
+- `object_ingest_failed`
+- `object_publish_grouped`
+- `object_publish_published`
+- `object_publish_failed`
+- `object_publish_skipped`
+
+Use these events to debug a single object key or output object. Use `tpf.object_ingest.*`, `tpf.object_publish.*`, and `tpf.await.*` metrics to alert on aggregate health.
 
 ## Replay exporter configuration
 

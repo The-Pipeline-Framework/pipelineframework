@@ -55,4 +55,4 @@ Use higher `search.replay.embed.delay-ms` values when recording close-ups. Avoid
 
 ## Adjacent Capabilities
 
-Keep this video focused on typed stream fan-out/fan-in and replay. For deferred external completion, use [Await Boundaries](../../docs/guide/development/orchestrator-runtime/await.md) and the CSV Payments replay. For runtime failure triage, use [Error Handling](../../docs/guide/operations/error-handling.md) and the item reject sink docs.
+Keep this video focused on typed stream fan-out/fan-in and replay. For deferred external completion, use [Await Boundaries](../../docs/deploy/orchestrator-runtime/await.md) and the CSV Payments replay. For runtime failure triage, use [Error Handling](../../docs/operate/error-handling.md) and the item reject sink docs.

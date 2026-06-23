@@ -25,6 +25,7 @@ import org.pipelineframework.checkpoint.CheckpointPublicationService;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionAdmissionFailures;
+import org.pipelineframework.awaitable.AwaitCompletionMetrics;
 import org.pipelineframework.awaitable.AwaitCompletionTenantMismatchException;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCoordinator;
@@ -645,6 +646,8 @@ class QueueAsyncCoordinator {
                                   unit,
                                   itemContinuationHandler,
                                   normalized.nowEpochMs());
+                            } else {
+                              AwaitCompletionMetrics.recordEarlyCompletionHeld(validated.record(), unit);
                             }
                           })
                           .replaceWith(validated);
@@ -1396,6 +1399,7 @@ class QueueAsyncCoordinator {
                     unit.expectedItemCount(),
                     unit.completedItemCount(),
                     unit.dispatchComplete()));
+                AwaitCompletionMetrics.recordResumeReleased(unit);
                 return workDispatcher.enqueueNow(new ExecutionWorkItem(
                         updated.get().tenantId(),
                         updated.get().executionId()))
@@ -1467,6 +1471,20 @@ class QueueAsyncCoordinator {
                 awaitUnitId,
                 updated.get().currentStepIndex());
             recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
+                AwaitReplayLifecycleEvent.RESUME_RELEASED,
+                executionId,
+                awaitUnitId,
+                stepId,
+                stepIndex,
+                updated.get().status().name(),
+                interactionId,
+                correlationId,
+                transportType,
+                itemIndex,
+                null,
+                null,
+                null));
+            AwaitCompletionMetrics.recordResumeReleased(new AwaitReplayLifecycleEvent(
                 AwaitReplayLifecycleEvent.RESUME_RELEASED,
                 executionId,
                 awaitUnitId,

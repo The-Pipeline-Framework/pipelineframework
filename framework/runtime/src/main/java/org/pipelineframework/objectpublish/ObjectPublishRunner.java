@@ -3,6 +3,8 @@ package org.pipelineframework.objectpublish;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HexFormat;
@@ -236,9 +238,14 @@ public final class ObjectPublishRunner {
             checksum,
             "object-publish:" + target.name() + ":" + objectKey + ":" + checksum);
         ObjectTargetProvider provider = registry.require(target.provider());
+        Instant writeStarted = Instant.now();
         return toUni(provider.write(request))
-            .invoke(result -> telemetry.published(target.name(), target.provider(), objectKey, result.bytes()))
+            .invoke(result -> {
+                telemetry.writeDuration(target.name(), target.provider(), Duration.between(writeStarted, Instant.now()));
+                telemetry.published(target.name(), target.provider(), objectKey, result.bytes());
+            })
             .onFailure().invoke(failure -> {
+                telemetry.writeDuration(target.name(), target.provider(), Duration.between(writeStarted, Instant.now()));
                 telemetry.failed(target.name(), target.provider(), objectKey, failure);
                 LOG.warnf(failure, "Object publish failed for target=%s key=%s", target.name(), objectKey);
             })
@@ -560,11 +567,16 @@ public final class ObjectPublishRunner {
                 return Uni.createFrom().voidItem();
             }
             closed = true;
+            Instant writeStarted = Instant.now();
             return writeChunk(renderer.onClose())
                 .chain(() -> open())
                 .chain(session -> toUni(session.close(new ObjectWriteCloseRequest(bytes, checksum(), finalMetadata()))))
-                .invoke(result -> telemetry.published(target.name(), target.provider(), openRequest.objectKey(), result.bytes()))
+                .invoke(result -> {
+                    telemetry.writeDuration(target.name(), target.provider(), Duration.between(writeStarted, Instant.now()));
+                    telemetry.published(target.name(), target.provider(), openRequest.objectKey(), result.bytes());
+                })
                 .onFailure().invoke(failure -> {
+                    telemetry.writeDuration(target.name(), target.provider(), Duration.between(writeStarted, Instant.now()));
                     telemetry.failed(target.name(), target.provider(), openRequest.objectKey(), failure);
                     LOG.warnf(failure, "Object publish failed for target=%s key=%s", target.name(), openRequest.objectKey());
                 })

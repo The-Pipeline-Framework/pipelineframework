@@ -206,6 +206,12 @@ The deprecated file-step path can still use `BlockingIteratorPacer` as a legacy 
 
 Use provider concurrency and retry settings to shape the payment-provider portion of the demo. Use the object I/O connector settings to shape file admission and terminal object writes.
 
+Operational proof for the connector-first path comes from three surfaces:
+
+1. Grafana metrics show Object Ingest admission, await gate health, provider/request pressure, Object Publish writes, and output completeness.
+2. Tempo traces show the live service topology and step spans.
+3. Replay JSON shows the high-cardinality details: object keys, await unit ids, interaction ids, item completions, resume release, and published output keys.
+
 ### Performance Expectations
 
 Do not read the 1k demo duration as only `record-count / permits-per-second`. The mock payment provider also has per-item processing delay, and the first few items pay cold-path costs for the packaged Quarkus app, gRPC clients, Kafka channels, persistence, telemetry export, and provider warmup.
@@ -684,19 +690,44 @@ The telemetry harness launches the packaged orchestrator application. If the pac
 
 The application ships separate observability surfaces:
 
-1. **Grafana metrics dashboard**: Prometheus-backed throughput, latency, queue depth, inflight, and retry panels
+1. **Grafana metrics dashboard**: Prometheus-backed throughput, latency, queue depth, inflight, retry, Object Ingest, await-gate, and Object Publish panels
 2. **Tempo tracing surface**: live topology and trace drill-down
 3. **Replay viewer**: deterministic playback from `csv-payments-replay.json`
 
 Dashboards are discovered from `META-INF/grafana/grafana-dashboard-*.json` resources when LGTM Dev Services are active.
 
-### Custom Metrics
+### Connector-First Metrics
 
-The application exposes custom metrics to demonstrate reactive programming concepts:
+The connector-first path is healthy when:
 
-- **Backpressure Events**: Count of backpressure events triggered by rate limiting
-- **Retry Attempts**: Number of retry attempts with exponential back-off
-- **Lazy Evaluation**: Metrics showing the benefits of lazy stream processing
+1. Object Ingest listed and submitted the expected source object count.
+2. Await completions are admitted, early-held completions drain, and resume releases follow completed await units.
+3. Object Publish grouped the same terminal item count the run produced and published the expected `.out` object.
+4. Object Publish failures and await dropped completions remain zero outside intentional duplicate/retry tests.
+
+The relevant TPF metrics are:
+
+- `tpf.object_ingest.listed.objects.total`
+- `tpf.object_ingest.submitted.total`
+- `tpf.object_ingest.duplicate.total`
+- `tpf.object_ingest.failed.total`
+- `tpf.await.interaction.dispatched.total`
+- `tpf.await.unit.dispatch_complete.total`
+- `tpf.await.completion.admitted.total`
+- `tpf.await.item.completed.total`
+- `tpf.await.completion.early_held.total`
+- `tpf.await.resume.released.total`
+- `tpf.await.unit.terminal.total`
+- `tpf.await.completion.dropped.total`
+- `tpf.object_publish.grouped.items.total`
+- `tpf.object_publish.grouped.groups.total`
+- `tpf.object_publish.published.total`
+- `tpf.object_publish.published.bytes.total`
+- `tpf.object_publish.skipped.total`
+- `tpf.object_publish.failed.total`
+- `tpf.object_publish.write.duration`
+
+Object keys, await unit ids, interaction ids, and execution ids are intentionally visible in replay and traces, not metric labels.
 
 ### Distributed Tracing
 

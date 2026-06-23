@@ -51,6 +51,39 @@ Late or duplicate completions can be dropped when the target interaction is alre
 
 - `tpf.await.completion.dropped.total`
 
+## Gate Signals
+
+In `QUEUE_ASYNC`, itemized await is not one continuous in-memory stream across the external provider gap. The runtime turns that gap into durable coordination gates:
+
+1. **Interaction dispatched**: TPF created await interactions and handed requests to the configured await transport.
+2. **Unit dispatch complete**: the await unit has finished dispatching the known item set for that live segment.
+3. **Parent wait durable**: the parent execution is stored as `WAITING_EXTERNAL` for that await unit.
+4. **Completion admitted**: a provider completion matched an interaction and was recorded idempotently.
+5. **Early completion held**: a completion arrived before both release gates were true, so it was recorded but not used to start continuation yet.
+6. **Resume released**: dispatch is complete, the parent wait is durable, and enough completions exist to resume the next segment.
+7. **Unit terminal**: the await unit completed, timed out, or failed.
+
+The matching metrics are:
+
+| Gate | Metric |
+| --- | --- |
+| Interaction dispatched | `tpf.await.interaction.dispatched.total` |
+| Unit dispatch complete | `tpf.await.unit.dispatch_complete.total` |
+| Completion admitted | `tpf.await.completion.admitted.total` |
+| Item completed | `tpf.await.item.completed.total` |
+| Early completion held | `tpf.await.completion.early_held.total` |
+| Resume released | `tpf.await.resume.released.total` |
+| Unit terminal | `tpf.await.unit.terminal.total` |
+| Completion latency | `tpf.await.completion.latency` |
+| Unit duration | `tpf.await.unit.duration` |
+
+Operational interpretation:
+
+1. Admitted completions rising without resume releases points to parent-wait persistence, dispatch-complete, or worker-lag pressure.
+2. Early-held completions are normal during races where providers answer quickly, but they should drain after the parent execution is durably waiting.
+3. Dropped completions indicate stale, duplicate, or non-admissible completions; correlate them with transport retries and replay events.
+4. Queue depth and provider lag remain provider-native signals. TPF does not scan the await store to synthesize backlog gauges.
+
 ## Replay And Tracing
 
 Replay and trace events expose the lifecycle of the await unit:

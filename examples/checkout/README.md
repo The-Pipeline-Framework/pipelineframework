@@ -146,4 +146,4 @@ Run the full TPFGo checkpoint-flow integration suite directly:
 
 ## Docs
 
-The user-facing walkthrough is in [docs/guide/development/tpfgo-example.md](../../docs/guide/development/tpfgo-example.md).
+The user-facing walkthrough is in [docs/develop/tpfgo-example.md](../../docs/develop/tpfgo-example.md).
