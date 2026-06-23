@@ -37,7 +37,9 @@ const palette = {
   await: { base: 0x7ca8ff, glow: 0xbdd0ff },
   broker: { base: 0x8f78ff, glow: 0xbba7ff },
   provider: { base: 0xc299ff, glow: 0xe0c6ff },
-  store: { base: 0x49c0ff, glow: 0x92ebff }
+  store: { base: 0x49c0ff, glow: 0x92ebff },
+  "object-ingest": { base: 0x37d79e, glow: 0x90ffd2 },
+  "object-publish": { base: 0xf1bd4f, glow: 0xffe7a0 }
 };
 
 function roundedRectShape(width, height, radius) {
@@ -250,10 +252,67 @@ function createSupportNode(role, scale) {
   return group;
 }
 
+function createConnectorNode(role, scale) {
+  const colors = palette[role];
+  const group = new THREE.Group();
+  const shell = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(roundedRectShape(1.18, 0.86, 0.18), { depth: 0.2, bevelEnabled: false }),
+    makeLayeredMaterial(colors.base, colors.glow)
+  );
+  shell.position.z = -0.1;
+  group.add(shell);
+
+  const portMaterial = makeLayeredMaterial(colors.glow, colors.glow);
+  if (role === "object-ingest") {
+    [-0.24, 0, 0.24].forEach((offset) => {
+      const line = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.055, 0.08), portMaterial);
+      line.position.set(-0.05, offset, 0.14);
+      group.add(line);
+    });
+    const arrow = new THREE.Mesh(
+      new THREE.ConeGeometry(0.16, 0.34, 3),
+      portMaterial
+    );
+    arrow.rotation.z = -Math.PI / 2;
+    arrow.position.set(0.42, 0, 0.16);
+    group.add(arrow);
+  } else if (role === "object-publish") {
+    const tray = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.13, 0.08), portMaterial);
+    tray.position.set(0, -0.25, 0.15);
+    group.add(tray);
+    const arrow = new THREE.Mesh(
+      new THREE.ConeGeometry(0.17, 0.38, 32),
+      portMaterial
+    );
+    arrow.rotation.x = Math.PI / 2;
+    arrow.position.set(0, 0.14, 0.17);
+    group.add(arrow);
+    const stem = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.36, 0.08), portMaterial);
+    stem.position.set(0, 0, 0.15);
+    group.add(stem);
+  }
+
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.66, 0.025, 10, 48),
+    new THREE.MeshBasicMaterial({ color: colors.glow, transparent: true, opacity: 0.7 })
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(0, 0, 0.18);
+  group.add(ring);
+
+  const halo = makeGlowSprite(colors.glow, 2.45);
+  halo.position.set(0, 0, -0.12);
+  group.add(halo);
+  group.scale.setScalar(scale);
+  return group;
+}
+
 function createNode(node) {
-  const group = node.tier === "primary"
-    ? createPrimaryNode(node.role, node.scale)
-    : createSupportNode(node.role, node.scale);
+  const group = node.tier === "connector"
+    ? createConnectorNode(node.role, node.scale)
+    : node.tier === "primary"
+      ? createPrimaryNode(node.role, node.scale)
+      : createSupportNode(node.role, node.scale);
   group.position.set(node.x, node.y, node.z);
   group.userData.baseScale = node.scale;
   group.userData.role = node.role;
@@ -269,11 +328,32 @@ function controlPointsForEdge(fromNode, toNode, edge) {
     primary: 0.38,
     request: 1.2,
     completion: 0.92,
-    store: -1.05
+    store: -1.05,
+    ingest: 0.18,
+    publish: 0.18
   };
   midpoint.y += liftByKind[edge.kind] ?? 0.3;
-  midpoint.z += edge.kind === "store" ? -1.15 : edge.kind === "request" ? 0.36 : edge.kind === "completion" ? 0.16 : 0.42;
+  midpoint.z += edge.kind === "store" ? -1.15 : edge.kind === "request" ? 0.36 : edge.kind === "completion" ? 0.16 : edge.kind === "ingest" || edge.kind === "publish" ? 0.22 : 0.42;
   return new THREE.CatmullRomCurve3([start, midpoint, end]);
+}
+
+function edgeColor(edge, glow = false) {
+  if (edge.kind === "store") {
+    return glow ? 0x7ce8ff : 0x56cfff;
+  }
+  if (edge.kind === "request") {
+    return glow ? 0x9fafef : 0x7e90ff;
+  }
+  if (edge.kind === "completion") {
+    return glow ? 0xe3c5ff : 0xc3b2ff;
+  }
+  if (edge.kind === "ingest") {
+    return glow ? 0x9cffda : 0x54d7a9;
+  }
+  if (edge.kind === "publish") {
+    return glow ? 0xffe7a0 : 0xf1bd4f;
+  }
+  return glow ? 0x58b8ff : 0x2c4f7e;
 }
 
 function addEdges(edges, nodesById) {
@@ -285,22 +365,23 @@ function addEdges(edges, nodesById) {
     }
     const curve = controlPointsForEdge(fromNode, toNode, edge);
     edgeCurves.set(edge.id, curve);
+    const tubeRadius = edge.kind === "primary" ? 0.038 : edge.kind === "ingest" || edge.kind === "publish" ? 0.034 : 0.03;
     const tube = new THREE.Mesh(
-      new THREE.TubeGeometry(curve, 48, edge.kind === "primary" ? 0.038 : 0.03, 8, false),
+      new THREE.TubeGeometry(curve, 48, tubeRadius, 8, false),
       new THREE.MeshBasicMaterial({
-        color: edge.kind === "store" ? 0x56cfff : edge.kind === "request" ? 0x7e90ff : edge.kind === "completion" ? 0xc3b2ff : 0x2c4f7e,
+        color: edgeColor(edge),
         transparent: true,
-        opacity: edge.kind === "primary" ? 0.42 : 0.5
+        opacity: edge.kind === "primary" ? 0.42 : edge.kind === "ingest" || edge.kind === "publish" ? 0.58 : 0.5
       })
     );
     scene.add(tube);
 
     const glow = new THREE.Mesh(
-      new THREE.TubeGeometry(curve, 48, edge.kind === "primary" ? 0.058 : 0.045, 8, false),
+      new THREE.TubeGeometry(curve, 48, edge.kind === "primary" ? 0.058 : edge.kind === "ingest" || edge.kind === "publish" ? 0.052 : 0.045, 8, false),
       new THREE.MeshBasicMaterial({
-        color: edge.kind === "store" ? 0x7ce8ff : edge.kind === "request" ? 0x9fafef : edge.kind === "completion" ? 0xe3c5ff : 0x58b8ff,
+        color: edgeColor(edge, true),
         transparent: true,
-        opacity: 0.12,
+        opacity: edge.kind === "ingest" || edge.kind === "publish" ? 0.18 : 0.12,
         depthWrite: false
       })
     );
