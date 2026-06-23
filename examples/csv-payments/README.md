@@ -206,6 +206,20 @@ The deprecated file-step path can still use `BlockingIteratorPacer` as a legacy 
 
 Use provider concurrency and retry settings to shape the payment-provider portion of the demo. Use the object I/O connector settings to shape file admission and terminal object writes.
 
+### Performance Expectations
+
+Do not read the 1k demo duration as only `record-count / permits-per-second`. The mock payment provider also has per-item processing delay, and the first few items pay cold-path costs for the packaged Quarkus app, gRPC clients, Kafka channels, persistence, telemetry export, and provider warmup.
+
+The connector-first path proves that the CSV reader demand pacer is not the mechanism keeping the run alive. It does not remove the provider as the bottleneck. If await dispatch exceeds provider capacity, pending interactions, broker lag, retries, timeouts, or DLQ events are the expected pressure signals. For performance comparisons, separate:
+
+1. cold first-item latency,
+2. warm first-item latency,
+3. steady-state provider permits/sec and provider processing delay,
+4. completion-to-continuation latency,
+5. terminal Object Publish close latency.
+
+Only compare full-run wall time after those components are visible in metrics, traces, or replay.
+
 For local manual inspection before teardown:
 
 ```bash
