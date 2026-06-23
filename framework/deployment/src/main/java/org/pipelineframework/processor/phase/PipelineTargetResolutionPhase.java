@@ -24,6 +24,7 @@ import org.pipelineframework.processor.ir.PipelineTransport;
  */
 public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
     public static final String AWAIT_STEP_DESCRIPTOR_CLASS = "org.pipelineframework.awaitable.AwaitStepDescriptor";
+    public static final String COMMAND_STEP_DESCRIPTOR_CLASS = "org.pipelineframework.command.CommandStepDescriptor";
     public static final String QUERY_STEP_DESCRIPTOR_CLASS = "org.pipelineframework.query.QueryStepDescriptor";
 
     private final EnumMap<DeploymentRole, TargetResolutionStrategy> strategiesByRole;
@@ -121,6 +122,10 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
         if (model.serviceClassName() != null
             && AWAIT_STEP_DESCRIPTOR_CLASS.equals(model.serviceClassName().canonicalName())) {
             return Set.of(GenerationTarget.AWAIT_CLIENT_STEP);
+        }
+        if (model.serviceClassName() != null
+            && COMMAND_STEP_DESCRIPTOR_CLASS.equals(model.serviceClassName().canonicalName())) {
+            return Set.of(GenerationTarget.COMMAND_CLIENT_STEP);
         }
         if (model.serviceClassName() != null
             && QUERY_STEP_DESCRIPTOR_CLASS.equals(model.serviceClassName().canonicalName())) {

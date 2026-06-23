@@ -259,6 +259,7 @@ const mainSidebar = [
             {text: 'Overview', link: '/evolve/'},
             {text: 'Architecture', link: '/evolve/architecture'},
             {text: 'Architecture Reference', link: '/evolve/architecture-reference'},
+            {text: 'I/O Shell Absorption', link: '/evolve/io-shell-absorption'},
             {
                 text: 'Operators',
                 link: '/evolve/operators/',

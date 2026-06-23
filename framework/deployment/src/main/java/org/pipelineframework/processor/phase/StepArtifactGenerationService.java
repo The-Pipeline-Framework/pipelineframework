@@ -24,6 +24,7 @@ import org.pipelineframework.processor.renderer.RemoteOperatorAdapterRenderer;
 import org.pipelineframework.processor.renderer.RestClientStepRenderer;
 import org.pipelineframework.processor.renderer.AbstractFunctionHandlerRenderer;
 import org.pipelineframework.processor.renderer.AwaitClientStepRenderer;
+import org.pipelineframework.processor.renderer.CommandClientStepRenderer;
 import org.pipelineframework.processor.renderer.QueryClientStepRenderer;
 import org.pipelineframework.processor.renderer.RestResourceRenderer;
 import org.pipelineframework.processor.util.ResourceNameUtils;
@@ -95,9 +96,25 @@ class StepArtifactGenerationService {
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer,
             AwaitClientStepRenderer awaitClientStepRenderer,
+            CommandClientStepRenderer commandClientStepRenderer,
             QueryClientStepRenderer queryClientStepRenderer) throws IOException {
         for (GenerationTarget target : model.enabledTargets()) {
             switch (target) {
+                case COMMAND_CLIENT_STEP -> {
+                    String baseName = ResourceNameUtils.normalizeBaseName(model.generatedName());
+                    String commandClientClassName = model.servicePackage() + PIPELINE_DOT + baseName + "CommandClientStep";
+                    DeploymentRole clientRole = resolveClientRole(model.deploymentRole());
+                    commandClientStepRenderer.render(model, new GenerationContext(
+                        ctx.getProcessingEnv(),
+                        pathResolver.resolveRoleOutputDir(ctx, clientRole),
+                        clientRole,
+                        enabledAspects,
+                        cacheKeyGenerator,
+                        descriptorSet,
+                        ctx.getTransportMode(),
+                        ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config ? config.basePackage() : null));
+                    roleMetadataGenerator.recordClassWithRole(commandClientClassName, clientRole.name());
+                }
                 case AWAIT_CLIENT_STEP -> {
                     String baseName = ResourceNameUtils.normalizeBaseName(model.generatedName());
                     String awaitClientClassName = model.servicePackage() + PIPELINE_DOT + baseName + "AwaitClientStep";
@@ -409,6 +426,7 @@ class StepArtifactGenerationService {
             blockingReactiveBridgeRenderer,
             remoteOperatorAdapterRenderer,
             new AwaitClientStepRenderer(),
+            new CommandClientStepRenderer(),
             new QueryClientStepRenderer());
     }
 

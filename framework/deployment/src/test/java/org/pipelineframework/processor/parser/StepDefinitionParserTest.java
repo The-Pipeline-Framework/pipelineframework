@@ -282,6 +282,112 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void parsesAwaitOneToManyAsUnaryStreaming() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Fraud Check"
+                kind: "await"
+                cardinality: "ONE_TO_MANY"
+                input: "com.example.FraudCheckRequest"
+                output: "com.example.FraudCheckDecision"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "interactionId"
+                  transport:
+                    type: "webhook"
+                    request:
+                      url: "https://partner.example/check"
+            """, diagnostics);
+
+        assertEquals(1, steps.size());
+        assertEquals(StreamingShape.UNARY_STREAMING, steps.getFirst().streamingShapeHint());
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
+    }
+
+    @Test
+    void parsesCommandStepDefinition() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Write Search Index Document"
+                kind: "command"
+                command: "opensearch-index-document"
+                cardinality: "ONE_TO_ONE"
+                input: "com.example.SearchIndexDocument"
+                output: "com.example.SearchIndexWriteResult"
+                commandIdGenerator: "com.example.SearchIndexDocumentCommandIdGenerator"
+                duplicatePolicy: "return_recorded"
+            """, diagnostics);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.COMMAND, step.kind());
+        assertNull(step.executionClass());
+        assertEquals("opensearch-index-document", step.command());
+        assertEquals(ClassName.get("com.example", "SearchIndexDocumentCommandIdGenerator"), step.commandIdGenerator());
+        assertEquals("RETURN_RECORDED", step.duplicatePolicy());
+        assertEquals(StreamingShape.UNARY_UNARY, step.streamingShapeHint());
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
+    }
+
+    @Test
+    void rejectsCommandStepWithManyToOneCardinality() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Write Search Index Document"
+                kind: "command"
+                command: "opensearch-index-document"
+                cardinality: "MANY_TO_ONE"
+                input: "com.example.SearchIndexDocument"
+                output: "com.example.SearchIndexWriteResult"
+                commandIdGenerator: "com.example.SearchIndexDocumentCommandIdGenerator"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message ->
+                message.startsWith(Diagnostic.Kind.ERROR.name() + ":")
+                    && message.contains("support only ONE_TO_ONE")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsCommandStepWithNonMapConfig() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Write Search Index Document"
+                kind: "command"
+                command: "opensearch-index-document"
+                cardinality: "ONE_TO_ONE"
+                input: "com.example.SearchIndexDocument"
+                output: "com.example.SearchIndexWriteResult"
+                commandIdGenerator: "com.example.SearchIndexDocumentCommandIdGenerator"
+                config: "not-a-map"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message ->
+                message.startsWith(Diagnostic.Kind.ERROR.name() + ":")
+                    && message.contains("command config must be a map")),
+            diagnostics.toString());
+    }
+
+    @Test
     void parsesDelegatedOperatorMethodReferenceUsingOwningClass() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""

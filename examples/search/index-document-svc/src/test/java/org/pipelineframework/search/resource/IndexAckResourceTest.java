@@ -64,7 +64,7 @@ class IndexAckResourceTest {
     private static boolean isGeneratedRestResourcePresent() {
         try {
             Class.forName(
-                    "org.pipelineframework.search.index_document.service.pipeline.ProcessIndexDocumentResource",
+                    "org.pipelineframework.search.index_document.service.pipeline.ProcessSummarizeIndexWritesResource",
                     false,
                     Thread.currentThread().getContextClassLoader());
             return true;
@@ -89,10 +89,18 @@ class IndexAckResourceTest {
                 [
                   {
                     "docId": "%s",
+                    "externalId": "external-0",
+                    "commandId": "cmd-0",
+                    "indexName": "search-index",
+                    "resultStatus": "UPSERTED",
+                    "createdOrUpdated": true,
+                    "recordedDuplicate": false,
                     "batchIndex": 0,
                     "tokenCount": 4,
                     "tokens": "search pipeline tokens",
-                    "tokensHash": "seed-hash"
+                    "tokensHash": "seed-hash",
+                    "vectorHash": "vector-hash-0",
+                    "vectorVersion": "vec-v1"
                   }
                 ]
                 """
@@ -117,8 +125,12 @@ class IndexAckResourceTest {
                 [
                   {
                     "docId": "invalid-uuid",
+                    "externalId": "external-0",
+                    "commandId": "cmd-0",
                     "tokens": "search pipeline tokens",
-                    "tokensHash": "seed-hash"
+                    "tokensHash": "seed-hash",
+                    "vectorHash": "vector-hash-0",
+                    "vectorVersion": "vec-v1"
                   }
                 ]
                 """;
@@ -137,7 +149,8 @@ class IndexAckResourceTest {
                 """
                 [
                   {
-                    "docId": "%s"
+                    "docId": "%s",
+                    "externalId": "external-0"
                   }
                 ]
                 """
@@ -158,17 +171,33 @@ class IndexAckResourceTest {
                 [
                   {
                     "docId": "%s",
+                    "externalId": "external-0",
+                    "commandId": "cmd-0",
+                    "indexName": "search-index",
+                    "resultStatus": "UPSERTED",
+                    "createdOrUpdated": true,
+                    "recordedDuplicate": false,
                     "batchIndex": 0,
                     "tokenCount": 5,
                     "tokens": "search pipeline tokens one",
-                    "tokensHash": "seed-hash-1"
+                    "tokensHash": "seed-hash-1",
+                    "vectorHash": "vector-hash-0",
+                    "vectorVersion": "vec-v1"
                   },
                   {
                     "docId": "%s",
-                    "batchIndex": 0,
+                    "externalId": "external-1",
+                    "commandId": "cmd-1",
+                    "indexName": "search-index",
+                    "resultStatus": "UPSERTED",
+                    "createdOrUpdated": true,
+                    "recordedDuplicate": false,
+                    "batchIndex": 1,
                     "tokenCount": 5,
                     "tokens": "search pipeline tokens two",
-                    "tokensHash": "seed-hash-2"
+                    "tokensHash": "seed-hash-2",
+                    "vectorHash": "vector-hash-1",
+                    "vectorVersion": "vec-v1"
                   }
                 ]
                 """
