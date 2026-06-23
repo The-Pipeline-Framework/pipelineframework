@@ -129,10 +129,17 @@ public final class ObjectIngestRunner implements AutoCloseable {
                 String idempotencyKey = ObjectIdentity.executionKey(source.name(), snapshot, source.identity());
                 org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto accepted =
                     admission.submit(pipelineInput, DEFAULT_TENANT_ID, idempotencyKey).await().atMost(Duration.ofSeconds(30));
-                if (accepted != null && accepted.executionId() != null && !accepted.executionId().isBlank()) {
+                if (accepted == null) {
+                    throw new IllegalStateException("Object execution admission returned null accepted response");
+                }
+                if (accepted.executionId() != null && !accepted.executionId().isBlank()) {
                     executionIds.add(accepted.executionId());
                 }
-                telemetry.submitted(source.name(), source.provider(), item.key());
+                if (accepted.duplicate()) {
+                    telemetry.duplicate(source.name(), source.provider(), item.key());
+                } else {
+                    telemetry.submitted(source.name(), source.provider(), item.key());
+                }
                 submitted++;
             } catch (RuntimeException e) {
                 telemetry.failed(source.name(), source.provider(), item.key(), e);

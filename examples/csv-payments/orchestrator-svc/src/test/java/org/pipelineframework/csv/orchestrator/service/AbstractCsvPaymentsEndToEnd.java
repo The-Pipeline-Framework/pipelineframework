@@ -879,6 +879,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
             command.add("bash");
             command.add("build-monolith.sh");
             command.add("-DskipTests");
+            command.add("-Dquarkus.container-image.build=false");
+            command.add("-Dquarkus.container-image.push=false");
             if (!mavenRepoLocal.isBlank()) {
                 command.add("-Dmaven.repo.local=" + mavenRepoLocal);
             }
@@ -890,6 +892,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
             command.add("orchestrator-svc");
             command.add("-am");
             command.add("-DskipTests");
+            command.add("-Dquarkus.container-image.build=false");
+            command.add("-Dquarkus.container-image.push=false");
             if (!mavenRepoLocal.isBlank()) {
                 command.add("-Dmaven.repo.local=" + mavenRepoLocal);
             }

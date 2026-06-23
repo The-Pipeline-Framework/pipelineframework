@@ -102,6 +102,19 @@ sequenceDiagram
 3. **Awaited Provider Completion**: The await adapter dispatches provider requests and resumes the execution from correlated completions.
 4. **Output Publication**: Object Publish streams terminal `PaymentOutput` records into grouped output files.
 
+### Connector-First Observability
+
+The orchestrator owns the framework-side metrics for Object Ingest, await gates, and Object Publish.
+
+Use the Grafana CSV Payments dashboard to confirm:
+
+1. Object Ingest listed and submitted the expected source object.
+2. Await completions are admitted, early-held completions drain, and resume releases follow dispatch completion.
+3. Object Publish grouped the terminal `PaymentOutput` count and wrote the expected output bytes before execution success.
+4. Legacy `ProcessFolderService` and `ProcessCsvPaymentsOutputFileService` are absent from the default replay/order path.
+
+Use replay JSON for the high-cardinality details: source object key, await unit id, interaction ids, correlation ids, and published output key.
+
 ### gRPC Communication
 The service communicates with other services via gRPC, using clients injected with `@GrpcClient`:
 - Processing input CSV files

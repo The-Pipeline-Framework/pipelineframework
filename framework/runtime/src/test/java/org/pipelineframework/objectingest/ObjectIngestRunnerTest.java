@@ -107,6 +107,43 @@ class ObjectIngestRunnerTest {
     }
 
     @Test
+    void pollOnceTreatsNullAdmissionAsFailure() {
+        PipelineObjectSourceConfig source = new PipelineObjectSourceConfig(
+            "documents",
+            "object",
+            "test",
+            Map.of(),
+            null,
+            null,
+            null,
+            null);
+        PipelineYamlConfig config = new PipelineYamlConfig(
+            "org.pipelineframework.objectingest",
+            "GRPC",
+            "COMPUTE",
+            List.of(),
+            Map.of("documents", source),
+            List.of(),
+            new PipelineInputBoundaryConfig(null, new PipelineObjectInputConfig(
+                "documents",
+                TestInput.class.getName(),
+                "TestInput",
+                TestMapper.class.getName())),
+            null);
+        ObjectIngestRunner runner = new ObjectIngestRunner(
+            config,
+            new ObjectSourceRegistry(List.of(new TestProvider())),
+            (input, tenantId, idempotencyKey) -> Uni.createFrom().nullItem(),
+            ObjectIngestTelemetry.NOOP);
+
+        ObjectIngestRunner.PollResult result = runner.pollOnce();
+
+        assertEquals(1, result.listed());
+        assertEquals(0, result.submitted());
+        assertEquals(1, result.failed());
+    }
+
+    @Test
     void executionKeyEscapesSourceName() {
         ObjectSnapshot snapshot = new ObjectSnapshot(
             "documents",

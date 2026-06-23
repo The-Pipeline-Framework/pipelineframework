@@ -147,7 +147,7 @@ The function will be available at:
 - HTTP Trigger URL: `http://localhost:7071/api/{route}`
 - Health endpoint: `http://localhost:7071/q/health` (if configured)
 
-**Prerequisites**: Azure Functions Core Tools v4.x must be installed. See [Search Azure Functions Verification Lane](../../docs/guide/build/runtime-layouts/search-azure-functions.md) for installation instructions.
+**Prerequisites**: Azure Functions Core Tools v4.x must be installed. See [Search Azure Functions Verification Lane](../../docs/deploy/search-azure-functions.md) for installation instructions.
 
 ### Function Streaming Lane Status
 

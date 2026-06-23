@@ -233,6 +233,25 @@ Object Publish also targets queue-async terminal output. Streaming terminal outp
 
 FUNCTION pipelines are rejected in v1. Quarkus currently hosts the bootstrap, but the ingest runner and provider SPI are plain Java so a Spring Boot host can wire the same semantics later.
 
+## Observability Proof
+
+Object I/O emits metrics for aggregate health and replay/span events for high-cardinality investigation.
+
+Use metrics to answer SLO questions:
+
+1. Are source objects being listed and admitted? Check `tpf.object_ingest.listed.objects.total`, `tpf.object_ingest.submitted.total`, `tpf.object_ingest.duplicate.total`, and `tpf.object_ingest.failed.total`.
+2. Are terminal values being published? Check `tpf.object_publish.grouped.items.total`, `tpf.object_publish.published.total`, `tpf.object_publish.published.bytes.total`, `tpf.object_publish.failed.total`, and `tpf.object_publish.write.duration`.
+3. Is the await boundary draining? Check `tpf.await.completion.admitted.total`, `tpf.await.completion.early_held.total`, `tpf.await.resume.released.total`, and `tpf.await.completion.dropped.total`.
+
+Use replay to answer per-run questions:
+
+1. Which source object was admitted?
+2. Which await unit parked the execution?
+3. Which completions were admitted, held, dropped, or released?
+4. Which output object key was published?
+
+See [Metrics](/operate/observability/metrics), [Await Boundary Operations](/operate/await-boundaries), and [Replay And Live Topology](/operate/observability/replay).
+
 ## Example Configs
 
 - CSV Payments connector-owned input/output path: `examples/csv-payments/config/pipeline.yaml`

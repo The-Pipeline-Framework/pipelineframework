@@ -340,6 +340,7 @@ public class AwaitCoordinator {
     }
 
     private void recordInteractionDispatched(AwaitInteractionRecord record) {
+        AwaitCompletionMetrics.recordInteractionDispatched(record);
         recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
             AwaitReplayLifecycleEvent.INTERACTION_DISPATCHED,
             record.executionId(),
@@ -357,6 +358,7 @@ public class AwaitCoordinator {
     }
 
     private void recordUnitDispatchComplete(AwaitUnitRecord unit) {
+        AwaitCompletionMetrics.recordUnitDispatchComplete(unit);
         recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
             AwaitReplayLifecycleEvent.UNIT_DISPATCH_COMPLETE,
             unit.executionId(),
@@ -374,7 +376,9 @@ public class AwaitCoordinator {
     }
 
     private void recordCompletionLifecycle(AwaitInteractionRecord record, AwaitUnitRecord unit) {
+        AwaitCompletionMetrics.recordCompletionAdmitted(record);
         if (record.itemInteraction()) {
+            AwaitCompletionMetrics.recordItemCompleted(record, unit);
             recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
                 AwaitReplayLifecycleEvent.UNIT_ITEM_COMPLETED,
                 record.executionId(),
@@ -409,6 +413,7 @@ public class AwaitCoordinator {
     }
 
     private void recordUnitTerminal(AwaitInteractionRecord record, AwaitUnitRecord unit) {
+        AwaitCompletionMetrics.recordUnitTerminal(record, unit);
         recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
             AwaitReplayLifecycleEvent.UNIT_TERMINAL,
             unit.executionId(),

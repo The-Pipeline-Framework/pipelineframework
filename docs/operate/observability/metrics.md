@@ -114,6 +114,62 @@ Counter success = registry.counter("payment.processing.success");
 return timer.recordCallable(() -> processPayment(record));
 ```
 
+## Connector And Await Boundary Metrics
+
+Connector-owned I/O and await gates use low-cardinality metrics. Keep object keys, execution ids, await unit ids, interaction ids, and correlation ids in spans/replay events, not metric attributes.
+
+Object Ingest metrics:
+
+| Metric | Type | Attributes | Meaning |
+| --- | --- | --- | --- |
+| `tpf.object_ingest.list.total` | counter | `tpf.object_ingest.source`, `tpf.object_ingest.provider` | Source listing attempts. |
+| `tpf.object_ingest.listed.objects.total` | counter | `tpf.object_ingest.source`, `tpf.object_ingest.provider` | Objects returned by listing. |
+| `tpf.object_ingest.submitted.total` | counter | `tpf.object_ingest.source`, `tpf.object_ingest.provider` | Objects accepted as queue-async execution inputs. |
+| `tpf.object_ingest.duplicate.total` | counter | `tpf.object_ingest.source`, `tpf.object_ingest.provider` | Duplicate object admissions resolved by idempotency. |
+| `tpf.object_ingest.failed.total` | counter | `tpf.object_ingest.source`, `tpf.object_ingest.provider` | Listing, mapping, or submission failures. |
+
+Object Publish metrics:
+
+| Metric | Type | Attributes | Meaning |
+| --- | --- | --- | --- |
+| `tpf.object_publish.grouped.total` | counter | `tpf.object_publish.target` | Terminal output grouping operations. |
+| `tpf.object_publish.grouped.items.total` | counter | `tpf.object_publish.target` | Terminal items seen by Object Publish. |
+| `tpf.object_publish.grouped.groups.total` | counter | `tpf.object_publish.target` | Object groups created for publication. |
+| `tpf.object_publish.published.total` | counter | `tpf.object_publish.target`, `tpf.object_publish.provider` | Objects successfully written. |
+| `tpf.object_publish.published.bytes.total` | counter | `tpf.object_publish.target`, `tpf.object_publish.provider` | Bytes written by successful publishes. |
+| `tpf.object_publish.skipped.total` | counter | `tpf.object_publish.target` | Empty terminal outputs skipped. |
+| `tpf.object_publish.failed.total` | counter | `tpf.object_publish.target`, `tpf.object_publish.provider` | Publish failures. |
+| `tpf.object_publish.write.duration` | histogram | `tpf.object_publish.target`, `tpf.object_publish.provider` | Provider write duration in milliseconds. |
+
+Await gate metrics:
+
+| Metric | Type | Attributes | Meaning |
+| --- | --- | --- | --- |
+| `tpf.await.interaction.dispatched.total` | counter | step, status, transport | Await interactions dispatched to an external actor. |
+| `tpf.await.unit.dispatch_complete.total` | counter | step, cardinality, status | Await units whose dispatch phase completed. |
+| `tpf.await.completion.admitted.total` | counter | step, status, transport | Completion envelopes admitted into await state. |
+| `tpf.await.item.completed.total` | counter | step, cardinality, status, transport | Itemized await completions recorded. |
+| `tpf.await.completion.early_held.total` | counter | step, cardinality, status, transport | Item completions held until the parent execution is durably waiting. |
+| `tpf.await.resume.released.total` | counter | step, cardinality/status/transport when known | Await resumes released after durable gates are satisfied. |
+| `tpf.await.unit.terminal.total` | counter | step, cardinality, status, transport | Await units reaching terminal state. |
+| `tpf.await.completion.latency` | histogram | step, status, transport | Time from interaction creation to completion admission. |
+| `tpf.await.unit.duration` | histogram | step, cardinality, status, transport | Time from await unit creation to terminal state. |
+| `tpf.await.completion.dropped.total` | counter | transport, reason | Completions that cannot be admitted because the target interaction is already terminal, stale, or otherwise not admissible. |
+
+Prometheus exports OpenTelemetry units in the metric name. For example, the duration histograms are exported with `_milliseconds_*` suffixes in the Quarkus Prometheus endpoint.
+
+SLO-friendly derived indicators:
+
+1. Await admission reliability: admitted completions divided by admitted plus dropped completions.
+2. Await release health: resume releases compared with terminal await units, with early-held completions draining over the same window.
+3. Object publish reliability: published objects divided by published plus failed objects.
+4. Object publish latency: p95/p99 of `tpf.object_publish.write.duration` by provider and target.
+5. CSV output completeness: Object Publish grouped item count matches the terminal `PaymentOutput` count for the run.
+
+Keep demo expectations separate from production SLOs. The CSV Payments demo may report provider permits/sec, wall time, throughput, output count, and checksum, but production thresholds should come from service-specific latency/error budgets and provider-native backlog/lag signals.
+
+Use replay JSON for high-cardinality drill-down. It includes object keys, await unit ids, interaction ids, execution ids, and correlation fields that must not become metric dimensions.
+
 ## Orchestrator Queue-Async Signals
 
 For `QUEUE_ASYNC`, include control-plane metrics in addition to step metrics.
@@ -139,11 +195,7 @@ Step-level reject signal:
 
 - `tpf.step.reject.total` (counter): rejected step items published to item reject sinks.
 
-Await signal:
-
-- `tpf.await.completion.dropped.total` (counter): completions that cannot be admitted because the target interaction is already terminal, stale, or otherwise not admissible.
-
-Await execution logs include the parked await unit when a `QUEUE_ASYNC` execution waits or resumes. Replay and trace events expose await unit lifecycle transitions, including dispatch, waiting, item completion, unit completion, resume release, and terminal timeout/failure states. The metrics surface intentionally remains limited to dropped-completion counting plus provider-native backlog/latency signals.
+Await execution logs include the parked await unit when a `QUEUE_ASYNC` execution waits or resumes. Replay and trace events expose await unit lifecycle transitions, including dispatch, waiting, item completion, unit completion, resume release, and terminal timeout/failure states. Metrics expose aggregate await-gate health without high-cardinality ids.
 
 Backlog signal note:
 
