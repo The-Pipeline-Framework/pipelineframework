@@ -11,6 +11,7 @@ const SEGMENTS = {
   suspend: [5.05, 6.15],
   completion: [6.35, 8.95],
   continuation: [8.55, 10.85],
+  publish: [10.75, 11.55],
   store: [0.95, 6.55]
 };
 const PRIMARY_ROLES = ["primary-a", "primary-b", "primary-c", "primary-d", "primary-e"];
@@ -35,6 +36,12 @@ function parseArgs(argv) {
 }
 
 function displayRole(step) {
+  if (isObjectIngestStep(step)) {
+    return "object-ingest";
+  }
+  if (isObjectPublishStep(step)) {
+    return "object-publish";
+  }
   if (step?.renderRole) {
     return step.renderRole;
   }
@@ -45,6 +52,22 @@ function displayRole(step) {
     return "await";
   }
   return "primary";
+}
+
+function isObjectIngestStep(step) {
+  return step?.step === "ObjectIngest"
+    || step?.runtimeStepClass === "runtime::ObjectIngest"
+    || step?.service === "ObjectIngestConnector";
+}
+
+function isObjectPublishStep(step) {
+  return step?.step === "ObjectPublish"
+    || step?.runtimeStepClass === "runtime::ObjectPublish"
+    || step?.service === "ObjectPublishConnector";
+}
+
+function isConnectorStep(step) {
+  return isObjectIngestStep(step) || isObjectPublishStep(step);
 }
 
 function sampleEvenly(items, count) {
@@ -80,7 +103,7 @@ function spreadAcrossSegment(items, segmentStart, segmentEnd) {
 
 function orderedMainlineSteps(steps, transitions) {
   const mainlineSteps = steps
-    .filter((step) => step && step.sideEffect !== true)
+    .filter((step) => step && step.sideEffect !== true && !isConnectorStep(step))
     .sort((left, right) => (left.index ?? Number.MAX_SAFE_INTEGER) - (right.index ?? Number.MAX_SAFE_INTEGER));
   const mainlineIds = new Set(mainlineSteps.map((step) => step.step));
   const mainlineTransitions = transitions.filter((transition) => mainlineIds.has(transition.from) && mainlineIds.has(transition.to));
@@ -128,13 +151,28 @@ function buildNodeSet(steps, transitions) {
     return role === "provider" || role === "external-provider";
   });
   const explicitStore = steps.find((step) => displayRole(step) === "store");
+  const objectIngestStep = steps.find(isObjectIngestStep);
+  const objectPublishStep = steps.find(isObjectPublishStep);
   const persistenceSteps = steps.filter((step) => displayRole(step) === "persistence-plugin");
   const nodes = [];
   const primaryCount = mainline.length;
-  const minX = -6.1;
-  const maxX = 6.1;
+  const minX = -4.15;
+  const maxX = 4.15;
   const xSpan = primaryCount <= 1 ? 0 : maxX - minX;
   let primaryRoleIndex = 0;
+
+  if (objectIngestStep) {
+    nodes.push({
+      id: objectIngestStep.step,
+      sourceId: objectIngestStep.step,
+      role: "object-ingest",
+      tier: "connector",
+      x: -6.75,
+      y: 2.4,
+      z: 0.38,
+      scale: 0.92
+    });
+  }
 
   mainline.forEach((step, index) => {
     const awaitRole = displayRole(step) === "await";
@@ -152,6 +190,19 @@ function buildNodeSet(steps, transitions) {
       scale: awaitRole ? 1.22 : 1.08
     });
   });
+
+  if (objectPublishStep) {
+    nodes.push({
+      id: objectPublishStep.step,
+      sourceId: objectPublishStep.step,
+      role: "object-publish",
+      tier: "connector",
+      x: 6.75,
+      y: 2.4,
+      z: 0.38,
+      scale: 0.92
+    });
+  }
 
   if (awaitStep) {
     const awaitNode = nodes.find((node) => node.id === awaitStep.step);
@@ -193,14 +244,14 @@ function buildNodeSet(steps, transitions) {
       scale: 0.86
     });
   }
-  return { nodes, mainline, awaitStep, persistenceSteps };
+  return { nodes, mainline, awaitStep, persistenceSteps, objectIngestStep, objectPublishStep };
 }
 
 function edgeId(from, to, kind) {
   return `${from}->${to}:${kind}`;
 }
 
-function buildEdges(transitions, nodes, mainline, awaitStep, persistenceSteps) {
+function buildEdges(transitions, nodes, mainline, awaitStep, persistenceSteps, objectIngestStep, objectPublishStep) {
   const nodeIds = new Set(nodes.map((node) => node.id));
   const storeNode = nodes.find((node) => node.role === "store");
   const brokerNode = nodes.find((node) => node.role === "broker");
@@ -226,6 +277,12 @@ function buildEdges(transitions, nodes, mainline, awaitStep, persistenceSteps) {
       continue;
     }
     addEdge(from, to, "primary", transition.cardinality ?? "one-to-one");
+  }
+  if (objectIngestStep && mainline[0]) {
+    addEdge(objectIngestStep.step, mainline[0].step, "ingest");
+  }
+  if (objectPublishStep && mainline.length > 0) {
+    addEdge(mainline[mainline.length - 1].step, objectPublishStep.step, "publish");
   }
   if (awaitStep && brokerNode && providerNode) {
     addEdge(awaitStep.step, brokerNode.id, "request");
@@ -278,7 +335,7 @@ function findEdge(edges, from, to, kind) {
   return edges.find((edge) => edge.from === from && edge.to === to && edge.kind === kind);
 }
 
-function buildPulses(replay, edges, mainline, awaitStep, persistenceSteps) {
+function buildPulses(replay, edges, mainline, awaitStep, persistenceSteps, objectIngestStep, objectPublishStep) {
   const events = Array.isArray(replay.events) ? replay.events : [];
   const pulses = [];
   const mainlineEdges = [];
@@ -294,7 +351,7 @@ function buildPulses(replay, edges, mainline, awaitStep, persistenceSteps) {
         || (event.event === "start" && event.step === entry.to && event.from === entry.from)
     );
     const segment = index === 0
-      ? SEGMENTS.ingress
+      ? [SEGMENTS.ingress[1] - 0.1, SEGMENTS.request[0] + 0.55]
       : entry.from === awaitStep?.step
         ? SEGMENTS.completion
         : index === mainlineEdges.length - 1
@@ -302,6 +359,22 @@ function buildPulses(replay, edges, mainline, awaitStep, persistenceSteps) {
           : SEGMENTS.request;
     pulses.push(...pulseBundle(entry.edge, "primary", sampleEvenly(matches, index === 0 ? 3 : 12), ...segment, 0.86, 0.13, "#8eeeff"));
   });
+
+  if (objectIngestStep && mainline[0]) {
+    const ingestEvents = events.filter((event) =>
+      event.event === "object_ingest_listed" || event.event === "object_ingest_submitted"
+    );
+    pulses.push(...pulseBundle(
+      findEdge(edges, objectIngestStep.step, mainline[0].step, "ingest"),
+      "ingest",
+      sampleEvenly(ingestEvents, 3),
+      SEGMENTS.ingress[0],
+      SEGMENTS.ingress[1],
+      0.95,
+      0.135,
+      "#7af7c6"
+    ));
+  }
 
   if (awaitStep) {
     const awaitIndex = mainline.findIndex((step) => step.step === awaitStep.step);
@@ -342,14 +415,31 @@ function buildPulses(replay, edges, mainline, awaitStep, persistenceSteps) {
     const segmentEnd = mainlineIndex >= mainline.length - 1 ? SEGMENTS.continuation[1] : Math.min(SEGMENTS.store[1], segmentStart + 2.8);
     pulses.push(...pulseBundle(edge, "store", sampleEvenly(writes, mainlineIndex <= 0 ? 2 : 8), segmentStart, segmentEnd, 1.08, 0.115, "#6fd9ff"));
   }
+  if (objectPublishStep && mainline.length > 0) {
+    const publishEvents = events.filter((event) =>
+      event.event === "object_publish_grouped" || event.event === "object_publish_published"
+    );
+    pulses.push(...pulseBundle(
+      findEdge(edges, mainline[mainline.length - 1].step, objectPublishStep.step, "publish"),
+      "publish",
+      sampleEvenly(publishEvents, 3),
+      SEGMENTS.publish[0],
+      SEGMENTS.publish[1],
+      0.45,
+      0.135,
+      "#ffe08a"
+    ));
+  }
   return pulses.sort((left, right) => left.start - right.start);
 }
 
 function buildHighlights(nodes) {
   return [
+    { targetId: nodes.find((node) => node.role === "object-ingest")?.id, kind: "ingest", start: SEGMENTS.ingress[0], end: SEGMENTS.ingress[1], intensity: 1.05, color: "#7af7c6" },
     { targetId: nodes.find((node) => node.role === "await")?.id, kind: "suspend", start: SEGMENTS.suspend[0], end: SEGMENTS.suspend[1], intensity: 1.25, color: "#95b8ff" },
     { targetId: nodes.find((node) => node.role === "store")?.id, kind: "store", start: SEGMENTS.store[0], end: SEGMENTS.store[1], intensity: 0.85, color: "#76d8ff" },
-    { targetId: nodes.find((node) => node.role === "provider")?.id, kind: "completion", start: SEGMENTS.completion[0], end: SEGMENTS.completion[1] - 0.1, intensity: 0.95, color: "#d2c3ff" }
+    { targetId: nodes.find((node) => node.role === "provider")?.id, kind: "completion", start: SEGMENTS.completion[0], end: SEGMENTS.completion[1] - 0.1, intensity: 0.95, color: "#d2c3ff" },
+    { targetId: nodes.find((node) => node.role === "object-publish")?.id, kind: "publish", start: SEGMENTS.publish[0], end: SEGMENTS.publish[1], intensity: 1.1, color: "#ffe08a" }
   ].filter((highlight) => highlight.targetId);
 }
 
@@ -358,8 +448,8 @@ function main() {
   const replay = JSON.parse(fs.readFileSync(input, "utf8"));
   const steps = Array.isArray(replay.topology?.steps) ? replay.topology.steps : [];
   const transitions = Array.isArray(replay.topology?.transitions) ? replay.topology.transitions : [];
-  const { nodes, mainline, awaitStep, persistenceSteps } = buildNodeSet(steps, transitions);
-  const edges = buildEdges(transitions, nodes, mainline, awaitStep, persistenceSteps);
+  const { nodes, mainline, awaitStep, persistenceSteps, objectIngestStep, objectPublishStep } = buildNodeSet(steps, transitions);
+  const edges = buildEdges(transitions, nodes, mainline, awaitStep, persistenceSteps, objectIngestStep, objectPublishStep);
   const cinematic = {
     sourceReplay: path
       .relative(path.resolve(__dirname, "../.."), path.resolve(input))
@@ -373,7 +463,7 @@ function main() {
     phases: SEGMENTS,
     nodes,
     edges,
-    pulses: buildPulses(replay, edges, mainline, awaitStep, persistenceSteps),
+    pulses: buildPulses(replay, edges, mainline, awaitStep, persistenceSteps, objectIngestStep, objectPublishStep),
     highlights: buildHighlights(nodes)
   };
   fs.mkdirSync(path.dirname(output), { recursive: true });
