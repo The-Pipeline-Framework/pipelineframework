@@ -1,6 +1,6 @@
 # Await Runtime Setup
 
-Await steps suspend `QUEUE_ASYNC` execution at an external boundary. TPF persists the interaction, dispatches through the configured adapter, and resumes the owning execution after a correlated completion is admitted.
+Await steps model external boundaries inside `QUEUE_ASYNC` execution. TPF persists the interaction, dispatches through the configured adapter, and admits correlated completions back into the owning execution. Scalar and recovery paths suspend as `WAITING_EXTERNAL`; brokered itemized streams can also flow through a live await session while the transition is active.
 
 For modeling guidance, start with [Await Boundaries](/design/await-boundaries). For production operation, see [Await Boundary Operations](/operate/await-boundaries). Internally, await is backed by durable await units; for implementation diagrams and the state model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
 
@@ -18,43 +18,50 @@ For modeling guidance, start with [Await Boundaries](/design/await-boundaries). 
 
 ## Itemized Queue-Async Mechanics
 
-When `ONE_TO_ONE` await receives a stream, TPF creates one owning await unit and one interaction per input item. Completion admission is intentionally stricter than "a response arrived, continue now":
+When `ONE_TO_ONE` await receives a stream, TPF creates one owning await unit and one interaction per input item. The unit gives the whole boundary one durable identity, while each item keeps its own correlation id, request payload, response payload, and item index.
+
+For brokered await transports such as Kafka, the normal path is a live await session:
+
+1. the source stream dispatches item interactions up to the configured live in-flight window,
+2. each provider completion is recorded against its interaction before it is emitted,
+3. the live session emits completed items to the resumed segment only as downstream requests them,
+4. the source parser receives more demand as accepted completions free capacity.
+
+This is still durable await, not a plain in-memory request/reply stream. If the worker crashes, the live session is cancelled, or a completion arrives with no live session, the queue-async coordinator falls back to durable item continuation:
 
 1. the source stream must finish dispatching the unit and persist `dispatchComplete`,
 2. the parent execution must be durably parked as `WAITING_EXTERNAL` for the same await unit,
 3. the item completion must be recorded against the expected interaction,
 4. only then can the queue-async coordinator dispatch that item's continuation.
 
-This handles fast providers and broker redelivery safely. A completion that arrives before the parent wait is persisted is recorded, but it does not start item continuation work until the parent execution is actually waiting on that unit. Duplicate completions resolve through the same interaction record instead of re-running the continuation.
+This handles crash recovery, fast providers, and broker redelivery safely. A completion that cannot be accepted by a live session is recorded, then released through durable continuation only when the parent execution is actually waiting on that unit. Duplicate completions resolve through the same interaction record instead of re-running the continuation.
 
-For `csv-payments`, `Process Csv Payments Input` can emit `PaymentRecord` rows incrementally, `Await Payment Provider` dispatches each row as an item interaction, and `Process Payment Status` can run per admitted completion. The parent execution is released after the itemized unit is complete; terminal Object Publish then writes the final `PaymentOutput` objects before the execution is marked successful.
+For `csv-payments`, `Process Csv Payments Input` emits `PaymentRecord` rows incrementally, `Await Payment Provider` dispatches each row as an item interaction, and `Process Payment Status` runs as completions are accepted by the live session or durable fallback. Terminal Object Publish writes `PaymentOutput` objects before the execution is marked successful.
 
 ```mermaid
 sequenceDiagram
     participant Input as "Input stream"
     participant Await as "AwaitStepSupport"
     participant Unit as "Await unit store"
-    participant Exec as "Execution store"
-    participant Provider as "Provider response"
+    participant Kafka as "Kafka/provider"
     participant Queue as "QueueAsyncCoordinator"
+    participant Live as "Live await session"
     participant Status as "Item continuation"
+    participant Exec as "Execution store"
 
     Input->>Await: item 0
     Await->>Unit: create interaction itemIndex=0
-    Await-->>Provider: dispatch request 0
-    Provider-->>Queue: completion item 0 arrives early
+    Await-->>Kafka: dispatch request 0
+    Kafka-->>Queue: completion item 0
     Queue->>Unit: record item 0 completed
-    Queue->>Exec: check parent waiting
-    Exec-->>Queue: not WAITING_EXTERNAL yet
-    Queue-->>Queue: do not continue item 0
+    Queue->>Live: signal item 0
+    Live-->>Status: emit when downstream requests
 
-    Input->>Await: source exhausted
-    Await->>Unit: mark dispatchComplete(expected count)
-    Await-->>Queue: suspend parent await unit
-    Queue->>Exec: mark WAITING_EXTERNAL(awaitUnitId)
-    Queue->>Unit: find completed unreleased items
-    Queue->>Status: continue item 0
-    Status-->>Queue: collect item output
+    alt no live session
+      Queue->>Exec: require parent WAITING_EXTERNAL(awaitUnitId)
+      Queue->>Unit: require dispatchComplete for fallback release
+      Queue->>Status: dispatch durable item continuation
+    end
 ```
 
 The built-in `interaction-api` adapter is for human/UI inboxes and mock-provider style flows where another client queries pending interactions and later calls the generated completion API. The built-in `webhook` adapter dispatches an HTTP request to an external system and includes a signed resume token in the envelope. The built-in `kafka` adapter publishes a request envelope to Kafka and admits completion envelopes from a configured response channel. The built-in `sqs` adapter does the same request/completion pattern with SQS standard queues.

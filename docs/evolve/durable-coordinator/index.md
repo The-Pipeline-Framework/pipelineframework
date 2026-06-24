@@ -33,7 +33,7 @@ sequenceDiagram
         Coordinator->>Store: park execution as WAITING_EXTERNAL
         Client->>Coordinator: complete interaction
         Coordinator->>Store: admit completion into await unit
-        Coordinator->>Store: release only if unit complete and parent waits
+        Coordinator->>Store: fallback release if unit complete and parent waits
     else completed transition
         Worker-->>Coordinator: COMPLETED payload
         Coordinator->>Store: commit result / enqueue next

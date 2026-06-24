@@ -31,6 +31,7 @@ import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCoordinator;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
+import org.pipelineframework.awaitable.AwaitLiveCompletionRegistry;
 import org.pipelineframework.awaitable.AwaitThrowableSupport;
 import org.pipelineframework.awaitable.AwaitUnitStatus;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionDecision;
@@ -133,6 +134,9 @@ class QueueAsyncCoordinator {
 
   @Inject
   AwaitCoordinator awaitCoordinator;
+
+  @Inject
+  AwaitLiveCompletionRegistry awaitLiveCompletionRegistry;
 
   @Inject
   TransitionWorkerExecutor transitionWorkerExecutor;
@@ -636,27 +640,49 @@ class QueueAsyncCoordinator {
         .onItem().transformToUni(result -> validateAwaitCompletionTenant(result, normalized)
             .onItem().transformToUni(validated -> {
               return awaitCoordinator.recordCompletion(validated.record(), normalized.nowEpochMs())
-                  .onItem().transformToUni(unit -> {
-                    if (usesItemContinuations(validated.record(), unit)) {
-                      return awaitItemContinuationReady(validated.record(), unit)
-                          .onItem().invoke(ready -> {
-                            if (ready) {
-                              dispatchAwaitItemContinuation(
-                                  validated.record(),
-                                  unit,
-                                  itemContinuationHandler,
-                                  normalized.nowEpochMs());
-                            } else {
-                              AwaitCompletionMetrics.recordEarlyCompletionHeld(validated.record(), unit);
-                            }
-                          })
-                          .replaceWith(validated);
-                    }
-                    return unit.status() == AwaitUnitStatus.COMPLETED
-                        ? releaseAwaitResume(validated.record(), unit.unitId(), normalized.nowEpochMs()).replaceWith(validated)
-                        : Uni.createFrom().item(validated);
-                  });
+                  .onItem().transformToUni(unit -> signalLiveAwaitCompletion(validated.record(), unit)
+                      .onItem().transformToUni(liveAccepted -> liveAccepted
+                          ? Uni.createFrom().item(validated)
+                          : handleRecordedAwaitCompletion(
+                              validated,
+                              unit,
+                              itemContinuationHandler,
+                              normalized.nowEpochMs())));
             }));
+  }
+
+  private Uni<AwaitCompletionResult> handleRecordedAwaitCompletion(
+      AwaitCompletionResult validated,
+      org.pipelineframework.awaitable.AwaitUnitRecord unit,
+      AwaitItemContinuationHandler itemContinuationHandler,
+      long nowEpochMs) {
+    if (usesItemContinuations(validated.record(), unit)) {
+      return awaitItemContinuationReady(validated.record(), unit)
+          .onItem().invoke(ready -> {
+            if (ready) {
+              dispatchAwaitItemContinuation(
+                  validated.record(),
+                  unit,
+                  itemContinuationHandler,
+                  nowEpochMs);
+            } else {
+              AwaitCompletionMetrics.recordEarlyCompletionHeld(validated.record(), unit);
+            }
+          })
+          .replaceWith(validated);
+    }
+    return unit.status() == AwaitUnitStatus.COMPLETED
+        ? releaseAwaitResume(validated.record(), unit.unitId(), nowEpochMs).replaceWith(validated)
+        : Uni.createFrom().item(validated);
+  }
+
+  private Uni<Boolean> signalLiveAwaitCompletion(
+      AwaitInteractionRecord record,
+      org.pipelineframework.awaitable.AwaitUnitRecord unit) {
+    if (awaitLiveCompletionRegistry == null) {
+      return Uni.createFrom().item(false);
+    }
+    return awaitLiveCompletionRegistry.signal(record, unit);
   }
 
   private void dispatchAwaitItemContinuation(
@@ -901,6 +927,9 @@ class QueueAsyncCoordinator {
   }
 
   private Uni<Void> publishTerminalOutputsIfConfigured(TransitionResultEnvelope result) {
+    if (result.terminalOutputPublished()) {
+      return Uni.createFrom().voidItem();
+    }
     if (objectPublishCompletionService == null) {
       return Uni.createFrom().voidItem();
     }

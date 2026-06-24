@@ -46,6 +46,7 @@ import org.pipelineframework.telemetry.PipelineTelemetry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -118,6 +119,7 @@ class PipelineRunnerObjectPublishTest {
             List.of(new IdentityStep()),
             0,
             1);
+        assertTrue(execution.terminalOutputPublished());
 
         @SuppressWarnings("unchecked")
         Multi<TestTerminalOutput> stream = (Multi<TestTerminalOutput>) execution.result();
@@ -139,6 +141,7 @@ class PipelineRunnerObjectPublishTest {
             List.of(new IdentityStep()),
             0,
             0);
+        assertFalse(execution.terminalOutputPublished());
 
         @SuppressWarnings("unchecked")
         Multi<TestTerminalOutput> stream = (Multi<TestTerminalOutput>) execution.result();
@@ -149,7 +152,7 @@ class PipelineRunnerObjectPublishTest {
     }
 
     @Test
-    void queueAsyncTransitionWithAwaitContextDoesNotInvokeRunnerObjectPublish() throws Exception {
+    void queueAsyncTerminalTransitionWithAwaitContextStreamsThroughObjectPublish() throws Exception {
         AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant-1", "exec-1", 0));
 
         PipelineRunner.ExecutionResult execution = runner.runFromStepUntilWithContext(
@@ -157,13 +160,18 @@ class PipelineRunnerObjectPublishTest {
             List.of(new IdentityStep()),
             0,
             1);
+        assertTrue(execution.terminalOutputPublished());
 
         @SuppressWarnings("unchecked")
         Multi<TestTerminalOutput> stream = (Multi<TestTerminalOutput>) execution.result();
+        CompletableFuture<List<TestTerminalOutput>> result = stream.collect().asList().subscribeAsCompletionStage();
 
-        assertEquals(List.of(new TestTerminalOutput("file-a", "line-1")),
-            stream.collect().asList().await().indefinitely());
-        assertEquals(0, provider.writeAttempts());
+        provider.awaitWriteStarted();
+        assertFalse(result.isDone(), "Await-context terminal publish must still gate result collection");
+        provider.acceptWrite();
+
+        assertEquals(List.of(new TestTerminalOutput("file-a", "line-1")), result.get(5, TimeUnit.SECONDS));
+        assertEquals(1, provider.writeAttempts());
     }
 
     private static PipelineYamlConfig objectPublishConfig(String provider) {

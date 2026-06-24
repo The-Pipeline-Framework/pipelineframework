@@ -2539,7 +2539,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         "store".equals(transition.relationKind())),
                 "Expected store transitions in merged replay topology.");
         assertReplayLifecycleEvents(replayDocument);
-        assertItemizedAwaitContinuationsStartAfterExecutionWaits(replayDocument);
+        assertItemizedAwaitLiveFlowStartsBeforeUnitDispatchCompletes(replayDocument);
     }
 
     private void assertReplayLifecycleEvents(PipelineReplayDocument replayDocument) {
@@ -2581,7 +2581,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "Expected await lifecycle events to include expected item count once dispatch size is known.");
     }
 
-    private void assertItemizedAwaitContinuationsStartAfterExecutionWaits(PipelineReplayDocument replayDocument) {
+    private void assertItemizedAwaitLiveFlowStartsBeforeUnitDispatchCompletes(PipelineReplayDocument replayDocument) {
         Comparator<PipelineExecutionEvent> playbackOrder = Comparator
                 .comparingDouble(AbstractCsvPaymentsEndToEnd::playbackTimeForEvent)
                 .thenComparingLong(event -> event.sequence() == null ? Long.MAX_VALUE : event.sequence());
@@ -2589,20 +2589,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 .filter(event -> "ProcessPaymentStatus".equals(event.step()))
                 .min(playbackOrder)
                 .orElseThrow(() -> new AssertionError("Expected ProcessPaymentStatus replay events."));
-        PipelineExecutionEvent awaitExecutionWaitingEvent = replayDocument.events().stream()
-                .filter(event -> AWAIT_EXECUTION_WAITING.equals(event.event()))
-                .min(playbackOrder)
-                .orElseThrow(() -> new AssertionError("Expected await_execution_waiting replay events."));
         PipelineExecutionEvent awaitUnitDispatchCompleteEvent = replayDocument.events().stream()
                 .filter(event -> AWAIT_UNIT_DISPATCH_COMPLETE.equals(event.event()))
                 .min(playbackOrder)
                 .orElseThrow(() -> new AssertionError("Expected await_unit_dispatch_complete replay events."));
         assertTrue(
-                playbackOrder.compare(awaitExecutionWaitingEvent, firstPaymentStatusEvent) < 0,
-                "Expected ONE_TO_ONE await item continuations to start only after the parent execution is durably waiting.");
-        assertTrue(
-                playbackOrder.compare(awaitUnitDispatchCompleteEvent, firstPaymentStatusEvent) < 0,
-                "Expected ONE_TO_ONE await item continuations to start only after await item dispatch completes.");
+                playbackOrder.compare(firstPaymentStatusEvent, awaitUnitDispatchCompleteEvent) < 0,
+                "Expected connector-first Kafka ONE_TO_ONE await to process completed items through the live session before unit dispatch completes.");
     }
 
     private void assertReplayEvent(PipelineReplayDocument replayDocument, String eventName) {

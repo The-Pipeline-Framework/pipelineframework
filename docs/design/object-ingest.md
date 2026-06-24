@@ -112,9 +112,9 @@ CSV Payments uses both sides of the object shell in the default path.
 | --- | --- | --- |
 | Source discovery | `ProcessFolderService` listed folders as a business step. | Object Ingest lists and admits source objects, then submits deterministic queue-async executions. |
 | CSV parsing | `ProcessCsvPaymentsInputService` parsed the selected file. | `ProcessCsvPaymentsInputService` still parses the source object domain input. |
-| Provider wait | `Await Payment Provider` dispatched one interaction per row. | Same authored await step; TPF coordinates itemized completion through await units. |
+| Provider wait | `Await Payment Provider` dispatched one interaction per row. | Same authored await step; TPF coordinates itemized completion through durable await units and a live await session when the queue-async transition is active. |
 | Output file | `ProcessCsvPaymentsOutputFileService` grouped and wrote final files. | Object Publish groups terminal `PaymentOutput` values and writes `{groupKey}.out`. |
-| Reader pacing | `BlockingIteratorPacer` throttled the old path as a fallback. | Runtime backpressure plus durable await coordination and streaming publish carry the default path. |
+| Reader pacing | `BlockingIteratorPacer` throttled the old path as a fallback. | The parser advances by reactive demand, the await in-flight window, and streaming publish backpressure. |
 
 The business pipeline therefore ends at the last domain transition, not at a file-writing step:
 
@@ -127,6 +127,8 @@ Object Ingest
 ```
 
 `Object Ingest` and `Object Publish` are framework-owned I/O shells around the pipeline. They are not replacement names for user-authored steps.
+
+The parser pace in the connector-first path is reactive. `ProcessCsvPaymentsInputService` still owns CSV parsing, but it is requested by the pipeline as downstream capacity becomes available. It is not held back by the deprecated CSV demand pacer.
 
 ## Publish Mapper
 

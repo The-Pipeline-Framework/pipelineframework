@@ -32,6 +32,8 @@ Suspension is normal control flow. It should not be logged as a failed step or r
 
 `ONE_TO_ONE` over a `Multi` is a stream of unary awaits inside one owning unit. This is the model used by `csv-payments`: each `PaymentRecord` is one input unit and each provider completion is one output unit.
 
+For brokered await transports, the preferred queue-async path is live. `AwaitStepSupport` opens a live await session for the unit, source dispatch is bounded by the configured in-flight window, and each completion is recorded before it is emitted to the resumed suffix. If that live session is unavailable, the coordinator falls back to durable item continuations.
+
 ```mermaid
 sequenceDiagram
     participant Source as Upstream Multi
@@ -39,9 +41,10 @@ sequenceDiagram
     participant Coord as AwaitCoordinator
     participant Adapter as AwaitTransportAdapter
     participant UnitStore as AwaitUnitStore
-    participant ExecStore as ExecutionStateStore
     participant Queue as QueueAsyncCoordinator
+    participant Live as LiveAwaitSession
     participant Suffix as Item continuation suffix
+    participant ExecStore as ExecutionStateStore
 
     Source->>Step: item 0
     Step->>Coord: createOrGetItem(unitId, itemIndex=0)
@@ -49,24 +52,30 @@ sequenceDiagram
     Source->>Step: item 1
     Step->>Coord: createOrGetItem(unitId, itemIndex=1)
     Coord->>Adapter: dispatch item 1
-    Step->>UnitStore: markDispatchComplete(expectedItemCount=2)
-    Step-->>ExecStore: park execution with awaitUnitId
     Adapter-->>Coord: complete item 1
     Coord->>UnitStore: recordItemCompleted
-    Coord->>Queue: ask whether item 1 may continue
-    Queue->>UnitStore: require dispatchComplete
-    Queue->>ExecStore: require parent WAITING_EXTERNAL(awaitUnitId)
-    Queue->>Suffix: continue item 1 when both gates pass
+    Coord->>Queue: signal completion
+    Queue->>Live: accept item 1 after durable record
+    Live->>Suffix: emit item 1 when downstream requests
     Adapter-->>Coord: complete item 0
     Coord->>UnitStore: recordItemCompleted -> COMPLETED
-    Coord->>Queue: release parent after item continuations complete
+    Coord->>Queue: signal completion
+    Queue->>Live: accept item 0 after durable record
+    Live->>Suffix: emit item 0 when downstream requests
+    Step->>UnitStore: markDispatchComplete(expectedItemCount=2)
+    alt live session unavailable
+      Step-->>ExecStore: park execution with awaitUnitId
+      Queue->>UnitStore: require dispatchComplete
+      Queue->>ExecStore: require parent WAITING_EXTERNAL(awaitUnitId)
+      Queue->>Suffix: dispatch durable item continuation
+    end
 ```
 
-Completion may arrive out of order. Replay preserves input order by reading completed item interactions by `itemIndex`.
+Completion may arrive out of order. The live path can process accepted completions as they arrive; durable replay and aggregate release preserve item identity by reading completed item interactions by `itemIndex`.
 
 ## Await Unit Gatekeeper
 
-The await unit is both a durability gate and a unit-shape gate. It prevents completions from racing ahead of parent suspension, and it defines what must be replayed together.
+The await unit is the durable shape for the boundary. In the live path, it is the identity, ordering, and dedupe anchor for item interactions. In the fallback path, it also gates release so completions cannot race ahead of durable parent suspension. For aggregate cardinalities, it defines what must be replayed together.
 
 ```mermaid
 flowchart TD
@@ -76,18 +85,18 @@ flowchart TD
     B -->|ONE_TO_MANY| E["One unit<br/>one input, materialized output items"]
     B -->|MANY_TO_ONE| F["One unit<br/>materialized input items, one output"]
     B -->|MANY_TO_MANY| G["One unit<br/>materialized input and output items"]
-    C --> H["Release when completion recorded<br/>and parent waits on unit"]
-    D --> I["Release item continuations only after<br/>dispatchComplete + parent WAITING_EXTERNAL"]
+    C --> H["Scalar resume from completion<br/>or parent wait fallback"]
+    D --> I["Live session emits by demand<br/>fallback requires dispatchComplete + parent WAITING_EXTERNAL"]
     E --> J["Replay whole output unit"]
     F --> K["Replay one aggregate output"]
     G --> L["Replay whole output unit"]
 ```
 
-For `ONE_TO_ONE` over a stream, the unit groups item interactions for ordering, dedupe, and release. It is not provider-side batching. For aggregate cardinalities, the unit is the batch because the runtime materializes the relevant side of the boundary.
+For `ONE_TO_ONE` over a stream, the unit groups item interactions for ordering, dedupe, live-session identity, and fallback release. It is not provider-side batching. For aggregate cardinalities, the unit is the batch because the runtime materializes the relevant side of the boundary.
 
 ## CSV Payments Itemized Await
 
-This is the concrete connector-first `csv-payments` shape. `Await Payment Provider` owns the Kafka boundary, but `Process Payment Status` can run per completed item. The parent execution is released after the itemized unit reaches the next aggregate or terminal boundary, then terminal Object Publish writes the output objects before success is committed.
+This is the concrete connector-first `csv-payments` shape. `Await Payment Provider` owns the Kafka boundary, but `Process Payment Status` can run per completed item through the live await session. Terminal Object Publish writes output chunks before success is committed.
 
 ```mermaid
 sequenceDiagram
@@ -99,6 +108,7 @@ sequenceDiagram
     participant Provider as payments-processing-svc
     participant Exec as PipelineExecutionService
     participant Queue as QueueAsyncCoordinator
+    participant Live as LiveAwaitSession
     participant Status as Process Payment Status
     participant Publish as Object Publish
 
@@ -107,11 +117,13 @@ sequenceDiagram
     Await->>AwaitCoord: create item interaction(itemIndex=0)
     AwaitCoord->>Kafka: publish request envelope
     Kafka->>Provider: deliver payment request
-    Provider-->>Kafka: PaymentStatus item 0 early
+    Provider-->>Kafka: PaymentStatus item 0
     Kafka-->>Exec: complete by correlationId
     Exec->>Queue: complete await interaction
     Queue->>AwaitCoord: record item 0 completed
-    Queue->>Queue: hold continuation until parent is WAITING_EXTERNAL
+    Queue->>Live: signal item 0 after durable record
+    Live->>Status: emit item 0 when requested
+    Status-->>Publish: PaymentOutput item 0 chunk
 
     Input-->>Runner: PaymentRecord item 1
     Runner->>Await: execute item 1
@@ -119,27 +131,43 @@ sequenceDiagram
     AwaitCoord->>Kafka: publish request envelope
     Kafka->>Provider: deliver payment request
 
-    Await->>AwaitCoord: mark dispatchComplete(expectedItemCount=2)
-    Await-->>Queue: suspend parent execution(awaitUnitId)
-    Queue->>Queue: mark WAITING_EXTERNAL(awaitUnitId)
-    Queue->>Queue: release already completed item 0
-    Queue->>Status: continue item 0
-    Status-->>Queue: PaymentOutput item 0
-
     Provider-->>Kafka: PaymentStatus item 1
     Kafka-->>Exec: complete by correlationId
     Exec->>Queue: complete await interaction
-    Queue->>Status: continue item 1
-    Status-->>Queue: PaymentOutput item 1
+    Queue->>AwaitCoord: record item 1 completed
+    Queue->>Live: signal item 1 after durable record
+    Live->>Status: emit item 1 when requested
+    Status-->>Publish: PaymentOutput item 1 chunk
 
-    Queue->>Queue: all item continuations collected in itemIndex order
-    Queue->>Queue: release parent execution at terminal boundary
-    Queue->>Publish: publish terminal PaymentOutput objects
-    Publish-->>Queue: write sessions closed
+    alt live session lost or worker restarted
+      Await->>AwaitCoord: mark dispatchComplete(expectedItemCount=2)
+      Await-->>Queue: suspend parent execution(awaitUnitId)
+      Queue->>Queue: mark WAITING_EXTERNAL(awaitUnitId)
+      Queue->>Status: dispatch durable item continuations
+    end
+
+    Publish-->>Queue: target sessions closed
     Queue->>Queue: mark execution succeeded
 ```
 
-The model is itemized until the next aggregate or terminal boundary. If an authored downstream step is `MANY_TO_ONE` or `MANY_TO_MANY`, the parent execution resumes there with the collected ordered item outputs. If the suffix remains itemized through the terminal output, Object Publish owns final grouping and object writes.
+The model is itemized until the next aggregate or terminal boundary. If an authored downstream step is `MANY_TO_ONE` or `MANY_TO_MANY`, durable fallback resumes the parent execution there with the collected ordered item outputs. If the suffix remains itemized through the terminal output, Object Publish owns final grouping and object writes.
+
+```mermaid
+sequenceDiagram
+    participant Queue as QueueAsyncCoordinator
+    participant AwaitCoord as AwaitCoordinator
+    participant ExecStore as ExecutionStateStore
+    participant Status as Process Payment Status
+    participant Publish as Object Publish
+
+    Queue->>AwaitCoord: completion already recorded, no live session
+    Queue->>ExecStore: require WAITING_EXTERNAL(awaitUnitId)
+    Queue->>AwaitCoord: require dispatchComplete
+    Queue->>Status: continue item 1
+    Status-->>Queue: PaymentOutput item 1
+    Queue->>Publish: publish terminal output before success
+    Queue->>Queue: mark execution succeeded
+```
 
 ## Aggregate Unit
 

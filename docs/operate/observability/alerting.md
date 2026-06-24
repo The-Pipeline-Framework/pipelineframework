@@ -115,12 +115,13 @@ Immediate operator actions:
 2. Scale workers or reduce ingest pressure temporarily.
 3. Verify sweeper activity and lease conflict levels during catch-up.
 
-### Await Gate Drain Failure (Warning/Critical)
+### Await Boundary Flow Stall (Warning/Critical)
 
 Operational meaning:
 
-1. External completions are arriving, but item continuations are not being released at the expected rate.
-2. The parent execution may not have reached durable `WAITING_EXTERNAL`, dispatch completion may be delayed, or the worker queue may be saturated.
+1. External completions are arriving, but downstream business steps are not progressing at the expected rate.
+2. On the live path, the issue is usually downstream demand, worker capacity, broker lag, or state-store write latency.
+3. On the durable fallback path, the parent execution may not have reached durable `WAITING_EXTERNAL`, dispatch completion may be delayed, or the worker queue may be saturated.
 
 Business meaning:
 
@@ -129,8 +130,8 @@ Business meaning:
 
 Immediate operator actions:
 
-1. Compare `tpf.await.completion.admitted.total`, `tpf.await.completion.early_held.total`, `tpf.await.resume.released.total`, and provider-native completion queue age.
-2. Inspect replay for `await_unit_dispatch_complete`, `await_execution_waiting`, `await_unit_item_completed`, and `await_resume_released`.
+1. Compare `tpf.await.completion.admitted.total`, downstream step throughput, Object Publish progress, and provider-native completion queue age.
+2. Inspect replay for `await_unit_item_completed`, downstream step events, and Object Publish events; use `await_execution_waiting` and `await_resume_released` to diagnose durable fallback.
 3. Check queue-async worker lag and state-store write latency before increasing provider throughput.
 
 ### Object Publish Failure (Critical)

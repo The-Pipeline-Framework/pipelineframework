@@ -5,6 +5,8 @@ work while waiting for I/O.
 
 ### How to size `pipeline.max-concurrency`
 
+`pipeline.max-concurrency` limits live work admitted by a step or live connector segment. For brokered `ONE_TO_ONE` await over a stream, it also acts as the pending-interaction window: the parser can dispatch up to that many await interactions, then advances as completions are durably recorded and accepted by downstream demand.
+
 1. **Start from CPU cores and I/O profile**:
    - CPU-bound steps: set concurrency near the number of vCPUs (for example 4 cores → 4–8).
    - I/O-bound steps: you can go higher (for example 4 cores → 32–128), but validate with metrics.
@@ -44,14 +46,28 @@ below the limit while `tpf.step.buffer.queued` spikes.
 
 ### Durable boundaries
 
-Backpressure only propagates through a live reactive segment. It does not cross an external await boundary, because the request has left the current process and the completion may return later through Kafka, SQS, a webhook, or a human/API completion.
+Backpressure propagates through live reactive segments. A brokered await can participate in that live flow while the same queue-async transition still owns a live await session: source dispatch is bounded by `pipeline.max-concurrency`, completions are recorded durably, and downstream demand decides when accepted completions move into the next step.
+
+Durability takes over when the live session is unavailable. A request may complete later through Kafka, SQS, a webhook, a human/API completion, or a restarted worker. In that path, TPF uses await unit state, execution state, and queue admission rather than a single in-memory demand signal.
 
 For await-heavy pipelines, size the system around two kinds of pressure:
 
-- live segment pressure: step inflight counts, step buffers, terminal publish write latency, and source admission;
-- durable boundary pressure: pending await interactions, completed-but-not-released items, work-queue depth, provider permits, broker lag, retry rate, and DLQ events.
+- live segment pressure: step inflight counts, step buffers, pending live await interactions, terminal publish write latency, and source admission;
+- durable boundary pressure: pending await interactions, completions waiting for durable fallback continuation, work-queue depth, provider permits, broker lag, retry rate, and DLQ events.
 
-In connector-first CSV Payments, Object Ingest controls source-object admission and Object Publish accepts terminal chunks through a target session. The old CSV reader demand pacer is a legacy fallback for the deprecated file-step path; it is not the main backpressure mechanism for the connector-owned path.
+In connector-first CSV Payments, Object Ingest controls source-object admission, the CSV parser advances by reactive demand and the live await in-flight window, and Object Publish accepts terminal chunks through a target session. The old CSV reader demand pacer is a legacy fallback for the deprecated file-step path; it is not the main backpressure mechanism for the connector-owned path.
+
+```mermaid
+flowchart LR
+    A["Object Ingest<br/>source object"] --> B["CSV parser<br/>demand-driven iterator"]
+    B --> C["Await Payment Provider<br/>max in-flight interactions"]
+    C --> D["Kafka/provider<br/>external latency"]
+    D --> E["Live await session<br/>durable completion first"]
+    E --> F["Process Payment Status"]
+    F --> G["Object Publish<br/>streaming target session"]
+    C -. "durable fallback" .-> H["WAITING_EXTERNAL<br/>item continuations"]
+    H -. "restart or no live session" .-> F
+```
 
 ### Retry amplification example (real-world)
 
