@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
@@ -367,7 +368,7 @@ class AwaitStepSupportTest {
         AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
 
         AwaitStepDescriptor testDescriptor = kafkaDescriptor();
-        List<AwaitInteractionRecord> dispatched = new ArrayList<>();
+        List<AwaitInteractionRecord> dispatched = new CopyOnWriteArrayList<>();
         DemandSource source = new DemandSource("first", "second");
         AtomicInteger dispatchCompleteCalls = new AtomicInteger();
 
@@ -456,6 +457,59 @@ class AwaitStepSupportTest {
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.eq(2),
             anyLong());
+    }
+
+    @Test
+    void kafkaOneToOneStreamCompletesWithoutDurableDispatchWhenSourceIsEmpty() {
+        AwaitStepSupport support = support();
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
+
+        List<String> output = support.<String, String>awaitOneToOneStream(
+                kafkaDescriptor(),
+                Multi.createFrom().empty())
+            .collect().asList()
+            .await().indefinitely();
+
+        assertEquals(List.of(), output);
+        org.mockito.Mockito.verify(awaitCoordinator, never()).createOrGetItem(
+            any(), any(), any(), anyInt(), any(), any(), any(), anyInt(), any(), any());
+        org.mockito.Mockito.verify(awaitCoordinator, never()).markDispatchComplete(
+            any(), any(), anyInt(), anyLong());
+    }
+
+    @Test
+    void kafkaOneToOneStreamFailsFastForTerminalExistingInteraction() {
+        AwaitStepSupport support = support();
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
+        AwaitStepDescriptor testDescriptor = kafkaDescriptor();
+        AwaitInteractionRecord failed = itemRecord(0, AwaitInteractionStatus.FAILED, "first", null);
+        when(awaitCoordinator.createOrGetItem(
+            org.mockito.ArgumentMatchers.eq(testDescriptor),
+            org.mockito.ArgumentMatchers.eq("tenant1"),
+            org.mockito.ArgumentMatchers.eq("exec123"),
+            org.mockito.ArgumentMatchers.eq(2),
+            any(),
+            any(),
+            any(),
+            org.mockito.ArgumentMatchers.eq(0),
+            org.mockito.ArgumentMatchers.isNull(),
+            org.mockito.ArgumentMatchers.isNull()))
+            .thenReturn(Uni.createFrom().item(new AwaitCreateResult(failed, false)));
+
+        IllegalStateException error = assertThrows(
+            IllegalStateException.class,
+            () -> support.<String, String>awaitOneToOneStream(
+                    testDescriptor,
+                    Multi.createFrom().item("first"))
+                .collect().asList()
+                .await().indefinitely());
+
+        assertTrue(error.getMessage().contains("terminal with status FAILED"));
+        org.mockito.Mockito.verify(awaitCoordinator, never()).dispatch(any(), any());
+        org.mockito.Mockito.verify(awaitCoordinator, never()).markDispatchComplete(
+            any(), any(), anyInt(), anyLong());
     }
 
     @Test

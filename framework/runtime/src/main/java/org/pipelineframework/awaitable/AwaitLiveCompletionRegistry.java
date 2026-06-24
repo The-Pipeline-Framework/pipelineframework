@@ -108,8 +108,11 @@ public class AwaitLiveCompletionRegistry {
         private boolean dispatchComplete;
         private int expectedItemCount;
         private int emittedItemCount;
+        private boolean subscriberReady;
         private boolean cancelled;
         private boolean terminated;
+        private boolean terminalSignalDelivered;
+        private Throwable terminalFailure;
         private boolean draining;
         private boolean drainAgain;
 
@@ -136,6 +139,9 @@ public class AwaitLiveCompletionRegistry {
                 return;
             }
             subscriber.onSubscribe(new LiveSubscription());
+            synchronized (lock) {
+                subscriberReady = true;
+            }
             drain();
         }
 
@@ -149,19 +155,27 @@ public class AwaitLiveCompletionRegistry {
                 return Uni.createFrom().failure(failure);
             }
             CompletableFuture<Void> accepted = new CompletableFuture<>();
+            String completionKey = completionKey(record);
+            O payload;
+            try {
+                @SuppressWarnings("unchecked")
+                O coerced = (O) AwaitPayloadSupport.coercePayload(record.responsePayload(), outputType);
+                payload = coerced;
+            } catch (Throwable failure) {
+                accepted.completeExceptionally(failure);
+                fail(failure);
+                return Uni.createFrom().completionStage(accepted);
+            }
             synchronized (lock) {
                 if (cancelled || terminated) {
                     accepted.completeExceptionally(new IllegalStateException(
                         "Live await stream is no longer accepting completions for unit " + key.unitId()));
                     return Uni.createFrom().completionStage(accepted);
                 }
-                String completionKey = completionKey(record);
                 if (!seenCompletions.add(completionKey)) {
                     accepted.complete(null);
                     return Uni.createFrom().completionStage(accepted);
                 }
-                @SuppressWarnings("unchecked")
-                O payload = (O) AwaitPayloadSupport.coercePayload(record.responsePayload(), outputType);
                 pending.addLast(new Pending<>(completionKey, payload, accepted));
             }
             drain();
@@ -200,9 +214,15 @@ public class AwaitLiveCompletionRegistry {
                     return;
                 }
                 terminated = true;
+                terminalFailure = failure;
                 rejected = new ArrayList<>(pending);
                 pending.clear();
-                current = subscriber;
+                if (subscriberReady && subscriber != null) {
+                    terminalSignalDelivered = true;
+                    current = subscriber;
+                } else {
+                    current = null;
+                }
             }
             for (Pending<O> item : rejected) {
                 item.accepted().completeExceptionally(failure);
@@ -256,8 +276,9 @@ public class AwaitLiveCompletionRegistry {
             while (true) {
                 List<Pending<O>> toEmit = new ArrayList<>();
                 Flow.Subscriber<? super O> toComplete = null;
+                Throwable toFail = null;
                 synchronized (lock) {
-                    while (!terminated && subscriber != null && requested > 0 && !pending.isEmpty()) {
+                    while (!terminated && subscriberReady && subscriber != null && requested > 0 && !pending.isEmpty()) {
                         Pending<O> next = pending.removeFirst();
                         if (requested != Long.MAX_VALUE) {
                             requested--;
@@ -280,15 +301,24 @@ public class AwaitLiveCompletionRegistry {
                 }
                 synchronized (lock) {
                     emittedItemCount += toEmit.size();
-                    if (!terminated
+                    if (!terminalSignalDelivered
+                        && terminated
+                        && terminalFailure != null
+                        && subscriberReady
+                        && subscriber != null) {
+                        terminalSignalDelivered = true;
+                        toFail = terminalFailure;
+                    } else if (!terminated
                         && subscriber != null
+                        && subscriberReady
                         && dispatchComplete
                         && pending.isEmpty()
                         && emittedItemCount >= expectedItemCount) {
                         terminated = true;
+                        terminalSignalDelivered = true;
                         toComplete = subscriber;
                     }
-                    if (toComplete != null) {
+                    if (toComplete != null || toFail != null) {
                         draining = false;
                         drainAgain = false;
                     } else if (!drainAgain) {
@@ -297,6 +327,10 @@ public class AwaitLiveCompletionRegistry {
                         drainAgain = false;
                         continue;
                     }
+                }
+                if (toFail != null) {
+                    subscriber.onError(toFail);
+                    close();
                 }
                 if (toComplete != null) {
                     toComplete.onComplete();

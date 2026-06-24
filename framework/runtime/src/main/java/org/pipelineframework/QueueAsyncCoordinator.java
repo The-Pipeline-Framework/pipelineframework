@@ -641,6 +641,7 @@ class QueueAsyncCoordinator {
             .onItem().transformToUni(validated -> {
               return awaitCoordinator.recordCompletion(validated.record(), normalized.nowEpochMs())
                   .onItem().transformToUni(unit -> signalLiveAwaitCompletion(validated.record(), unit)
+                      .onFailure().recoverWithItem(false)
                       .onItem().transformToUni(liveAccepted -> liveAccepted
                           ? Uni.createFrom().item(validated)
                           : handleRecordedAwaitCompletion(

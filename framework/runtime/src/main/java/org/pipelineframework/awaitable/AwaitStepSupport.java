@@ -295,12 +295,20 @@ public class AwaitStepSupport {
             AtomicInteger itemIndex = new AtomicInteger();
             AtomicReference<Cancellable> dispatchSubscription = new AtomicReference<>();
             Uni<Void> dispatch = dispatchLiveKafkaAwaitItems(descriptor, input, context, unitId, itemIndex, session)
-                .onItem().transformToUni(ignored -> awaitCoordinator.markDispatchComplete(
-                    context.tenantId(),
-                    unitId,
-                    itemIndex.get(),
-                    System.currentTimeMillis()))
-                .invoke(unit -> session.markDispatchComplete(itemIndex.get()))
+                .onItem().transformToUni(ignored -> {
+                    int dispatchedItems = itemIndex.get();
+                    if (dispatchedItems == 0) {
+                        session.markDispatchComplete(0);
+                        return Uni.createFrom().voidItem();
+                    }
+                    return awaitCoordinator.markDispatchComplete(
+                        context.tenantId(),
+                        unitId,
+                        dispatchedItems,
+                        System.currentTimeMillis())
+                        .invoke(unit -> session.markDispatchComplete(dispatchedItems))
+                        .replaceWithVoid();
+                })
                 .onFailure().invoke(session::fail)
                 .replaceWithVoid();
             return Multi.createFrom().publisher(session)
@@ -366,6 +374,12 @@ public class AwaitStepSupport {
                 AwaitInteractionRecord record = created.record();
                 if (record.status() == AwaitInteractionStatus.COMPLETED) {
                     return session.accept(record).replaceWith(record);
+                }
+                if (record.status().terminal()) {
+                    return Uni.createFrom().failure(new IllegalStateException(
+                        "Await interaction " + record.interactionId()
+                            + " is terminal with status " + record.status()
+                            + " and cannot be accepted by the live await stream."));
                 }
                 Uni<Void> accepted = session.awaitAccepted(record);
                 if (record.status() == AwaitInteractionStatus.WAITING) {
