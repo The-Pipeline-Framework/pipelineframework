@@ -116,7 +116,7 @@ return timer.recordCallable(() -> processPayment(record));
 
 ## Connector And Await Boundary Metrics
 
-Connector-owned I/O and await gates use low-cardinality metrics. Keep object keys, execution ids, await unit ids, interaction ids, and correlation ids in spans/replay events, not metric attributes.
+Connector-owned I/O and await boundaries use low-cardinality metrics. Keep object keys, execution ids, await unit ids, interaction ids, and correlation ids in spans/replay events, not metric attributes.
 
 Object Ingest metrics:
 
@@ -141,7 +141,7 @@ Object Publish metrics:
 | `tpf.object_publish.failed.total` | counter | `tpf.object_publish.target`, `tpf.object_publish.provider` | Publish failures. |
 | `tpf.object_publish.write.duration` | histogram | `tpf.object_publish.target`, `tpf.object_publish.provider` | Provider write duration in milliseconds. |
 
-Await gate metrics:
+Await boundary metrics:
 
 | Metric | Type | Attributes | Meaning |
 | --- | --- | --- | --- |
@@ -149,8 +149,8 @@ Await gate metrics:
 | `tpf.await.unit.dispatch_complete.total` | counter | step, cardinality, status | Await units whose dispatch phase completed. |
 | `tpf.await.completion.admitted.total` | counter | step, status, transport | Completion envelopes admitted into await state. |
 | `tpf.await.item.completed.total` | counter | step, cardinality, status, transport | Itemized await completions recorded. |
-| `tpf.await.completion.early_held.total` | counter | step, cardinality, status, transport | Item completions held until the parent execution is durably waiting. |
-| `tpf.await.resume.released.total` | counter | step, cardinality/status/transport when known | Await resumes released after durable gates are satisfied. |
+| `tpf.await.completion.early_held.total` | counter | step, cardinality, status, transport | Item completions held for durable fallback because live release was not available yet. |
+| `tpf.await.resume.released.total` | counter | step, cardinality/status/transport when known | Await resumes released from durable fallback state. |
 | `tpf.await.unit.terminal.total` | counter | step, cardinality, status, transport | Await units reaching terminal state. |
 | `tpf.await.completion.latency` | histogram | step, status, transport | Time from interaction creation to completion admission. |
 | `tpf.await.unit.duration` | histogram | step, cardinality, status, transport | Time from await unit creation to terminal state. |
@@ -161,7 +161,7 @@ Prometheus exports OpenTelemetry units in the metric name. For example, the dura
 SLO-friendly derived indicators:
 
 1. Await admission reliability: admitted completions divided by admitted plus dropped completions.
-2. Await release health: resume releases compared with terminal await units, with early-held completions draining over the same window.
+2. Await flow health: admitted completions followed by downstream step progress in the live path; durable resume releases and early-held completions draining in fallback paths.
 3. Object publish reliability: published objects divided by published plus failed objects.
 4. Object publish latency: p95/p99 of `tpf.object_publish.write.duration` by provider and target.
 5. CSV output completeness: Object Publish grouped item count matches the terminal `PaymentOutput` count for the run.
@@ -195,7 +195,7 @@ Step-level reject signal:
 
 - `tpf.step.reject.total` (counter): rejected step items published to item reject sinks.
 
-Await execution logs include the parked await unit when a `QUEUE_ASYNC` execution waits or resumes. Replay and trace events expose await unit lifecycle transitions, including dispatch, waiting, item completion, unit completion, resume release, and terminal timeout/failure states. Metrics expose aggregate await-gate health without high-cardinality ids.
+Await execution logs include the parked await unit when a `QUEUE_ASYNC` execution waits or resumes. Replay and trace events expose await unit lifecycle transitions, including dispatch, waiting, item completion, unit completion, resume release, and terminal timeout/failure states. Metrics expose aggregate await-boundary health without high-cardinality ids.
 
 Command signal:
 

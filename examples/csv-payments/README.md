@@ -200,7 +200,7 @@ That lane starts a dedicated LGTM stack, points the modular services and package
 
 ### Object I/O Backpressure
 
-The default CSV Payments path uses Object Ingest and Object Publish. Object Ingest admits one source object into a queue-async execution, the CSV parser emits rows incrementally, and Object Publish writes terminal rows through a streaming target session. The default path does not configure the CSV reader demand pacer.
+The default CSV Payments path uses Object Ingest and Object Publish. Object Ingest admits one source object into a queue-async execution, the CSV parser emits rows incrementally, Kafka await completions flow through a live await session when the transition is active, and Object Publish writes terminal rows through a streaming target session. The default path does not configure the CSV reader demand pacer.
 
 The deprecated file-step path can still use `BlockingIteratorPacer` as a legacy fallback. It is a blocking-thread throttle, not end-to-end reactive backpressure, and should not be used as the primary CSV Payments proof path.
 
@@ -208,15 +208,15 @@ Use provider concurrency and retry settings to shape the payment-provider portio
 
 Operational proof for the connector-first path comes from three surfaces:
 
-1. Grafana metrics show Object Ingest admission, await gate health, provider/request pressure, Object Publish writes, and output completeness.
+1. Grafana metrics show Object Ingest admission, await completion health, provider/request pressure, Object Publish writes, and output completeness.
 2. Tempo traces show the live service topology and step spans.
-3. Replay JSON shows the high-cardinality details: object keys, await unit ids, interaction ids, item completions, resume release, and published output keys.
+3. Replay JSON shows the high-cardinality details: object keys, await unit ids, interaction ids, item completions, live downstream progress, durable fallback release, and published output keys.
 
 ### Performance Expectations
 
 Do not read the 1k demo duration as only `record-count / permits-per-second`. The mock payment provider also has per-item processing delay, and the first few items pay cold-path costs for the packaged Quarkus app, gRPC clients, Kafka channels, persistence, telemetry export, and provider warmup.
 
-The connector-first path proves that the CSV reader demand pacer is not the mechanism keeping the run alive. It does not remove the provider as the bottleneck. If await dispatch exceeds provider capacity, pending interactions, broker lag, retries, timeouts, or DLQ events are the expected pressure signals. For performance comparisons, separate:
+The connector-first path proves that the CSV reader demand pacer is not the mechanism keeping the run alive. Parser pace comes from reactive demand and the await in-flight window. This does not remove the provider as the bottleneck. If await dispatch exceeds provider capacity, pending interactions, broker lag, retries, timeouts, or DLQ events are the expected pressure signals. For performance comparisons, separate:
 
 1. cold first-item latency,
 2. warm first-item latency,
@@ -690,7 +690,7 @@ The telemetry harness launches the packaged orchestrator application. If the pac
 
 The application ships separate observability surfaces:
 
-1. **Grafana metrics dashboard**: Prometheus-backed throughput, latency, queue depth, inflight, retry, Object Ingest, await-gate, and Object Publish panels
+1. **Grafana metrics dashboard**: Prometheus-backed throughput, latency, queue depth, inflight, retry, Object Ingest, await-boundary, and Object Publish panels
 2. **Tempo tracing surface**: live topology and trace drill-down
 3. **Replay viewer**: deterministic playback from `csv-payments-replay.json`
 
@@ -701,7 +701,7 @@ Dashboards are discovered from `META-INF/grafana/grafana-dashboard-*.json` resou
 The connector-first path is healthy when:
 
 1. Object Ingest listed and submitted the expected source object count.
-2. Await completions are admitted, early-held completions drain, and resume releases follow completed await units.
+2. Await completions are admitted and downstream status/publish progress follows accepted completions; early-held completions and resume releases are durable fallback signals.
 3. Object Publish grouped the same terminal item count the run produced and published the expected `.out` object.
 4. Object Publish failures and await dropped completions remain zero outside intentional duplicate/retry tests.
 

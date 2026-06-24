@@ -1,6 +1,6 @@
 # Await Boundary Operations
 
-Await boundaries are operationally different from ordinary remote calls. A `kind: await` step parks a `QUEUE_ASYNC` execution, dispatches work to an external actor, and resumes only after a correlated completion is admitted.
+Await boundaries are operationally different from ordinary remote calls. A `kind: await` step dispatches work to an external actor and admits only correlated completions. Some paths park a `QUEUE_ASYNC` execution as `WAITING_EXTERNAL`; brokered itemized streams can keep a live await session open and use the parked state as the recovery fallback.
 
 Use this page with [Await Boundaries](/design/await-boundaries) for application design, [Await runtime setup](/deploy/orchestrator-runtime/await) for adapter configuration, and [Replay & Live Topology](/operate/observability/replay) for replay inspection.
 
@@ -51,16 +51,20 @@ Late or duplicate completions can be dropped when the target interaction is alre
 
 - `tpf.await.completion.dropped.total`
 
-## Gate Signals
+## Runtime Signals
 
-In `QUEUE_ASYNC`, itemized await is not one continuous in-memory stream across the external provider gap. The runtime turns that gap into durable coordination gates:
+In `QUEUE_ASYNC`, itemized await has a live path and a durable fallback path.
+
+In the live path, a brokered `ONE_TO_ONE` stream keeps an in-memory await session open while the parent transition is alive. A completion is still recorded durably first, then the live session emits it to the resumed segment when downstream requests it. This is the normal connector-first CSV Payments path.
+
+The durable fallback path is used when the live session is unavailable, after worker loss, or when a later claim must resume from stored state. In that path, the runtime uses durable coordination gates:
 
 1. **Interaction dispatched**: TPF created await interactions and handed requests to the configured await transport.
 2. **Unit dispatch complete**: the await unit has finished dispatching the known item set for that live segment.
-3. **Parent wait durable**: the parent execution is stored as `WAITING_EXTERNAL` for that await unit.
+3. **Parent wait durable**: the parent execution is stored as `WAITING_EXTERNAL` for that await unit when the transition suspends.
 4. **Completion admitted**: a provider completion matched an interaction and was recorded idempotently.
-5. **Early completion held**: a completion arrived before both release gates were true, so it was recorded but not used to start continuation yet.
-6. **Resume released**: dispatch is complete, the parent wait is durable, and enough completions exist to resume the next segment.
+5. **Early completion held**: a completion arrived when no live session could accept it and before the fallback release gates were true, so it was recorded but not used to start continuation yet.
+6. **Resume released**: dispatch is complete, the parent wait is durable, and enough completions exist to resume the next segment from stored state.
 7. **Unit terminal**: the await unit completed, timed out, or failed.
 
 The matching metrics are:
@@ -79,10 +83,11 @@ The matching metrics are:
 
 Operational interpretation:
 
-1. Admitted completions rising without resume releases points to parent-wait persistence, dispatch-complete, or worker-lag pressure.
-2. Early-held completions are normal during races where providers answer quickly, but they should drain after the parent execution is durably waiting.
-3. Dropped completions indicate stale, duplicate, or non-admissible completions; correlate them with transport retries and replay events.
-4. Queue depth and provider lag remain provider-native signals. TPF does not scan the await store to synthesize backlog gauges.
+1. In the live path, admitted completions may move directly into downstream step telemetry without a separate durable resume release per item.
+2. Admitted completions rising without downstream step progress points to live-session demand, provider/broker ordering, downstream backpressure, or fallback-release pressure.
+3. Early-held completions are normal during races where providers answer quickly and no live session accepts the completion, but they should drain after the parent execution is durably waiting.
+4. Dropped completions indicate stale, duplicate, or non-admissible completions; correlate them with transport retries and replay events.
+5. Queue depth and provider lag remain provider-native signals. TPF does not scan the await store to synthesize backlog gauges.
 
 ## Replay And Tracing
 

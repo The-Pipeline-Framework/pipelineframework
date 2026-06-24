@@ -103,6 +103,8 @@ Submit(run-async)
   -> enqueue work item
   -> worker claimLease (OCC + lease expiry)
   -> execute transition
+     -> live await sessions may stream completed item output while transition is alive
+     -> otherwise await suspension parks execution as WAITING_EXTERNAL
   -> publish terminal connector output when configured
   -> commit transition (markSucceeded / scheduleRetry / markTerminalFailure)
   -> enqueue next transition OR finalize terminal state
@@ -116,7 +118,9 @@ Recovery points:
 
 These guarantees are deterministic for orchestrator state, not for external side effects; downstream step boundaries must accept at-least-once invocation.
 
-Await steps add one more durable boundary. An itemized await continuation is not released just because a completion envelope arrived. The coordinator waits until the await unit dispatch is complete and the parent execution is durably `WAITING_EXTERNAL` for that unit. That is the handoff point where in-memory backpressure ends and durable coordination takes over.
+Await steps add one more boundary. For brokered `ONE_TO_ONE` await over a stream, the live queue-async transition can keep a live await session open: completions are recorded durably, signalled to the session, and emitted to downstream demand without waiting for every item in the unit to finish. That is how CSV Payments lets the parser, Kafka await, status processing, and Object Publish move together.
+
+The durable `WAITING_EXTERNAL` path still exists. It is the recovery and fallback path when no live session can accept the completion, or when the worker suspends and another claim must resume later. In that path, the coordinator waits for dispatch completion and the parent execution's `WAITING_EXTERNAL` state before releasing item continuations from the stores.
 
 ## HA Baseline
 

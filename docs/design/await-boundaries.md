@@ -59,19 +59,20 @@ Keep aggregate await payloads bounded. If the design needs unbounded streaming, 
 
 ## Flow Across Await
 
-Await separates a pipeline into live reactive segments and a durable external wait.
+Await separates a pipeline into live reactive segments and durable recovery state.
 
 Inside a live segment, normal reactive demand and backpressure can apply between adjacent steps. A streaming input step can slow down when the downstream step cannot accept more items, and terminal Object Publish can accept each output chunk before the runtime advances.
 
-Across an await boundary, there is no continuous in-memory demand signal. The request has left the process and the completion may arrive later through a different transport, worker, or JVM. TPF therefore turns the boundary into durable coordination instead of pretending one `Multi` subscription still spans the whole flow:
+For brokered `ONE_TO_ONE` await over a stream, `QUEUE_ASYNC` can keep a live await session open while the parent transition is still running. The session is keyed by the durable await unit. Each input item creates a durable interaction and is dispatched through the await transport; each completion is recorded durably before it is offered to the live resumed segment. Source parsing then advances by demand and the configured in-flight window, not by a forced sleep or demand pacer.
 
-1. dispatch the await interactions,
-2. record dispatch completion for the await unit,
-3. park the parent execution as `WAITING_EXTERNAL`,
-4. admit completions by correlation/idempotency,
-5. resume item continuations only after the durable gates are satisfied,
-6. release the parent execution when the itemized unit is complete,
-7. publish terminal output before the execution is marked successful.
+The durable await model still matters. If the process restarts, the worker lease is lost, or a completion arrives after the live session is gone, TPF falls back to durable coordination:
+
+1. record dispatched interactions and dispatch completion for the await unit,
+2. park the parent execution as `WAITING_EXTERNAL` when the transition suspends,
+3. admit completions by correlation/idempotency,
+4. resume item continuations from durable state when no live session accepted the completion,
+5. release the parent execution when the itemized unit is complete,
+6. publish terminal output before the execution is marked successful.
 
 That is why `ONE_TO_ONE` await over a stream is not a hidden batch mode. It is a stream of item interactions owned by one durable await unit. The external provider is not a pipeline step; it is external reality behind a framework-owned I/O shell.
 
@@ -80,25 +81,28 @@ sequenceDiagram
     participant Source as "Live source segment"
     participant Await as "Await step"
     participant Unit as "Await unit"
-    participant Store as "Execution store"
+    participant Live as "Live await session"
     participant External as "External actor"
     participant Continue as "Continuation segment"
     participant Publish as "Object Publish"
+    participant Store as "Execution store"
 
     Source->>Await: emit typed item(s)
     Await->>Unit: create item or aggregate interactions
     Await->>External: dispatch request(s)
-    Await->>Unit: mark dispatch complete
-    Await-->>Store: suspend parent execution
-    Store->>Store: persist WAITING_EXTERNAL(awaitUnitId)
     External-->>Unit: admit correlated completion(s)
-    Unit->>Unit: release only when unit shape is complete
-    Unit-->>Continue: resume typed output(s)
+    Unit-->>Live: signal completion after durable record
+    Live-->>Continue: emit typed output when downstream requests
     Continue-->>Publish: terminal domain output
     Publish-->>Store: publish before markSucceeded
+    alt live session unavailable
+      Await-->>Store: suspend parent execution
+      Store->>Store: persist WAITING_EXTERNAL(awaitUnitId)
+      Unit-->>Continue: resume from durable item continuation
+    end
 ```
 
-The await unit acts as a gatekeeper. For itemized `ONE_TO_ONE` over a stream, it groups item interactions so completions can be ordered and released safely; it does not turn the provider call into a batch request. For aggregate cardinalities, the unit is the durable batch shape: input and/or output is materialized as one replayable unit.
+The await unit is the durable identity for the boundary. For itemized `ONE_TO_ONE` over a stream, it groups item interactions for ordering, dedupe, recovery, and fallback release; it does not turn the provider call into a batch request. For aggregate cardinalities, the unit is the durable batch shape: input and/or output is materialized as one replayable unit.
 
 ## Await Versus Checkpoint Handoff
 

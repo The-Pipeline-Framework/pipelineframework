@@ -91,9 +91,16 @@ TPF emits:
 
 Replay JSON is written from the same runtime semantics by the framework replay exporter.
 
-Await boundaries park the owning `QUEUE_ASYNC` execution on a durable await unit and resume from that unit after completion admission. Replay events include await unit ids, execution ids, interaction ids, step ids, unit status, and expected/completed item counts where the runtime knows them. For operations, see [Await Boundary Operations](/operate/await-boundaries); for the implementation model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
+Await boundaries record durable await unit and interaction events even when the live path keeps work flowing. Replay events include await unit ids, execution ids, interaction ids, step ids, unit status, and expected/completed item counts where the runtime knows them. For operations, see [Await Boundary Operations](/operate/await-boundaries); for the implementation model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
 
-Connector-first pipelines add framework-owned nodes that are not user-authored business steps. In CSV Payments, replay should show Object Ingest as source admission, `Await Payment Provider` as the durable external boundary, item continuations through `Process Payment Status`, and Object Publish as terminal object output. The old folder and output-file services should only appear when the legacy file-step config is being replayed.
+Connector-first pipelines add framework-owned nodes that are not user-authored business steps. In CSV Payments, replay should show Object Ingest as source admission, `Await Payment Provider` as the external Kafka boundary, `Process Payment Status` consuming accepted completions, and Object Publish as terminal object output. The healthy live path is interleaved: parser dispatch, provider completions, status processing, and publish progress should overlap. The old folder and output-file services should only appear when the legacy file-step config is being replayed.
+
+Telemetry impact for live itemized await:
+
+1. await interaction and unit events still describe durable admission and recovery state;
+2. step spans and object-publish events show whether completed items are flowing downstream;
+3. `await_resume_released` mainly describes durable fallback release, not every live item handoff;
+4. a replay that shows the await step waiting for every item before status/publish starts is showing batch-like behavior, not the intended live queue-async path.
 
 Connector replay events include:
 

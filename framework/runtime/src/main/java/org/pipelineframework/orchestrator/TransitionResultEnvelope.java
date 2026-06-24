@@ -17,13 +17,23 @@ public record TransitionResultEnvelope(
     List<SerializedTransitionPayload> outputPayloads,
     TransitionAwaitSuspension awaitSuspension,
     TransitionFailureEnvelope failure,
-    @JsonIgnore List<?> decodedOutputItems) {
+    @JsonIgnore List<?> decodedOutputItems,
+    boolean terminalOutputPublished) {
     public TransitionResultEnvelope(
         TransitionWorkerOutcome outcome,
         List<SerializedTransitionPayload> outputPayloads,
         TransitionAwaitSuspension awaitSuspension,
         TransitionFailureEnvelope failure) {
-        this(outcome, outputPayloads, awaitSuspension, failure, null);
+        this(outcome, outputPayloads, awaitSuspension, failure, null, false);
+    }
+
+    public TransitionResultEnvelope(
+        TransitionWorkerOutcome outcome,
+        List<SerializedTransitionPayload> outputPayloads,
+        TransitionAwaitSuspension awaitSuspension,
+        TransitionFailureEnvelope failure,
+        List<?> decodedOutputItems) {
+        this(outcome, outputPayloads, awaitSuspension, failure, decodedOutputItems, false);
     }
 
     public TransitionResultEnvelope {
@@ -45,6 +55,9 @@ public record TransitionResultEnvelope(
         if (outcome == TransitionWorkerOutcome.COMPLETED && failure != null) {
             throw new IllegalArgumentException("COMPLETED transition envelope must not include failure");
         }
+        if (outcome != TransitionWorkerOutcome.COMPLETED && terminalOutputPublished) {
+            throw new IllegalArgumentException("Only COMPLETED transition envelopes may mark terminal output as published");
+        }
         if (outcome == TransitionWorkerOutcome.WAITING_EXTERNAL && (!outputPayloads.isEmpty() || failure != null || decodedOutputItems != null)) {
             throw new IllegalArgumentException("WAITING_EXTERNAL transition envelope must only include awaitSuspension");
         }
@@ -61,11 +74,24 @@ public record TransitionResultEnvelope(
      * @return completed envelope
      */
     public static TransitionResultEnvelope completed(TransitionPayloadCodec codec, List<?> outputItems) {
+        return completed(codec, outputItems, false);
+    }
+
+    public static TransitionResultEnvelope completed(
+        TransitionPayloadCodec codec,
+        List<?> outputItems,
+        boolean terminalOutputPublished) {
         Objects.requireNonNull(codec, "codec must not be null");
         List<SerializedTransitionPayload> encoded = outputItems == null
             ? List.of()
             : outputItems.stream().map(codec::encode).toList();
-        return new TransitionResultEnvelope(TransitionWorkerOutcome.COMPLETED, encoded, null, null);
+        return new TransitionResultEnvelope(
+            TransitionWorkerOutcome.COMPLETED,
+            encoded,
+            null,
+            null,
+            null,
+            terminalOutputPublished);
     }
 
     /**
@@ -75,12 +101,17 @@ public record TransitionResultEnvelope(
      * @return completed envelope
      */
     public static TransitionResultEnvelope completedInProcess(List<?> outputItems) {
+        return completedInProcess(outputItems, false);
+    }
+
+    public static TransitionResultEnvelope completedInProcess(List<?> outputItems, boolean terminalOutputPublished) {
         return new TransitionResultEnvelope(
             TransitionWorkerOutcome.COMPLETED,
             List.of(),
             null,
             null,
-            outputItems == null ? List.of() : outputItems);
+            outputItems == null ? List.of() : outputItems,
+            terminalOutputPublished);
     }
 
     /**

@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.ObservesAsync;
@@ -411,11 +412,12 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     } catch (Throwable failure) {
       return Uni.createFrom().item(TransitionResultEnvelope.failed(failure));
     }
-    return executePipelineStreamingFromCommand(decodedCommand)
+    AtomicBoolean terminalOutputPublished = new AtomicBoolean(false);
+    return executePipelineStreamingFromCommand(decodedCommand, terminalOutputPublished)
         .collect().asList()
         .onItem().transform(items -> encodeOutputs
-            ? TransitionResultEnvelope.completed(payloadCodec(), items)
-            : TransitionResultEnvelope.completedInProcess(items))
+            ? TransitionResultEnvelope.completed(payloadCodec(), items, terminalOutputPublished.get())
+            : TransitionResultEnvelope.completedInProcess(items, terminalOutputPublished.get()))
         .onFailure(AwaitThrowableSupport::containsAwaitSuspension).recoverWithUni(failure -> {
           AwaitSuspendedException suspended = AwaitThrowableSupport.extractAwaitSuspension(failure);
           return awaitCoordinator.suspensionSnapshot(suspended)
@@ -496,7 +498,9 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     });
   }
 
-  private Multi<?> executePipelineStreamingFromCommand(TransitionWorkerCommand command) {
+  private Multi<?> executePipelineStreamingFromCommand(
+      TransitionWorkerCommand command,
+      AtomicBoolean terminalOutputPublished) {
     return Multi.createFrom().deferred(() -> {
       Uni<Object> sourcePayload = Uni.createFrom().item(command.inputPayload());
       return sourcePayload.onItem().transformToMulti(payload -> {
@@ -533,11 +537,13 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
                 ? multi
                 : ((Uni<?>) reactiveInput).toMulti();
           }
-          Object result = executePipelineStreamingInternalFromStep(
+          PipelineRunner.ExecutionResult executionResult = executePipelineStreamingInternalFromStep(
               reactiveInput,
               steps,
               command.currentStepIndex(),
               stopBeforeStepIndex);
+          terminalOutputPublished.set(executionResult.terminalOutputPublished());
+          Object result = executionResult.result();
           Multi<?> stream;
           if (result instanceof Multi<?> multi) {
             stream = multi;
@@ -597,28 +603,36 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     return fallback;
   }
 
-  private Object executePipelineStreamingInternalFromStep(Object input, int startStepIndex) {
+  private PipelineRunner.ExecutionResult executePipelineStreamingInternalFromStep(Object input, int startStepIndex) {
     List<Object> steps = loadStepsForExecution();
     return executePipelineStreamingInternalFromStep(input, steps, startStepIndex, steps.size());
   }
 
-  private Object executePipelineStreamingInternalFromStep(
+  private PipelineRunner.ExecutionResult executePipelineStreamingInternalFromStep(
       Object input,
       List<Object> steps,
       int startStepIndex,
       int stopBeforeStepIndex) {
     StopWatch watch = new StopWatch();
     if (steps == null) {
-      return Multi.createFrom().failure(new IllegalStateException("Pipeline steps could not be loaded."));
+      return new PipelineRunner.ExecutionResult(
+          Multi.createFrom().failure(new IllegalStateException("Pipeline steps could not be loaded.")),
+          null);
     }
     PipelineRunner.ExecutionResult executionResult =
         pipelineRunner.runFromStepUntilWithContext(input, steps, startStepIndex, stopBeforeStepIndex);
     Object result = executionResult.result();
     if (result instanceof Multi<?> multi) {
-      return executionHooks.attachMultiHooks(multi, watch, executionResult.telemetryContext());
+      return new PipelineRunner.ExecutionResult(
+          executionHooks.attachMultiHooks(multi, watch, executionResult.telemetryContext()),
+          executionResult.telemetryContext(),
+          executionResult.terminalOutputPublished());
     }
     if (result instanceof Uni<?> uni) {
-      return executionHooks.attachMultiHooks(uni.toMulti(), watch, executionResult.telemetryContext());
+      return new PipelineRunner.ExecutionResult(
+          executionHooks.attachMultiHooks(uni.toMulti(), watch, executionResult.telemetryContext()),
+          executionResult.telemetryContext(),
+          executionResult.terminalOutputPublished());
     }
     String resultType = result == null ? "null" : result.getClass().getName();
     Multi<?> failed = Multi.createFrom().failure(new IllegalStateException(
@@ -626,7 +640,10 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
             "PipelineRunner returned unexpected type from step index {0}: {1}",
             startStepIndex,
             resultType)));
-    return executionHooks.attachMultiHooks(failed, watch, executionResult.telemetryContext());
+    return new PipelineRunner.ExecutionResult(
+        executionHooks.attachMultiHooks(failed, watch, executionResult.telemetryContext()),
+        executionResult.telemetryContext(),
+        executionResult.terminalOutputPublished());
   }
 
   private static int firstAggregateStepIndex(List<Object> steps, int startStepIndex) {

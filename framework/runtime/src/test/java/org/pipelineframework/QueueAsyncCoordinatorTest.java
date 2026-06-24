@@ -57,6 +57,7 @@ import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCoordinator;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
+import org.pipelineframework.awaitable.AwaitLiveCompletionRegistry;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.awaitable.AwaitUnitRecord;
 import org.pipelineframework.awaitable.AwaitUnitStatus;
@@ -110,6 +111,9 @@ class QueueAsyncCoordinatorTest {
     private AwaitCoordinator awaitCoordinator;
 
     @Mock
+    private AwaitLiveCompletionRegistry awaitLiveCompletionRegistry;
+
+    @Mock
     private CheckpointPublicationService checkpointPublicationService;
 
     @Mock
@@ -142,6 +146,7 @@ class QueueAsyncCoordinatorTest {
         coordinator.workDispatcher = workDispatcher;
         coordinator.deadLetterPublisher = deadLetterPublisher;
         coordinator.awaitCoordinator = awaitCoordinator;
+        coordinator.awaitLiveCompletionRegistry = awaitLiveCompletionRegistry;
         coordinator.transitionWorkerExecutor = new TransitionWorkerExecutor(
             orchestratorConfig,
             new PipelineInvocationRuntime());
@@ -159,6 +164,8 @@ class QueueAsyncCoordinatorTest {
         lenient().when(workerConfig.maxInFlight()).thenReturn(64);
         lenient().when(workerConfig.saturatedDelay()).thenReturn(Duration.ofSeconds(1));
         lenient().when(awaitCoordinator.importSuspension(any())).thenReturn(Uni.createFrom().voidItem());
+        lenient().when(awaitLiveCompletionRegistry.signal(any(), any()))
+            .thenReturn(Uni.createFrom().item(false));
     }
 
     @Test
@@ -1321,6 +1328,84 @@ class QueueAsyncCoordinatorTest {
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.anyLong());
         verify(workDispatcher, never()).enqueueNow(any());
+    }
+
+    @Test
+    void completeAwaitUsesLiveAwaitStreamInsteadOfDurableItemContinuationWhenAccepted() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitInteractionRecord completed = itemAwaitRecord(0, AwaitInteractionStatus.COMPLETED, "approved");
+        AwaitUnitRecord unit = awaitUnit("unit-1", AwaitUnitStatus.COMPLETED, 1, 1, true, null);
+        AwaitCompletionCommand command = new AwaitCompletionCommand(
+            "tenant-1",
+            completed.interactionId(),
+            null,
+            null,
+            java.util.Map.of("value", "approved"),
+            "user-1",
+            System.currentTimeMillis());
+        AwaitItemContinuationHandler handler = mock(AwaitItemContinuationHandler.class);
+        when(awaitCoordinator.complete(command))
+            .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(completed, false)));
+        when(awaitCoordinator.recordCompletion(org.mockito.ArgumentMatchers.eq(completed), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(unit));
+        when(awaitLiveCompletionRegistry.signal(completed, unit))
+            .thenReturn(Uni.createFrom().item(true));
+
+        AwaitCompletionResult result = coordinator.completeAwait(command, handler).await().indefinitely();
+
+        assertEquals(completed.interactionId(), result.record().interactionId());
+        verify(awaitLiveCompletionRegistry).signal(completed, unit);
+        verify(handler, never()).continueAwaitItem(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyInt(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyLong());
+        verify(handler, never()).releaseAwaitParentIfReady(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyInt(),
+            org.mockito.ArgumentMatchers.anyLong());
+        verify(executionStateStore, never()).getExecution(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void completeAwaitFallsBackToDurableContinuationWhenLiveAwaitSignalFails() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitInteractionRecord completed = itemAwaitRecord(0, AwaitInteractionStatus.COMPLETED, "approved");
+        AwaitUnitRecord unit = awaitUnit("unit-1", AwaitUnitStatus.COMPLETED, 1, 1, true, null);
+        AwaitCompletionCommand command = new AwaitCompletionCommand(
+            "tenant-1",
+            completed.interactionId(),
+            null,
+            null,
+            java.util.Map.of("value", "approved"),
+            "user-1",
+            System.currentTimeMillis());
+        ExecutionRecord<Object, Object> runningParent = createRecord("tenant-1", "exec-1", "key-1");
+        AwaitItemContinuationHandler handler = mock(AwaitItemContinuationHandler.class);
+        when(awaitCoordinator.complete(command))
+            .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(completed, false)));
+        when(awaitCoordinator.recordCompletion(org.mockito.ArgumentMatchers.eq(completed), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(unit));
+        when(awaitLiveCompletionRegistry.signal(completed, unit))
+            .thenReturn(Uni.createFrom().failure(new IllegalStateException("closed live session")));
+        when(executionStateStore.getExecution("tenant-1", "exec-1"))
+            .thenReturn(Uni.createFrom().item(Optional.of(runningParent)));
+
+        AwaitCompletionResult result = coordinator.completeAwait(command, handler).await().indefinitely();
+
+        assertEquals(completed.interactionId(), result.record().interactionId());
+        verify(awaitLiveCompletionRegistry).signal(completed, unit);
+        verify(executionStateStore).getExecution("tenant-1", "exec-1");
+        verify(handler, never()).continueAwaitItem(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyInt(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyLong());
     }
 
     @Test

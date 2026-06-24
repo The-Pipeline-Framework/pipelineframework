@@ -20,6 +20,7 @@ import java.text.MessageFormat;
 import java.util.List;
 import java.util.Objects;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
 import io.quarkus.arc.Unremovable;
@@ -35,6 +36,7 @@ import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.objectpublish.ObjectPublishRunner;
+import org.pipelineframework.objectpublish.ObjectPublishTelemetry;
 import org.pipelineframework.runtime.core.PipelineRunnerCore;
 import org.pipelineframework.step.Configurable;
 import org.pipelineframework.step.ConfigFactory;
@@ -74,6 +76,9 @@ public class PipelineRunner implements AutoCloseable {
 
     @Inject
     PipelineStepExecutor stepExecutor;
+
+    @Inject
+    Instance<ObjectPublishTelemetry> objectPublishTelemetry;
 
     private final PipelineRunnerCore runnerCore = new PipelineRunnerCore();
     private volatile ObjectPublishRunner objectPublishRunner;
@@ -183,13 +188,28 @@ public class PipelineRunner implements AutoCloseable {
             index -> logger.warnf("Warning: Found null step at index %d in configuration, skipping...", index));
 
         // Terminal object publish only runs after a full pipeline execution, not for partial/early-stop runs.
-        Object terminal = stopBeforeStepIndex == orderedSteps.size() && awaitContext == null
-            ? objectPublishRunner().publish(current)
-            : current;
-        return new ExecutionResult(telemetry.instrumentRunCompletion(terminal, telemetryContext), telemetryContext);
+        Object terminal = current;
+        boolean terminalOutputPublished = false;
+        if (stopBeforeStepIndex == orderedSteps.size()) {
+            ObjectPublishRunner publishRunner = objectPublishRunner();
+            if (publishRunner.enabled()) {
+                terminal = publishRunner.publish(current);
+                terminalOutputPublished = true;
+            }
+        }
+        return new ExecutionResult(
+            telemetry.instrumentRunCompletion(terminal, telemetryContext),
+            telemetryContext,
+            terminalOutputPublished);
     }
 
-    public record ExecutionResult(Object result, PipelineTelemetry.RunContext telemetryContext) {
+    public record ExecutionResult(
+        Object result,
+        PipelineTelemetry.RunContext telemetryContext,
+        boolean terminalOutputPublished) {
+        public ExecutionResult(Object result, PipelineTelemetry.RunContext telemetryContext) {
+            this(result, telemetryContext, false);
+        }
     }
 
     /**
@@ -275,7 +295,10 @@ public class PipelineRunner implements AutoCloseable {
         synchronized (this) {
             runner = objectPublishRunner;
             if (runner == null) {
-                runner = ObjectPublishRunner.loadFromDefaultConfig();
+                runner = ObjectPublishRunner.loadFromDefaultConfig(
+                    objectPublishTelemetry != null && objectPublishTelemetry.isResolvable()
+                        ? objectPublishTelemetry.get()
+                        : ObjectPublishTelemetry.NOOP);
                 objectPublishRunner = runner;
             }
             return runner;

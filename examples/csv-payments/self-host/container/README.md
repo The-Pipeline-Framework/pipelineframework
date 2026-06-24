@@ -66,11 +66,11 @@ These defaults are for local verification only. Real deployments should use secr
 
 1. The durable coordinator can submit and observe a stream-shaped CSV pipeline through the generic control-plane API.
 2. A separated REST worker can execute the grouped pipeline runtime while the coordinator owns durable execution, await, release, worker lifecycle, work queue, and DLQ state.
-3. SQS and Kafka await dispatch/completion can run through the same self-host shape.
+3. SQS and Kafka await dispatch/completion can run through the same self-host shape. In the Kafka lane, the transition worker consumes completion messages so the live await session can continue immediately while await records still use the shared Dynamo tables.
 4. The example persistence path can run beside the durable coordinator substrates.
 
 This is still a local reference stack, not a production deployment package.
 
 ## Runtime Boundary Note
 
-SQS and Kafka await completions resume item continuations through the same bounded transition-worker seam used for normal queue-async work. The REST transition worker executes each continuation segment until the itemized unit reaches the next aggregate or terminal boundary. In the connector-first path, Object Publish owns the terminal object write before the execution is marked successful, while generated gRPC step calls target the runtime and persistence containers.
+SQS await completions resume item continuations through the same bounded transition-worker seam used for normal queue-async work. Kafka completions are consumed by the REST transition worker in this stack so live await sessions can stream completions to downstream steps without waiting for a coordinator-side handoff. The REST transition worker executes each continuation segment until the itemized unit reaches the next aggregate or terminal boundary. In the connector-first path, Object Publish owns the terminal object write before the execution is marked successful, while generated gRPC step calls target the runtime and persistence containers.
