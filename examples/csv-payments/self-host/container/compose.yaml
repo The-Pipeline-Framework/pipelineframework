@@ -76,6 +76,7 @@ services:
       AWS_SECRET_ACCESS_KEY: test
       AWS_REGION: "${AWS_REGION:-us-east-1}"
       PIPELINE_CONFIG: "${TPF_CSV_PIPELINE_CONFIG:-${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/config/pipeline.container-sqs.yaml}"
+      PIPELINE_OBJECT_INGEST_AUTOSTART: "false"
       SERVER_KEYSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/target/dev-certs/pipeline-runtime-svc/server-keystore.jks"
       SERVER_KEYSTORE_PASSWORD: secret
       SERVER_TRUSTSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/target/dev-certs/pipeline-runtime-svc/client-truststore.jks"
@@ -102,6 +103,7 @@ services:
         -Dkafka.bootstrap.servers=${TPF_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
         -Dtpf.await.kafka.reactive-messaging.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
         -Dmp.messaging.outgoing.tpf-await-kafka-requests.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
+        -Dmp.messaging.incoming.tpf-await-kafka-responses.enabled=false
         -Dmp.messaging.incoming.csv-payment-provider-requests.enabled=${TPF_RUNTIME_KAFKA_PROVIDER_ENABLED:-false}
         -Dmp.messaging.outgoing.csv-payment-provider-results.enabled=${TPF_RUNTIME_KAFKA_PROVIDER_ENABLED:-false}
         -Dcsv-payments.payment-provider.sqs.enabled=${TPF_RUNTIME_AWAIT_SQS_PROVIDER_ENABLED:-true}
@@ -138,6 +140,7 @@ services:
       AWS_REGION: "${AWS_REGION:-us-east-1}"
       TPF_WORKER_SECRET: "${TPF_WORKER_SECRET:-csv-transition-worker-secret}"
       PIPELINE_CONFIG: "${TPF_CSV_PIPELINE_CONFIG:-${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/config/pipeline.container-sqs.yaml}"
+      PIPELINE_OBJECT_INGEST_AUTOSTART: "false"
       SERVER_KEYSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/target/dev-certs/orchestrator-svc/server-keystore.jks"
       SERVER_KEYSTORE_PASSWORD: secret
       SERVER_TRUSTSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/target/dev-certs/orchestrator-svc/client-truststore.jks"
@@ -166,9 +169,17 @@ services:
         -Dkafka.bootstrap.servers=${TPF_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
         -Dtpf.await.kafka.reactive-messaging.enabled=${TPF_WORKER_AWAIT_KAFKA_ENABLED:-false}
         -Dmp.messaging.outgoing.tpf-await-kafka-requests.enabled=${TPF_WORKER_AWAIT_KAFKA_ENABLED:-false}
-        -Dmp.messaging.incoming.tpf-await-kafka-responses.enabled=false
+        -Dmp.messaging.incoming.tpf-await-kafka-responses.enabled=${TPF_WORKER_AWAIT_KAFKA_ENABLED:-false}
         -Dpipeline.orchestrator.sqs.region=${AWS_REGION:-us-east-1}
         -Dpipeline.orchestrator.sqs.endpoint-override=http://localstack:4566
+        -Dpipeline.orchestrator.state-provider=dynamo
+        -Dpipeline.orchestrator.dynamo.region=${AWS_REGION:-us-east-1}
+        -Dpipeline.orchestrator.dynamo.endpoint-override=http://localstack:4566
+        -Dpipeline.orchestrator.dynamo.execution-table=tpf_execution
+        -Dpipeline.orchestrator.dynamo.execution-key-table=tpf_execution_key
+        -Dpipeline.orchestrator.dynamo.await-unit-table=tpf_await_unit
+        -Dpipeline.orchestrator.dynamo.await-interaction-table=tpf_await_interaction
+        -Dpipeline.orchestrator.dynamo.await-interaction-key-table=tpf_await_interaction_key
         -Dpipeline.health.enabled=false
         -Dquarkus.grpc.clients.process-csv-payments-input.host=runtime
         -Dquarkus.grpc.clients.process-csv-payments-input.port=8183
@@ -225,6 +236,7 @@ services:
       TPF_ADMIN_TOKEN: "${TPF_ADMIN_TOKEN:-csv-control-plane-admin-token}"
       TPF_WORKER_SECRET: "${TPF_WORKER_SECRET:-csv-transition-worker-secret}"
       PIPELINE_CONFIG: "${TPF_CSV_PIPELINE_CONFIG:-${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/config/pipeline.container-sqs.yaml}"
+      PIPELINE_OBJECT_INGEST_AUTOSTART: "false"
       SERVER_KEYSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/target/dev-certs/orchestrator-svc/server-keystore.jks"
       CLIENT_TRUSTSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/examples/csv-payments/target/dev-certs/orchestrator-svc/client-truststore.jks"
       JAVA_OPTS_APPEND: >-

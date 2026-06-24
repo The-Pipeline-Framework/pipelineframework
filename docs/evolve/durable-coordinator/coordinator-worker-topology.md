@@ -139,9 +139,10 @@ flowchart LR
     Runtime --> AwaitProvider["Payment provider mock"]
     AwaitProvider --> AwaitSubstrate["SQS response queue<br/>or Kafka topic"]
     AwaitSubstrate --> Coord
+    AwaitSubstrate --> TWorker
 ```
 
-The default lane uses SQS await request/completion queues so the whole stack can run against the LocalStack-backed AWS-shaped substrate. The Kafka lane runs the same coordinator and worker topology with Kafka as the await provider substrate. That proves the await abstraction is not tied to one broker.
+The default lane uses SQS await request/completion queues so the whole stack can run against the LocalStack-backed AWS-shaped substrate. The Kafka lane runs the same coordinator and worker topology with Kafka as the await provider substrate. In that lane, the transition worker consumes Kafka completions for the live await session while using the same Dynamo await tables as the coordinator. That proves the await abstraction is not tied to one broker without forcing Kafka completions through the coordinator before downstream steps can proceed.
 
 ## Transition Sequence
 

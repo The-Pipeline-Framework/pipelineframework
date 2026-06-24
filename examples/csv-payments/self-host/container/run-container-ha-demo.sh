@@ -31,7 +31,7 @@ case "${TPF_CSV_AWAIT_TRANSPORT}" in
     export TPF_RUNTIME_KAFKA_PROVIDER_ENABLED="${TPF_RUNTIME_KAFKA_PROVIDER_ENABLED:-true}"
     export TPF_RUNTIME_AWAIT_SQS_PROVIDER_ENABLED="${TPF_RUNTIME_AWAIT_SQS_PROVIDER_ENABLED:-false}"
     export TPF_WORKER_AWAIT_KAFKA_ENABLED="${TPF_WORKER_AWAIT_KAFKA_ENABLED:-true}"
-    export TPF_COORDINATOR_AWAIT_KAFKA_ENABLED="${TPF_COORDINATOR_AWAIT_KAFKA_ENABLED:-true}"
+    export TPF_COORDINATOR_AWAIT_KAFKA_ENABLED="${TPF_COORDINATOR_AWAIT_KAFKA_ENABLED:-false}"
     export TPF_COORDINATOR_AWAIT_SQS_POLLER_ENABLED="${TPF_COORDINATOR_AWAIT_SQS_POLLER_ENABLED:-false}"
     ;;
   *)
@@ -135,7 +135,6 @@ if [[ "${CI_MODE}" == "true" ]]; then
   compose down -v --remove-orphans >/dev/null 2>&1 || true
   rm -rf "${TPF_RUN_DIR}"
 fi
-generate_container_pipeline_config
 
 require_free_port "COORDINATOR" "${TPF_COORDINATOR_PORT}"
 require_free_port "WORKER" "${TPF_WORKER_PORT}"
@@ -147,9 +146,14 @@ if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" ]]; then
 fi
 
 if [[ "${TPF_SKIP_CONTAINER_BUILD}" != "true" ]]; then
+  if [[ -n "${TPF_CSV_PIPELINE_CONFIG_EXPLICIT}" ]]; then
+    export TPF_CSV_PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG_EXPLICIT}"
+  else
+    unset TPF_CSV_PIPELINE_CONFIG
+  fi
   "${SCRIPT_DIR}/build-container-images.sh"
-  generate_container_pipeline_config
 fi
+generate_container_pipeline_config
 
 bash "${EXAMPLE_DIR}/generate-dev-certs.sh" >/dev/null
 
