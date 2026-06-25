@@ -9,10 +9,41 @@ The await unit runtime is not a new transport. It is a persistence and replay mo
 | Unit of Work | `AwaitUnitRecord` | One authored await boundary has one durable completion contract. |
 | Durable continuation | `ExecutionRecord.awaitUnitId` | The execution parks without embedding response payload state in the execution row. |
 | Adapter | `AwaitTransportAdapter` | `interaction-api`, `webhook`, and `kafka` differ at dispatch/admission edges, not in core resume semantics. |
-| State machine | unit and interaction statuses | Runtime transitions are explicit and terminal states are guarded. |
+| State machine | unit and interaction statuses | State transitions are explicit and terminal states are guarded. |
 | Optimistic concurrency | versioned stores and conditional updates | Concurrent dispatch/completion cannot silently overwrite progress. |
 | Lease-based recovery | `QUEUE_ASYNC` execution claiming | Worker failure is handled by re-claiming and replaying safe transitions. |
 | Idempotent admission | idempotency and correlation lookups | Duplicate completions resolve to the same logical interaction where possible. |
+
+## Semantic Flow Objects
+
+The queue-async refactor names the flows and immutable decisions that were previously buried inside the coordinator.
+
+| Owner | Owns | Does not own |
+| --- | --- | --- |
+| `QueueAsyncCoordinator` | API entrypoints, worker lifecycle, provider wiring, sweeper startup | completion routing, transition commit decisions |
+| `QueueAsyncExecutionFlow` | work-item `Uni` chain: admission, lease claim, transition command, worker execution, commit routing | store semantics, await completion admission, publication mechanics |
+| `ItemizedAwaitStream` | live stream-await `Multi`: demand-bounded dispatch, live completion emission, live session lifecycle | durable fallback, child continuation records, success commit |
+| `AwaitCompletionFlow` | completion normalization, durable recording, live-session signalling, durable fallback routing | step execution, provider dispatch, terminal publication |
+| `ItemContinuationFlow` | item-continuation readiness gates, durable fallback dispatch, retry/failure handling, child continuation records, ordered parent release | live stream demand, non-item await resume, terminal publication |
+| `TransitionCommitFlow` | completed/suspended/failed transition commit ordering, result-shape validation, success/wait/failure store commits | await completion admission, live stream demand, terminal publication mechanics |
+| `TerminalPublicationFlow` | checkpoint handoff, terminal Object Publish, portable output decoding, publish-before-success effects | success/wait/failure store commits, await completion admission |
+| `LiveAwaitSession` | immutable live-session state, subscriber readiness, demand, duplicate completion handling, terminal stream signals | stores, dispatchers, object writers, telemetry policy |
+
+The split is useful only because each owner has a narrow decision model. `AwaitCompletionOutcome`, `TransitionCommitPlan`, and `TerminalPublicationPlan` are immutable records, not service calls. Stores, dispatchers, publishers, and metrics are effects at the boundary; they are not hidden inside the state machine.
+
+The naming matters. A flow object composes `Uni`/`Multi` work and interprets plans. It should not become a procedural bag of helpers. A plan or outcome object is data: it says what should happen, but it does not mutate a store, call a dispatcher, publish an object, or emit telemetry.
+
+## Distributed Semantics
+
+Queue-async is allowed to run on more than one process. The central store is the distributed source of truth:
+
+1. execution records are claimed by lease and versioned writes,
+2. await completions are recorded idempotently by interaction/unit facts,
+3. stale execution versions lose optimistic-concurrency races,
+4. duplicate completions either signal the same live session once or become record-only no-ops,
+5. terminal publication still happens before success commit.
+
+`LiveAwaitSession` is not distributed in this slice. It is a process-local fast path for a stream that is still alive. When a completion lands on a different node, or when the stream has already suspended or disappeared, `AwaitCompletionFlow` falls back to durable item continuations guarded by `dispatchComplete` and parent `WAITING_EXTERNAL`.
 
 ## Why The Unit Model Fixed The Design
 

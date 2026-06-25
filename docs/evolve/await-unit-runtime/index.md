@@ -1,4 +1,4 @@
-# Await Unit Runtime
+# Await Unit Flow Model
 
 Await units are the durable suspend/resume model for `kind: await` steps. The unit is the interaction boundary TPF owns: it records what was dispatched, what completion is required, and what payload should be replayed when the owning execution resumes.
 
@@ -63,6 +63,13 @@ classDiagram
     class PipelineExecutionService
     class PipelineRunner
     class QueueAsyncCoordinator
+    class QueueAsyncExecutionFlow
+    class AwaitCompletionFlow
+    class ItemContinuationFlow
+    class TransitionCommitFlow
+    class TerminalPublicationFlow
+    class ItemizedAwaitStream
+    class LiveAwaitSession
     class AwaitStepSupport
     class AwaitCoordinator
     class AwaitUnitStore
@@ -74,16 +81,41 @@ classDiagram
     AwaitUnitRecord "1" --> "1..n" AwaitInteractionRecord : owns
     PipelineExecutionService --> PipelineRunner : run / resume steps
     PipelineRunner --> AwaitStepSupport : execute generated await step
+    AwaitStepSupport --> ItemizedAwaitStream : stream await dispatch
     AwaitStepSupport --> AwaitCoordinator : create / dispatch unit
+    ItemizedAwaitStream --> LiveAwaitSession : open live stream
     PipelineExecutionService --> QueueAsyncCoordinator : async execution lifecycle
-    QueueAsyncCoordinator --> AwaitCoordinator : complete / resume
-    QueueAsyncCoordinator --> ExecutionStateStore : wait / resume execution
+    QueueAsyncCoordinator --> QueueAsyncExecutionFlow : process work item
+    QueueAsyncCoordinator --> AwaitCompletionFlow : route completions
+    QueueAsyncCoordinator --> ItemContinuationFlow : item continuations
+    QueueAsyncCoordinator --> TransitionCommitFlow : commit worker outcome
+    AwaitCompletionFlow --> AwaitCoordinator : complete / record
+    AwaitCompletionFlow --> LiveAwaitSession : signal accepted item
+    AwaitCompletionFlow --> ItemContinuationFlow : durable fallback
+    ItemContinuationFlow --> ExecutionStateStore : child records / parent release
+    TransitionCommitFlow --> ExecutionStateStore : wait / succeed / fail
+    TransitionCommitFlow --> ItemContinuationFlow : release already-completed items
+    TransitionCommitFlow --> TerminalPublicationFlow : publish-before-success barrier
     AwaitCoordinator --> AwaitUnitStore
     AwaitCoordinator --> AwaitInteractionStore
     AwaitCoordinator --> AwaitTransportAdapter : dispatch
 ```
 
 `AwaitUnitRecord` is the source of truth for completion of the authored await boundary. `AwaitInteractionRecord` is the transport-facing projection. That distinction prevents execution state, dispatch strategy, and step cardinality from collapsing into one ambiguous record.
+
+The current queue-async implementation keeps `QueueAsyncCoordinator` as the facade for API entrypoints, worker lifecycle, provider wiring, and sweeper startup. The semantic behavior is named as flows over immutable facts:
+
+1. `QueueAsyncExecutionFlow` claims work and composes the transition worker pipeline as a `Uni`.
+2. `ItemizedAwaitStream` owns the live `Multi` shape for stream await dispatch and completion emission.
+3. `AwaitCompletionFlow` records completions, then chooses live-session admission or durable fallback.
+4. `ItemContinuationFlow` owns durable item continuation fallback and ordered parent release.
+5. `TransitionCommitFlow` commits completed, suspended, and failed worker outcomes.
+6. `TerminalPublicationFlow` owns checkpoint and Object Publish publish-before-success effects.
+7. `LiveAwaitSession` owns demand, duplicate handling, terminal delivery, and cancellation as an immutable state machine.
+
+Small records such as `AwaitCompletionOutcome`, `TransitionCommitPlan`, and `TerminalPublicationPlan` describe decisions. Store writes, dispatch, publication, and telemetry remain interpreted effects at the boundary.
+
+Distributed correctness still comes from the central store and versioned writes. A live await session is process-local optimization: if a completion lands on the process that owns the live stream, it can be emitted by demand after the durable completion record is written. If it lands elsewhere, or if the live stream is gone, the same durable facts drive item continuation fallback.
 
 ## CSV Payments Applied Model
 

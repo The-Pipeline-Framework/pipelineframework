@@ -1794,6 +1794,91 @@ class QueueAsyncCoordinatorTest {
             org.mockito.ArgumentMatchers.anyLong());
     }
 
+    @Test
+    void timeoutSweepStopsWhenFailureWriteLosesRaceToTerminalExecution() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.sweepLimit()).thenReturn(100);
+        AwaitInteractionRecord interaction = awaitRecord();
+        ExecutionRecord<Object, Object> waiting = new ExecutionRecord<>(
+            "tenant-1",
+            "exec-1",
+            "key-1",
+            ExecutionResultShape.SINGLE,
+            ExecutionStatus.WAITING_EXTERNAL,
+            7L,
+            2,
+            0,
+            null,
+            0L,
+            0L,
+            null,
+            "input",
+            "unit-1",
+            null,
+            null,
+            null,
+            1L,
+            1L,
+            99999999L);
+        ExecutionRecord<Object, Object> succeeded = recordWithStatus(waiting, ExecutionStatus.SUCCEEDED, 8L, 0);
+        when(awaitCoordinator.findTimedOut(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.eq(100)))
+            .thenReturn(Uni.createFrom().item(java.util.List.of(interaction)));
+        when(awaitCoordinator.markTimedOut(org.mockito.ArgumentMatchers.eq(interaction), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(interaction)));
+        when(executionStateStore.getExecution("tenant-1", "exec-1"))
+            .thenReturn(Uni.createFrom().item(Optional.of(waiting)))
+            .thenReturn(Uni.createFrom().item(Optional.of(succeeded)));
+        when(executionStateStore.markTerminalFailure(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-1"),
+                org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.eq(ExecutionStatus.FAILED),
+                org.mockito.ArgumentMatchers.eq("exec-1:2:0"),
+                org.mockito.ArgumentMatchers.eq("AWAIT_TIMEOUT"),
+                org.mockito.ArgumentMatchers.contains("interaction-1"),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.empty()));
+        when(executionStateStore.findDueExecutions(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.eq(100)))
+            .thenReturn(Uni.createFrom().item(java.util.List.of()));
+
+        coordinator.sweepDueExecutions();
+
+        verify(executionStateStore, timeout(500).times(1)).markTerminalFailure(
+            org.mockito.ArgumentMatchers.eq("tenant-1"),
+            org.mockito.ArgumentMatchers.eq("exec-1"),
+            org.mockito.ArgumentMatchers.eq(7L),
+            org.mockito.ArgumentMatchers.eq(ExecutionStatus.FAILED),
+            org.mockito.ArgumentMatchers.eq("exec-1:2:0"),
+            org.mockito.ArgumentMatchers.eq("AWAIT_TIMEOUT"),
+            org.mockito.ArgumentMatchers.contains("interaction-1"),
+            org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
+    void timeoutSweepDoesNotFailParentWhenInteractionTimeoutMarkLosesRace() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.sweepLimit()).thenReturn(100);
+        AwaitInteractionRecord interaction = awaitRecord();
+        when(awaitCoordinator.findTimedOut(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.eq(100)))
+            .thenReturn(Uni.createFrom().item(java.util.List.of(interaction)));
+        when(awaitCoordinator.markTimedOut(org.mockito.ArgumentMatchers.eq(interaction), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.empty()));
+        when(executionStateStore.findDueExecutions(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.eq(100)))
+            .thenReturn(Uni.createFrom().item(java.util.List.of()));
+
+        coordinator.sweepDueExecutions();
+
+        verify(executionStateStore, after(200).never()).markTerminalFailure(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyLong(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyLong());
+    }
+
     private void configureQueueModeDefaults() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         when(orchestratorConfig.executionTtlDays()).thenReturn(7);

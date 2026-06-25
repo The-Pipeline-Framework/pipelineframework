@@ -1,19 +1,12 @@
 package org.pipelineframework.awaitable;
 
-import java.lang.reflect.Array;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
-import io.smallrye.mutiny.subscription.Cancellable;
-import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
@@ -265,214 +258,12 @@ public class AwaitStepSupport {
         return new AwaitExecutionContext(context.tenantId(), context.executionId(), context.currentStepIndex());
     }
 
-    @SuppressWarnings("unchecked")
     private <I, O> Multi<O> awaitOneToOneStream(
         AwaitStepDescriptor descriptor,
         Multi<I> input,
-        AwaitExecutionContext context
-    ) {
-        if (isKafkaItemStream(descriptor)) {
-            return awaitOneToOneKafkaLiveStream(descriptor, input, context);
-        }
-        return awaitOneToOneStreamSuspending(descriptor, input, context);
-    }
-
-    @SuppressWarnings("unchecked")
-    private <I, O> Multi<O> awaitOneToOneKafkaLiveStream(
-        AwaitStepDescriptor descriptor,
-        Multi<I> input,
-        AwaitExecutionContext context
-    ) {
-        int stepIndex = context.currentStepIndex();
-        String unitId = streamUnitId(descriptor, context, stepIndex);
-        return Multi.createFrom().deferred(() -> {
-            AwaitLiveCompletionRegistry.LiveAwaitSession<O> session;
-            try {
-                session = liveCompletionRegistry.open(descriptor, context.tenantId(), unitId);
-            } catch (Throwable failure) {
-                return Multi.createFrom().failure(failure);
-            }
-            AtomicInteger itemIndex = new AtomicInteger();
-            AtomicReference<Cancellable> dispatchSubscription = new AtomicReference<>();
-            Uni<Void> dispatch = dispatchLiveKafkaAwaitItems(descriptor, input, context, unitId, itemIndex, session)
-                .onItem().transformToUni(ignored -> {
-                    int dispatchedItems = itemIndex.get();
-                    if (dispatchedItems == 0) {
-                        session.markDispatchComplete(0);
-                        return Uni.createFrom().voidItem();
-                    }
-                    return awaitCoordinator.markDispatchComplete(
-                        context.tenantId(),
-                        unitId,
-                        dispatchedItems,
-                        System.currentTimeMillis())
-                        .invoke(unit -> session.markDispatchComplete(dispatchedItems))
-                        .replaceWithVoid();
-                })
-                .onFailure().invoke(session::fail)
-                .replaceWithVoid();
-            return Multi.createFrom().publisher(session)
-                .onSubscription().invoke(ignored -> dispatchSubscription.set(dispatch.subscribe().with(
-                    item -> {
-                    },
-                    session::fail)))
-                .onTermination().invoke((failure, cancelled) -> {
-                    Cancellable active = dispatchSubscription.get();
-                    if (cancelled && active != null) {
-                        active.cancel();
-                    }
-                    if (failure != null) {
-                        session.fail(failure);
-                    }
-                    liveCompletionRegistry.close(context.tenantId(), unitId);
-                });
-        });
-    }
-
-    private <I, O> Uni<Void> dispatchLiveKafkaAwaitItems(
-        AwaitStepDescriptor descriptor,
-        Multi<I> input,
-        AwaitExecutionContext context,
-        String unitId,
-        AtomicInteger itemIndex,
-        AwaitLiveCompletionRegistry.LiveAwaitSession<O> session
-    ) {
-        Multi<AwaitInteractionRecord> dispatches = input.onItem().transformToUni(item -> {
-            int index = itemIndex.getAndIncrement();
-            return dispatchLiveKafkaAwaitItem(descriptor, item, context, unitId, index, session);
-        }).merge(awaitMaxConcurrency());
-        if (pipelineConfig != null && pipelineConfig.parallelism() == ParallelismPolicy.SEQUENTIAL) {
-            dispatches = input.onItem().transformToUni(item -> {
-                int index = itemIndex.getAndIncrement();
-                return dispatchLiveKafkaAwaitItem(descriptor, item, context, unitId, index, session);
-            }).concatenate();
-        }
-        return dispatches.collect().in(() -> Boolean.TRUE, (ignored, record) -> {
-        }).replaceWithVoid();
-    }
-
-    private <I, O> Uni<AwaitInteractionRecord> dispatchLiveKafkaAwaitItem(
-        AwaitStepDescriptor descriptor,
-        I item,
-        AwaitExecutionContext context,
-        String unitId,
-        int index,
-        AwaitLiveCompletionRegistry.LiveAwaitSession<O> session
-    ) {
-        return withAwaitExecutionContext(context, () -> awaitCoordinator.createOrGetItem(
-            descriptor,
-            context.tenantId(),
-            context.executionId(),
-            context.currentStepIndex(),
-            context.executionId() + ":" + context.currentStepIndex() + ":" + index,
-            item,
-            unitId,
-            index,
-            null,
-            null)
-            .onItem().transformToUni(created -> {
-                AwaitInteractionRecord record = created.record();
-                if (record.status() == AwaitInteractionStatus.COMPLETED) {
-                    return session.accept(record).replaceWith(record);
-                }
-                if (record.status().terminal()) {
-                    return Uni.createFrom().failure(new IllegalStateException(
-                        "Await interaction " + record.interactionId()
-                            + " is terminal with status " + record.status()
-                            + " and cannot be accepted by the live await stream."));
-                }
-                Uni<Void> accepted = session.awaitAccepted(record);
-                if (record.status() == AwaitInteractionStatus.WAITING) {
-                    return awaitCoordinator.dispatch(descriptor, record)
-                        .chain(dispatched -> accepted.replaceWith(dispatched));
-                }
-                return accepted.replaceWith(record);
-            }));
-    }
-
-    @SuppressWarnings("unchecked")
-    private <I, O> Multi<O> awaitOneToOneStreamSuspending(
-        AwaitStepDescriptor descriptor,
-        Multi<I> input,
-        AwaitExecutionContext context
-    ) {
-        int stepIndex = context.currentStepIndex();
-        String unitId = streamUnitId(descriptor, context, stepIndex);
-        AtomicInteger itemIndex = new AtomicInteger();
-        Multi<AwaitInteractionRecord> dispatched = input.onItem().transformToUniAndConcatenate(item -> {
-            int index = itemIndex.getAndIncrement();
-            return withAwaitExecutionContext(context, () -> awaitCoordinator.createOrGetItem(
-                descriptor,
-                context.tenantId(),
-                context.executionId(),
-                stepIndex,
-                context.executionId() + ":" + stepIndex + ":" + index,
-                item,
-                unitId,
-                index,
-                null,
-                null)
-                .onItem().transformToUni(created -> {
-                    AwaitInteractionRecord record = created.record();
-                    return record.status() == AwaitInteractionStatus.WAITING
-                        ? awaitCoordinator.dispatch(descriptor, record)
-                        : Uni.createFrom().item(record);
-                }));
-        });
-        return dispatched
-            .collect().in(() -> Boolean.TRUE, (ignored, record) -> {
-            })
-            .onItem().transformToMulti(ignored -> {
-                if (itemIndex.get() == 0) {
-                    return Multi.createFrom().empty();
-                }
-                return awaitCoordinator.markDispatchComplete(
-                    context.tenantId(),
-                    unitId,
-                    itemIndex.get(),
-                    System.currentTimeMillis())
-                    .onItem().transformToMulti(unit -> unit.status() == AwaitUnitStatus.COMPLETED
-                        ? awaitCoordinator.loadResumePayload(context.tenantId(), unitId)
-                            .toMulti()
-                            .onItem().transformToMultiAndConcatenate(payload -> {
-                                if (payload instanceof Iterable) {
-                                    return Multi.createFrom().<O>iterable((Iterable<O>) payload);
-                                } else if (payload != null && payload.getClass().isArray()) {
-                                    int length = Array.getLength(payload);
-                                    List<O> items = new ArrayList<>(length);
-                                    for (int i = 0; i < length; i++) {
-                                        items.add((O) Array.get(payload, i));
-                                    }
-                                    return Multi.createFrom().iterable(items);
-                                } else {
-                                    return Multi.createFrom().<O>item((O) payload);
-                                }
-                            })
-                        : Uni.createFrom().<O>failure(new AwaitSuspendedException(
-                            context.tenantId(),
-                            context.executionId(),
-                            unitId,
-                            stepIndex)).toMulti());
-            });
-    }
-
-    private static boolean isKafkaItemStream(AwaitStepDescriptor descriptor) {
-        return descriptor != null
-            && "ONE_TO_ONE".equalsIgnoreCase(descriptor.cardinality())
-            && "kafka".equalsIgnoreCase(descriptor.transportType());
-    }
-
-    private static String streamUnitId(AwaitStepDescriptor descriptor, AwaitExecutionContext context, int stepIndex) {
-        return UUID.nameUUIDFromBytes((context.tenantId() + ":" + context.executionId() + ":"
-            + descriptor.stepId() + ":" + stepIndex).getBytes(StandardCharsets.UTF_8)).toString();
-    }
-
-    private int awaitMaxConcurrency() {
-        int configured = pipelineConfig == null ? 128 : pipelineConfig.maxConcurrency();
-        if (configured < 1) {
-            return 1;
-        }
-        return Math.min(configured, 1024);
+        AwaitExecutionContext context) {
+        return new ItemizedAwaitStream(awaitCoordinator, liveCompletionRegistry, pipelineConfig)
+            .awaitOneToOneStream(descriptor, input, context);
     }
 
     private <T> Uni<T> withAwaitExecutionContext(AwaitExecutionContext context, java.util.function.Supplier<Uni<T>> supplier) {

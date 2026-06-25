@@ -653,7 +653,7 @@ class AwaitStepSupportTest {
         boolean dispatchComplete) {
         return new AwaitUnitRecord(
             "tenant1",
-            streamUnitId(),
+            unitId,
             "exec123",
             "review",
             2,
