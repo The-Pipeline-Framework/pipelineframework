@@ -12,6 +12,7 @@ Use public Design/Develop/Deploy docs for application usage. Use this page when 
 | Generated artifacts and module ownership | [Pipeline Compilation](/develop/pipeline-compilation/) |
 | Runtime layout vs build topology | [Runtime Layouts](/deploy/runtime-layouts/) |
 | Queue-async durable execution | [Queue-Async Runtime](/deploy/orchestrator-runtime/queue-async) |
+| Queue-async immutable segment/boundary model | [Queue-Async Immutable Boundaries](/evolve/queue-async-immutable-boundaries) |
 | Await and callback admission | [Await Boundaries](/design/await-boundaries) and [Await Runtime Setup](/deploy/orchestrator-runtime/await) |
 | Checkpoint handoff | [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff) |
 | Brokered runtime boundaries | [Brokered Runtime Boundaries](/evolve/brokered-boundaries/) |
@@ -30,7 +31,7 @@ The current durable direction is a queue-driven async control plane:
 6. state is committed,
 7. terminal state is exposed through status/result APIs or failures move to the configured DLQ.
 
-This is not a full event-sourced runtime in the current milestone. New durable control-plane storage should prefer immutable records, conditional writes, and append-only event records.
+This is not a full event-sourced runtime in the current milestone. The target direction is described in [Queue-Async Immutable Boundaries](/evolve/queue-async-immutable-boundaries): immutable segment and boundary facts first, with stores maintaining projections for efficient lookup.
 
 ## Legacy Reference
 
