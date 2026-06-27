@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator.controlplane;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -102,6 +103,45 @@ class ControlPlaneReducerTest {
         assertEquals(PipelineRunStatus.FAILED, projection.run().orElseThrow().status());
         assertEquals("BOUNDARY_TIMEOUT", projection.run().orElseThrow().errorCode());
         assertEquals(SegmentStatus.FAILED, projection.segments().get("segment-0").status());
+        assertEquals(SegmentAttemptStatus.FAILED, projection.attempts().get("attempt-0").status());
+        assertEquals("BOUNDARY_TIMEOUT", projection.attempts().get("attempt-0").failureCode());
+        assertEquals(BoundaryUnitStatus.TIMED_OUT, projection.boundaries().get("await-unit").status());
+        assertEquals(BoundaryInteractionStatus.TIMED_OUT, projection.interactions().get("interaction-0").status());
+    }
+
+    @Test
+    void lateDispatchAndCompletionFactsDoNotReopenTimedOutBoundaryState() {
+        ControlPlaneProjection projection = ControlPlaneReducer.reduce("tenant", "run-1", List.of(
+            event(1, submitted()),
+            event(2, new ControlPlaneFact.SegmentAttemptStarted("tenant", "run-1", "segment-0", "attempt-0", 0)),
+            event(3, new ControlPlaneFact.SegmentSuspended(
+                "tenant",
+                "run-1",
+                "segment-0",
+                "attempt-0",
+                "await-unit",
+                BoundaryKind.AWAIT,
+                1,
+                1)),
+            event(4, dispatched("await-unit", BoundaryKind.AWAIT, "interaction-0", "idem-0", 0)),
+            event(5, new ControlPlaneFact.InteractionTimedOut(
+                "tenant",
+                "run-1",
+                "await-unit",
+                "interaction-0",
+                "provider timeout")),
+            event(6, new ControlPlaneFact.BoundaryDispatchCompleted("tenant", "run-1", "await-unit", 1)),
+            event(7, BoundaryAdmissionFacts.completion(new BoundaryAdmissionRequest(
+                "tenant",
+                "run-1",
+                "await-unit",
+                BoundaryKind.AWAIT,
+                "interaction-0",
+                "idem-0",
+                "late-status")))));
+
+        assertEquals(PipelineRunStatus.FAILED, projection.run().orElseThrow().status());
+        assertEquals(SegmentAttemptStatus.FAILED, projection.attempts().get("attempt-0").status());
         assertEquals(BoundaryUnitStatus.TIMED_OUT, projection.boundaries().get("await-unit").status());
         assertEquals(BoundaryInteractionStatus.TIMED_OUT, projection.interactions().get("interaction-0").status());
     }
@@ -120,7 +160,17 @@ class ControlPlaneReducerTest {
                 BoundaryKind.AWAIT,
                 1,
                 1)),
-            event(4, new ControlPlaneFact.ContinuationSegmentCreated(
+            event(4, dispatched("await-unit", BoundaryKind.AWAIT, "interaction-0", "idem-0", 0)),
+            event(5, BoundaryAdmissionFacts.completion(new BoundaryAdmissionRequest(
+                "tenant",
+                "run-1",
+                "await-unit",
+                BoundaryKind.AWAIT,
+                "interaction-0",
+                "idem-0",
+                "status-0"))),
+            event(6, new ControlPlaneFact.BoundaryDispatchCompleted("tenant", "run-1", "await-unit", 1)),
+            event(7, new ControlPlaneFact.ContinuationSegmentCreated(
                 "tenant",
                 "run-1",
                 "segment-0",
@@ -131,8 +181,63 @@ class ControlPlaneReducerTest {
                 "status-0"))));
 
         assertEquals(PipelineRunStatus.RUNNING, projection.run().orElseThrow().status());
+        assertEquals(BoundaryUnitStatus.COMPLETED, projection.boundaries().get("await-unit").status());
         assertEquals(SegmentStatus.QUEUED, projection.segments().get("segment-1").status());
         assertEquals("status-0", projection.segments().get("segment-1").inputPayload());
+    }
+
+    @Test
+    void segmentBoundsOnlyAllowUnboundedSentinelOrForwardStopIndex() {
+        assertThrows(IllegalArgumentException.class,
+            () -> new DueSegment("tenant", "run-1", "segment-0", 2, -2, "input"));
+        assertThrows(IllegalArgumentException.class,
+            () -> new ExecutionSegment(
+                "tenant",
+                "run-1",
+                "segment-0",
+                2,
+                -2,
+                SegmentStatus.QUEUED,
+                "input",
+                List.of(),
+                null,
+                100L,
+                100L,
+                100L));
+        assertThrows(IllegalArgumentException.class,
+            () -> new ControlPlaneFact.RunSubmitted(
+                "tenant",
+                "run-1",
+                "execution-key",
+                "pipeline",
+                "contract",
+                "release",
+                ExecutionResultShape.SINGLE,
+                "segment-0",
+                2,
+                -2,
+                "input",
+                1000L));
+    }
+
+    @Test
+    void boundaryUnitRejectsContradictoryCompletedCount() {
+        assertThrows(IllegalArgumentException.class,
+            () -> new BoundaryUnit(
+                "tenant",
+                "run-1",
+                "await-unit",
+                BoundaryKind.AWAIT,
+                BoundaryUnitStatus.DISPATCH_COMPLETE,
+                "segment-0",
+                "attempt-0",
+                1,
+                3,
+                2,
+                java.util.Set.of("idem-0"),
+                true,
+                100L,
+                101L));
     }
 
     private static ControlPlaneFact.RunSubmitted submitted() {

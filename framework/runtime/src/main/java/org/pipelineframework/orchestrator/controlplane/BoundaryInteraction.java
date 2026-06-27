@@ -31,6 +31,8 @@ public record BoundaryInteraction(
         if (itemIndex != null && itemIndex < 0) {
             throw new IllegalArgumentException("itemIndex must not be negative");
         }
+        requestPayload = ControlPlaneChecks.freezePayload(requestPayload);
+        responsePayload = ControlPlaneChecks.freezePayload(responsePayload);
         transportType = ControlPlaneChecks.requireText(transportType, "transportType");
         ControlPlaneChecks.requireNonNegative(deadlineEpochMs, "deadlineEpochMs");
         ControlPlaneChecks.requireNonNegative(createdAtEpochMs, "createdAtEpochMs");

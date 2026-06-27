@@ -40,6 +40,8 @@ public record SegmentAttempt(
     }
 
     SegmentAttempt failed(String failureCode, String failureMessage, long nowEpochMs) {
+        failureCode = ControlPlaneChecks.requireText(failureCode, "failureCode");
+        failureMessage = failureMessage == null ? "" : failureMessage;
         return new SegmentAttempt(
             tenantId,
             runId,

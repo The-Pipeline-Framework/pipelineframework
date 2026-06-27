@@ -13,8 +13,7 @@ public record DueSegment(
         runId = ControlPlaneChecks.requireText(runId, "runId");
         segmentId = ControlPlaneChecks.requireText(segmentId, "segmentId");
         ControlPlaneChecks.requireNonNegative(startStepIndex, "startStepIndex");
-        if (stopBeforeStepIndex >= 0 && stopBeforeStepIndex < startStepIndex) {
-            throw new IllegalArgumentException("stopBeforeStepIndex must be greater than or equal to startStepIndex");
-        }
+        stopBeforeStepIndex = ControlPlaneChecks.requireSegmentStopAfterStart(startStepIndex, stopBeforeStepIndex);
+        inputPayload = ControlPlaneChecks.freezePayload(inputPayload);
     }
 }

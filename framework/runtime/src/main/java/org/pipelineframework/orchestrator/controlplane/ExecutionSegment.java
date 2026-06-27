@@ -22,11 +22,12 @@ public record ExecutionSegment(
         runId = ControlPlaneChecks.requireText(runId, "runId");
         segmentId = ControlPlaneChecks.requireText(segmentId, "segmentId");
         ControlPlaneChecks.requireNonNegative(startStepIndex, "startStepIndex");
-        if (stopBeforeStepIndex >= 0 && stopBeforeStepIndex < startStepIndex) {
-            throw new IllegalArgumentException("stopBeforeStepIndex must be greater than or equal to startStepIndex");
-        }
+        stopBeforeStepIndex = ControlPlaneChecks.requireSegmentStopAfterStart(startStepIndex, stopBeforeStepIndex);
         Objects.requireNonNull(status, "status must not be null");
-        outputItems = ControlPlaneChecks.copyList(outputItems);
+        inputPayload = ControlPlaneChecks.freezePayload(inputPayload);
+        outputItems = ControlPlaneChecks.copyList(outputItems).stream()
+            .map(ControlPlaneChecks::freezePayload)
+            .toList();
         ControlPlaneChecks.requireNonNegative(nextDueEpochMs, "nextDueEpochMs");
         ControlPlaneChecks.requireNonNegative(createdAtEpochMs, "createdAtEpochMs");
         ControlPlaneChecks.requireNonNegative(updatedAtEpochMs, "updatedAtEpochMs");

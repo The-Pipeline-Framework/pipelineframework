@@ -3,6 +3,7 @@ package org.pipelineframework.orchestrator.controlplane;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -49,10 +50,10 @@ public class SegmentBoundaryLedger {
             return Uni.createFrom().voidItem();
         }
         ExecutionRecord<Object, Object> record = created.record();
-        return append(
+        return appendBuilt(
             record.tenantId(),
             record.executionId(),
-            List.of(new ControlPlaneFact.RunSubmitted(
+            () -> List.of(new ControlPlaneFact.RunSubmitted(
                 record.tenantId(),
                 record.executionId(),
                 record.executionKey(),
@@ -76,10 +77,10 @@ public class SegmentBoundaryLedger {
         if (record == null) {
             return Uni.createFrom().voidItem();
         }
-        return append(
+        return appendBuilt(
             record.tenantId(),
             record.executionId(),
-            List.of(new ControlPlaneFact.SegmentAttemptStarted(
+            () -> List.of(new ControlPlaneFact.SegmentAttemptStarted(
                 record.tenantId(),
                 record.executionId(),
                 segmentId(record),
@@ -97,10 +98,10 @@ public class SegmentBoundaryLedger {
         if (record == null || result == null) {
             return Uni.createFrom().voidItem();
         }
-        return append(
+        return appendBuilt(
             record.tenantId(),
             record.executionId(),
-            List.of(new ControlPlaneFact.SegmentCompleted(
+            () -> List.of(new ControlPlaneFact.SegmentCompleted(
                 record.tenantId(),
                 record.executionId(),
                 segmentId(record),
@@ -119,28 +120,30 @@ public class SegmentBoundaryLedger {
         if (record == null || suspension == null) {
             return Uni.createFrom().voidItem();
         }
-        List<ControlPlaneFact> facts = new ArrayList<>();
-        AwaitUnitRecord unit = suspension.unit();
-        facts.add(new ControlPlaneFact.SegmentSuspended(
-            record.tenantId(),
-            record.executionId(),
-            segmentId(record),
-            attemptId(record, transitionKey),
-            suspension.unitId(),
-            BoundaryKind.AWAIT,
-            suspension.stepIndex(),
-            unit == null ? null : unit.expectedItemCount()));
-        for (AwaitInteractionRecord interaction : suspension.interactions()) {
-            facts.add(boundaryInteractionDispatched(record.executionId(), interaction));
-        }
-        if (unit != null && unit.dispatchComplete() && unit.expectedItemCount() != null) {
-            facts.add(new ControlPlaneFact.BoundaryDispatchCompleted(
-                unit.tenantId(),
-                unit.executionId(),
-                unit.unitId(),
-                unit.expectedItemCount()));
-        }
-        return append(record.tenantId(), record.executionId(), facts, nowEpochMs);
+        return appendBuilt(record.tenantId(), record.executionId(), () -> {
+            List<ControlPlaneFact> facts = new ArrayList<>();
+            AwaitUnitRecord unit = suspension.unit();
+            facts.add(new ControlPlaneFact.SegmentSuspended(
+                record.tenantId(),
+                record.executionId(),
+                segmentId(record),
+                attemptId(record, transitionKey),
+                suspension.unitId(),
+                BoundaryKind.AWAIT,
+                suspension.stepIndex(),
+                unit == null ? null : unit.expectedItemCount()));
+            for (AwaitInteractionRecord interaction : suspension.interactions()) {
+                facts.add(boundaryInteractionDispatched(record.executionId(), interaction));
+            }
+            if (unit != null && unit.dispatchComplete() && unit.expectedItemCount() != null) {
+                facts.add(new ControlPlaneFact.BoundaryDispatchCompleted(
+                    unit.tenantId(),
+                    unit.executionId(),
+                    unit.unitId(),
+                    unit.expectedItemCount()));
+            }
+            return facts;
+        }, nowEpochMs);
     }
 
     public Uni<Void> recordBoundaryCompletionAdmitted(
@@ -151,10 +154,10 @@ public class SegmentBoundaryLedger {
         if (record == null || unit == null) {
             return Uni.createFrom().voidItem();
         }
-        return append(
+        return appendBuilt(
             record.tenantId(),
             record.executionId(),
-            List.of(BoundaryAdmissionFacts.completion(new BoundaryAdmissionRequest(
+            () -> List.of(BoundaryAdmissionFacts.completion(new BoundaryAdmissionRequest(
                 record.tenantId(),
                 record.executionId(),
                 unit.unitId(),
@@ -169,10 +172,10 @@ public class SegmentBoundaryLedger {
         if (record == null) {
             return Uni.createFrom().voidItem();
         }
-        return append(
+        return appendBuilt(
             record.tenantId(),
             record.executionId(),
-            List.of(new ControlPlaneFact.InteractionTimedOut(
+            () -> List.of(new ControlPlaneFact.InteractionTimedOut(
                 record.tenantId(),
                 record.executionId(),
                 record.unitId(),
@@ -216,13 +219,46 @@ public class SegmentBoundaryLedger {
             || segmentId == null || segmentId.isBlank()) {
             return Uni.createFrom().voidItem();
         }
-        return append(
+        return appendBuilt(
             parent.tenantId(),
             parent.executionId(),
-            List.of(new ControlPlaneFact.ContinuationSegmentCreated(
+            () -> List.of(new ControlPlaneFact.ContinuationSegmentCreated(
                 parent.tenantId(),
                 parent.executionId(),
                 segmentId(parent),
+                segmentId,
+                boundaryUnitId,
+                startStepIndex,
+                stopBeforeStepIndex,
+                inputPayload)),
+            nowEpochMs);
+    }
+
+    public Uni<Void> recordContinuationSegmentCreated(
+        String tenantId,
+        String runId,
+        String sourceSegmentId,
+        String boundaryUnitId,
+        String segmentId,
+        int startStepIndex,
+        int stopBeforeStepIndex,
+        Object inputPayload,
+        long nowEpochMs
+    ) {
+        if (tenantId == null || tenantId.isBlank()
+            || runId == null || runId.isBlank()
+            || sourceSegmentId == null || sourceSegmentId.isBlank()
+            || boundaryUnitId == null || boundaryUnitId.isBlank()
+            || segmentId == null || segmentId.isBlank()) {
+            return Uni.createFrom().voidItem();
+        }
+        return appendBuilt(
+            tenantId,
+            runId,
+            () -> List.of(new ControlPlaneFact.ContinuationSegmentCreated(
+                tenantId,
+                runId,
+                sourceSegmentId,
                 segmentId,
                 boundaryUnitId,
                 startStepIndex,
@@ -240,10 +276,10 @@ public class SegmentBoundaryLedger {
             return Uni.createFrom().voidItem();
         }
         String idempotencyKey = attemptId(record, transitionKey) + ":terminal-publication";
-        return append(
+        return appendBuilt(
             record.tenantId(),
             record.executionId(),
-            List.of(new ControlPlaneFact.TerminalPublicationCompleted(
+            () -> List.of(new ControlPlaneFact.TerminalPublicationCompleted(
                 record.tenantId(),
                 record.executionId(),
                 segmentId(record),
@@ -260,10 +296,10 @@ public class SegmentBoundaryLedger {
         if (record == null) {
             return Uni.createFrom().voidItem();
         }
-        return append(
+        return appendBuilt(
             record.tenantId(),
             record.executionId(),
-            List.of(new ControlPlaneFact.RunSucceeded(
+            () -> List.of(new ControlPlaneFact.RunSucceeded(
                 record.tenantId(),
                 record.executionId(),
                 segmentId(record),
@@ -280,10 +316,10 @@ public class SegmentBoundaryLedger {
         if (record == null) {
             return Uni.createFrom().voidItem();
         }
-        return append(
+        return appendBuilt(
             record.tenantId(),
             record.executionId(),
-            List.of(new ControlPlaneFact.RunFailed(
+            () -> List.of(new ControlPlaneFact.RunFailed(
                 record.tenantId(),
                 record.executionId(),
                 segmentId(record),
@@ -316,11 +352,32 @@ public class SegmentBoundaryLedger {
         }
         return appendWithRetry(journal.get(), tenantId, runId, List.copyOf(facts), nowEpochMs, 1)
             .replaceWithVoid()
-            .onFailure().invoke(failure -> LOG.warnf(
+            .onFailure().recoverWithUni(failure -> {
+                LOG.warnf(
+                    failure,
+                    "Failed appending queue-async control-plane facts tenant=%s runId=%s",
+                    tenantId,
+                    runId);
+                return Uni.createFrom().voidItem();
+            });
+    }
+
+    private Uni<Void> appendBuilt(
+        String tenantId,
+        String runId,
+        Supplier<List<ControlPlaneFact>> facts,
+        long nowEpochMs
+    ) {
+        try {
+            return append(tenantId, runId, facts.get(), nowEpochMs);
+        } catch (IllegalArgumentException failure) {
+            LOG.warnf(
                 failure,
-                "Failed appending queue-async control-plane facts tenant=%s runId=%s",
+                "Failed building queue-async control-plane facts tenant=%s runId=%s",
                 tenantId,
-                runId));
+                runId);
+            return Uni.createFrom().voidItem();
+        }
     }
 
     private Uni<ControlPlaneAppendResult> appendWithRetry(
