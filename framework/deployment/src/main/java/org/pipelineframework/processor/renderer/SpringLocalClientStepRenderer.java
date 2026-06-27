@@ -52,13 +52,13 @@ public class SpringLocalClientStepRenderer implements PipelineRenderer<LocalBind
         PipelineStepModel model = binding.model();
         validateSupported(model);
 
-        TypeSpec clientStepClass = buildClientStepClass(model);
+        TypeSpec clientStepClass = buildClientStepClass(model, ctx.stepOrder());
         JavaFile.builder(model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX, clientStepClass)
             .build()
             .writeTo(ctx.outputDir());
     }
 
-    private TypeSpec buildClientStepClass(PipelineStepModel model) {
+    private TypeSpec buildClientStepClass(PipelineStepModel model, Integer stepOrder) {
         TypeName inputType = resolveDomainType(model.inboundDomainType());
         TypeName outputType = resolveDomainType(model.outboundDomainType());
         TypeName stepInterface = ParameterizedTypeName.get(
@@ -66,8 +66,9 @@ public class SpringLocalClientStepRenderer implements PipelineRenderer<LocalBind
             inputType,
             outputType);
         TypeName completionStage = ParameterizedTypeName.get(ClassName.get(CompletionStage.class), outputType);
-        TypeName serviceType = model.serviceClassName();
-        String serviceFieldName = decapitalize(model.serviceClassName().simpleName());
+        ClassName targetServiceClass = targetServiceClass(model);
+        TypeName serviceType = targetServiceClass;
+        String serviceFieldName = decapitalize(targetServiceClass.simpleName());
 
         FieldSpec serviceField = FieldSpec.builder(serviceType, serviceFieldName, Modifier.PRIVATE, Modifier.FINAL)
             .build();
@@ -84,14 +85,23 @@ public class SpringLocalClientStepRenderer implements PipelineRenderer<LocalBind
             .addStatement(applyStatement(model), applyStatementArgs(model, serviceFieldName))
             .build();
 
-        return TypeSpec.classBuilder(getClientStepClassName(model))
+        TypeSpec.Builder classBuilder = TypeSpec.classBuilder(getClientStepClassName(model))
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(AnnotationSpec.builder(ClassName.get("org.springframework.stereotype", "Component")).build())
             .addSuperinterface(stepInterface)
             .addField(serviceField)
             .addMethod(constructor)
-            .addMethod(applyMethod)
-            .build();
+            .addMethod(applyMethod);
+        if (stepOrder != null) {
+            classBuilder.addAnnotation(AnnotationSpec.builder(ClassName.get("org.springframework.core.annotation", "Order"))
+                .addMember("value", "$L", stepOrder)
+                .build());
+        }
+        return classBuilder.build();
+    }
+
+    private ClassName targetServiceClass(PipelineStepModel model) {
+        return model.delegateService() != null ? model.delegateService() : model.serviceClassName();
     }
 
     private String completionStageAdapter(PipelineStepModel model) {
@@ -138,9 +148,9 @@ public class SpringLocalClientStepRenderer implements PipelineRenderer<LocalBind
             throw new IllegalArgumentException(
                 "Spring renderer profile does not yet support side-effect steps; step '" + model.serviceName() + "'");
         }
-        if (model.delegateService() != null || model.remoteExecution() != null) {
+        if (model.remoteExecution() != null) {
             throw new IllegalArgumentException(
-                "Spring renderer profile currently supports only internal local steps; step '" + model.serviceName() + "'");
+                "Spring renderer profile does not support remote local steps; step '" + model.serviceName() + "'");
         }
     }
 

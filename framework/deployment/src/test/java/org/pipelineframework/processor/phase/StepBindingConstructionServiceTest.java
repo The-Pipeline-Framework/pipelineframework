@@ -66,6 +66,24 @@ class StepBindingConstructionServiceTest {
     }
 
     @Test
+    void springDelegatedLocalStepBuildsLocalBindingWithoutExternalAdapter() {
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, null);
+        ctx.setRendererProfile("spring");
+        PipelineStepModel delegated = TestModelFactory
+            .createTestModelWithTargets("DelegatedService", Set.of(GenerationTarget.LOCAL_CLIENT_STEP))
+            .toBuilder()
+            .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .build();
+        ctx.setStepModels(List.of(delegated));
+
+        Map<String, Object> bindings = service.buildBindings(ctx, null);
+
+        assertFalse(bindings.containsKey("DelegatedService_external_adapter"));
+        assertTrue(bindings.containsKey("DelegatedService_local"));
+        assertFalse(bindings.containsKey("DelegatedService_grpc"));
+    }
+
+    @Test
     void delegatedStepWithServerTargetsEmitsWarning() {
         when(processingEnv.getMessager()).thenReturn(messager);
         PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, null);

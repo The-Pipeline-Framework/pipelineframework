@@ -168,6 +168,24 @@ class PipelineBindingConstructionPhaseTest {
     }
 
     @Test
+    void springDelegatedLocalClientStepBuildsLocalBindingOnly() throws Exception {
+        PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        context.setRendererProfile("spring");
+
+        PipelineStepModel delegatedModel = TestModelFactory
+            .createTestModelWithTargets("DelegatedLocalService", Set.of(GenerationTarget.LOCAL_CLIENT_STEP))
+            .toBuilder()
+            .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .build();
+        context.setStepModels(List.of(delegatedModel));
+
+        assertDoesNotThrow(() -> phase.execute(context));
+        Map<String, Object> bindings = context.getRendererBindings();
+        assertEquals(Set.of("DelegatedLocalService_local"), bindings.keySet());
+    }
+
+    @Test
     void delegatedStepWithServerTargetsEmitsWarning() throws Exception {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);

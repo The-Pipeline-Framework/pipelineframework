@@ -80,6 +80,10 @@ final class SpringRendererProfileSupport {
             errors.add("Spring renderer profile currently supports only " + supportedTargets + " generation; step '"
                 + model.serviceName() + "' resolved targets " + model.enabledTargets() + ".");
         }
+        if (model.delegateService() != null && !model.enabledTargets().equals(Set.of(GenerationTarget.LOCAL_CLIENT_STEP))) {
+            errors.add("Spring renderer profile supports delegated Spring beans only as unary local client steps; step '"
+                + model.serviceName() + "' resolved targets " + model.enabledTargets() + ".");
+        }
         if (model.streamingShape() != StreamingShape.UNARY_UNARY) {
             errors.add("Spring renderer profile currently supports only unary-unary steps; step '"
                 + model.serviceName() + "' has shape " + model.streamingShape() + ".");
@@ -93,8 +97,8 @@ final class SpringRendererProfileSupport {
             errors.add("Spring renderer profile does not yet support side-effect steps; step '"
                 + model.serviceName() + "'.");
         }
-        if (model.delegateService() != null || model.remoteExecution() != null) {
-            errors.add("Spring renderer profile currently supports only internal local steps; step '"
+        if (model.remoteExecution() != null) {
+            errors.add("Spring renderer profile does not support remote execution; step '"
                 + model.serviceName() + "'.");
         }
     }

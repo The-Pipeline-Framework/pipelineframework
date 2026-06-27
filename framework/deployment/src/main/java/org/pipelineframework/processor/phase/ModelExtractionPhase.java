@@ -705,7 +705,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             PipelineCompilationContext ctx,
             org.pipelineframework.processor.ir.StepDefinition stepDef) {
 
-        // Validate that the delegate service exists and implements a reactive service interface
+        // Validate that the delegate service exists and exposes a supported step contract.
         TypeElement delegateElement = ctx.getProcessingEnv().getElementUtils()
             .getTypeElement(stepDef.executionClass().canonicalName());
 
@@ -718,23 +718,22 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         var typeUtils = ctx.getProcessingEnv().getTypeUtils();
-        ReactiveSignature reactiveSignature = resolveReactiveSignature(
+        Optional<SupportedServiceSignature> delegateSignature = resolveSupportedDelegatedSignature(
+            ctx,
             delegateElement,
             typeUtils,
             ctx.getProcessingEnv().getMessager());
-        if (reactiveSignature == null) {
+        if (delegateSignature.isEmpty()) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Delegate service '" + stepDef.executionClass().canonicalName() +
-                "' must implement one of: ReactiveService, ReactiveStreamingService, "
-                    + "ReactiveStreamingClientService, "
-                    + "ReactiveBidirectionalStreamingService for step '" +
-                stepDef.name() + "'");
+                    "' must expose a supported step contract for step '" + stepDef.name() + "'");
             return null;
         }
+        SupportedServiceSignature resolvedDelegateSignature = delegateSignature.get();
 
-        TypeName inputType = stepDef.inputType() != null ? stepDef.inputType() : reactiveSignature.inputType();
-        TypeName outputType = stepDef.outputType() != null ? stepDef.outputType() : reactiveSignature.outputType();
+        TypeName inputType = stepDef.inputType() != null ? stepDef.inputType() : resolvedDelegateSignature.inputType();
+        TypeName outputType = stepDef.outputType() != null ? stepDef.outputType() : resolvedDelegateSignature.outputType();
         if (inputType == null || outputType == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
@@ -745,8 +744,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
 
         boolean fallbackGloballyEnabled = isMapperFallbackGloballyEnabled(ctx);
         boolean fallbackRequested = stepDef.mapperFallback() == MapperFallbackMode.JACKSON;
-        boolean typesDiffer = !inputType.equals(reactiveSignature.inputType())
-            || !outputType.equals(reactiveSignature.outputType());
+        boolean typesDiffer = !inputType.equals(resolvedDelegateSignature.inputType())
+            || !outputType.equals(resolvedDelegateSignature.outputType());
         boolean allowFallbackNoMapper = stepDef.externalMapper() == null
             && fallbackRequested
             && fallbackGloballyEnabled
@@ -757,8 +756,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             stepDef,
             inputType,
             outputType,
-            reactiveSignature.inputType(),
-            reactiveSignature.outputType(),
+            resolvedDelegateSignature.inputType(),
+            resolvedDelegateSignature.outputType(),
             allowFallbackNoMapper);
         MapperFallbackMode effectiveFallback = MapperFallbackMode.NONE;
 
@@ -787,7 +786,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                     + "': no operator mapper provided and YAML types ["
                     + inputType + " -> " + outputType
                     + "] do not match delegate types ["
-                    + reactiveSignature.inputType() + " -> " + reactiveSignature.outputType() + "]."
+                    + resolvedDelegateSignature.inputType() + " -> " + resolvedDelegateSignature.outputType() + "]."
                     + fallbackMessage);
             return null;
         }
@@ -802,8 +801,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         // Create type mappings based on the input/output types specified in the YAML
-        TypeMapping inputMapping = new TypeMapping(inputType, null, false, reactiveSignature.inputType());
-        TypeMapping outputMapping = new TypeMapping(outputType, null, false, reactiveSignature.outputType());
+        TypeMapping inputMapping = new TypeMapping(inputType, null, false, resolvedDelegateSignature.inputType());
+        TypeMapping outputMapping = new TypeMapping(outputType, null, false, resolvedDelegateSignature.outputType());
 
         // Derive package from execution class or use default
         String servicePackage = stepDef.executionClass().packageName().isEmpty()
@@ -819,7 +818,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .serviceClassName(stepDef.executionClass())
             .inputMapping(inputMapping)
             .outputMapping(outputMapping)
-            .streamingShape(reactiveSignature.shape())
+            .streamingShape(resolvedDelegateSignature.shape())
             .enabledTargets(targets)
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.PIPELINE_SERVER)
@@ -830,6 +829,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .delegateService(stepDef.executionClass())
             .externalMapper(externalMapper)
             .mapperFallbackMode(effectiveFallback)
+            .serviceApiKind(resolvedDelegateSignature.apiKind())
+            .reactiveReturnKind(resolvedDelegateSignature.reactiveReturnKind())
             .build();
     }
 
@@ -1150,6 +1151,27 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return null;
         }
         return matches.isEmpty() ? null : matches.get(0);
+    }
+
+    private Optional<SupportedServiceSignature> resolveSupportedDelegatedSignature(
+            PipelineCompilationContext ctx,
+            TypeElement delegateElement,
+            Types typeUtils,
+            javax.annotation.processing.Messager messager) {
+        if (isSpringRendererProfile(ctx)) {
+            return Optional.ofNullable(resolveSupportedInternalSignature(ctx, delegateElement, typeUtils, messager));
+        }
+        ReactiveSignature reactiveSignature = resolveReactiveSignature(delegateElement, typeUtils, messager);
+        if (reactiveSignature == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new SupportedServiceSignature(
+            ServiceApiKind.REACTIVE,
+            reactiveSignature.shape(),
+            reactiveSignature.inputType(),
+            reactiveSignature.outputType(),
+            ReactiveReturnKind.MUTINY_UNI,
+            null));
     }
 
     private SupportedServiceSignature resolveSupportedInternalSignature(

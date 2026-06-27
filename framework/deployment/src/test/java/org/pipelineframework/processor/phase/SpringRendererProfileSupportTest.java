@@ -34,6 +34,7 @@ import org.pipelineframework.processor.ir.TypeMapping;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SpringRendererProfileSupportTest {
 
@@ -61,6 +62,17 @@ class SpringRendererProfileSupportTest {
         PipelineCompilationContext context = context();
         context.setStepModels(List.of(step(Set.of(GenerationTarget.LOCAL_CLIENT_STEP), StreamingShape.UNARY_UNARY,
             ServiceApiKind.BLOCKING)));
+
+        assertDoesNotThrow(() -> SpringRendererProfileSupport.validateGenerationSupported(context));
+    }
+
+    @Test
+    void acceptsUnaryDelegatedSpringBeanStep() {
+        PipelineCompilationContext context = context();
+        context.setStepModels(List.of(delegatedStep(
+            Set.of(GenerationTarget.LOCAL_CLIENT_STEP),
+            StreamingShape.UNARY_UNARY,
+            ServiceApiKind.REACTIVE)));
 
         assertDoesNotThrow(() -> SpringRendererProfileSupport.validateGenerationSupported(context));
     }
@@ -103,6 +115,34 @@ class SpringRendererProfileSupportTest {
             () -> SpringRendererProfileSupport.validateGenerationSupported(context));
     }
 
+    @Test
+    void rejectsDelegatedNonUnaryStep() {
+        PipelineCompilationContext context = context();
+        context.setStepModels(List.of(delegatedStep(
+            Set.of(GenerationTarget.LOCAL_CLIENT_STEP),
+            StreamingShape.UNARY_STREAMING,
+            ServiceApiKind.REACTIVE)));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> SpringRendererProfileSupport.validateGenerationSupported(context));
+        assertTrue(error.getMessage().contains("supports only unary-unary steps"), error.getMessage());
+    }
+
+    @Test
+    void rejectsDelegatedRestResourceTarget() {
+        PipelineCompilationContext context = context();
+        context.setTransportMode(PipelineTransport.REST);
+        context.setStepModels(List.of(delegatedStep(
+            Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.LOCAL_CLIENT_STEP),
+            StreamingShape.UNARY_UNARY,
+            ServiceApiKind.REACTIVE)));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> SpringRendererProfileSupport.validateGenerationSupported(context));
+        assertTrue(error.getMessage().contains("delegated Spring beans only as unary local client steps"),
+            error.getMessage());
+    }
+
     private PipelineCompilationContext context() {
         PipelineCompilationContext context = new PipelineCompilationContext(null, null);
         context.setRendererProfile("spring");
@@ -129,6 +169,27 @@ class SpringRendererProfileSupportTest {
             .enabledTargets(targets)
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+            .serviceApiKind(apiKind)
+            .build();
+    }
+
+    private PipelineStepModel delegatedStep(
+        Set<GenerationTarget> targets,
+        StreamingShape shape,
+        ServiceApiKind apiKind
+    ) {
+        return new PipelineStepModel.Builder()
+            .serviceName("AuditService")
+            .generatedName("AuditService")
+            .servicePackage("com.example.service")
+            .serviceClassName(ClassName.get("com.example.service", "AuditService"))
+            .inputMapping(new TypeMapping(ClassName.get("com.example.service", "PaymentStatus"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("com.example.service", "PaymentStatus"), null, false))
+            .streamingShape(shape)
+            .enabledTargets(targets)
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+            .delegateService(ClassName.get("com.example.service", "PaymentAuditBean"))
             .serviceApiKind(apiKind)
             .build();
     }
