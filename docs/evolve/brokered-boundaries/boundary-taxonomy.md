@@ -33,6 +33,8 @@ Kafka replay means re-reading records from a log. SQS redrive means making queue
 
 Serialization choices such as protobuf, JSON, bytes, or payload references belong to payload policy, not broker fit. See [Envelope And Data Policy](/evolve/brokered-boundaries/envelope-and-data-policy).
 
+Await completion and checkpoint handoff both admit transport messages into TPF-owned boundaries. The immutable queue-async facts for those admissions are described in [Immutable Segment And Boundary Model](/evolve/await-unit-runtime/immutable-boundaries).
+
 ```mermaid
 flowchart TB
     Runtime["TPF runtime boundary"]

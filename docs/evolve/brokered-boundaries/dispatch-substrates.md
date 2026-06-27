@@ -58,6 +58,7 @@ This guide extends existing boundary seams:
 - [Step-Aware Invocation Runtime](/evolve/durable-coordinator/boundary-invocation-model) defines shared invocation points for step, transition-worker, and transport-boundary execution.
 - [Worker Protocols](/evolve/durable-coordinator/worker-protocols) already model transition-worker command/result envelopes over local, REST, gRPC, and SQS.
 - [Await Unit Runtime](/evolve/await-unit-runtime/) defines durable suspend/resume semantics that can use different transports.
+- [Immutable Segment And Boundary Model](/evolve/await-unit-runtime/immutable-boundaries) defines the internal fact model shared by await completion and checkpoint handoff admissions.
 - [Checkpoint Handoff](/deploy/orchestrator-runtime/checkpoint-handoff) is the natural user-facing shape for pipeline-to-pipeline publication.
 - [Runtime Core Decoupling](/evolve/runtime-core-decoupling) keeps runtime-adapter concerns out of core semantics.
 

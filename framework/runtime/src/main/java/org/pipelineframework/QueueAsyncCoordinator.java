@@ -69,6 +69,7 @@ import org.pipelineframework.orchestrator.TransitionWorkerExecutor;
 import org.pipelineframework.orchestrator.TransitionWorkerCommand;
 import org.pipelineframework.orchestrator.TransitionWorkerOutcome;
 import org.pipelineframework.orchestrator.WorkDispatcher;
+import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 import org.pipelineframework.objectpublish.ObjectPublishCompletionService;
@@ -149,6 +150,9 @@ class QueueAsyncCoordinator {
 
   @Inject
   ControlPlaneAdmissionPolicy controlPlaneAdmissionPolicy;
+
+  @Inject
+  SegmentBoundaryLedger segmentBoundaryLedger;
 
   private volatile TransitionPayloadCodec fallbackTransitionPayloadCodec;
   private volatile PipelineReleaseIdentityResolver fallbackReleaseIdentityResolver;
@@ -305,12 +309,17 @@ class QueueAsyncCoordinator {
               ttlEpochS);
           return executionStateStore.createOrGetExecution(command)
               .onItem().transformToUni(created -> {
+                Uni<Void> recordSubmitted = created.duplicate()
+                    ? Uni.createFrom().voidItem()
+                    : segmentBoundaryLedger().recordRunSubmitted(created, command, now);
                 Uni<Void> enqueue = created.duplicate()
                     ? Uni.createFrom().voidItem()
                     : workDispatcher.enqueueNow(new ExecutionWorkItem(
                         created.record().tenantId(),
                         created.record().executionId()));
-                return enqueue.onItem().transform(ignored -> toRunAccepted(created, now));
+                return recordSubmitted
+                    .chain(() -> enqueue)
+                    .onItem().transform(ignored -> toRunAccepted(created, now));
               });
         });
   }
@@ -552,7 +561,8 @@ class QueueAsyncCoordinator {
               record.resultShape(),
               record.awaitUnitId() == null ? "<none>" : record.awaitUnitId());
           String transitionKey = transitionKey(record.executionId(), record.currentStepIndex(), record.attempt());
-          return prepareTransitionCommand(record, transitionKey)
+          return segmentBoundaryLedger().recordSegmentAttemptStarted(record, transitionKey, now)
+              .chain(() -> prepareTransitionCommand(record, transitionKey))
               .onItem().transformToUni(command -> transitionWorkerExecutor.execute(worker, command))
               .onItem().transformToUni(result -> handleTransitionResult(record, transitionKey, result, itemContinuationHandler))
               .onFailure(AwaitThrowableSupport::containsAwaitSuspension).recoverWithUni(failure ->
@@ -640,7 +650,9 @@ class QueueAsyncCoordinator {
         .onItem().transformToUni(result -> validateAwaitCompletionTenant(result, normalized)
             .onItem().transformToUni(validated -> {
               return awaitCoordinator.recordCompletion(validated.record(), normalized.nowEpochMs())
-                  .onItem().transformToUni(unit -> signalLiveAwaitCompletion(validated.record(), unit)
+                  .onItem().transformToUni(unit -> segmentBoundaryLedger()
+                      .recordBoundaryCompletionAdmitted(validated.record(), unit, normalized.nowEpochMs())
+                      .chain(() -> signalLiveAwaitCompletion(validated.record(), unit))
                       .onFailure().recoverWithItem(false)
                       .onItem().transformToUni(liveAccepted -> liveAccepted
                           ? Uni.createFrom().item(validated)
@@ -913,9 +925,10 @@ class QueueAsyncCoordinator {
               + " produced " + outputItems.size()
               + " terminal items for SINGLE result shape"));
     }
-    return checkpointPublicationService
-        .publishIfConfigured(record, singleResult(outputItems))
-        .chain(() -> publishTerminalOutputsIfConfigured(result))
+    long nowEpochMs = System.currentTimeMillis();
+    return segmentBoundaryLedger().recordSegmentCompleted(record, transitionKey, result, nowEpochMs)
+        .chain(() -> checkpointPublicationService.publishIfConfigured(record, singleResult(outputItems)))
+        .chain(() -> publishTerminalOutputsIfConfigured(record, transitionKey, result, nowEpochMs))
         .replaceWith(outputItems)
         .onItem().transformToUni(payload -> executionStateStore.markSucceeded(
             record.tenantId(),
@@ -923,18 +936,26 @@ class QueueAsyncCoordinator {
             record.version(),
             transitionKey,
             payload,
-            System.currentTimeMillis()))
+            nowEpochMs))
+        .onItem().transformToUni(updated -> updated
+            .map(succeeded -> segmentBoundaryLedger().recordRunSucceeded(succeeded, outputItems, nowEpochMs))
+            .orElseGet(() -> Uni.createFrom().voidItem()))
         .replaceWithVoid();
   }
 
-  private Uni<Void> publishTerminalOutputsIfConfigured(TransitionResultEnvelope result) {
+  private Uni<Void> publishTerminalOutputsIfConfigured(
+      ExecutionRecord<Object, Object> record,
+      String transitionKey,
+      TransitionResultEnvelope result,
+      long nowEpochMs) {
     if (result.terminalOutputPublished()) {
-      return Uni.createFrom().voidItem();
+      return segmentBoundaryLedger().recordTerminalPublicationCompleted(record, transitionKey, nowEpochMs);
     }
     if (objectPublishCompletionService == null) {
       return Uni.createFrom().voidItem();
     }
-    return objectPublishCompletionService.publishIfConfigured(() -> result.decodeOutputItems(payloadCodec()));
+    return objectPublishCompletionService.publishIfConfigured(() -> result.decodeOutputItems(payloadCodec()))
+        .chain(() -> segmentBoundaryLedger().recordTerminalPublicationCompleted(record, transitionKey, nowEpochMs));
   }
 
   private Uni<Void> markWaitingExternal(
@@ -975,7 +996,12 @@ class QueueAsyncCoordinator {
                       null,
                       null,
                       null));
-                  return releaseAlreadyCompletedAwaitUnit(updated.get(), suspended, nowEpochMs, itemContinuationHandler);
+                  return segmentBoundaryLedger().recordSegmentSuspended(record, transitionKey, suspended, nowEpochMs)
+                      .chain(() -> releaseAlreadyCompletedAwaitUnit(
+                          updated.get(),
+                          suspended,
+                          nowEpochMs,
+                          itemContinuationHandler));
                 }
                 return Uni.createFrom().failure(new IllegalStateException(
                     "Failed to persist WAITING_EXTERNAL state for execution "
@@ -1000,7 +1026,10 @@ class QueueAsyncCoordinator {
           List<Uni<Void>> operations = new ArrayList<>(records.size());
           for (AwaitInteractionRecord record : records) {
             operations.add(awaitCoordinator.markTimedOut(record, now)
-                .onItem().transformToUni(updated -> executionStateStore.getExecution(record.tenantId(), record.executionId()))
+                .onItem().transformToUni(updated -> updated.isPresent()
+                    ? segmentBoundaryLedger().recordInteractionTimedOut(updated.get(), now)
+                    : Uni.createFrom().voidItem())
+                .onItem().transformToUni(ignored -> executionStateStore.getExecution(record.tenantId(), record.executionId()))
                 .onItem().transformToUni(execution -> {
                   if (execution.isEmpty() || execution.get().status().terminal()) {
                     return Uni.createFrom().voidItem();
@@ -1019,6 +1048,13 @@ class QueueAsyncCoordinator {
                           "AWAIT_TIMEOUT",
                           "Await interaction timed out: " + record.interactionId(),
                           now)
+                      .onItem().transformToUni(updated -> updated
+                          .map(failed -> segmentBoundaryLedger().recordRunFailed(
+                              failed,
+                              "AWAIT_TIMEOUT",
+                              "Await interaction timed out: " + record.interactionId(),
+                              now))
+                          .orElseGet(() -> Uni.createFrom().voidItem()))
                       .replaceWithVoid();
                 }));
           }
@@ -1359,6 +1395,18 @@ class QueueAsyncCoordinator {
                               transitionKey,
                               List.copyOf(segmentOutputs == null ? List.of() : segmentOutputs),
                               nowEpochMs)
+                          .onItem().transformToUni(ignored -> segmentBoundaryLedger()
+                              .recordContinuationSegmentCreated(
+                                  parentRecord,
+                                  unit,
+                                  SegmentBoundaryLedger.itemContinuationSegmentId(
+                                      parentRecord.executionId(),
+                                      unit.unitId(),
+                                      interaction.itemIndex()),
+                                  interaction.stepIndex() + 1,
+                                  aggregateStepIndex,
+                                  normalizedInput,
+                                  nowEpochMs))
                           .onItem().transformToUni(ignored ->
                               releaseItemizedAwaitParentIfReady(parentRecord, unit, aggregateStepIndex, nowEpochMs));
                     });
@@ -1415,6 +1463,16 @@ class QueueAsyncCoordinator {
                 if (updated.isEmpty()) {
                   return Uni.createFrom().voidItem();
                 }
+                Uni<Void> recordedContinuation = segmentBoundaryLedger().recordContinuationSegmentCreated(
+                    parent.tenantId(),
+                    parent.executionId(),
+                    SegmentBoundaryLedger.segmentId(parent),
+                    unit.unitId(),
+                    SegmentBoundaryLedger.segmentId(updated.get()),
+                    aggregateStepIndex,
+                    -1,
+                    resumePayload,
+                    nowEpochMs);
                 recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
                     AwaitReplayLifecycleEvent.RESUME_RELEASED,
                     parent.executionId(),
@@ -1430,9 +1488,11 @@ class QueueAsyncCoordinator {
                     unit.completedItemCount(),
                     unit.dispatchComplete()));
                 AwaitCompletionMetrics.recordResumeReleased(unit);
-                return workDispatcher.enqueueNow(new ExecutionWorkItem(
-                        updated.get().tenantId(),
-                        updated.get().executionId()))
+                ExecutionRecord<Object, Object> released = updated.get();
+                return recordedContinuation
+                    .chain(() -> workDispatcher.enqueueNow(new ExecutionWorkItem(
+                        released.tenantId(),
+                        released.executionId())))
                     .replaceWithVoid();
               });
         });
@@ -1520,17 +1580,29 @@ class QueueAsyncCoordinator {
                 awaitUnitId,
                 stepId,
                 stepIndex,
-                updated.get().status().name(),
-                interactionId,
-                correlationId,
-                transportType,
-                itemIndex,
-                null,
-                null,
-                null));
-            return workDispatcher.enqueueNow(new ExecutionWorkItem(
-                    updated.get().tenantId(),
-                    updated.get().executionId()))
+            updated.get().status().name(),
+            interactionId,
+            correlationId,
+            transportType,
+            itemIndex,
+            null,
+            null,
+            null));
+            Uni<Void> recordedContinuation = segmentBoundaryLedger().recordContinuationSegmentCreated(
+                tenantId,
+                executionId,
+                SegmentBoundaryLedger.segmentId(executionId, stepIndex),
+                awaitUnitId,
+                SegmentBoundaryLedger.segmentId(updated.get()),
+                stepIndex + 1,
+                -1,
+                updated.get().inputPayload(),
+                nowEpochMs);
+            ExecutionRecord<Object, Object> released = updated.get();
+            return recordedContinuation
+                .chain(() -> workDispatcher.enqueueNow(new ExecutionWorkItem(
+                    released.tenantId(),
+                    released.executionId())))
                 .replaceWithVoid();
           }
           LOG.debugf(
@@ -1540,6 +1612,10 @@ class QueueAsyncCoordinator {
               stepIndex);
           return Uni.createFrom().voidItem();
         });
+  }
+
+  private SegmentBoundaryLedger segmentBoundaryLedger() {
+    return segmentBoundaryLedger == null ? new SegmentBoundaryLedger() : segmentBoundaryLedger;
   }
 
   private Uni<AwaitCompletionResult> validateAwaitCompletionTenant(

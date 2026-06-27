@@ -405,6 +405,7 @@ const mainSidebar = [
                 collapsed: true,
                 items: [
                     {text: 'Model', link: '/evolve/await-unit-runtime/'},
+                    {text: 'Immutable Boundaries', link: '/evolve/await-unit-runtime/immutable-boundaries'},
                     {text: 'Sequences', link: '/evolve/await-unit-runtime/sequences'},
                     {text: 'Patterns', link: '/evolve/await-unit-runtime/patterns'},
                     {text: 'Limitations And Debt', link: '/evolve/await-unit-runtime/operations-and-debt'}

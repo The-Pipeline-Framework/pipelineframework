@@ -4,14 +4,15 @@ Await units are the durable suspend/resume model for `kind: await` steps. The un
 
 This guide is implementation-facing. Application-facing design guidance lives in [Await Boundaries](/design/await-boundaries). Runtime setup lives in [Await runtime setup](/deploy/orchestrator-runtime/await).
 
-For the longer-term orchestration boundary that can move await units out of each app-hosted orchestrator, see [Durable Coordinator](/evolve/durable-coordinator/). For the immutable queue-async model that treats await completion and checkpoint handoff as the same boundary-admission shape, see [Queue-Async Immutable Boundaries](/evolve/queue-async-immutable-boundaries).
+For the longer-term orchestration boundary that can move await units out of each app-hosted orchestrator, see [Durable Coordinator](/evolve/durable-coordinator/). For the immutable queue-async model that treats await completion and checkpoint handoff as the same boundary-admission shape, see [Immutable Segment And Boundary Model](/evolve/await-unit-runtime/immutable-boundaries).
 
 ## Guide Pages
 
 1. [Model](/evolve/await-unit-runtime/) explains the durable records and cardinality semantics.
-2. [Sequences](/evolve/await-unit-runtime/sequences) shows unary, stream, aggregate, timeout, and resume flows.
-3. [Patterns](/evolve/await-unit-runtime/patterns) explains the architectural patterns and why the unit model fixed the design.
-4. [Limitations And Debt](/evolve/await-unit-runtime/operations-and-debt) tracks implementation limitations and follow-up work.
+2. [Immutable Boundaries](/evolve/await-unit-runtime/immutable-boundaries) explains the segment, boundary, fact, and projection model behind queue-async.
+3. [Sequences](/evolve/await-unit-runtime/sequences) shows unary, stream, aggregate, timeout, and resume flows.
+4. [Patterns](/evolve/await-unit-runtime/patterns) explains the architectural patterns and why the unit model fixed the design.
+5. [Limitations And Debt](/evolve/await-unit-runtime/operations-and-debt) tracks implementation limitations and follow-up work.
 
 ## Core Model
 
