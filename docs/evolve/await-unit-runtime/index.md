@@ -4,7 +4,7 @@ Await units are the durable suspend/resume model for `kind: await` steps. The un
 
 This guide is implementation-facing. Application-facing design guidance lives in [Await Boundaries](/design/await-boundaries). Runtime setup lives in [Await runtime setup](/deploy/orchestrator-runtime/await).
 
-For the longer-term orchestration boundary that can move await units out of each app-hosted orchestrator, see [Durable Coordinator](/evolve/durable-coordinator/).
+For the longer-term orchestration boundary that can move await units out of each app-hosted orchestrator, see [Durable Coordinator](/evolve/durable-coordinator/). For the immutable queue-async model that treats await completion and checkpoint handoff as the same boundary-admission shape, see [Queue-Async Immutable Boundaries](/evolve/queue-async-immutable-boundaries).
 
 ## Guide Pages
 
@@ -83,7 +83,9 @@ classDiagram
     AwaitCoordinator --> AwaitTransportAdapter : dispatch
 ```
 
-`AwaitUnitRecord` is the source of truth for completion of the authored await boundary. `AwaitInteractionRecord` is the transport-facing projection. That distinction prevents execution state, dispatch strategy, and step cardinality from collapsing into one ambiguous record.
+`AwaitUnitRecord` is the current compatibility projection for completion of the authored await boundary. `AwaitInteractionRecord` is the transport-facing projection. The target queue-async model represents the same behavior as immutable `BoundaryUnit` and `BoundaryInteraction` projections derived from appended facts.
+
+In that model, `PipelineRunner` still runs synchronous step segments. An await step suspends one `ExecutionSegment` by appending a `SegmentSuspended` fact. Kafka, webhook, or interaction-api completion appends `BoundaryCompletionAdmitted`. If a live await session is present, the admitted completion can flow into the active downstream `Multi`; if not, the same durable facts create continuation segment work.
 
 ## CSV Payments Applied Model
 
