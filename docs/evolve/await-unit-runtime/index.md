@@ -64,6 +64,8 @@ classDiagram
     class PipelineExecutionService
     class PipelineRunner
     class QueueAsyncCoordinator
+    class AwaitBoundaryAdmission
+    class AwaitContinuations
     class AwaitStepSupport
     class AwaitCoordinator
     class AwaitUnitStore
@@ -77,8 +79,10 @@ classDiagram
     PipelineRunner --> AwaitStepSupport : execute generated await step
     AwaitStepSupport --> AwaitCoordinator : create / dispatch unit
     PipelineExecutionService --> QueueAsyncCoordinator : async execution lifecycle
-    QueueAsyncCoordinator --> AwaitCoordinator : complete / resume
-    QueueAsyncCoordinator --> ExecutionStateStore : wait / resume execution
+    QueueAsyncCoordinator --> AwaitBoundaryAdmission : complete await
+    AwaitBoundaryAdmission --> AwaitCoordinator : record completion
+    AwaitBoundaryAdmission --> AwaitContinuations : durable fallback
+    AwaitContinuations --> ExecutionStateStore : continuation projection writes
     AwaitCoordinator --> AwaitUnitStore
     AwaitCoordinator --> AwaitInteractionStore
     AwaitCoordinator --> AwaitTransportAdapter : dispatch
