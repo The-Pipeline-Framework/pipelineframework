@@ -53,6 +53,8 @@ class SpringLocalClientStepRendererTest {
         String source = Files.readString(clientStep);
         assertTrue(source.contains("import org.pipelineframework.runtime.core.PipelineUnaryStep;"));
         assertTrue(source.contains("import org.springframework.stereotype.Component;"));
+        assertFalse(source.contains("import org.springframework.core.annotation.Order;"));
+        assertFalse(source.contains("@Order"));
         assertTrue(source.contains("public class PaymentLocalClientStep implements PipelineUnaryStep<PaymentRecord, PaymentStatus>"));
         assertTrue(source.contains("private final PaymentService paymentService;"));
         assertTrue(source.contains("public PaymentLocalClientStep(PaymentService paymentService)"));
@@ -74,10 +76,12 @@ class SpringLocalClientStepRendererTest {
                 StreamingShape.UNARY_UNARY,
                 ServiceApiKind.REACTIVE,
                 ReactiveReturnKind.REACTOR_MONO)),
-            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null,
+                null, null, 1));
 
         Path clientStep = tempDir.resolve("com/example/service/pipeline/PaymentLocalClientStep.java");
         String source = Files.readString(clientStep);
+        assertTrue(source.contains("@Order(1)"));
         assertTrue(source.contains("return this.paymentService.process(input).toFuture();"));
         assertFalse(source.contains("subscribeAsCompletionStage"));
         assertFalse(source.contains("io.smallrye.mutiny"));
@@ -86,6 +90,39 @@ class SpringLocalClientStepRendererTest {
         assertFalse(source.contains("io.vertx."));
         assertFalse(source.contains("org.jboss.resteasy."));
         assertFalse(source.contains("jakarta.ws.rs."));
+    }
+
+    @Test
+    void rendersDelegatedSpringBeanLocalClientStep() throws Exception {
+        SpringLocalClientStepRenderer renderer = new SpringLocalClientStepRenderer();
+
+        renderer.render(new LocalBinding(delegatedModel(ServiceApiKind.REACTIVE, ReactiveReturnKind.REACTOR_MONO)),
+            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null,
+                null, null, 2));
+
+        Path clientStep = tempDir.resolve("com/example/service/pipeline/AuditLocalClientStep.java");
+        String source = Files.readString(clientStep);
+        assertTrue(source.contains("import com.example.operator.PaymentAuditBean;"));
+        assertTrue(source.contains("@Order(2)"));
+        assertTrue(source.contains("public class AuditLocalClientStep implements PipelineUnaryStep<PaymentStatus, PaymentStatus>"));
+        assertTrue(source.contains("private final PaymentAuditBean paymentAuditBean;"));
+        assertTrue(source.contains("public AuditLocalClientStep(PaymentAuditBean paymentAuditBean)"));
+        assertTrue(source.contains("return this.paymentAuditBean.process(input).toFuture();"));
+        assertFalse(source.contains("private final AuditService auditService;"));
+        assertFalse(source.contains("AuditService auditService"));
+    }
+
+    @Test
+    void rendersDelegatedBlockingSpringBeanLocalClientStep() throws Exception {
+        SpringLocalClientStepRenderer renderer = new SpringLocalClientStepRenderer();
+
+        renderer.render(new LocalBinding(delegatedModel(ServiceApiKind.BLOCKING, ReactiveReturnKind.MUTINY_UNI)),
+            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+
+        Path clientStep = tempDir.resolve("com/example/service/pipeline/AuditLocalClientStep.java");
+        String source = Files.readString(clientStep);
+        assertTrue(source.contains("private final PaymentAuditBean paymentAuditBean;"));
+        assertTrue(source.contains("return RuntimeAdapters.executeBlocking(() -> this.paymentAuditBean.processBlocking(input), false);"));
     }
 
     @Test
@@ -173,6 +210,24 @@ class SpringLocalClientStepRendererTest {
             .enabledTargets(Set.of(GenerationTarget.LOCAL_CLIENT_STEP))
             .executionMode(executionMode)
             .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+            .serviceApiKind(apiKind)
+            .reactiveReturnKind(reactiveReturnKind)
+            .build();
+    }
+
+    private PipelineStepModel delegatedModel(ServiceApiKind apiKind, ReactiveReturnKind reactiveReturnKind) {
+        return new PipelineStepModel.Builder()
+            .serviceName("AuditService")
+            .generatedName("AuditService")
+            .servicePackage("com.example.service")
+            .serviceClassName(ClassName.get("com.example.service", "AuditService"))
+            .inputMapping(new TypeMapping(ClassName.get("com.example.service", "PaymentStatus"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("com.example.service", "PaymentStatus"), null, false))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(Set.of(GenerationTarget.LOCAL_CLIENT_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+            .delegateService(ClassName.get("com.example.operator", "PaymentAuditBean"))
             .serviceApiKind(apiKind)
             .reactiveReturnKind(reactiveReturnKind)
             .build();

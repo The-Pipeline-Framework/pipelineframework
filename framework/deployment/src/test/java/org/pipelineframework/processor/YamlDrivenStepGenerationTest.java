@@ -321,6 +321,41 @@ class YamlDrivenStepGenerationTest {
     }
 
     @Test
+    void generatesYamlDelegatedStepFromPlainMonoProcessMethodWithSpringProfile() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-delegated-plain-mono.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "audit"
+                operator: "com.example.app.PaymentAuditService"
+                input: "com.example.app.PaymentStatus"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentAuditService = writeSource("PaymentAuditService.java", """
+            package com.example.app;
+
+            import reactor.core.publisher.Mono;
+
+            public class PaymentAuditService {
+                public Mono<PaymentStatus> process(PaymentStatus input) {
+                    return Mono.just(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentStatus = writePaymentStatus();
+        Path monoStub = writeMonoStub();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentAuditService, paymentStatus, monoStub),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertTrue(result.success(), "Expected Spring delegated Mono operator compilation to succeed: " + result.errorSummary());
+    }
+
+    @Test
     void failsYamlInternalStepFromPlainMonoProcessMethodWithoutSpringProfile() throws IOException {
         Path yamlFile = tempDir.resolve("pipeline-internal-plain-mono-quarkus.yaml");
         Files.writeString(yamlFile, """

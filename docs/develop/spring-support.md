@@ -13,6 +13,7 @@ Current Spring work proves a narrow generated application path:
 - generated Spring `@Component` local step beans,
 - Spring WebFlux `@RestController` resources for the supported smoke path,
 - `Mono<Out>` authored service methods for YAML-declared Spring-profile unary services,
+- unary delegated Spring bean steps for local pipeline execution,
 - shared runner-core sequencing through the neutral runtime seam.
 
 ## Not Yet Supported
@@ -23,7 +24,7 @@ Spring does not yet have parity for:
 - function handlers,
 - await, checkpoint, durable coordinator, or broker paths,
 - persistence providers,
-- delegated/operator steps,
+- arbitrary `Class::method` operator invokers and non-local delegated/operator paths,
 - side effects and plugins,
 - REST client-step remote boundaries,
 - streaming or non-unary shapes,
@@ -37,10 +38,11 @@ Use Quarkus for production TPF applications today.
 
 Use the Spring path only when you are validating the emerging renderer/runtime seam or contributing to portability work. Keep business contracts neutral: typed inputs, typed outputs, mappers, and YAML declarations should not rely on Quarkus-only application code unless the application is explicitly Quarkus-targeted.
 
+Delegated Spring beans are supported only for unary local steps declared from YAML with a Spring bean class and a supported service shape such as `process(In): Mono<Out>` or `processBlocking(In): Out`. They do not imply gRPC, function, await/checkpoint, broker, durable coordinator, or production parity with the Quarkus runtime.
+
 ## Deeper Architecture
 
 - [Runtime Core Decoupling](/evolve/runtime-core-decoupling)
 - [Framework Portability Assessment](/evolve/framework-portability-assessment/)
 - [Runtime Split](/evolve/framework-portability-assessment/runtime-split)
 - [Code Generation Portability](/evolve/framework-portability-assessment/code-generation)
-

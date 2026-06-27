@@ -20,6 +20,7 @@ import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.ServiceApiKind;
 import org.pipelineframework.processor.ir.StreamingShape;
 
 /**
@@ -449,6 +450,9 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         // Validate the step models created from YAML
         for (PipelineStepModel model : ctx.getStepModels()) {
             if (model.delegateService() != null) {
+                if (isSpringLocalDelegate(ctx, model)) {
+                    continue;
+                }
                 // Validate that the delegate service exists
                 var delegateElement = elementUtils.getTypeElement(model.delegateService().canonicalName());
                 if (delegateElement == null) {
@@ -536,6 +540,14 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                 }
             }
         }
+    }
+
+    private boolean isSpringLocalDelegate(PipelineCompilationContext ctx, PipelineStepModel model) {
+        return SpringRendererProfileSupport.isSpringProfile(ctx)
+            && model.remoteExecution() == null
+            && !model.sideEffect()
+            && model.streamingShape() == StreamingShape.UNARY_UNARY
+            && (model.serviceApiKind() == ServiceApiKind.REACTIVE || model.serviceApiKind() == ServiceApiKind.BLOCKING);
     }
 
     /**

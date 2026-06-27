@@ -162,7 +162,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         Set<String> enabledAspects = computeEnabledAspects(ctx);
 
         // Generate artifacts for each step model
-        for (PipelineStepModel model : ctx.getStepModels()) {
+        for (int stepIndex = 0; stepIndex < ctx.getStepModels().size(); stepIndex++) {
+            PipelineStepModel model = ctx.getStepModels().get(stepIndex);
             // Check if this is a delegation step
             Object externalAdapterBindingObj = bindingsMap.get(model.serviceName() + "_external_adapter");
             ExternalAdapterBinding externalAdapterBinding = null;
@@ -240,6 +241,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             generateArtifacts(
                 ctx,
                 model,
+                stepIndex,
                 grpcBinding,
                 restBinding,
                 localBinding,
@@ -696,6 +698,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     private void generateArtifacts(
             PipelineCompilationContext ctx,
             PipelineStepModel model,
+            int stepIndex,
             GrpcBinding grpcBinding,
             RestBinding restBinding,
             LocalBinding localBinding,
@@ -718,6 +721,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         stepArtifactGenerationService.generateArtifactsForModel(
             ctx,
             model,
+            stepIndex,
             grpcBinding,
             restBinding,
             localBinding,

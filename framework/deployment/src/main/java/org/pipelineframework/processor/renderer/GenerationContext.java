@@ -20,17 +20,35 @@ import org.pipelineframework.processor.ir.PipelineTransport;
  * @param descriptorSet Gets the optional protobuf descriptor set for gRPC type resolution.
  * @param transportMode Gets the resolved pipeline transport mode when available.
  * @param pipelineBasePackage Gets the resolved pipeline base package when available.
+ * @param stepOrder Gets the zero-based resolved step order when rendering an ordered pipeline step.
  */
 public record GenerationContext(ProcessingEnvironment processingEnv, Path outputDir, DeploymentRole role,
                                 Set<String> enabledAspects, ClassName cacheKeyGenerator,
                                 DescriptorProtos.FileDescriptorSet descriptorSet,
                                 PipelineTransport transportMode,
-                                String pipelineBasePackage) {
+                                String pipelineBasePackage,
+                                Integer stepOrder) {
     /**
      * Creates a new GenerationContext instance.
      */
     public GenerationContext {
         enabledAspects = enabledAspects == null ? Set.of() : Set.copyOf(enabledAspects);
+    }
+
+    public GenerationContext(ProcessingEnvironment processingEnv, Path outputDir, DeploymentRole role,
+                             Set<String> enabledAspects, ClassName cacheKeyGenerator,
+                             DescriptorProtos.FileDescriptorSet descriptorSet,
+                             PipelineTransport transportMode,
+                             String pipelineBasePackage) {
+        this(processingEnv,
+            outputDir,
+            role,
+            enabledAspects,
+            cacheKeyGenerator,
+            descriptorSet,
+            transportMode,
+            pipelineBasePackage,
+            null);
     }
 
     public GenerationContext(
@@ -40,6 +58,6 @@ public record GenerationContext(ProcessingEnvironment processingEnv, Path output
             Set<String> enabledAspects,
             ClassName cacheKeyGenerator,
             DescriptorProtos.FileDescriptorSet descriptorSet) {
-        this(processingEnv, outputDir, role, enabledAspects, cacheKeyGenerator, descriptorSet, null, null);
+        this(processingEnv, outputDir, role, enabledAspects, cacheKeyGenerator, descriptorSet, null, null, null);
     }
 }

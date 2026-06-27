@@ -39,7 +39,7 @@ class StepBindingConstructionService {
         for (PipelineStepModel model : ctx.getStepModels()) {
             String modelKey = model.serviceName();
 
-            if (model.delegateService() != null) {
+            if (model.delegateService() != null && !isSpringLocalDelegatedStep(ctx, model)) {
                 warnIfDelegatedStepHasServerTargets(ctx, model);
                 ExternalAdapterBinding externalAdapterBinding = new ExternalAdapterBinding(
                     model,
@@ -75,6 +75,13 @@ class StepBindingConstructionService {
             }
         }
         return bindingsMap;
+    }
+
+    private boolean isSpringLocalDelegatedStep(PipelineCompilationContext ctx, PipelineStepModel model) {
+        return ctx != null
+            && "spring".equalsIgnoreCase(ctx.getRendererProfile())
+            && model.delegateService() != null
+            && model.enabledTargets().equals(Set.of(GenerationTarget.LOCAL_CLIENT_STEP));
     }
 
     private void warnIfDelegatedStepHasServerTargets(PipelineCompilationContext ctx, PipelineStepModel model) {

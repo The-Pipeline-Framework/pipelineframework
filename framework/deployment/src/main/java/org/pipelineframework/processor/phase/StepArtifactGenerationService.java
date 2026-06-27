@@ -79,6 +79,7 @@ class StepArtifactGenerationService {
     void generateArtifactsForModel(
             PipelineCompilationContext ctx,
             PipelineStepModel model,
+            Integer stepIndex,
             GrpcBinding grpcBinding,
             RestBinding restBinding,
             LocalBinding localBinding,
@@ -275,7 +276,10 @@ class StepArtifactGenerationService {
                         localClientRole,
                         enabledAspects,
                         cacheKeyGenerator,
-                        descriptorSet));
+                        descriptorSet,
+                        ctx.getTransportMode(),
+                        ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config ? config.basePackage() : null,
+                        stepIndex));
                     roleMetadataGenerator.recordClassWithRole(localClientClassName, localClientRole.name());
                 }
                 case REST_RESOURCE -> {
@@ -409,6 +413,7 @@ class StepArtifactGenerationService {
         generateArtifactsForModel(
             ctx,
             model,
+            null,
             grpcBinding,
             restBinding,
             localBinding,

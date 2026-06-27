@@ -22,7 +22,7 @@ class GeneratedSpringRestSmokeTest {
 
     @Test
     void generatedRestEndpointRunsThroughSpringPipelineRunner() {
-        assertEquals(1, pipelineRunner.stepCount());
+        assertEquals(2, pipelineRunner.stepCount());
 
         WebTestClient.bindToServer()
             .baseUrl("http://localhost:" + port)
@@ -36,7 +36,7 @@ class GeneratedSpringRestSmokeTest {
             .expectBody(PaymentStatusDto.class)
             .value(response -> {
                 assertEquals("pay-123", response.paymentId());
-                assertEquals("APPROVED:42", response.status());
+                assertEquals("APPROVED:42:DELEGATED", response.status());
             });
     }
 }
