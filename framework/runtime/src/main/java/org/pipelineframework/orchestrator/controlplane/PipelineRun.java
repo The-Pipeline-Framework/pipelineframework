@@ -30,6 +30,8 @@ public record PipelineRun(
         releaseVersion = ControlPlaneChecks.requireText(releaseVersion, "releaseVersion");
         Objects.requireNonNull(resultShape, "resultShape must not be null");
         Objects.requireNonNull(status, "status must not be null");
+        inputPayload = ControlPlaneChecks.freezePayload(inputPayload);
+        resultPayload = ControlPlaneChecks.freezePayload(resultPayload);
         ControlPlaneChecks.requireNonNegative(version, "version");
         ControlPlaneChecks.requireNonNegative(createdAtEpochMs, "createdAtEpochMs");
         ControlPlaneChecks.requireNonNegative(updatedAtEpochMs, "updatedAtEpochMs");
@@ -77,6 +79,8 @@ public record PipelineRun(
     }
 
     PipelineRun failed(String errorCode, String errorMessage, long version, long nowEpochMs) {
+        errorCode = ControlPlaneChecks.requireText(errorCode, "errorCode");
+        errorMessage = errorMessage == null ? "" : errorMessage;
         return new PipelineRun(
             tenantId,
             runId,

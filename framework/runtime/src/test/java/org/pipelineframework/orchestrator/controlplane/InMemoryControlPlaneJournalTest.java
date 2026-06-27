@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
 
@@ -43,6 +45,34 @@ class InMemoryControlPlaneJournalTest {
         assertEquals(1, first.appendedEvents().size());
         assertTrue(duplicate.appendedEvents().isEmpty());
         assertEquals(1, duplicate.projection().version());
+    }
+
+    @Test
+    void appendIsLazyUntilSubscribed() {
+        InMemoryControlPlaneJournal journal = new InMemoryControlPlaneJournal();
+
+        var append = journal.append("tenant", "run-1", 0, List.of(submitted()), 100L);
+
+        assertTrue(journal.projection("tenant", "run-1").await().indefinitely().factKeys().isEmpty());
+
+        append.await().indefinitely();
+
+        assertTrue(journal.projection("tenant", "run-1")
+            .await().indefinitely()
+            .factKeys()
+            .contains("run-submitted:tenant:run-1"));
+    }
+
+    @Test
+    void duplicateFactsInsideSingleAppendAreIdempotent() {
+        InMemoryControlPlaneJournal journal = new InMemoryControlPlaneJournal();
+        ControlPlaneFact.RunSubmitted fact = submitted();
+
+        ControlPlaneAppendResult result = journal.append("tenant", "run-1", 0, List.of(fact, fact), 100L)
+            .await().indefinitely();
+
+        assertEquals(1, result.appendedEvents().size());
+        assertEquals(1, result.projection().version());
     }
 
     @Test
@@ -147,6 +177,50 @@ class InMemoryControlPlaneJournalTest {
         assertEquals(BoundaryUnitStatus.COMPLETED, first.projection().boundaries().get("await-unit").status());
         assertTrue(duplicate.appendedEvents().isEmpty());
         assertEquals(first.projection().version(), duplicate.projection().version());
+    }
+
+    @Test
+    void mutablePayloadsAreFrozenBeforeStorage() {
+        InMemoryControlPlaneJournal journal = new InMemoryControlPlaneJournal();
+        Map<String, Object> requestPayload = new LinkedHashMap<>();
+        requestPayload.put("amount", 10);
+        requestPayload.put("labels", new java.util.ArrayList<>(List.of("initial")));
+        ControlPlaneFact.BoundaryInteractionDispatched dispatched = new ControlPlaneFact.BoundaryInteractionDispatched(
+            "tenant",
+            "run-1",
+            "await-unit",
+            BoundaryKind.AWAIT,
+            "interaction-0",
+            "correlation-0",
+            "idem-0",
+            0,
+            requestPayload,
+            "kafka",
+            150L);
+
+        requestPayload.put("amount", 99);
+        @SuppressWarnings("unchecked")
+        List<String> labels = (List<String>) requestPayload.get("labels");
+        labels.add("mutated");
+        ControlPlaneAppendResult result = journal.append("tenant", "run-1", 0, List.of(
+                submitted(),
+                new ControlPlaneFact.SegmentAttemptStarted("tenant", "run-1", "segment-0", "attempt-0", 0),
+                new ControlPlaneFact.SegmentSuspended(
+                    "tenant",
+                    "run-1",
+                    "segment-0",
+                    "attempt-0",
+                    "await-unit",
+                    BoundaryKind.AWAIT,
+                    1,
+                    1),
+                dispatched),
+            100L).await().indefinitely();
+
+        Object stored = result.projection().interactions().get("interaction-0").requestPayload();
+
+        assertEquals(Map.of("amount", 10, "labels", List.of("initial")), stored);
+        assertThrows(UnsupportedOperationException.class, () -> ((Map<?, ?>) stored).clear());
     }
 
     private static ControlPlaneFact.RunSubmitted submitted() {

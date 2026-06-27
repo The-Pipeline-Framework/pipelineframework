@@ -10,6 +10,7 @@ public record BoundaryUnit(
     BoundaryKind kind,
     BoundaryUnitStatus status,
     String segmentId,
+    String attemptId,
     int stepIndex,
     Integer expectedItemCount,
     int completedItemCount,
@@ -25,17 +26,24 @@ public record BoundaryUnit(
         Objects.requireNonNull(kind, "kind must not be null");
         Objects.requireNonNull(status, "status must not be null");
         segmentId = ControlPlaneChecks.requireText(segmentId, "segmentId");
+        attemptId = ControlPlaneChecks.requireText(attemptId, "attemptId");
         ControlPlaneChecks.requireNonNegative(stepIndex, "stepIndex");
         if (expectedItemCount != null && expectedItemCount < 0) {
             throw new IllegalArgumentException("expectedItemCount must not be negative");
         }
         ControlPlaneChecks.requireNonNegative(completedItemCount, "completedItemCount");
         completedInteractionKeys = ControlPlaneChecks.copySet(completedInteractionKeys);
+        if (completedItemCount != completedInteractionKeys.size()) {
+            throw new IllegalArgumentException("completedItemCount must match completedInteractionKeys size");
+        }
         ControlPlaneChecks.requireNonNegative(createdAtEpochMs, "createdAtEpochMs");
         ControlPlaneChecks.requireNonNegative(updatedAtEpochMs, "updatedAtEpochMs");
     }
 
     BoundaryUnit withDispatchComplete(int expectedCount, long nowEpochMs) {
+        if (status.terminal()) {
+            return this;
+        }
         BoundaryUnitStatus nextStatus = completedInteractionKeys.size() >= expectedCount
             ? BoundaryUnitStatus.COMPLETED
             : BoundaryUnitStatus.DISPATCH_COMPLETE;
@@ -46,6 +54,7 @@ public record BoundaryUnit(
             kind,
             nextStatus,
             segmentId,
+            attemptId,
             stepIndex,
             expectedCount,
             completedInteractionKeys.size(),
@@ -56,6 +65,9 @@ public record BoundaryUnit(
     }
 
     BoundaryUnit withCompletion(String completionKey, long nowEpochMs) {
+        if (status.terminal()) {
+            return this;
+        }
         Set<String> nextKeys = new java.util.HashSet<>(completedInteractionKeys);
         nextKeys.add(ControlPlaneChecks.requireText(completionKey, "completionKey"));
         int expected = expectedItemCount == null ? -1 : expectedItemCount;
@@ -69,6 +81,7 @@ public record BoundaryUnit(
             kind,
             nextStatus,
             segmentId,
+            attemptId,
             stepIndex,
             expectedItemCount,
             nextKeys.size(),
@@ -94,6 +107,7 @@ public record BoundaryUnit(
             kind,
             nextStatus,
             segmentId,
+            attemptId,
             stepIndex,
             expectedItemCount,
             completedItemCount,

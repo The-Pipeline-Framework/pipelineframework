@@ -48,9 +48,8 @@ public sealed interface ControlPlaneFact permits
             Objects.requireNonNull(resultShape, "resultShape must not be null");
             initialSegmentId = ControlPlaneChecks.requireText(initialSegmentId, "initialSegmentId");
             ControlPlaneChecks.requireNonNegative(startStepIndex, "startStepIndex");
-            if (stopBeforeStepIndex >= 0 && stopBeforeStepIndex < startStepIndex) {
-                throw new IllegalArgumentException("stopBeforeStepIndex must be greater than or equal to startStepIndex");
-            }
+            stopBeforeStepIndex = ControlPlaneChecks.requireSegmentStopAfterStart(startStepIndex, stopBeforeStepIndex);
+            inputPayload = ControlPlaneChecks.freezePayload(inputPayload);
             ControlPlaneChecks.requireNonNegative(ttlEpochS, "ttlEpochS");
         }
 
@@ -94,7 +93,9 @@ public sealed interface ControlPlaneFact permits
             runId = ControlPlaneChecks.requireText(runId, "runId");
             segmentId = ControlPlaneChecks.requireText(segmentId, "segmentId");
             attemptId = ControlPlaneChecks.requireText(attemptId, "attemptId");
-            outputItems = ControlPlaneChecks.copyList(outputItems);
+            outputItems = ControlPlaneChecks.copyList(outputItems).stream()
+                .map(ControlPlaneChecks::freezePayload)
+                .toList();
         }
 
         @Override
@@ -156,6 +157,7 @@ public sealed interface ControlPlaneFact permits
             if (itemIndex != null && itemIndex < 0) {
                 throw new IllegalArgumentException("itemIndex must not be negative");
             }
+            requestPayload = ControlPlaneChecks.freezePayload(requestPayload);
             transportType = ControlPlaneChecks.requireText(transportType, "transportType");
             ControlPlaneChecks.requireNonNegative(deadlineEpochMs, "deadlineEpochMs");
         }
@@ -201,6 +203,7 @@ public sealed interface ControlPlaneFact permits
             Objects.requireNonNull(boundaryKind, "boundaryKind must not be null");
             interactionId = ControlPlaneChecks.requireText(interactionId, "interactionId");
             idempotencyKey = ControlPlaneChecks.requireText(idempotencyKey, "idempotencyKey");
+            responsePayload = ControlPlaneChecks.freezePayload(responsePayload);
         }
 
         @Override
@@ -247,9 +250,8 @@ public sealed interface ControlPlaneFact permits
             segmentId = ControlPlaneChecks.requireText(segmentId, "segmentId");
             boundaryUnitId = ControlPlaneChecks.requireText(boundaryUnitId, "boundaryUnitId");
             ControlPlaneChecks.requireNonNegative(startStepIndex, "startStepIndex");
-            if (stopBeforeStepIndex >= 0 && stopBeforeStepIndex < startStepIndex) {
-                throw new IllegalArgumentException("stopBeforeStepIndex must be greater than or equal to startStepIndex");
-            }
+            stopBeforeStepIndex = ControlPlaneChecks.requireSegmentStopAfterStart(startStepIndex, stopBeforeStepIndex);
+            inputPayload = ControlPlaneChecks.freezePayload(inputPayload);
         }
 
         @Override
@@ -289,6 +291,7 @@ public sealed interface ControlPlaneFact permits
             tenantId = ControlPlaneChecks.requireText(tenantId, "tenantId");
             runId = ControlPlaneChecks.requireText(runId, "runId");
             segmentId = ControlPlaneChecks.requireText(segmentId, "segmentId");
+            resultPayload = ControlPlaneChecks.freezePayload(resultPayload);
         }
 
         @Override

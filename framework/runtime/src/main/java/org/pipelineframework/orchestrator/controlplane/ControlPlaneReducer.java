@@ -142,6 +142,7 @@ public final class ControlPlaneReducer {
                 fact.boundaryKind(),
                 BoundaryUnitStatus.OPEN,
                 fact.segmentId(),
+                fact.attemptId(),
                 fact.boundaryStepIndex(),
                 fact.expectedItemCount(),
                 0,
@@ -190,13 +191,13 @@ public final class ControlPlaneReducer {
             ControlPlaneFact.BoundaryCompletionAdmitted fact
         ) {
             BoundaryInteraction interaction = interactions.get(fact.interactionId());
-            if (interaction != null && interaction.status() != BoundaryInteractionStatus.COMPLETED) {
+            if (interaction != null && !interaction.status().terminal()) {
                 interactions.put(fact.interactionId(), interaction.completed(
                     fact.responsePayload(),
                     event.occurredAtEpochMs()));
             }
             BoundaryUnit unit = boundaries.get(fact.boundaryUnitId());
-            if (unit != null) {
+            if (unit != null && !unit.status().terminal()) {
                 boundaries.put(fact.boundaryUnitId(), unit.withCompletion(
                     fact.idempotencyKey(),
                     event.occurredAtEpochMs()));
@@ -214,6 +215,13 @@ public final class ControlPlaneReducer {
                 ExecutionSegment segment = segments.get(unit.segmentId());
                 if (segment != null) {
                     segments.put(segment.segmentId(), segment.failed(event.occurredAtEpochMs()));
+                }
+                SegmentAttempt attempt = attempts.get(unit.attemptId());
+                if (attempt != null) {
+                    attempts.put(unit.attemptId(), attempt.failed(
+                        "BOUNDARY_TIMEOUT",
+                        fact.reason(),
+                        event.occurredAtEpochMs()));
                 }
             }
             if (run != null && !run.status().terminal()) {

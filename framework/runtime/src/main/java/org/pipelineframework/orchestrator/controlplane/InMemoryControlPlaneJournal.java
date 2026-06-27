@@ -22,38 +22,22 @@ public class InMemoryControlPlaneJournal implements ControlPlaneJournal {
         List<ControlPlaneFact> facts,
         long nowEpochMs
     ) {
-        try {
-            return Uni.createFrom().item(appendBlocking(tenantId, runId, expectedVersion, facts, nowEpochMs));
-        } catch (Throwable failure) {
-            return Uni.createFrom().failure(failure);
-        }
+        return Uni.createFrom().item(() -> appendBlocking(tenantId, runId, expectedVersion, facts, nowEpochMs));
     }
 
     @Override
     public Uni<ControlPlaneProjection> projection(String tenantId, String runId) {
-        try {
-            return Uni.createFrom().item(projectionBlocking(tenantId, runId));
-        } catch (Throwable failure) {
-            return Uni.createFrom().failure(failure);
-        }
+        return Uni.createFrom().item(() -> projectionBlocking(tenantId, runId));
     }
 
     @Override
     public Uni<List<DueSegment>> findDueSegments(long nowEpochMs, int limit) {
-        try {
-            return Uni.createFrom().item(findDueSegmentsBlocking(nowEpochMs, limit));
-        } catch (Throwable failure) {
-            return Uni.createFrom().failure(failure);
-        }
+        return Uni.createFrom().item(() -> findDueSegmentsBlocking(nowEpochMs, limit));
     }
 
     @Override
     public Uni<List<DueBoundaryInteraction>> findTimedOutInteractions(long nowEpochMs, int limit) {
-        try {
-            return Uni.createFrom().item(findTimedOutInteractionsBlocking(nowEpochMs, limit));
-        } catch (Throwable failure) {
-            return Uni.createFrom().failure(failure);
-        }
+        return Uni.createFrom().item(() -> findTimedOutInteractionsBlocking(nowEpochMs, limit));
     }
 
     private ControlPlaneAppendResult appendBlocking(
@@ -82,9 +66,12 @@ public class InMemoryControlPlaneJournal implements ControlPlaneJournal {
             List<ControlPlaneEvent> currentEvents = eventsByRun.computeIfAbsent(key, ignored -> new ArrayList<>());
             ControlPlaneProjection current = ControlPlaneReducer.reduce(tenantId, runId, currentEvents);
             Set<String> knownFactKeys = new HashSet<>(current.factKeys());
-            List<ControlPlaneFact> newFacts = requestedFacts.stream()
-                .filter(fact -> !knownFactKeys.contains(fact.factKey()))
-                .toList();
+            List<ControlPlaneFact> newFacts = new ArrayList<>();
+            for (ControlPlaneFact fact : requestedFacts) {
+                if (knownFactKeys.add(fact.factKey())) {
+                    newFacts.add(fact);
+                }
+            }
             if (newFacts.isEmpty()) {
                 return new ControlPlaneAppendResult(current, List.of());
             }
