@@ -18,6 +18,7 @@ import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.WorkDispatcher;
+import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
 import org.pipelineframework.step.NonRetryableException;
 import org.pipelineframework.step.PipelineControlFlowException;
 
@@ -33,6 +34,9 @@ class ExecutionFailureHandler {
 
   @Inject
   PipelineOrchestratorConfig orchestratorConfig;
+
+  @Inject
+  SegmentBoundaryLedger segmentBoundaryLedger;
 
   Uni<Void> handleExecutionFailure(
       ExecutionRecord<Object, Object> record,
@@ -114,8 +118,18 @@ class ExecutionFailureHandler {
               .retriesObserved(record.attempt())
               .createdAtEpochMs(now)
               .build();
-          return deadLetterPublisher.publish(envelope);
+          return segmentBoundaryLedger()
+              .recordRunFailed(
+                  updated.get(),
+                  classifiedFailure.getClass().getSimpleName(),
+                  classifiedFailure.getMessage(),
+                  now)
+              .chain(() -> deadLetterPublisher.publish(envelope));
         });
+  }
+
+  private SegmentBoundaryLedger segmentBoundaryLedger() {
+    return segmentBoundaryLedger == null ? new SegmentBoundaryLedger() : segmentBoundaryLedger;
   }
 
   long retryDelayMillis(int nextAttempt) {

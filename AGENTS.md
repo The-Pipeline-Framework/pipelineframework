@@ -57,7 +57,7 @@ When changing layout support in csv-payments, update all of:
 3. Topology test(s)
 4. E2E IT path (through `AbstractCsvPaymentsEndToEnd`)
 5. Relevant CI workflows under `.github/workflows/` (at minimum `full-tests.yml` and any `e2e-csv-*.yml` jobs that cover the changed layout)
-6. Build docs under `docs/guide/build/runtime-layouts/`
+6. Runtime-layout docs under `docs/deploy/runtime-layouts/`
 
 ## Runtime and Build Commands
 
@@ -152,34 +152,34 @@ Keep both forms aligned in docs and processor behavior.
 
 ## Docs Source of Truth
 
-Application-user docs:
+Canonical docs live under top-level route directories:
 
-- Build/runtime-layout docs: `docs/guide/build/runtime-layouts/`
-- Build mechanics: `docs/guide/build/`
-- Operations and usage: `docs/guide/operations/`, `docs/guide/development/`
+- Architecture and concepts: `docs/design/`
+- Implementation and usage: `docs/develop/`
+- Runtime topology and deployment mechanics: `docs/deploy/`
+- Observability and operations: `docs/operate/`
+- Implementation internals, design notes, and backlog material: `docs/evolve/`
+- Product/value framing: `docs/value/`
 
-Implementation/developer-internal docs:
-
-- `docs/guide/evolve/`
-- `docs/guide/evolve/tpfgo/` (TPFGo reference guide and DDD alignment)
+`docs/guide/**` files are redirect/noindex compatibility stubs only. Do not add real content there. Move or merge useful guide-stub content into the canonical top-level route.
 
 Use links between these areas when a feature spans both implementation and app usage.
-Prefer the split annotation-processor guide under `docs/guide/evolve/annotation-processor/` over older compatibility pages when both exist.
+Prefer the split annotation-processor guide under `docs/evolve/annotation-processor/` over older compatibility pages when both exist.
 
 ## Canonical Entry Docs
 
-- `docs/guide/build/runtime-layouts/index.md`
-- `docs/guide/build/pipeline-compilation.md`
-- `docs/guide/build/operators.md`
-- `docs/guide/development/testing.md`
-- `docs/guide/plugins/persistence.md`
-- `docs/guide/development/using-plugins.md`
-- `docs/guide/evolve/annotation-processor/index.md`
-- `docs/guide/evolve/compiler-pipeline-architecture.md`
-- `docs/guide/evolve/plugins-architecture.md`
-- `docs/guide/evolve/publishing.md`
-- `docs/guide/evolve/ci-guidelines.md`
-- `docs/guide/evolve/tpfgo/index.md`
+- `docs/deploy/runtime-layouts/index.md`
+- `docs/develop/pipeline-compilation/index.md`
+- `docs/develop/operators.md`
+- `docs/develop/testing.md`
+- `docs/design/persistence.md`
+- `docs/develop/using-plugins.md`
+- `docs/evolve/annotation-processor/index.md`
+- `docs/evolve/compiler-pipeline-architecture.md`
+- `docs/evolve/plugins-architecture.md`
+- `docs/evolve/publishing.md`
+- `docs/evolve/ci-guidelines.md`
+- `docs/evolve/tpfgo/index.md`
 
 ## Agent Working Rules for This Repo
 
@@ -188,14 +188,15 @@ Prefer the split annotation-processor guide under `docs/guide/evolve/annotation-
 - Do not commit/push unless explicitly requested.
 - If unexpected unrelated working-tree changes appear mid-task, stop and ask.
 - Treat `examples/` and `ai-sdk/` as compatibility/reference surfaces, not disposable demos, when framework semantics change.
-- Keep user-facing docs (`build`/`development`/`operations`) free of internal planning terminology unless the topic is explicitly implementation-internal (`docs/guide/evolve/`).
-- Prefer enriching existing guide pages over introducing standalone “feature islands” that duplicate navigation.
-- Do not add “audience declaration” sections in user-facing docs. Make docs audience-fit by placing content in the right guide area:
-  - `development`: implementation and usage
-  - `operations`: observability and response
-  - `build`: topology/configuration/application of features
+- Keep user-facing docs (`design`/`develop`/`deploy`/`operate`/`value`) free of internal planning terminology unless the topic is explicitly implementation-internal (`docs/evolve/`).
+- Prefer enriching existing canonical docs pages over introducing standalone “feature islands” that duplicate navigation.
+- Do not add “audience declaration” sections in user-facing docs. Make docs audience-fit by placing content in the right canonical docs area:
+  - `design`: architecture, concepts, and user-facing design rationale
+  - `develop`: implementation and usage
+  - `deploy`: runtime topology and deployment mechanics
+  - `operate`: observability and response
   - `evolve`: internals, design notes, and backlog-oriented material
-- Keep risk registers, update reports, and future-work tracking out of user-facing docs unless they are actionable operator runbooks; place backlog/planning artifacts under `docs/guide/evolve/` or external issue trackers.
+- Keep risk registers, update reports, and future-work tracking out of user-facing docs unless they are actionable operator runbooks; place backlog/planning artifacts under `docs/evolve/` or external issue trackers.
 - When changing operator or mapper semantics, update code + tests + docs together in the same change set.
 - When adding or changing a semantic step kind (`kind: await`, `kind: command`, query steps, object I/O, or future DSL-owned I/O shells), update compiler/runtime support, validation tests, user docs, telemetry/replay metadata, replay-viewer node rendering/legend, and any affected example replay datasets or generation paths in the same change set.
 - When changing runtime-layout, generator, or Canvas/web UI semantics, update `web-ui`, affected docs, tests, and the separate `The-Pipeline-Framework/tpf-mcp-bridge` repository when applicable.

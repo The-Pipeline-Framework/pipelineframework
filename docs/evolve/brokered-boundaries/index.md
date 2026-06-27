@@ -35,6 +35,8 @@ The important separation is:
 3. [Envelope And Data Policy](/evolve/brokered-boundaries/envelope-and-data-policy) separates loose payloads from strict TPF control metadata.
 4. [Adoption And Slices](/evolve/brokered-boundaries/adoption-and-slices) captures the value proposition and implementation ordering.
 
+For the queue-async segment and boundary facts that await and checkpoint handoffs share, see [Immutable Segment And Boundary Model](/evolve/await-unit-runtime/immutable-boundaries).
+
 ## Naming
 
 Use **step host** for an external process, service, pod, or function that executes a TPF step boundary.
