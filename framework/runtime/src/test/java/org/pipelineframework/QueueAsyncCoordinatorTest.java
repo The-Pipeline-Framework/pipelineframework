@@ -4,6 +4,7 @@ import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -51,6 +52,11 @@ import org.pipelineframework.orchestrator.TransitionResultEnvelope;
 import org.pipelineframework.orchestrator.TransitionWorkerOutcome;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.DynamoExecutionStateStore;
+import org.pipelineframework.orchestrator.controlplane.BoundaryUnitStatus;
+import org.pipelineframework.orchestrator.controlplane.ControlPlaneProjection;
+import org.pipelineframework.orchestrator.controlplane.InMemoryControlPlaneJournal;
+import org.pipelineframework.orchestrator.controlplane.PipelineRunStatus;
+import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
@@ -356,6 +362,23 @@ class QueueAsyncCoordinatorTest {
     }
 
     @Test
+    void executePipelineAsyncAppendsRunSubmittedForNewExecution() {
+        configureQueueModeDefaults();
+        InMemoryControlPlaneJournal journal = new InMemoryControlPlaneJournal();
+        coordinator.segmentBoundaryLedger = new SegmentBoundaryLedger(journal);
+        ExecutionRecord<Object, Object> record = createRecord("tenant-1", "exec-ledger", "key-ledger");
+        when(executionStateStore.createOrGetExecution(any()))
+            .thenReturn(Uni.createFrom().item(new CreateExecutionResult(record, false)));
+        when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
+
+        coordinator.executePipelineAsync("input", "tenant-1", null, false).await().indefinitely();
+
+        ControlPlaneProjection projection = journal.projection("tenant-1", "exec-ledger").await().indefinitely();
+        assertEquals(PipelineRunStatus.ACCEPTED, projection.status());
+        assertTrue(projection.factKeys().contains("run-submitted:tenant-1:exec-ledger"));
+    }
+
+    @Test
     void executePipelineAsyncRejectsDeniedTenantBeforeStoreAccess() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         PipelineOrchestratorConfig.TenancyConfig tenancy = mock(PipelineOrchestratorConfig.TenancyConfig.class);
@@ -460,6 +483,8 @@ class QueueAsyncCoordinatorTest {
     void processExecutionWorkItemMarksWaitingExternalWhenAwaitSuspends() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         when(orchestratorConfig.leaseMs()).thenReturn(1000L);
+        InMemoryControlPlaneJournal journal = new InMemoryControlPlaneJournal();
+        coordinator.segmentBoundaryLedger = new SegmentBoundaryLedger(journal);
         ExecutionRecord<Object, Object> claimed = createRecord("tenant-1", "exec-await", "key-await");
         when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
@@ -499,6 +524,9 @@ class QueueAsyncCoordinatorTest {
             org.mockito.ArgumentMatchers.anyInt(),
             org.mockito.ArgumentMatchers.anyLong());
         verify(workDispatcher, never()).enqueueNow(any());
+        ControlPlaneProjection projection = journal.projection("tenant-1", "exec-await").await().indefinitely();
+        assertTrue(projection.factKeys().contains("segment-suspended:exec-await:0:0:unit-1"));
+        assertEquals(BoundaryUnitStatus.OPEN, projection.boundaries().get("unit-1").status());
     }
 
     @Test
@@ -680,6 +708,8 @@ class QueueAsyncCoordinatorTest {
     void processExecutionWorkItemPersistsCollectedStreamingOutputs() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         when(orchestratorConfig.leaseMs()).thenReturn(1000L);
+        InMemoryControlPlaneJournal journal = new InMemoryControlPlaneJournal();
+        coordinator.segmentBoundaryLedger = new SegmentBoundaryLedger(journal);
         ExecutionRecord<Object, Object> claimed = createRecord(
             "tenant-1",
             "exec-stream",
@@ -731,6 +761,10 @@ class QueueAsyncCoordinatorTest {
             org.mockito.ArgumentMatchers.eq("exec-stream:0:0"),
             org.mockito.ArgumentMatchers.eq(List.of("out-1", "out-2")),
             org.mockito.ArgumentMatchers.anyLong());
+        ControlPlaneProjection projection = journal.projection("tenant-1", "exec-stream").await().indefinitely();
+        assertTrue(projection.factKeys().contains("segment-attempt-started:exec-stream:0:0"));
+        assertTrue(projection.factKeys().contains("segment-completed:exec-stream:0:0"));
+        assertTrue(projection.factKeys().contains("run-succeeded:exec-stream"));
     }
 
     @Test
@@ -877,6 +911,8 @@ class QueueAsyncCoordinatorTest {
     void processExecutionWorkItemPublishesDecodedRemoteOutputWhenObjectPublishConfigured() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         when(orchestratorConfig.leaseMs()).thenReturn(1000L);
+        InMemoryControlPlaneJournal journal = new InMemoryControlPlaneJournal();
+        coordinator.segmentBoundaryLedger = new SegmentBoundaryLedger(journal);
         ExecutionRecord<Object, Object> claimed = createRecord("tenant-1", "exec-publish", "key-publish");
         SerializedTransitionPayload serialized = payloadCodec.encode("published-output");
         ObjectPublishCompletionService publishService = mock(ObjectPublishCompletionService.class);
@@ -921,6 +957,9 @@ class QueueAsyncCoordinatorTest {
             org.mockito.ArgumentMatchers.anyLong());
         List<?> persisted = assertInstanceOf(List.class, resultCaptor.getValue());
         assertEquals(serialized, persisted.getFirst());
+        ControlPlaneProjection projection = journal.projection("tenant-1", "exec-publish").await().indefinitely();
+        assertTrue(projection.terminalPublicationKeys()
+            .contains("terminal-publication-completed:exec-publish:terminal-output:exec-publish:0:0:terminal-publication"));
     }
 
     @Test
@@ -1148,7 +1187,27 @@ class QueueAsyncCoordinatorTest {
             .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(interaction, false)));
         when(awaitCoordinator.recordCompletion(org.mockito.ArgumentMatchers.eq(interaction), org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(Uni.createFrom().item(completedUnit));
-        ExecutionRecord<Object, Object> resumed = createRecord("tenant-1", "exec-1", "key-1");
+        ExecutionRecord<Object, Object> resumed = new ExecutionRecord<>(
+            "tenant-1",
+            "exec-1",
+            "key-1",
+            ExecutionResultShape.SINGLE,
+            ExecutionStatus.QUEUED,
+            8L,
+            3,
+            0,
+            null,
+            0L,
+            0L,
+            null,
+            "input",
+            null,
+            null,
+            null,
+            null,
+            1L,
+            2L,
+            99999999L);
         when(executionStateStore.markAwaitCompleted(
                 org.mockito.ArgumentMatchers.eq("tenant-1"),
                 org.mockito.ArgumentMatchers.eq("exec-1"),
@@ -1210,7 +1269,27 @@ class QueueAsyncCoordinatorTest {
             .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(interaction, false)));
         when(awaitCoordinator.recordCompletion(org.mockito.ArgumentMatchers.eq(interaction), org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(Uni.createFrom().item(awaitUnit("unit-1", AwaitUnitStatus.COMPLETED, null, 0, true, "interaction-1")));
-        ExecutionRecord<Object, Object> resumed = createRecord("tenant-1", "exec-1", "key-1");
+        ExecutionRecord<Object, Object> resumed = new ExecutionRecord<>(
+            "tenant-1",
+            "exec-1",
+            "key-1",
+            ExecutionResultShape.SINGLE,
+            ExecutionStatus.QUEUED,
+            8L,
+            3,
+            0,
+            null,
+            0L,
+            0L,
+            null,
+            "input",
+            null,
+            null,
+            null,
+            null,
+            1L,
+            2L,
+            99999999L);
         when(executionStateStore.markAwaitCompleted(
                 org.mockito.ArgumentMatchers.eq("tenant-1"),
                 org.mockito.ArgumentMatchers.eq("exec-1"),
@@ -1246,7 +1325,7 @@ class QueueAsyncCoordinatorTest {
             .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(interaction, true)));
         when(awaitCoordinator.recordCompletion(org.mockito.ArgumentMatchers.eq(interaction), org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(Uni.createFrom().item(awaitUnit("unit-1", AwaitUnitStatus.COMPLETED, null, 0, true, "interaction-1")));
-        ExecutionRecord<Object, Object> resumed = createRecord("tenant-1", "exec-1", "key-1");
+        ExecutionRecord<Object, Object> resumed = createRecordAtStep("tenant-1", "exec-1", "key-1", 3);
         when(executionStateStore.markAwaitCompleted(
                 org.mockito.ArgumentMatchers.eq("tenant-1"),
                 org.mockito.ArgumentMatchers.eq("exec-1"),
@@ -1636,6 +1715,8 @@ class QueueAsyncCoordinatorTest {
     @Test
     void completeAwaitResumesCompletedItemUnitAndEnqueuesExecution() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        InMemoryControlPlaneJournal journal = new InMemoryControlPlaneJournal();
+        coordinator.segmentBoundaryLedger = new SegmentBoundaryLedger(journal);
         AwaitInteractionRecord second = awaitRecord();
         AwaitCompletionCommand command = new AwaitCompletionCommand(
             "tenant-1",
@@ -1649,7 +1730,13 @@ class QueueAsyncCoordinatorTest {
             .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(second, false)));
         when(awaitCoordinator.recordCompletion(org.mockito.ArgumentMatchers.eq(second), org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(Uni.createFrom().item(awaitUnit("unit-1", AwaitUnitStatus.COMPLETED, null, 0, false, "interaction-1")));
-        ExecutionRecord<Object, Object> resumed = createRecord("tenant-1", "exec-1", "key-1");
+        when(awaitLiveCompletionRegistry.signal(org.mockito.ArgumentMatchers.eq(second), any()))
+            .thenAnswer(invocation -> {
+                ControlPlaneProjection projection = journal.projection("tenant-1", "exec-1").await().indefinitely();
+                assertTrue(projection.factKeys().contains("boundary-completion-admitted:unit-1:idem-1"));
+                return Uni.createFrom().item(false);
+            });
+        ExecutionRecord<Object, Object> resumed = createRecordAtStep("tenant-1", "exec-1", "key-1", 3);
         when(executionStateStore.markAwaitCompleted(
                 org.mockito.ArgumentMatchers.eq("tenant-1"),
                 org.mockito.ArgumentMatchers.eq("exec-1"),
@@ -1668,12 +1755,16 @@ class QueueAsyncCoordinatorTest {
             org.mockito.ArgumentMatchers.eq(3),
             org.mockito.ArgumentMatchers.anyLong());
         verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-1", "exec-1"));
+        ControlPlaneProjection projection = journal.projection("tenant-1", "exec-1").await().indefinitely();
+        assertTrue(projection.factKeys().contains("continuation-segment-created:exec-1:segment:3"));
     }
 
     @Test
     void recordAwaitItemContinuationStoresChildrenAndReleasesParentAtAggregateBoundaryInOrder() {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        InMemoryControlPlaneJournal journal = new InMemoryControlPlaneJournal();
         coordinator.executionStateStore = store;
+        coordinator.segmentBoundaryLedger = new SegmentBoundaryLedger(journal);
         when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
         long now = System.currentTimeMillis();
         CreateExecutionResult parent = store.createOrGetExecution(new org.pipelineframework.orchestrator.ExecutionCreateCommand(
@@ -1734,12 +1825,21 @@ class QueueAsyncCoordinatorTest {
         assertEquals(ExecutionInputShape.UNI, firstChildInput.shape());
         assertEquals("first-normalized", firstChildInput.payload());
         verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-1", parent.record().executionId()));
+        ControlPlaneProjection projection = journal.projection("tenant-1", parent.record().executionId()).await().indefinitely();
+        assertTrue(projection.factKeys().contains("continuation-segment-created:"
+            + parent.record().executionId() + ":segment:await-item:unit-1:0"));
+        assertTrue(projection.factKeys().contains("continuation-segment-created:"
+            + parent.record().executionId() + ":segment:await-item:unit-1:1"));
+        assertTrue(projection.factKeys().contains("continuation-segment-created:"
+            + parent.record().executionId() + ":segment:4"));
     }
 
     @Test
     void sweepTimesOutAwaitInteractionsAndFailsOwningExecution() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         when(orchestratorConfig.sweepLimit()).thenReturn(100);
+        InMemoryControlPlaneJournal journal = new InMemoryControlPlaneJournal();
+        coordinator.segmentBoundaryLedger = new SegmentBoundaryLedger(journal);
         AwaitInteractionRecord interaction = awaitRecord();
         ExecutionRecord<Object, Object> waiting = new ExecutionRecord<>(
             "tenant-1",
@@ -1792,6 +1892,34 @@ class QueueAsyncCoordinatorTest {
             org.mockito.ArgumentMatchers.eq("AWAIT_TIMEOUT"),
             org.mockito.ArgumentMatchers.contains("interaction-1"),
             org.mockito.ArgumentMatchers.anyLong());
+        assertEventually(() -> {
+            ControlPlaneProjection projection = journal.projection("tenant-1", "exec-1").await().indefinitely();
+            assertTrue(projection.factKeys().contains("interaction-timed-out:unit-1:interaction-1"));
+            assertTrue(projection.factKeys().contains("run-failed:exec-1:AWAIT_TIMEOUT"));
+        });
+    }
+
+    private static void assertEventually(Runnable assertion) {
+        AssertionError last = null;
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+        while (System.nanoTime() < deadline) {
+            try {
+                assertion.run();
+                return;
+            } catch (AssertionError error) {
+                last = error;
+                try {
+                    Thread.sleep(10L);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw error;
+                }
+            }
+        }
+        if (last != null) {
+            throw last;
+        }
+        assertion.run();
     }
 
     private void configureQueueModeDefaults() {
@@ -1803,6 +1931,38 @@ class QueueAsyncCoordinatorTest {
 
     private ExecutionRecord<Object, Object> createRecord(String tenantId, String executionId, String executionKey) {
         return createRecord(tenantId, executionId, executionKey, ExecutionResultShape.SINGLE);
+    }
+
+    private ExecutionRecord<Object, Object> createRecordAtStep(
+        String tenantId,
+        String executionId,
+        String executionKey,
+        int currentStepIndex) {
+        ExecutionRecord<Object, Object> source = createRecord(tenantId, executionId, executionKey);
+        return new ExecutionRecord<>(
+            source.tenantId(),
+            source.executionId(),
+            source.executionKey(),
+            source.pipelineId(),
+            source.contractVersion(),
+            source.releaseVersion(),
+            source.resultShape(),
+            source.status(),
+            source.version(),
+            currentStepIndex,
+            source.attempt(),
+            source.leaseOwner(),
+            source.leaseExpiresEpochMs(),
+            source.nextDueEpochMs(),
+            source.lastTransitionKey(),
+            source.inputPayload(),
+            source.awaitUnitId(),
+            source.resultPayload(),
+            source.errorCode(),
+            source.errorMessage(),
+            source.createdAtEpochMs(),
+            source.updatedAtEpochMs(),
+            source.ttlEpochS());
     }
 
     private ExecutionRecord<Object, Object> recordWithStatus(
