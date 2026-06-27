@@ -95,15 +95,21 @@ final class ControlPlaneChecks {
             }
             return List.copyOf(frozen);
         }
+        Object normalized;
         try {
-            Object normalized = PipelineJson.mapper().convertValue(value, Object.class);
-            if (normalized == value) {
-                return value.toString();
-            }
-            return freezePayload(normalized);
-        } catch (IllegalArgumentException ignored) {
-            return value.toString();
+            normalized = PipelineJson.mapper().convertValue(value, Object.class);
+        } catch (IllegalArgumentException failure) {
+            throw unsupportedPayload(value, failure);
         }
+        if (normalized == value) {
+            throw unsupportedPayload(value, null);
+        }
+        return freezePayload(normalized);
+    }
+
+    private static IllegalArgumentException unsupportedPayload(Object value, Throwable cause) {
+        String message = "Unsupported control-plane payload type: " + value.getClass().getName();
+        return cause == null ? new IllegalArgumentException(message) : new IllegalArgumentException(message, cause);
     }
 
     private static boolean immutableScalar(Object value) {

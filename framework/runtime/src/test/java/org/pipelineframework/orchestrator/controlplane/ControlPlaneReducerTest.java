@@ -160,7 +160,17 @@ class ControlPlaneReducerTest {
                 BoundaryKind.AWAIT,
                 1,
                 1)),
-            event(4, new ControlPlaneFact.ContinuationSegmentCreated(
+            event(4, dispatched("await-unit", BoundaryKind.AWAIT, "interaction-0", "idem-0", 0)),
+            event(5, BoundaryAdmissionFacts.completion(new BoundaryAdmissionRequest(
+                "tenant",
+                "run-1",
+                "await-unit",
+                BoundaryKind.AWAIT,
+                "interaction-0",
+                "idem-0",
+                "status-0"))),
+            event(6, new ControlPlaneFact.BoundaryDispatchCompleted("tenant", "run-1", "await-unit", 1)),
+            event(7, new ControlPlaneFact.ContinuationSegmentCreated(
                 "tenant",
                 "run-1",
                 "segment-0",
@@ -171,6 +181,7 @@ class ControlPlaneReducerTest {
                 "status-0"))));
 
         assertEquals(PipelineRunStatus.RUNNING, projection.run().orElseThrow().status());
+        assertEquals(BoundaryUnitStatus.COMPLETED, projection.boundaries().get("await-unit").status());
         assertEquals(SegmentStatus.QUEUED, projection.segments().get("segment-1").status());
         assertEquals("status-0", projection.segments().get("segment-1").inputPayload());
     }
