@@ -6,7 +6,7 @@ import reactor.core.publisher.Mono;
 
 @Component
 public class PaymentAuditService {
-    public Mono<PaymentStatus> process(PaymentStatus input) {
+    public Mono<PaymentStatus> audit(PaymentStatus input) {
         if (input == null) {
             return Mono.error(new IllegalArgumentException("Payment status must not be null"));
         }

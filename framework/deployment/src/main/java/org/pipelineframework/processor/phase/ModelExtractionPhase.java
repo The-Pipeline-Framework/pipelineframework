@@ -722,15 +722,27 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ctx,
             delegateElement,
             typeUtils,
-            ctx.getProcessingEnv().getMessager());
+            ctx.getProcessingEnv().getMessager(),
+            stepDef.delegatedMethodName());
         if (delegateSignature.isEmpty()) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Delegate service '" + stepDef.executionClass().canonicalName() +
-                    "' must expose a supported step contract for step '" + stepDef.name() + "'");
+                    stepDef.delegatedMethodName().map(method -> "::" + method).orElse("")
+                    + "' must expose a supported step contract for step '" + stepDef.name() + "'");
             return null;
         }
         SupportedServiceSignature resolvedDelegateSignature = delegateSignature.get();
+        StreamingShape yamlShape = stepDef.streamingShapeHint();
+        if (yamlShape != null && yamlShape != resolvedDelegateSignature.shape()) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Delegated step '" + stepDef.name() + "' declares cardinality "
+                    + yamlShape + " in YAML, but delegate '" + stepDef.executionClass().canonicalName()
+                    + stepDef.delegatedMethodName().map(method -> "::" + method).orElse("")
+                    + "' implements " + resolvedDelegateSignature.shape() + " semantics.");
+            return null;
+        }
 
         TypeName inputType = stepDef.inputType() != null ? stepDef.inputType() : resolvedDelegateSignature.inputType();
         TypeName outputType = stepDef.outputType() != null ? stepDef.outputType() : resolvedDelegateSignature.outputType();
@@ -827,6 +839,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .orderingRequirement(OrderingRequirement.RELAXED)
             .threadSafety(ThreadSafety.SAFE)
             .delegateService(stepDef.executionClass())
+            .delegateMethodName(stepDef.delegatedMethodName())
             .externalMapper(externalMapper)
             .mapperFallbackMode(effectiveFallback)
             .serviceApiKind(resolvedDelegateSignature.apiKind())
@@ -1157,7 +1170,17 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             PipelineCompilationContext ctx,
             TypeElement delegateElement,
             Types typeUtils,
-            javax.annotation.processing.Messager messager) {
+            javax.annotation.processing.Messager messager,
+            Optional<String> delegatedMethodName) {
+        if (delegatedMethodName.isPresent() && isSpringRendererProfile(ctx)) {
+            return resolveSpringDelegatedMethodSignature(ctx, delegateElement, messager, delegatedMethodName.get());
+        }
+        if (delegatedMethodName.isPresent()) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Class::method delegated operators are currently supported only by the Spring renderer profile.");
+            return Optional.empty();
+        }
         if (isSpringRendererProfile(ctx)) {
             return Optional.ofNullable(resolveSupportedInternalSignature(ctx, delegateElement, typeUtils, messager));
         }
@@ -1170,6 +1193,111 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             reactiveSignature.shape(),
             reactiveSignature.inputType(),
             reactiveSignature.outputType(),
+            ReactiveReturnKind.MUTINY_UNI,
+            null));
+    }
+
+    private Optional<SupportedServiceSignature> resolveSpringDelegatedMethodSignature(
+            PipelineCompilationContext ctx,
+            TypeElement delegateElement,
+            javax.annotation.processing.Messager messager,
+            String delegatedMethodName) {
+        List<ExecutableElement> publicInstanceMatches = new ArrayList<>();
+        boolean staticMatch = false;
+        boolean namedMethodExists = false;
+        for (Element enclosed : delegateElement.getEnclosedElements()) {
+            if (!(enclosed instanceof ExecutableElement method)
+                || !delegatedMethodName.contentEquals(method.getSimpleName())) {
+                continue;
+            }
+            namedMethodExists = true;
+            if (method.getModifiers().contains(Modifier.STATIC)) {
+                staticMatch = true;
+                continue;
+            }
+            if (method.getModifiers().contains(Modifier.PUBLIC)) {
+                publicInstanceMatches.add(method);
+            }
+        }
+        if (publicInstanceMatches.isEmpty()) {
+            String reason = staticMatch
+                ? "is static, but Spring delegated operator methods must be instance bean methods"
+                : namedMethodExists
+                    ? "is not public"
+                    : "was not found";
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Spring delegated operator '" + delegateElement.getQualifiedName() + "::" + delegatedMethodName
+                    + "' " + reason + ".");
+            return Optional.empty();
+        }
+        if (publicInstanceMatches.size() > 1) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Spring delegated operator '" + delegateElement.getQualifiedName() + "::" + delegatedMethodName
+                    + "' is overloaded. Declare exactly one public instance method with that name.");
+            return Optional.empty();
+        }
+
+        ExecutableElement method = publicInstanceMatches.getFirst();
+        if (method.getParameters().size() != 1) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Spring delegated operator '" + delegateElement.getQualifiedName() + "::" + delegatedMethodName
+                    + "' must declare exactly one input parameter.");
+            return Optional.empty();
+        }
+        TypeMirror returnType = method.getReturnType();
+        if (returnType.getKind() == TypeKind.VOID) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Spring delegated operator '" + delegateElement.getQualifiedName() + "::" + delegatedMethodName
+                    + "' must return an output value.");
+            return Optional.empty();
+        }
+
+        TypeName inputType = TypeName.get(method.getParameters().getFirst().asType());
+        if (returnType instanceof DeclaredType declaredReturn && declaredReturn.getTypeArguments().size() == 1) {
+            if (isDeclaredType(declaredReturn, "reactor.core.publisher.Mono")) {
+                return Optional.of(new SupportedServiceSignature(
+                    ServiceApiKind.REACTIVE,
+                    StreamingShape.UNARY_UNARY,
+                    inputType,
+                    TypeName.get(declaredReturn.getTypeArguments().getFirst()),
+                    ReactiveReturnKind.REACTOR_MONO,
+                    null));
+            }
+            if (isDeclaredType(declaredReturn, "java.util.concurrent.CompletionStage")) {
+                return Optional.of(new SupportedServiceSignature(
+                    ServiceApiKind.REACTIVE,
+                    StreamingShape.UNARY_UNARY,
+                    inputType,
+                    TypeName.get(declaredReturn.getTypeArguments().getFirst()),
+                    ReactiveReturnKind.COMPLETION_STAGE,
+                    null));
+            }
+        }
+
+        if (returnType instanceof DeclaredType declaredReturn && (
+            isDeclaredType(declaredReturn, "reactor.core.publisher.Mono")
+                || isDeclaredType(declaredReturn, "java.util.concurrent.CompletionStage")
+                || isDeclaredType(declaredReturn, "io.smallrye.mutiny.Uni")
+                || isDeclaredType(declaredReturn, "io.smallrye.mutiny.Multi")
+                || isDeclaredType(declaredReturn, "reactor.core.publisher.Flux"))) {
+            String kind = ((TypeElement) declaredReturn.asElement()).getQualifiedName().toString();
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Spring delegated operator '" + delegateElement.getQualifiedName() + "::" + delegatedMethodName
+                    + "' does not support return type '" + kind
+                    + "'; use Mono<Out>, CompletionStage<Out>, or a blocking return value.");
+            return Optional.empty();
+        }
+
+        return Optional.of(new SupportedServiceSignature(
+            ServiceApiKind.BLOCKING,
+            StreamingShape.UNARY_UNARY,
+            inputType,
+            TypeName.get(returnType),
             ReactiveReturnKind.MUTINY_UNI,
             null));
     }
