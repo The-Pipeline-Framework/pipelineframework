@@ -1464,8 +1464,10 @@ class QueueAsyncCoordinator {
                   return Uni.createFrom().voidItem();
                 }
                 Uni<Void> recordedContinuation = segmentBoundaryLedger().recordContinuationSegmentCreated(
-                    updated.get(),
-                    unit,
+                    parent.tenantId(),
+                    parent.executionId(),
+                    SegmentBoundaryLedger.segmentId(parent),
+                    unit.unitId(),
                     SegmentBoundaryLedger.segmentId(updated.get()),
                     aggregateStepIndex,
                     -1,
@@ -1578,16 +1580,18 @@ class QueueAsyncCoordinator {
                 awaitUnitId,
                 stepId,
                 stepIndex,
-                updated.get().status().name(),
-                interactionId,
-                correlationId,
-                transportType,
-                itemIndex,
-                null,
-                null,
-                null));
+            updated.get().status().name(),
+            interactionId,
+            correlationId,
+            transportType,
+            itemIndex,
+            null,
+            null,
+            null));
             Uni<Void> recordedContinuation = segmentBoundaryLedger().recordContinuationSegmentCreated(
-                updated.get(),
+                tenantId,
+                executionId,
+                SegmentBoundaryLedger.segmentId(executionId, stepIndex),
                 awaitUnitId,
                 SegmentBoundaryLedger.segmentId(updated.get()),
                 stepIndex + 1,

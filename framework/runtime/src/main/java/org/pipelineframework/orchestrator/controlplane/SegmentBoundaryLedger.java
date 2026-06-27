@@ -231,6 +231,39 @@ public class SegmentBoundaryLedger {
             nowEpochMs);
     }
 
+    public Uni<Void> recordContinuationSegmentCreated(
+        String tenantId,
+        String runId,
+        String sourceSegmentId,
+        String boundaryUnitId,
+        String segmentId,
+        int startStepIndex,
+        int stopBeforeStepIndex,
+        Object inputPayload,
+        long nowEpochMs
+    ) {
+        if (tenantId == null || tenantId.isBlank()
+            || runId == null || runId.isBlank()
+            || sourceSegmentId == null || sourceSegmentId.isBlank()
+            || boundaryUnitId == null || boundaryUnitId.isBlank()
+            || segmentId == null || segmentId.isBlank()) {
+            return Uni.createFrom().voidItem();
+        }
+        return append(
+            tenantId,
+            runId,
+            List.of(new ControlPlaneFact.ContinuationSegmentCreated(
+                tenantId,
+                runId,
+                sourceSegmentId,
+                segmentId,
+                boundaryUnitId,
+                startStepIndex,
+                stopBeforeStepIndex,
+                inputPayload)),
+            nowEpochMs);
+    }
+
     public Uni<Void> recordTerminalPublicationCompleted(
         ExecutionRecord<Object, Object> record,
         String transitionKey,
@@ -316,11 +349,14 @@ public class SegmentBoundaryLedger {
         }
         return appendWithRetry(journal.get(), tenantId, runId, List.copyOf(facts), nowEpochMs, 1)
             .replaceWithVoid()
-            .onFailure().invoke(failure -> LOG.warnf(
-                failure,
-                "Failed appending queue-async control-plane facts tenant=%s runId=%s",
-                tenantId,
-                runId));
+            .onFailure().recoverWithUni(failure -> {
+                LOG.warnf(
+                    failure,
+                    "Failed appending queue-async control-plane facts tenant=%s runId=%s",
+                    tenantId,
+                    runId);
+                return Uni.createFrom().voidItem();
+            });
     }
 
     private Uni<ControlPlaneAppendResult> appendWithRetry(
