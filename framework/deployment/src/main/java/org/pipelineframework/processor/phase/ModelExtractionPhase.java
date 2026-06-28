@@ -1256,14 +1256,14 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return Optional.empty();
         }
 
-        TypeName inputType = TypeName.get(method.getParameters().getFirst().asType());
+        TypeName inputType = boxIfPrimitive(TypeName.get(method.getParameters().getFirst().asType()));
         if (returnType instanceof DeclaredType declaredReturn && declaredReturn.getTypeArguments().size() == 1) {
             if (isDeclaredType(declaredReturn, "reactor.core.publisher.Mono")) {
                 return Optional.of(new SupportedServiceSignature(
                     ServiceApiKind.REACTIVE,
                     StreamingShape.UNARY_UNARY,
                     inputType,
-                    TypeName.get(declaredReturn.getTypeArguments().getFirst()),
+                    boxIfPrimitive(TypeName.get(declaredReturn.getTypeArguments().getFirst())),
                     ReactiveReturnKind.REACTOR_MONO,
                     null));
             }
@@ -1272,7 +1272,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                     ServiceApiKind.REACTIVE,
                     StreamingShape.UNARY_UNARY,
                     inputType,
-                    TypeName.get(declaredReturn.getTypeArguments().getFirst()),
+                    boxIfPrimitive(TypeName.get(declaredReturn.getTypeArguments().getFirst())),
                     ReactiveReturnKind.COMPLETION_STAGE,
                     null));
             }
@@ -1297,7 +1297,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ServiceApiKind.BLOCKING,
             StreamingShape.UNARY_UNARY,
             inputType,
-            TypeName.get(returnType),
+            boxIfPrimitive(TypeName.get(returnType)),
             ReactiveReturnKind.MUTINY_UNI,
             null));
     }
@@ -1728,6 +1728,35 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             }
         }
         return null;
+    }
+
+    /**
+     * Boxes primitive TypeName values to their wrapper types.
+     * This ensures model types are always non-primitive, preventing invalid generic signatures.
+     */
+    private static TypeName boxIfPrimitive(TypeName typeName) {
+        if (typeName.isPrimitive()) {
+            if (typeName.equals(TypeName.INT)) {
+                return TypeName.get(Integer.class);
+            } else if (typeName.equals(TypeName.LONG)) {
+                return TypeName.get(Long.class);
+            } else if (typeName.equals(TypeName.BOOLEAN)) {
+                return TypeName.get(Boolean.class);
+            } else if (typeName.equals(TypeName.DOUBLE)) {
+                return TypeName.get(Double.class);
+            } else if (typeName.equals(TypeName.FLOAT)) {
+                return TypeName.get(Float.class);
+            } else if (typeName.equals(TypeName.SHORT)) {
+                return TypeName.get(Short.class);
+            } else if (typeName.equals(TypeName.BYTE)) {
+                return TypeName.get(Byte.class);
+            } else if (typeName.equals(TypeName.CHAR)) {
+                return TypeName.get(Character.class);
+            }
+        } else if (typeName.equals(TypeName.VOID)) {
+            return TypeName.get(Void.class);
+        }
+        return typeName;
     }
 
     private record ReactiveSignature(StreamingShape shape, TypeName inputType, TypeName outputType) {
