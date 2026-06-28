@@ -2,7 +2,6 @@ package org.pipelineframework;
 
 import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -15,7 +14,6 @@ import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 
 import io.smallrye.mutiny.Uni;
@@ -33,9 +31,7 @@ import org.pipelineframework.orchestrator.ControlPlaneAdmissionPolicy;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionRequest;
 import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
 import org.pipelineframework.telemetry.PipelineTelemetry;
-import org.pipelineframework.orchestrator.CreateExecutionResult;
 import org.pipelineframework.orchestrator.DeadLetterPublisher;
-import org.pipelineframework.orchestrator.ExecutionCreateCommand;
 import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRedriveResult;
 import org.pipelineframework.orchestrator.ExecutionRecord;
@@ -120,6 +116,7 @@ class QueueAsyncCoordinator {
   private volatile ControlPlaneAdmissionPolicy fallbackAdmissionPolicy;
   private volatile AwaitContinuations awaitContinuations;
   private volatile ExecutionReadModel executionReadModel;
+  private volatile QueueAsyncSubmissionFlow submissionFlow;
 
   @Inject
   PipelineTelemetry telemetry;
@@ -201,14 +198,7 @@ class QueueAsyncCoordinator {
       String tenantId,
       String idempotencyKey,
       boolean outputStreaming) {
-    return executePipelineAsync(
-        input,
-        tenantId,
-        idempotencyKey,
-        outputStreaming,
-        pipelineId(),
-        contractVersion(),
-        releaseVersion());
+    return submissionFlow().submit(input, tenantId, idempotencyKey, outputStreaming);
   }
 
   Uni<RunAsyncAcceptedDto> executePipelineAsync(
@@ -219,72 +209,14 @@ class QueueAsyncCoordinator {
       String pipelineId,
       String contractVersion,
       String releaseVersion) {
-    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
-      return Uni.createFrom().failure(new IllegalStateException(
-          "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
-    }
-    if (outputStreaming) {
-      return Uni.createFrom().failure(new IllegalStateException(
-          "Async queue mode does not support streaming pipeline outputs yet."));
-    }
-    Object executionInput = executionInputPolicy.normalizeExecutionInput(input);
-    RuntimeException inputFailure = executionInputPolicy.validateInputShape(executionInput);
-    if (inputFailure != null) {
-      return Uni.createFrom().failure(inputFailure);
-    }
-    String resolvedTenant = executionInputPolicy.normalizeTenant(tenantId);
-    RuntimeException admissionFailure = admissionFailure(admissionRequest(
-        resolvedTenant,
-        ControlPlaneAdmissionOperation.SUBMIT_EXECUTION,
+    return submissionFlow().submit(
+        input,
+        tenantId,
+        idempotencyKey,
+        outputStreaming,
         pipelineId,
-        releaseVersion,
-        null,
-        "api",
-        explicitTenant(tenantId)));
-    if (admissionFailure != null) {
-      return Uni.createFrom().failure(admissionFailure);
-    }
-    long now = System.currentTimeMillis();
-    long ttlEpochS = Instant.ofEpochMilli(now)
-        .plus(Duration.ofDays(Math.max(1, orchestratorConfig.executionTtlDays())))
-        .getEpochSecond();
-
-    return executionInputPolicy.resolveExecutionInputPayload(executionInput)
-        .onItem().transformToUni(snapshot -> {
-              String executionKey;
-              try {
-                executionKey = scopedRootExecutionKey(
-                    pipelineId,
-                    releaseVersion,
-                    executionInputPolicy.resolveExecutionKey(resolvedTenant, snapshot.payload(), idempotencyKey));
-              } catch (IllegalArgumentException e) {
-                return Uni.createFrom().failure(new BadRequestException(e.getMessage()));
-              }
-          ExecutionCreateCommand command = new ExecutionCreateCommand(
-              resolvedTenant,
-              executionKey,
-              pipelineId,
-              contractVersion,
-              releaseVersion,
-              snapshot,
-              executionResultShapeResolver.resolve(),
-              now,
-              ttlEpochS);
-          return executionStateStore.createOrGetExecution(command)
-              .onItem().transformToUni(created -> {
-                Uni<Void> recordSubmitted = created.duplicate()
-                    ? Uni.createFrom().voidItem()
-                    : segmentBoundaryLedger().recordRunSubmitted(created, command, now);
-                Uni<Void> enqueue = created.duplicate()
-                    ? Uni.createFrom().voidItem()
-                    : workDispatcher.enqueueNow(new ExecutionWorkItem(
-                        created.record().tenantId(),
-                        created.record().executionId()));
-                return recordSubmitted
-                    .chain(() -> enqueue)
-                    .onItem().transform(ignored -> toRunAccepted(created, now));
-              });
-        });
+        contractVersion,
+        releaseVersion);
   }
 
   Uni<ExecutionStatusDto> getExecutionStatus(String tenantId, String executionId) {
@@ -504,25 +436,6 @@ class QueueAsyncCoordinator {
     return trimmed.length() <= 80 ? trimmed : trimmed.substring(0, 80);
   }
 
-  private static String scopedRootExecutionKey(String pipelineId, String releaseVersion, String executionKey) {
-    return compositeScopedKey("pipelineId", pipelineId, "releaseVersion", releaseVersion)
-        + ":executionKey:"
-        + requireScopedValue("executionKey", executionKey);
-  }
-
-  private static String compositeScopedKey(String leftName, String left, String rightName, String right) {
-    String safeLeft = requireScopedValue(leftName, left);
-    String safeRight = requireScopedValue(rightName, right);
-    return safeLeft.length() + ":" + safeLeft + ":" + safeRight.length() + ":" + safeRight;
-  }
-
-  private static String requireScopedValue(String name, String value) {
-    if (value == null || value.isBlank()) {
-      throw new IllegalArgumentException(name + " must not be blank");
-    }
-    return value;
-  }
-
   private Duration saturatedDelay() {
     PipelineOrchestratorConfig.WorkerConfig workerConfig = orchestratorConfig.worker();
     if (workerConfig == null || workerConfig.saturatedDelay() == null) {
@@ -696,6 +609,31 @@ class QueueAsyncCoordinator {
     }
   }
 
+  private QueueAsyncSubmissionFlow submissionFlow() {
+    QueueAsyncSubmissionFlow current = submissionFlow;
+    if (current != null) {
+      return current;
+    }
+    synchronized (this) {
+      current = submissionFlow;
+      if (current == null) {
+        current = new QueueAsyncSubmissionFlow(
+            orchestratorConfig,
+            executionInputPolicy,
+            executionResultShapeResolver,
+            executionStateStore,
+            workDispatcher,
+            admissionPolicy(),
+            this::pipelineId,
+            this::contractVersion,
+            this::releaseVersion,
+            this::segmentBoundaryLedger);
+        submissionFlow = current;
+      }
+      return current;
+    }
+  }
+
   private AwaitContinuations awaitContinuations() {
     AwaitContinuations current = awaitContinuations;
     if (current != null) {
@@ -794,15 +732,6 @@ class QueueAsyncCoordinator {
       return true;
     }
     return configuredName.equalsIgnoreCase(availableName);
-  }
-
-  private static RunAsyncAcceptedDto toRunAccepted(CreateExecutionResult created, long nowEpochMs) {
-    String executionId = created.record().executionId();
-    return new RunAsyncAcceptedDto(
-        executionId,
-        created.duplicate(),
-        "/pipeline/executions/" + executionId,
-        nowEpochMs);
   }
 
   private static String transitionKey(String executionId, int stepIndex, int attempt) {
