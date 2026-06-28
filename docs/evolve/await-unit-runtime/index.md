@@ -64,10 +64,18 @@ classDiagram
     class PipelineExecutionService
     class PipelineRunner
     class QueueAsyncCoordinator
+    class QueueAsyncSegmentPipeline
+    class SegmentCommitPlan
+    class SegmentCommitEffects
+    class TerminalPublicationBoundary
     class AwaitBoundaryAdmission
     class AwaitLiveCompletionRegistry
     class LiveAwaitSession
     class AwaitContinuations
+    class AwaitContinuationPlanner
+    class ScalarAwaitContinuationFlow
+    class ItemizedAwaitContinuationFlow
+    class ItemContinuationClaims
     class AwaitStepSupport
     class AwaitCoordinator
     class AwaitUnitStore
@@ -81,13 +89,22 @@ classDiagram
     PipelineRunner --> AwaitStepSupport : execute generated await step
     AwaitStepSupport --> AwaitCoordinator : create / dispatch unit
     PipelineExecutionService --> QueueAsyncCoordinator : async execution lifecycle
+    QueueAsyncCoordinator --> QueueAsyncSegmentPipeline : process work item
+    QueueAsyncSegmentPipeline --> SegmentCommitPlan : plan completed/suspended/failed
+    QueueAsyncSegmentPipeline --> SegmentCommitEffects : interpret plan
+    SegmentCommitEffects --> TerminalPublicationBoundary : publish before success
     QueueAsyncCoordinator --> AwaitBoundaryAdmission : complete await
     AwaitBoundaryAdmission --> AwaitCoordinator : record completion
     AwaitBoundaryAdmission --> AwaitLiveCompletionRegistry : try live handoff
     AwaitLiveCompletionRegistry --> LiveAwaitSession : local admission
     LiveAwaitSession --> PipelineRunner : downstream demand
     AwaitBoundaryAdmission --> AwaitContinuations : durable fallback
-    AwaitContinuations --> ExecutionStateStore : continuation projection writes
+    AwaitContinuations --> AwaitContinuationPlanner : plan future beginning
+    AwaitContinuations --> ScalarAwaitContinuationFlow : scalar resume
+    AwaitContinuations --> ItemizedAwaitContinuationFlow : item continuations
+    ItemizedAwaitContinuationFlow --> ItemContinuationClaims : local duplicate suppression
+    ScalarAwaitContinuationFlow --> ExecutionStateStore : continuation projection writes
+    ItemizedAwaitContinuationFlow --> ExecutionStateStore : continuation projection writes
     AwaitCoordinator --> AwaitUnitStore
     AwaitCoordinator --> AwaitInteractionStore
     AwaitCoordinator --> AwaitTransportAdapter : dispatch
@@ -96,6 +113,8 @@ classDiagram
 `AwaitUnitRecord` is the current compatibility projection for completion of the authored await boundary. `AwaitInteractionRecord` is the transport-facing projection. The target queue-async model represents the same behavior as immutable `BoundaryUnit` and `BoundaryInteraction` projections derived from appended facts.
 
 In that model, `PipelineRunner` still runs synchronous step segments. An await step suspends one `ExecutionSegment` by appending a `SegmentSuspended` fact. Kafka, webhook, or interaction-api completion appends `BoundaryCompletionAdmitted`. If a live await session is present, the admitted completion can flow into the active downstream `Multi`; if not, the same durable facts create continuation segment work.
+
+That continuation is the future beginning of the suspended pipeline. `AwaitContinuationPlanner` decides whether a completion is still held, releases a scalar resume, dispatches item continuations, records item output, or releases an itemized parent. `ScalarAwaitContinuationFlow` and `ItemizedAwaitContinuationFlow` interpret those decisions through the existing projection stores and dispatcher. `ItemContinuationClaims` is only process-local duplicate suppression; durable truth remains in the stores and immutable ledger facts.
 
 ## CSV Payments Applied Model
 
