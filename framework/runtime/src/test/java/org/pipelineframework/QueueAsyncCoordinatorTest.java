@@ -1080,54 +1080,39 @@ class QueueAsyncCoordinatorTest {
     }
 
     @Test
-    void getExecutionResultReturnsStoredListForMaterializedMulti() {
+    void getExecutionResultDelegatesToReadModel() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        when(executionStateStore.getExecution("tenant-1", "exec-multi"))
+        when(executionStateStore.getExecution("tenant-1", "exec-single"))
             .thenReturn(Uni.createFrom().item(Optional.of(succeededRecord(
                 "tenant-1",
-                "exec-multi",
-                "key-multi",
-                ExecutionResultShape.MATERIALIZED_MULTI,
-                List.of("a", "b")))));
+                "exec-single",
+                "key-single",
+                ExecutionResultShape.SINGLE,
+                List.of("value")))));
 
-        Object result = coordinator.getExecutionResult("tenant-1", "exec-multi", String.class, true)
+        Object result = coordinator.getExecutionResult("tenant-1", "exec-single", String.class, false)
             .await().indefinitely();
 
-        assertEquals(List.of("a", "b"), result);
+        assertEquals("value", result);
+        verify(executionStateStore).getExecution("tenant-1", "exec-single");
     }
 
     @Test
-    void getExecutionResultRejectsUnaryRetrievalForMaterializedMulti() {
+    void getExecutionResultPayloadDelegatesToReadModel() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        when(executionStateStore.getExecution("tenant-1", "exec-multi"))
+        when(executionStateStore.getExecution("tenant-1", "exec-payload"))
             .thenReturn(Uni.createFrom().item(Optional.of(succeededRecord(
                 "tenant-1",
-                "exec-multi",
-                "key-multi",
-                ExecutionResultShape.MATERIALIZED_MULTI,
-                List.of("a", "b")))));
-
-        IllegalStateException error = assertThrows(IllegalStateException.class, () ->
-            coordinator.getExecutionResult("tenant-1", "exec-multi", String.class, false).await().indefinitely());
-
-        assertTrue(error.getMessage().contains("materialized multi result"));
-    }
-
-    @Test
-    void getExecutionResultRejectsCorruptSingleResultList() {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        when(executionStateStore.getExecution("tenant-1", "exec-corrupt"))
-            .thenReturn(Uni.createFrom().item(Optional.of(succeededRecord(
-                "tenant-1",
-                "exec-corrupt",
-                "key-corrupt",
+                "exec-payload",
+                "key-payload",
                 ExecutionResultShape.SINGLE,
-                List.of("a", "b")))));
+                List.of("raw")))));
 
-        IllegalStateException error = assertThrows(IllegalStateException.class, () ->
-            coordinator.getExecutionResult("tenant-1", "exec-corrupt", String.class, false).await().indefinitely());
+        Object result = coordinator.getExecutionResultPayload("tenant-1", "exec-payload")
+            .await().indefinitely();
 
-        assertTrue(error.getMessage().contains("multiple terminal items"));
+        assertEquals("raw", result);
+        verify(executionStateStore).getExecution("tenant-1", "exec-payload");
     }
 
     @Test

@@ -21,7 +21,6 @@ import jakarta.ws.rs.NotFoundException;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.checkpoint.CheckpointPublicationService;
-import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCoordinator;
@@ -40,7 +39,6 @@ import org.pipelineframework.orchestrator.ExecutionCreateCommand;
 import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRedriveResult;
 import org.pipelineframework.orchestrator.ExecutionRecord;
-import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionResultShapeResolver;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionStatus;
@@ -50,7 +48,6 @@ import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.PipelineReleaseIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineTransitionWorker;
-import org.pipelineframework.orchestrator.SerializedTransitionPayload;
 import org.pipelineframework.orchestrator.TransitionPayloadCodec;
 import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
 import org.pipelineframework.orchestrator.TransitionWorkerExecutor;
@@ -122,6 +119,7 @@ class QueueAsyncCoordinator {
   private volatile PipelineReleaseIdentityResolver fallbackReleaseIdentityResolver;
   private volatile ControlPlaneAdmissionPolicy fallbackAdmissionPolicy;
   private volatile AwaitContinuations awaitContinuations;
+  private volatile ExecutionReadModel executionReadModel;
 
   @Inject
   PipelineTelemetry telemetry;
@@ -290,75 +288,11 @@ class QueueAsyncCoordinator {
   }
 
   Uni<ExecutionStatusDto> getExecutionStatus(String tenantId, String executionId) {
-    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
-      return Uni.createFrom().failure(new IllegalStateException(
-          "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
-    }
-    String resolvedTenant = executionInputPolicy.normalizeTenant(tenantId);
-    RuntimeException admissionFailure = admissionFailure(admissionRequest(
-        resolvedTenant,
-        ControlPlaneAdmissionOperation.GET_EXECUTION_STATUS,
-        executionId,
-        "api",
-        explicitTenant(tenantId)));
-    if (admissionFailure != null) {
-      return Uni.createFrom().failure(admissionFailure);
-    }
-    return executionStateStore.getExecution(resolvedTenant, executionId)
-        .onItem().transform(optional -> optional
-            .map(QueueAsyncCoordinator::toStatusDto)
-            .orElseThrow(() -> new NotFoundException("Execution not found: " + executionId)));
+    return executionReadModel().getExecutionStatus(tenantId, executionId);
   }
 
-  @SuppressWarnings("unchecked")
   <T> Uni<T> getExecutionResult(String tenantId, String executionId, Class<?> outputType, boolean outputStreaming) {
-    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
-      return Uni.createFrom().failure(new IllegalStateException(
-          "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
-    }
-    String resolvedTenant = executionInputPolicy.normalizeTenant(tenantId);
-    RuntimeException admissionFailure = admissionFailure(admissionRequest(
-        resolvedTenant,
-        ControlPlaneAdmissionOperation.GET_EXECUTION_RESULT,
-        executionId,
-        "api",
-        explicitTenant(tenantId)));
-    if (admissionFailure != null) {
-      return Uni.createFrom().failure(admissionFailure);
-    }
-    return executionStateStore.getExecution(resolvedTenant, executionId)
-        .onItem().transform(optional -> optional.orElseThrow(
-            () -> new NotFoundException("Execution not found: " + executionId)))
-        .onItem().transform(record -> {
-          if (record.status() == ExecutionStatus.SUCCEEDED) {
-            if (record.resultPayload() == null) {
-              return null;
-            }
-            List<?> items = (List<?>) record.resultPayload();
-            if (record.resultShape() == ExecutionResultShape.SINGLE) {
-              if (items.size() > 1) {
-                throw new IllegalStateException(
-                    "Execution " + executionId + " stored multiple terminal items for SINGLE result shape");
-              }
-              if (outputStreaming) {
-                return (T) List.copyOf(items);
-              }
-              if (items.isEmpty()) {
-                return null;
-              }
-              return (T) coerceStoredResult(items.getFirst(), outputType);
-            }
-            if (!outputStreaming) {
-              throw new IllegalStateException(
-                  "Execution " + executionId + " produced a materialized multi result. Request list retrieval instead.");
-            }
-            return (T) coerceStoredResults(items, outputType);
-          }
-          if (record.status().terminal()) {
-            throw new IllegalStateException("Execution finished without a successful result: " + record.status());
-          }
-          throw new IllegalStateException("Execution is not complete yet: " + record.status());
-        });
+    return executionReadModel().getExecutionResult(tenantId, executionId, outputType, outputStreaming);
   }
 
   Uni<ExecutionRedriveResult> redriveExecution(
@@ -429,43 +363,7 @@ class QueueAsyncCoordinator {
   }
 
   Uni<Object> getExecutionResultPayload(String tenantId, String executionId) {
-    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
-      return Uni.createFrom().failure(new IllegalStateException(
-          "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
-    }
-    String resolvedTenant = executionInputPolicy.normalizeTenant(tenantId);
-    RuntimeException admissionFailure = admissionFailure(admissionRequest(
-        resolvedTenant,
-        ControlPlaneAdmissionOperation.GET_EXECUTION_RESULT,
-        executionId,
-        "api",
-        explicitTenant(tenantId)));
-    if (admissionFailure != null) {
-      return Uni.createFrom().failure(admissionFailure);
-    }
-    return executionStateStore.getExecution(resolvedTenant, executionId)
-        .onItem().transform(optional -> optional.orElseThrow(
-            () -> new NotFoundException("Execution not found: " + executionId)))
-        .onItem().transform(record -> {
-          if (record.status() == ExecutionStatus.SUCCEEDED) {
-            if (record.resultPayload() == null) {
-              return null;
-            }
-            List<?> items = (List<?>) record.resultPayload();
-            if (record.resultShape() == ExecutionResultShape.SINGLE) {
-              if (items.size() > 1) {
-                throw new IllegalStateException(
-                    "Execution " + executionId + " stored multiple terminal items for SINGLE result shape");
-              }
-              return items.isEmpty() ? null : items.getFirst();
-            }
-            return List.copyOf(items);
-          }
-          if (record.status().terminal()) {
-            throw new IllegalStateException("Execution finished without a successful result: " + record.status());
-          }
-          throw new IllegalStateException("Execution is not complete yet: " + record.status());
-        });
+    return executionReadModel().getExecutionResultPayload(tenantId, executionId);
   }
 
   Uni<Void> processExecutionWorkItem(ExecutionWorkItem workItem, PipelineTransitionWorker worker) {
@@ -633,34 +531,6 @@ class QueueAsyncCoordinator {
     return workerConfig.saturatedDelay();
   }
 
-  private Object coerceStoredResult(Object result, Class<?> outputType) {
-    if (result instanceof SerializedTransitionPayload serialized) {
-      return coerceStoredResult(payloadCodec().decode(serialized), outputType);
-    }
-    if (result == null || outputType == null || outputType.isInstance(result)) {
-      return result;
-    }
-    try {
-      return PipelineJson.mapper().convertValue(result, outputType);
-    } catch (IllegalArgumentException e) {
-      throw new IllegalStateException(
-          "Failed to coerce stored result from "
-              + result.getClass().getName()
-              + " to "
-              + outputType.getName(),
-          e);
-    }
-  }
-
-  private List<?> coerceStoredResults(List<?> results, Class<?> outputType) {
-    if (outputType == null) {
-      return List.copyOf(results);
-    }
-    return results.stream()
-        .map(result -> coerceStoredResult(result, outputType))
-        .toList();
-  }
-
   private TransitionPayloadCodec payloadCodec() {
     if (transitionPayloadCodec != null) {
       return transitionPayloadCodec;
@@ -804,6 +674,28 @@ class QueueAsyncCoordinator {
         awaitContinuations());
   }
 
+  private ExecutionReadModel executionReadModel() {
+    ExecutionReadModel current = executionReadModel;
+    if (current != null) {
+      return current;
+    }
+    synchronized (this) {
+      current = executionReadModel;
+      if (current == null) {
+        current = new ExecutionReadModel(
+            orchestratorConfig,
+            executionInputPolicy,
+            executionStateStore,
+            admissionPolicy(),
+            this::pipelineId,
+            this::releaseVersion,
+            this::payloadCodec);
+        executionReadModel = current;
+      }
+      return current;
+    }
+  }
+
   private AwaitContinuations awaitContinuations() {
     AwaitContinuations current = awaitContinuations;
     if (current != null) {
@@ -911,19 +803,6 @@ class QueueAsyncCoordinator {
         created.duplicate(),
         "/pipeline/executions/" + executionId,
         nowEpochMs);
-  }
-
-  private static ExecutionStatusDto toStatusDto(ExecutionRecord<Object, Object> record) {
-    return new ExecutionStatusDto(
-        record.executionId(),
-        record.status(),
-        record.currentStepIndex(),
-        record.attempt(),
-        record.version(),
-        record.nextDueEpochMs(),
-        record.updatedAtEpochMs(),
-        record.errorCode(),
-        record.errorMessage());
   }
 
   private static String transitionKey(String executionId, int stepIndex, int attempt) {
