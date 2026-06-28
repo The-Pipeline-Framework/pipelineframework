@@ -19,21 +19,15 @@ import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 
 import io.smallrye.mutiny.Uni;
-import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
 import org.pipelineframework.checkpoint.CheckpointPublicationService;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
-import org.pipelineframework.awaitable.AwaitCompletionAdmissionFailures;
-import org.pipelineframework.awaitable.AwaitCompletionMetrics;
-import org.pipelineframework.awaitable.AwaitCompletionTenantMismatchException;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCoordinator;
-import org.pipelineframework.awaitable.AwaitInteractionStatus;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitLiveCompletionRegistry;
 import org.pipelineframework.awaitable.AwaitThrowableSupport;
-import org.pipelineframework.awaitable.AwaitUnitStatus;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionDecision;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionException;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionOperation;
@@ -45,7 +39,6 @@ import org.pipelineframework.telemetry.PipelineTelemetry;
 import org.pipelineframework.orchestrator.CreateExecutionResult;
 import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.ExecutionCreateCommand;
-import org.pipelineframework.orchestrator.ExecutionInputShape;
 import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRedriveResult;
 import org.pipelineframework.orchestrator.ExecutionRecord;
@@ -81,30 +74,8 @@ import org.pipelineframework.objectpublish.ObjectPublishCompletionService;
 class QueueAsyncCoordinator {
 
   private static final Logger LOG = Logger.getLogger(QueueAsyncCoordinator.class);
-  private static final int AWAIT_ITEM_CONTINUATION_MAX_ATTEMPTS = 3;
-  private static final long AWAIT_ITEM_CONTINUATION_RETRY_BASE_MS = 100L;
-  private static final String ONE_TO_ONE_CARDINALITY = "ONE_TO_ONE";
   private static final AwaitItemContinuationHandler NOOP_ITEM_CONTINUATION_HANDLER =
-      new AwaitItemContinuationHandler() {
-        @Override
-        public Uni<Void> continueAwaitItem(
-            AwaitInteractionRecord record,
-            org.pipelineframework.awaitable.AwaitUnitRecord unit,
-            int nextStepIndex,
-            Optional<ExecutionRecord<Object, Object>> parent,
-            long nowEpochMs) {
-          return Uni.createFrom().voidItem();
-        }
-
-        @Override
-        public Uni<Void> releaseAwaitParentIfReady(
-            ExecutionRecord<Object, Object> parent,
-            org.pipelineframework.awaitable.AwaitUnitRecord unit,
-            int nextStepIndex,
-            long nowEpochMs) {
-          return Uni.createFrom().voidItem();
-        }
-      };
+      AwaitContinuations.NOOP_ITEM_CONTINUATION_HANDLER;
 
   @Inject
   PipelineOrchestratorConfig orchestratorConfig;
@@ -157,6 +128,7 @@ class QueueAsyncCoordinator {
   private volatile TransitionPayloadCodec fallbackTransitionPayloadCodec;
   private volatile PipelineReleaseIdentityResolver fallbackReleaseIdentityResolver;
   private volatile ControlPlaneAdmissionPolicy fallbackAdmissionPolicy;
+  private volatile AwaitContinuations awaitContinuations;
 
   @Inject
   PipelineTelemetry telemetry;
@@ -618,248 +590,7 @@ class QueueAsyncCoordinator {
   Uni<AwaitCompletionResult> completeAwait(
       AwaitCompletionCommand command,
       AwaitItemContinuationHandler itemContinuationHandler) {
-    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
-      return Uni.createFrom().failure(new IllegalStateException(
-          "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
-    }
-    AwaitCompletionCommand normalized = new AwaitCompletionCommand(
-        executionInputPolicy.normalizeTenant(command.tenantId()),
-        command.interactionId(),
-        command.correlationId(),
-        command.resumeToken(),
-        command.idempotencyKey(),
-        command.responsePayload(),
-        command.actor(),
-        command.nowEpochMs());
-    RuntimeException admissionFailure = admissionFailure(admissionRequest(
-        normalized.tenantId(),
-        ControlPlaneAdmissionOperation.COMPLETE_AWAIT,
-        null,
-        "api",
-        explicitTenant(command.tenantId())));
-    if (admissionFailure != null) {
-      return Uni.createFrom().failure(admissionFailure);
-    }
-    return awaitCoordinator.complete(normalized)
-        .onFailure(failure -> !AwaitCompletionAdmissionFailures.isDeterministic(failure))
-        .transform(failure -> new IllegalStateException(
-            "Failed completing await interaction tenant=" + normalized.tenantId()
-                + ", interactionId=" + normalized.interactionId()
-                + ", correlationId=" + normalized.correlationId(),
-            failure))
-        .onItem().transformToUni(result -> validateAwaitCompletionTenant(result, normalized)
-            .onItem().transformToUni(validated -> {
-              return awaitCoordinator.recordCompletion(validated.record(), normalized.nowEpochMs())
-                  .onItem().transformToUni(unit -> segmentBoundaryLedger()
-                      .recordBoundaryCompletionAdmitted(validated.record(), unit, normalized.nowEpochMs())
-                      .chain(() -> signalLiveAwaitCompletion(validated.record(), unit))
-                      .onFailure().recoverWithItem(false)
-                      .onItem().transformToUni(liveAccepted -> liveAccepted
-                          ? Uni.createFrom().item(validated)
-                          : handleRecordedAwaitCompletion(
-                              validated,
-                              unit,
-                              itemContinuationHandler,
-                              normalized.nowEpochMs())));
-            }));
-  }
-
-  private Uni<AwaitCompletionResult> handleRecordedAwaitCompletion(
-      AwaitCompletionResult validated,
-      org.pipelineframework.awaitable.AwaitUnitRecord unit,
-      AwaitItemContinuationHandler itemContinuationHandler,
-      long nowEpochMs) {
-    if (usesItemContinuations(validated.record(), unit)) {
-      return awaitItemContinuationReady(validated.record(), unit)
-          .onItem().invoke(ready -> {
-            if (ready) {
-              dispatchAwaitItemContinuation(
-                  validated.record(),
-                  unit,
-                  itemContinuationHandler,
-                  nowEpochMs);
-            } else {
-              AwaitCompletionMetrics.recordEarlyCompletionHeld(validated.record(), unit);
-            }
-          })
-          .replaceWith(validated);
-    }
-    return unit.status() == AwaitUnitStatus.COMPLETED
-        ? releaseAwaitResume(validated.record(), unit.unitId(), nowEpochMs).replaceWith(validated)
-        : Uni.createFrom().item(validated);
-  }
-
-  private Uni<Boolean> signalLiveAwaitCompletion(
-      AwaitInteractionRecord record,
-      org.pipelineframework.awaitable.AwaitUnitRecord unit) {
-    if (awaitLiveCompletionRegistry == null) {
-      return Uni.createFrom().item(false);
-    }
-    return awaitLiveCompletionRegistry.signal(record, unit);
-  }
-
-  private void dispatchAwaitItemContinuation(
-      AwaitInteractionRecord record,
-      org.pipelineframework.awaitable.AwaitUnitRecord unit,
-      AwaitItemContinuationHandler itemContinuationHandler,
-      long nowEpochMs) {
-    if (itemContinuationHandler == NOOP_ITEM_CONTINUATION_HANDLER) {
-      return;
-    }
-    dispatchAwaitItemContinuationAttempt(record, unit, itemContinuationHandler, nowEpochMs, 1);
-  }
-
-  private Uni<Boolean> awaitItemContinuationReady(
-      AwaitInteractionRecord record,
-      org.pipelineframework.awaitable.AwaitUnitRecord unit) {
-    if (record == null || unit == null || !unit.dispatchComplete()) {
-      return Uni.createFrom().item(false);
-    }
-    Uni<Optional<ExecutionRecord<Object, Object>>> parentLookup =
-        executionStateStore.getExecution(record.tenantId(), record.executionId());
-    if (parentLookup == null) {
-      return Uni.createFrom().item(false);
-    }
-    return parentLookup
-        .onItem().transform(parent -> awaitItemContinuationReady(parent, unit));
-  }
-
-  private static boolean awaitItemContinuationReady(
-      Optional<ExecutionRecord<Object, Object>> parent,
-      org.pipelineframework.awaitable.AwaitUnitRecord unit) {
-    return parent.isPresent()
-        && parent.get().status() == ExecutionStatus.WAITING_EXTERNAL
-        && unit.unitId().equals(parent.get().awaitUnitId());
-  }
-
-  private Uni<Void> dispatchCompletedAwaitItemContinuations(
-      ExecutionRecord<Object, Object> parent,
-      org.pipelineframework.awaitable.AwaitUnitRecord unit,
-      AwaitItemContinuationHandler itemContinuationHandler,
-      long nowEpochMs) {
-    if (parent == null || unit == null || !usesItemContinuations(unit) || !unit.dispatchComplete()
-        || itemContinuationHandler == NOOP_ITEM_CONTINUATION_HANDLER) {
-      return Uni.createFrom().voidItem();
-    }
-    return awaitCoordinator.findByUnit(parent.tenantId(), unit.unitId())
-        .onItem().invoke(records -> records.stream()
-            .filter(record -> record.itemInteraction()
-                && record.itemIndex() != null
-                && record.status() == AwaitInteractionStatus.COMPLETED)
-            .forEach(record -> dispatchAwaitItemContinuation(
-                record,
-                unit,
-                itemContinuationHandler,
-                nowEpochMs)))
-        .replaceWithVoid();
-  }
-
-  private void dispatchAwaitItemContinuationAttempt(
-      AwaitInteractionRecord record,
-      org.pipelineframework.awaitable.AwaitUnitRecord unit,
-      AwaitItemContinuationHandler itemContinuationHandler,
-      long nowEpochMs,
-      int attempt) {
-    Optional<TransitionWorkerExecutor.TransitionAdmission> admission = transitionWorkerExecutor.tryAdmit();
-    if (admission.isEmpty()) {
-      queueSweepExecutor.schedule(
-          () -> dispatchAwaitItemContinuationAttempt(record, unit, itemContinuationHandler, nowEpochMs, attempt),
-          saturatedDelay().toMillis(),
-          TimeUnit.MILLISECONDS);
-      return;
-    }
-    TransitionWorkerExecutor.TransitionAdmission permit = admission.get();
-    Infrastructure.getDefaultExecutor().execute(() ->
-        executionStateStore
-            .getExecution(record.tenantId(), record.executionId())
-            .onItem().transformToUni(parent -> {
-              if (!awaitItemContinuationReady(parent, unit)) {
-                return Uni.createFrom().voidItem();
-              }
-              return itemContinuationHandler.continueAwaitItem(
-                  record,
-                  unit,
-                  record.stepIndex() + 1,
-                  parent,
-                  nowEpochMs);
-            })
-            .subscribe().with(
-                ignored -> {
-                  permit.close();
-                },
-                failure -> {
-                  permit.close();
-                  if (attempt < AWAIT_ITEM_CONTINUATION_MAX_ATTEMPTS) {
-                    long retryDelayMs = awaitItemContinuationRetryDelayMs(attempt);
-                    LOG.warnf(
-                        failure,
-                        "Retrying await item continuation tenant=%s executionId=%s unitId=%s interactionId=%s itemIndex=%s attempt=%d delayMs=%d",
-                        record.tenantId(),
-                        record.executionId(),
-                        record.unitId(),
-                        record.interactionId(),
-                        record.itemIndex(),
-                        attempt + 1,
-                        retryDelayMs);
-                    queueSweepExecutor.schedule(
-                        () -> dispatchAwaitItemContinuationAttempt(
-                            record,
-                            unit,
-                            itemContinuationHandler,
-                            nowEpochMs,
-                            attempt + 1),
-                        retryDelayMs,
-                        TimeUnit.MILLISECONDS);
-                    return;
-                  }
-                  markAwaitItemContinuationFailed(record, failure, attempt);
-                }));
-  }
-
-  private static long awaitItemContinuationRetryDelayMs(int attempt) {
-    int boundedAttempt = Math.max(1, Math.min(attempt, AWAIT_ITEM_CONTINUATION_MAX_ATTEMPTS));
-    return AWAIT_ITEM_CONTINUATION_RETRY_BASE_MS << (boundedAttempt - 1);
-  }
-
-  private void markAwaitItemContinuationFailed(
-      AwaitInteractionRecord record,
-      Throwable failure,
-      int attempt) {
-    long nowEpochMs = System.currentTimeMillis();
-    executionStateStore.getExecution(record.tenantId(), record.executionId())
-        .onItem().transformToUni(parent -> {
-          if (parent.isEmpty() || parent.get().status().terminal()) {
-            return Uni.createFrom().item(Optional.<ExecutionRecord<Object, Object>>empty());
-          }
-          ExecutionRecord<Object, Object> parentRecord = parent.get();
-          return executionStateStore.markTerminalFailure(
-              parentRecord.tenantId(),
-              parentRecord.executionId(),
-              parentRecord.version(),
-              ExecutionStatus.FAILED,
-              "await-item-continuation-failed:" + record.unitId() + ":" + record.itemIndex(),
-              "AWAIT_ITEM_CONTINUATION_FAILED",
-              "Await item continuation failed after " + attempt + " attempts: " + failure.getMessage(),
-              nowEpochMs);
-        })
-        .subscribe().with(
-            ignored -> LOG.errorf(
-                failure,
-                "Failed processing await item continuation tenant=%s executionId=%s unitId=%s interactionId=%s itemIndex=%s after %d attempts; marked parent failed when still active",
-                record.tenantId(),
-                record.executionId(),
-                record.unitId(),
-                record.interactionId(),
-                record.itemIndex(),
-                attempt),
-            persistenceFailure -> LOG.errorf(
-                persistenceFailure,
-                "Failed marking parent execution failed after await item continuation failure tenant=%s executionId=%s unitId=%s interactionId=%s itemIndex=%s",
-                record.tenantId(),
-                record.executionId(),
-                record.unitId(),
-                record.interactionId(),
-                record.itemIndex()));
+    return awaitBoundaryAdmission().complete(command, itemContinuationHandler);
   }
 
   Uni<List<AwaitInteractionRecord>> queryPendingAwaitInteractions(
@@ -1311,33 +1042,7 @@ class QueueAsyncCoordinator {
       TransitionAwaitSuspension suspended,
       long nowEpochMs,
       AwaitItemContinuationHandler itemContinuationHandler) {
-    return awaitCoordinator.getUnit(record.tenantId(), suspended.unitId())
-        .onItem().transformToUni(unit -> {
-          if (unit == null || unit.status() != AwaitUnitStatus.COMPLETED) {
-            return unit != null && usesItemContinuations(unit)
-                ? dispatchCompletedAwaitItemContinuations(record, unit, itemContinuationHandler, nowEpochMs)
-                : Uni.createFrom().voidItem();
-          }
-          if (usesItemContinuations(unit)) {
-            return dispatchCompletedAwaitItemContinuations(record, unit, itemContinuationHandler, nowEpochMs)
-                .onItem().transformToUni(ignored -> itemContinuationHandler.releaseAwaitParentIfReady(
-                    record,
-                    unit,
-                    suspended.stepIndex() + 1,
-                    nowEpochMs));
-          }
-          return releaseAwaitResume(
-              record.tenantId(),
-              record.executionId(),
-              unit.unitId(),
-              unit.stepId(),
-              suspended.stepIndex(),
-              null,
-              null,
-              null,
-              null,
-              nowEpochMs);
-        });
+    return awaitContinuations().afterParentWaiting(record, suspended, nowEpochMs, itemContinuationHandler);
   }
 
   Uni<Void> recordAwaitItemContinuation(
@@ -1347,79 +1052,13 @@ class QueueAsyncCoordinator {
       ExecutionInputSnapshot continuationInput,
       List<?> segmentOutputs,
       long nowEpochMs) {
-    if (!usesItemContinuations(interaction, unit)) {
-      return Uni.createFrom().voidItem();
-    }
-    if (interaction.itemIndex() == null) {
-      return Uni.createFrom().failure(new IllegalArgumentException("Itemized await continuation requires itemIndex"));
-    }
-    if (continuationInput == null) {
-      return Uni.createFrom().failure(new IllegalArgumentException(
-          "Itemized await continuation requires normalized continuation input"));
-    }
-    ExecutionInputSnapshot normalizedInput = copyInputSnapshot(continuationInput);
-    return executionStateStore.getExecution(interaction.tenantId(), interaction.executionId())
-        .onItem().transformToUni(parent -> {
-          if (parent.isEmpty()) {
-            return Uni.createFrom().voidItem();
-          }
-          ExecutionRecord<Object, Object> parentRecord = parent.get();
-          String childKey = awaitItemContinuationKey(parentRecord, unit, interaction.itemIndex());
-          return executionStateStore.getExecutionByKey(interaction.tenantId(), childKey)
-              .onItem().transformToUni(existing -> {
-                if (existing.isPresent() && existing.get().status() == ExecutionStatus.SUCCEEDED) {
-                  return releaseItemizedAwaitParentIfReady(parentRecord, unit, aggregateStepIndex, nowEpochMs);
-                }
-                long ttl = parentRecord.ttlEpochS();
-                ExecutionCreateCommand create = new ExecutionCreateCommand(
-                    interaction.tenantId(),
-                    childKey,
-                    parentRecord.pipelineId(),
-                    parentRecord.contractVersion(),
-                    parentRecord.releaseVersion(),
-                    normalizedInput,
-                    ExecutionResultShape.MATERIALIZED_MULTI,
-                    nowEpochMs,
-                    ttl);
-                return executionStateStore.createOrGetExecution(create)
-                    .onItem().transformToUni(created -> {
-                      ExecutionRecord<Object, Object> child = created.record();
-                      if (created.duplicate() && child.status() == ExecutionStatus.SUCCEEDED) {
-                        return releaseItemizedAwaitParentIfReady(parentRecord, unit, aggregateStepIndex, nowEpochMs);
-                      }
-                      String transitionKey = "await-item-continuation:" + unit.unitId() + ":" + interaction.itemIndex();
-                      return executionStateStore.markSucceeded(
-                              child.tenantId(),
-                              child.executionId(),
-                              child.version(),
-                              transitionKey,
-                              List.copyOf(segmentOutputs == null ? List.of() : segmentOutputs),
-                              nowEpochMs)
-                          .onItem().transformToUni(ignored -> segmentBoundaryLedger()
-                              .recordContinuationSegmentCreated(
-                                  parentRecord,
-                                  unit,
-                                  SegmentBoundaryLedger.itemContinuationSegmentId(
-                                      parentRecord.executionId(),
-                                      unit.unitId(),
-                                      interaction.itemIndex()),
-                                  interaction.stepIndex() + 1,
-                                  aggregateStepIndex,
-                                  normalizedInput,
-                                  nowEpochMs))
-                          .onItem().transformToUni(ignored ->
-                              releaseItemizedAwaitParentIfReady(parentRecord, unit, aggregateStepIndex, nowEpochMs));
-                    });
-              });
-        });
-  }
-
-  private static ExecutionInputSnapshot copyInputSnapshot(ExecutionInputSnapshot snapshot) {
-    Object payload = snapshot.payload();
-    if (payload instanceof List<?> list) {
-      payload = List.copyOf(list);
-    }
-    return new ExecutionInputSnapshot(snapshot.shape(), payload);
+    return awaitContinuations().captureItemContinuationOutput(
+        interaction,
+        unit,
+        aggregateStepIndex,
+        continuationInput,
+        segmentOutputs,
+        nowEpochMs);
   }
 
   Uni<Void> releaseItemizedAwaitParentIfReady(
@@ -1427,206 +1066,47 @@ class QueueAsyncCoordinator {
       org.pipelineframework.awaitable.AwaitUnitRecord unit,
       int aggregateStepIndex,
       long nowEpochMs) {
-    if (parent == null || unit == null || !usesItemContinuations(unit)
-        || !unit.dispatchComplete() || unit.expectedItemCount() == null) {
-      return Uni.createFrom().voidItem();
+    return awaitContinuations().releaseParentIfReady(parent, unit, aggregateStepIndex, nowEpochMs);
+  }
+
+  private AwaitBoundaryAdmission awaitBoundaryAdmission() {
+    return new AwaitBoundaryAdmission(
+        orchestratorConfig,
+        executionInputPolicy,
+        admissionPolicy(),
+        awaitCoordinator,
+        awaitLiveCompletionRegistry,
+        this::pipelineId,
+        this::releaseVersion,
+        this::segmentBoundaryLedger,
+        awaitContinuations());
+  }
+
+  private AwaitContinuations awaitContinuations() {
+    AwaitContinuations current = awaitContinuations;
+    if (current != null) {
+      return current;
     }
-    List<Uni<Optional<ExecutionRecord<Object, Object>>>> lookups = new ArrayList<>();
-    for (int index = 0; index < unit.expectedItemCount(); index++) {
-      lookups.add(executionStateStore.getExecutionByKey(parent.tenantId(), awaitItemContinuationKey(parent, unit, index)));
+    synchronized (this) {
+      current = awaitContinuations;
+      if (current == null) {
+        current = new AwaitContinuations(
+            executionStateStore,
+            workDispatcher,
+            awaitCoordinator,
+            transitionWorkerExecutor,
+            queueSweepExecutor,
+            this::saturatedDelay,
+            this::segmentBoundaryLedger,
+            this::recordAwaitLifecycle);
+        awaitContinuations = current;
+      }
+      return current;
     }
-    return Uni.join().all(lookups).andCollectFailures()
-        .onItem().transformToUni(children -> {
-          List<Object> orderedOutputs = new ArrayList<>();
-          for (Object childObject : children) {
-            @SuppressWarnings("unchecked")
-            Optional<ExecutionRecord<Object, Object>> child = (Optional<ExecutionRecord<Object, Object>>) childObject;
-            if (child.isEmpty() || child.get().status() != ExecutionStatus.SUCCEEDED) {
-              return Uni.createFrom().voidItem();
-            }
-            Object payload = child.get().resultPayload();
-            if (payload instanceof Iterable<?> iterable) {
-              iterable.forEach(orderedOutputs::add);
-            } else if (payload != null) {
-              orderedOutputs.add(payload);
-            }
-          }
-          Object resumePayload = new ExecutionInputSnapshot(ExecutionInputShape.MULTI, List.copyOf(orderedOutputs));
-          return executionStateStore.markAwaitItemContinuationsCompleted(
-                  parent.tenantId(),
-                  parent.executionId(),
-                  unit.unitId(),
-                  aggregateStepIndex,
-                  resumePayload,
-                  nowEpochMs)
-              .onItem().transformToUni(updated -> {
-                if (updated.isEmpty()) {
-                  return Uni.createFrom().voidItem();
-                }
-                Uni<Void> recordedContinuation = segmentBoundaryLedger().recordContinuationSegmentCreated(
-                    parent.tenantId(),
-                    parent.executionId(),
-                    SegmentBoundaryLedger.segmentId(parent),
-                    unit.unitId(),
-                    SegmentBoundaryLedger.segmentId(updated.get()),
-                    aggregateStepIndex,
-                    -1,
-                    resumePayload,
-                    nowEpochMs);
-                recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
-                    AwaitReplayLifecycleEvent.RESUME_RELEASED,
-                    parent.executionId(),
-                    unit.unitId(),
-                    unit.stepId(),
-                    unit.stepIndex(),
-                    updated.get().status().name(),
-                    null,
-                    null,
-                    null,
-                    null,
-                    unit.expectedItemCount(),
-                    unit.completedItemCount(),
-                    unit.dispatchComplete()));
-                AwaitCompletionMetrics.recordResumeReleased(unit);
-                ExecutionRecord<Object, Object> released = updated.get();
-                return recordedContinuation
-                    .chain(() -> workDispatcher.enqueueNow(new ExecutionWorkItem(
-                        released.tenantId(),
-                        released.executionId())))
-                    .replaceWithVoid();
-              });
-        });
-  }
-
-  private static boolean usesItemContinuations(
-      AwaitInteractionRecord record,
-      org.pipelineframework.awaitable.AwaitUnitRecord unit) {
-    return record != null
-        && record.itemInteraction()
-        && usesItemContinuations(unit);
-  }
-
-  private static boolean usesItemContinuations(org.pipelineframework.awaitable.AwaitUnitRecord unit) {
-    return unit != null
-        && unit.primaryInteractionId() == null
-        && ONE_TO_ONE_CARDINALITY.equalsIgnoreCase(unit.cardinality());
-  }
-
-  private static String awaitItemContinuationKey(
-      ExecutionRecord<Object, Object> parent,
-      org.pipelineframework.awaitable.AwaitUnitRecord unit,
-      int itemIndex) {
-    return parent.executionKey() + ":await-item:" + unit.unitId() + ":" + itemIndex;
-  }
-
-  private Uni<Void> releaseAwaitResume(
-      AwaitInteractionRecord record,
-      String awaitUnitId,
-      long nowEpochMs) {
-    return releaseAwaitResume(
-        record.tenantId(),
-        record.executionId(),
-        awaitUnitId,
-        record.stepId(),
-        record.stepIndex(),
-        record.interactionId(),
-        record.correlationId(),
-        record.transportType(),
-        record.itemIndex(),
-        nowEpochMs);
-  }
-
-  private Uni<Void> releaseAwaitResume(
-      String tenantId,
-      String executionId,
-      String awaitUnitId,
-      String stepId,
-      int stepIndex,
-      String interactionId,
-      String correlationId,
-      String transportType,
-      Integer itemIndex,
-      long nowEpochMs) {
-    return executionStateStore.markAwaitCompleted(
-            tenantId,
-            executionId,
-            awaitUnitId,
-            stepIndex + 1,
-            nowEpochMs)
-        .onItem().transformToUni(updated -> {
-          if (updated.isPresent()) {
-            LOG.infof(
-                "Resuming async execution %s from awaitUnitId=%s at nextStepIndex=%d",
-                updated.get().executionId(),
-                awaitUnitId,
-                updated.get().currentStepIndex());
-            recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
-                AwaitReplayLifecycleEvent.RESUME_RELEASED,
-                executionId,
-                awaitUnitId,
-                stepId,
-                stepIndex,
-                updated.get().status().name(),
-                interactionId,
-                correlationId,
-                transportType,
-                itemIndex,
-                null,
-                null,
-                null));
-            AwaitCompletionMetrics.recordResumeReleased(new AwaitReplayLifecycleEvent(
-                AwaitReplayLifecycleEvent.RESUME_RELEASED,
-                executionId,
-                awaitUnitId,
-                stepId,
-                stepIndex,
-            updated.get().status().name(),
-            interactionId,
-            correlationId,
-            transportType,
-            itemIndex,
-            null,
-            null,
-            null));
-            Uni<Void> recordedContinuation = segmentBoundaryLedger().recordContinuationSegmentCreated(
-                tenantId,
-                executionId,
-                SegmentBoundaryLedger.segmentId(executionId, stepIndex),
-                awaitUnitId,
-                SegmentBoundaryLedger.segmentId(updated.get()),
-                stepIndex + 1,
-                -1,
-                updated.get().inputPayload(),
-                nowEpochMs);
-            ExecutionRecord<Object, Object> released = updated.get();
-            return recordedContinuation
-                .chain(() -> workDispatcher.enqueueNow(new ExecutionWorkItem(
-                    released.tenantId(),
-                    released.executionId())))
-                .replaceWithVoid();
-          }
-          LOG.debugf(
-              "Await resume release for execution %s awaitUnitId=%s at stepIndex=%d produced no state update; treating as idempotent no-op",
-              executionId,
-              awaitUnitId,
-              stepIndex);
-          return Uni.createFrom().voidItem();
-        });
   }
 
   private SegmentBoundaryLedger segmentBoundaryLedger() {
     return segmentBoundaryLedger == null ? new SegmentBoundaryLedger() : segmentBoundaryLedger;
-  }
-
-  private Uni<AwaitCompletionResult> validateAwaitCompletionTenant(
-      AwaitCompletionResult result,
-      AwaitCompletionCommand command) {
-    if (!command.tenantId().equals(result.record().tenantId())) {
-      return Uni.createFrom().failure(new AwaitCompletionTenantMismatchException(
-          "Await completion tenant mismatch: command tenant=" + command.tenantId()
-              + ", record tenant=" + result.record().tenantId()));
-    }
-    return Uni.createFrom().item(result);
   }
 
   private void recordAwaitLifecycle(AwaitReplayLifecycleEvent lifecycleEvent) {

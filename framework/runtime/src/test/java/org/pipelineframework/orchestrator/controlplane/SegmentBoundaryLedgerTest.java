@@ -2,17 +2,25 @@ package org.pipelineframework.orchestrator.controlplane;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.awaitable.AwaitInteractionRecord;
+import org.pipelineframework.awaitable.AwaitInteractionStatus;
+import org.pipelineframework.awaitable.AwaitUnitRecord;
+import org.pipelineframework.awaitable.AwaitUnitStatus;
 import org.pipelineframework.orchestrator.CreateExecutionResult;
 import org.pipelineframework.orchestrator.ExecutionCreateCommand;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionStatus;
+import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
 
 class SegmentBoundaryLedgerTest {
 
@@ -71,6 +79,61 @@ class SegmentBoundaryLedgerTest {
         assertTrue(projection.attempts().containsKey("run-4:0:0"));
     }
 
+    @Test
+    void requiredBoundaryInteractionFactsFailFastWhenPayloadCannotBeFrozen() {
+        SegmentBoundaryLedger ledger = new SegmentBoundaryLedger(new InMemoryControlPlaneJournal());
+        ExecutionRecord<Object, Object> record = record("run-5");
+        AwaitUnitRecord unit = new AwaitUnitRecord(
+            "tenant",
+            "unit-1",
+            "run-5",
+            "AwaitPaymentProvider",
+            2,
+            "ONE_TO_ONE",
+            1L,
+            AwaitUnitStatus.WAITING_EXTERNAL,
+            null,
+            1,
+            0,
+            Set.of(),
+            true,
+            1L,
+            1L,
+            999999L);
+        AwaitInteractionRecord interaction = new AwaitInteractionRecord(
+            "tenant",
+            "run-5",
+            "AwaitPaymentProvider",
+            2,
+            String.class.getName(),
+            "interaction-1",
+            "corr-1",
+            "cause-1",
+            "idem-1",
+            1L,
+            AwaitInteractionStatus.WAITING,
+            new SelfReferentialPayload(),
+            null,
+            "unit-1",
+            0,
+            "user-1",
+            null,
+            null,
+            "kafka",
+            Map.of(),
+            999999L,
+            1L,
+            1L,
+            999999L);
+
+        assertThrows(IllegalArgumentException.class, () -> ledger.recordSegmentSuspended(
+                record,
+                "run-5:2:0",
+                new TransitionAwaitSuspension("tenant", "run-5", "unit-1", 2, unit, List.of(interaction)),
+                50L)
+            .await().indefinitely());
+    }
+
     private static ExecutionCreateCommand command(ExecutionRecord<Object, Object> record) {
         return new ExecutionCreateCommand(
             record.tenantId(),
@@ -109,6 +172,11 @@ class SegmentBoundaryLedgerTest {
             1L,
             1L,
             999999L);
+    }
+
+    private static final class SelfReferentialPayload {
+        @SuppressWarnings("unused")
+        public final Object self = this;
     }
 
     private static final class ConflictOnceJournal implements ControlPlaneJournal {

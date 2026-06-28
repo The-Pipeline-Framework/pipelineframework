@@ -112,6 +112,34 @@ sequenceDiagram
 
 `BoundaryAdmissionFacts` is deliberately transport-agnostic. Kafka await completions and Kafka checkpoint handoffs should produce the same `BoundaryCompletionAdmitted` fact shape after their protocol-specific decoding.
 
+For await completions, `AwaitBoundaryAdmission` is the internal owner of that route. It normalizes the completion command, applies local control-plane admission, records the existing await completion projection, appends `BoundaryCompletionAdmitted`, and only then chooses between a local live-session handoff or durable continuation work.
+
+`AwaitContinuations` owns the "future beginning" after the boundary. It releases scalar awaits, records per-item continuation outputs, assembles ordered itemized parent output, and dispatches resumed segment work. `QueueAsyncCoordinator` remains the API and provider façade for now; it should not own completion-routing semantics directly.
+
+```mermaid
+sequenceDiagram
+    participant Broker as "Broker / transport"
+    participant Admission as "AwaitBoundaryAdmission"
+    participant AwaitStore as "Await projections"
+    participant Ledger as "SegmentBoundaryLedger -> ControlPlaneJournal"
+    participant Live as "LiveAwaitSession"
+    participant Consumer as "Downstream live consumer"
+    participant Continue as "AwaitContinuations"
+    participant Work as "Work dispatcher"
+
+    Broker->>Admission: "correlated completion"
+    Admission->>AwaitStore: "record completion"
+    AwaitStore-->>Admission: "AwaitUnitRecord"
+    Admission->>Ledger: "append BoundaryCompletionAdmitted"
+    alt local live session accepts
+      Admission->>Live: "signal admitted completion"
+      Live-->>Consumer: "emit item by demand"
+    else no local live session
+      Admission->>Continue: "durable fallback"
+      Continue->>Work: "enqueue scalar or item continuation when gates allow"
+    end
+```
+
 ## Relationship To Projection Stores
 
 The existing stores are projection stores for efficient runtime lookup:
