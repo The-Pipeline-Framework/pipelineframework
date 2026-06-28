@@ -15,6 +15,7 @@ Current Spring work proves a narrow generated application path:
 - `Mono<Out>` and `CompletionStage<Out>` authored service methods for YAML-declared Spring-profile unary services,
 - unary delegated Spring bean steps for local pipeline execution,
 - unary `Class::method` Spring operator beans for local pipeline execution,
+- unary REST client-step boundaries for Spring WebFlux pipelines,
 - shared runner-core sequencing through the neutral runtime seam.
 
 ## Not Yet Supported
@@ -27,7 +28,6 @@ Spring does not yet have parity for:
 - persistence providers,
 - non-local delegated/operator paths,
 - side effects and plugins,
-- REST client-step remote boundaries,
 - streaming or non-unary shapes,
 - production Spring observability and deployment guidance.
 
@@ -42,6 +42,8 @@ Use the Spring path only when you are validating the emerging renderer/runtime s
 Spring-profile service steps are supported only for unary local steps declared from YAML. Normal `service:` beans can use `process(In): Mono<Out>`, `process(In): CompletionStage<Out>`, or `processBlocking(In): Out`.
 
 Delegated Spring beans are supported only for unary local steps declared from YAML with either a Spring bean class or an explicit `Class::method` operator reference. Class-only delegates use supported TPF-style service shapes such as `process(In): Mono<Out>` or `processBlocking(In): Out`. `Class::method` delegates support narrow unary Spring bean methods: `Out method(In)`, `Mono<Out> method(In)`, or `CompletionStage<Out> method(In)`.
+
+Spring REST client-step boundaries are supported only for unary `REST + COMPUTE` client-role steps. Configure each generated Spring REST client with `tpf.rest-client.<client-name>.url`; Spring REST client steps do not forward TPF control, cache, or replay headers.
 
 This support does not imply gRPC, function, await/checkpoint, broker, durable coordinator, streaming/non-unary, or production parity with the Quarkus runtime.
 
