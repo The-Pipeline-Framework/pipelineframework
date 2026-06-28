@@ -636,24 +636,64 @@ function computeReplayDurationSeconds(document) {
 }
 
 function augmentTopologyWithConnectorNodes(topology, connectors = []) {
-  if (!topology || !Array.isArray(topology.steps) || !Array.isArray(topology.transitions) || !Array.isArray(connectors)) {
+  if (!topology || !Array.isArray(topology.steps) || !Array.isArray(topology.transitions)) {
     return topology;
   }
-  if (connectors.length === 0) {
-    return topology;
-  }
-  const steps = [...topology.steps];
+  const steps = topology.steps.map((step) => Object.assign({}, step));
   const transitions = [...topology.transitions];
   const stepNames = new Set(steps.map((step) => step.step));
   const transitionIds = new Set(transitions.map((transition) => transition.id));
   const runtimeStepClasses = new Set(steps.map((step) => step.runtimeStepClass).filter(Boolean));
-  const businessSteps = steps.filter((step) => !step.sideEffect);
+  const businessSteps = steps.filter((step) => !step.sideEffect && !connectorRenderRole(step));
   const firstBusinessStep = businessSteps[0]?.step ?? null;
   const lastBusinessStep = [...businessSteps].reverse().find((step) => resolveDisplayRole(step) === "primary")?.step
     ?? businessSteps[businessSteps.length - 1]?.step
     ?? null;
 
-  for (const connector of connectors) {
+  const ensureConnectorTransition = (connectorStepName, role, targetStep, connector = {}) => {
+    const relationKind = connector.relationKind ?? role;
+    const from = role === "object-ingest" || role === "query-connector" ? connectorStepName : targetStep;
+    const to = role === "object-ingest" || role === "query-connector" ? targetStep : connectorStepName;
+    const transitionId = connector.transitionId ?? `${from}->${to}`;
+    if (transitionIds.has(transitionId)) {
+      return;
+    }
+    transitions.push({
+      id: transitionId,
+      fromRuntimeStepClass: steps.find((step) => step.step === from)?.runtimeStepClass,
+      toRuntimeStepClass: steps.find((step) => step.step === to)?.runtimeStepClass,
+      from,
+      to,
+      fromService: steps.find((step) => step.step === from)?.service,
+      toService: steps.find((step) => step.step === to)?.service,
+      cardinality: connector.cardinality ?? "one-to-one",
+      relationKind
+    });
+    transitionIds.add(transitionId);
+  };
+
+  for (const step of steps) {
+    const role = connectorRenderRole(step);
+    if (!role) {
+      continue;
+    }
+    const targetStep = step.targetStep
+      ?? step.attachesTo
+      ?? (role === "object-ingest" || role === "query-connector" ? firstBusinessStep : lastBusinessStep);
+    if (!targetStep) {
+      continue;
+    }
+    step.sideEffect = true;
+    step.parentStep = targetStep;
+    step.pluginKind = step.pluginKind ?? null;
+    step.connectorKind = step.connectorKind ?? role;
+    step.connectorProvider = step.connectorProvider ?? step.provider ?? null;
+    step.renderRole = role;
+    step.actorKind = step.actorKind ?? connectorActorKind(role, step.connectorProvider);
+    ensureConnectorTransition(step.step, role, targetStep, step);
+  }
+
+  for (const connector of Array.isArray(connectors) ? connectors : []) {
     const role = connectorRenderRole(connector);
     if (!role) {
       continue;
@@ -691,24 +731,7 @@ function augmentTopologyWithConnectorNodes(topology, connectors = []) {
       stepNames.add(connectorStepName);
       runtimeStepClasses.add(connectorRuntimeStepClass);
     }
-    const relationKind = connector.relationKind ?? role;
-    const from = role === "object-ingest" || role === "query-connector" ? connectorStepName : targetStep;
-    const to = role === "object-ingest" || role === "query-connector" ? targetStep : connectorStepName;
-    const transitionId = connector.transitionId ?? `${from}->${to}`;
-    if (!transitionIds.has(transitionId)) {
-      transitions.push({
-        id: transitionId,
-        fromRuntimeStepClass: steps.find((step) => step.step === from)?.runtimeStepClass,
-        toRuntimeStepClass: steps.find((step) => step.step === to)?.runtimeStepClass,
-        from,
-        to,
-        fromService: steps.find((step) => step.step === from)?.service,
-        toService: steps.find((step) => step.step === to)?.service,
-        cardinality: connector.cardinality ?? "one-to-one",
-        relationKind
-      });
-      transitionIds.add(transitionId);
-    }
+    ensureConnectorTransition(connectorStepName, role, targetStep, connector);
   }
 
   return Object.assign({}, topology, {
@@ -720,10 +743,23 @@ function augmentTopologyWithConnectorNodes(topology, connectors = []) {
 function connectorRenderRole(connector) {
   const kind = String(connector?.kind ?? connector?.connectorKind ?? "").toLowerCase();
   const role = String(connector?.renderRole ?? "").toLowerCase();
-  if (role === "object-ingest" || kind === "object-ingest" || kind === "object-ingest-connector") {
+  const runtimeStepClass = String(connector?.runtimeStepClass ?? "").toLowerCase();
+  const service = String(connector?.service ?? "").toLowerCase();
+  const step = String(connector?.step ?? connector?.name ?? "").toLowerCase();
+  if (role === "object-ingest"
+      || kind === "object-ingest"
+      || kind === "object-ingest-connector"
+      || runtimeStepClass === "runtime::objectingest"
+      || service === "objectingestconnector"
+      || step === "objectingest") {
     return "object-ingest";
   }
-  if (role === "object-publish" || kind === "object-publish" || kind === "object-publish-connector") {
+  if (role === "object-publish"
+      || kind === "object-publish"
+      || kind === "object-publish-connector"
+      || runtimeStepClass === "runtime::objectpublish"
+      || service === "objectpublishconnector"
+      || step === "objectpublish") {
     return "object-publish";
   }
   if (role === "query-connector" || kind === "jpa-query" || kind === "jpa-query-connector" || kind === "query") {
@@ -1983,10 +2019,11 @@ function registerNode(step, position) {
   scene.add(mesh);
   nodeMeshes.set(step.step, mesh);
   nodePositions.set(step.step, position.clone());
+  const namedSupportActor = isNamedSupportActor(step);
   if (!isSideEffect) {
     registerPressureRing(step, position);
   }
-  if (!isSideEffect || isNamedSupportActor(step)) {
+  if (!isSideEffect || namedSupportActor) {
     const sprite = buildStepLabelSprite(step.step);
     const labelOffset = isSideEffect ? LABEL_OFFSET_Y - 0.08 : LABEL_OFFSET_Y;
     sprite.scale.multiplyScalar(isSideEffect ? SUPPORT_LABEL_HEIGHT / BASE_LABEL_HEIGHT : 1);
@@ -1995,9 +2032,9 @@ function registerNode(step, position) {
     scene.add(sprite);
     nodeLabelSprites.set(step.step, sprite);
   }
-  if (!isSideEffect) {
+  if (!isSideEffect || namedSupportActor) {
     const valueSprite = buildThroughputCounterSprite("—|—");
-    valueSprite.position.copy(position);
+    valueSprite.position.copy(position).add(isSideEffect ? new THREE.Vector3(0, -0.3, 0) : new THREE.Vector3(0, 0, 0));
     scene.add(valueSprite);
     nodeValueSprites.set(step.step, valueSprite);
   } else {
@@ -2932,6 +2969,15 @@ function outputItemCount(event) {
   return event?.itemId ? 1 : 0;
 }
 
+function numericEventAttribute(event, key) {
+  const value = event?.attributes?.[key];
+  if (value == null || value === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function displayStateForStep(stepName) {
   const directState = stateForStep(stepName);
   const step = resolveStepDefinition(stepName);
@@ -2959,6 +3005,12 @@ function markCounterEvidence(state, itemCount) {
     state.receivedKnown = true;
     state.sentKnown = true;
   }
+}
+
+function markCountersKnown(state) {
+  state.known = true;
+  state.receivedKnown = true;
+  state.sentKnown = true;
 }
 
 function formatCounterValue(value, known = true) {
@@ -3110,6 +3162,9 @@ function recordReplayCounters(rawEvent) {
     recordAwaitLifecycleCounters(rawEvent, event);
     return;
   }
+  if (recordConnectorCounters(rawEvent, event)) {
+    return;
+  }
   if (!event?.step) {
     return;
   }
@@ -3155,6 +3210,47 @@ function recordReplayCounters(rawEvent) {
     rejectState.rejects += inputCount;
     return;
   }
+}
+
+function recordConnectorCounters(rawEvent, event) {
+  if (!event?.step) {
+    return false;
+  }
+  const step = resolveStepDefinition(event.step);
+  const role = resolveDisplayRole(step);
+  if (role === "object-ingest") {
+    const state = stateForStep(event.step);
+    markCountersKnown(state);
+    if (rawEvent.event === "object_ingest_listed") {
+      state.received = Math.max(state.received, numericEventAttribute(rawEvent, "count") ?? 0);
+      return true;
+    }
+    if (rawEvent.event === "object_ingest_submitted") {
+      state.sent += 1;
+      state.received = Math.max(state.received, state.sent);
+      return true;
+    }
+  }
+  if (role === "object-publish") {
+    const state = stateForStep(event.step);
+    markCountersKnown(state);
+    if (rawEvent.event === "object_publish_grouped") {
+      const itemCount = numericEventAttribute(rawEvent, "itemCount");
+      const groupCount = numericEventAttribute(rawEvent, "groupCount");
+      if (itemCount != null) {
+        state.received = Math.max(state.received, itemCount);
+      }
+      if (groupCount != null) {
+        state.sent = Math.max(state.sent, groupCount);
+      }
+      return true;
+    }
+    if (rawEvent.event === "object_publish_published") {
+      state.sent = Math.max(state.sent, 1);
+      return true;
+    }
+  }
+  return false;
 }
 
 function recordAwaitLifecycleCounters(rawEvent, event) {
@@ -3361,10 +3457,32 @@ function processEvent(rawEvent) {
       && shouldSampleSupportFlow(`query:${queryConnectorEdge.from}->${queryConnectorEdge.to}`, 16)) {
     animateConnectorFlow(queryConnectorEdge, rawEvent.startTime + 0.04, 0x9bd6ff);
   }
+  if (rawEvent.event === "object_ingest_listed" || rawEvent.event === "object_ingest_submitted") {
+    const ingestEdge = activeAnimationPolicy.connectorIngestByTargetStep.get(event.step)
+      ?? [...activeAnimationPolicy.connectorIngestByTargetStep.values()].find((edge) => edge.from === event.step);
+    if (ingestEdge) {
+      animateConnectorFlow(ingestEdge, rawEvent.startTime, 0x8bffa5);
+    } else {
+      highlightStep(event.step, 1.1, rawEvent.startTime);
+      spawnPulse(event.step, 0x8bffa5, EFFECT_PRESETS.pulse.success, rawEvent.startTime);
+    }
+    return;
+  }
   const objectPublishEdge = event?.step ? activeAnimationPolicy.connectorPublishBySourceStep.get(event.step) : null;
   if (rawEvent.event === "success" && objectPublishEdge
       && shouldSampleSupportFlow(`object-publish:${objectPublishEdge.from}->${objectPublishEdge.to}`, 12)) {
     animateConnectorFlow(objectPublishEdge, rawEvent.endTime ?? rawEvent.startTime, 0x86f0cf);
+  }
+  if (rawEvent.event === "object_publish_grouped" || rawEvent.event === "object_publish_published") {
+    const publishEdge = [...activeAnimationPolicy.connectorPublishBySourceStep.values()]
+      .find((edge) => edge.to === event.step);
+    if (publishEdge) {
+      animateConnectorFlow(publishEdge, rawEvent.startTime, 0x86f0cf);
+    } else {
+      highlightStep(event.step, 1.1, rawEvent.startTime);
+      spawnPulse(event.step, 0x86f0cf, EFFECT_PRESETS.pulse.success, rawEvent.startTime);
+    }
+    return;
   }
   const storeWriteFlow = activeAnimationPolicy.storeWriteByRawStep.get(rawEvent.step);
   if (rawEvent.event === "success" && storeWriteFlow && isPersistenceSideEffectStep(rawEvent.step)
