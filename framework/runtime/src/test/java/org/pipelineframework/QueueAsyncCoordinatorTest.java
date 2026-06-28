@@ -1,12 +1,10 @@
 package org.pipelineframework;
 
-import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
@@ -45,7 +43,6 @@ import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
 import org.pipelineframework.orchestrator.LocalControlPlaneAdmissionPolicy;
 import org.pipelineframework.orchestrator.SerializedTransitionPayload;
 import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
-import org.pipelineframework.orchestrator.TransitionCommandEnvelope;
 import org.pipelineframework.orchestrator.TransitionWorkerExecutor;
 import org.pipelineframework.orchestrator.TransitionWorkerExecutionMode;
 import org.pipelineframework.orchestrator.TransitionResultEnvelope;
@@ -964,21 +961,20 @@ class QueueAsyncCoordinatorTest {
 
     @Test
     void transitionCommandUsesExecutionPinnedReleaseIdentity() {
-        TransitionCommandEnvelope envelope = prepareTransitionCommand(
-            createRecord(
+        ClaimedSegment segment = ClaimedSegment.from(createRecord(
                 "tenant-1",
                 "exec-bundle",
                 "key-bundle",
                 "org.example.pinned",
                 "sha256:contract",
                 "sha256:release",
-                ExecutionResultShape.SINGLE),
-            "trace-1");
+                ExecutionResultShape.SINGLE));
+        var envelope = segment.transitionCommand("input", payloadCodec);
 
         assertEquals("org.example.pinned", envelope.pipelineId());
         assertEquals("sha256:contract", envelope.contractVersion());
         assertEquals("sha256:release", envelope.releaseVersion());
-        assertEquals("trace-1", envelope.traceId());
+        assertEquals("exec-bundle:0:0", envelope.traceId());
     }
 
     @Test
@@ -1060,22 +1056,24 @@ class QueueAsyncCoordinatorTest {
     }
 
     @Test
-    void runAsyncExecutionAllowsSingleShapeWithZeroOrOneItems() {
-        ExecutionRecord<Object, Object> single = createRecord("tenant-1", "exec-single", "key-single");
+    void segmentCommitPlanAllowsSingleShapeWithZeroOrOneItems() {
+        ClaimedSegment segment = ClaimedSegment.from(createRecord("tenant-1", "exec-single", "key-single"));
 
-        List<?> none = runAsyncExecution(single, record -> Multi.createFrom().empty());
-        List<?> one = runAsyncExecution(single, record -> Multi.createFrom().item("only"));
+        CompletedSegment none = assertInstanceOf(CompletedSegment.class,
+            SegmentCommitPlan.from(segment, TransitionResultEnvelope.completedInProcess(List.of())));
+        CompletedSegment one = assertInstanceOf(CompletedSegment.class,
+            SegmentCommitPlan.from(segment, TransitionResultEnvelope.completedInProcess(List.of("only"))));
 
-        assertTrue(none.isEmpty());
-        assertEquals(List.of("only"), one);
+        assertTrue(none.outputItems().isEmpty());
+        assertEquals(List.of("only"), one.outputItems());
     }
 
     @Test
-    void runAsyncExecutionRejectsMultipleItemsForSingleShape() {
-        ExecutionRecord<Object, Object> single = createRecord("tenant-1", "exec-single", "key-single");
+    void segmentCommitPlanRejectsMultipleItemsForSingleShape() {
+        ClaimedSegment segment = ClaimedSegment.from(createRecord("tenant-1", "exec-single", "key-single"));
 
         IllegalStateException error = assertThrows(IllegalStateException.class, () ->
-            runAsyncExecution(single, record -> Multi.createFrom().items("a", "b")));
+            SegmentCommitPlan.from(segment, TransitionResultEnvelope.completedInProcess(List.of("a", "b"))));
 
         assertTrue(error.getMessage().contains("SINGLE result shape"));
         assertTrue(error.getMessage().contains("exec-single"));
@@ -2147,66 +2145,6 @@ class QueueAsyncCoordinatorTest {
     }
 
     private record NonSerializableOutput(Object writer) {
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<?> runAsyncExecution(
-        ExecutionRecord<Object, Object> record,
-        Function<ExecutionRecord<Object, Object>, Multi<?>> executeStreaming) {
-        try {
-            Method method = QueueAsyncCoordinator.class.getDeclaredMethod(
-                "runAsyncExecution",
-                ExecutionRecord.class,
-                org.pipelineframework.orchestrator.PipelineTransitionWorker.class);
-            method.setAccessible(true);
-            return ((Uni<List<?>>) method.invoke(
-                coordinator,
-                record,
-                (org.pipelineframework.orchestrator.PipelineTransitionWorker) command ->
-                    executeStreaming.apply(new ExecutionRecord<>(
-                            command.tenantId(),
-                            command.executionId(),
-                            "key-" + command.executionId(),
-                            command.resultShape(),
-                            ExecutionStatus.RUNNING,
-                            command.executionVersion(),
-                            command.currentStepIndex(),
-                            command.attempt(),
-                            null,
-                            0L,
-                            0L,
-                            null,
-                            command.toCommand(payloadCodec).inputPayload(),
-                            null,
-                            null,
-                            null,
-                            null,
-                            1L,
-                            1L,
-                            99999999L))
-                        .collect().asList()
-                        .onItem().transform(TransitionResultEnvelope::completedInProcess)))
-                .await().indefinitely();
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError("Failed invoking runAsyncExecution", e);
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private TransitionCommandEnvelope prepareTransitionCommand(
-        ExecutionRecord<Object, Object> record,
-        String transitionKey) {
-        try {
-            Method method = QueueAsyncCoordinator.class.getDeclaredMethod(
-                "prepareTransitionCommand",
-                ExecutionRecord.class,
-                String.class);
-            method.setAccessible(true);
-            return ((Uni<TransitionCommandEnvelope>) method.invoke(coordinator, record, transitionKey))
-                .await().indefinitely();
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError("Failed invoking prepareTransitionCommand", e);
-        }
     }
 
     private AwaitInteractionRecord awaitRecord() {
