@@ -4,7 +4,6 @@ import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -14,7 +13,6 @@ import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.NotFoundException;
 
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
@@ -37,7 +35,6 @@ import org.pipelineframework.orchestrator.ExecutionRedriveResult;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionResultShapeResolver;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
-import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.OrchestratorIdempotencyPolicy;
 import org.pipelineframework.orchestrator.OrchestratorMode;
@@ -117,6 +114,8 @@ class QueueAsyncCoordinator {
   private volatile AwaitContinuations awaitContinuations;
   private volatile ExecutionReadModel executionReadModel;
   private volatile QueueAsyncSubmissionFlow submissionFlow;
+  private volatile QueueAsyncRedriveFlow redriveFlow;
+  private volatile QueueAsyncSweepFlow sweepFlow;
 
   @Inject
   PipelineTelemetry telemetry;
@@ -148,6 +147,8 @@ class QueueAsyncCoordinator {
     deadLetterPublisher = selectDeadLetterPublisher(orchestratorConfig.dlqProvider());
     executionReadModel = null;
     submissionFlow = null;
+    redriveFlow = null;
+    sweepFlow = null;
 
     List<String> providerReadinessErrors = new ArrayList<>();
     executionStateStore.startupValidationError(orchestratorConfig)
@@ -247,65 +248,10 @@ class QueueAsyncCoordinator {
       Long expectedVersion,
       boolean allowFailed,
       String reason) {
-    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
-      return Uni.createFrom().failure(new IllegalStateException(
-          "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
+    if (!ensureQueueModeReady()) {
+      return Uni.createFrom().failure(queueModeDisabledException());
     }
-    String resolvedTenant = executionInputPolicy.normalizeTenant(tenantId);
-    RuntimeException admissionFailure = admissionFailure(admissionRequest(
-        resolvedTenant,
-        ControlPlaneAdmissionOperation.REDRIVE_EXECUTION,
-        executionId,
-        "api",
-        explicitTenant(tenantId)));
-    if (admissionFailure != null) {
-      return Uni.createFrom().failure(admissionFailure);
-    }
-    long now = System.currentTimeMillis();
-    return executionStateStore.getExecution(resolvedTenant, executionId)
-        .onItem().transformToUni(optional -> {
-          if (optional.isEmpty()) {
-            return Uni.createFrom().failure(new NotFoundException("Execution not found: " + executionId));
-          }
-          ExecutionRecord<Object, Object> previous = optional.get();
-          if (!redrivable(previous.status(), allowFailed)) {
-            return Uni.createFrom().failure(new IllegalStateException(
-                "Execution " + executionId + " cannot be re-driven from status " + previous.status()));
-          }
-          long version = expectedVersion == null ? previous.version() : expectedVersion;
-          if (version != previous.version()) {
-            return Uni.createFrom().failure(new IllegalStateException(
-                "Execution " + executionId + " version mismatch: expected " + version
-                    + " but current version is " + previous.version()));
-          }
-          String transitionKey = redriveTransitionKey(previous, reason);
-          return executionStateStore.redriveTerminalExecution(
-                  resolvedTenant,
-                  executionId,
-                  version,
-                  allowFailed,
-                  transitionKey,
-                  now)
-              .onItem().transformToUni(redriven -> {
-                if (redriven.isEmpty()) {
-                  return Uni.createFrom().failure(new IllegalStateException(
-                      "Execution " + executionId + " changed before re-drive could be admitted"));
-                }
-                ExecutionRecord<Object, Object> record = redriven.get();
-                return workDispatcher.enqueueNow(new ExecutionWorkItem(record.tenantId(), record.executionId()))
-                    .onItem().transform(ignored -> {
-                      LOG.infof(
-                          "Re-drove execution tenant=%s executionId=%s previousStatus=%s stepIndex=%d attempt=%d reason=%s",
-                          record.tenantId(),
-                          record.executionId(),
-                          previous.status(),
-                          record.currentStepIndex(),
-                          record.attempt(),
-                          normalizeReason(reason));
-                      return ExecutionRedriveResult.from(previous, record);
-                    });
-              });
-        });
+    return redriveFlow().redrive(tenantId, executionId, expectedVersion, allowFailed, reason);
   }
 
   Uni<Object> getExecutionResultPayload(String tenantId, String executionId) {
@@ -336,27 +282,7 @@ class QueueAsyncCoordinator {
     if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC || executionStateStore == null || workDispatcher == null) {
       return;
     }
-    long now = System.currentTimeMillis();
-    sweepTimedOutAwaitInteractions(now)
-        .onItem().transformToUni(ignored -> executionStateStore.findDueExecutions(now, orchestratorConfig.sweepLimit()))
-        .onItem().transformToUni(due -> {
-          if (due.isEmpty()) {
-            return Uni.createFrom().voidItem();
-          }
-          List<Uni<Void>> enqueueOperations = new ArrayList<>(due.size());
-          for (ExecutionRecord<Object, Object> record : due) {
-            enqueueOperations.add(workDispatcher.enqueueNow(new ExecutionWorkItem(record.tenantId(), record.executionId()))
-                .onFailure().transform(failure -> new IllegalStateException(
-                    "Failed to re-dispatch due execution " + record.executionId(),
-                    failure)));
-          }
-          return Uni.join().all(enqueueOperations).andCollectFailures().replaceWithVoid();
-        })
-        .subscribe()
-        .with(
-            ignored -> {
-            },
-            failure -> LOG.errorf(failure, "Failed sweeping due async executions"));
+    sweepFlow().sweepDueExecutions();
   }
 
   Uni<AwaitCompletionResult> completeAwait(AwaitCompletionCommand command) {
@@ -390,67 +316,6 @@ class QueueAsyncCoordinator {
       return Uni.createFrom().failure(admissionFailure);
     }
     return awaitCoordinator.queryPending(resolvedTenant, assignee, group, stepId, limit <= 0 ? 100 : limit);
-  }
-
-  private Uni<Void> sweepTimedOutAwaitInteractions(long now) {
-    return awaitCoordinator.findTimedOut(now, orchestratorConfig.sweepLimit())
-        .onItem().transformToUni(records -> {
-          if (records.isEmpty()) {
-            return Uni.createFrom().voidItem();
-          }
-          List<Uni<Void>> operations = new ArrayList<>(records.size());
-          for (AwaitInteractionRecord record : records) {
-            operations.add(awaitCoordinator.markTimedOut(record, now)
-                .onItem().transformToUni(updated -> updated.isPresent()
-                    ? segmentBoundaryLedger().recordInteractionTimedOut(updated.get(), now)
-                    : Uni.createFrom().voidItem())
-                .onItem().transformToUni(ignored -> executionStateStore.getExecution(record.tenantId(), record.executionId()))
-                .onItem().transformToUni(execution -> {
-                  if (execution.isEmpty() || execution.get().status().terminal()) {
-                    return Uni.createFrom().voidItem();
-                  }
-                  ExecutionRecord<Object, Object> executionRecord = execution.get();
-                  if (executionRecord.status() != ExecutionStatus.WAITING_EXTERNAL
-                      || !record.unitId().equals(executionRecord.awaitUnitId())) {
-                    return Uni.createFrom().voidItem();
-                  }
-                  return executionStateStore.markTerminalFailure(
-                          executionRecord.tenantId(),
-                          executionRecord.executionId(),
-                          executionRecord.version(),
-                          ExecutionStatus.FAILED,
-                          transitionKey(executionRecord.executionId(), executionRecord.currentStepIndex(), executionRecord.attempt()),
-                          "AWAIT_TIMEOUT",
-                          "Await interaction timed out: " + record.interactionId(),
-                          now)
-                      .onItem().transformToUni(updated -> updated
-                          .map(failed -> segmentBoundaryLedger().recordRunFailed(
-                              failed,
-                              "AWAIT_TIMEOUT",
-                              "Await interaction timed out: " + record.interactionId(),
-                              now))
-                          .orElseGet(() -> Uni.createFrom().voidItem()))
-                      .replaceWithVoid();
-                }));
-          }
-          return Uni.join().all(operations).andCollectFailures().replaceWithVoid();
-        });
-  }
-
-  private static boolean redrivable(ExecutionStatus status, boolean allowFailed) {
-    return status == ExecutionStatus.DLQ || (allowFailed && status == ExecutionStatus.FAILED);
-  }
-
-  private static String redriveTransitionKey(ExecutionRecord<Object, Object> record, String reason) {
-    return "redrive:" + record.executionId() + ":" + record.version() + ":" + normalizeReason(reason);
-  }
-
-  private static String normalizeReason(String reason) {
-    if (reason == null || reason.isBlank()) {
-      return "operator";
-    }
-    String trimmed = reason.trim();
-    return trimmed.length() <= 80 ? trimmed : trimmed.substring(0, 80);
   }
 
   private Duration saturatedDelay() {
@@ -676,6 +541,50 @@ class QueueAsyncCoordinator {
     }
   }
 
+  private QueueAsyncRedriveFlow redriveFlow() {
+    if (!ensureQueueModeReady()) {
+      throw queueModeDisabledException();
+    }
+    QueueAsyncRedriveFlow current = redriveFlow;
+    if (current != null) {
+      return current;
+    }
+    synchronized (this) {
+      current = redriveFlow;
+      if (current == null) {
+        current = new QueueAsyncRedriveFlow(
+            orchestratorConfig,
+            executionInputPolicy,
+            executionStateStore,
+            workDispatcher,
+            admissionPolicy(),
+            this::pipelineId,
+            this::releaseVersion);
+        redriveFlow = current;
+      }
+      return current;
+    }
+  }
+
+  private QueueAsyncSweepFlow sweepFlow() {
+    QueueAsyncSweepFlow current = sweepFlow;
+    if (current != null) {
+      return current;
+    }
+    synchronized (this) {
+      current = sweepFlow;
+      if (current == null) {
+        current = new QueueAsyncSweepFlow(
+            orchestratorConfig,
+            executionStateStore,
+            workDispatcher,
+            new AwaitTimeoutFlow(awaitCoordinator, executionStateStore, this::segmentBoundaryLedger));
+        sweepFlow = current;
+      }
+      return current;
+    }
+  }
+
   private AwaitContinuations awaitContinuations() {
     AwaitContinuations current = awaitContinuations;
     if (current != null) {
@@ -774,10 +683,6 @@ class QueueAsyncCoordinator {
       return true;
     }
     return configuredName.equalsIgnoreCase(availableName);
-  }
-
-  private static String transitionKey(String executionId, int stepIndex, int attempt) {
-    return executionId + ":" + stepIndex + ":" + attempt;
   }
 
 }
