@@ -82,6 +82,7 @@ The control-plane model uses facts such as:
 - `BoundaryCompletionAdmitted`
 - `InteractionTimedOut`
 - `ContinuationSegmentCreated`
+- `TerminalPublicationPrepared`
 - `TerminalPublicationCompleted`
 - `RunSucceeded`
 - `RunFailed`
@@ -102,6 +103,8 @@ Queue-async segment execution is modeled as a small reactive flow over immutable
 6. `TerminalPublicationBoundary` handles checkpoint and Object Publish side effects before success is committed.
 
 The split is deliberate. `SegmentCommitPlan` is pure: it validates result shape and describes what happened without calling stores, publishers, telemetry, or dispatchers. Effects are interpreted afterwards through narrow boundaries.
+
+Terminal publication is a prepare/complete barrier before run success. When a control-plane journal is available, `TerminalPublicationBoundary` appends `TerminalPublicationPrepared` before checkpoint or Object Publish side effects run, then appends `TerminalPublicationCompleted` after the side effect succeeds. A retry that sees a completed publication skips the external effect. A retry that sees only a prepared publication may run the effect again with the same deterministic idempotency key, so the checkpoint target or object provider still needs idempotent writes. The future Dynamo append-only journal work in issue #396 is the durable storage implementation for this same model.
 
 ```mermaid
 sequenceDiagram

@@ -272,20 +272,49 @@ public class SegmentBoundaryLedger {
         String transitionKey,
         long nowEpochMs
     ) {
+        return completeTerminalPublication(record, transitionKey, "object-publish", nowEpochMs);
+    }
+
+    public Uni<TerminalPublicationClaim> claimTerminalPublication(
+        ExecutionRecord<Object, Object> record,
+        String transitionKey,
+        String publicationKind,
+        long nowEpochMs
+    ) {
+        if (record == null) {
+            return Uni.createFrom().item(TerminalPublicationClaim.untracked(null, null));
+        }
+        String kind = publicationKind(publicationKind);
+        TerminalPublicationFacts facts = terminalPublicationFacts(record, transitionKey, kind);
+        Optional<ControlPlaneJournal> journal = journal();
+        if (journal.isEmpty()) {
+            return Uni.createFrom().item(TerminalPublicationClaim.untracked(facts.publicationId(), facts.idempotencyKey()));
+        }
+        return claimTerminalPublication(journal.get(), record, facts, nowEpochMs, 1);
+    }
+
+    public Uni<Void> completeTerminalPublication(
+        ExecutionRecord<Object, Object> record,
+        String transitionKey,
+        String publicationKind,
+        long nowEpochMs
+    ) {
         if (record == null) {
             return Uni.createFrom().voidItem();
         }
-        String idempotencyKey = attemptId(record, transitionKey) + ":terminal-publication";
-        return appendBuilt(
+        Optional<ControlPlaneJournal> journal = journal();
+        if (journal.isEmpty()) {
+            return Uni.createFrom().voidItem();
+        }
+        TerminalPublicationFacts facts = terminalPublicationFacts(record, transitionKey, publicationKind(publicationKind));
+        return appendWithRetry(
+            journal.get(),
             record.tenantId(),
             record.executionId(),
-            () -> List.of(new ControlPlaneFact.TerminalPublicationCompleted(
-                record.tenantId(),
-                record.executionId(),
-                segmentId(record),
-                record.executionId() + ":terminal-output",
-                idempotencyKey)),
-            nowEpochMs);
+            List.of(facts.completed()),
+            nowEpochMs,
+            1)
+            .replaceWithVoid();
     }
 
     public Uni<Void> recordRunSucceeded(
@@ -415,6 +444,41 @@ public class SegmentBoundaryLedger {
             });
     }
 
+    private Uni<TerminalPublicationClaim> claimTerminalPublication(
+        ControlPlaneJournal journal,
+        ExecutionRecord<Object, Object> record,
+        TerminalPublicationFacts facts,
+        long nowEpochMs,
+        int attempt
+    ) {
+        return journal.projection(record.tenantId(), record.executionId())
+            .onItem().transformToUni(projection -> {
+                if (projection.terminalPublicationKeys().contains(facts.completed().factKey())) {
+                    return Uni.createFrom().item(toClaim(
+                        TerminalPublicationClaim.Status.ALREADY_COMPLETED,
+                        facts));
+                }
+                if (projection.terminalPublicationPreparedKeys().contains(facts.prepared().factKey())) {
+                    return Uni.createFrom().item(toClaim(
+                        TerminalPublicationClaim.Status.PREPARED_RETRY,
+                        facts));
+                }
+                return journal.append(
+                        record.tenantId(),
+                        record.executionId(),
+                        projection.version(),
+                        List.of(facts.prepared()),
+                        nowEpochMs)
+                    .onItem().transform(ignored -> toClaim(TerminalPublicationClaim.Status.CLAIMED, facts));
+            })
+            .onFailure(ControlPlaneAppendConflictException.class).recoverWithUni(failure -> {
+                if (attempt >= MAX_APPEND_ATTEMPTS) {
+                    return Uni.createFrom().failure(failure);
+                }
+                return claimTerminalPublication(journal, record, facts, nowEpochMs, attempt + 1);
+            });
+    }
+
     private Optional<ControlPlaneJournal> journal() {
         if (explicitJournal != null) {
             return Optional.of(explicitJournal);
@@ -455,5 +519,56 @@ public class SegmentBoundaryLedger {
             return transitionKey;
         }
         return record.executionId() + ":" + record.currentStepIndex() + ":" + record.attempt();
+    }
+
+    private static TerminalPublicationClaim toClaim(
+        TerminalPublicationClaim.Status status,
+        TerminalPublicationFacts facts
+    ) {
+        return new TerminalPublicationClaim(
+            status,
+            facts.publicationId(),
+            facts.idempotencyKey(),
+            facts.prepared().factKey(),
+            facts.completed().factKey());
+    }
+
+    private static TerminalPublicationFacts terminalPublicationFacts(
+        ExecutionRecord<Object, Object> record,
+        String transitionKey,
+        String publicationKind
+    ) {
+        String publicationId = record.executionId() + ":terminal-output:" + publicationKind;
+        String idempotencyKey = publicationId + ":terminal-publication";
+        return new TerminalPublicationFacts(
+            publicationId,
+            idempotencyKey,
+            new ControlPlaneFact.TerminalPublicationPrepared(
+                record.tenantId(),
+                record.executionId(),
+                segmentId(record),
+                publicationId,
+                idempotencyKey),
+            new ControlPlaneFact.TerminalPublicationCompleted(
+                record.tenantId(),
+                record.executionId(),
+                segmentId(record),
+                publicationId,
+                idempotencyKey));
+    }
+
+    private static String publicationKind(String publicationKind) {
+        if (publicationKind == null || publicationKind.isBlank()) {
+            throw new IllegalArgumentException("publicationKind must not be blank");
+        }
+        return publicationKind.trim();
+    }
+
+    private record TerminalPublicationFacts(
+        String publicationId,
+        String idempotencyKey,
+        ControlPlaneFact.TerminalPublicationPrepared prepared,
+        ControlPlaneFact.TerminalPublicationCompleted completed
+    ) {
     }
 }

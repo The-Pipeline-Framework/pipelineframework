@@ -33,34 +33,34 @@ class TerminalPublicationBoundary {
   Uni<Void> publishBeforeSuccess(CompletedSegment completed, long nowEpochMs) {
     Objects.requireNonNull(completed, "completed must not be null");
     TerminalPublicationPlan plan = completed.terminalPublication();
-    return publishCheckpoint(completed, plan)
+    return publishCheckpoint(completed, plan, nowEpochMs)
         .chain(() -> publishObjectOutput(plan, nowEpochMs));
   }
 
-  private Uni<Void> publishCheckpoint(CompletedSegment completed, TerminalPublicationPlan plan) {
-    if (checkpointPublicationService == null) {
+  private Uni<Void> publishCheckpoint(CompletedSegment completed, TerminalPublicationPlan plan, long nowEpochMs) {
+    var checkpointPayload = plan.checkpointPayload();
+    if (checkpointPublicationService == null || !checkpointPublicationService.enabled() || checkpointPayload.isEmpty()) {
       return Uni.createFrom().voidItem();
     }
-    return plan.checkpointPayload()
-        .map(payload -> checkpointPublicationService.publishIfConfigured(completed.segment().record(), payload))
-        .orElseGet(() -> Uni.createFrom().voidItem());
+    return new TerminalPublicationIntent(
+        TerminalPublicationIntent.CHECKPOINT,
+        completed.segment(),
+        () -> checkpointPublicationService.publishIfConfigured(completed.segment().record(), checkpointPayload.get()))
+        .run(segmentBoundaryLedger.get(), nowEpochMs);
   }
 
   private Uni<Void> publishObjectOutput(TerminalPublicationPlan plan, long nowEpochMs) {
     ClaimedSegment segment = plan.segment();
-    if (plan.alreadyPublished()) {
-      return segmentBoundaryLedger.get().recordTerminalPublicationCompleted(
-          segment.record(),
-          segment.transitionKey(),
-          nowEpochMs);
-    }
-    if (objectPublishCompletionService == null) {
+    if (!plan.alreadyPublished()
+        && (objectPublishCompletionService == null || !objectPublishCompletionService.enabled())) {
       return Uni.createFrom().voidItem();
     }
-    return objectPublishCompletionService.publishIfConfigured(() -> plan.decodedOutputItems(payloadCodec.get()))
-        .chain(() -> segmentBoundaryLedger.get().recordTerminalPublicationCompleted(
-            segment.record(),
-            segment.transitionKey(),
-            nowEpochMs));
+    return new TerminalPublicationIntent(
+        TerminalPublicationIntent.OBJECT_PUBLISH,
+        segment,
+        () -> plan.alreadyPublished()
+            ? Uni.createFrom().voidItem()
+            : objectPublishCompletionService.publishIfConfigured(() -> plan.decodedOutputItems(payloadCodec.get())))
+        .run(segmentBoundaryLedger.get(), nowEpochMs);
   }
 }

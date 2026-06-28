@@ -33,6 +33,10 @@ public class ObjectPublishCompletionService {
         return active.publishItems(outputItems == null ? List.of() : outputItems);
     }
 
+    public boolean enabled() {
+        return runner().enabled();
+    }
+
     private ObjectPublishRunner runner() {
         ObjectPublishRunner active = runner;
         if (active != null) {

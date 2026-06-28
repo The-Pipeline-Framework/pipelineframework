@@ -14,6 +14,7 @@ public sealed interface ControlPlaneFact permits
     ControlPlaneFact.BoundaryCompletionAdmitted,
     ControlPlaneFact.InteractionTimedOut,
     ControlPlaneFact.ContinuationSegmentCreated,
+    ControlPlaneFact.TerminalPublicationPrepared,
     ControlPlaneFact.TerminalPublicationCompleted,
     ControlPlaneFact.RunSucceeded,
     ControlPlaneFact.RunFailed {
@@ -278,6 +279,27 @@ public sealed interface ControlPlaneFact permits
         @Override
         public String factKey() {
             return "terminal-publication-completed:" + publicationId + ":" + idempotencyKey;
+        }
+    }
+
+    record TerminalPublicationPrepared(
+        String tenantId,
+        String runId,
+        String segmentId,
+        String publicationId,
+        String idempotencyKey
+    ) implements ControlPlaneFact {
+        public TerminalPublicationPrepared {
+            tenantId = ControlPlaneChecks.requireText(tenantId, "tenantId");
+            runId = ControlPlaneChecks.requireText(runId, "runId");
+            segmentId = ControlPlaneChecks.requireText(segmentId, "segmentId");
+            publicationId = ControlPlaneChecks.requireText(publicationId, "publicationId");
+            idempotencyKey = ControlPlaneChecks.requireText(idempotencyKey, "idempotencyKey");
+        }
+
+        @Override
+        public String factKey() {
+            return "terminal-publication-prepared:" + publicationId + ":" + idempotencyKey;
         }
     }
 

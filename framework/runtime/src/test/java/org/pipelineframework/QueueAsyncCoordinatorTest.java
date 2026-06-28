@@ -735,8 +735,6 @@ class QueueAsyncCoordinatorTest {
             99999999L);
         when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
-        when(checkpointPublicationService.publishIfConfigured(org.mockito.ArgumentMatchers.eq(claimed), org.mockito.ArgumentMatchers.eq("out-1")))
-            .thenReturn(Uni.createFrom().voidItem());
         when(executionStateStore.markSucceeded(
                 org.mockito.ArgumentMatchers.eq("tenant-1"),
                 org.mockito.ArgumentMatchers.eq("exec-stream"),
@@ -794,8 +792,6 @@ class QueueAsyncCoordinatorTest {
             99999999L);
         when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
-        when(checkpointPublicationService.publishIfConfigured(org.mockito.ArgumentMatchers.eq(claimed), org.mockito.ArgumentMatchers.eq("output-file")))
-            .thenReturn(Uni.createFrom().voidItem());
         when(executionStateStore.markSucceeded(
                 org.mockito.ArgumentMatchers.eq("tenant-1"),
                 org.mockito.ArgumentMatchers.eq("exec-aggregate"),
@@ -833,8 +829,6 @@ class QueueAsyncCoordinatorTest {
         NonSerializableOutput output = new NonSerializableOutput(new Object());
         when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
-        when(checkpointPublicationService.publishIfConfigured(org.mockito.ArgumentMatchers.eq(claimed), org.mockito.ArgumentMatchers.same(output)))
-            .thenReturn(Uni.createFrom().voidItem());
         when(executionStateStore.markSucceeded(
                 org.mockito.ArgumentMatchers.eq("tenant-1"),
                 org.mockito.ArgumentMatchers.eq("exec-local"),
@@ -872,8 +866,6 @@ class QueueAsyncCoordinatorTest {
             "{\"value\":\"remote\"}");
         when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
-        when(checkpointPublicationService.publishIfConfigured(org.mockito.ArgumentMatchers.eq(claimed), org.mockito.ArgumentMatchers.eq(serialized)))
-            .thenReturn(Uni.createFrom().voidItem());
         when(executionStateStore.markSucceeded(
                 org.mockito.ArgumentMatchers.eq("tenant-1"),
                 org.mockito.ArgumentMatchers.eq("exec-remote"),
@@ -917,8 +909,7 @@ class QueueAsyncCoordinatorTest {
         coordinator.objectPublishCompletionService = publishService;
         when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
-        when(checkpointPublicationService.publishIfConfigured(org.mockito.ArgumentMatchers.eq(claimed), org.mockito.ArgumentMatchers.eq(serialized)))
-            .thenReturn(Uni.createFrom().voidItem());
+        when(publishService.enabled()).thenReturn(true);
         when(publishService.publishIfConfigured(org.mockito.ArgumentMatchers.<Supplier<List<?>>>any()))
             .thenAnswer(invocation -> {
                 Supplier<List<?>> supplier = invocation.getArgument(0);
@@ -956,7 +947,7 @@ class QueueAsyncCoordinatorTest {
         assertEquals(serialized, persisted.getFirst());
         ControlPlaneProjection projection = journal.projection("tenant-1", "exec-publish").await().indefinitely();
         assertTrue(projection.terminalPublicationKeys()
-            .contains("terminal-publication-completed:exec-publish:terminal-output:exec-publish:0:0:terminal-publication"));
+            .contains("terminal-publication-completed:exec-publish:terminal-output:object-publish:exec-publish:terminal-output:object-publish:terminal-publication"));
     }
 
     @Test
