@@ -58,6 +58,19 @@ class SpringRendererProfileSupportTest {
     }
 
     @Test
+    void acceptsUnaryRestClientStep() {
+        PipelineCompilationContext context = context();
+        context.setTransportMode(PipelineTransport.REST);
+        context.setStepModels(List.of(step(
+            Set.of(GenerationTarget.REST_CLIENT_STEP),
+            StreamingShape.UNARY_UNARY,
+            ServiceApiKind.REACTIVE,
+            DeploymentRole.ORCHESTRATOR_CLIENT)));
+
+        assertDoesNotThrow(() -> SpringRendererProfileSupport.validateGenerationSupported(context));
+    }
+
+    @Test
     void acceptsBlockingUnaryStep() {
         PipelineCompilationContext context = context();
         context.setStepModels(List.of(step(Set.of(GenerationTarget.LOCAL_CLIENT_STEP), StreamingShape.UNARY_UNARY,
@@ -103,6 +116,19 @@ class SpringRendererProfileSupportTest {
 
         assertThrows(IllegalStateException.class,
             () -> SpringRendererProfileSupport.validateGenerationSupported(context));
+    }
+
+    @Test
+    void rejectsRestClientStepForPipelineServerRole() {
+        PipelineCompilationContext context = context();
+        context.setTransportMode(PipelineTransport.REST);
+        context.setStepModels(List.of(step(Set.of(GenerationTarget.REST_CLIENT_STEP), StreamingShape.UNARY_UNARY,
+            ServiceApiKind.REACTIVE, DeploymentRole.PIPELINE_SERVER)));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> SpringRendererProfileSupport.validateGenerationSupported(context));
+        assertTrue(error.getMessage().contains("REST client steps only for client-role boundaries"),
+            error.getMessage());
     }
 
     @Test
@@ -170,6 +196,17 @@ class SpringRendererProfileSupportTest {
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.PIPELINE_SERVER)
             .serviceApiKind(apiKind)
+            .build();
+    }
+
+    private PipelineStepModel step(
+        Set<GenerationTarget> targets,
+        StreamingShape shape,
+        ServiceApiKind apiKind,
+        DeploymentRole role
+    ) {
+        return step(targets, shape, apiKind).toBuilder()
+            .deploymentRole(role)
             .build();
     }
 

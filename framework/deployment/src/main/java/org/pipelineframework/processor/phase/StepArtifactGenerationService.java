@@ -21,7 +21,6 @@ import org.pipelineframework.processor.renderer.GenerationContext;
 import org.pipelineframework.processor.renderer.GrpcServiceAdapterRenderer;
 import org.pipelineframework.processor.renderer.PipelineRenderer;
 import org.pipelineframework.processor.renderer.RemoteOperatorAdapterRenderer;
-import org.pipelineframework.processor.renderer.RestClientStepRenderer;
 import org.pipelineframework.processor.renderer.AbstractFunctionHandlerRenderer;
 import org.pipelineframework.processor.renderer.AwaitClientStepRenderer;
 import org.pipelineframework.processor.renderer.CommandClientStepRenderer;
@@ -91,7 +90,7 @@ class StepArtifactGenerationService {
             GrpcServiceAdapterRenderer grpcRenderer,
             ClientStepRenderer clientRenderer,
             PipelineRenderer<LocalBinding> localClientRenderer,
-            RestClientStepRenderer restClientRenderer,
+            PipelineRenderer<RestBinding> restClientRenderer,
             PipelineRenderer<RestBinding> restRenderer,
             AbstractFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
@@ -405,7 +404,7 @@ class StepArtifactGenerationService {
             GrpcServiceAdapterRenderer grpcRenderer,
             ClientStepRenderer clientRenderer,
             PipelineRenderer<LocalBinding> localClientRenderer,
-            RestClientStepRenderer restClientRenderer,
+            PipelineRenderer<RestBinding> restClientRenderer,
             PipelineRenderer<RestBinding> restRenderer,
             AbstractFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
