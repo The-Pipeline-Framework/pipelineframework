@@ -43,7 +43,7 @@ Spring-profile service steps are supported only for unary local steps declared f
 
 Delegated Spring beans are supported only for unary local steps declared from YAML with either a Spring bean class or an explicit `Class::method` operator reference. Class-only delegates use supported TPF-style service shapes such as `process(In): Mono<Out>` or `processBlocking(In): Out`. `Class::method` delegates support narrow unary Spring bean methods: `Out method(In)`, `Mono<Out> method(In)`, or `CompletionStage<Out> method(In)`.
 
-Spring REST client-step boundaries are supported only for unary `REST + COMPUTE` client-role steps. Configure each generated Spring REST client with `tpf.rest-client.<client-name>.url`; v1 does not forward TPF control, cache, or replay headers.
+Spring REST client-step boundaries are supported only for unary `REST + COMPUTE` client-role steps. Configure each generated Spring REST client with `tpf.rest-client.<client-name>.url`; Spring REST client steps do not forward TPF control, cache, or replay headers.
 
 This support does not imply gRPC, function, await/checkpoint, broker, durable coordinator, streaming/non-unary, or production parity with the Quarkus runtime.
 

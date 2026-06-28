@@ -70,8 +70,7 @@ public class SpringRestClientStepRenderer implements PipelineRenderer<RestBindin
             ClassName.get("org.pipelineframework.runtime.core", "PipelineUnaryStep"),
             inputDomainType,
             outputDomainType);
-        String servicePath = resolveServicePath(binding, ctx);
-        String operationPath = RestPathResolver.resolveOperationPath(ctx.processingEnv());
+        String endpointPath = endpointPath(binding, ctx);
         String configKey = "tpf.rest-client." + restClientName(model.serviceName()) + ".url";
 
         return TypeSpec.classBuilder(clientStepClassName(model))
@@ -104,7 +103,7 @@ public class SpringRestClientStepRenderer implements PipelineRenderer<RestBindin
                 .build())
             .addMethod(constructor(inputDomainType, inputDtoType, outputDomainType, outputDtoType))
             .addMethod(applyMethod(inputDomainType, outputDomainType, inputDtoType, outputDtoType))
-            .addMethod(resolveEndpointUrlMethod(configKey, servicePath, operationPath))
+            .addMethod(resolveEndpointUrlMethod(configKey, endpointPath))
             .addMethod(normalizeBaseUrlMethod())
             .build();
     }
@@ -155,19 +154,50 @@ public class SpringRestClientStepRenderer implements PipelineRenderer<RestBindin
             .build();
     }
 
+    private String endpointPath(RestBinding binding, GenerationContext ctx) {
+        return joinPaths(resolveServicePath(binding, ctx),
+            normalizePath(RestPathResolver.resolveOperationPath(ctx.processingEnv()), "operation", binding.model()));
+    }
+
     private String resolveServicePath(RestBinding binding, GenerationContext ctx) {
         String servicePath = binding.restPathOverride() != null
             ? binding.restPathOverride()
             : RestPathResolver.resolveResourcePath(binding.model(), ctx.processingEnv());
-        if (servicePath == null || servicePath.isBlank()) {
-            throw new IllegalArgumentException(
-                "REST client step requires a non-blank resource path; step '"
-                    + binding.model().serviceName() + "'");
-        }
-        return servicePath;
+        return normalizePath(servicePath, "resource", binding.model());
     }
 
-    private MethodSpec resolveEndpointUrlMethod(String configKey, String servicePath, String operationPath) {
+    private String joinPaths(String servicePath, String operationPath) {
+        if ("/".equals(servicePath)) {
+            return operationPath;
+        }
+        if ("/".equals(operationPath)) {
+            return servicePath + "/";
+        }
+        return servicePath + operationPath;
+    }
+
+    private String normalizePath(String path, String label, PipelineStepModel model) {
+        if (path == null || path.isBlank()) {
+            throw new IllegalArgumentException(
+                "REST client step requires a non-blank " + label + " path; step '"
+                    + model.serviceName() + "'");
+        }
+        String normalized = path.strip();
+        if (normalized.contains("://") || normalized.contains("?") || normalized.contains("#")) {
+            throw new IllegalArgumentException(
+                "REST client step " + label + " path must be a path, not a full URL or query/fragment target; step '"
+                    + model.serviceName() + "'");
+        }
+        if (!normalized.startsWith("/")) {
+            normalized = "/" + normalized;
+        }
+        while (normalized.length() > 1 && normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
+    }
+
+    private MethodSpec resolveEndpointUrlMethod(String configKey, String endpointPath) {
         return MethodSpec.methodBuilder("resolveEndpointUrl")
             .addModifiers(Modifier.PRIVATE)
             .returns(String.class)
@@ -178,7 +208,7 @@ public class SpringRestClientStepRenderer implements PipelineRenderer<RestBindin
                 IllegalStateException.class,
                 "Missing required Spring REST client URL property '" + configKey + "'")
             .endControlFlow()
-            .addStatement("return normalizeBaseUrl(baseUrl) + $S", servicePath + operationPath)
+            .addStatement("return normalizeBaseUrl(baseUrl) + $S", endpointPath)
             .build();
     }
 

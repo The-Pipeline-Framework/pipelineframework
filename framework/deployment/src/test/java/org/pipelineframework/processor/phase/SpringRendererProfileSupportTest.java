@@ -132,6 +132,32 @@ class SpringRendererProfileSupportTest {
     }
 
     @Test
+    void rejectsRestClientStepForRestServerRole() {
+        PipelineCompilationContext context = context();
+        context.setTransportMode(PipelineTransport.REST);
+        context.setStepModels(List.of(step(Set.of(GenerationTarget.REST_CLIENT_STEP), StreamingShape.UNARY_UNARY,
+            ServiceApiKind.REACTIVE, DeploymentRole.REST_SERVER)));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> SpringRendererProfileSupport.validateGenerationSupported(context));
+        assertTrue(error.getMessage().contains("REST client steps only for client-role boundaries"),
+            error.getMessage());
+    }
+
+    @Test
+    void rejectsRestClientStepForPluginServerRole() {
+        PipelineCompilationContext context = context();
+        context.setTransportMode(PipelineTransport.REST);
+        context.setStepModels(List.of(step(Set.of(GenerationTarget.REST_CLIENT_STEP), StreamingShape.UNARY_UNARY,
+            ServiceApiKind.REACTIVE, DeploymentRole.PLUGIN_SERVER)));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> SpringRendererProfileSupport.validateGenerationSupported(context));
+        assertTrue(error.getMessage().contains("REST client steps only for client-role boundaries"),
+            error.getMessage());
+    }
+
+    @Test
     void rejectsBlockingIteratorStep() {
         PipelineCompilationContext context = context();
         context.setStepModels(List.of(step(Set.of(GenerationTarget.LOCAL_CLIENT_STEP), StreamingShape.UNARY_UNARY,

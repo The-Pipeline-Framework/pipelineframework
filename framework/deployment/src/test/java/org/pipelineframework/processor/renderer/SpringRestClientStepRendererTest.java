@@ -133,6 +133,43 @@ class SpringRestClientStepRendererTest {
         assertTrue(error.getMessage().contains("non-blank resource path"), error.getMessage());
     }
 
+    @Test
+    void rejectsFullUrlRestPathOverride() {
+        SpringRestClientStepRenderer renderer = new SpringRestClientStepRenderer();
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, false),
+                    "https://payments.example.test/payments"),
+                new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
+
+        assertTrue(error.getMessage().contains("must be a path"), error.getMessage());
+    }
+
+    @Test
+    void rejectsQueryRestPathOverride() {
+        SpringRestClientStepRenderer renderer = new SpringRestClientStepRenderer();
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, false), "/payments?mode=test"),
+                new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null)));
+
+        assertTrue(error.getMessage().contains("query/fragment"), error.getMessage());
+    }
+
+    @Test
+    void normalizesRelativeRestPathOverride() throws Exception {
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(Map.of());
+        SpringRestClientStepRenderer renderer = new SpringRestClientStepRenderer();
+
+        renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, false), "payments/"),
+            new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+
+        Path clientStep = tempDir.resolve("com/example/service/pipeline/PaymentRestClientStep.java");
+        String source = Files.readString(clientStep);
+        assertTrue(source.contains("return normalizeBaseUrl(baseUrl) + \"/payments/\";"));
+    }
+
     private PipelineStepModel model(StreamingShape shape, boolean sideEffect) {
         return new PipelineStepModel.Builder()
             .serviceName("PaymentService")

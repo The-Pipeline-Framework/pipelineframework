@@ -86,7 +86,7 @@ final class SpringRendererProfileSupport {
                 + model.serviceName() + "' resolved targets " + model.enabledTargets() + ".");
         }
         if (model.enabledTargets().contains(GenerationTarget.REST_CLIENT_STEP)
-            && model.deploymentRole() == DeploymentRole.PIPELINE_SERVER) {
+            && isServerRole(model.deploymentRole())) {
             errors.add("Spring renderer profile supports REST client steps only for client-role boundaries; step '"
                 + model.serviceName() + "' resolved role " + model.deploymentRole() + ".");
         }
@@ -107,5 +107,11 @@ final class SpringRendererProfileSupport {
             errors.add("Spring renderer profile does not support remote execution; step '"
                 + model.serviceName() + "'.");
         }
+    }
+
+    private static boolean isServerRole(DeploymentRole role) {
+        return role == DeploymentRole.PIPELINE_SERVER
+            || role == DeploymentRole.REST_SERVER
+            || role == DeploymentRole.PLUGIN_SERVER;
     }
 }
