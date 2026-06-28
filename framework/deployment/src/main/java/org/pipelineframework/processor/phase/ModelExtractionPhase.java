@@ -433,13 +433,14 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ctx,
             serviceClass,
             ctx.getProcessingEnv().getTypeUtils(),
-            ctx.getProcessingEnv().getMessager());
+            ctx.getProcessingEnv().getMessager(),
+            true);
         if (serviceSignature == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Internal step service '" + stepDef.executionClass().canonicalName()
                     + "' must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out>"
-                    + springPlainMethodHint(ctx) + " method for step '"
+                    + springPlainMethodHint(ctx, true) + " method for step '"
                     + stepDef.name() + "'");
             return null;
         }
@@ -1182,7 +1183,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return Optional.empty();
         }
         if (isSpringRendererProfile(ctx)) {
-            return Optional.ofNullable(resolveSupportedInternalSignature(ctx, delegateElement, typeUtils, messager));
+            return Optional.ofNullable(resolveSupportedInternalSignature(ctx, delegateElement, typeUtils, messager, false));
         }
         ReactiveSignature reactiveSignature = resolveReactiveSignature(delegateElement, typeUtils, messager);
         if (reactiveSignature == null) {
@@ -1306,7 +1307,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             PipelineCompilationContext ctx,
             TypeElement serviceElement,
             Types typeUtils,
-            javax.annotation.processing.Messager messager) {
+            javax.annotation.processing.Messager messager,
+            boolean allowSpringCompletionStageProcess) {
         List<SupportedServiceSignature> blockingMatches = new ArrayList<>();
         List<String> blockingMatchNames = new ArrayList<>();
 
@@ -1379,7 +1381,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return null;
         }
         if (combinedMatches.isEmpty()) {
-            return resolvePlainUnaryProcessSignature(ctx, serviceElement, messager).orElse(null);
+            return resolvePlainUnaryProcessSignature(ctx, serviceElement, messager, allowSpringCompletionStageProcess)
+                .orElse(null);
         }
         SupportedServiceSignature match = combinedMatches.get(0);
         if (match.materializingWarning() != null) {
@@ -1394,20 +1397,33 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     private Optional<SupportedServiceSignature> resolvePlainUnaryProcessSignature(
             PipelineCompilationContext ctx,
             TypeElement serviceElement,
-            javax.annotation.processing.Messager messager) {
+            javax.annotation.processing.Messager messager,
+            boolean allowSpringCompletionStageProcess) {
         List<SupportedServiceSignature> matches = new ArrayList<>();
+        List<String> invalidProcessReasons = new ArrayList<>();
         boolean springProfile = isSpringRendererProfile(ctx);
         for (Element enclosed : serviceElement.getEnclosedElements()) {
             if (!(enclosed instanceof ExecutableElement method)) {
                 continue;
             }
             if (!method.getModifiers().contains(Modifier.PUBLIC)
-                || method.getModifiers().contains(Modifier.STATIC)
-                || method.getParameters().size() != 1) {
+                || method.getModifiers().contains(Modifier.STATIC)) {
                 continue;
             }
             String methodName = method.getSimpleName().toString();
             TypeMirror returnType = method.getReturnType();
+            if ("process".equals(methodName) && method.getParameters().size() != 1) {
+                invalidProcessReasons.add("process method must accept exactly one input parameter");
+                continue;
+            }
+            if ("process".equals(methodName) && returnType.getKind() == TypeKind.VOID) {
+                invalidProcessReasons.add("process method must return a typed output");
+                continue;
+            }
+            if ("processBlocking".equals(methodName) && method.getParameters().size() != 1) {
+                invalidProcessReasons.add("processBlocking method must accept exactly one input parameter");
+                continue;
+            }
             if ("processBlocking".equals(methodName) && springProfile && returnType.getKind() != TypeKind.VOID) {
                 matches.add(new SupportedServiceSignature(
                     ServiceApiKind.BLOCKING,
@@ -1430,6 +1446,10 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 reactiveReturnKind = ReactiveReturnKind.MUTINY_UNI;
             } else if (springProfile && isDeclaredType(declaredReturn, "reactor.core.publisher.Mono")) {
                 reactiveReturnKind = ReactiveReturnKind.REACTOR_MONO;
+            } else if (springProfile
+                && allowSpringCompletionStageProcess
+                && isDeclaredType(declaredReturn, "java.util.concurrent.CompletionStage")) {
+                reactiveReturnKind = ReactiveReturnKind.COMPLETION_STAGE;
             } else {
                 continue;
             }
@@ -1446,9 +1466,17 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             messager.printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Internal service '" + serviceElement.getQualifiedName()
-                    + "' declares multiple public process(In): Uni<Out>" + springPlainMethodHint(ctx)
+                    + "' declares multiple public process(In): Uni<Out>"
+                    + springPlainMethodHint(ctx, allowSpringCompletionStageProcess)
                     + " methods. Please declare exactly one.");
             return Optional.empty();
+        }
+        if (matches.isEmpty() && !invalidProcessReasons.isEmpty()) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Internal service '" + serviceElement.getQualifiedName()
+                    + "' has unsupported process method shape: "
+                    + invalidProcessReasons.stream().distinct().collect(Collectors.joining("; ")));
         }
         return matches.isEmpty() ? Optional.empty() : Optional.of(matches.getFirst());
     }
@@ -1482,8 +1510,12 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return ctx != null && "spring".equalsIgnoreCase(ctx.getRendererProfile());
     }
 
-    private String springPlainMethodHint(PipelineCompilationContext ctx) {
-        return isSpringRendererProfile(ctx) ? " or process(In): Mono<Out> or processBlocking(In): Out" : "";
+    private String springPlainMethodHint(PipelineCompilationContext ctx, boolean includeCompletionStage) {
+        if (!isSpringRendererProfile(ctx)) {
+            return "";
+        }
+        String completionStageShape = includeCompletionStage ? " or process(In): CompletionStage<Out>" : "";
+        return " or process(In): Mono<Out>" + completionStageShape + " or processBlocking(In): Out";
     }
 
     private boolean isDeclaredType(DeclaredType declaredType, String qualifiedName) {

@@ -12,7 +12,7 @@ Current Spring work proves a narrow generated application path:
 - constrained `REST + COMPUTE` unary smoke coverage,
 - generated Spring `@Component` local step beans,
 - Spring WebFlux `@RestController` resources for the supported smoke path,
-- `Mono<Out>` authored service methods for YAML-declared Spring-profile unary services,
+- `Mono<Out>` and `CompletionStage<Out>` authored service methods for YAML-declared Spring-profile unary services,
 - unary delegated Spring bean steps for local pipeline execution,
 - unary `Class::method` Spring operator beans for local pipeline execution,
 - shared runner-core sequencing through the neutral runtime seam.
@@ -38,6 +38,8 @@ Unsupported combinations should fail at build time instead of silently falling b
 Use Quarkus for production TPF applications today.
 
 Use the Spring path only when you are validating the emerging renderer/runtime seam or contributing to portability work. Keep business contracts neutral: typed inputs, typed outputs, mappers, and YAML declarations should not rely on Quarkus-only application code unless the application is explicitly Quarkus-targeted.
+
+Spring-profile service steps are supported only for unary local steps declared from YAML. Normal `service:` beans can use `process(In): Mono<Out>`, `process(In): CompletionStage<Out>`, or `processBlocking(In): Out`.
 
 Delegated Spring beans are supported only for unary local steps declared from YAML with either a Spring bean class or an explicit `Class::method` operator reference. Class-only delegates use supported TPF-style service shapes such as `process(In): Mono<Out>` or `processBlocking(In): Out`. `Class::method` delegates support narrow unary Spring bean methods: `Out method(In)`, `Mono<Out> method(In)`, or `CompletionStage<Out> method(In)`.
 
