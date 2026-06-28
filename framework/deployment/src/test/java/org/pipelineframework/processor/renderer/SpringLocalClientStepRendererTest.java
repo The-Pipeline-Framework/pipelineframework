@@ -94,6 +94,27 @@ class SpringLocalClientStepRendererTest {
     }
 
     @Test
+    void rendersCompletionStageUnaryLocalClientStep() throws Exception {
+        SpringLocalClientStepRenderer renderer = new SpringLocalClientStepRenderer();
+
+        renderer.render(new LocalBinding(model(
+                StreamingShape.UNARY_UNARY,
+                ServiceApiKind.REACTIVE,
+                ReactiveReturnKind.COMPLETION_STAGE)),
+            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null,
+                null, null, 1));
+
+        Path clientStep = tempDir.resolve("com/example/service/pipeline/PaymentLocalClientStep.java");
+        String source = Files.readString(clientStep);
+        assertTrue(source.contains("return this.paymentService.process(input);"));
+        assertFalse(source.contains(".toFuture();"));
+        assertFalse(source.contains("subscribeAsCompletionStage"));
+        assertFalse(source.contains("RuntimeAdapters.executeBlocking"));
+        assertFalse(source.contains("reactor.core.publisher"));
+        assertFalse(source.contains("io.smallrye.mutiny"));
+    }
+
+    @Test
     void rendersDelegatedSpringBeanLocalClientStep() throws Exception {
         SpringLocalClientStepRenderer renderer = new SpringLocalClientStepRenderer();
 

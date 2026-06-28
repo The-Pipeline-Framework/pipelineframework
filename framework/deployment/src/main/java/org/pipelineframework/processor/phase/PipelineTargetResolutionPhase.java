@@ -6,6 +6,7 @@ import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -69,11 +70,12 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
     public void execute(PipelineCompilationContext ctx) throws Exception {
         PipelineTransport mode = ctx.getTransportMode();
         PipelineTransport transportMode = Objects.requireNonNullElse(mode, PipelineTransport.GRPC);
+        Optional<PipelineStepModel> springRestEntrypoint = springRestEntrypoint(ctx, transportMode);
 
         // Apply transport targets and resolve client/server roles for each step model
         List<PipelineStepModel> updatedModels = new ArrayList<>();
         for (PipelineStepModel model : ctx.getStepModels()) {
-            Set<GenerationTarget> targets = resolveTargetsForModel(ctx, model, transportMode);
+            Set<GenerationTarget> targets = resolveTargetsForModel(ctx, model, transportMode, springRestEntrypoint);
             PipelineStepModel updatedModel = model.toBuilder()
                 .enabledTargets(targets)
                 .build();
@@ -118,7 +120,8 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
     private Set<GenerationTarget> resolveTargetsForModel(
             PipelineCompilationContext ctx,
             PipelineStepModel model,
-            PipelineTransport transportMode) {
+            PipelineTransport transportMode,
+            Optional<PipelineStepModel> springRestEntrypoint) {
         if (model.serviceClassName() != null
             && AWAIT_STEP_DESCRIPTOR_CLASS.equals(model.serviceClassName().canonicalName())) {
             return Set.of(GenerationTarget.AWAIT_CLIENT_STEP);
@@ -142,6 +145,12 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
             // External adapter generation is bound later in PipelineBindingConstructionPhase.
             return Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
         }
+        if (SpringRendererProfileSupport.isSpringProfile(ctx)
+            && transportMode == PipelineTransport.REST
+            && model.sideEffect()
+            && model.deploymentRole() == DeploymentRole.PIPELINE_SERVER) {
+            return Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
+        }
         if (transportMode == PipelineTransport.LOCAL
             && model.sideEffect()
             && model.deploymentRole() == DeploymentRole.PLUGIN_SERVER) {
@@ -157,7 +166,10 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
             && transportMode == PipelineTransport.REST
             && !model.sideEffect()
             && model.deploymentRole() == DeploymentRole.PIPELINE_SERVER) {
-            return Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.LOCAL_CLIENT_STEP);
+            if (springRestEntrypoint.filter(entrypoint -> entrypoint == model).isPresent()) {
+                return Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.LOCAL_CLIENT_STEP);
+            }
+            return Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
         }
         LinkedHashSet<GenerationTarget> targets = new LinkedHashSet<>(resolveTargetsForRole(model.deploymentRole(), transportMode));
         if (model.serviceApiKind() != ServiceApiKind.REACTIVE
@@ -166,5 +178,21 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
             targets.add(GenerationTarget.BLOCKING_REACTIVE_BRIDGE);
         }
         return Collections.unmodifiableSet(targets);
+    }
+
+    private Optional<PipelineStepModel> springRestEntrypoint(PipelineCompilationContext ctx, PipelineTransport transportMode) {
+        if (!SpringRendererProfileSupport.isSpringProfile(ctx) || transportMode != PipelineTransport.REST) {
+            return Optional.empty();
+        }
+        for (PipelineStepModel model : ctx.getStepModels()) {
+            boolean remote = model.remoteExecution() != null && model.remoteExecution().isRemote();
+            if (!model.sideEffect()
+                && model.deploymentRole() == DeploymentRole.PIPELINE_SERVER
+                && model.delegateService() == null
+                && !remote) {
+                return Optional.of(model);
+            }
+        }
+        return Optional.empty();
     }
 }

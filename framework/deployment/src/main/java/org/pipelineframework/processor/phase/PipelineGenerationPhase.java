@@ -89,7 +89,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         PipelineRenderer<LocalBinding> localClientRenderer = springProfile
             ? new SpringLocalClientStepRenderer()
             : new org.pipelineframework.processor.renderer.LocalClientStepRenderer();
-        RestClientStepRenderer restClientRenderer = new RestClientStepRenderer();
+        PipelineRenderer<RestBinding> restClientRenderer = springProfile
+            ? new SpringRestClientStepRenderer()
+            : new RestClientStepRenderer();
         PipelineRenderer<RestBinding> restRenderer = springProfile
             ? new SpringRestResourceRenderer()
             : new RestResourceRenderer();
@@ -710,7 +712,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             GrpcServiceAdapterRenderer grpcRenderer,
             org.pipelineframework.processor.renderer.ClientStepRenderer clientRenderer,
             PipelineRenderer<LocalBinding> localClientRenderer,
-            RestClientStepRenderer restClientRenderer,
+            PipelineRenderer<RestBinding> restClientRenderer,
             PipelineRenderer<RestBinding> restRenderer,
             RestFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,

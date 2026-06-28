@@ -24,6 +24,7 @@ import javax.tools.Diagnostic;
 
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.GenerationTarget;
+import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.ServiceApiKind;
@@ -74,7 +75,7 @@ final class SpringRendererProfileSupport {
 
     private static void validateModel(PipelineStepModel model, PipelineTransport transportMode, List<String> errors) {
         Set<GenerationTarget> supportedTargets = transportMode == PipelineTransport.REST
-            ? Set.of(GenerationTarget.LOCAL_CLIENT_STEP, GenerationTarget.REST_RESOURCE)
+            ? Set.of(GenerationTarget.LOCAL_CLIENT_STEP, GenerationTarget.REST_RESOURCE, GenerationTarget.REST_CLIENT_STEP)
             : Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
         if (!supportedTargets.containsAll(model.enabledTargets())) {
             errors.add("Spring renderer profile currently supports only " + supportedTargets + " generation; step '"
@@ -83,6 +84,11 @@ final class SpringRendererProfileSupport {
         if (model.delegateService() != null && !model.enabledTargets().equals(Set.of(GenerationTarget.LOCAL_CLIENT_STEP))) {
             errors.add("Spring renderer profile supports delegated Spring beans only as unary local client steps; step '"
                 + model.serviceName() + "' resolved targets " + model.enabledTargets() + ".");
+        }
+        if (model.enabledTargets().contains(GenerationTarget.REST_CLIENT_STEP)
+            && isServerRole(model.deploymentRole())) {
+            errors.add("Spring renderer profile supports REST client steps only for client-role boundaries; step '"
+                + model.serviceName() + "' resolved role " + model.deploymentRole() + ".");
         }
         if (model.streamingShape() != StreamingShape.UNARY_UNARY) {
             errors.add("Spring renderer profile currently supports only unary-unary steps; step '"
@@ -101,5 +107,11 @@ final class SpringRendererProfileSupport {
             errors.add("Spring renderer profile does not support remote execution; step '"
                 + model.serviceName() + "'.");
         }
+    }
+
+    private static boolean isServerRole(DeploymentRole role) {
+        return role == DeploymentRole.PIPELINE_SERVER
+            || role == DeploymentRole.REST_SERVER
+            || role == DeploymentRole.PLUGIN_SERVER;
     }
 }
