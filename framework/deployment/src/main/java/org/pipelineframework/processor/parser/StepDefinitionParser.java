@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.regex.Pattern;
@@ -219,6 +220,7 @@ public class StepDefinitionParser {
         boolean commandStep = "command".equalsIgnoreCase(rawKind);
         boolean queryStep = "query".equalsIgnoreCase(rawKind);
         String delegatedClassName = null;
+        Optional<String> delegatedMethodName = Optional.empty();
 
         if (!isBlank(operatorClassName) && !isBlank(delegateClassName)) {
             String message = "Skipping step '" + name + "': 'operator' and 'delegate' are aliases and are mutually exclusive";
@@ -227,9 +229,19 @@ public class StepDefinitionParser {
             return null;
         }
         if (!isBlank(operatorClassName)) {
-            delegatedClassName = normalizeDelegatedExecutionClassName(operatorClassName);
+            Optional<DelegatedReference> delegatedReference = parseDelegatedReference(operatorClassName, name, "operator");
+            if (delegatedReference.isEmpty()) {
+                return null;
+            }
+            delegatedClassName = delegatedReference.get().className();
+            delegatedMethodName = delegatedReference.get().methodName();
         } else if (!isBlank(delegateClassName)) {
-            delegatedClassName = normalizeDelegatedExecutionClassName(delegateClassName);
+            Optional<DelegatedReference> delegatedReference = parseDelegatedReference(delegateClassName, name, "delegate");
+            if (delegatedReference.isEmpty()) {
+                return null;
+            }
+            delegatedClassName = delegatedReference.get().className();
+            delegatedMethodName = delegatedReference.get().methodName();
         }
 
         if (!isBlank(delegatedClassName) && !isBlank(serviceClassName)) {
@@ -702,17 +714,7 @@ public class StepDefinitionParser {
             name,
             kind,
             executionClass,
-            null,
-            Map.of(),
-            null,
-            List.of(),
-            null,
-            null,
-            null,
-            Map.of(),
-            null,
-            Map.of(),
-            List.of(),
+            delegatedMethodName,
             inboundMapper,
             outboundMapper,
             externalMapper,
@@ -1439,15 +1441,31 @@ public class StepDefinitionParser {
         diagnosticReporter.accept(kind, message);
     }
 
-    private String normalizeDelegatedExecutionClassName(String delegatedValue) {
+    private Optional<DelegatedReference> parseDelegatedReference(String delegatedValue, String stepName, String fieldName) {
         if (isBlank(delegatedValue)) {
-            return delegatedValue;
+            return Optional.empty();
         }
         int separator = delegatedValue.indexOf("::");
-        if (separator <= 0) {
-            return delegatedValue;
+        if (separator < 0) {
+            return Optional.of(new DelegatedReference(delegatedValue.trim(), Optional.empty()));
         }
-        return delegatedValue.substring(0, separator).trim();
+        String className = delegatedValue.substring(0, separator).trim();
+        String methodName = delegatedValue.substring(separator + 2).trim();
+        if (className.isBlank() || methodName.isBlank() || delegatedValue.indexOf("::", separator + 2) >= 0) {
+            String message = "Skipping step '" + stepName + "': invalid " + fieldName
+                + " reference '" + delegatedValue + "'. Expected <class> or <class>::<method>";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return Optional.empty();
+        }
+        if (!isValidIdentifier(methodName)) {
+            String message = "Skipping step '" + stepName + "': invalid " + fieldName
+                + " method name '" + methodName + "'";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return Optional.empty();
+        }
+        return Optional.of(new DelegatedReference(className, Optional.of(methodName)));
     }
 
     /**
@@ -1551,6 +1569,9 @@ public class StepDefinitionParser {
      */
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private record DelegatedReference(String className, Optional<String> methodName) {
     }
 
     /**

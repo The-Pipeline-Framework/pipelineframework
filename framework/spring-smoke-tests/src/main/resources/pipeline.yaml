@@ -10,6 +10,6 @@ steps:
     output: "com.example.smoke.domain.PaymentStatus"
     outboundMapper: "com.example.smoke.mapper.PaymentStatusMapper"
   - name: "audit"
-    operator: "com.example.smoke.service.PaymentAuditService"
+    operator: "com.example.smoke.service.PaymentAuditService::audit"
     input: "com.example.smoke.domain.PaymentStatus"
     output: "com.example.smoke.domain.PaymentStatus"

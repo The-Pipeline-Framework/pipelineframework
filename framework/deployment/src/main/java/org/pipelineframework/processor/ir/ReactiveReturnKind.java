@@ -5,5 +5,6 @@ package org.pipelineframework.processor.ir;
  */
 public enum ReactiveReturnKind {
     MUTINY_UNI,
-    REACTOR_MONO
+    REACTOR_MONO,
+    COMPLETION_STAGE
 }

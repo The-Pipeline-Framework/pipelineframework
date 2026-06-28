@@ -18,6 +18,7 @@ package org.pipelineframework.processor.renderer;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 import java.util.Set;
 
 import com.squareup.javapoet.ClassName;
@@ -113,6 +114,40 @@ class SpringLocalClientStepRendererTest {
     }
 
     @Test
+    void rendersDelegatedSpringBeanClassMethodLocalClientStep() throws Exception {
+        SpringLocalClientStepRenderer renderer = new SpringLocalClientStepRenderer();
+
+        renderer.render(new LocalBinding(delegatedModel(
+                ServiceApiKind.REACTIVE,
+                ReactiveReturnKind.REACTOR_MONO,
+                "audit")),
+            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+
+        Path clientStep = tempDir.resolve("com/example/service/pipeline/AuditLocalClientStep.java");
+        String source = Files.readString(clientStep);
+        assertTrue(source.contains("private final PaymentAuditBean paymentAuditBean;"));
+        assertTrue(source.contains("return this.paymentAuditBean.audit(input).toFuture();"));
+        assertFalse(source.contains(".process(input)"));
+    }
+
+    @Test
+    void rendersDelegatedSpringBeanCompletionStageClassMethodLocalClientStep() throws Exception {
+        SpringLocalClientStepRenderer renderer = new SpringLocalClientStepRenderer();
+
+        renderer.render(new LocalBinding(delegatedModel(
+                ServiceApiKind.REACTIVE,
+                ReactiveReturnKind.COMPLETION_STAGE,
+                "auditAsync")),
+            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+
+        Path clientStep = tempDir.resolve("com/example/service/pipeline/AuditLocalClientStep.java");
+        String source = Files.readString(clientStep);
+        assertTrue(source.contains("return this.paymentAuditBean.auditAsync(input);"));
+        assertFalse(source.contains(".toFuture();"));
+        assertFalse(source.contains("subscribeAsCompletionStage"));
+    }
+
+    @Test
     void rendersDelegatedBlockingSpringBeanLocalClientStep() throws Exception {
         SpringLocalClientStepRenderer renderer = new SpringLocalClientStepRenderer();
 
@@ -123,6 +158,20 @@ class SpringLocalClientStepRendererTest {
         String source = Files.readString(clientStep);
         assertTrue(source.contains("private final PaymentAuditBean paymentAuditBean;"));
         assertTrue(source.contains("return RuntimeAdapters.executeBlocking(() -> this.paymentAuditBean.processBlocking(input), false);"));
+    }
+
+    @Test
+    void rendersDelegatedBlockingSpringBeanClassMethodLocalClientStep() throws Exception {
+        SpringLocalClientStepRenderer renderer = new SpringLocalClientStepRenderer();
+
+        renderer.render(new LocalBinding(delegatedModel(ServiceApiKind.BLOCKING, ReactiveReturnKind.MUTINY_UNI,
+                "auditBlocking")),
+            new GenerationContext(null, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, Set.of(), null, null));
+
+        Path clientStep = tempDir.resolve("com/example/service/pipeline/AuditLocalClientStep.java");
+        String source = Files.readString(clientStep);
+        assertTrue(source.contains("return RuntimeAdapters.executeBlocking(() -> this.paymentAuditBean.auditBlocking(input), false);"));
+        assertFalse(source.contains(".processBlocking(input)"));
     }
 
     @Test
@@ -216,6 +265,22 @@ class SpringLocalClientStepRendererTest {
     }
 
     private PipelineStepModel delegatedModel(ServiceApiKind apiKind, ReactiveReturnKind reactiveReturnKind) {
+        return delegatedModel(apiKind, reactiveReturnKind, Optional.empty());
+    }
+
+    private PipelineStepModel delegatedModel(
+        ServiceApiKind apiKind,
+        ReactiveReturnKind reactiveReturnKind,
+        String delegateMethodName
+    ) {
+        return delegatedModel(apiKind, reactiveReturnKind, Optional.of(delegateMethodName));
+    }
+
+    private PipelineStepModel delegatedModel(
+        ServiceApiKind apiKind,
+        ReactiveReturnKind reactiveReturnKind,
+        Optional<String> delegateMethodName
+    ) {
         return new PipelineStepModel.Builder()
             .serviceName("AuditService")
             .generatedName("AuditService")
@@ -228,6 +293,7 @@ class SpringLocalClientStepRendererTest {
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.PIPELINE_SERVER)
             .delegateService(ClassName.get("com.example.operator", "PaymentAuditBean"))
+            .delegateMethodName(delegateMethodName)
             .serviceApiKind(apiKind)
             .reactiveReturnKind(reactiveReturnKind)
             .build();

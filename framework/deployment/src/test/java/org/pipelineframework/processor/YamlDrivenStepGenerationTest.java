@@ -356,6 +356,273 @@ class YamlDrivenStepGenerationTest {
     }
 
     @Test
+    void generatesSpringDelegatedStepFromNamedMonoOperatorMethod() throws IOException {
+        Path yamlFile = writeSpringNamedOperatorYaml(
+            "pipeline-delegated-named-mono.yaml",
+            "com.example.app.PaymentAuditService::audit",
+            "");
+        Path paymentAuditService = writePaymentAuditService("""
+            import reactor.core.publisher.Mono;
+
+            public class PaymentAuditService {
+                public Mono<PaymentStatus> audit(PaymentStatus input) {
+                    return Mono.just(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentStatus = writePaymentStatus();
+        Path monoStub = writeMonoStub();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentAuditService, paymentStatus, monoStub),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertTrue(result.success(), "Expected Spring named Mono operator compilation to succeed: " + result.errorSummary());
+    }
+
+    @Test
+    void generatesSpringDelegatedStepFromNamedCompletionStageOperatorMethod() throws IOException {
+        Path yamlFile = writeSpringNamedOperatorYaml(
+            "pipeline-delegated-named-stage.yaml",
+            "com.example.app.PaymentAuditService::auditAsync",
+            "");
+        Path paymentAuditService = writePaymentAuditService("""
+            import java.util.concurrent.CompletableFuture;
+            import java.util.concurrent.CompletionStage;
+
+            public class PaymentAuditService {
+                public CompletionStage<PaymentStatus> auditAsync(PaymentStatus input) {
+                    return CompletableFuture.completedFuture(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentAuditService, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertTrue(result.success(), "Expected Spring named CompletionStage operator compilation to succeed: "
+            + result.errorSummary());
+    }
+
+    @Test
+    void generatesSpringDelegatedStepFromNamedBlockingOperatorMethod() throws IOException {
+        Path yamlFile = writeSpringNamedOperatorYaml(
+            "pipeline-delegated-named-blocking.yaml",
+            "com.example.app.PaymentAuditService::auditBlocking",
+            "");
+        Path paymentAuditService = writePaymentAuditService("""
+            public class PaymentAuditService {
+                public PaymentStatus auditBlocking(PaymentStatus input) {
+                    return new PaymentStatus();
+                }
+            }
+            """);
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentAuditService, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertTrue(result.success(), "Expected Spring named blocking operator compilation to succeed: "
+            + result.errorSummary());
+    }
+
+    @Test
+    void failsNamedOperatorMethodWithoutSpringProfile() throws IOException {
+        Path yamlFile = writeSpringNamedOperatorYaml(
+            "pipeline-delegated-named-default-profile.yaml",
+            "com.example.app.PaymentAuditService::audit",
+            "");
+        Path paymentAuditService = writePaymentAuditService("""
+            public class PaymentAuditService {
+                public PaymentStatus audit(PaymentStatus input) {
+                    return new PaymentStatus();
+                }
+            }
+            """);
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentAuditService, paymentStatus));
+        assertFalse(result.success(), "Expected default renderer profile to reject Class::method delegated operators");
+        assertTrue(result.errorSummary().contains("only by the Spring renderer profile"), result.errorSummary());
+    }
+
+    @Test
+    void failsNamedOperatorMethodWhenMissing() throws IOException {
+        Path yamlFile = writeSpringNamedOperatorYaml(
+            "pipeline-delegated-named-missing.yaml",
+            "com.example.app.PaymentAuditService::audit",
+            "");
+        Path paymentAuditService = writePaymentAuditService("""
+            public class PaymentAuditService {
+                public PaymentStatus process(PaymentStatus input) {
+                    return new PaymentStatus();
+                }
+            }
+            """);
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentAuditService, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected missing named Spring operator method to fail");
+        assertTrue(result.errorSummary().contains("was not found"), result.errorSummary());
+    }
+
+    @Test
+    void failsNamedOperatorMethodWhenOverloaded() throws IOException {
+        Path yamlFile = writeSpringNamedOperatorYaml(
+            "pipeline-delegated-named-overloaded.yaml",
+            "com.example.app.PaymentAuditService::audit",
+            "");
+        Path paymentAuditService = writePaymentAuditService("""
+            public class PaymentAuditService {
+                public PaymentStatus audit(PaymentStatus input) {
+                    return new PaymentStatus();
+                }
+
+                public PaymentStatus audit(AlternatePaymentStatus input) {
+                    return new PaymentStatus();
+                }
+            }
+            """);
+        Path paymentStatus = writePaymentStatus();
+        Path alternatePaymentStatus = writeSource("AlternatePaymentStatus.java", """
+            package com.example.app;
+
+            public class AlternatePaymentStatus {
+            }
+            """);
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentAuditService, paymentStatus, alternatePaymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected overloaded named Spring operator method to fail");
+        assertTrue(result.errorSummary().contains("is overloaded"), result.errorSummary());
+    }
+
+    @Test
+    void failsNamedOperatorMethodWhenWrongArity() throws IOException {
+        Path yamlFile = writeSpringNamedOperatorYaml(
+            "pipeline-delegated-named-wrong-arity.yaml",
+            "com.example.app.PaymentAuditService::audit",
+            "");
+        Path paymentAuditService = writePaymentAuditService("""
+            public class PaymentAuditService {
+                public PaymentStatus audit(PaymentStatus input, String reason) {
+                    return new PaymentStatus();
+                }
+            }
+            """);
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentAuditService, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected wrong-arity named Spring operator method to fail");
+        assertTrue(result.errorSummary().contains("exactly one input parameter"), result.errorSummary());
+    }
+
+    @Test
+    void failsNamedOperatorMethodWhenVoid() throws IOException {
+        Path yamlFile = writeSpringNamedOperatorYaml(
+            "pipeline-delegated-named-void.yaml",
+            "com.example.app.PaymentAuditService::audit",
+            "");
+        Path paymentAuditService = writePaymentAuditService("""
+            public class PaymentAuditService {
+                public void audit(PaymentStatus input) {
+                }
+            }
+            """);
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentAuditService, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected void named Spring operator method to fail");
+        assertTrue(result.errorSummary().contains("must return an output value"), result.errorSummary());
+    }
+
+    @Test
+    void failsNamedOperatorMethodWhenStaticOnly() throws IOException {
+        Path yamlFile = writeSpringNamedOperatorYaml(
+            "pipeline-delegated-named-static.yaml",
+            "com.example.app.PaymentAuditService::audit",
+            "");
+        Path paymentAuditService = writePaymentAuditService("""
+            public class PaymentAuditService {
+                public static PaymentStatus audit(PaymentStatus input) {
+                    return new PaymentStatus();
+                }
+            }
+            """);
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentAuditService, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected static named Spring operator method to fail");
+        assertTrue(result.errorSummary().contains("must be instance bean methods"), result.errorSummary());
+    }
+
+    @Test
+    void failsNamedOperatorMethodWhenReturnTypeIsUnsupportedReactiveWrapper() throws IOException {
+        Path yamlFile = writeSpringNamedOperatorYaml(
+            "pipeline-delegated-named-flux.yaml",
+            "com.example.app.PaymentAuditService::audit",
+            "");
+        Path paymentAuditService = writePaymentAuditService("""
+            import reactor.core.publisher.Flux;
+
+            public class PaymentAuditService {
+                public Flux<PaymentStatus> audit(PaymentStatus input) {
+                    return Flux.just(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentStatus = writePaymentStatus();
+        Path fluxStub = writeFluxStub();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentAuditService, paymentStatus, fluxStub),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected unsupported reactive named Spring operator return type to fail");
+        assertTrue(result.errorSummary().contains("does not support return type"), result.errorSummary());
+    }
+
+    @Test
+    void failsNamedOperatorMethodWhenCardinalityIsNonUnary() throws IOException {
+        Path yamlFile = writeSpringNamedOperatorYaml(
+            "pipeline-delegated-named-non-unary.yaml",
+            "com.example.app.PaymentAuditService::audit",
+            "    cardinality: \"ONE_TO_MANY\"\n");
+        Path paymentAuditService = writePaymentAuditService("""
+            public class PaymentAuditService {
+                public PaymentStatus audit(PaymentStatus input) {
+                    return new PaymentStatus();
+                }
+            }
+            """);
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentAuditService, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected non-unary named Spring operator compilation to fail");
+        assertTrue(result.errorSummary().contains("declares cardinality"), result.errorSummary());
+    }
+
+    @Test
     void failsYamlInternalStepFromPlainMonoProcessMethodWithoutSpringProfile() throws IOException {
         Path yamlFile = tempDir.resolve("pipeline-internal-plain-mono-quarkus.yaml");
         Files.writeString(yamlFile, """
@@ -1450,6 +1717,30 @@ class YamlDrivenStepGenerationTest {
             "Expected delegated step not to be skipped when mapper fallback is enabled: " + warnings);
     }
 
+    private Path writeSpringNamedOperatorYaml(String fileName, String operatorReference, String extraStepLines)
+        throws IOException {
+        Path yamlFile = tempDir.resolve(fileName);
+        Files.writeString(yamlFile,
+            "appName: \"Test App\"\n"
+                + "basePackage: \"com.example\"\n"
+                + "transport: \"LOCAL\"\n"
+                + "steps:\n"
+                + "  - name: \"audit\"\n"
+                + "    operator: \"" + operatorReference + "\"\n"
+                + "    input: \"com.example.app.PaymentStatus\"\n"
+                + "    output: \"com.example.app.PaymentStatus\"\n"
+                + extraStepLines);
+        return yamlFile;
+    }
+
+    private Path writePaymentAuditService(String classBody) throws IOException {
+        return writeSource("PaymentAuditService.java", """
+            package com.example.app;
+
+            %s
+            """.formatted(classBody));
+    }
+
     private Path writeSource(String fileName, String content) throws IOException {
         Path baseDir = tempDir;
         Matcher matcher = PACKAGE_PATTERN.matcher(content);
@@ -1488,6 +1779,18 @@ class YamlDrivenStepGenerationTest {
             public class Mono<T> {
                 public static <U> Mono<U> just(U value) {
                     return new Mono<>();
+                }
+            }
+            """);
+    }
+
+    private Path writeFluxStub() throws IOException {
+        return writeSource("Flux.java", """
+            package reactor.core.publisher;
+
+            public class Flux<T> {
+                public static <U> Flux<U> just(U value) {
+                    return new Flux<>();
                 }
             }
             """);

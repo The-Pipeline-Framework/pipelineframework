@@ -19,6 +19,7 @@ package org.pipelineframework.processor.ir;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import javax.annotation.Nullable;
 import com.squareup.javapoet.ClassName;
 import org.pipelineframework.config.template.PipelineTemplateStepExecution;
@@ -30,6 +31,7 @@ import org.pipelineframework.config.template.PipelineTemplateStepExecution;
  * @param name The name of the step
  * @param kind The kind of step (INTERNAL, DELEGATED, REMOTE, AWAIT, COMMAND, or QUERY)
  * @param executionClass The class that provides the execution implementation
+ * @param delegatedMethodName Optional delegated/operator method name when YAML uses Class::method syntax
  * @param remoteExecution remote execution metadata for REMOTE steps
  * @param awaitConfig raw await configuration for AWAIT steps
  * @param timeout await timeout string for AWAIT steps
@@ -54,6 +56,7 @@ public record StepDefinition(
         String name,
         StepKind kind,
         @Nullable ClassName executionClass,
+        Optional<String> delegatedMethodName,
         @Nullable PipelineTemplateStepExecution remoteExecution,
         Map<String, Object> awaitConfig,
         @Nullable String timeout,
@@ -82,6 +85,56 @@ public record StepDefinition(
         Map<String, Object> awaitConfig,
         @Nullable String timeout,
         List<String> idempotencyKeyFields,
+        @Nullable String command,
+        @Nullable ClassName commandIdGenerator,
+        @Nullable String duplicatePolicy,
+        Map<String, Object> commandConfig,
+        @Nullable String queryId,
+        Map<String, Object> queryConfig,
+        List<String> queryKeyFields,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads
+    ) {
+        this(
+            name,
+            kind,
+            executionClass,
+            Optional.empty(),
+            remoteExecution,
+            awaitConfig,
+            timeout,
+            idempotencyKeyFields,
+            command,
+            commandIdGenerator,
+            duplicatePolicy,
+            commandConfig,
+            queryId,
+            queryConfig,
+            queryKeyFields,
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint,
+            runOnVirtualThreads);
+    }
+
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        @Nullable ClassName executionClass,
+        @Nullable PipelineTemplateStepExecution remoteExecution,
+        Map<String, Object> awaitConfig,
+        @Nullable String timeout,
+        List<String> idempotencyKeyFields,
         @Nullable ClassName inboundMapper,
         @Nullable ClassName outboundMapper,
         @Nullable ClassName externalMapper,
@@ -94,6 +147,7 @@ public record StepDefinition(
             name,
             kind,
             executionClass,
+            Optional.empty(),
             remoteExecution,
             awaitConfig,
             timeout,
@@ -139,6 +193,7 @@ public record StepDefinition(
             name,
             kind,
             executionClass,
+            Optional.empty(),
             remoteExecution,
             copyObjectMap(awaitConfig),
             timeout,
@@ -174,6 +229,7 @@ public record StepDefinition(
             name,
             requireNonRemoteKind(kind),
             executionClass,
+            Optional.empty(),
             null,
             Map.of(),
             null,
@@ -210,6 +266,7 @@ public record StepDefinition(
             name,
             requireNonRemoteKind(kind),
             executionClass,
+            Optional.empty(),
             null,
             Map.of(),
             null,
@@ -235,6 +292,46 @@ public record StepDefinition(
         String name,
         StepKind kind,
         ClassName executionClass,
+        Optional<String> delegatedMethodName,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads
+    ) {
+        this(
+            name,
+            requireNonRemoteKind(kind),
+            executionClass,
+            delegatedMethodName,
+            null,
+            Map.of(),
+            null,
+            List.of(),
+            null,
+            null,
+            null,
+            Map.of(),
+            null,
+            Map.of(),
+            List.of(),
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint,
+            runOnVirtualThreads);
+    }
+
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        ClassName executionClass,
         @Nullable ClassName inboundMapper,
         @Nullable ClassName outboundMapper,
         @Nullable ClassName externalMapper,
@@ -247,6 +344,7 @@ public record StepDefinition(
             name,
             requireNonRemoteKind(kind),
             executionClass,
+            Optional.empty(),
             null,
             Map.of(),
             null,
@@ -280,6 +378,7 @@ public record StepDefinition(
         if (executionClass != null && remoteExecution != null) {
             throw new IllegalArgumentException("executionClass and remoteExecution are mutually exclusive");
         }
+        delegatedMethodName = normalizeOptionalString(delegatedMethodName);
         if (kind == StepKind.REMOTE) {
             Objects.requireNonNull(remoteExecution, "Remote execution cannot be null for REMOTE steps");
         } else if (kind == StepKind.AWAIT || kind == StepKind.COMMAND || kind == StepKind.QUERY) {
@@ -316,6 +415,14 @@ public record StepDefinition(
             throw new IllegalArgumentException("Convenience constructor cannot be used for " + kind);
         }
         return kind;
+    }
+
+    private static Optional<String> normalizeOptionalString(Optional<String> value) {
+        if (value == null || value.isEmpty()) {
+            return Optional.empty();
+        }
+        String normalized = value.get().trim();
+        return normalized.isBlank() ? Optional.empty() : Optional.of(normalized);
     }
 
     private static Map<String, Object> copyObjectMap(Map<?, ?> values) {

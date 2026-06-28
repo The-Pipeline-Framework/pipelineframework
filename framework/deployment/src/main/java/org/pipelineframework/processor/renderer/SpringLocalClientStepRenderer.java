@@ -108,28 +108,46 @@ public class SpringLocalClientStepRenderer implements PipelineRenderer<LocalBind
         return switch (model.reactiveReturnKind()) {
             case MUTINY_UNI -> "subscribeAsCompletionStage()";
             case REACTOR_MONO -> "toFuture()";
+            case COMPLETION_STAGE -> "";
         };
     }
 
     private String applyStatement(PipelineStepModel model) {
         if (model.serviceApiKind() == ServiceApiKind.BLOCKING) {
-            return "return $T.executeBlocking(() -> this.$N.processBlocking(input), $L)";
+            return "return $T.executeBlocking(() -> this.$N.$N(input), $L)";
         }
-        return "return this.$N.process(input).$L";
+        if (model.reactiveReturnKind() == ReactiveReturnKind.COMPLETION_STAGE) {
+            return "return this.$N.$N(input)";
+        }
+        return "return this.$N.$N(input).$L";
     }
 
     private Object[] applyStatementArgs(PipelineStepModel model, String serviceFieldName) {
+        String methodName = invocationMethodName(model);
         if (model.serviceApiKind() == ServiceApiKind.BLOCKING) {
             return new Object[] {
                 ClassName.get("org.pipelineframework.runtime.core", "RuntimeAdapters"),
                 serviceFieldName,
+                methodName,
                 model.executionMode() == ExecutionMode.VIRTUAL_THREADS
+            };
+        }
+        if (model.reactiveReturnKind() == ReactiveReturnKind.COMPLETION_STAGE) {
+            return new Object[] {
+                serviceFieldName,
+                methodName
             };
         }
         return new Object[] {
             serviceFieldName,
+            methodName,
             completionStageAdapter(model)
         };
+    }
+
+    private String invocationMethodName(PipelineStepModel model) {
+        return model.delegateMethodName()
+            .orElseGet(() -> model.serviceApiKind() == ServiceApiKind.BLOCKING ? "processBlocking" : "process");
     }
 
     private void validateSupported(PipelineStepModel model) {

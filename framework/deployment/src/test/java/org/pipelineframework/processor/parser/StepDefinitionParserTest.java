@@ -160,6 +160,59 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void preservesClassMethodSegmentForDelegatedOperatorStep() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "delegate-payment"
+                operator: "com.example.PaymentOperators::approve"
+                input: "com.example.PaymentRecord"
+                output: "com.example.PaymentStatus"
+            """, diagnostics);
+
+        assertEquals(1, steps.size(), diagnostics.toString());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.DELEGATED, step.kind());
+        assertEquals(ClassName.get("com.example", "PaymentOperators"), step.executionClass());
+        assertEquals(java.util.Optional.of("approve"), step.delegatedMethodName());
+    }
+
+    @Test
+    void rejectsMalformedClassMethodOperatorReference() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "delegate-payment"
+                operator: "com.example.PaymentOperators::"
+                input: "com.example.PaymentRecord"
+                output: "com.example.PaymentStatus"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("Expected <class> or <class>::<method>")),
+            diagnostics.toString());
+
+        diagnostics.clear();
+        steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "delegate-payment"
+                operator: "::approve"
+                input: "com.example.PaymentRecord"
+                output: "com.example.PaymentStatus"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("Expected <class> or <class>::<method>")),
+            diagnostics.toString());
+    }
+
+    @Test
     void parsesExplicitFalseRunOnVirtualThreadsForInternalStep() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
