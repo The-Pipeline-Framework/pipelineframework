@@ -33,6 +33,17 @@ class ExecutionRedrivePlanTest {
   }
 
   @Test
+  void failedExecutionCanBeRedrivenWhenAllowed() {
+    ExecutionRecord<Object, Object> record = record(ExecutionStatus.FAILED, 2L);
+
+    ExecutionRedrivePlan plan = ExecutionRedrivePlan.from(record, null, true, "retry failed");
+
+    assertEquals(2L, plan.expectedVersion());
+    assertEquals("retry failed", plan.normalizedReason());
+    assertEquals("redrive:exec-1:2", plan.transitionKey());
+  }
+
+  @Test
   void staleExpectedVersionIsRejectedBeforeEffects() {
     ExecutionRecord<Object, Object> record = record(ExecutionStatus.DLQ, 7L);
 

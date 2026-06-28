@@ -48,16 +48,23 @@ class AwaitTimeoutFlowTest {
 
   @Test
   void timeoutRecordsFactBeforeFailingWaitingParent() {
-    AwaitInteractionRecord interaction = interaction("unit-1");
+    AwaitInteractionRecord earlier = interaction("unit-1", "interaction-a", "corr-a", 900L);
+    AwaitInteractionRecord later = interaction("unit-1", "interaction-b", "corr-b", 950L);
     ExecutionRecord<Object, Object> parent = parent(ExecutionStatus.WAITING_EXTERNAL, "unit-1");
     ExecutionRecord<Object, Object> failed = parent(ExecutionStatus.FAILED, "unit-1");
-    when(awaitCoordinator.findTimedOut(1000L, 100)).thenReturn(Uni.createFrom().item(List.of(interaction)));
-    when(awaitCoordinator.markTimedOut(interaction, 1000L))
-        .thenReturn(Uni.createFrom().item(Optional.of(interaction)));
-    when(segmentBoundaryLedger.recordInteractionTimedOut(interaction, 1000L))
+    when(awaitCoordinator.findTimedOut(1000L, 100)).thenReturn(Uni.createFrom().item(List.of(later, earlier)));
+    when(awaitCoordinator.markTimedOut(earlier, 1000L))
+        .thenReturn(Uni.createFrom().item(Optional.of(earlier)));
+    when(awaitCoordinator.markTimedOut(later, 1000L))
+        .thenReturn(Uni.createFrom().item(Optional.of(later)));
+    when(segmentBoundaryLedger.recordInteractionTimedOut(earlier, 1000L))
+        .thenReturn(Uni.createFrom().voidItem());
+    when(segmentBoundaryLedger.recordInteractionTimedOut(later, 1000L))
         .thenReturn(Uni.createFrom().voidItem());
     when(executionStateStore.getExecution("tenant-1", "exec-1"))
-        .thenReturn(Uni.createFrom().item(Optional.of(parent)));
+        .thenReturn(
+            Uni.createFrom().item(Optional.of(parent)),
+            Uni.createFrom().item(Optional.of(failed)));
     when(executionStateStore.markTerminalFailure(
             eq("tenant-1"),
             eq("exec-1"),
@@ -65,21 +72,21 @@ class AwaitTimeoutFlowTest {
             eq(ExecutionStatus.FAILED),
             eq("exec-1:2:3"),
             eq("AWAIT_TIMEOUT"),
-            eq("Await interaction timed out: interaction-1"),
+            eq("Await interaction timed out: interaction-a"),
             anyLong()))
         .thenReturn(Uni.createFrom().item(Optional.of(failed)));
     when(segmentBoundaryLedger.recordRunFailed(
             failed,
             "AWAIT_TIMEOUT",
-            "Await interaction timed out: interaction-1",
+            "Await interaction timed out: interaction-a",
             1000L))
         .thenReturn(Uni.createFrom().voidItem());
 
     flow.sweepTimedOut(1000L, 100).await().indefinitely();
 
     InOrder order = inOrder(awaitCoordinator, segmentBoundaryLedger, executionStateStore);
-    order.verify(awaitCoordinator).markTimedOut(interaction, 1000L);
-    order.verify(segmentBoundaryLedger).recordInteractionTimedOut(interaction, 1000L);
+    order.verify(awaitCoordinator).markTimedOut(earlier, 1000L);
+    order.verify(segmentBoundaryLedger).recordInteractionTimedOut(earlier, 1000L);
     order.verify(executionStateStore).getExecution("tenant-1", "exec-1");
     order.verify(executionStateStore).markTerminalFailure(
         eq("tenant-1"),
@@ -88,13 +95,16 @@ class AwaitTimeoutFlowTest {
         eq(ExecutionStatus.FAILED),
         eq("exec-1:2:3"),
         eq("AWAIT_TIMEOUT"),
-        eq("Await interaction timed out: interaction-1"),
+        eq("Await interaction timed out: interaction-a"),
         anyLong());
     order.verify(segmentBoundaryLedger).recordRunFailed(
         failed,
         "AWAIT_TIMEOUT",
-        "Await interaction timed out: interaction-1",
+        "Await interaction timed out: interaction-a",
         1000L);
+    order.verify(awaitCoordinator).markTimedOut(later, 1000L);
+    order.verify(segmentBoundaryLedger).recordInteractionTimedOut(later, 1000L);
+    order.verify(executionStateStore).getExecution("tenant-1", "exec-1");
   }
 
   @Test
@@ -160,16 +170,24 @@ class AwaitTimeoutFlowTest {
   }
 
   private static AwaitInteractionRecord interaction(String unitId) {
+    return interaction(unitId, "interaction-1", "corr-1", 99999999L);
+  }
+
+  private static AwaitInteractionRecord interaction(
+      String unitId,
+      String interactionId,
+      String correlationId,
+      long deadlineEpochMs) {
     return new AwaitInteractionRecord(
         "tenant-1",
         "exec-1",
         "AwaitStep",
         2,
         String.class.getName(),
-        "interaction-1",
-        "corr-1",
-        "cause-1",
-        "idem-1",
+        interactionId,
+        correlationId,
+        "cause-" + interactionId,
+        "idem-" + interactionId,
         1L,
         AwaitInteractionStatus.DISPATCHED,
         "request",
@@ -181,7 +199,7 @@ class AwaitTimeoutFlowTest {
         null,
         "kafka",
         java.util.Map.of(),
-        1000L,
+        deadlineEpochMs,
         1L,
         1L,
         99999999L);

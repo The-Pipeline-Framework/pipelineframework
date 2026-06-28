@@ -29,10 +29,16 @@ class AwaitTimeoutFlow {
 
   Uni<Void> sweepTimedOut(long nowEpochMs, int limit) {
     return awaitCoordinator.findTimedOut(nowEpochMs, limit)
-        .onItem().transformToUni(records -> Multi.createFrom().iterable(records)
-            .onItem().transformToUniAndConcatenate(record -> admitTimeout(record, nowEpochMs))
-            .collect().asList()
-            .replaceWithVoid());
+        .onItem().transform(records -> TimedOutAwaitInteractionsPlan.from(records, limit))
+        .onItem().transformToUni(plan -> {
+          if (plan.empty()) {
+            return Uni.createFrom().voidItem();
+          }
+          return Multi.createFrom().iterable(plan.interactions())
+              .onItem().transformToUniAndConcatenate(record -> admitTimeout(record, nowEpochMs))
+              .collect().asList()
+              .replaceWithVoid();
+        });
   }
 
   private Uni<Void> admitTimeout(AwaitInteractionRecord interaction, long nowEpochMs) {

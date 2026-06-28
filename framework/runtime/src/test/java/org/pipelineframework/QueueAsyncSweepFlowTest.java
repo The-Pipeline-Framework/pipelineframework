@@ -60,8 +60,9 @@ class QueueAsyncSweepFlowTest {
   void sweepRunsTimeoutsThenEnqueuesEveryDueExecution() {
     when(awaitTimeoutFlow.sweepTimedOut(1000L, 100)).thenReturn(Uni.createFrom().voidItem());
     when(executionStateStore.findDueExecutions(1000L, 100)).thenReturn(Uni.createFrom().item(List.of(
-        record("tenant-a", "exec-a"),
-        record("tenant-b", "exec-b"))));
+        record("tenant-b", "exec-b", 20L),
+        record("tenant-b", "exec-a", 10L),
+        record("tenant-a", "exec-c", 10L))));
     when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
 
     flow.sweepOnce(1000L).await().indefinitely();
@@ -69,7 +70,8 @@ class QueueAsyncSweepFlowTest {
     InOrder order = inOrder(awaitTimeoutFlow, executionStateStore, workDispatcher);
     order.verify(awaitTimeoutFlow).sweepTimedOut(1000L, 100);
     order.verify(executionStateStore).findDueExecutions(1000L, 100);
-    order.verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-a", "exec-a"));
+    order.verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-a", "exec-c"));
+    order.verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-b", "exec-a"));
     order.verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-b", "exec-b"));
   }
 
@@ -115,6 +117,10 @@ class QueueAsyncSweepFlowTest {
   }
 
   private static ExecutionRecord<Object, Object> record(String tenantId, String executionId) {
+    return record(tenantId, executionId, 1L);
+  }
+
+  private static ExecutionRecord<Object, Object> record(String tenantId, String executionId, long nextDueEpochMs) {
     return new ExecutionRecord<>(
         tenantId,
         executionId,
@@ -126,7 +132,7 @@ class QueueAsyncSweepFlowTest {
         1,
         null,
         0L,
-        1L,
+        nextDueEpochMs,
         null,
         "input",
         null,
