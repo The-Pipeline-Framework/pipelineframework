@@ -8,7 +8,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
-import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.inject.Instance;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,7 +16,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.pipelineframework.orchestrator.ControlPlaneAdmissionException;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionRequest;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionOperation;
 import org.pipelineframework.orchestrator.ControlPlaneTransitionAdmission;
@@ -37,7 +35,6 @@ import org.pipelineframework.orchestrator.InMemoryExecutionStateStore;
 import org.pipelineframework.orchestrator.LoggingDeadLetterPublisher;
 import org.pipelineframework.orchestrator.OrchestratorIdempotencyPolicy;
 import org.pipelineframework.orchestrator.OrchestratorMode;
-import org.pipelineframework.orchestrator.PipelineReleaseIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
 import org.pipelineframework.orchestrator.LocalControlPlaneAdmissionPolicy;
@@ -52,7 +49,6 @@ import org.pipelineframework.orchestrator.DynamoExecutionStateStore;
 import org.pipelineframework.orchestrator.controlplane.BoundaryUnitStatus;
 import org.pipelineframework.orchestrator.controlplane.ControlPlaneProjection;
 import org.pipelineframework.orchestrator.controlplane.InMemoryControlPlaneJournal;
-import org.pipelineframework.orchestrator.controlplane.PipelineRunStatus;
 import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
@@ -74,7 +70,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -172,22 +168,22 @@ class QueueAsyncCoordinatorTest {
     }
 
     @Test
-    void executePipelineAsyncRequiresQueueMode() {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.SYNC);
+    void executePipelineAsyncDelegatesToSubmissionFlow() {
+        configureQueueModeDefaults();
+        when(executionStateStore.createOrGetExecution(any()))
+            .thenReturn(Uni.createFrom().item(new CreateExecutionResult(
+                createRecord("tenant-1", "exec-submit", "key-submit"),
+                true)));
 
-        Uni<?> result = coordinator.executePipelineAsync("input", "tenant-1", "idem-1", false);
+        coordinator.executePipelineAsync("input", "tenant-1", "client-key", false)
+            .await().indefinitely();
 
-        assertThrows(IllegalStateException.class, () -> result.await().indefinitely());
-    }
-
-    @Test
-    void executePipelineAsyncRejectsStreamingOutputFlagInQueueMode() {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-
-        Uni<?> result = coordinator.executePipelineAsync("input", "tenant-1", "idem-1", true);
-
-        IllegalStateException error = assertThrows(IllegalStateException.class, () -> result.await().indefinitely());
-        assertTrue(error.getMessage().contains("does not support streaming pipeline outputs"));
+        ArgumentCaptor<org.pipelineframework.orchestrator.ExecutionCreateCommand> captor =
+            ArgumentCaptor.forClass(org.pipelineframework.orchestrator.ExecutionCreateCommand.class);
+        verify(executionStateStore).createOrGetExecution(captor.capture());
+        assertEquals("local-pipeline", captor.getValue().pipelineId());
+        assertEquals("local-contract", captor.getValue().contractVersion());
+        assertEquals("local-contract", captor.getValue().releaseVersion());
     }
 
     @Test
@@ -204,6 +200,32 @@ class QueueAsyncCoordinatorTest {
 
         IllegalStateException error = assertThrows(IllegalStateException.class, coordinator::initializeQueueMode);
         assertTrue(error.getMessage().contains("ExecutionStateStore(dynamo)"));
+    }
+
+    @Test
+    void getExecutionStatusInitializesQueueProvidersBeforeCachingReadModel() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        coordinator.executionStateStore = null;
+        coordinator.workDispatcher = null;
+        coordinator.deadLetterPublisher = null;
+        when(executionStateStore.providerName()).thenReturn("memory");
+        when(workDispatcher.providerName()).thenReturn("memory");
+        when(deadLetterPublisher.providerName()).thenReturn("log");
+        when(executionStateStore.startupValidationError(orchestratorConfig)).thenReturn(Optional.empty());
+        when(workDispatcher.startupValidationError(orchestratorConfig)).thenReturn(Optional.empty());
+        when(deadLetterPublisher.startupValidationError(orchestratorConfig)).thenReturn(Optional.empty());
+        when(executionStateStores.stream()).thenReturn(Stream.of(executionStateStore));
+        when(workDispatchers.stream()).thenReturn(Stream.of(workDispatcher));
+        when(deadLetterPublishers.stream()).thenReturn(Stream.of(deadLetterPublisher));
+        ExecutionRecord<Object, Object> record = createRecord("tenant-1", "exec-1", "key-1");
+        when(executionStateStore.getExecution("tenant-1", "exec-1"))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+
+        ExecutionStatusDto dto = coordinator.getExecutionStatus("tenant-1", "exec-1").await().indefinitely();
+
+        assertEquals("exec-1", dto.executionId());
+        assertSame(executionStateStore, coordinator.executionStateStore);
+        assertSame(workDispatcher, coordinator.workDispatcher);
     }
 
     @Test
@@ -337,125 +359,29 @@ class QueueAsyncCoordinatorTest {
     }
 
     @Test
-    void executePipelineAsyncPersistsUniInputShapeForPlainArrayPayload() {
+    void executePipelineAsyncExplicitIdentityOverloadDelegatesToSubmissionFlow() {
         configureQueueModeDefaults();
         when(executionStateStore.createOrGetExecution(any()))
             .thenReturn(Uni.createFrom().item(new CreateExecutionResult(
-                createRecord("tenant-1", "exec-uni", "key-uni"),
+                createRecord("tenant-1", "exec-explicit", "key-explicit"),
                 true)));
 
-        coordinator.executePipelineAsync(java.util.List.of("a", "b"), "tenant-1", null, false)
+        coordinator.executePipelineAsync(
+                "input",
+                "tenant-1",
+                "client-key",
+                false,
+                "pipeline-explicit",
+                "contract-explicit",
+                "release-explicit")
             .await().indefinitely();
 
         ArgumentCaptor<org.pipelineframework.orchestrator.ExecutionCreateCommand> captor =
             ArgumentCaptor.forClass(org.pipelineframework.orchestrator.ExecutionCreateCommand.class);
         verify(executionStateStore).createOrGetExecution(captor.capture());
-        Object persisted = captor.getValue().inputPayload();
-        assertTrue(persisted instanceof ExecutionInputSnapshot);
-        ExecutionInputSnapshot snapshot = (ExecutionInputSnapshot) persisted;
-        assertEquals(ExecutionInputShape.UNI, snapshot.shape());
-        assertEquals(java.util.List.of("a", "b"), snapshot.payload());
-        assertEquals(ExecutionResultShape.SINGLE, captor.getValue().resultShape());
-    }
-
-    @Test
-    void executePipelineAsyncAppendsRunSubmittedForNewExecution() {
-        configureQueueModeDefaults();
-        InMemoryControlPlaneJournal journal = new InMemoryControlPlaneJournal();
-        coordinator.segmentBoundaryLedger = new SegmentBoundaryLedger(journal);
-        ExecutionRecord<Object, Object> record = createRecord("tenant-1", "exec-ledger", "key-ledger");
-        when(executionStateStore.createOrGetExecution(any()))
-            .thenReturn(Uni.createFrom().item(new CreateExecutionResult(record, false)));
-        when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
-
-        coordinator.executePipelineAsync("input", "tenant-1", null, false).await().indefinitely();
-
-        ControlPlaneProjection projection = journal.projection("tenant-1", "exec-ledger").await().indefinitely();
-        assertEquals(PipelineRunStatus.ACCEPTED, projection.status());
-        assertTrue(projection.factKeys().contains("run-submitted:tenant-1:exec-ledger"));
-    }
-
-    @Test
-    void executePipelineAsyncRejectsDeniedTenantBeforeStoreAccess() {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        PipelineOrchestratorConfig.TenancyConfig tenancy = mock(PipelineOrchestratorConfig.TenancyConfig.class);
-        when(orchestratorConfig.tenancy()).thenReturn(tenancy);
-        when(tenancy.allowedTenants()).thenReturn(List.of("tenant-allowed"));
-        when(tenancy.requireExplicitTenant()).thenReturn(false);
-        coordinator.controlPlaneAdmissionPolicy = new LocalControlPlaneAdmissionPolicy(orchestratorConfig);
-
-        Uni<?> result = coordinator.executePipelineAsync("input", "tenant-denied", null, false);
-
-        ControlPlaneAdmissionException error = assertThrows(
-            ControlPlaneAdmissionException.class,
-            () -> result.await().indefinitely());
-        assertTrue(error.getMessage().contains("TENANT_NOT_ALLOWED"));
-        verify(executionStateStore, never()).createOrGetExecution(any());
-    }
-
-    @Test
-    void executePipelineAsyncPersistsMultiInputShapeForStreamingPayload() {
-        configureQueueModeDefaults();
-        when(executionStateStore.createOrGetExecution(any()))
-            .thenReturn(Uni.createFrom().item(new CreateExecutionResult(
-                createRecord("tenant-1", "exec-multi", "key-multi", ExecutionResultShape.MATERIALIZED_MULTI),
-                true)));
-
-        coordinator.executePipelineAsync(Multi.createFrom().items("x", "y"), "tenant-1", null, false)
-            .await().indefinitely();
-
-        ArgumentCaptor<org.pipelineframework.orchestrator.ExecutionCreateCommand> captor =
-            ArgumentCaptor.forClass(org.pipelineframework.orchestrator.ExecutionCreateCommand.class);
-        verify(executionStateStore).createOrGetExecution(captor.capture());
-        Object persisted = captor.getValue().inputPayload();
-        assertTrue(persisted instanceof ExecutionInputSnapshot);
-        ExecutionInputSnapshot snapshot = (ExecutionInputSnapshot) persisted;
-        assertEquals(ExecutionInputShape.MULTI, snapshot.shape());
-        assertEquals(java.util.List.of("x", "y"), snapshot.payload());
-    }
-
-    @Test
-    void executePipelineAsyncPersistsResolvedMaterializedMultiResultShape() {
-        configureQueueModeDefaults();
-        when(executionResultShapeResolver.resolve()).thenReturn(ExecutionResultShape.MATERIALIZED_MULTI);
-        when(executionStateStore.createOrGetExecution(any()))
-            .thenReturn(Uni.createFrom().item(new CreateExecutionResult(
-                createRecord("tenant-1", "exec-resolved", "key-resolved", ExecutionResultShape.MATERIALIZED_MULTI),
-                true)));
-
-        coordinator.executePipelineAsync("input", "tenant-1", null, false)
-            .await().indefinitely();
-
-        ArgumentCaptor<org.pipelineframework.orchestrator.ExecutionCreateCommand> captor =
-            ArgumentCaptor.forClass(org.pipelineframework.orchestrator.ExecutionCreateCommand.class);
-        verify(executionStateStore).createOrGetExecution(captor.capture());
-        assertEquals(ExecutionResultShape.MATERIALIZED_MULTI, captor.getValue().resultShape());
-    }
-
-    @Test
-    void executePipelineAsyncScopesIdempotencyKeyByPipelineAndRelease() {
-        configureQueueModeDefaults();
-        PipelineReleaseIdentityResolver identityResolver = mock(PipelineReleaseIdentityResolver.class);
-        coordinator.releaseIdentityResolver = identityResolver;
-        when(identityResolver.pipelineId(orchestratorConfig)).thenReturn("pipeline-a", "pipeline-b");
-        when(identityResolver.contractVersion()).thenReturn("contract-1", "contract-1");
-        when(identityResolver.releaseVersion(orchestratorConfig)).thenReturn("release-1", "release-1");
-        when(executionStateStore.createOrGetExecution(any()))
-            .thenReturn(
-                Uni.createFrom().item(new CreateExecutionResult(createRecord("tenant-1", "exec-a", "key-a"), false)),
-                Uni.createFrom().item(new CreateExecutionResult(createRecord("tenant-1", "exec-b", "key-b"), false)));
-        when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
-
-        coordinator.executePipelineAsync("input", "tenant-1", "client-key", false).await().indefinitely();
-        coordinator.executePipelineAsync("input", "tenant-1", "client-key", false).await().indefinitely();
-
-        ArgumentCaptor<org.pipelineframework.orchestrator.ExecutionCreateCommand> captor =
-            ArgumentCaptor.forClass(org.pipelineframework.orchestrator.ExecutionCreateCommand.class);
-        verify(executionStateStore, org.mockito.Mockito.times(2)).createOrGetExecution(captor.capture());
-        List<org.pipelineframework.orchestrator.ExecutionCreateCommand> commands = captor.getAllValues();
-        assertEquals("pipeline-a", commands.get(0).pipelineId());
-        assertEquals("pipeline-b", commands.get(1).pipelineId());
-        assertNotEquals(commands.get(0).executionKey(), commands.get(1).executionKey());
+        assertEquals("pipeline-explicit", captor.getValue().pipelineId());
+        assertEquals("contract-explicit", captor.getValue().contractVersion());
+        assertEquals("release-explicit", captor.getValue().releaseVersion());
     }
 
     @Test
@@ -1080,54 +1006,39 @@ class QueueAsyncCoordinatorTest {
     }
 
     @Test
-    void getExecutionResultReturnsStoredListForMaterializedMulti() {
+    void getExecutionResultDelegatesToReadModel() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        when(executionStateStore.getExecution("tenant-1", "exec-multi"))
+        when(executionStateStore.getExecution("tenant-1", "exec-single"))
             .thenReturn(Uni.createFrom().item(Optional.of(succeededRecord(
                 "tenant-1",
-                "exec-multi",
-                "key-multi",
-                ExecutionResultShape.MATERIALIZED_MULTI,
-                List.of("a", "b")))));
+                "exec-single",
+                "key-single",
+                ExecutionResultShape.SINGLE,
+                List.of("value")))));
 
-        Object result = coordinator.getExecutionResult("tenant-1", "exec-multi", String.class, true)
+        Object result = coordinator.getExecutionResult("tenant-1", "exec-single", String.class, false)
             .await().indefinitely();
 
-        assertEquals(List.of("a", "b"), result);
+        assertEquals("value", result);
+        verify(executionStateStore).getExecution("tenant-1", "exec-single");
     }
 
     @Test
-    void getExecutionResultRejectsUnaryRetrievalForMaterializedMulti() {
+    void getExecutionResultPayloadDelegatesToReadModel() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        when(executionStateStore.getExecution("tenant-1", "exec-multi"))
+        when(executionStateStore.getExecution("tenant-1", "exec-payload"))
             .thenReturn(Uni.createFrom().item(Optional.of(succeededRecord(
                 "tenant-1",
-                "exec-multi",
-                "key-multi",
-                ExecutionResultShape.MATERIALIZED_MULTI,
-                List.of("a", "b")))));
-
-        IllegalStateException error = assertThrows(IllegalStateException.class, () ->
-            coordinator.getExecutionResult("tenant-1", "exec-multi", String.class, false).await().indefinitely());
-
-        assertTrue(error.getMessage().contains("materialized multi result"));
-    }
-
-    @Test
-    void getExecutionResultRejectsCorruptSingleResultList() {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        when(executionStateStore.getExecution("tenant-1", "exec-corrupt"))
-            .thenReturn(Uni.createFrom().item(Optional.of(succeededRecord(
-                "tenant-1",
-                "exec-corrupt",
-                "key-corrupt",
+                "exec-payload",
+                "key-payload",
                 ExecutionResultShape.SINGLE,
-                List.of("a", "b")))));
+                List.of("raw")))));
 
-        IllegalStateException error = assertThrows(IllegalStateException.class, () ->
-            coordinator.getExecutionResult("tenant-1", "exec-corrupt", String.class, false).await().indefinitely());
+        Object result = coordinator.getExecutionResultPayload("tenant-1", "exec-payload")
+            .await().indefinitely();
 
-        assertTrue(error.getMessage().contains("multiple terminal items"));
+        assertEquals("raw", result);
+        verify(executionStateStore).getExecution("tenant-1", "exec-payload");
     }
 
     @Test
