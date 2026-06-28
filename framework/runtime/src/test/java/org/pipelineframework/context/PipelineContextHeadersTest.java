@@ -1,6 +1,10 @@
 package org.pipelineframework.context;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.runtime.core.TpfContextHeaders;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -19,6 +23,23 @@ class PipelineContextHeadersTest {
     @Test
     void cachePolicyHeaderConstantIsCorrect() {
         assertEquals("x-pipeline-cache-policy", PipelineContextHeaders.CACHE_POLICY);
+    }
+
+    @Test
+    void frameworkNeutralHeadersDelegateToRuntimeCoreConstants() {
+        assertEquals(TpfContextHeaders.VERSION, PipelineContextHeaders.VERSION);
+        assertEquals(TpfContextHeaders.REPLAY, PipelineContextHeaders.REPLAY);
+        assertEquals(TpfContextHeaders.CACHE_POLICY, PipelineContextHeaders.CACHE_POLICY);
+    }
+
+    @Test
+    void frameworkNeutralHeadersAreSourcedFromRuntimeCoreConstants() throws Exception {
+        String source = Files.readString(
+            Path.of("src/main/java/org/pipelineframework/context/PipelineContextHeaders.java"));
+
+        assertTrue(source.contains("public static final String VERSION = TpfContextHeaders.VERSION;"));
+        assertTrue(source.contains("public static final String REPLAY = TpfContextHeaders.REPLAY;"));
+        assertTrue(source.contains("public static final String CACHE_POLICY = TpfContextHeaders.CACHE_POLICY;"));
     }
 
     @Test

@@ -65,7 +65,10 @@ class SpringRestClientStepRendererTest {
         String source = Files.readString(clientStep);
         assertTrue(source.contains("import java.util.concurrent.CompletionStage;"));
         assertTrue(source.contains("import org.pipelineframework.runtime.core.PipelineUnaryStep;"));
+        assertTrue(source.contains("import org.pipelineframework.runtime.core.TpfContextHeaders;"));
+        assertTrue(source.contains("import org.pipelineframework.runtime.core.TpfExecutionContext;"));
         assertTrue(source.contains("import org.springframework.core.env.Environment;"));
+        assertTrue(source.contains("import org.springframework.http.HttpHeaders;"));
         assertTrue(source.contains("import org.springframework.stereotype.Component;"));
         assertTrue(source.contains("import org.springframework.web.reactive.function.client.WebClient;"));
         assertTrue(source.contains("@Component"));
@@ -79,6 +82,7 @@ class SpringRestClientStepRendererTest {
         assertTrue(source.contains("Mapper<PaymentStatus, PaymentStatusDto> outboundMapper)"));
         assertTrue(source.contains("this.webClient = webClientBuilder.build();"));
         assertTrue(source.contains("PaymentRecordDto inputDto = this.inboundMapper.toExternal(input);"));
+        assertTrue(source.contains(".headers(this::applyTpfHeaders)"));
         assertTrue(source.contains(".bodyToMono(PaymentStatusDto.class)"));
         assertTrue(source.contains(".switchIfEmpty(Mono.error(new IllegalStateException(\"REST client step received an empty response body\")))"));
         assertTrue(source.contains(".map(this.outboundMapper::fromExternal)"));
@@ -88,6 +92,10 @@ class SpringRestClientStepRendererTest {
         assertTrue(source.contains("environment.getProperty(\"tpf.rest-client.payment.url\")"));
         assertTrue(source.contains("Missing required Spring REST client URL property 'tpf.rest-client.payment.url'"));
         assertTrue(source.contains("return normalizeBaseUrl(baseUrl) + \"/payments/\";"));
+        assertTrue(source.contains("private void applyTpfHeaders(HttpHeaders headers)"));
+        assertTrue(source.contains("TpfExecutionContext.versionTag().ifPresent(value -> headers.set(TpfContextHeaders.VERSION, value));"));
+        assertTrue(source.contains("TpfExecutionContext.replayMode().ifPresent(value -> headers.set(TpfContextHeaders.REPLAY, value));"));
+        assertTrue(source.contains("TpfExecutionContext.cachePolicy().ifPresent(value -> headers.set(TpfContextHeaders.CACHE_POLICY, value));"));
         assertFalse(source.contains("io.quarkus."));
         assertFalse(source.contains("io.smallrye.mutiny"));
         assertFalse(source.contains("jakarta.enterprise."));
@@ -207,10 +215,20 @@ class SpringRestClientStepRendererTest {
                 String getProperty(String key);
             }
             """);
+        writeSource("org/springframework/http/HttpHeaders.java",
+            """
+            package org.springframework.http;
+            public class HttpHeaders {
+                public void set(String name, String value) {
+                }
+            }
+            """);
         writeSource("org/springframework/web/reactive/function/client/WebClient.java",
             """
             package org.springframework.web.reactive.function.client;
+            import java.util.function.Consumer;
             import reactor.core.publisher.Mono;
+            import org.springframework.http.HttpHeaders;
             public class WebClient {
                 public interface Builder {
                     WebClient build();
@@ -222,6 +240,7 @@ class SpringRestClientStepRendererTest {
                     RequestBodySpec uri(String uri);
                 }
                 public interface RequestBodySpec {
+                    RequestBodySpec headers(Consumer<HttpHeaders> headersConsumer);
                     RequestHeadersSpec bodyValue(Object body);
                 }
                 public interface RequestHeadersSpec {

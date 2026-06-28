@@ -146,11 +146,31 @@ public class SpringRestResourceRenderer implements PipelineRenderer<RestBinding>
             .addParameter(ParameterSpec.builder(inputDtoType, "inputDto")
                 .addAnnotation(ClassName.get("org.springframework.web.bind.annotation", "RequestBody"))
                 .build())
+            .addParameter(headerParameter("VERSION", "tpfVersionTag"))
+            .addParameter(headerParameter("REPLAY", "tpfReplayMode"))
+            .addParameter(headerParameter("CACHE_POLICY", "tpfCachePolicy"))
+            .beginControlFlow("return $T.defer(() ->", ClassName.get("reactor.core.publisher", "Mono"))
+            .beginControlFlow("try ($T tpfContextScope = $T.withHeaders(tpfVersionTag, tpfReplayMode, tpfCachePolicy))",
+                ClassName.get("org.pipelineframework.runtime.core", "TpfExecutionContext", "Scope"),
+                ClassName.get("org.pipelineframework.runtime.core", "TpfExecutionContext"))
             .addStatement("$T inputDomain = this.inboundMapper.fromExternal(inputDto)", inputDomainType)
             .addStatement("return $T.fromCompletionStage(this.pipelineRunner.run(inputDomain))\n"
                     + ".map(output -> this.outboundMapper.toExternal(($T) output))",
                 ClassName.get("reactor.core.publisher", "Mono"),
                 outputDomainType)
+            .endControlFlow()
+            .endControlFlow(")")
+            .build();
+    }
+
+    private ParameterSpec headerParameter(String headerConstant, String parameterName) {
+        return ParameterSpec.builder(String.class, parameterName)
+            .addAnnotation(AnnotationSpec.builder(ClassName.get("org.springframework.web.bind.annotation", "RequestHeader"))
+                .addMember("name", "$T.$L",
+                    ClassName.get("org.pipelineframework.runtime.core", "TpfContextHeaders"),
+                    headerConstant)
+                .addMember("required", "$L", false)
+                .build())
             .build();
     }
 

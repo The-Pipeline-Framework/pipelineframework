@@ -17,6 +17,7 @@
 package org.pipelineframework.runtime.spring;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.runtime.core.PipelineUnaryStep;
 import org.pipelineframework.runtime.core.RuntimeAdapters;
+import org.pipelineframework.runtime.core.TpfExecutionContext;
 import reactor.core.publisher.Mono;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -84,6 +86,26 @@ class SpringRuntimeAdaptersAutoConfigurationTest {
 
             RuntimeAdapters.clearExecutionContext("tenant");
             assertNull(RuntimeAdapters.executionContext("tenant", String.class));
+        });
+    }
+
+    @Test
+    void executionContextCarrierSupportsTpfHeaderContext() {
+        contextRunner.withUserConfiguration(HeaderReadingServiceConfig.class).run(context -> {
+            try (TpfExecutionContext.Scope ignored = TpfExecutionContext.withHeaders(
+                    " version-1 ", " replay ", " require-cache ")) {
+                assertEquals("version-1", TpfExecutionContext.versionTag().orElseThrow());
+                assertEquals("replay", TpfExecutionContext.replayMode().orElseThrow());
+                assertEquals("require-cache", TpfExecutionContext.cachePolicy().orElseThrow());
+                HeaderReadingService service = RuntimeAdapters.resolveBean(HeaderReadingService.class).orElseThrow();
+                assertEquals("version-1", service.versionTag().orElseThrow());
+                assertEquals("replay", service.replayMode().orElseThrow());
+                assertEquals("require-cache", service.cachePolicy().orElseThrow());
+            }
+
+            assertTrue(TpfExecutionContext.versionTag().isEmpty());
+            assertTrue(TpfExecutionContext.replayMode().isEmpty());
+            assertTrue(TpfExecutionContext.cachePolicy().isEmpty());
         });
     }
 
@@ -249,6 +271,28 @@ class SpringRuntimeAdaptersAutoConfigurationTest {
         @Bean
         SampleService secondService() {
             return new SampleService("second");
+        }
+    }
+
+    static class HeaderReadingService {
+        Optional<String> versionTag() {
+            return TpfExecutionContext.versionTag();
+        }
+
+        Optional<String> replayMode() {
+            return TpfExecutionContext.replayMode();
+        }
+
+        Optional<String> cachePolicy() {
+            return TpfExecutionContext.cachePolicy();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class HeaderReadingServiceConfig {
+        @Bean
+        HeaderReadingService headerReadingService() {
+            return new HeaderReadingService();
         }
     }
 
