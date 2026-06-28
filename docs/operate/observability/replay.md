@@ -115,6 +115,35 @@ Connector replay events include:
 
 Use these events to debug a single object key or output object. Use `tpf.object_ingest.*`, `tpf.object_publish.*`, and `tpf.await.*` metrics to alert on aggregate health.
 
+## CSV Payments Built-In Proof
+
+The built-in CSV Payments replay is a captured proof run, not a benchmark promise. It is useful because it shows the intended connector-first shape and the timing relationship between parser dispatch, await completions, status processing, and Object Publish.
+
+The current dataset was captured with:
+
+| Field | Value |
+| --- | --- |
+| Input records | `1000` |
+| Payment provider permits | `250/s` |
+| Replay duration | `13.426s` |
+| Effective throughput | `74.5 records/s` |
+| Replay events | `12007` |
+| Output checksum | `a29a39ea8ac078bfaff3d53236eefd8020922bfd89266f77ca3ed3826794e784` |
+
+Key timing checks:
+
+| Signal | Time from start |
+| --- | --- |
+| First `Process Payment Status` event | `1.575s` |
+| Last input parser event | `8.243s` |
+| Last await dispatch | `11.320s` |
+| Last await completion | `13.400s` |
+| Object Publish | `13.416s` - `13.426s` |
+
+The important operational signal is the overlap: status processing starts before the parser has finished and before all await completions have arrived. That means the parser is being paced by reactive demand and the await in-flight window, not by a forced sleep. Object Publish runs at the terminal boundary after status output exists and before success is committed.
+
+The repo proof also runs a 10k monolith lane with the same connector-first path. In the captured run, 10k records completed in `80s` of pipeline time with 10k output records and output checksum `cf8996e7d593202dd6f9f9405b82e95e69d48544c3edec830f64afabc703a023`.
+
 Command telemetry has two layers:
 
 1. the pipeline layer, where the command appears in `tpf.step` spans, step metrics, and replay topology like other authored steps;

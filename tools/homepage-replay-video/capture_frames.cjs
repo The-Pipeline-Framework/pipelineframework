@@ -94,12 +94,18 @@ async function main() {
     fs.mkdirSync(args.framesDir, { recursive: true });
     fs.mkdirSync(path.dirname(args.poster), { recursive: true });
 
-    await page.evaluate(() => window.homepageReplayCinematic.renderFrame(0.58));
+    await page.evaluate(async () => {
+      window.homepageReplayCinematic.renderFrame(0.58);
+      await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    });
     await captureRoot.screenshot({ path: args.poster, type: "jpeg", quality: 90 });
 
     for (let frame = 0; frame < totalFrames; frame += 1) {
       const progress = totalFrames <= 1 ? 0 : frame / (totalFrames - 1);
-      await page.evaluate((value) => window.homepageReplayCinematic.renderFrame(value), progress);
+      await page.evaluate(async (value) => {
+        window.homepageReplayCinematic.renderFrame(value);
+        await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+      }, progress);
       const framePath = path.join(args.framesDir, `frame_${String(frame + 1).padStart(4, "0")}.png`);
       await captureRoot.screenshot({ path: framePath, type: "png" });
     }

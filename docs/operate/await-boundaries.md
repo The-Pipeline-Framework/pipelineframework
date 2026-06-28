@@ -103,6 +103,62 @@ Replay and trace events expose the lifecycle of the await unit:
 
 Use these events to separate runtime behavior from viewer interpretation. For example, in `csv-payments`, `Await Payment Provider` is `ONE_TO_ONE` over a stream, so item completions should appear as provider responses are admitted. The replay viewer should show those real lifecycle events rather than inventing smoothed timing.
 
+## Troubleshooting Runbook
+
+### Parser Appears To Race Ahead
+
+In a healthy connector-first stream, the parser can be ahead of the provider, but it should not blast the whole source before downstream work starts. Compare replay times:
+
+1. first parser `emit`,
+2. first await dispatch,
+3. first downstream step start,
+4. last parser event,
+5. last await completion.
+
+If downstream status processing starts while parser and await dispatch are still active, the live path is working. If every parser event happens before the first downstream event, check `pipeline.max-concurrency`, step buffer metrics, and whether the await step is running through the live brokered path or durable fallback only.
+
+### Await Stays Hot Or Red In Replay
+
+Treat await heat as a question about where time is spent:
+
+1. If dispatch finishes quickly but completions arrive slowly, inspect provider permits, provider latency, and broker lag.
+2. If completions arrive but downstream steps do not start, inspect live-session demand and durable fallback metrics such as `tpf.await.completion.early_held.total` and `tpf.await.resume.released.total`.
+3. If `await_resume_released` is low but downstream steps are running, that can be normal live-path behavior. Live handoff is visible through downstream step events, not through a durable release event per item.
+
+### Completions Lag
+
+Check the provider and broker before tuning TPF:
+
+1. provider-side rate limit or permits,
+2. request topic/queue publish latency,
+3. response topic/queue consumer lag,
+4. completion admission drops or duplicate completions.
+
+The await store is the idempotency point, but it is not the external provider backlog. Use provider-native and broker-native dashboards for backlog age.
+
+### Object Publish Drips Slowly
+
+Object Publish is the terminal output boundary. It should start after terminal step output exists and must finish before execution success. If it appears slow:
+
+1. compare `object_publish_grouped` and `object_publish_published` replay events,
+2. check target provider write duration and bytes published,
+3. check whether the terminal step is still producing output slowly,
+4. verify `grouping.maxOpenGroups` is intentional for the input shape.
+
+For CSV Payments, `grouping.maxOpenGroups: 1` is expected because Object Ingest admits one source object per execution.
+
+### Kafka Topic Warnings
+
+Short-lived local stacks can log transient `UNKNOWN_TOPIC_OR_PARTITION` warnings while topics are being created or containers are starting. Treat them as benign only if the consumer later joins, requests are dispatched, completions are admitted, and the run finishes. Persistent warnings mean the topic/bootstrap configuration or startup ordering is wrong.
+
+### Stale Runtime Or Packaged Classes
+
+If local behavior disagrees with source changes, rebuild with a worktree-local Maven cache and clear corrupted image/layer cache only when the build reports cache extraction errors. For CSV Payments, rebuild the selected layout before rerunning E2E so generated classes and packaged `org.pipelineframework` artifacts match the branch under test.
+
+### Journal Or Index Misconfiguration
+
+When the control-plane journal is enabled, due-work and timeout behavior depend on journal writes and indexes as well as the existing projections. If executions stop sweeping or timeouts do not fire, verify journal append success, projection version conflicts, due-work index configuration, and timeout index configuration before redriving executions.
+
 ## Aggregate Limits
 
 `ONE_TO_ONE` over a stream is itemized. Aggregate await shapes materialize input and/or output units in the current runtime:

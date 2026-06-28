@@ -8,9 +8,10 @@
     "sourceReplay": "tools/replay-viewer/datasets/csv-payments-built-in.json",
     "outputFile": "examples/csv-payments/orchestrator-svc/target/test-e2e/payments_1k.csv.out",
     "itemCount": 1000,
-    "wallTimeSeconds": 15.037,
-    "throughputItemsPerSecond": 66.503,
+    "wallTimeSeconds": 13.426,
+    "throughputItemsPerSecond": 74.482,
     "replayEventCount": 12007,
+    "replayDurationMs": 13426,
     "replayEventCounts": {
       "object_ingest_listed": 1,
       "object_ingest_submitted": 1,
@@ -32,12 +33,57 @@
       "PersistencePaymentOutputSideEffect": 3000,
       "ObjectPublish": 2
     },
-    "outputSha256": "f9d07671235c39006938ab72e959403cf10f48959e0b4600c751f4dd306e4ddc",
+    "outputSha256": "a29a39ea8ac078bfaff3d53236eefd8020922bfd89266f77ca3ed3826794e784",
     "liveAwait": {
       "firstStatusBeforeDispatchComplete": true,
+      "firstStatusBeforeAllAwaitCompletions": true,
+      "firstPublishAfterLastStatus": true,
       "awaitExecutionWaitingEvents": 0,
       "objectPublishGroupedEvents": 1,
       "objectPublishPublishedEvents": 1
+    },
+    "timing": {
+      "firstInputSeconds": 0.19807075000000002,
+      "lastInputSeconds": 8.243330042,
+      "firstAwaitDispatchSeconds": 1.257546,
+      "lastAwaitDispatchSeconds": 11.320125,
+      "firstAwaitCompletionSeconds": 1.55874,
+      "lastAwaitCompletionSeconds": 13.400011,
+      "firstStatusSeconds": 1.574662292,
+      "lastStatusSeconds": 13.40859525,
+      "firstPublishSeconds": 13.416315,
+      "lastPublishSeconds": 13.425913
+    }
+  },
+  "proofRuns": {
+    "monolith1k": {
+      "inputFile": "examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv",
+      "providerPermitsPerSecond": 250,
+      "pipelineSeconds": 9,
+      "mavenWallSeconds": 124.93,
+      "outputRecords": 1000,
+      "databaseRecords": 1000,
+      "demandPacerOverrides": false
+    },
+    "monolith10k": {
+      "inputFile": "examples/csv-payments/input-csv-file-processing-svc/csv/payments_10k.csv",
+      "providerPermitsPerSecond": 250,
+      "pipelineSeconds": 80,
+      "mavenWallSeconds": 200.11,
+      "outputRecords": 10000,
+      "databaseRecords": 10000,
+      "outputSha256": "cf8996e7d593202dd6f9f9405b82e95e69d48544c3edec830f64afabc703a023",
+      "demandPacerOverrides": false
+    },
+    "modularTelemetry1k": {
+      "inputFile": "examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv",
+      "providerPermitsPerSecond": 250,
+      "pipelineSeconds": 13,
+      "replayDurationSeconds": 13.426,
+      "mavenWallSeconds": 90.06,
+      "outputRecords": 1000,
+      "databaseRecords": 1000,
+      "demandPacerOverrides": false
     }
   },
   "comparisonRuns": [
@@ -46,9 +92,10 @@
       "sourceReplay": "tools/replay-viewer/datasets/csv-payments-built-in.json",
       "outputFile": "examples/csv-payments/orchestrator-svc/target/test-e2e/payments_1k.csv.out",
       "itemCount": 1000,
-      "wallTimeSeconds": 15.037,
-      "throughputItemsPerSecond": 66.503,
+      "wallTimeSeconds": 13.426,
+      "throughputItemsPerSecond": 74.482,
       "replayEventCount": 12007,
+      "replayDurationMs": 13426,
       "replayEventCounts": {
         "object_ingest_listed": 1,
         "object_ingest_submitted": 1,
@@ -70,12 +117,26 @@
         "PersistencePaymentOutputSideEffect": 3000,
         "ObjectPublish": 2
       },
-      "outputSha256": "f9d07671235c39006938ab72e959403cf10f48959e0b4600c751f4dd306e4ddc",
+      "outputSha256": "a29a39ea8ac078bfaff3d53236eefd8020922bfd89266f77ca3ed3826794e784",
       "liveAwait": {
         "firstStatusBeforeDispatchComplete": true,
+        "firstStatusBeforeAllAwaitCompletions": true,
+        "firstPublishAfterLastStatus": true,
         "awaitExecutionWaitingEvents": 0,
         "objectPublishGroupedEvents": 1,
         "objectPublishPublishedEvents": 1
+      },
+      "timing": {
+        "firstInputSeconds": 0.19807075000000002,
+        "lastInputSeconds": 8.243330042,
+        "firstAwaitDispatchSeconds": 1.257546,
+        "lastAwaitDispatchSeconds": 11.320125,
+        "firstAwaitCompletionSeconds": 1.55874,
+        "lastAwaitCompletionSeconds": 13.400011,
+        "firstStatusSeconds": 1.574662292,
+        "lastStatusSeconds": 13.40859525,
+        "firstPublishSeconds": 13.416315,
+        "lastPublishSeconds": 13.425913
       }
     }
   ]
