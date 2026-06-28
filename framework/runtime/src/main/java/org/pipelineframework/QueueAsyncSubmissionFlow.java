@@ -3,6 +3,7 @@ package org.pipelineframework;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 import io.smallrye.mutiny.Uni;
@@ -85,9 +86,9 @@ class QueueAsyncSubmissionFlow {
       String contractVersion,
       String releaseVersion) {
     return Uni.createFrom().deferred(() -> {
-      RuntimeException guardFailure = guardSubmission(outputStreaming);
-      if (guardFailure != null) {
-        return Uni.createFrom().failure(guardFailure);
+      Optional<RuntimeException> guardFailure = guardSubmission(outputStreaming);
+      if (guardFailure.isPresent()) {
+        return Uni.createFrom().failure(guardFailure.get());
       }
       Object executionInput = executionInputPolicy.normalizeExecutionInput(input);
       RuntimeException inputFailure = executionInputPolicy.validateInputShape(executionInput);
@@ -102,9 +103,9 @@ class QueueAsyncSubmissionFlow {
           releaseVersion,
           idempotencyKey,
           outputStreaming);
-      RuntimeException admissionFailure = admissionFailure(submission);
-      if (admissionFailure != null) {
-        return Uni.createFrom().failure(admissionFailure);
+      Optional<RuntimeException> admissionFailure = admissionFailure(submission);
+      if (admissionFailure.isPresent()) {
+        return Uni.createFrom().failure(admissionFailure.get());
       }
       long now = System.currentTimeMillis();
       long ttlEpochS = ttlEpochS(now);
@@ -116,16 +117,16 @@ class QueueAsyncSubmissionFlow {
     });
   }
 
-  private RuntimeException guardSubmission(boolean outputStreaming) {
+  private Optional<RuntimeException> guardSubmission(boolean outputStreaming) {
     if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
-      return new IllegalStateException(
-          "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC.");
+      return Optional.of(new IllegalStateException(
+          "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
     }
     if (outputStreaming) {
-      return new IllegalStateException(
-          "Async queue mode does not support streaming pipeline outputs yet.");
+      return Optional.of(new IllegalStateException(
+          "Async queue mode does not support streaming pipeline outputs yet."));
     }
-    return null;
+    return Optional.empty();
   }
 
   private Uni<PipelineRunSubmissionPlan> createPlan(
@@ -173,9 +174,11 @@ class QueueAsyncSubmissionFlow {
         .onItem().transform(ignored -> new RunAcceptance(created, now).toDto());
   }
 
-  private RuntimeException admissionFailure(PipelineRunSubmission submission) {
+  private Optional<RuntimeException> admissionFailure(PipelineRunSubmission submission) {
     ControlPlaneAdmissionDecision decision = admissionPolicy.admit(submission.admissionRequest());
-    return decision.allowed() ? null : new ControlPlaneAdmissionException(decision);
+    return decision.allowed()
+        ? Optional.empty()
+        : Optional.of(new ControlPlaneAdmissionException(decision));
   }
 
   private long ttlEpochS(long nowEpochMs) {

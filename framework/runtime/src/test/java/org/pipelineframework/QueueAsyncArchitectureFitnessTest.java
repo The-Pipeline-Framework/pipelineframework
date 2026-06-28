@@ -129,11 +129,12 @@ class QueueAsyncArchitectureFitnessTest {
 
   private static void assertOnlyFileCalls(String invocation, String allowedType) throws IOException {
     Path packageRoot = sourceRoot().resolve("org/pipelineframework");
-    try (var files = Files.list(packageRoot)) {
+    try (var files = Files.walk(packageRoot)) {
       List<Path> offenders = files
+          .filter(Files::isRegularFile)
           .filter(path -> path.getFileName().toString().endsWith(".java"))
           .filter(path -> !path.getFileName().toString().equals(allowedType + ".java"))
-          .filter(path -> contains(path, invocation + "("))
+          .filter(path -> contains(path, "." + invocation + "("))
           .toList();
       assertTrue(offenders.isEmpty(), () -> invocation + " may only be called by " + allowedType + ": " + offenders);
     }

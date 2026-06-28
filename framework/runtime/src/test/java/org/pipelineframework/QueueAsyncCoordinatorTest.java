@@ -70,6 +70,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -199,6 +200,32 @@ class QueueAsyncCoordinatorTest {
 
         IllegalStateException error = assertThrows(IllegalStateException.class, coordinator::initializeQueueMode);
         assertTrue(error.getMessage().contains("ExecutionStateStore(dynamo)"));
+    }
+
+    @Test
+    void getExecutionStatusInitializesQueueProvidersBeforeCachingReadModel() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        coordinator.executionStateStore = null;
+        coordinator.workDispatcher = null;
+        coordinator.deadLetterPublisher = null;
+        when(executionStateStore.providerName()).thenReturn("memory");
+        when(workDispatcher.providerName()).thenReturn("memory");
+        when(deadLetterPublisher.providerName()).thenReturn("log");
+        when(executionStateStore.startupValidationError(orchestratorConfig)).thenReturn(Optional.empty());
+        when(workDispatcher.startupValidationError(orchestratorConfig)).thenReturn(Optional.empty());
+        when(deadLetterPublisher.startupValidationError(orchestratorConfig)).thenReturn(Optional.empty());
+        when(executionStateStores.stream()).thenReturn(Stream.of(executionStateStore));
+        when(workDispatchers.stream()).thenReturn(Stream.of(workDispatcher));
+        when(deadLetterPublishers.stream()).thenReturn(Stream.of(deadLetterPublisher));
+        ExecutionRecord<Object, Object> record = createRecord("tenant-1", "exec-1", "key-1");
+        when(executionStateStore.getExecution("tenant-1", "exec-1"))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+
+        ExecutionStatusDto dto = coordinator.getExecutionStatus("tenant-1", "exec-1").await().indefinitely();
+
+        assertEquals("exec-1", dto.executionId());
+        assertSame(executionStateStore, coordinator.executionStateStore);
+        assertSame(workDispatcher, coordinator.workDispatcher);
     }
 
     @Test

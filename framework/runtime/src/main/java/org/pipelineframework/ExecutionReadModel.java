@@ -71,7 +71,7 @@ class ExecutionReadModel {
           "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
     }
     String resolvedTenant = executionInputPolicy.normalizeTenant(tenantId);
-    RuntimeException admissionFailure = admissionFailure(new ControlPlaneAdmissionRequest(
+    Optional<RuntimeException> admissionFailure = admissionFailure(new ControlPlaneAdmissionRequest(
         resolvedTenant,
         operation,
         pipelineId.get(),
@@ -79,16 +79,18 @@ class ExecutionReadModel {
         executionId,
         "api",
         tenantId != null && !tenantId.isBlank()));
-    if (admissionFailure != null) {
-      return Uni.createFrom().failure(admissionFailure);
+    if (admissionFailure.isPresent()) {
+      return Uni.createFrom().failure(admissionFailure.get());
     }
     return executionStateStore.getExecution(resolvedTenant, executionId)
         .onItem().transform(optional -> requireExecution(optional, executionId));
   }
 
-  private RuntimeException admissionFailure(ControlPlaneAdmissionRequest request) {
+  private Optional<RuntimeException> admissionFailure(ControlPlaneAdmissionRequest request) {
     ControlPlaneAdmissionDecision decision = admissionPolicy.admit(request);
-    return decision.allowed() ? null : new ControlPlaneAdmissionException(decision);
+    return decision.allowed()
+        ? Optional.empty()
+        : Optional.of(new ControlPlaneAdmissionException(decision));
   }
 
   private ExecutionRecord<Object, Object> requireExecution(

@@ -146,6 +146,8 @@ class QueueAsyncCoordinator {
     executionStateStore = selectExecutionStateStore(orchestratorConfig.stateProvider());
     workDispatcher = selectWorkDispatcher(orchestratorConfig.dispatcherProvider());
     deadLetterPublisher = selectDeadLetterPublisher(orchestratorConfig.dlqProvider());
+    executionReadModel = null;
+    submissionFlow = null;
 
     List<String> providerReadinessErrors = new ArrayList<>();
     executionStateStore.startupValidationError(orchestratorConfig)
@@ -198,6 +200,9 @@ class QueueAsyncCoordinator {
       String tenantId,
       String idempotencyKey,
       boolean outputStreaming) {
+    if (!ensureQueueModeReady()) {
+      return Uni.createFrom().failure(queueModeDisabledException());
+    }
     return submissionFlow().submit(input, tenantId, idempotencyKey, outputStreaming);
   }
 
@@ -209,6 +214,9 @@ class QueueAsyncCoordinator {
       String pipelineId,
       String contractVersion,
       String releaseVersion) {
+    if (!ensureQueueModeReady()) {
+      return Uni.createFrom().failure(queueModeDisabledException());
+    }
     return submissionFlow().submit(
         input,
         tenantId,
@@ -220,10 +228,16 @@ class QueueAsyncCoordinator {
   }
 
   Uni<ExecutionStatusDto> getExecutionStatus(String tenantId, String executionId) {
+    if (!ensureQueueModeReady()) {
+      return Uni.createFrom().failure(queueModeDisabledException());
+    }
     return executionReadModel().getExecutionStatus(tenantId, executionId);
   }
 
   <T> Uni<T> getExecutionResult(String tenantId, String executionId, Class<?> outputType, boolean outputStreaming) {
+    if (!ensureQueueModeReady()) {
+      return Uni.createFrom().failure(queueModeDisabledException());
+    }
     return executionReadModel().getExecutionResult(tenantId, executionId, outputType, outputStreaming);
   }
 
@@ -295,6 +309,9 @@ class QueueAsyncCoordinator {
   }
 
   Uni<Object> getExecutionResultPayload(String tenantId, String executionId) {
+    if (!ensureQueueModeReady()) {
+      return Uni.createFrom().failure(queueModeDisabledException());
+    }
     return executionReadModel().getExecutionResultPayload(tenantId, executionId);
   }
 
@@ -550,6 +567,25 @@ class QueueAsyncCoordinator {
     return tenantId != null && !tenantId.isBlank();
   }
 
+  private boolean ensureQueueModeReady() {
+    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
+      return false;
+    }
+    if (!queueModeInitialized && missingQueueProviders()) {
+      initializeQueueMode();
+    }
+    return true;
+  }
+
+  private boolean missingQueueProviders() {
+    return executionStateStore == null || workDispatcher == null || deadLetterPublisher == null;
+  }
+
+  private static IllegalStateException queueModeDisabledException() {
+    return new IllegalStateException(
+        "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC.");
+  }
+
   Uni<Void> recordAwaitItemContinuation(
       AwaitInteractionRecord interaction,
       org.pipelineframework.awaitable.AwaitUnitRecord unit,
@@ -588,6 +624,9 @@ class QueueAsyncCoordinator {
   }
 
   private ExecutionReadModel executionReadModel() {
+    if (!ensureQueueModeReady()) {
+      throw queueModeDisabledException();
+    }
     ExecutionReadModel current = executionReadModel;
     if (current != null) {
       return current;
@@ -610,6 +649,9 @@ class QueueAsyncCoordinator {
   }
 
   private QueueAsyncSubmissionFlow submissionFlow() {
+    if (!ensureQueueModeReady()) {
+      throw queueModeDisabledException();
+    }
     QueueAsyncSubmissionFlow current = submissionFlow;
     if (current != null) {
       return current;

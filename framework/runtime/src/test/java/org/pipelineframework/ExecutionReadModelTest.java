@@ -28,7 +28,6 @@ import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -119,7 +118,7 @@ class ExecutionReadModelTest {
   }
 
   @Test
-  void succeededSingleEmptyResultReturnsNull() {
+  void succeededSingleEmptyResultReturnsEmptyOptional() {
     when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
     when(admissionPolicy.admit(any())).thenReturn(ControlPlaneAdmissionDecision.allow());
     when(executionStateStore.getExecution("tenant-1", "exec-empty"))
@@ -132,7 +131,7 @@ class ExecutionReadModelTest {
     Object result = readModel.getExecutionResult("tenant-1", "exec-empty", String.class, false)
         .await().indefinitely();
 
-    assertNull(result);
+    assertEquals(Optional.empty(), result);
   }
 
   @Test
@@ -146,6 +145,23 @@ class ExecutionReadModelTest {
     Optional<Object> result = view.typedOptionalResult(String.class, false, () -> payloadCodec);
 
     assertTrue(result.isEmpty());
+  }
+
+  @Test
+  void succeededSingleEmptyRawPayloadReturnsEmptyOptional() {
+    when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+    when(admissionPolicy.admit(any())).thenReturn(ControlPlaneAdmissionDecision.allow());
+    when(executionStateStore.getExecution("tenant-1", "exec-empty"))
+        .thenReturn(Uni.createFrom().item(Optional.of(succeeded(
+            "tenant-1",
+            "exec-empty",
+            ExecutionResultShape.SINGLE,
+            List.of()))));
+
+    Object result = readModel.getExecutionResultPayload("tenant-1", "exec-empty")
+        .await().indefinitely();
+
+    assertEquals(Optional.empty(), result);
   }
 
   @Test

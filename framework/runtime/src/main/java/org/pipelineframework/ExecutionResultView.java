@@ -40,7 +40,11 @@ record ExecutionResultView(ExecutionRecord<Object, Object> record) {
       if (outputStreaming) {
         return List.copyOf(items);
       }
-      return items.isEmpty() ? null : coerceStoredResult(items.getFirst(), outputType, payloadCodec);
+      if (items.isEmpty()) {
+        return Optional.empty();
+      }
+      Object result = coerceStoredResult(items.getFirst(), outputType, payloadCodec);
+      return result == null ? Optional.empty() : result;
     }
     if (!outputStreaming) {
       throw new IllegalStateException(
@@ -54,7 +58,7 @@ record ExecutionResultView(ExecutionRecord<Object, Object> record) {
     List<?> items = successfulItems();
     if (record.resultShape() == ExecutionResultShape.SINGLE) {
       validateSingleShape(items);
-      return items.isEmpty() ? null : items.getFirst();
+      return items.isEmpty() ? Optional.empty() : items.getFirst();
     }
     return List.copyOf(items);
   }
@@ -63,7 +67,11 @@ record ExecutionResultView(ExecutionRecord<Object, Object> record) {
       Class<?> outputType,
       boolean outputStreaming,
       Supplier<TransitionPayloadCodec> payloadCodec) {
-    return Optional.ofNullable(typedResult(outputType, outputStreaming, payloadCodec));
+    Object result = typedResult(outputType, outputStreaming, payloadCodec);
+    if (result instanceof Optional<?> optional && optional.isEmpty()) {
+      return Optional.empty();
+    }
+    return Optional.ofNullable(result);
   }
 
   private List<?> successfulItems() {
