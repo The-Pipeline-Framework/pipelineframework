@@ -37,6 +37,7 @@ import org.pipelineframework.orchestrator.TransitionWorkerExecutor;
 import org.pipelineframework.orchestrator.TransitionWorkerExecutionMode;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
+import org.pipelineframework.orchestrator.controlplane.TerminalPublicationClaim;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -109,10 +110,22 @@ class QueueAsyncSegmentPipelineTest {
         .thenReturn(Uni.createFrom().voidItem());
     lenient().when(segmentBoundaryLedger.recordSegmentSuspended(any(), any(), any(), anyLong()))
         .thenReturn(Uni.createFrom().voidItem());
-    lenient().when(segmentBoundaryLedger.recordTerminalPublicationCompleted(any(), any(), anyLong()))
+    lenient().when(segmentBoundaryLedger.claimTerminalPublication(
+            any(),
+            any(),
+            org.mockito.ArgumentMatchers.anyString(),
+            anyLong()))
+        .thenAnswer(invocation -> Uni.createFrom().item(claim(TerminalPublicationClaim.Status.CLAIMED, invocation.getArgument(2))));
+    lenient().when(segmentBoundaryLedger.completeTerminalPublication(
+            any(),
+            any(),
+            org.mockito.ArgumentMatchers.anyString(),
+            anyLong()))
         .thenReturn(Uni.createFrom().voidItem());
     lenient().when(segmentBoundaryLedger.recordRunSucceeded(any(), any(), anyLong()))
         .thenReturn(Uni.createFrom().voidItem());
+    lenient().when(checkpointPublicationService.enabled()).thenReturn(true);
+    lenient().when(objectPublishCompletionService.enabled()).thenReturn(true);
     lenient().when(checkpointPublicationService.publishIfConfigured(any(), any()))
         .thenReturn(Uni.createFrom().voidItem());
     lenient().when(objectPublishCompletionService.publishIfConfigured(org.mockito.ArgumentMatchers.<Supplier<List<?>>>any()))
@@ -159,9 +172,28 @@ class QueueAsyncSegmentPipelineTest {
     order.verify(executionStateStore).claimLease(eq("tenant-1"), eq("exec-success"), any(), anyLong(), eq(1000L));
     order.verify(segmentBoundaryLedger).recordSegmentAttemptStarted(same(claimed), eq("exec-success:0:0"), anyLong());
     order.verify(segmentBoundaryLedger).recordSegmentCompleted(same(claimed), eq("exec-success:0:0"), any(), anyLong());
+    order.verify(segmentBoundaryLedger).claimTerminalPublication(
+        same(claimed),
+        eq("exec-success:0:0"),
+        eq(TerminalPublicationIntent.CHECKPOINT),
+        anyLong());
     order.verify(checkpointPublicationService).publishIfConfigured(same(claimed), eq("out-1"));
+    order.verify(segmentBoundaryLedger).completeTerminalPublication(
+        same(claimed),
+        eq("exec-success:0:0"),
+        eq(TerminalPublicationIntent.CHECKPOINT),
+        anyLong());
+    order.verify(segmentBoundaryLedger).claimTerminalPublication(
+        same(claimed),
+        eq("exec-success:0:0"),
+        eq(TerminalPublicationIntent.OBJECT_PUBLISH),
+        anyLong());
     order.verify(objectPublishCompletionService).publishIfConfigured(org.mockito.ArgumentMatchers.<Supplier<List<?>>>any());
-    order.verify(segmentBoundaryLedger).recordTerminalPublicationCompleted(same(claimed), eq("exec-success:0:0"), anyLong());
+    order.verify(segmentBoundaryLedger).completeTerminalPublication(
+        same(claimed),
+        eq("exec-success:0:0"),
+        eq(TerminalPublicationIntent.OBJECT_PUBLISH),
+        anyLong());
     order.verify(executionStateStore).markSucceeded(
         eq("tenant-1"),
         eq("exec-success"),
@@ -429,5 +461,14 @@ class QueueAsyncSegmentPipelineTest {
         source.createdAtEpochMs(),
         source.updatedAtEpochMs(),
         source.ttlEpochS());
+  }
+
+  private static TerminalPublicationClaim claim(TerminalPublicationClaim.Status status, String kind) {
+    return new TerminalPublicationClaim(
+        status,
+        "publication-" + kind,
+        "idempotency-" + kind,
+        "terminal-publication-prepared:publication-" + kind + ":idempotency-" + kind,
+        "terminal-publication-completed:publication-" + kind + ":idempotency-" + kind);
   }
 }

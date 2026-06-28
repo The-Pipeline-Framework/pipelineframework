@@ -80,6 +80,112 @@ class SegmentBoundaryLedgerTest {
     }
 
     @Test
+    void terminalPublicationClaimIsPreparedThenCompletedByFactKey() {
+        InMemoryControlPlaneJournal journal = new InMemoryControlPlaneJournal();
+        SegmentBoundaryLedger ledger = new SegmentBoundaryLedger(journal);
+        ExecutionRecord<Object, Object> record = record("run-terminal");
+
+        TerminalPublicationClaim claim = ledger.claimTerminalPublication(
+                record,
+                "run-terminal:0:0",
+                "object-publish",
+                50L)
+            .await().indefinitely();
+        ledger.completeTerminalPublication(record, "run-terminal:0:0", "object-publish", 51L)
+            .await().indefinitely();
+
+        ControlPlaneProjection projection = journal.projection("tenant", "run-terminal").await().indefinitely();
+        assertEquals(TerminalPublicationClaim.Status.CLAIMED, claim.status());
+        assertTrue(projection.terminalPublicationPreparedKeys().contains(claim.preparedFactKey()));
+        assertTrue(projection.terminalPublicationKeys().contains(claim.completedFactKey()));
+    }
+
+    @Test
+    void duplicateTerminalPublicationClaimReturnsPreparedRetryBeforeCompletion() {
+        InMemoryControlPlaneJournal journal = new InMemoryControlPlaneJournal();
+        SegmentBoundaryLedger ledger = new SegmentBoundaryLedger(journal);
+        ExecutionRecord<Object, Object> record = record("run-terminal-retry");
+
+        TerminalPublicationClaim first = ledger.claimTerminalPublication(
+                record,
+                "run-terminal-retry:0:0",
+                "object-publish",
+                60L)
+            .await().indefinitely();
+        TerminalPublicationClaim second = ledger.claimTerminalPublication(
+                record,
+                "run-terminal-retry:0:0",
+                "object-publish",
+                61L)
+            .await().indefinitely();
+
+        ControlPlaneProjection projection = journal.projection("tenant", "run-terminal-retry").await().indefinitely();
+        assertEquals(TerminalPublicationClaim.Status.CLAIMED, first.status());
+        assertEquals(TerminalPublicationClaim.Status.PREPARED_RETRY, second.status());
+        assertEquals(first.idempotencyKey(), second.idempotencyKey());
+        assertEquals(1L, projection.version());
+    }
+
+    @Test
+    void untrackedTerminalPublicationClaimStillCarriesStableIdentifiers() {
+        SegmentBoundaryLedger ledger = new SegmentBoundaryLedger((ControlPlaneJournal) null);
+        ExecutionRecord<Object, Object> record = record("run-terminal-untracked");
+
+        TerminalPublicationClaim claim = ledger.claimTerminalPublication(
+                record,
+                "run-terminal-untracked:0:0",
+                "object-publish",
+                65L)
+            .await().indefinitely();
+
+        assertEquals(TerminalPublicationClaim.Status.UNTRACKED, claim.status());
+        assertEquals("run-terminal-untracked:terminal-output:object-publish", claim.publicationId());
+        assertEquals("run-terminal-untracked:terminal-output:object-publish:terminal-publication",
+            claim.idempotencyKey());
+    }
+
+    @Test
+    void terminalPublicationClaimSkipsAlreadyCompletedPublication() {
+        InMemoryControlPlaneJournal journal = new InMemoryControlPlaneJournal();
+        SegmentBoundaryLedger ledger = new SegmentBoundaryLedger(journal);
+        ExecutionRecord<Object, Object> record = record("run-terminal-completed");
+
+        ledger.claimTerminalPublication(record, "run-terminal-completed:0:0", "object-publish", 70L)
+            .await().indefinitely();
+        ledger.completeTerminalPublication(record, "run-terminal-completed:0:0", "object-publish", 71L)
+            .await().indefinitely();
+
+        TerminalPublicationClaim duplicate = ledger.claimTerminalPublication(
+                record,
+                "run-terminal-completed:0:0",
+                "object-publish",
+                72L)
+            .await().indefinitely();
+
+        assertEquals(TerminalPublicationClaim.Status.ALREADY_COMPLETED, duplicate.status());
+    }
+
+    @Test
+    void terminalPublicationClaimRetriesBoundedOccConflict() {
+        InMemoryControlPlaneJournal delegate = new InMemoryControlPlaneJournal();
+        SegmentBoundaryLedger ledger = new SegmentBoundaryLedger(new ConflictOnceJournal(delegate));
+        ExecutionRecord<Object, Object> record = record("run-terminal-conflict");
+
+        TerminalPublicationClaim claim = ledger.claimTerminalPublication(
+                record,
+                "run-terminal-conflict:0:0",
+                "object-publish",
+                80L)
+            .await().indefinitely();
+
+        assertEquals(TerminalPublicationClaim.Status.CLAIMED, claim.status());
+        assertTrue(delegate.projection("tenant", "run-terminal-conflict")
+            .await().indefinitely()
+            .terminalPublicationPreparedKeys()
+            .contains(claim.preparedFactKey()));
+    }
+
+    @Test
     void requiredBoundaryInteractionFactsFailFastWhenPayloadCannotBeFrozen() {
         SegmentBoundaryLedger ledger = new SegmentBoundaryLedger(new InMemoryControlPlaneJournal());
         ExecutionRecord<Object, Object> record = record("run-5");

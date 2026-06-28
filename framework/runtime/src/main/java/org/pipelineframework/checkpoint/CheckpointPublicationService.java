@@ -64,6 +64,10 @@ public class CheckpointPublicationService {
         }
     }
 
+    public boolean enabled() {
+        return descriptor != null;
+    }
+
     public Uni<Void> publishIfConfigured(ExecutionRecord<Object, Object> record, Object resultPayload) {
         if (descriptor == null) {
             return Uni.createFrom().voidItem();

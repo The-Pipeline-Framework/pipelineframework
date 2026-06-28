@@ -13,6 +13,7 @@ public record ControlPlaneProjection(
     Map<String, SegmentAttempt> attempts,
     Map<String, BoundaryUnit> boundaries,
     Map<String, BoundaryInteraction> interactions,
+    Set<String> terminalPublicationPreparedKeys,
     Set<String> terminalPublicationKeys,
     Set<String> factKeys
 ) {
@@ -25,6 +26,7 @@ public record ControlPlaneProjection(
         attempts = ControlPlaneChecks.copyMap(attempts);
         boundaries = ControlPlaneChecks.copyMap(boundaries);
         interactions = ControlPlaneChecks.copyMap(interactions);
+        terminalPublicationPreparedKeys = ControlPlaneChecks.copySet(terminalPublicationPreparedKeys);
         terminalPublicationKeys = ControlPlaneChecks.copySet(terminalPublicationKeys);
         factKeys = ControlPlaneChecks.copySet(factKeys);
     }
@@ -39,6 +41,7 @@ public record ControlPlaneProjection(
             Map.of(),
             Map.of(),
             Map.of(),
+            Set.of(),
             Set.of(),
             Set.of());
     }

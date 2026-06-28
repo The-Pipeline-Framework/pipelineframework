@@ -22,18 +22,25 @@ class ControlPlaneReducerTest {
                 "attempt-0",
                 List.of("out-1", "out-2"),
                 true)),
-            event(4, new ControlPlaneFact.TerminalPublicationCompleted(
+            event(4, new ControlPlaneFact.TerminalPublicationPrepared(
                 "tenant",
                 "run-1",
                 "segment-0",
                 "object-publish",
                 "run-1:publish")),
-            event(5, new ControlPlaneFact.RunSucceeded("tenant", "run-1", "segment-0", List.of("out-1", "out-2")))));
+            event(5, new ControlPlaneFact.TerminalPublicationCompleted(
+                "tenant",
+                "run-1",
+                "segment-0",
+                "object-publish",
+                "run-1:publish")),
+            event(6, new ControlPlaneFact.RunSucceeded("tenant", "run-1", "segment-0", List.of("out-1", "out-2")))));
 
-        assertEquals(5, projection.version());
+        assertEquals(6, projection.version());
         assertEquals(PipelineRunStatus.SUCCEEDED, projection.run().orElseThrow().status());
         assertEquals(SegmentStatus.COMPLETED, projection.segments().get("segment-0").status());
         assertEquals(SegmentAttemptStatus.COMPLETED, projection.attempts().get("attempt-0").status());
+        assertTrue(projection.terminalPublicationPreparedKeys().contains("terminal-publication-prepared:object-publish:run-1:publish"));
         assertTrue(projection.terminalPublicationKeys().contains("terminal-publication-completed:object-publish:run-1:publish"));
     }
 

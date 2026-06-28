@@ -31,6 +31,7 @@ public final class ControlPlaneReducer {
         private final Map<String, SegmentAttempt> attempts = new HashMap<>();
         private final Map<String, BoundaryUnit> boundaries = new HashMap<>();
         private final Map<String, BoundaryInteraction> interactions = new HashMap<>();
+        private final Set<String> terminalPublicationPreparedKeys = new HashSet<>();
         private final Set<String> terminalPublicationKeys = new HashSet<>();
         private final Set<String> factKeys = new HashSet<>();
 
@@ -55,6 +56,7 @@ public final class ControlPlaneReducer {
                 case ControlPlaneFact.BoundaryCompletionAdmitted fact -> applyBoundaryCompletionAdmitted(event, fact);
                 case ControlPlaneFact.InteractionTimedOut fact -> applyInteractionTimedOut(event, fact);
                 case ControlPlaneFact.ContinuationSegmentCreated fact -> applyContinuationSegmentCreated(event, fact);
+                case ControlPlaneFact.TerminalPublicationPrepared fact -> terminalPublicationPreparedKeys.add(fact.factKey());
                 case ControlPlaneFact.TerminalPublicationCompleted fact -> terminalPublicationKeys.add(fact.factKey());
                 case ControlPlaneFact.RunSucceeded fact -> applyRunSucceeded(event, fact);
                 case ControlPlaneFact.RunFailed fact -> applyRunFailed(event, fact);
@@ -273,6 +275,7 @@ public final class ControlPlaneReducer {
                 new HashMap<>(attempts),
                 new HashMap<>(boundaries),
                 new HashMap<>(interactions),
+                new HashSet<>(terminalPublicationPreparedKeys),
                 new HashSet<>(terminalPublicationKeys),
                 new HashSet<>(factKeys));
         }
