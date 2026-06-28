@@ -107,6 +107,43 @@ class PipelineTargetResolutionPhaseTest {
     }
 
     @Test
+    void springProfileResolvesOnlyFirstRestServerStepToRestResource() throws Exception {
+        PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        context.setRendererProfile("spring");
+        context.setTransportMode(PipelineTransport.REST);
+        context.setStepModels(List.of(
+            step("SideEffectSpringServer", DeploymentRole.PIPELINE_SERVER)
+                .toBuilder()
+                .sideEffect(true)
+                .build(),
+            step("DelegatedSpringServer", DeploymentRole.PIPELINE_SERVER)
+                .toBuilder()
+                .delegateService(ClassName.get("com.example.delegate", "DelegatedSpringService"))
+                .build(),
+            step("SpringRestEntrypoint", DeploymentRole.PIPELINE_SERVER),
+            step("SpringLocalContinuation", DeploymentRole.PIPELINE_SERVER)));
+
+        phase.execute(context);
+
+        assertEquals(
+            Set.of(GenerationTarget.LOCAL_CLIENT_STEP),
+            context.getStepModels().get(0).enabledTargets());
+        assertEquals(
+            Set.of(GenerationTarget.LOCAL_CLIENT_STEP),
+            context.getStepModels().get(1).enabledTargets());
+        assertEquals(
+            Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.LOCAL_CLIENT_STEP),
+            context.getStepModels().get(2).enabledTargets());
+        assertEquals(
+            Set.of(GenerationTarget.LOCAL_CLIENT_STEP),
+            context.getStepModels().get(3).enabledTargets());
+        assertEquals(
+            Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.LOCAL_CLIENT_STEP),
+            context.getResolvedTargets());
+    }
+
+    @Test
     void defaultsToGrpcWhenTransportModeIsNull() throws Exception {
         PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(null, null);

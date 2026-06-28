@@ -321,6 +321,43 @@ class YamlDrivenStepGenerationTest {
     }
 
     @Test
+    void generatesYamlInternalStepFromPlainCompletionStageProcessMethodWithSpringProfile() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-plain-stage.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import java.util.concurrent.CompletableFuture;
+            import java.util.concurrent.CompletionStage;
+
+            public class PaymentService {
+                public CompletionStage<PaymentStatus> process(PaymentRecord input) {
+                    return CompletableFuture.completedFuture(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writePaymentRecord();
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertTrue(result.success(), "Expected plain CompletionStage process method compilation to succeed: "
+            + result.errorSummary());
+    }
+
+    @Test
     void generatesYamlDelegatedStepFromPlainMonoProcessMethodWithSpringProfile() throws IOException {
         Path yamlFile = tempDir.resolve("pipeline-delegated-plain-mono.yaml");
         Files.writeString(yamlFile, """
@@ -669,6 +706,42 @@ class YamlDrivenStepGenerationTest {
     }
 
     @Test
+    void failsYamlInternalStepFromPlainCompletionStageProcessMethodWithoutSpringProfile() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-plain-stage-quarkus.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import java.util.concurrent.CompletableFuture;
+            import java.util.concurrent.CompletionStage;
+
+            public class PaymentService {
+                public CompletionStage<PaymentStatus> process(PaymentRecord input) {
+                    return CompletableFuture.completedFuture(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writePaymentRecord();
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, paymentStatus));
+        assertFalse(result.success(), "Expected default renderer profile to reject plain CompletionStage process methods");
+        assertTrue(
+            result.errorSummary().contains("must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out> method"),
+            result.errorSummary());
+    }
+
+    @Test
     void failsYamlInternalStepWhenPlainMonoProcessMethodIsRaw() throws IOException {
         Path yamlFile = tempDir.resolve("pipeline-internal-raw-plain-mono.yaml");
         Files.writeString(yamlFile, """
@@ -716,6 +789,117 @@ class YamlDrivenStepGenerationTest {
         assertTrue(
             result.errorSummary().contains("process(In): Mono<Out>"),
             result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenPlainCompletionStageProcessMethodIsRaw() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-raw-plain-stage.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import java.util.concurrent.CompletableFuture;
+            import java.util.concurrent.CompletionStage;
+
+            public class PaymentService {
+                @SuppressWarnings("rawtypes")
+                public CompletionStage process(PaymentRecord input) {
+                    return CompletableFuture.completedFuture(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writePaymentRecord();
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected raw CompletionStage process method compilation to fail");
+        assertTrue(result.errorSummary().contains("process(In): CompletionStage<Out>"), result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenPlainCompletionStageProcessMethodHasWrongArity() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-wrong-arity-plain-stage.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import java.util.concurrent.CompletableFuture;
+            import java.util.concurrent.CompletionStage;
+
+            public class PaymentService {
+                public CompletionStage<PaymentStatus> process(PaymentRecord input, String unused) {
+                    return CompletableFuture.completedFuture(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writePaymentRecord();
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected wrong-arity CompletionStage process method compilation to fail");
+        assertTrue(result.errorSummary().contains("process method must accept exactly one input parameter"),
+            result.errorSummary());
+        assertTrue(result.errorSummary().contains("process(In): CompletionStage<Out>"), result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenPlainCompletionStageProcessMethodReturnsVoid() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-void-plain-stage.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            public class PaymentService {
+                public void process(PaymentRecord input) {
+                }
+            }
+            """);
+        Path paymentRecord = writePaymentRecord();
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected void process method compilation to fail");
+        assertTrue(result.errorSummary().contains("process method must return a typed output"), result.errorSummary());
+        assertTrue(result.errorSummary().contains("process(In): CompletionStage<Out>"), result.errorSummary());
     }
 
     @Test
@@ -777,6 +961,95 @@ class YamlDrivenStepGenerationTest {
         assertAll(
             () -> assertTrue(result.errorSummary().contains("multiple public"), result.errorSummary()),
             () -> assertTrue(result.errorSummary().contains("processBlocking(In): Out"), result.errorSummary()));
+    }
+
+    @Test
+    void failsYamlInternalStepWhenMultiplePlainSpringProcessMethodsExist() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-multiple-plain-spring.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import java.util.concurrent.CompletableFuture;
+            import java.util.concurrent.CompletionStage;
+            import reactor.core.publisher.Mono;
+
+            public class PaymentService {
+                public Mono<PaymentStatus> process(PaymentRecord input) {
+                    return Mono.just(new PaymentStatus());
+                }
+
+                public CompletionStage<PaymentStatus> process(AlternatePaymentRecord input) {
+                    return CompletableFuture.completedFuture(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writePaymentRecord();
+        Path alternatePaymentRecord = writeSource("AlternatePaymentRecord.java", """
+            package com.example.app;
+
+            public class AlternatePaymentRecord {
+            }
+            """);
+        Path paymentStatus = writePaymentStatus();
+        Path monoStub = writeMonoStub();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, alternatePaymentRecord, paymentStatus, monoStub),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected multiple plain Spring process methods to fail");
+        assertAll(
+            () -> assertTrue(result.errorSummary().contains("multiple public"), result.errorSummary()),
+            () -> assertTrue(result.errorSummary().contains("CompletionStage<Out>"), result.errorSummary()));
+    }
+
+    @Test
+    void failsYamlInternalStepWhenCompletionStageCardinalityIsNonUnary() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-stage-non-unary.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                cardinality: "ONE_TO_MANY"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import java.util.concurrent.CompletableFuture;
+            import java.util.concurrent.CompletionStage;
+
+            public class PaymentService {
+                public CompletionStage<PaymentStatus> process(PaymentRecord input) {
+                    return CompletableFuture.completedFuture(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writePaymentRecord();
+        Path paymentStatus = writePaymentStatus();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus),
+            List.of("-Apipeline.codegen.rendererProfile=spring"));
+        assertFalse(result.success(), "Expected non-unary CompletionStage process method compilation to fail");
+        assertTrue(result.errorSummary().contains("declares cardinality"), result.errorSummary());
     }
 
     @Test

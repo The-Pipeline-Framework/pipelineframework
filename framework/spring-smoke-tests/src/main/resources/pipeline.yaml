@@ -13,3 +13,7 @@ steps:
     operator: "com.example.smoke.service.PaymentAuditService::audit"
     input: "com.example.smoke.domain.PaymentStatus"
     output: "com.example.smoke.domain.PaymentStatus"
+  - name: "receipt"
+    service: "com.example.smoke.service.PaymentReceiptService"
+    input: "com.example.smoke.domain.PaymentStatus"
+    output: "com.example.smoke.domain.PaymentStatus"
