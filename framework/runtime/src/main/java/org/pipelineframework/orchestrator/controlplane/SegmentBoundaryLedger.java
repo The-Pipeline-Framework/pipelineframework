@@ -98,7 +98,7 @@ public class SegmentBoundaryLedger {
         if (record == null || result == null) {
             return Uni.createFrom().voidItem();
         }
-        return appendBuilt(
+        return appendBestEffortBuilt(
             record.tenantId(),
             record.executionId(),
             () -> List.of(new ControlPlaneFact.SegmentCompleted(
@@ -296,7 +296,7 @@ public class SegmentBoundaryLedger {
         if (record == null) {
             return Uni.createFrom().voidItem();
         }
-        return appendBuilt(
+        return appendBestEffortBuilt(
             record.tenantId(),
             record.executionId(),
             () -> List.of(new ControlPlaneFact.RunSucceeded(
@@ -363,6 +363,15 @@ public class SegmentBoundaryLedger {
     }
 
     private Uni<Void> appendBuilt(
+        String tenantId,
+        String runId,
+        Supplier<List<ControlPlaneFact>> facts,
+        long nowEpochMs
+    ) {
+        return append(tenantId, runId, facts.get(), nowEpochMs);
+    }
+
+    private Uni<Void> appendBestEffortBuilt(
         String tenantId,
         String runId,
         Supplier<List<ControlPlaneFact>> facts,

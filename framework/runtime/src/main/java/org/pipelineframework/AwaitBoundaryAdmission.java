@@ -78,19 +78,25 @@ class AwaitBoundaryAdmission {
                   + ", correlationId=" + normalized.correlationId(),
               failure))
           .onItem().transformToUni(result -> validateTenant(result, normalized)
-              .onItem().transformToUni(validated -> awaitCoordinator
-                  .recordCompletion(validated.record(), normalized.nowEpochMs())
-                  .onItem().transformToUni(unit -> segmentBoundaryLedger.get()
-                      .recordBoundaryCompletionAdmitted(validated.record(), unit, normalized.nowEpochMs())
-                      .chain(() -> completionPlan(validated, unit))
-                      .onItem().transformToUni(plan -> plan.liveSession()
-                          ? Uni.createFrom().item(plan.result())
-                          : continuations.afterRecordedCompletion(
-                              plan.result(),
-                              plan.unit(),
-                              itemContinuationHandler,
-                              normalized.nowEpochMs())))));
+              .onItem().transformToUni(validated -> route(validated, normalized, itemContinuationHandler)));
     });
+  }
+
+  private Uni<AwaitCompletionResult> route(
+      AwaitCompletionResult validated,
+      AwaitCompletionCommand normalized,
+      AwaitItemContinuationHandler itemContinuationHandler) {
+    return awaitCoordinator.recordCompletion(validated.record(), normalized.nowEpochMs())
+        .onItem().transformToUni(unit -> segmentBoundaryLedger.get()
+            .recordBoundaryCompletionAdmitted(validated.record(), unit, normalized.nowEpochMs())
+            .chain(() -> completionPlan(validated, unit))
+            .onItem().transformToUni(plan -> plan.liveSession()
+                ? Uni.createFrom().item(plan.result())
+                : continuations.afterRecordedCompletion(
+                    plan.result(),
+                    plan.unit(),
+                    itemContinuationHandler,
+                    normalized.nowEpochMs())));
   }
 
   private AwaitCompletionCommand normalize(AwaitCompletionCommand command) {

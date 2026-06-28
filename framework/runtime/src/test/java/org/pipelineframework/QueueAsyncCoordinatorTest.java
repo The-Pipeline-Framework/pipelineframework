@@ -1451,6 +1451,76 @@ class QueueAsyncCoordinatorTest {
     }
 
     @Test
+    void duplicateItemCompletionDoesNotDispatchContinuationTwiceAcrossCoordinatorCalls() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitInteractionRecord completed = itemAwaitRecord(0, AwaitInteractionStatus.COMPLETED, "approved");
+        AwaitUnitRecord unit = awaitUnit("unit-1", AwaitUnitStatus.COMPLETED, 1, 1, true, null);
+        AwaitCompletionCommand command = new AwaitCompletionCommand(
+            "tenant-1",
+            completed.interactionId(),
+            null,
+            null,
+            java.util.Map.of("value", "approved"),
+            "user-1",
+            System.currentTimeMillis());
+        ExecutionRecord<Object, Object> waitingParent = new ExecutionRecord<>(
+            "tenant-1",
+            "exec-1",
+            "key-1",
+            ExecutionResultShape.MATERIALIZED_MULTI,
+            ExecutionStatus.WAITING_EXTERNAL,
+            7L,
+            2,
+            0,
+            null,
+            0L,
+            0L,
+            null,
+            "input",
+            "unit-1",
+            null,
+            null,
+            null,
+            1L,
+            2L,
+            99999999L);
+        AwaitItemContinuationHandler handler = mock(AwaitItemContinuationHandler.class);
+        when(awaitCoordinator.complete(command))
+            .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(completed, false)))
+            .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(completed, true)));
+        when(awaitCoordinator.recordCompletion(org.mockito.ArgumentMatchers.eq(completed), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(unit));
+        when(awaitCoordinator.findByUnit("tenant-1", "unit-1"))
+            .thenReturn(Uni.createFrom().item(List.of(completed)));
+        when(executionStateStore.getExecution("tenant-1", "exec-1"))
+            .thenReturn(Uni.createFrom().item(Optional.of(waitingParent)));
+        when(handler.continueAwaitItem(
+                org.mockito.ArgumentMatchers.eq(completed),
+                org.mockito.ArgumentMatchers.eq(unit),
+                org.mockito.ArgumentMatchers.eq(3),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().voidItem());
+
+        coordinator.completeAwait(command, handler).await().indefinitely();
+        verify(handler, timeout(1000).times(1)).continueAwaitItem(
+            org.mockito.ArgumentMatchers.eq(completed),
+            org.mockito.ArgumentMatchers.eq(unit),
+            org.mockito.ArgumentMatchers.eq(3),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyLong());
+
+        coordinator.completeAwait(command, handler).await().indefinitely();
+
+        verify(handler, after(300).times(1)).continueAwaitItem(
+            org.mockito.ArgumentMatchers.eq(completed),
+            org.mockito.ArgumentMatchers.eq(unit),
+            org.mockito.ArgumentMatchers.eq(3),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
     void completeAwaitPropagatesUnexpectedLiveAwaitSignalFailure() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitInteractionRecord completed = itemAwaitRecord(0, AwaitInteractionStatus.COMPLETED, "approved");

@@ -128,6 +128,7 @@ class QueueAsyncCoordinator {
   private volatile TransitionPayloadCodec fallbackTransitionPayloadCodec;
   private volatile PipelineReleaseIdentityResolver fallbackReleaseIdentityResolver;
   private volatile ControlPlaneAdmissionPolicy fallbackAdmissionPolicy;
+  private volatile AwaitContinuations awaitContinuations;
 
   @Inject
   PipelineTelemetry telemetry;
@@ -1082,15 +1083,26 @@ class QueueAsyncCoordinator {
   }
 
   private AwaitContinuations awaitContinuations() {
-    return new AwaitContinuations(
-        executionStateStore,
-        workDispatcher,
-        awaitCoordinator,
-        transitionWorkerExecutor,
-        queueSweepExecutor,
-        this::saturatedDelay,
-        this::segmentBoundaryLedger,
-        this::recordAwaitLifecycle);
+    AwaitContinuations current = awaitContinuations;
+    if (current != null) {
+      return current;
+    }
+    synchronized (this) {
+      current = awaitContinuations;
+      if (current == null) {
+        current = new AwaitContinuations(
+            executionStateStore,
+            workDispatcher,
+            awaitCoordinator,
+            transitionWorkerExecutor,
+            queueSweepExecutor,
+            this::saturatedDelay,
+            this::segmentBoundaryLedger,
+            this::recordAwaitLifecycle);
+        awaitContinuations = current;
+      }
+      return current;
+    }
   }
 
   private SegmentBoundaryLedger segmentBoundaryLedger() {

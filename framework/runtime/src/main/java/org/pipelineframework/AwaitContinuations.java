@@ -3,6 +3,7 @@ package org.pipelineframework;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -76,6 +77,7 @@ class AwaitContinuations {
   private final Supplier<SegmentBoundaryLedger> segmentBoundaryLedger;
   private final Consumer<AwaitReplayLifecycleEvent> lifecycleRecorder;
   private final Set<String> itemContinuationDispatchClaims = ConcurrentHashMap.newKeySet();
+  private final Map<String, Set<Integer>> completedItemContinuationIndexes = new ConcurrentHashMap<>();
 
   AwaitContinuations(
       ExecutionStateStore executionStateStore,
@@ -221,17 +223,59 @@ class AwaitContinuations {
                               transitionKey,
                               List.copyOf(segmentOutputs == null ? List.of() : segmentOutputs),
                               nowEpochMs)
-                          .onItem().transformToUni(ignored -> recordItemContinuationSegment(
+                          .onItem().transformToUni(updated -> handleChildSuccessUpdate(
+                              updated,
                               parentRecord,
                               unit,
                               interaction,
                               aggregateStepIndex,
                               normalizedInput,
-                              nowEpochMs))
-                          .onItem().transformToUni(ignored ->
-                              releaseParentIfReady(parentRecord, unit, aggregateStepIndex, nowEpochMs));
+                              childKey,
+                              nowEpochMs));
                     });
               });
+        });
+  }
+
+  private Uni<Void> handleChildSuccessUpdate(
+      Optional<ExecutionRecord<Object, Object>> updated,
+      ExecutionRecord<Object, Object> parentRecord,
+      AwaitUnitRecord unit,
+      AwaitInteractionRecord interaction,
+      int aggregateStepIndex,
+      ExecutionInputSnapshot normalizedInput,
+      String childKey,
+      long nowEpochMs) {
+    if (updated.isPresent()) {
+      return recordItemContinuationSegment(
+              parentRecord,
+              unit,
+              interaction,
+              aggregateStepIndex,
+              normalizedInput,
+              nowEpochMs)
+          .chain(() -> releaseParentWhenLocallyReady(
+              parentRecord,
+              unit,
+              interaction.itemIndex(),
+              aggregateStepIndex,
+              nowEpochMs));
+    }
+    return executionStateStore.getExecutionByKey(parentRecord.tenantId(), childKey)
+        .onItem().transformToUni(current -> {
+          if (current.isPresent() && current.get().status() == ExecutionStatus.SUCCEEDED) {
+            return recordItemContinuationSegment(
+                    parentRecord,
+                    unit,
+                    interaction,
+                    aggregateStepIndex,
+                    normalizedInput,
+                    nowEpochMs)
+                .chain(() -> releaseParentIfReady(parentRecord, unit, aggregateStepIndex, nowEpochMs));
+          }
+          return Uni.createFrom().failure(new IllegalStateException(
+              "Await item continuation child success was not admitted and child is not already SUCCEEDED: "
+                  + childKey));
         });
   }
 
@@ -312,6 +356,25 @@ class AwaitContinuations {
         nowEpochMs);
   }
 
+  private Uni<Void> releaseParentWhenLocallyReady(
+      ExecutionRecord<Object, Object> parent,
+      AwaitUnitRecord unit,
+      Integer itemIndex,
+      int aggregateStepIndex,
+      long nowEpochMs) {
+    if (itemIndex == null || unit == null || unit.expectedItemCount() == null) {
+      return Uni.createFrom().voidItem();
+    }
+    Set<Integer> completed = completedItemContinuationIndexes.computeIfAbsent(
+        itemContinuationCompletionKey(parent, unit),
+        ignored -> ConcurrentHashMap.newKeySet());
+    completed.add(itemIndex);
+    if (completed.size() < unit.expectedItemCount()) {
+      return Uni.createFrom().voidItem();
+    }
+    return releaseParentIfReady(parent, unit, aggregateStepIndex, nowEpochMs);
+  }
+
   private Uni<Void> enqueueAlreadyReleasedParent(
       String tenantId,
       String executionId,
@@ -352,6 +415,7 @@ class AwaitContinuations {
             released.executionId())))
         .invoke(() -> {
           clearItemContinuationDispatchClaims(unit);
+          clearItemContinuationCompletionClaims(released, unit);
           lifecycleRecorder.accept(new AwaitReplayLifecycleEvent(
               AwaitReplayLifecycleEvent.RESUME_RELEASED,
               released.executionId(),
@@ -613,6 +677,18 @@ class AwaitContinuations {
         + unit.executionId() + "::"
         + unit.unitId() + "::";
     itemContinuationDispatchClaims.removeIf(key -> key.startsWith(prefix));
+  }
+
+  private void clearItemContinuationCompletionClaims(
+      ExecutionRecord<Object, Object> parent,
+      AwaitUnitRecord unit) {
+    completedItemContinuationIndexes.remove(itemContinuationCompletionKey(parent, unit));
+  }
+
+  private static String itemContinuationCompletionKey(
+      ExecutionRecord<Object, Object> parent,
+      AwaitUnitRecord unit) {
+    return parent.tenantId() + "::" + parent.executionId() + "::" + unit.unitId();
   }
 
   private Uni<Void> releaseScalarResume(

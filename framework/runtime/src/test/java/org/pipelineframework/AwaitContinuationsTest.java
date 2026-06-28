@@ -41,6 +41,7 @@ import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -326,6 +327,79 @@ class AwaitContinuationsTest {
     assertTrue(projection.factKeys().contains("continuation-segment-created:"
         + parent.record().executionId() + ":segment:4"));
     verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-1", parent.record().executionId()));
+  }
+
+  @Test
+  void captureItemContinuationOutputStopsWhenChildSuccessIsNotAdmitted() {
+    ExecutionRecord<Object, Object> parent =
+        record("tenant-1", "exec-1", "key-1", ExecutionStatus.WAITING_EXTERNAL, 7L);
+    ExecutionRecord<Object, Object> child =
+        record("tenant-1", "child-1", "key-1:await-item:unit-1:0", ExecutionStatus.QUEUED, 3L);
+    AwaitUnitRecord unit = awaitUnit(AwaitUnitStatus.COMPLETED, 1, 1, true, null);
+    when(executionStateStore.getExecution("tenant-1", "exec-1"))
+        .thenReturn(Uni.createFrom().item(java.util.Optional.of(parent)));
+    when(executionStateStore.getExecutionByKey("tenant-1", "key-1:await-item:unit-1:0"))
+        .thenReturn(Uni.createFrom().item(java.util.Optional.empty()))
+        .thenReturn(Uni.createFrom().item(java.util.Optional.of(child)));
+    when(executionStateStore.createOrGetExecution(any()))
+        .thenReturn(Uni.createFrom().item(new CreateExecutionResult(child, false)));
+    when(executionStateStore.markSucceeded(
+        "tenant-1",
+        "child-1",
+        3L,
+        "await-item-continuation:unit-1:0",
+        List.of("out-0"),
+        1234L))
+        .thenReturn(Uni.createFrom().item(java.util.Optional.empty()));
+
+    assertThrows(IllegalStateException.class, () -> continuations.captureItemContinuationOutput(
+            itemAwaitRecord("exec-1", 0, AwaitInteractionStatus.COMPLETED, "first"),
+            unit,
+            4,
+            new ExecutionInputSnapshot(ExecutionInputShape.UNI, "normalized"),
+            List.of("out-0"),
+            1234L)
+        .await().indefinitely());
+
+    verify(workDispatcher, never()).enqueueNow(any());
+  }
+
+  @Test
+  void firstChildContinuationCompletionDoesNotFetchAllSiblings() {
+    ExecutionRecord<Object, Object> parent =
+        record("tenant-1", "exec-1", "key-1", ExecutionStatus.WAITING_EXTERNAL, 7L);
+    ExecutionRecord<Object, Object> child =
+        record("tenant-1", "child-0", "key-1:await-item:unit-1:0", ExecutionStatus.QUEUED, 3L);
+    ExecutionRecord<Object, Object> succeeded =
+        record("tenant-1", "child-0", "key-1:await-item:unit-1:0", ExecutionStatus.SUCCEEDED, 4L);
+    AwaitUnitRecord unit = awaitUnit(AwaitUnitStatus.COMPLETED, 2, 2, true, null);
+    when(executionStateStore.getExecution("tenant-1", "exec-1"))
+        .thenReturn(Uni.createFrom().item(java.util.Optional.of(parent)));
+    when(executionStateStore.getExecutionByKey("tenant-1", "key-1:await-item:unit-1:0"))
+        .thenReturn(Uni.createFrom().item(java.util.Optional.empty()));
+    when(executionStateStore.createOrGetExecution(any()))
+        .thenReturn(Uni.createFrom().item(new CreateExecutionResult(child, false)));
+    when(executionStateStore.markSucceeded(
+        "tenant-1",
+        "child-0",
+        3L,
+        "await-item-continuation:unit-1:0",
+        List.of("out-0"),
+        1234L))
+        .thenReturn(Uni.createFrom().item(java.util.Optional.of(succeeded)));
+
+    continuations.captureItemContinuationOutput(
+            itemAwaitRecord("exec-1", 0, AwaitInteractionStatus.COMPLETED, "first"),
+            unit,
+            4,
+            new ExecutionInputSnapshot(ExecutionInputShape.UNI, "normalized"),
+            List.of("out-0"),
+            1234L)
+        .await().indefinitely();
+
+    verify(executionStateStore, never())
+        .getExecutionByKey("tenant-1", "key-1:await-item:unit-1:1");
+    verify(workDispatcher, never()).enqueueNow(any());
   }
 
   private AwaitContinuations continuations(

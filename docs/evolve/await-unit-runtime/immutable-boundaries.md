@@ -123,6 +123,7 @@ sequenceDiagram
     participant AwaitStore as "Await projections"
     participant Ledger as "SegmentBoundaryLedger -> ControlPlaneJournal"
     participant Live as "LiveAwaitSession"
+    participant Consumer as "Downstream live consumer"
     participant Continue as "AwaitContinuations"
     participant Work as "Work dispatcher"
 
@@ -132,7 +133,7 @@ sequenceDiagram
     Admission->>Ledger: "append BoundaryCompletionAdmitted"
     alt local live session accepts
       Admission->>Live: "signal admitted completion"
-      Live-->>Continue: "downstream suffix receives item by demand"
+      Live-->>Consumer: "emit item by demand"
     else no local live session
       Admission->>Continue: "durable fallback"
       Continue->>Work: "enqueue scalar or item continuation when gates allow"

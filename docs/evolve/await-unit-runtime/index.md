@@ -65,6 +65,8 @@ classDiagram
     class PipelineRunner
     class QueueAsyncCoordinator
     class AwaitBoundaryAdmission
+    class AwaitLiveCompletionRegistry
+    class LiveAwaitSession
     class AwaitContinuations
     class AwaitStepSupport
     class AwaitCoordinator
@@ -81,6 +83,9 @@ classDiagram
     PipelineExecutionService --> QueueAsyncCoordinator : async execution lifecycle
     QueueAsyncCoordinator --> AwaitBoundaryAdmission : complete await
     AwaitBoundaryAdmission --> AwaitCoordinator : record completion
+    AwaitBoundaryAdmission --> AwaitLiveCompletionRegistry : try live handoff
+    AwaitLiveCompletionRegistry --> LiveAwaitSession : local admission
+    LiveAwaitSession --> PipelineRunner : downstream demand
     AwaitBoundaryAdmission --> AwaitContinuations : durable fallback
     AwaitContinuations --> ExecutionStateStore : continuation projection writes
     AwaitCoordinator --> AwaitUnitStore
