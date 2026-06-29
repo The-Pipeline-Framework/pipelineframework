@@ -83,6 +83,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.telemetry.PipelineExecutionEvent;
 import org.pipelineframework.telemetry.PipelineReplayDocument;
+import org.pipelineframework.telemetry.PipelineReplayRunParameters;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 import org.pipelineframework.telemetry.PipelineReplayTopology;
 
@@ -2359,6 +2360,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         documents.sort(Comparator.comparing(PipelineReplayDocument::startedAt));
 
         PipelineReplayDocument canonical = selectCanonicalReplayDocument(documents);
+        PipelineReplayRunParameters runParameters = selectMergedRunParameters(documents);
         Instant earliestStart = documents.getFirst().startedAt();
         List<PipelineExecutionEvent> shiftedEvents = new ArrayList<>();
         boolean completedFragmentPresent = documents.stream().anyMatch(document -> "completed".equals(document.status()));
@@ -2474,7 +2476,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 status,
                 failureType,
                 failureMessage,
-                canonical.runParameters(),
+                runParameters,
                 canonical.topology(),
                 List.copyOf(renumbered));
         Files.createDirectories(outputFile.getParent());
@@ -2500,6 +2502,22 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                         : document.topology().transitions().size())
                         .thenComparing(PipelineReplayDocument::startedAt))
                 .orElseThrow(() -> new IllegalStateException("No replay documents available to merge."));
+    }
+
+    private static PipelineReplayRunParameters selectMergedRunParameters(List<PipelineReplayDocument> documents) throws Exception {
+        Map<String, PipelineReplayRunParameters> distinctRunParameters = new LinkedHashMap<>();
+        for (PipelineReplayDocument document : documents) {
+            if (document.runParameters() == null) {
+                continue;
+            }
+            distinctRunParameters.put(
+                    PipelineJson.mapper().writeValueAsString(document.runParameters()),
+                    document.runParameters());
+        }
+        if (distinctRunParameters.size() > 1) {
+            fail("Replay fragments disagree on runParameters; merged replay parameters must be run-level metadata.");
+        }
+        return distinctRunParameters.values().stream().findFirst().orElse(null);
     }
 
     private void assertReplayCoverage(PipelineReplayDocument replayDocument) {
