@@ -25,7 +25,10 @@ class QueueAsyncArchitectureFitnessTest {
       "AwaitContinuationPlan",
       "AwaitContinuationPlanner",
       "ItemContinuationKey",
-      "ItemizedParentRelease");
+      "ItemizedParentRelease",
+      "ExecutionRedrivePlan",
+      "DueExecutionDispatchPlan",
+      "AwaitTimeoutPlan");
 
   private static final Pattern FORBIDDEN_PURE_IMPORT = Pattern.compile(
       "^import\\s+.*("
@@ -72,6 +75,10 @@ class QueueAsyncArchitectureFitnessTest {
     assertAbsent(coordinator, "runAsyncExecution");
     assertAbsent(coordinator, "markWaitingExternal");
     assertAbsent(coordinator, "publishTerminalOutputsIfConfigured");
+    assertAbsent(coordinator, "redriveTerminalExecution");
+    assertAbsent(coordinator, "findDueExecutions");
+    assertAbsent(coordinator, "markTimedOut");
+    assertAbsent(coordinator, "markTerminalFailure");
 
     assertTrue(
         coordinator.contains("return segmentPipeline().process(workItem, worker, itemContinuationHandler);"),
@@ -79,6 +86,12 @@ class QueueAsyncArchitectureFitnessTest {
     assertTrue(
         coordinator.contains("return awaitBoundaryAdmission().complete(command, itemContinuationHandler);"),
         "completeAwait must delegate to AwaitBoundaryAdmission");
+    assertTrue(
+        coordinator.contains("return redriveFlow().redrive(tenantId, executionId, expectedVersion, allowFailed, reason);"),
+        "redriveExecution must delegate to QueueAsyncRedriveFlow");
+    assertTrue(
+        coordinator.contains("sweepFlow().sweepDueExecutions();"),
+        "sweepDueExecutions must delegate to QueueAsyncSweepFlow");
   }
 
   @Test
