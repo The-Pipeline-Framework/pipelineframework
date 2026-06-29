@@ -643,6 +643,11 @@ function augmentTopologyWithConnectorNodes(topology, connectors = []) {
   const transitions = [...topology.transitions];
   const stepNames = new Set(steps.map((step) => step.step));
   const transitionIds = new Set(transitions.map((transition) => transition.id));
+  const transitionEndpoints = new Set(
+    transitions
+      .filter((transition) => transition.from && transition.to)
+      .map((transition) => `${transition.from}->${transition.to}`)
+  );
   const runtimeStepClasses = new Set(steps.map((step) => step.runtimeStepClass).filter(Boolean));
   const businessSteps = steps.filter((step) => !step.sideEffect && !connectorRenderRole(step));
   const firstBusinessStep = businessSteps[0]?.step ?? null;
@@ -655,7 +660,8 @@ function augmentTopologyWithConnectorNodes(topology, connectors = []) {
     const from = role === "object-ingest" || role === "query-connector" ? connectorStepName : targetStep;
     const to = role === "object-ingest" || role === "query-connector" ? targetStep : connectorStepName;
     const transitionId = connector.transitionId ?? `${from}->${to}`;
-    if (transitionIds.has(transitionId)) {
+    const transitionEndpoint = `${from}->${to}`;
+    if (transitionIds.has(transitionId) || transitionEndpoints.has(transitionEndpoint)) {
       return;
     }
     transitions.push({
@@ -670,6 +676,7 @@ function augmentTopologyWithConnectorNodes(topology, connectors = []) {
       relationKind
     });
     transitionIds.add(transitionId);
+    transitionEndpoints.add(transitionEndpoint);
   };
 
   for (const step of steps) {
@@ -3460,6 +3467,12 @@ function processEvent(rawEvent) {
   if (rawEvent.event === "object_ingest_listed" || rawEvent.event === "object_ingest_submitted") {
     const ingestEdge = activeAnimationPolicy.connectorIngestByTargetStep.get(event.step)
       ?? [...activeAnimationPolicy.connectorIngestByTargetStep.values()].find((edge) => edge.from === event.step);
+    const sampleKey = ingestEdge
+      ? `object-ingest:${ingestEdge.from}->${ingestEdge.to}`
+      : `object-ingest:${event.step}`;
+    if (!shouldSampleSupportFlow(sampleKey, 12)) {
+      return;
+    }
     if (ingestEdge) {
       animateConnectorFlow(ingestEdge, rawEvent.startTime, 0x8bffa5);
     } else {
@@ -3476,6 +3489,12 @@ function processEvent(rawEvent) {
   if (rawEvent.event === "object_publish_grouped" || rawEvent.event === "object_publish_published") {
     const publishEdge = [...activeAnimationPolicy.connectorPublishBySourceStep.values()]
       .find((edge) => edge.to === event.step);
+    const sampleKey = publishEdge
+      ? `object-publish:${publishEdge.from}->${publishEdge.to}`
+      : `object-publish:${event.step}`;
+    if (!shouldSampleSupportFlow(sampleKey, 12)) {
+      return;
+    }
     if (publishEdge) {
       animateConnectorFlow(publishEdge, rawEvent.startTime, 0x86f0cf);
     } else {
