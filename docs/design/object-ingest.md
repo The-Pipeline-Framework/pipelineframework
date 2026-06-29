@@ -252,6 +252,8 @@ Use replay to answer per-run questions:
 3. Which completions were admitted, held, dropped, or released?
 4. Which output object key was published?
 
+The built-in CSV Payments replay is the reference connector-first proof. In the captured 1k run, Object Ingest admitted one source object, `Process Payment Status` started before all parser dispatch and await completions finished, and Object Publish wrote the terminal output object before success. See [Replay And Live Topology](/operate/observability/replay#csv-payments-built-in-proof) for the measured timings and checksum.
+
 See [Metrics](/operate/observability/metrics), [Await Boundary Operations](/operate/await-boundaries), and [Replay And Live Topology](/operate/observability/replay).
 
 ## Example Configs

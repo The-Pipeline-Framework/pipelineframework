@@ -23,7 +23,7 @@ sequenceDiagram
     Adapter-->>Coord: dispatch metadata
     Coord-->>Step: interaction dispatched
     Step-->>Worker: AwaitSuspendedException(unitId)
-    Worker->>ExecStore: mark WAITING_EXTERNAL(awaitUnitId)
+    Worker->>ExecStore: persist WAITING_EXTERNAL(awaitUnitId)
 ```
 
 Suspension is normal control flow. It should not be logged as a failed step or routed through recovery as an exception.
@@ -142,12 +142,12 @@ sequenceDiagram
     alt live session lost or worker restarted
       Await->>AwaitCoord: mark dispatchComplete(expectedItemCount=2)
       Await-->>Queue: suspend parent execution(awaitUnitId)
-      Queue->>Queue: mark WAITING_EXTERNAL(awaitUnitId)
+      Queue->>Queue: persist WAITING_EXTERNAL(awaitUnitId)
       Queue->>Status: dispatch durable item continuations
     end
 
     Publish-->>Queue: target sessions closed
-    Queue->>Queue: mark execution succeeded
+    Queue->>Queue: commit execution success
 ```
 
 The model is itemized until the next aggregate or terminal boundary. If an authored downstream step is `MANY_TO_ONE` or `MANY_TO_MANY`, durable fallback resumes the parent execution there with the collected ordered item outputs. If the suffix remains itemized through the terminal output, Object Publish owns final grouping and object writes.
@@ -166,7 +166,7 @@ sequenceDiagram
     Queue->>Status: continue item 1
     Status-->>Queue: PaymentOutput item 1
     Queue->>Publish: publish terminal output before success
-    Queue->>Queue: mark execution succeeded
+    Queue->>Queue: commit execution success
 ```
 
 ## Aggregate Unit
@@ -189,7 +189,7 @@ sequenceDiagram
     Coord->>Adapter: dispatch aggregate request
     Step-->>Store: execution waits on awaitUnitId
     Adapter-->>Coord: complete primary interaction
-    Coord->>Store: mark unit COMPLETED with output snapshot
+    Coord->>Store: record unit COMPLETED with output snapshot
     Store-->>Resume: load continuation input
     Resume->>Resume: replay full output unit
 ```
@@ -213,7 +213,7 @@ sequenceDiagram
     Coord-->>Sweeper: terminal await record
     Sweeper->>ExecStore: load waiting execution
     alt execution still waits on same awaitUnitId
-      Sweeper->>ExecStore: mark terminal failure / schedule failure handling
+      Sweeper->>ExecStore: commit terminal failure / schedule failure handling
     else execution already resumed or terminal
       Sweeper-->>Dispatcher: no-op
     end

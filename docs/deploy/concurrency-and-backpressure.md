@@ -69,6 +69,8 @@ flowchart LR
     H -. "restart or no live session" .-> F
 ```
 
+The repo proof run for the built-in CSV Payments replay used a `250/s` payment-provider permit setting. It processed 1k records in `13.426s` of replay time and showed `Process Payment Status` starting at `1.575s`, before the parser finished at `8.243s` and before the last await completion at `13.400s`. The observed await dispatch-to-completion latency was p50 `2613.9ms` and p95 `3147.9ms`; that includes provider permit wait, any configured provider response delay, Kafka transit, and completion admission. The overlap is the backpressure signal to look for: the parser, brokered await, status step, and terminal Object Publish are moving as connected live segments, with durable fallback available for recovery.
+
 ### Retry amplification example (real-world)
 
 When an upstream source can admit work faster than a downstream step can call a slow third-party
