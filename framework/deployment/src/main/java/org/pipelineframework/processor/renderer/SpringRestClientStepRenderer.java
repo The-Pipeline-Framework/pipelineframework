@@ -103,6 +103,7 @@ public class SpringRestClientStepRenderer implements PipelineRenderer<RestBindin
                 .build())
             .addMethod(constructor(inputDomainType, inputDtoType, outputDomainType, outputDtoType))
             .addMethod(applyMethod(inputDomainType, outputDomainType, inputDtoType, outputDtoType))
+            .addMethod(applyTpfHeadersMethod())
             .addMethod(resolveEndpointUrlMethod(configKey, endpointPath))
             .addMethod(normalizeBaseUrlMethod())
             .build();
@@ -141,6 +142,7 @@ public class SpringRestClientStepRenderer implements PipelineRenderer<RestBindin
             .addStatement("$T inputDto = this.inboundMapper.toExternal(input)", inputDtoType)
             .addStatement("return this.webClient.post()\n"
                     + ".uri(this.endpointUrl)\n"
+                    + ".headers(this::applyTpfHeaders)\n"
                     + ".bodyValue(inputDto)\n"
                     + ".retrieve()\n"
                     + ".bodyToMono($T.class)\n"
@@ -151,6 +153,22 @@ public class SpringRestClientStepRenderer implements PipelineRenderer<RestBindin
                 ClassName.get("reactor.core.publisher", "Mono"),
                 IllegalStateException.class,
                 "REST client step received an empty response body")
+            .build();
+    }
+
+    private MethodSpec applyTpfHeadersMethod() {
+        return MethodSpec.methodBuilder("applyTpfHeaders")
+            .addModifiers(Modifier.PRIVATE)
+            .addParameter(ClassName.get("org.springframework.http", "HttpHeaders"), "headers")
+            .addStatement("$T.versionTag().ifPresent(value -> headers.set($T.VERSION, value))",
+                ClassName.get("org.pipelineframework.runtime.core", "TpfExecutionContext"),
+                ClassName.get("org.pipelineframework.runtime.core", "TpfContextHeaders"))
+            .addStatement("$T.replayMode().ifPresent(value -> headers.set($T.REPLAY, value))",
+                ClassName.get("org.pipelineframework.runtime.core", "TpfExecutionContext"),
+                ClassName.get("org.pipelineframework.runtime.core", "TpfContextHeaders"))
+            .addStatement("$T.cachePolicy().ifPresent(value -> headers.set($T.CACHE_POLICY, value))",
+                ClassName.get("org.pipelineframework.runtime.core", "TpfExecutionContext"),
+                ClassName.get("org.pipelineframework.runtime.core", "TpfContextHeaders"))
             .build();
     }
 

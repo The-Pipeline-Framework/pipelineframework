@@ -28,6 +28,11 @@ The goal is:
 `framework/runtime-spring` provides the first Spring Boot adapter for these same contracts without depending on the
 Quarkus runtime artifact.
 
+When a concept moves into `framework/runtime-core`, the core type becomes the source of truth. Existing Quarkus runtime
+types that expose the same concept should delegate to the core type, or the PR should explicitly justify why the concepts
+remain separate. Keep a compatibility test around delegated legacy constants or APIs so Spring support does not create a
+second parallel contract by accident.
+
 The Spring adapter currently proves host integration only:
 
 - Spring bean and config lookup through `ApplicationContext`.
