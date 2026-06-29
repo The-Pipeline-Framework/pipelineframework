@@ -53,6 +53,16 @@
       "lastStatusSeconds": 13.40859525,
       "firstPublishSeconds": 13.416315,
       "lastPublishSeconds": 13.425913
+    },
+    "awaitDispatchToCompletionLatency": {
+      "count": 1000,
+      "minMs": 301.194,
+      "p50Ms": 2613.892,
+      "p90Ms": 3125.096,
+      "p95Ms": 3147.899,
+      "p99Ms": 3172.407,
+      "maxMs": 3188.111,
+      "averageMs": 2277.271
     }
   },
   "proofRuns": {

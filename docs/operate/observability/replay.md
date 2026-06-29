@@ -125,10 +125,13 @@ The current dataset was captured with:
 | --- | --- |
 | Input records | `1000` |
 | Payment provider permits | `250/s` |
+| Configured provider response delay | `0ms` |
 | Replay duration | `13.426s` |
 | Effective throughput | `74.5 records/s` |
 | Replay events | `12007` |
 | Output checksum | `a29a39ea8ac078bfaff3d53236eefd8020922bfd89266f77ca3ed3826794e784` |
+
+Provider-boundary timing in the replay is measured from `await_interaction_dispatched` to `await_unit_item_completed`. For this capture the observed latency was p50 `2613.9ms`, p95 `3147.9ms`, and max `3188.1ms`. Treat that as await completion latency, not pure provider CPU time: it includes provider permit wait, any configured response delay, Kafka transit, and completion admission.
 
 Key timing checks:
 
