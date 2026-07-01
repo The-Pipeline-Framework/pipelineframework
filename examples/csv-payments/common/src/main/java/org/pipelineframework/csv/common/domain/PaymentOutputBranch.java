@@ -16,9 +16,10 @@
 
 package org.pipelineframework.csv.common.domain;
 
-import jakarta.persistence.Entity;
+import jakarta.persistence.MappedSuperclass;
 import lombok.NoArgsConstructor;
 
-@Entity
+@MappedSuperclass
 @NoArgsConstructor
-public class PaymentOutput extends AbstractPaymentOutput {}
+public abstract sealed class PaymentOutputBranch extends AbstractPaymentOutput
+    permits ApprovedPaymentOutput, UnapprovedPaymentOutput {}

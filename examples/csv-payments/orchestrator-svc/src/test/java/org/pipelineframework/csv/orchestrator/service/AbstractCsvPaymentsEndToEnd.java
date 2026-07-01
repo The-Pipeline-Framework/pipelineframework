@@ -1085,7 +1085,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     @Test
-    void providerRejectsAreRoutedToRejectSink() throws Exception {
+    void providerRejectsStillProduceOutputRows() throws Exception {
         assumeTrue(runProviderRejectScenario(), "Provider-reject scenario disabled for this E2E class.");
         assumeTrue(
                 TELEMETRY_CAPTURE_ACTIVE,
@@ -1105,31 +1105,25 @@ abstract class AbstractCsvPaymentsEndToEnd {
         resetDatabasePersistence();
         createTestCsvFiles();
 
-        ProcessRunResult runResult = orchestratorTriggerRun();
+        orchestratorTriggerRun();
 
         waitForPipelineComplete();
 
         PipelineReplayDocument replayDocument = mergeReplayDocuments(REPLAY_CAPTURE_DIR, REPLAY_FILE);
-        long rejectEvents = replayDocument.events().stream()
-                .filter(event -> "reject".equals(event.event()))
-                .count();
-        assertTrue(rejectEvents > 0, "Expected replay JSON to contain reject events.");
-
         long outputRecords = outputRecordCount(Paths.get(TEST_E2E_DIR));
-        assertTrue(outputRecords < expectedPaymentRecordCount(), "Expected fewer output records than input records.");
+        assertEquals(expectedPaymentRecordCount(), outputRecords, "Expected one output row per valid input payment.");
 
         String combinedOutput = readCombinedOutput(TEST_E2E_DIR);
-        assertFalse(combinedOutput.contains("John Doe"), "Provider-rejected recipient John Doe should not reach output.");
-        assertFalse(combinedOutput.contains("Alice Brown"), "Provider-rejected recipient Alice Brown should not reach output.");
+        assertTrue(combinedOutput.contains("John Doe"), "Provider-rejected recipient John Doe should reach output.");
+        assertTrue(combinedOutput.contains("Alice Brown"), "Provider-rejected recipient Alice Brown should reach output.");
+        assertTrue(
+                combinedOutput.contains("Mock payment provider rejected the payment."),
+                "Expected provider rejection text to be rendered into the output row.");
         assertTrue(
                 combinedOutput.contains("Jane Smith")
                         || combinedOutput.contains("Bob Johnson")
                         || combinedOutput.contains("Charlie Wilson"),
                 "Expected at least one successful recipient to reach output.");
-
-        assertTrue(
-                runResult.output().contains("Item reject stored in memory sink"),
-                "Expected in-memory item reject sink evidence in orchestrator logs.");
     }
 
     protected boolean runHappyPathScenario() {
@@ -1324,7 +1318,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", localhost, grpcPort);
         putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", localhost, grpcPort);
         putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", localhost, grpcPort);
-        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", localhost, grpcPort);
+        putGrpcClient(pb, "PROCESS_APPROVED_PAYMENT_STATUS", localhost, grpcPort);
+        putGrpcClient(pb, "PROCESS_UNAPPROVED_PAYMENT_STATUS", localhost, grpcPort);
+        putGrpcClient(pb, "FINALIZE_PAYMENT_OUTPUT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", localhost, grpcPort);
@@ -1357,7 +1353,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", inputService.getHost(), String.valueOf(inputService.getMappedPort(8444)), "/q/health/live");
         putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)), "/q/health/live");
         putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)), "/q/health/live");
-        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
+        putGrpcClient(pb, "PROCESS_APPROVED_PAYMENT_STATUS", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
+        putGrpcClient(pb, "PROCESS_UNAPPROVED_PAYMENT_STATUS", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
+        putGrpcClient(pb, "FINALIZE_PAYMENT_OUTPUT", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
@@ -1390,7 +1388,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", pipelineHost, pipelinePort);
         putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", pipelineHost, pipelinePort);
         putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", pipelineHost, pipelinePort);
-        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "PROCESS_APPROVED_PAYMENT_STATUS", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "PROCESS_UNAPPROVED_PAYMENT_STATUS", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "FINALIZE_PAYMENT_OUTPUT", pipelineHost, pipelinePort);
 
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", persistenceHost, persistencePort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", persistenceHost, persistencePort);
@@ -2524,7 +2524,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertEquals("completed", replayDocument.status(), "Expected merged replay to complete successfully.");
         assertReplayStepEvents(replayDocument, "ProcessCsvPaymentsInput");
         assertReplayStepEvents(replayDocument, "AwaitPaymentProvider");
-        assertReplayStepEvents(replayDocument, "ProcessPaymentStatus");
+        assertReplayStepEvents(replayDocument, "ProcessApprovedPaymentStatus");
+        assertReplayStepEvents(replayDocument, "ProcessUnapprovedPaymentStatus");
+        assertReplayStepEvents(replayDocument, "FinalizePaymentOutput");
         assertReplayStepEvents(replayDocument, "PersistencePaymentRecordSideEffect");
         assertReplayStepEvents(replayDocument, "PersistencePaymentOutputSideEffect");
         assertReplayStepEvents(replayDocument, "ObjectIngest");
@@ -2542,7 +2544,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "Expected merged replay to contain input-to-await flow events.");
         assertTrue(
                 replayDocument.events().stream().anyMatch(event ->
-                        "ProcessPaymentStatus".equals(event.step())
+                        ("ProcessApprovedPaymentStatus".equals(event.step())
+                                || "ProcessUnapprovedPaymentStatus".equals(event.step()))
                                 && "AwaitPaymentProvider".equals(event.from())),
                 "Expected merged replay to contain await-resume flow events.");
 
@@ -2604,9 +2607,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 .comparingDouble(AbstractCsvPaymentsEndToEnd::playbackTimeForEvent)
                 .thenComparingLong(event -> event.sequence() == null ? Long.MAX_VALUE : event.sequence());
         PipelineExecutionEvent firstPaymentStatusEvent = replayDocument.events().stream()
-                .filter(event -> "ProcessPaymentStatus".equals(event.step()))
+                .filter(event ->
+                        "ProcessApprovedPaymentStatus".equals(event.step())
+                                || "ProcessUnapprovedPaymentStatus".equals(event.step()))
                 .min(playbackOrder)
-                .orElseThrow(() -> new AssertionError("Expected ProcessPaymentStatus replay events."));
+                .orElseThrow(() -> new AssertionError("Expected payment-status branch replay events."));
         PipelineExecutionEvent awaitUnitDispatchCompleteEvent = replayDocument.events().stream()
                 .filter(event -> AWAIT_UNIT_DISPATCH_COMPLETE.equals(event.event()))
                 .min(playbackOrder)

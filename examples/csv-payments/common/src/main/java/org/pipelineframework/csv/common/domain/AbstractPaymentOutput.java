@@ -16,64 +16,77 @@
 
 package org.pipelineframework.csv.common.domain;
 
-import static java.text.MessageFormat.format;
-
-import jakarta.persistence.Column;
+import com.opencsv.bean.CsvBindByName;
+import com.opencsv.bean.CsvIgnore;
+import com.opencsv.bean.CsvNumber;
+import jakarta.persistence.Convert;
 import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.PrePersist;
-import jakarta.persistence.Transient;
 import java.io.Serializable;
 import java.math.BigDecimal;
+import java.nio.file.Path;
+import java.util.Currency;
+import java.util.Objects;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.NonNull;
 import lombok.Setter;
-import lombok.experimental.Accessors;
 
 @MappedSuperclass
 @Getter
 @Setter
-@Accessors(chain = true)
 @NoArgsConstructor
-public abstract sealed class PaymentStatus extends BaseEntity implements Serializable
-    permits ApprovedPaymentStatus, UnapprovedPaymentStatus {
+public abstract class AbstractPaymentOutput extends BaseEntity implements Serializable {
 
-  private String customerReference;
+  @CsvIgnore private String csvPaymentsOutputFilename;
 
-  @NonNull
-  @Column(nullable = false)
-  private String reference;
+  @CsvIgnore
+  @Convert(converter = PathConverter.class)
+  private Path csvPaymentsInputFilePath;
 
-  @NonNull private String status;
-  @NonNull private String message;
-  @NonNull private BigDecimal fee;
+  @CsvBindByName(column = "CSV Id")
+  String csvId;
 
-  @NonNull private UUID conversationId;
-  @NonNull private Long statusCode;
+  @CsvBindByName(column = "Recipient")
+  String recipient;
 
-  @Transient private PaymentRecord paymentRecord;
-  @NonNull private UUID paymentRecordId;
+  @CsvBindByName(column = "Amount", locale = "en-UK")
+  @CsvNumber("#,###.00")
+  BigDecimal amount;
+
+  @CsvBindByName(column = "Currency")
+  Currency currency;
+
+  @CsvBindByName(column = "Reference")
+  UUID conversationId;
+
+  @CsvBindByName(column = "Status")
+  Long status;
+
+  @CsvBindByName(column = "Message")
+  String message;
+
+  @CsvBindByName(column = "Fee", locale = "en-UK")
+  @CsvNumber("#,###.00")
+  BigDecimal fee;
 
   @PrePersist
-  public void useStablePaymentStatusId() {
+  public void useStablePaymentOutputId() {
     CsvPaymentsStableIdSupport.stableId(
-            getClass().getSimpleName(), paymentRecordId, reference, status, statusCode, message)
+            "PaymentOutput", csvId, recipient, amount, currency, status, message)
         .ifPresent(stableId -> id = stableId);
-  }
-
-  @Override
-  public String toString() {
-    return format(
-        "{0}'{'reference=''{1}'', message=''{2}'', status=''{3}'', fee={4}, recordId={5}'}'",
-        getClass().getSimpleName(), reference, message, status, fee, paymentRecordId);
   }
 
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
-    PaymentStatus that = (PaymentStatus) o;
+    AbstractPaymentOutput that = (AbstractPaymentOutput) o;
     return this.id != null && this.id.equals(that.id);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(id);
   }
 }

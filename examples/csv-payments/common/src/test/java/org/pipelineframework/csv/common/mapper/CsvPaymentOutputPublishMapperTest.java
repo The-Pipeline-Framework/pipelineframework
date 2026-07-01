@@ -12,8 +12,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.csv.common.domain.PaymentOutput;
-import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.common.domain.PaymentStatus;
 import org.pipelineframework.objectpublish.ObjectPublishGroupRenderer;
 
 class CsvPaymentOutputPublishMapperTest {
@@ -59,22 +57,9 @@ class CsvPaymentOutputPublishMapperTest {
     }
 
     private PaymentOutput paymentOutput(Path inputFile, String csvId, String recipient, String amount) {
-        PaymentRecord record = new PaymentRecord();
-        record.setCsvPaymentsInputFilePath(inputFile);
-        record.setCsvId(csvId);
-        record.setRecipient(recipient);
-        record.setAmount(new BigDecimal(amount));
-        record.setCurrency(Currency.getInstance("USD"));
-
-        PaymentStatus status = new PaymentStatus();
-        status.setPaymentRecord(record);
-        status.setConversationId(UUID.randomUUID());
-        status.setStatusCode(1000L);
-        status.setStatus("APPROVED");
-        status.setMessage("Success");
-
         PaymentOutput output = new PaymentOutput();
-        output.setPaymentStatus(status);
+        output.setCsvPaymentsOutputFilename(inputFile.getFileName().toString());
+        output.setCsvPaymentsInputFilePath(inputFile);
         output.setCsvId(csvId);
         output.setRecipient(recipient);
         output.setAmount(new BigDecimal(amount));

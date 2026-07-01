@@ -11,10 +11,10 @@ aspects:
       # Queue-async resume is at-least-once from the await boundary onward. Persisted CSV entities
       # use stable business IDs and duplicate-key=ignore so replayed side effects stay idempotent.
       targetSteps:
-        - ProcessFolderService
-        - ProcessCsvPaymentsInputService
-        - ProcessPaymentStatusService
-        - ProcessCsvPaymentsOutputFileService
+        - ProcessFolder
+        - ProcessCsvPaymentsInput
+        - ProcessPaymentStatus
+        - ProcessCsvPaymentsOutputFile
       pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
       enabledTargets:
         - GRPC_SERVICE
@@ -94,30 +94,33 @@ messages:
         name: csvPaymentsOutputFilename
         type: string
       - number: 3
+        name: csvPaymentsInputFilePath
+        type: path
+      - number: 4
         name: csvId
         type: string
-      - number: 4
+      - number: 5
         name: recipient
         type: string
-      - number: 5
+      - number: 6
         name: amount
         type: decimal
-      - number: 6
+      - number: 7
         name: currency
         type: currency
-      - number: 7
+      - number: 8
         name: conversationId
         type: uuid
-      - number: 8
+      - number: 9
         name: status
         type: int64
-      - number: 9
+      - number: 10
         name: message
         type: string
-      - number: 10
+      - number: 11
         name: fee
         type: decimal
-      - number: 11
+      - number: 12
         name: paymentStatus
         type: PaymentStatus
   CsvPaymentsOutputFile:

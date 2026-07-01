@@ -28,11 +28,11 @@ class CsvPaymentsAwaitPersistenceScopeTest {
                 pipelineYaml.contains("- ProcessFolderService"),
                 "Default persistence should not target the legacy folder ingestion step");
         assertTrue(
-                pipelineYaml.contains("- ProcessCsvPaymentsInputService"),
+                pipelineYaml.contains("- ProcessCsvPaymentsInput"),
                 "Persistence should include the CSV parsing step");
         assertTrue(
-                pipelineYaml.contains("- ProcessPaymentStatusService"),
-                "Persistence should include post-await status processing with idempotent entity keys");
+                pipelineYaml.contains("- FinalizePaymentOutput"),
+                "Persistence should include the explicit terminal merge step before object publish");
         assertFalse(
                 pipelineYaml.contains("- ProcessCsvPaymentsOutputFileService"),
                 "Default persistence should not target the legacy output-file step");

@@ -41,6 +41,7 @@ import org.mockito.MockitoAnnotations;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitCompletionEnvelope;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitDispatchEnvelope;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.csv.common.domain.ApprovedPaymentStatus;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
 
@@ -153,15 +154,16 @@ class PaymentProviderKafkaAwaitMockTest {
   }
 
   private static PaymentStatus validPaymentStatus(PaymentRecord paymentRecord) {
-    return new PaymentStatus()
-        .setReference("provider-ref")
-        .setStatus("Completed")
-        .setMessage("settled")
-        .setFee(new BigDecimal("0.12"))
-        .setConversationId(UUID.randomUUID())
-        .setStatusCode(1000L)
-        .setPaymentRecord(paymentRecord)
-        .setPaymentRecordId(paymentRecord.getId());
+    ApprovedPaymentStatus paymentStatus = new ApprovedPaymentStatus();
+    paymentStatus.setReference("provider-ref");
+    paymentStatus.setStatus("Completed");
+    paymentStatus.setMessage("settled");
+    paymentStatus.setFee(new BigDecimal("0.12"));
+    paymentStatus.setConversationId(UUID.randomUUID());
+    paymentStatus.setStatusCode(1000L);
+    paymentStatus.setPaymentRecord(paymentRecord);
+    paymentStatus.setPaymentRecordId(paymentRecord.getId());
+    return paymentStatus;
   }
 
   private static String dispatchJson(PaymentRecord paymentRecord) throws Exception {

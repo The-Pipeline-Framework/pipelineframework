@@ -16,9 +16,7 @@
 
 package org.pipelineframework.csv.common.domain;
 
-import jakarta.persistence.Entity;
 import lombok.NoArgsConstructor;
 
-@Entity
 @NoArgsConstructor
-public class PaymentOutput extends AbstractPaymentOutput {}
+public final class ApprovedPaymentOutput extends PaymentOutputBranch {}
