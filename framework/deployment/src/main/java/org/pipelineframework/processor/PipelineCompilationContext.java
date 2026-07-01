@@ -20,6 +20,7 @@ import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution;
+import org.pipelineframework.processor.routing.PipelineBranchingPlan;
 
 /**
  * Holds the compilation context for the pipeline annotation processing.
@@ -48,6 +49,8 @@ public class PipelineCompilationContext {
     private Object pipelineTemplateConfig; // Store as Object to avoid circular dependencies
     @Setter
     private List<StepDefinition> stepDefinitions;
+    @Setter
+    private PipelineBranchingPlan branchingPlan;
     
     // Resolved generation targets
     @Setter
@@ -102,6 +105,7 @@ public class PipelineCompilationContext {
         this.orchestratorModels = List.of();
         this.pipelineTemplateConfig = null;
         this.stepDefinitions = List.of();
+        this.branchingPlan = null;
         this.resolvedTargets = Set.of();
         this.rendererBindings = Map.of();
         this.pluginHost = false;

@@ -2172,6 +2172,74 @@ class StepDefinitionParserTest {
             diagnostics.toString());
     }
 
+    @Test
+    void parsesBranchRoutingAcceptsAndTerminalFields() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Finalize"
+                service: "com.example.FinalizeService"
+                cardinality: "ONE_TO_ONE"
+                input: "com.example.OrderCompletion"
+                output: "com.example.FinalizedOrder"
+                accepts:
+                  - "StockReserved"
+                  - "LicenseProvisioned"
+                terminal: true
+            """, diagnostics);
+
+        assertEquals(1, steps.size(), diagnostics.toString());
+        StepDefinition step = steps.getFirst();
+        assertEquals(List.of("StockReserved", "LicenseProvisioned"), step.accepts());
+        assertTrue(step.terminal());
+    }
+
+    @Test
+    void rejectsPredicateStyleRoutingKeys() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Reserve Stock"
+                service: "com.example.ReserveStockService"
+                input: "com.example.PhysicalOrder"
+                output: "com.example.StockReserved"
+                when: "country == 'ES'"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message ->
+                message.contains("type-based accepts/terminal routing only") && message.contains("when")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsBranchRoutingFieldsBeforeVersionTwo() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 1
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Finalize"
+                service: "com.example.FinalizeService"
+                input: "com.example.OrderCompletion"
+                output: "com.example.FinalizedOrder"
+                accepts:
+                  - "StockReserved"
+                terminal: true
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("accepts/terminal branch routing requires version: 2")),
+            diagnostics.toString());
+    }
+
     private List<StepDefinition> parse(String yaml) throws IOException {
         return parse(yaml, null);
     }

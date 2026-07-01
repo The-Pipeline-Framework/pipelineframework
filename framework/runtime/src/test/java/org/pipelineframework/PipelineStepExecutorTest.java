@@ -35,6 +35,8 @@ import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.AwaitStreamOneToOneStep;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
+import org.pipelineframework.branching.PipelineBranchRoutingException;
+import org.pipelineframework.branching.StepBranchingDescriptor;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.blocking.BlockingExecutionSupport;
 import org.pipelineframework.context.PipelineContext;
@@ -57,6 +59,7 @@ import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineStepExecutorTest {
@@ -208,6 +211,67 @@ class PipelineStepExecutorTest {
         List<String> values = ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5));
         values.sort(String::compareTo);
         assertEquals(List.of("a-future", "b-future"), values);
+    }
+
+    @Test
+    void branchAwareOneToOneSkipsNonApplicableItemsAndPassesThemThrough() {
+        ReserveStockStep step = new ReserveStockStep();
+        StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
+            1,
+            "Reserve Stock",
+            step.getClass().getName(),
+            List.of("PhysicalOrder"),
+            List.of(PhysicalOrder.class.getName()),
+            List.of(PhysicalOrder.class),
+            false);
+
+        Object result = PipelineStepExecutor.applyOneToOneUnchecked(
+            step,
+            Uni.createFrom().item(new DigitalOrder("o-1")),
+            false,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null,
+            descriptor);
+
+        Object output = ((Uni<?>) result).await().atMost(Duration.ofSeconds(5));
+        assertTrue(output instanceof DigitalOrder);
+        assertEquals("o-1", ((DigitalOrder) output).id());
+        assertEquals(0, step.invocations());
+    }
+
+    @Test
+    void branchAwareTerminalRejectsUnexpectedRuntimeType() {
+        ReserveStockStep step = new ReserveStockStep();
+        StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
+            4,
+            "Finalize",
+            step.getClass().getName(),
+            List.of("StockReserved"),
+            List.of(StockReserved.class.getName()),
+            List.of(StockReserved.class),
+            true);
+
+        Object result = PipelineStepExecutor.applyOneToOneUnchecked(
+            step,
+            Uni.createFrom().item(new DigitalOrder("o-2")),
+            false,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null,
+            descriptor);
+
+        PipelineBranchRoutingException exception = assertThrows(
+            PipelineBranchRoutingException.class,
+            () -> ((Uni<?>) result).await().atMost(Duration.ofSeconds(5)));
+        assertTrue(exception.getMessage().contains("Finalize"));
+        assertTrue(exception.getMessage().contains(DigitalOrder.class.getName()));
     }
 
     @Test
@@ -740,6 +804,29 @@ class PipelineStepExecutorTest {
         @Override
         public List<String> applyBatchBlocking(List<String> inputs) {
             return inputs.stream().map(item -> item + "-mapped").toList();
+        }
+    }
+
+    record PhysicalOrder(String id) {
+    }
+
+    record DigitalOrder(String id) {
+    }
+
+    record StockReserved(String id) {
+    }
+
+    static final class ReserveStockStep extends ConfigurableStep implements StepOneToOne<PhysicalOrder, StockReserved> {
+        private final AtomicInteger invocations = new AtomicInteger();
+
+        @Override
+        public Uni<StockReserved> applyOneToOne(PhysicalOrder in) {
+            invocations.incrementAndGet();
+            return Uni.createFrom().item(new StockReserved(in.id()));
+        }
+
+        int invocations() {
+            return invocations.get();
         }
     }
 }

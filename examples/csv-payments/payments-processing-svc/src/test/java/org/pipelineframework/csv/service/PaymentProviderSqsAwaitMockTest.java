@@ -39,6 +39,7 @@ import org.mockito.ArgumentCaptor;
 import org.pipelineframework.awaitable.sqs.SqsAwaitCompletionEnvelope;
 import org.pipelineframework.awaitable.sqs.SqsAwaitDispatchEnvelope;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.csv.common.domain.ApprovedPaymentStatus;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
 import software.amazon.awssdk.services.sqs.SqsClient;
@@ -262,15 +263,16 @@ class PaymentProviderSqsAwaitMockTest {
   }
 
   private static PaymentStatus validPaymentStatus(PaymentRecord paymentRecord) {
-    return new PaymentStatus()
-        .setReference("provider-ref")
-        .setStatus("Completed")
-        .setMessage("settled")
-        .setFee(new BigDecimal("0.12"))
-        .setConversationId(UUID.randomUUID())
-        .setStatusCode(1000L)
-        .setPaymentRecord(paymentRecord)
-        .setPaymentRecordId(paymentRecord.getId());
+    ApprovedPaymentStatus paymentStatus = new ApprovedPaymentStatus();
+    paymentStatus.setReference("provider-ref");
+    paymentStatus.setStatus("Completed");
+    paymentStatus.setMessage("settled");
+    paymentStatus.setFee(new BigDecimal("0.12"));
+    paymentStatus.setConversationId(UUID.randomUUID());
+    paymentStatus.setStatusCode(1000L);
+    paymentStatus.setPaymentRecord(paymentRecord);
+    paymentStatus.setPaymentRecordId(paymentRecord.getId());
+    return paymentStatus;
   }
 
   private static final class FakePaymentProviderConfig implements PaymentProviderConfig {

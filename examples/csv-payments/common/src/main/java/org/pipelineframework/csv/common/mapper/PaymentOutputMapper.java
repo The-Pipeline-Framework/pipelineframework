@@ -27,7 +27,7 @@ import org.pipelineframework.csv.common.dto.PaymentOutputDto;
 @SuppressWarnings("unused")
 @Mapper(
     componentModel = "jakarta",
-    uses = {CommonConverters.class, PaymentStatusMapper.class},
+    uses = CommonConverters.class,
     unmappedTargetPolicy = ReportingPolicy.WARN)
 public interface PaymentOutputMapper extends org.pipelineframework.mapper.Mapper<PaymentOutput, org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput> {
 
@@ -39,17 +39,17 @@ public interface PaymentOutputMapper extends org.pipelineframework.mapper.Mapper
 
   @BeanMapping(unmappedTargetPolicy = ReportingPolicy.IGNORE)
   @Mapping(target = "id", qualifiedByName = "uuidToString")
+  @Mapping(target = "csvPaymentsInputFilePath", qualifiedByName = "pathToString")
   @Mapping(target = "amount", qualifiedByName = "bigDecimalToString")
   @Mapping(target = "currency", qualifiedByName = "currencyToString")
   @Mapping(target = "fee", qualifiedByName = "bigDecimalToString")
-  @Mapping(target = "paymentStatus")
   org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput toGrpc(PaymentOutputDto dto);
 
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
+  @Mapping(target = "csvPaymentsInputFilePath", qualifiedByName = "stringToPath")
   @Mapping(target = "amount", qualifiedByName = "stringToBigDecimal")
   @Mapping(target = "currency", qualifiedByName = "stringToCurrency")
   @Mapping(target = "fee", qualifiedByName = "stringToBigDecimal")
-  @Mapping(target = "paymentStatus")
   PaymentOutputDto fromGrpc(org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput grpc);
 
   @Override

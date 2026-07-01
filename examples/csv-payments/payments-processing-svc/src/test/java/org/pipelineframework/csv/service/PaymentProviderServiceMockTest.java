@@ -28,8 +28,10 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.csv.common.domain.ApprovedPaymentStatus;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
+import org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus;
 
 class PaymentProviderServiceMockTest {
 
@@ -42,6 +44,7 @@ class PaymentProviderServiceMockTest {
     PaymentStatus paymentStatus = paymentProvider.processPayment(paymentRecord);
 
     assertThat(paymentStatus).isNotNull();
+    assertThat(paymentStatus).isInstanceOf(ApprovedPaymentStatus.class);
     assertThat(paymentStatus.getReference()).isEqualTo("101");
     assertThat(paymentStatus.getStatus()).isEqualTo("Complete");
     assertThat(paymentStatus.getFee()).isEqualTo(new BigDecimal("1.01"));
@@ -85,6 +88,7 @@ class PaymentProviderServiceMockTest {
 
     PaymentStatus paymentStatus = paymentProvider.processPayment(testPaymentRecord());
 
+    assertThat(paymentStatus).isInstanceOf(UnapprovedPaymentStatus.class);
     assertThat(paymentStatus.getStatus()).isEqualTo("Rejected");
     assertThat(paymentStatus.getMessage()).isEqualTo("Mock payment provider rejected the payment.");
     assertThat(paymentStatus.getPaymentRecordId()).isNotNull();

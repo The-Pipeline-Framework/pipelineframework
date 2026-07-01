@@ -466,11 +466,17 @@ Example:
   test
 ```
 
-`provider-reject-probability` returns a business-level `PaymentStatus.status=Rejected`, and the
-`ProcessPaymentStatusService` step maps that terminal outcome into the framework item-reject
-channel via `NonRetryableException`. Technical timeouts still surface as exceptions and therefore
-participate in the normal retry path. Malformed CSV handling is separate: today malformed input
-fails at file scope rather than as a per-record reject.
+`provider-reject-probability` now returns the `UnapprovedPaymentStatus` branch of the
+`PaymentStatus` union. The default object-publish pipeline routes that branch through
+`Process Unapproved Payment Status` and the explicit terminal merge step `Finalize Payment Output`,
+so rejected provider responses still produce normal `PaymentOutput` rows with the rejection text.
+Technical timeouts still surface as exceptions and therefore participate in the normal retry path.
+Malformed CSV handling is separate: today malformed input fails at file scope rather than as a
+per-record reject.
+
+The object publish sink does not imply the branch merge. The branch-aware proof in
+`config/pipeline.yaml` keeps `terminal: true` on `Finalize Payment Output`, then publishes the
+merged `PaymentOutput` rows through Object Publish.
 
 ## Getting Started
 
