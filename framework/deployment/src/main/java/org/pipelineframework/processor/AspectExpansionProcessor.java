@@ -62,7 +62,7 @@ public class AspectExpansionProcessor {
             applicable.addAll(globalAspects);
             for (PipelineAspectModel aspect : stepAspects) {
                 Set<String> targetSteps = extractTargetSteps(aspect);
-                if (targetSteps != null && targetSteps.contains(originalModel.serviceName())) {
+                if (matchesTargetStep(targetSteps, originalModel.serviceName())) {
                     applicable.add(aspect);
                 }
             }
@@ -171,11 +171,36 @@ public class AspectExpansionProcessor {
     }
 
     private void validateTargetStepName(Set<String> availableStepNames, String aspectName, String targetStep) {
-        if (!availableStepNames.contains(targetStep)) {
+        String normalizedTarget = normalizeStepToken(targetStep);
+        boolean matched = availableStepNames.stream()
+            .anyMatch(candidate -> matchesNormalizedToken(normalizeStepToken(candidate), normalizedTarget));
+        if (!matched) {
             throw new IllegalArgumentException(
                 "STEP-scoped aspect '" + aspectName +
                     "' targets non-existent step: " + targetStep);
         }
+    }
+
+    private boolean matchesTargetStep(Set<String> targetSteps, String serviceName) {
+        if (targetSteps == null || targetSteps.isEmpty()) {
+            return false;
+        }
+        String normalizedServiceName = normalizeStepToken(serviceName);
+        for (String targetStep : targetSteps) {
+            if (matchesNormalizedToken(normalizedServiceName, normalizeStepToken(targetStep))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesNormalizedToken(String candidate, String target) {
+        if (candidate == null || candidate.isBlank() || target == null || target.isBlank()) {
+            return false;
+        }
+        return candidate.equalsIgnoreCase(target)
+            || candidate.toLowerCase(Locale.ROOT).contains(target.toLowerCase(Locale.ROOT))
+            || target.toLowerCase(Locale.ROOT).contains(candidate.toLowerCase(Locale.ROOT));
     }
 
     private Set<String> extractTargetSteps(PipelineAspectModel aspect) {
@@ -254,5 +279,18 @@ public class AspectExpansionProcessor {
             }
         }
         return builder.toString();
+    }
+
+    private String normalizeStepToken(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String simple = value;
+        int lastDot = simple.lastIndexOf('.');
+        if (lastDot != -1) {
+            simple = simple.substring(lastDot + 1);
+        }
+        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep)(_Subclass)?$", "");
+        return simple.replaceAll("[^A-Za-z0-9]", "");
     }
 }

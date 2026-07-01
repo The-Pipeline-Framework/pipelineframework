@@ -28,6 +28,7 @@ import java.util.regex.Pattern;
 public final class PipelineConfigBuildItem extends SimpleBuildItem {
 
     private final List<StepConfig> steps;
+    private final boolean branchAware;
 
     /**
      * Creates a PipelineConfigBuildItem containing the given pipeline step configurations.
@@ -36,6 +37,17 @@ public final class PipelineConfigBuildItem extends SimpleBuildItem {
      * @throws NullPointerException if {@code steps} is null or contains a null element
      */
     public PipelineConfigBuildItem(List<StepConfig> steps) {
+        this(steps, false);
+    }
+
+    /**
+     * Creates a PipelineConfigBuildItem containing the given pipeline step configurations.
+     *
+     * @param steps the list of StepConfig entries; must not be null and must not contain null elements
+     * @param branchAware whether the YAML declares branch-aware routing markers
+     * @throws NullPointerException if {@code steps} is null or contains a null element
+     */
+    public PipelineConfigBuildItem(List<StepConfig> steps, boolean branchAware) {
         Objects.requireNonNull(steps, "steps must not be null");
         for (int i = 0; i < steps.size(); i++) {
             if (steps.get(i) == null) {
@@ -43,6 +55,7 @@ public final class PipelineConfigBuildItem extends SimpleBuildItem {
             }
         }
         this.steps = List.copyOf(steps);
+        this.branchAware = branchAware;
     }
 
     /**
@@ -52,6 +65,15 @@ public final class PipelineConfigBuildItem extends SimpleBuildItem {
      */
     public List<StepConfig> steps() {
         return steps;
+    }
+
+    /**
+     * Returns whether the YAML declares branch-aware routing markers.
+     *
+     * @return true when any step uses accepts/terminal routing markers
+     */
+    public boolean branchAware() {
+        return branchAware;
     }
 
     /**

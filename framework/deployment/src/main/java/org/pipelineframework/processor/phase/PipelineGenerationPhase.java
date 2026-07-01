@@ -18,6 +18,7 @@ import org.pipelineframework.processor.util.OrchestratorClientPropertiesGenerato
 import org.pipelineframework.processor.util.CheckpointHandoffMetadataGenerator;
 import org.pipelineframework.processor.util.DtoTypeUtils;
 import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
+import org.pipelineframework.processor.util.PipelineBranchingMetadataGenerator;
 import org.pipelineframework.processor.util.PipelineContractMetadataGenerator;
 import org.pipelineframework.processor.util.PipelineOrderMetadataGenerator;
 import org.pipelineframework.processor.util.PipelinePlatformMetadataGenerator;
@@ -318,6 +319,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             PipelineOrderMetadataGenerator orderMetadataGenerator =
                 new PipelineOrderMetadataGenerator(ctx.getProcessingEnv());
             orderMetadataGenerator.writeOrderMetadata(ctx);
+            PipelineBranchingMetadataGenerator branchingMetadataGenerator =
+                new PipelineBranchingMetadataGenerator(ctx.getProcessingEnv());
+            branchingMetadataGenerator.writeBranchingMetadata(ctx);
             PipelineContractMetadataGenerator contractMetadataGenerator =
                 new PipelineContractMetadataGenerator(ctx.getProcessingEnv());
             contractMetadataGenerator.writePipelineContract(ctx);

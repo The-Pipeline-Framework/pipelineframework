@@ -51,6 +51,8 @@ import org.pipelineframework.config.template.PipelineTemplateStepExecution;
  * @param outputType The output type for the step
  * @param streamingShapeHint Optional streaming shape hint parsed from YAML cardinality
  * @param runOnVirtualThreads Whether blocking execution should use virtual threads
+ * @param accepts Optional concrete contract types accepted by this step for branch-aware routing
+ * @param terminal Whether this step is the mandatory terminal merge for a branch-aware pipeline
  */
 public record StepDefinition(
         String name,
@@ -75,7 +77,9 @@ public record StepDefinition(
         @Nullable ClassName inputType,
         @Nullable ClassName outputType,
         @Nullable StreamingShape streamingShapeHint,
-        boolean runOnVirtualThreads
+        boolean runOnVirtualThreads,
+        List<String> accepts,
+        boolean terminal
 ) {
     public StepDefinition(
         String name,
@@ -124,7 +128,63 @@ public record StepDefinition(
             inputType,
             outputType,
             streamingShapeHint,
-            runOnVirtualThreads);
+            runOnVirtualThreads,
+            List.of(),
+            false);
+    }
+
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        @Nullable ClassName executionClass,
+        @Nullable PipelineTemplateStepExecution remoteExecution,
+        Map<?, ?> awaitConfig,
+        @Nullable String timeout,
+        List<?> idempotencyKeyFields,
+        @Nullable String command,
+        @Nullable ClassName commandIdGenerator,
+        @Nullable String duplicatePolicy,
+        Map<?, ?> commandConfig,
+        @Nullable String queryId,
+        Map<?, ?> queryConfig,
+        List<?> queryKeyFields,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads,
+        List<String> accepts,
+        boolean terminal
+    ) {
+        this(
+            name,
+            kind,
+            executionClass,
+            Optional.empty(),
+            remoteExecution,
+            copyObjectMap(awaitConfig),
+            timeout,
+            copyStringList(idempotencyKeyFields),
+            command,
+            commandIdGenerator,
+            duplicatePolicy,
+            copyObjectMap(commandConfig),
+            queryId,
+            copyObjectMap(queryConfig),
+            copyStringList(queryKeyFields),
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint,
+            runOnVirtualThreads,
+            accepts,
+            terminal);
     }
 
     public StepDefinition(
@@ -166,6 +226,8 @@ public record StepDefinition(
             inputType,
             outputType,
             streamingShapeHint,
+            false,
+            List.of(),
             false);
     }
 
@@ -212,7 +274,9 @@ public record StepDefinition(
             inputType,
             outputType,
             streamingShapeHint,
-            runOnVirtualThreads);
+            runOnVirtualThreads,
+            List.of(),
+            false);
     }
 
     public StepDefinition(
@@ -248,6 +312,8 @@ public record StepDefinition(
             inputType,
             outputType,
             streamingShapeHint,
+            false,
+            List.of(),
             false);
     }
 
@@ -285,6 +351,8 @@ public record StepDefinition(
             inputType,
             outputType,
             streamingShapeHint,
+            false,
+            List.of(),
             false);
     }
 
@@ -325,7 +393,9 @@ public record StepDefinition(
             inputType,
             outputType,
             streamingShapeHint,
-            runOnVirtualThreads);
+            runOnVirtualThreads,
+            List.of(),
+            false);
     }
 
     public StepDefinition(
@@ -363,7 +433,53 @@ public record StepDefinition(
             inputType,
             outputType,
             streamingShapeHint,
+            false,
+            List.of(),
             false);
+    }
+
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        ClassName executionClass,
+        Optional<String> delegatedMethodName,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint,
+        boolean runOnVirtualThreads,
+        List<String> accepts,
+        boolean terminal
+    ) {
+        this(
+            name,
+            requireNonRemoteKind(kind),
+            executionClass,
+            delegatedMethodName,
+            null,
+            Map.of(),
+            null,
+            List.of(),
+            null,
+            null,
+            null,
+            Map.of(),
+            null,
+            Map.of(),
+            List.of(),
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint,
+            runOnVirtualThreads,
+            accepts,
+            terminal);
     }
 
     public StepDefinition {
@@ -379,6 +495,7 @@ public record StepDefinition(
             throw new IllegalArgumentException("executionClass and remoteExecution are mutually exclusive");
         }
         delegatedMethodName = normalizeOptionalString(delegatedMethodName);
+        accepts = accepts == null ? List.of() : List.copyOf(accepts);
         if (kind == StepKind.REMOTE) {
             Objects.requireNonNull(remoteExecution, "Remote execution cannot be null for REMOTE steps");
         } else if (kind == StepKind.AWAIT || kind == StepKind.COMMAND || kind == StepKind.QUERY) {

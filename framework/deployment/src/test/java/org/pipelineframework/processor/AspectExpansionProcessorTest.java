@@ -89,6 +89,31 @@ class AspectExpansionProcessorTest {
 
     @SneakyThrows
     @Test
+    void appliesStepScopedAspectWhenTargetUsesNormalizedYamlToken() {
+        ResolvedStep step = resolvedStep("ProcessFolderService");
+        Map<String, Object> config = aspectConfig("org.pipelineframework.plugin.persistence.PersistenceService");
+        config.put("targetSteps", List.of("ProcessFolder"));
+
+        PipelineAspectModel stepScoped = new PipelineAspectModel(
+            "persistence",
+            AspectScope.STEPS,
+            AspectPosition.AFTER_STEP,
+            config
+        );
+
+        AspectExpansionProcessor processor = new AspectExpansionProcessor();
+        List<ResolvedStep> expanded = processor.expandAspects(
+            List.of(step),
+            List.of(stepScoped)
+        );
+
+        assertEquals(2, expanded.size(), "Expected original step and one synthetic step");
+        assertEquals(step.model().serviceName(), expanded.get(0).model().serviceName());
+        assertTrue(expanded.get(1).model().generatedName().contains("Persistence"));
+    }
+
+    @SneakyThrows
+    @Test
     void assignsPluginRoleAndTargetsToSyntheticSteps() {
         ResolvedStep step = resolvedStep("ProcessFolderService");
         Map<String, Object> config = aspectConfig("org.pipelineframework.plugin.persistence.PersistenceService");
