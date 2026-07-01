@@ -202,6 +202,55 @@ final class ExecutionReplayTracker {
         exporter.emitControlEvent(topology.pipeline(), occurredAt, topology, event);
     }
 
+    void recordSkip(
+        String runtimeStepClass,
+        PipelineTelemetry.RunContext runContext,
+        Object inputItem,
+        String currentType,
+        List<String> acceptedTypes
+    ) {
+        if (!enabled() || runtimeStepClass == null || runContext == null || runContext.replayState() == null) {
+            return;
+        }
+        PipelineReplayTopology.Step descriptor = descriptor(runtimeStepClass);
+        if (descriptor == null) {
+            return;
+        }
+        PipelineReplayTopology.Transition inbound = inbound(runtimeStepClass);
+        ItemLineage lineage = inputItem == null ? null : lookupOrCreateLineage(runContext, inputItem);
+        double nowSeconds = secondsSinceRunStart(runContext, System.nanoTime());
+        Map<String, String> attributes = new LinkedHashMap<>();
+        attributes.put("reason", "not_applicable");
+        if (currentType != null && !currentType.isBlank()) {
+            attributes.put("currentType", currentType);
+        }
+        if (acceptedTypes != null && !acceptedTypes.isEmpty()) {
+            attributes.put("acceptedTypes", String.join(",", acceptedTypes));
+        }
+        PipelineExecutionEvent event = new PipelineExecutionEvent(
+            lineage == null ? null : lineage.traceId(),
+            null,
+            null,
+            lineage == null ? null : lineage.itemId(),
+            topology.pipeline(),
+            descriptor.step(),
+            descriptor.service(),
+            "skip",
+            nowSeconds,
+            nowSeconds,
+            0L,
+            inbound == null ? null : inbound.from(),
+            descriptor.step(),
+            descriptor.cardinality(),
+            lineage == null ? List.of() : lineage.parentItemIds(),
+            runContext.replayState().eventSequence().incrementAndGet(),
+            null,
+            null,
+            null,
+            Map.copyOf(attributes));
+        exporter.emit(runContext.runId(), event);
+    }
+
     StepExecutionScope beginStep(
         String runtimeStepClass,
         PipelineTelemetry.RunContext runContext,

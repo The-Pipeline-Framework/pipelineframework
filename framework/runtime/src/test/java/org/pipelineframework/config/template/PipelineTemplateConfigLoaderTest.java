@@ -269,6 +269,74 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void loadsBranchRoutingAcceptsAndTerminalFields() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Order Routing"
+            basePackage: "com.example.order"
+            transport: "GRPC"
+            messages:
+              StockReserved: { fields: [] }
+              LicenseProvisioned: { fields: [] }
+              FinalizedOrder: { fields: [] }
+            unions:
+              OrderCompletion:
+                variants:
+                  stock:
+                    type: "StockReserved"
+                    number: 1
+                  license:
+                    type: "LicenseProvisioned"
+                    number: 2
+            steps:
+              - name: "Finalize"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "OrderCompletion"
+                outputTypeName: "FinalizedOrder"
+                accepts:
+                  - "StockReserved"
+                  - "LicenseProvisioned"
+                terminal: true
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-branch-routing.yaml");
+        Files.writeString(configPath, yaml);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        PipelineTemplateStep step = config.steps().getFirst();
+        assertEquals(List.of("StockReserved", "LicenseProvisioned"), step.accepts());
+        assertTrue(step.terminal());
+    }
+
+    @Test
+    void rejectsPredicateStyleRoutingKeys() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Order Routing"
+            basePackage: "com.example.order"
+            transport: "GRPC"
+            messages:
+              PhysicalOrder: { fields: [] }
+              StockReserved: { fields: [] }
+            steps:
+              - name: "Reserve Stock"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "PhysicalOrder"
+                outputTypeName: "StockReserved"
+                when: "country == 'ES'"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-predicate.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException exception = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("unsupported predicate-style routing keys"));
+        assertTrue(exception.getMessage().contains("when"));
+    }
+
+    @Test
     void stillLoadsLegacyTemplateFieldDefinitions() throws Exception {
         String yaml = """
             appName: "Legacy Test App"

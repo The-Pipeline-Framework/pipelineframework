@@ -66,6 +66,7 @@ public class PipelineTemplateConfigLoader {
     private static final Logger LOG = Logger.getLogger(PipelineTemplateConfigLoader.class.getName());
     private static final int MAX_NESTING_DEPTH = 100;
     private static final String DEFAULT_TRANSPORT = "GRPC";
+    private static final Set<String> REJECTED_BRANCH_PREDICATE_KEYS = Set.of("when", "condition", "predicate", "expression");
     private static final PipelinePlatform DEFAULT_PLATFORM = PipelinePlatform.COMPUTE;
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
@@ -537,7 +538,9 @@ public class PipelineTemplateConfigLoader {
                 step.outputTypeName(),
                 outputFields,
                 step.outboundMapper(),
-                step.execution()));
+                step.execution(),
+                step.accepts(),
+                step.terminal()));
         }
         return resolved;
     }
@@ -628,6 +631,7 @@ public class PipelineTemplateConfigLoader {
                 continue;
             }
             String name = readString(stepMap, "name");
+            rejectBranchPredicateKeys(stepMap, name);
             String cardinality = readString(stepMap, "cardinality");
             String inputType = readString(stepMap, "inputTypeName");
             String outputType = readString(stepMap, "outputTypeName");
@@ -636,6 +640,12 @@ public class PipelineTemplateConfigLoader {
             String inboundMapper = readString(stepMap, "inboundMapper");
             String outboundMapper = readString(stepMap, "outboundMapper");
             PipelineTemplateStepExecution execution = readExecution(stepMap.get("execution"), version, name);
+            if (version < 2 && (stepMap.containsKey("accepts") || Boolean.TRUE.equals(stepMap.get("terminal")))) {
+                throw new IllegalStateException(
+                    "Step '" + name + "' declares accepts/terminal, but branch-aware routing requires version: 2");
+            }
+            List<String> accepts = readStringList(stepMap, "accepts");
+            boolean terminal = readBoolean(stepMap, "terminal", false);
             stepInfos.add(new PipelineTemplateStep(
                 name,
                 cardinality,
@@ -645,9 +655,25 @@ public class PipelineTemplateConfigLoader {
                 outputType,
                 outputFields,
                 outboundMapper,
-                execution));
+                execution,
+                accepts,
+                terminal));
         }
         return stepInfos;
+    }
+
+    private void rejectBranchPredicateKeys(Map<?, ?> stepMap, String stepName) {
+        List<String> rejected = REJECTED_BRANCH_PREDICATE_KEYS.stream()
+            .filter(stepMap::containsKey)
+            .sorted()
+            .toList();
+        if (rejected.isEmpty()) {
+            return;
+        }
+        throw new IllegalStateException(
+            "Step '" + (stepName == null ? "<unnamed>" : stepName)
+                + "' declares unsupported predicate-style routing keys: " + String.join(", ", rejected)
+                + ". Use type-based accepts/terminal routing only.");
     }
 
     private PipelineTemplateStepExecution readExecution(Object executionObj, int version, String stepName) {

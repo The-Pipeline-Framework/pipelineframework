@@ -30,6 +30,8 @@ import java.util.List;
  * @param outputFields the output field definitions
  * @param outboundMapper optional outbound mapper for internal service steps
  * @param execution optional execution metadata for local/remote step invocation
+ * @param accepts optional concrete contract types accepted by this step for branch-aware routing
+ * @param terminal whether this step is the mandatory terminal merge for a branch-aware pipeline
  */
 public record PipelineTemplateStep(
     String name,
@@ -40,8 +42,14 @@ public record PipelineTemplateStep(
     String outputTypeName,
     List<PipelineTemplateField> outputFields,
     String outboundMapper,
-    PipelineTemplateStepExecution execution
+    PipelineTemplateStepExecution execution,
+    List<String> accepts,
+    boolean terminal
 ) {
+    public PipelineTemplateStep {
+        accepts = accepts == null ? List.of() : List.copyOf(accepts);
+    }
+
     public PipelineTemplateStep(
         String name,
         String cardinality,
@@ -50,7 +58,7 @@ public record PipelineTemplateStep(
         String outputTypeName,
         List<PipelineTemplateField> outputFields
     ) {
-        this(name, cardinality, inputTypeName, inputFields, null, outputTypeName, outputFields, null, null);
+        this(name, cardinality, inputTypeName, inputFields, null, outputTypeName, outputFields, null, null, List.of(), false);
     }
 
     public PipelineTemplateStep(
@@ -62,7 +70,7 @@ public record PipelineTemplateStep(
         List<PipelineTemplateField> outputFields,
         PipelineTemplateStepExecution execution
     ) {
-        this(name, cardinality, inputTypeName, inputFields, null, outputTypeName, outputFields, null, execution);
+        this(name, cardinality, inputTypeName, inputFields, null, outputTypeName, outputFields, null, execution, List.of(), false);
     }
 
     public PipelineTemplateStep(
@@ -75,6 +83,6 @@ public record PipelineTemplateStep(
         List<PipelineTemplateField> outputFields,
         String outboundMapper
     ) {
-        this(name, cardinality, inputTypeName, inputFields, inboundMapper, outputTypeName, outputFields, outboundMapper, null);
+        this(name, cardinality, inputTypeName, inputFields, inboundMapper, outputTypeName, outputFields, outboundMapper, null, List.of(), false);
     }
 }
