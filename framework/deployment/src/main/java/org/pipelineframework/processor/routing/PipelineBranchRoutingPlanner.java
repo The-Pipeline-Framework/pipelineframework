@@ -135,7 +135,7 @@ public final class PipelineBranchRoutingPlanner {
             return Optional.of(PipelineBranchingPlan.disabled());
         }
         error(ctx, "Branch-aware routing requires template contract metadata. Add version: 2 messages/unions and typed step declarations.");
-        return null;
+        return Optional.empty();
     }
 
     private Map<String, StepDefinition> indexStepDefinitions(
@@ -157,7 +157,7 @@ public final class PipelineBranchRoutingPlanner {
         }
         if (!duplicateNames.isEmpty()) {
             error(ctx, "Branch-aware pipelines require unique step names. Duplicate names: " + duplicateNames);
-            return Optional.empty();
+            return null;
         }
 
         boolean valid = true;
@@ -182,22 +182,22 @@ public final class PipelineBranchRoutingPlanner {
     ) {
         if (isBlank(templateStep.inputTypeName())) {
             error(ctx, "Branch-aware step '" + templateStep.name() + "' must declare inputTypeName.");
-            return Optional.empty();
+            return null;
         }
         if (isBlank(templateStep.outputTypeName())) {
             error(ctx, "Branch-aware step '" + templateStep.name() + "' must declare outputTypeName.");
-            return Optional.empty();
+            return null;
         }
 
         Set<String> inputLeafTypes = expandLeafTypes(ctx, templateConfig, templateStep.inputTypeName(),
             templateStep.name(), "inputTypeName", false);
         if (inputLeafTypes == null) {
-            return Optional.empty();
+            return null;
         }
         Set<String> outputLeafTypes = expandLeafTypes(ctx, templateConfig, templateStep.outputTypeName(),
             templateStep.name(), "outputTypeName", false);
         if (outputLeafTypes == null) {
-            return Optional.empty();
+            return null;
         }
 
         boolean oneToOneCardinality = "ONE_TO_ONE".equalsIgnoreCase(templateStep.cardinality());
@@ -208,7 +208,7 @@ public final class PipelineBranchRoutingPlanner {
                 || outputLeafTypes.size() != 1)) {
             error(ctx, "Branch-aware routing currently supports ONE_TO_ONE steps once type-based routing is in play. Step '"
                 + templateStep.name() + "' declares cardinality '" + templateStep.cardinality() + "'.");
-            return Optional.empty();
+            return null;
         }
 
         Set<String> acceptedLeafTypes = new LinkedHashSet<>();
@@ -216,23 +216,23 @@ public final class PipelineBranchRoutingPlanner {
             for (String accepted : templateStep.accepts()) {
                 if (isBlank(accepted)) {
                     error(ctx, "Step '" + templateStep.name() + "' declares a blank accepts entry.");
-                    return Optional.empty();
+                    return null;
                 }
                 if (templateConfig.unions().containsKey(accepted)) {
                     error(ctx, "Step '" + templateStep.name() + "' accepts '" + accepted
                         + "', but accepts may reference only concrete contract types, not unions.");
-                    return Optional.empty();
+                    return null;
                 }
                 Set<String> acceptedLeaf = expandLeafTypes(ctx, templateConfig, accepted, templateStep.name(), "accepts", true);
                 if (acceptedLeaf == null) {
-                    return Optional.empty();
+                    return null;
                 }
                 acceptedLeafTypes.addAll(acceptedLeaf);
             }
             if (!inputLeafTypes.containsAll(acceptedLeafTypes)) {
                 error(ctx, "Step '" + templateStep.name() + "' accepts " + acceptedLeafTypes
                     + " but inputTypeName '" + templateStep.inputTypeName() + "' resolves to " + inputLeafTypes + ".");
-                return Optional.empty();
+                return null;
             }
         } else {
             if (inputLeafTypes.size() != 1) {
@@ -240,7 +240,7 @@ public final class PipelineBranchRoutingPlanner {
                     + "' resolves inputTypeName '" + templateStep.inputTypeName()
                     + "' to multiple alternatives " + inputLeafTypes
                     + ". Explicit accepts is required.");
-                return Optional.empty();
+                return null;
             }
             acceptedLeafTypes.addAll(inputLeafTypes);
         }
@@ -249,14 +249,14 @@ public final class PipelineBranchRoutingPlanner {
             error(ctx, "Terminal step '" + templateStep.name()
                 + "' must declare one concrete terminal output type. outputTypeName '"
                 + templateStep.outputTypeName() + "' resolves to " + outputLeafTypes + ".");
-            return Optional.empty();
+            return null;
         }
 
         List<ClassName> acceptedDomainTypes = acceptedLeafTypes.stream()
             .map(typeName -> ClassName.get(templateConfig.basePackage() + ".common.domain", typeName))
             .toList();
         if (!validateAssignableAcceptedTypes(ctx, templateStep, stepDefinition, acceptedDomainTypes)) {
-            return Optional.empty();
+            return null;
         }
 
         return new ResolvedStep(
@@ -318,7 +318,7 @@ public final class PipelineBranchRoutingPlanner {
     ) {
         if (templateConfig == null || isBlank(contractTypeName)) {
             error(ctx, "Step '" + stepName + "' must declare " + fieldName + ".");
-            return Optional.empty();
+            return null;
         }
         if (templateConfig.messages().containsKey(contractTypeName)) {
             return Set.of(contractTypeName);
@@ -328,7 +328,7 @@ public final class PipelineBranchRoutingPlanner {
             if (concreteOnly) {
                 error(ctx, "Step '" + stepName + "' " + fieldName + " entry '" + contractTypeName
                     + "' must be a concrete contract type, not a union.");
-                return Optional.empty();
+                return null;
             }
             LinkedHashSet<String> leafTypes = new LinkedHashSet<>();
             for (PipelineTemplateUnionVariant variant : union.variants().values()) {
