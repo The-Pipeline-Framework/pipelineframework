@@ -750,8 +750,8 @@ button:disabled {
 }
 
 .legend-swatch--skip {
-  background: #caa6ff;
-  box-shadow: 0 0 12px rgb(202 166 255 / 40%);
+  background: #9fb3ff;
+  box-shadow: 0 0 12px rgb(159 179 255 / 42%);
 }
 
 .legend-swatch--branch {

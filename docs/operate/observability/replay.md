@@ -88,6 +88,8 @@ TPF emits:
   - `tpf.step.error`
   - `tpf.step.cache_hit`
   - `tpf.step.reject`
+- branch applicability replay event:
+  - `skip`
 
 Replay JSON is written from the same runtime semantics by the framework replay exporter.
 
@@ -117,8 +119,8 @@ Use these events to debug a single object key or output object. Use `tpf.object_
 
 Branch-aware replay also uses the normal event stream:
 
-- `skip` means the current item did not match a step's accepted type set, so TPF passed it through unchanged;
-- `skip` is node-local, not a transit edge, and should be visible in the replay viewer as branch applicability rather than failure;
+- the replay `skip` event means the current item did not match a step's accepted type set, so TPF passed it through unchanged;
+- the replay `skip` event is node-local, not a transit edge, and should be visible in the replay viewer as branch applicability rather than failure;
 - terminal branch mismatches are runtime errors, not skips.
 
 ## CSV Payments Built-In Proof
@@ -143,7 +145,7 @@ Key timing checks:
 
 | Signal | Time from start |
 | --- | --- |
-| First `Process Payment Status` event | `1.575s` |
+| First `Process Approved Payment Status` / `Process Unapproved Payment Status` event | `1.575s` |
 | Last input parser event | `8.243s` |
 | Last await dispatch | `11.320s` |
 | Last await completion | `13.400s` |
