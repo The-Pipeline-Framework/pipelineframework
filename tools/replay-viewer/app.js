@@ -2946,6 +2946,7 @@ function stateForStep(stepName) {
       received: 0,
       sent: 0,
       inFlight: 0,
+      skips: 0,
       rejects: 0,
       known: false,
       receivedKnown: true,
@@ -3150,13 +3151,17 @@ function tooltipForStep(stepName) {
   if (step.pluginKind === "reject") {
     return `${label}: rejected ${state.rejects}`;
   }
+  if (state.skips > 0 && display.unknown) {
+    return `${label}: skipped ${state.skips}; received/sent counters unknown for this replay.`;
+  }
   if (display.unknown) {
     return `${label}: received/sent counters unknown for this replay.`;
   }
   const pressure = pressureForState(state) ?? 0;
   const capacity = pressureCapacityForState(state);
   const capacityText = capacity == null ? "observed peak" : `${capacity} capacity`;
-  return `${label}: received ${formatCounterValue(state.received, state.receivedKnown)}, sent ${formatCounterValue(state.sent, state.sentKnown)}, queued pressure ${pressure} (${capacityText}).`;
+  const skipText = state.skips > 0 ? `, skipped ${state.skips}` : "";
+  return `${label}: received ${formatCounterValue(state.received, state.receivedKnown)}, sent ${formatCounterValue(state.sent, state.sentKnown)}${skipText}, queued pressure ${pressure} (${capacityText}).`;
 }
 
 function rejectStepNameFor(stepName) {
@@ -3208,6 +3213,11 @@ function recordReplayCounters(rawEvent) {
     return;
   }
   if (event.event === "cache_hit") {
+    return;
+  }
+  if (event.event === "skip") {
+    state.known = true;
+    state.skips += 1;
     return;
   }
   if (event.event === "reject") {
@@ -3592,6 +3602,16 @@ function processEvent(rawEvent) {
     spawnPulse(displayTargets.primaryStep, 0xff7c8f, EFFECT_PRESETS.pulse.errorPrimary, event.startTime);
     queueBackgroundFlash("#ff647c", event.startTime, 0.95, 0.58);
     itemAnchors.set(event.itemId, event.to || event.step);
+  } else if (event.event === "skip") {
+    highlightStep(event.step, EFFECT_PRESETS.node.defaultHoldSeconds + 0.35, event.startTime);
+    spawnPulse(event.step, 0xcaa6ff, {
+      duration: 0.78,
+      startScale: 0.98,
+      endScale: 1.92,
+      opacity: 0.6
+    }, event.startTime);
+    queueBackgroundFlash("#caa6ff", event.startTime, 0.72, 0.28);
+    itemAnchors.set(event.itemId, event.from || event.step);
   } else if (event.event === "emit") {
     spawnEmitSpark(event);
     itemAnchors.set(event.itemId, event.to || event.step);
