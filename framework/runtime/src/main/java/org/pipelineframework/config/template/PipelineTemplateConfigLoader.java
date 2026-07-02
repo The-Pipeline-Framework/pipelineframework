@@ -640,12 +640,12 @@ public class PipelineTemplateConfigLoader {
             String inboundMapper = readString(stepMap, "inboundMapper");
             String outboundMapper = readString(stepMap, "outboundMapper");
             PipelineTemplateStepExecution execution = readExecution(stepMap.get("execution"), version, name);
-            if (version < 2 && (stepMap.containsKey("accepts") || Boolean.TRUE.equals(stepMap.get("terminal")))) {
+            List<String> accepts = readStringList(stepMap, "accepts");
+            boolean terminal = readBoolean(stepMap, "terminal", false);
+            if (version < 2 && (stepMap.containsKey("accepts") || terminal)) {
                 throw new IllegalStateException(
                     "Step '" + name + "' declares accepts/terminal, but branch-aware routing requires version: 2");
             }
-            List<String> accepts = readStringList(stepMap, "accepts");
-            boolean terminal = readBoolean(stepMap, "terminal", false);
             stepInfos.add(new PipelineTemplateStep(
                 name,
                 cardinality,

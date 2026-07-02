@@ -50,7 +50,7 @@ public abstract class AbstractPaymentOutput extends BaseEntity implements Serial
   @CsvBindByName(column = "Recipient")
   String recipient;
 
-  @CsvBindByName(column = "Amount", locale = "en-UK")
+  @CsvBindByName(column = "Amount", locale = "en-GB")
   @CsvNumber("#,###.00")
   BigDecimal amount;
 
@@ -66,7 +66,7 @@ public abstract class AbstractPaymentOutput extends BaseEntity implements Serial
   @CsvBindByName(column = "Message")
   String message;
 
-  @CsvBindByName(column = "Fee", locale = "en-UK")
+  @CsvBindByName(column = "Fee", locale = "en-GB")
   @CsvNumber("#,###.00")
   BigDecimal fee;
 

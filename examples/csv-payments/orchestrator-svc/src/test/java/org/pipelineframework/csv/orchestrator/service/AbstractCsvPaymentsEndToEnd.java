@@ -1757,14 +1757,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private boolean outputRecordCountReady() throws IOException {
-        if (!CUSTOM_INPUT_FILE) {
-            return true;
-        }
         long currentRecords = outputRecordCount(Paths.get(TEST_E2E_DIR));
         long expectedRecords = expectedOutputRecordCount();
         if (currentRecords >= expectedRecords) {
             LOG.infof(
-                    "Output record count reached expected custom input count: %,d/%s",
+                    "Output record count reached expected count: %,d/%s",
                     currentRecords,
                     expectedRecords);
             return true;

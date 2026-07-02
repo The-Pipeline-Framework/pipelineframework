@@ -377,7 +377,7 @@ public class StepDefinitionParser {
         }
         List<String> accepts = parseStringList(stepData.get("accepts"), name, "accepts");
         if (accepts == null) {
-            return null;
+            throw new StepSkippedException();
         }
         boolean terminal = parseOptionalBoolean(stepData, name, "terminal");
 

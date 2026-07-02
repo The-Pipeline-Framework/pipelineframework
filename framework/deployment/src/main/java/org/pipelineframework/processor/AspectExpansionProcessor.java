@@ -198,9 +198,7 @@ public class AspectExpansionProcessor {
         if (candidate == null || candidate.isBlank() || target == null || target.isBlank()) {
             return false;
         }
-        return candidate.equalsIgnoreCase(target)
-            || candidate.toLowerCase(Locale.ROOT).contains(target.toLowerCase(Locale.ROOT))
-            || target.toLowerCase(Locale.ROOT).contains(candidate.toLowerCase(Locale.ROOT));
+        return candidate.equalsIgnoreCase(target);
     }
 
     private Set<String> extractTargetSteps(PipelineAspectModel aspect) {

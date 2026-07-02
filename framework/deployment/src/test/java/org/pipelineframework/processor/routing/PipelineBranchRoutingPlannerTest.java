@@ -64,7 +64,7 @@ class PipelineBranchRoutingPlannerTest {
             stepDefinition("requestManualReview", "ManualReviewOrder", "ManualReviewRequested"),
             stepDefinition("finalize", "OrderCompletion", "FinalizedOrder")));
 
-        PipelineBranchingPlan plan = planner.plan(ctx);
+        PipelineBranchingPlan plan = planner.plan(ctx).orElse(null);
 
         assertNotNull(plan, diagnostics.toString());
         assertTrue(plan.branchAware());
@@ -123,7 +123,7 @@ class PipelineBranchRoutingPlannerTest {
             stepDefinition("processUnapprovedPaymentStatus", "UnapprovedPaymentStatus", "UnapprovedPaymentOutput"),
             stepDefinition("finalizePaymentOutput", "PaymentOutputBranch", "PaymentOutput")));
 
-        PipelineBranchingPlan plan = planner.plan(ctx);
+        PipelineBranchingPlan plan = planner.plan(ctx).orElse(null);
 
         assertNotNull(plan, diagnostics.toString());
         assertTrue(plan.branchAware());
@@ -153,7 +153,7 @@ class PipelineBranchRoutingPlannerTest {
             stepDefinition("classifyOrder", "OrderRequest", "OrderDecision"),
             stepDefinition("reserveStock", "PhysicalOrder", "StockReserved")));
 
-        PipelineBranchingPlan plan = planner.plan(ctx);
+        PipelineBranchingPlan plan = planner.plan(ctx).orElse(null);
 
         assertNull(plan);
         assertTrue(diagnostics.stream().anyMatch(message -> message.contains("exactly one step with terminal: true")),
@@ -186,7 +186,7 @@ class PipelineBranchRoutingPlannerTest {
             stepDefinition("routeOrder", "OrderDecision", "OrderCompletion"),
             stepDefinition("finalize", "OrderCompletion", "FinalizedOrder")));
 
-        PipelineBranchingPlan plan = planner.plan(ctx);
+        PipelineBranchingPlan plan = planner.plan(ctx).orElse(null);
 
         assertNull(plan);
         assertTrue(diagnostics.stream().anyMatch(message ->
@@ -224,7 +224,7 @@ class PipelineBranchRoutingPlannerTest {
             stepDefinition("requestManualReview", "ManualReviewOrder", "ManualReviewRequested"),
             stepDefinition("finalize", "OrderCompletion", "FinalizedOrder")));
 
-        PipelineBranchingPlan plan = planner.plan(ctx);
+        PipelineBranchingPlan plan = planner.plan(ctx).orElse(null);
 
         assertNull(plan);
         assertTrue(diagnostics.stream().anyMatch(message ->

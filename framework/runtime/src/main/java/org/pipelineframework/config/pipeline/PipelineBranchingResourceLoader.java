@@ -64,10 +64,20 @@ public final class PipelineBranchingResourceLoader {
     }
 
     private static BranchingStep parseStep(Map<?, ?> raw) {
+        String step = stringValue(raw.get("step"));
+        String runtimeStepClass = stringValue(raw.get("runtimeStepClass"));
+        if (step == null || step.isBlank()) {
+            throw new IllegalStateException(
+                "Branch-aware step metadata is missing required field 'step' in branching.json. Entry: " + raw);
+        }
+        if (runtimeStepClass == null || runtimeStepClass.isBlank()) {
+            throw new IllegalStateException(
+                "Branch-aware step '" + step + "' is missing required field 'runtimeStepClass' in branching.json. Entry: " + raw);
+        }
         return new BranchingStep(
             intValue(raw.get("index"), -1),
-            stringValue(raw.get("step")),
-            stringValue(raw.get("runtimeStepClass")),
+            step,
+            runtimeStepClass,
             stringList(raw.get("acceptedContracts")),
             stringList(raw.get("acceptedRuntimeClasses")),
             booleanValue(raw.get("terminal")));

@@ -37,6 +37,12 @@ public class PipelineBranchingRegistry {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         Map<String, StepBranchingDescriptor> descriptors = new LinkedHashMap<>();
         for (PipelineBranchingResourceLoader.BranchingStep step : resource.steps()) {
+            String runtimeStepClass = step.runtimeStepClass();
+            if (runtimeStepClass == null || runtimeStepClass.isBlank()) {
+                throw new IllegalStateException(
+                    "Branch-aware step '" + step.step() + "' at index " + step.index()
+                        + " has null or blank runtimeStepClass in branching metadata. The branching.json resource is malformed.");
+            }
             List<Class<?>> acceptedRuntimeTypes = new java.util.ArrayList<>();
             for (String className : step.acceptedRuntimeClasses()) {
                 acceptedRuntimeTypes.add(resolveClass(className, classLoader, step.step()));
@@ -44,12 +50,12 @@ public class PipelineBranchingRegistry {
             StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
                 step.index(),
                 step.step(),
-                step.runtimeStepClass(),
+                runtimeStepClass,
                 step.acceptedContracts(),
                 step.acceptedRuntimeClasses(),
                 acceptedRuntimeTypes,
                 step.terminal());
-            descriptors.put(step.runtimeStepClass(), descriptor);
+            descriptors.put(runtimeStepClass, descriptor);
         }
         return Map.copyOf(descriptors);
     }

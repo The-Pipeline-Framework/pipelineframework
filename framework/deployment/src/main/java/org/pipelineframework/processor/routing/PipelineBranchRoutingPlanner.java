@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -32,35 +33,35 @@ public final class PipelineBranchRoutingPlanner {
      * Build a branching plan for the current compilation context.
      *
      * @param ctx compilation context
-     * @return disabled plan when the pipeline is not branch-aware, or null after reporting diagnostics on validation failure
+     * @return Optional containing the plan when successful, or empty after reporting diagnostics on validation failure
      */
-    public PipelineBranchingPlan plan(PipelineCompilationContext ctx) {
+    public Optional<PipelineBranchingPlan> plan(PipelineCompilationContext ctx) {
         if (ctx == null) {
-            return PipelineBranchingPlan.disabled();
+            return Optional.of(PipelineBranchingPlan.disabled());
         }
         if (!(ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig templateConfig)) {
             return planWithoutTemplate(ctx);
         }
         List<PipelineTemplateStep> templateSteps = templateConfig.steps() == null ? List.of() : templateConfig.steps();
         if (templateSteps.isEmpty()) {
-            return PipelineBranchingPlan.disabled();
+            return Optional.of(PipelineBranchingPlan.disabled());
         }
 
         boolean branchAware = templateSteps.stream()
             .filter(Objects::nonNull)
             .anyMatch(step -> !step.accepts().isEmpty() || step.terminal());
         if (!branchAware) {
-            return PipelineBranchingPlan.disabled();
+            return Optional.of(PipelineBranchingPlan.disabled());
         }
 
         if (templateConfig.version() < 2) {
             error(ctx, "Branch-aware routing requires version: 2 pipeline templates.");
-            return null;
+            return Optional.empty();
         }
 
         Map<String, StepDefinition> definitionsByName = indexStepDefinitions(ctx, templateSteps);
         if (definitionsByName == null) {
-            return null;
+            return Optional.empty();
         }
 
         List<ResolvedStep> resolvedSteps = new ArrayList<>();
@@ -91,24 +92,24 @@ public final class PipelineBranchRoutingPlanner {
             }
         }
         if (!valid) {
-            return null;
+            return Optional.empty();
         }
 
         if (terminalCount == 0) {
             error(ctx, "Branch-aware pipelines require exactly one step with terminal: true.");
-            return null;
+            return Optional.empty();
         }
         if (terminalCount > 1) {
             error(ctx, "Branch-aware pipelines may declare only one terminal: true step.");
-            return null;
+            return Optional.empty();
         }
         if (terminalIndex != resolvedSteps.size() - 1) {
             error(ctx, "The terminal: true step must be the last authored step in a branch-aware pipeline.");
-            return null;
+            return Optional.empty();
         }
 
         if (!validateReachability(ctx, resolvedSteps)) {
-            return null;
+            return Optional.empty();
         }
 
         List<PipelineBranchingPlan.BranchStep> steps = resolvedSteps.stream()
@@ -122,16 +123,16 @@ public final class PipelineBranchRoutingPlanner {
                 List.copyOf(step.acceptedDomainTypes()),
                 step.terminal()))
             .toList();
-        return new PipelineBranchingPlan(true, terminalIndex, steps);
+        return Optional.of(new PipelineBranchingPlan(true, terminalIndex, steps));
     }
 
-    private PipelineBranchingPlan planWithoutTemplate(PipelineCompilationContext ctx) {
+    private Optional<PipelineBranchingPlan> planWithoutTemplate(PipelineCompilationContext ctx) {
         List<StepDefinition> stepDefinitions = ctx.getStepDefinitions() == null ? List.of() : ctx.getStepDefinitions();
         boolean branchAware = stepDefinitions.stream()
             .filter(Objects::nonNull)
             .anyMatch(step -> !step.accepts().isEmpty() || step.terminal());
         if (!branchAware) {
-            return PipelineBranchingPlan.disabled();
+            return Optional.of(PipelineBranchingPlan.disabled());
         }
         error(ctx, "Branch-aware routing requires template contract metadata. Add version: 2 messages/unions and typed step declarations.");
         return null;
@@ -156,7 +157,7 @@ public final class PipelineBranchRoutingPlanner {
         }
         if (!duplicateNames.isEmpty()) {
             error(ctx, "Branch-aware pipelines require unique step names. Duplicate names: " + duplicateNames);
-            return null;
+            return Optional.empty();
         }
 
         boolean valid = true;
@@ -181,22 +182,22 @@ public final class PipelineBranchRoutingPlanner {
     ) {
         if (isBlank(templateStep.inputTypeName())) {
             error(ctx, "Branch-aware step '" + templateStep.name() + "' must declare inputTypeName.");
-            return null;
+            return Optional.empty();
         }
         if (isBlank(templateStep.outputTypeName())) {
             error(ctx, "Branch-aware step '" + templateStep.name() + "' must declare outputTypeName.");
-            return null;
+            return Optional.empty();
         }
 
         Set<String> inputLeafTypes = expandLeafTypes(ctx, templateConfig, templateStep.inputTypeName(),
             templateStep.name(), "inputTypeName", false);
         if (inputLeafTypes == null) {
-            return null;
+            return Optional.empty();
         }
         Set<String> outputLeafTypes = expandLeafTypes(ctx, templateConfig, templateStep.outputTypeName(),
             templateStep.name(), "outputTypeName", false);
         if (outputLeafTypes == null) {
-            return null;
+            return Optional.empty();
         }
 
         boolean oneToOneCardinality = "ONE_TO_ONE".equalsIgnoreCase(templateStep.cardinality());
@@ -207,7 +208,7 @@ public final class PipelineBranchRoutingPlanner {
                 || outputLeafTypes.size() != 1)) {
             error(ctx, "Branch-aware routing currently supports ONE_TO_ONE steps once type-based routing is in play. Step '"
                 + templateStep.name() + "' declares cardinality '" + templateStep.cardinality() + "'.");
-            return null;
+            return Optional.empty();
         }
 
         Set<String> acceptedLeafTypes = new LinkedHashSet<>();
@@ -215,23 +216,23 @@ public final class PipelineBranchRoutingPlanner {
             for (String accepted : templateStep.accepts()) {
                 if (isBlank(accepted)) {
                     error(ctx, "Step '" + templateStep.name() + "' declares a blank accepts entry.");
-                    return null;
+                    return Optional.empty();
                 }
                 if (templateConfig.unions().containsKey(accepted)) {
                     error(ctx, "Step '" + templateStep.name() + "' accepts '" + accepted
                         + "', but accepts may reference only concrete contract types, not unions.");
-                    return null;
+                    return Optional.empty();
                 }
                 Set<String> acceptedLeaf = expandLeafTypes(ctx, templateConfig, accepted, templateStep.name(), "accepts", true);
                 if (acceptedLeaf == null) {
-                    return null;
+                    return Optional.empty();
                 }
                 acceptedLeafTypes.addAll(acceptedLeaf);
             }
             if (!inputLeafTypes.containsAll(acceptedLeafTypes)) {
                 error(ctx, "Step '" + templateStep.name() + "' accepts " + acceptedLeafTypes
                     + " but inputTypeName '" + templateStep.inputTypeName() + "' resolves to " + inputLeafTypes + ".");
-                return null;
+                return Optional.empty();
             }
         } else {
             if (inputLeafTypes.size() != 1) {
@@ -239,7 +240,7 @@ public final class PipelineBranchRoutingPlanner {
                     + "' resolves inputTypeName '" + templateStep.inputTypeName()
                     + "' to multiple alternatives " + inputLeafTypes
                     + ". Explicit accepts is required.");
-                return null;
+                return Optional.empty();
             }
             acceptedLeafTypes.addAll(inputLeafTypes);
         }
@@ -248,14 +249,14 @@ public final class PipelineBranchRoutingPlanner {
             error(ctx, "Terminal step '" + templateStep.name()
                 + "' must declare one concrete terminal output type. outputTypeName '"
                 + templateStep.outputTypeName() + "' resolves to " + outputLeafTypes + ".");
-            return null;
+            return Optional.empty();
         }
 
         List<ClassName> acceptedDomainTypes = acceptedLeafTypes.stream()
             .map(typeName -> ClassName.get(templateConfig.basePackage() + ".common.domain", typeName))
             .toList();
         if (!validateAssignableAcceptedTypes(ctx, templateStep, stepDefinition, acceptedDomainTypes)) {
-            return null;
+            return Optional.empty();
         }
 
         return new ResolvedStep(
@@ -277,6 +278,15 @@ public final class PipelineBranchRoutingPlanner {
             "inputTypeName",
             false));
         for (ResolvedStep step : resolvedSteps) {
+            Set<String> unreachable = new LinkedHashSet<>(step.acceptedLeafTypes());
+            unreachable.removeAll(reachable);
+            if (!unreachable.isEmpty()) {
+                error(ctx, "Step '" + step.templateStep().name()
+                    + "' accepts types that are not currently reachable: " + unreachable
+                    + ". Currently reachable: " + reachable);
+                return false;
+            }
+
             Set<String> applicable = new LinkedHashSet<>(reachable);
             applicable.retainAll(step.acceptedLeafTypes());
 
@@ -308,7 +318,7 @@ public final class PipelineBranchRoutingPlanner {
     ) {
         if (templateConfig == null || isBlank(contractTypeName)) {
             error(ctx, "Step '" + stepName + "' must declare " + fieldName + ".");
-            return null;
+            return Optional.empty();
         }
         if (templateConfig.messages().containsKey(contractTypeName)) {
             return Set.of(contractTypeName);
@@ -318,7 +328,7 @@ public final class PipelineBranchRoutingPlanner {
             if (concreteOnly) {
                 error(ctx, "Step '" + stepName + "' " + fieldName + " entry '" + contractTypeName
                     + "' must be a concrete contract type, not a union.");
-                return null;
+                return Optional.empty();
             }
             LinkedHashSet<String> leafTypes = new LinkedHashSet<>();
             for (PipelineTemplateUnionVariant variant : union.variants().values()) {
@@ -346,14 +356,18 @@ public final class PipelineBranchRoutingPlanner {
         }
         TypeElement stepInputElement = processingEnv.getElementUtils().getTypeElement(stepDefinition.inputType().canonicalName());
         if (stepInputElement == null) {
-            return true;
+            error(ctx, "Step '" + templateStep.name() + "' input type '" + stepDefinition.inputType().canonicalName()
+                + "' could not be resolved during branch routing validation.");
+            return false;
         }
         Types types = processingEnv.getTypeUtils();
         TypeMirror stepInputType = stepInputElement.asType();
         for (ClassName acceptedType : acceptedDomainTypes) {
             TypeElement acceptedElement = processingEnv.getElementUtils().getTypeElement(acceptedType.canonicalName());
             if (acceptedElement == null) {
-                continue;
+                error(ctx, "Step '" + templateStep.name() + "' accepted type '" + acceptedType.canonicalName()
+                    + "' could not be resolved during branch routing validation.");
+                return false;
             }
             if (!types.isAssignable(acceptedElement.asType(), stepInputType)) {
                 error(ctx, "Step '" + templateStep.name() + "' accepts '" + acceptedType.simpleName()

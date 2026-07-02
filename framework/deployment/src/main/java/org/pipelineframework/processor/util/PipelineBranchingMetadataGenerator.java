@@ -194,10 +194,18 @@ public final class PipelineBranchingMetadataGenerator {
         if (!transportMappedRuntime) {
             return domainType.reflectionName();
         }
-        TypeName transportType = clientStepType(domainType,
-            java.util.Objects.requireNonNullElse(ctx.getTransportMode(), PipelineTransport.GRPC),
-            pipelineBasePackage(ctx, domainType));
+        PipelineTransport transportMode = java.util.Objects.requireNonNullElse(ctx.getTransportMode(), PipelineTransport.GRPC);
+        TypeName transportType = clientStepType(domainType, transportMode, pipelineBasePackage(ctx, domainType));
         if (transportType instanceof ClassName className) {
+            if (transportMode == PipelineTransport.GRPC && ctx.getProcessingEnv() != null) {
+                javax.lang.model.element.TypeElement element = ctx.getProcessingEnv().getElementUtils()
+                    .getTypeElement(className.canonicalName());
+                if (element == null) {
+                    throw new IllegalStateException("Branch-aware step accepted gRPC runtime type '"
+                        + className.canonicalName() + "' (derived from domain type '" + domainType.reflectionName()
+                        + "') could not be resolved. Ensure gRPC descriptor-set bindings are generated before compiling the pipeline.");
+                }
+            }
             return className.reflectionName();
         }
         return transportType.toString();
