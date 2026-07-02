@@ -93,7 +93,7 @@ Replay JSON is written from the same runtime semantics by the framework replay e
 
 Await boundaries record durable await unit and interaction events even when the live path keeps work flowing. Replay events include await unit ids, execution ids, interaction ids, step ids, unit status, and expected/completed item counts where the runtime knows them. For operations, see [Await Boundary Operations](/operate/await-boundaries); for the implementation model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
 
-Connector-first pipelines add framework-owned nodes that are not user-authored business steps. In CSV Payments, replay should show Object Ingest as source admission, `Await Payment Provider` as the external Kafka boundary, `Process Payment Status` consuming accepted completions, and Object Publish as terminal object output. The healthy live path is interleaved: parser dispatch, provider completions, status processing, and publish progress should overlap. The old folder and output-file services should only appear when the legacy file-step config is being replayed.
+Connector-first pipelines add framework-owned nodes that are not user-authored business steps. In CSV Payments, replay should show Object Ingest as source admission, `Await Payment Provider` as the external Kafka boundary, the approved or unapproved payment-status step consuming each completion, `Finalize Payment Output` as the explicit terminal merge, and Object Publish as terminal object output. The healthy live path is interleaved: parser dispatch, provider completions, branch-specific status processing, merge, and publish progress should overlap. The old folder, single `Process Payment Status`, and output-file services should only appear when the legacy file-step config is being replayed.
 
 Telemetry impact for live itemized await:
 
@@ -114,6 +114,12 @@ Connector replay events include:
 - `object_publish_skipped`
 
 Use these events to debug a single object key or output object. Use `tpf.object_ingest.*`, `tpf.object_publish.*`, and `tpf.await.*` metrics to alert on aggregate health.
+
+Branch-aware replay also uses the normal event stream:
+
+- `skip` means the current item did not match a step's accepted type set, so TPF passed it through unchanged;
+- `skip` is node-local, not a transit edge, and should be visible in the replay viewer as branch applicability rather than failure;
+- terminal branch mismatches are runtime errors, not skips.
 
 ## CSV Payments Built-In Proof
 
@@ -159,6 +165,12 @@ Example command replay checks:
 - The topology contains `renderRole: "command"` for the command step.
 - `actorKind` is the authored command name, such as `opensearch-index-document`.
 - For `RETURN_RECORDED`, a replayed duplicate should return the recorded output and should not require another provider write.
+
+Example branch-routing replay checks:
+
+- branch-specific steps show `skip` events for non-applicable alternatives instead of synthetic no-op business executions;
+- only the matching branch step shows normal `start`/`success` item flow for a given item;
+- the terminal merge step receives only valid branch-end types.
 
 ## Replay exporter configuration
 

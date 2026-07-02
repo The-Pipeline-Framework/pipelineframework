@@ -12,7 +12,7 @@ This differs from CNCF Serverless Workflow and AWS State Machine Language:
 - AWS State Machine Language uses `Choice` states to route execution between states.
 - TPF uses YAML contracts to generate typed Java, protobuf, REST, and mapper boundaries at build time.
 
-The first slice is contract support only. There is no automatic branch dispatch, `switch`, fork/join, or pipeline spawning.
+The current slice keeps the pipeline linear and adds conservative type-based routing. There is still no graph DSL, arbitrary predicate language, fork/join runtime, or pipeline spawning.
 
 ## Compiler Ownership
 
@@ -68,16 +68,44 @@ For protobuf-backed paths, TPF generates a framework-owned union wrapper mapper 
 
 `google.protobuf.Any` is intentionally not the default because it weakens the contract and hides exhaustiveness from the compiler.
 
-## Future Branching
+## Linear Branch Routing
 
-Future workflow routing can build on the same union contract:
+Branch routing now uses step applicability, not graph edges:
 
 ```yaml
-choice:
-  from: Capture Payment
-  on:
-    captured: Dispatch Order
-    rejected: Compensate Order
+steps:
+  - name: Reserve Stock
+    inputTypeName: OrderDecision
+    outputTypeName: StockReserved
+    accepts:
+      - PhysicalOrder
+
+  - name: Provision License
+    inputTypeName: OrderDecision
+    outputTypeName: LicenseProvisioned
+    accepts:
+      - DigitalOrder
+
+  - name: Finalize
+    inputTypeName: OrderCompletion
+    outputTypeName: FinalizedOrder
+    accepts:
+      - StockReserved
+      - LicenseProvisioned
+    terminal: true
 ```
 
-That routing layer should fail the build when a union variant is not handled, unless the author declares an explicit default branch. Until then, application code handles the sealed interface through normal polymorphic domain behavior in the next step.
+Compiler rules:
+
+- `accepts` may reference concrete contract types only.
+- union inputs with multiple concrete alternatives require explicit `accepts`.
+- branch-aware pipelines are `ONE_TO_ONE` only in v1.
+- there must be exactly one `terminal: true` step, and it must be last.
+- the terminal step must cover every reachable branch-end alternative.
+
+Runtime rules:
+
+- the runner still walks the authored step list in order;
+- steps whose accepted types do not match the current item are skipped as `not_applicable`;
+- skips are emitted as replay events and do not mutate async checkpoint state;
+- business steps never receive a union value just to no-op on the wrong variant.
