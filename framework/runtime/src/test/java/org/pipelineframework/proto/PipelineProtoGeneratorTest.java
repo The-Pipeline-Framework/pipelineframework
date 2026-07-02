@@ -198,6 +198,114 @@ class PipelineProtoGeneratorTest {
     }
 
     @Test
+    void preservesDeclaredBranchStepInputTypesForV2Contracts() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Branch Routing Test"
+            basePackage: "com.example.branch"
+            transport: "GRPC"
+            messages:
+              PaymentRecord:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+              ApprovedPaymentStatus:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+              UnapprovedPaymentStatus:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+                  - number: 2
+                    name: "message"
+                    type: "string"
+              ApprovedPaymentOutput:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+              UnapprovedPaymentOutput:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+                  - number: 2
+                    name: "message"
+                    type: "string"
+              PaymentOutput:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+                  - number: 2
+                    name: "message"
+                    type: "string"
+            unions:
+              PaymentStatus:
+                variants:
+                  approved:
+                    type: ApprovedPaymentStatus
+                    number: 1
+                  unapproved:
+                    type: UnapprovedPaymentStatus
+                    number: 2
+              PaymentOutputBranch:
+                variants:
+                  approved:
+                    type: ApprovedPaymentOutput
+                    number: 1
+                  unapproved:
+                    type: UnapprovedPaymentOutput
+                    number: 2
+            steps:
+              - name: "Await Payment Provider"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "PaymentRecord"
+                outputTypeName: "PaymentStatus"
+              - name: "Process Approved Payment Status"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ApprovedPaymentStatus"
+                accepts:
+                  - "ApprovedPaymentStatus"
+                outputTypeName: "ApprovedPaymentOutput"
+              - name: "Process Unapproved Payment Status"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "UnapprovedPaymentStatus"
+                accepts:
+                  - "UnapprovedPaymentStatus"
+                outputTypeName: "UnapprovedPaymentOutput"
+              - name: "Finalize Payment Output"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "PaymentOutputBranch"
+                accepts:
+                  - "ApprovedPaymentOutput"
+                  - "UnapprovedPaymentOutput"
+                outputTypeName: "PaymentOutput"
+                terminal: true
+            """;
+        Path configPath = tempDir.resolve("branch-routing-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-branch-routing-out");
+
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+
+        String approvedProto = Files.readString(outputDir.resolve("process-approved-payment-status-svc.proto"));
+        String unapprovedProto = Files.readString(outputDir.resolve("process-unapproved-payment-status-svc.proto"));
+        String finalizeProto = Files.readString(outputDir.resolve("finalize-payment-output-svc.proto"));
+
+        assertTrue(
+            approvedProto.contains("rpc remoteProcess(ApprovedPaymentStatus) returns (ApprovedPaymentOutput);"));
+        assertTrue(
+            unapprovedProto.contains("rpc remoteProcess(UnapprovedPaymentStatus) returns (UnapprovedPaymentOutput);"));
+        assertTrue(
+            finalizeProto.contains("rpc remoteProcess(PaymentOutputBranch) returns (PaymentOutput);"));
+    }
+
+    @Test
     void generatesProtoWithEmptyInputFields() throws Exception {
         String yaml = """
             version: 2
