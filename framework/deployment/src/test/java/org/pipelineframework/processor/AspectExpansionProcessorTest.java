@@ -114,6 +114,32 @@ class AspectExpansionProcessorTest {
 
     @SneakyThrows
     @Test
+    void appliesStepScopedAspectWhenTargetUsesAuthoredStepTokenAgainstGeneratedServiceName() {
+        ResolvedStep step = resolvedStepWithoutBinding("ProcessFinalizePaymentOutputService");
+        Map<String, Object> config = aspectConfig("org.pipelineframework.plugin.persistence.PersistenceService");
+        config.put("targetSteps", List.of("FinalizePaymentOutput"));
+
+        PipelineAspectModel stepScoped = new PipelineAspectModel(
+            "persistence",
+            AspectScope.STEPS,
+            AspectPosition.AFTER_STEP,
+            config
+        );
+
+        AspectExpansionProcessor processor = new AspectExpansionProcessor();
+        List<ResolvedStep> expanded = processor.expandAspects(
+            List.of(step, resolvedStepWithoutBinding("ProcessCsvPaymentsInputService")),
+            List.of(stepScoped)
+        );
+
+        assertEquals(3, expanded.size(), "Expected the targeted step plus one synthetic side effect");
+        assertEquals(step.model().serviceName(), expanded.get(0).model().serviceName());
+        assertTrue(expanded.get(1).model().generatedName().contains("Persistence"));
+        assertEquals("ProcessCsvPaymentsInputService", expanded.get(2).model().serviceName());
+    }
+
+    @SneakyThrows
+    @Test
     void assignsPluginRoleAndTargetsToSyntheticSteps() {
         ResolvedStep step = resolvedStep("ProcessFolderService");
         Map<String, Object> config = aspectConfig("org.pipelineframework.plugin.persistence.PersistenceService");

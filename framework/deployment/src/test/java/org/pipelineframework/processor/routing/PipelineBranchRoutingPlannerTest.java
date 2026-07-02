@@ -1,8 +1,7 @@
 package org.pipelineframework.processor.routing;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -14,6 +13,10 @@ import java.util.Map;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 
 import com.squareup.javapoet.ClassName;
@@ -64,15 +67,15 @@ class PipelineBranchRoutingPlannerTest {
             stepDefinition("requestManualReview", "ManualReviewOrder", "ManualReviewRequested"),
             stepDefinition("finalize", "OrderCompletion", "FinalizedOrder")));
 
-        PipelineBranchingPlan plan = planner.plan(ctx).orElse(null);
+        var plan = planner.plan(ctx);
 
-        assertNotNull(plan, diagnostics.toString());
-        assertTrue(plan.branchAware());
-        assertEquals(4, plan.terminalStepIndex());
-        assertEquals(List.of("PhysicalOrder"), plan.steps().get(1).acceptedContractTypes());
+        assertTrue(plan.isPresent(), diagnostics.toString());
+        assertTrue(plan.orElseThrow().branchAware());
+        assertEquals(4, plan.orElseThrow().terminalStepIndex());
+        assertEquals(List.of("PhysicalOrder"), plan.orElseThrow().steps().get(1).acceptedContractTypes());
         assertEquals(
             List.of("StockReserved", "LicenseProvisioned", "ManualReviewRequested"),
-            plan.steps().get(4).acceptedContractTypes());
+            plan.orElseThrow().steps().get(4).acceptedContractTypes());
         assertTrue(diagnostics.isEmpty(), diagnostics.toString());
     }
 
@@ -123,10 +126,10 @@ class PipelineBranchRoutingPlannerTest {
             stepDefinition("processUnapprovedPaymentStatus", "UnapprovedPaymentStatus", "UnapprovedPaymentOutput"),
             stepDefinition("finalizePaymentOutput", "PaymentOutputBranch", "PaymentOutput")));
 
-        PipelineBranchingPlan plan = planner.plan(ctx).orElse(null);
+        var plan = planner.plan(ctx);
 
-        assertNotNull(plan, diagnostics.toString());
-        assertTrue(plan.branchAware());
+        assertTrue(plan.isPresent(), diagnostics.toString());
+        assertTrue(plan.orElseThrow().branchAware());
         assertTrue(diagnostics.isEmpty(), diagnostics.toString());
     }
 
@@ -153,9 +156,9 @@ class PipelineBranchRoutingPlannerTest {
             stepDefinition("classifyOrder", "OrderRequest", "OrderDecision"),
             stepDefinition("reserveStock", "PhysicalOrder", "StockReserved")));
 
-        PipelineBranchingPlan plan = planner.plan(ctx).orElse(null);
+        var plan = planner.plan(ctx);
 
-        assertNull(plan);
+        assertTrue(plan.isEmpty());
         assertTrue(diagnostics.stream().anyMatch(message -> message.contains("exactly one step with terminal: true")),
             diagnostics.toString());
     }
@@ -186,9 +189,9 @@ class PipelineBranchRoutingPlannerTest {
             stepDefinition("routeOrder", "OrderDecision", "OrderCompletion"),
             stepDefinition("finalize", "OrderCompletion", "FinalizedOrder")));
 
-        PipelineBranchingPlan plan = planner.plan(ctx).orElse(null);
+        var plan = planner.plan(ctx);
 
-        assertNull(plan);
+        assertTrue(plan.isEmpty());
         assertTrue(diagnostics.stream().anyMatch(message ->
                 message.contains("Explicit accepts is required") && message.contains("OrderDecision")),
             diagnostics.toString());
@@ -224,13 +227,91 @@ class PipelineBranchRoutingPlannerTest {
             stepDefinition("requestManualReview", "ManualReviewOrder", "ManualReviewRequested"),
             stepDefinition("finalize", "OrderCompletion", "FinalizedOrder")));
 
-        PipelineBranchingPlan plan = planner.plan(ctx).orElse(null);
+        var plan = planner.plan(ctx);
 
-        assertNull(plan);
+        assertTrue(plan.isEmpty());
         assertTrue(diagnostics.stream().anyMatch(message ->
                 message.contains("does not cover all reachable branch-end alternatives")
                     && message.contains("ManualReviewRequested")),
             diagnostics.toString());
+    }
+
+    @Test
+    void rejectsBranchAwareStepWhenAcceptedJavaTypeCannotBeResolved() {
+        List<String> diagnostics = new ArrayList<>();
+        Messager messager = mock(Messager.class);
+        doAnswer(invocation -> {
+            Diagnostic.Kind kind = invocation.getArgument(0);
+            CharSequence message = invocation.getArgument(1);
+            diagnostics.add(kind + ":" + message);
+            return null;
+        }).when(messager).printMessage(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(CharSequence.class));
+
+        TypeMirror orderRequestMirror = mock(TypeMirror.class);
+        TypeMirror physicalOrderMirror = mock(TypeMirror.class);
+        TypeMirror digitalOrderMirror = mock(TypeMirror.class);
+        TypeMirror orderCompletionMirror = mock(TypeMirror.class);
+        TypeMirror stockReservedMirror = mock(TypeMirror.class);
+
+        TypeElement orderRequestElement = mock(TypeElement.class);
+        when(orderRequestElement.asType()).thenReturn(orderRequestMirror);
+        TypeElement physicalOrderElement = mock(TypeElement.class);
+        when(physicalOrderElement.asType()).thenReturn(physicalOrderMirror);
+        TypeElement digitalOrderElement = mock(TypeElement.class);
+        when(digitalOrderElement.asType()).thenReturn(digitalOrderMirror);
+        TypeElement orderCompletionElement = mock(TypeElement.class);
+        when(orderCompletionElement.asType()).thenReturn(orderCompletionMirror);
+        TypeElement stockReservedElement = mock(TypeElement.class);
+        when(stockReservedElement.asType()).thenReturn(stockReservedMirror);
+
+        Elements elements = mock(Elements.class);
+        when(elements.getTypeElement("com.example.order.common.domain.OrderRequest")).thenReturn(orderRequestElement);
+        when(elements.getTypeElement("com.example.order.common.domain.PhysicalOrder")).thenReturn(physicalOrderElement);
+        when(elements.getTypeElement("com.example.order.common.domain.DigitalOrder")).thenReturn(digitalOrderElement);
+        when(elements.getTypeElement("com.example.order.common.domain.OrderCompletion")).thenReturn(orderCompletionElement);
+        when(elements.getTypeElement("com.example.order.common.domain.StockReserved")).thenReturn(stockReservedElement);
+
+        Types types = mock(Types.class);
+        when(types.isAssignable(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(true);
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getMessager()).thenReturn(messager);
+        when(processingEnv.getElementUtils()).thenReturn(elements);
+        when(processingEnv.getTypeUtils()).thenReturn(types);
+
+        RoundEnvironment roundEnv = mock(RoundEnvironment.class);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
+            2,
+            "Order Routing",
+            "com.example.order",
+            "GRPC",
+            PipelinePlatform.COMPUTE,
+            messages(),
+            unions(),
+            List.of(
+                step("classifyOrder", "OrderRequest", "OrderDecision", List.of(), false),
+                step("reserveStock", "PhysicalOrder", "StockReserved", List.of("PhysicalOrder"), false),
+                step("provisionLicense", "DigitalOrder", "LicenseProvisioned", List.of("DigitalOrder"), false),
+                step("finalize", "OrderCompletion", "FinalizedOrder", List.of("StockReserved", "LicenseProvisioned"), true)),
+            Map.of(),
+            null,
+            null,
+            null));
+        ctx.setStepDefinitions(List.of(
+            stepDefinition("classifyOrder", "OrderRequest", "OrderDecision"),
+            stepDefinition("reserveStock", "PhysicalOrder", "StockReserved"),
+            stepDefinition("provisionLicense", "DigitalOrder", "LicenseProvisioned"),
+            stepDefinition("finalize", "OrderCompletion", "FinalizedOrder")));
+
+        var plan = planner.plan(ctx);
+
+        assertTrue(plan.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message ->
+                message.contains("accepted type 'com.example.order.common.domain.LicenseProvisioned'")
+                    && message.contains("could not be resolved during branch routing validation")),
+            diagnostics.toString());
+        assertFalse(diagnostics.isEmpty());
     }
 
     private PipelineCompilationContext context(List<String> diagnostics) {

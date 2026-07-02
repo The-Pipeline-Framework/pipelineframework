@@ -287,9 +287,6 @@ public final class PipelineBranchRoutingPlanner {
                 return false;
             }
 
-            Set<String> applicable = new LinkedHashSet<>(reachable);
-            applicable.retainAll(step.acceptedLeafTypes());
-
             Set<String> skipped = new LinkedHashSet<>(reachable);
             skipped.removeAll(step.acceptedLeafTypes());
 
@@ -300,9 +297,7 @@ public final class PipelineBranchRoutingPlanner {
             }
 
             Set<String> nextReachable = new LinkedHashSet<>(skipped);
-            if (!applicable.isEmpty()) {
-                nextReachable.addAll(step.producedLeafTypes());
-            }
+            nextReachable.addAll(step.producedLeafTypes());
             reachable = nextReachable;
         }
         return true;

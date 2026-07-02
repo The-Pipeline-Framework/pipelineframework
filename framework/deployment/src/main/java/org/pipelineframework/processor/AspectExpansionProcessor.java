@@ -289,6 +289,7 @@ public class AspectExpansionProcessor {
             simple = simple.substring(lastDot + 1);
         }
         simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep)(_Subclass)?$", "");
+        simple = simple.replaceFirst("^Process(?=[A-Z0-9])", "");
         return simple.replaceAll("[^A-Za-z0-9]", "");
     }
 }
