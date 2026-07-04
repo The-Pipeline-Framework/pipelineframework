@@ -18,6 +18,7 @@ package org.pipelineframework.csv.common.dto;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
+import java.nio.file.Path;
 import java.util.Currency;
 import java.util.UUID;
 
@@ -33,6 +34,8 @@ public class PaymentOutputDto implements Serializable {
 
   UUID id;
 
+  String csvPaymentsOutputFilename;
+  Path csvPaymentsInputFilePath;
   String csvId;
   String recipient;
   BigDecimal amount;
@@ -41,7 +44,6 @@ public class PaymentOutputDto implements Serializable {
   Long status;
   String message;
   BigDecimal fee;
-  PaymentStatusDto paymentStatus;
 
   // Lombok will generate the builder, but Jackson needs to know how to interpret it
   @JsonPOJOBuilder(withPrefix = "")

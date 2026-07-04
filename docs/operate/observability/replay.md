@@ -88,12 +88,14 @@ TPF emits:
   - `tpf.step.error`
   - `tpf.step.cache_hit`
   - `tpf.step.reject`
+- branch applicability replay event:
+  - `skip`
 
 Replay JSON is written from the same runtime semantics by the framework replay exporter.
 
 Await boundaries record durable await unit and interaction events even when the live path keeps work flowing. Replay events include await unit ids, execution ids, interaction ids, step ids, unit status, and expected/completed item counts where the runtime knows them. For operations, see [Await Boundary Operations](/operate/await-boundaries); for the implementation model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
 
-Connector-first pipelines add framework-owned nodes that are not user-authored business steps. In CSV Payments, replay should show Object Ingest as source admission, `Await Payment Provider` as the external Kafka boundary, `Process Payment Status` consuming accepted completions, and Object Publish as terminal object output. The healthy live path is interleaved: parser dispatch, provider completions, status processing, and publish progress should overlap. The old folder and output-file services should only appear when the legacy file-step config is being replayed.
+Connector-first pipelines add framework-owned nodes that are not user-authored business steps. In CSV Payments, replay should show Object Ingest as source admission, `Await Payment Provider` as the external Kafka boundary, the approved or unapproved payment-status step consuming each completion, `Finalize Payment Output` as the explicit terminal merge, and Object Publish as terminal object output. The healthy live path is interleaved: parser dispatch, provider completions, branch-specific status processing, merge, and publish progress should overlap. The old folder, single `Process Payment Status`, and output-file services should only appear when the legacy file-step config is being replayed.
 
 Telemetry impact for live itemized await:
 
@@ -115,33 +117,39 @@ Connector replay events include:
 
 Use these events to debug a single object key or output object. Use `tpf.object_ingest.*`, `tpf.object_publish.*`, and `tpf.await.*` metrics to alert on aggregate health.
 
+Branch-aware replay also uses the normal event stream:
+
+- the replay `skip` event means the current item did not match a step's accepted type set, so TPF passed it through unchanged;
+- the replay `skip` event is node-local, not a transit edge, and should be visible in the replay viewer as branch applicability rather than failure;
+- terminal branch mismatches are runtime errors, not skips.
+
 ## CSV Payments Built-In Proof
 
 The built-in CSV Payments replay is a captured proof run, not a benchmark promise. It is useful because it shows the intended connector-first shape and the timing relationship between parser dispatch, await completions, status processing, and Object Publish.
 
-The current dataset was captured with:
+The current dataset was captured from the 1k replay lane with provider rejects enabled so both branch alternatives appear in the proof:
 
 | Field | Value |
 | --- | --- |
 | Input records | `1000` |
 | Payment provider permits | `250/s` |
-| Configured provider response delay | `0ms` |
-| Replay duration | `13.426s` |
-| Effective throughput | `74.5 records/s` |
-| Replay events | `12007` |
-| Output checksum | `a29a39ea8ac078bfaff3d53236eefd8020922bfd89266f77ca3ed3826794e784` |
+| Provider reject probability | `0.08` |
+| Replay duration | `15.621s` |
+| Effective throughput | `64.0 records/s` |
+| Replay events | `16008` |
+| Unapproved branch items | `93` |
 
-Provider-boundary timing in the replay is measured from `await_interaction_dispatched` to `await_unit_item_completed`. For this capture the observed latency was p50 `2613.9ms`, p95 `3147.9ms`, and max `3188.1ms`. Treat that as await completion latency, not pure provider CPU time: it includes provider permit wait, any configured response delay, Kafka transit, and completion admission.
+Treat the replay timing as boundary timing, not pure provider CPU time: it includes permit wait, Kafka transit, completion admission, and downstream branch processing overlap.
 
 Key timing checks:
 
 | Signal | Time from start |
 | --- | --- |
-| First `Process Payment Status` event | `1.575s` |
-| Last input parser event | `8.243s` |
-| Last await dispatch | `11.320s` |
-| Last await completion | `13.400s` |
-| Object Publish | `13.416s` - `13.426s` |
+| First `Process Approved Payment Status` / `Process Unapproved Payment Status` event | `2.001s` |
+| Last input parser event | `6.901s` |
+| Last await dispatch | `10.713s` |
+| Last await completion | `15.585s` |
+| Object Publish | `15.612s` - `15.621s` |
 
 The important operational signal is the overlap: status processing starts before the parser has finished and before all await completions have arrived. That means the parser is being paced by reactive demand and the await in-flight window, not by a forced sleep. Object Publish runs at the terminal boundary after status output exists and before success is committed.
 
@@ -159,6 +167,12 @@ Example command replay checks:
 - The topology contains `renderRole: "command"` for the command step.
 - `actorKind` is the authored command name, such as `opensearch-index-document`.
 - For `RETURN_RECORDED`, a replayed duplicate should return the recorded output and should not require another provider write.
+
+Example branch-routing replay checks:
+
+- branch-specific steps show `skip` events for non-applicable alternatives instead of synthetic no-op business executions;
+- only the matching branch step shows normal `start`/`success` item flow for a given item;
+- the terminal merge step receives only valid branch-end types.
 
 ## Replay exporter configuration
 

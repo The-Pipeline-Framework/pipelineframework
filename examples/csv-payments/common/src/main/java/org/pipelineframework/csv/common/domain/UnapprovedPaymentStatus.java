@@ -21,4 +21,4 @@ import lombok.NoArgsConstructor;
 
 @Entity
 @NoArgsConstructor
-public class PaymentOutput extends AbstractPaymentOutput {}
+public final class UnapprovedPaymentStatus extends PaymentStatus {}

@@ -96,7 +96,7 @@ For `ONE_TO_ONE` over a stream, the unit groups item interactions for ordering, 
 
 ## CSV Payments Itemized Await
 
-This is the concrete connector-first `csv-payments` shape. `Await Payment Provider` owns the Kafka boundary, but `Process Payment Status` can run per completed item through the live await session. Terminal Object Publish writes output chunks before success is committed.
+This is the concrete connector-first `csv-payments` shape. `Await Payment Provider` owns the Kafka boundary, the approved and unapproved status branches can run per completed item through the live await session, `Finalize Payment Output` performs the mandatory terminal merge, and Object Publish writes output chunks before success is committed.
 
 ```mermaid
 sequenceDiagram
@@ -109,7 +109,9 @@ sequenceDiagram
     participant Exec as PipelineExecutionService
     participant Queue as QueueAsyncCoordinator
     participant Live as LiveAwaitSession
-    participant Status as Process Payment Status
+    participant Approved as Process Approved Payment Status
+    participant Unapproved as Process Unapproved Payment Status
+    participant Finalize as Finalize Payment Output
     participant Publish as Object Publish
 
     Input-->>Runner: PaymentRecord item 0
@@ -122,8 +124,14 @@ sequenceDiagram
     Exec->>Queue: complete await interaction
     Queue->>AwaitCoord: record item 0 completed
     Queue->>Live: signal item 0 after durable record
-    Live->>Status: emit item 0 when requested
-    Status-->>Publish: PaymentOutput item 0 chunk
+    alt approved
+        Live->>Approved: emit item 0 when requested
+        Approved-->>Finalize: ApprovedPaymentOutput item 0
+    else unapproved
+        Live->>Unapproved: emit item 0 when requested
+        Unapproved-->>Finalize: UnapprovedPaymentOutput item 0
+    end
+    Finalize-->>Publish: PaymentOutput item 0 chunk
 
     Input-->>Runner: PaymentRecord item 1
     Runner->>Await: execute item 1
@@ -136,14 +144,21 @@ sequenceDiagram
     Exec->>Queue: complete await interaction
     Queue->>AwaitCoord: record item 1 completed
     Queue->>Live: signal item 1 after durable record
-    Live->>Status: emit item 1 when requested
-    Status-->>Publish: PaymentOutput item 1 chunk
+    alt approved
+        Live->>Approved: emit item 1 when requested
+        Approved-->>Finalize: ApprovedPaymentOutput item 1
+    else unapproved
+        Live->>Unapproved: emit item 1 when requested
+        Unapproved-->>Finalize: UnapprovedPaymentOutput item 1
+    end
+    Finalize-->>Publish: PaymentOutput item 1 chunk
 
     alt live session lost or worker restarted
       Await->>AwaitCoord: mark dispatchComplete(expectedItemCount=2)
       Await-->>Queue: suspend parent execution(awaitUnitId)
       Queue->>Queue: persist WAITING_EXTERNAL(awaitUnitId)
-      Queue->>Status: dispatch durable item continuations
+      Queue->>Approved: dispatch approved item continuations
+      Queue->>Unapproved: dispatch unapproved item continuations
     end
 
     Publish-->>Queue: target sessions closed
@@ -157,14 +172,22 @@ sequenceDiagram
     participant Queue as QueueAsyncCoordinator
     participant AwaitCoord as AwaitCoordinator
     participant ExecStore as ExecutionStateStore
-    participant Status as Process Payment Status
+    participant Approved as Process Approved Payment Status
+    participant Unapproved as Process Unapproved Payment Status
+    participant Finalize as Finalize Payment Output
     participant Publish as Object Publish
 
     Queue->>AwaitCoord: completion already recorded, no live session
     Queue->>ExecStore: require WAITING_EXTERNAL(awaitUnitId)
     Queue->>AwaitCoord: require dispatchComplete
-    Queue->>Status: continue item 1
-    Status-->>Queue: PaymentOutput item 1
+    alt approved continuation
+        Queue->>Approved: continue item 1
+        Approved-->>Finalize: ApprovedPaymentOutput item 1
+    else unapproved continuation
+        Queue->>Unapproved: continue item 1
+        Unapproved-->>Finalize: UnapprovedPaymentOutput item 1
+    end
+    Finalize-->>Queue: PaymentOutput item 1
     Queue->>Publish: publish terminal output before success
     Queue->>Queue: commit execution success
 ```

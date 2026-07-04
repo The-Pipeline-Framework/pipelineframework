@@ -20,55 +20,46 @@ import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
-import org.mapstruct.factory.Mappers;
-import org.pipelineframework.csv.common.domain.PaymentOutput;
-import org.pipelineframework.csv.common.dto.PaymentOutputDto;
+import org.pipelineframework.csv.common.domain.UnapprovedPaymentOutput;
+import org.pipelineframework.csv.grpc.PipelineTypes;
 
-@SuppressWarnings("unused")
 @Mapper(
     componentModel = "jakarta",
     uses = CommonConverters.class,
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface PaymentOutputMapper extends org.pipelineframework.mapper.Mapper<PaymentOutput, org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput> {
+public interface UnapprovedPaymentOutputMapper
+    extends org.pipelineframework.mapper.Mapper<
+        UnapprovedPaymentOutput, PipelineTypes.UnapprovedPaymentOutput> {
 
-  PaymentOutputMapper INSTANCE = Mappers.getMapper( PaymentOutputMapper.class );
-
-  PaymentOutputDto toDto(PaymentOutput entity);
-
-  PaymentOutput fromDto(PaymentOutputDto dto);
-
-  @BeanMapping(unmappedTargetPolicy = ReportingPolicy.IGNORE)
+  @BeanMapping(ignoreByDefault = true)
   @Mapping(target = "id", qualifiedByName = "uuidToString")
+  @Mapping(target = "csvPaymentsOutputFilename", source = "csvPaymentsOutputFilename")
   @Mapping(target = "csvPaymentsInputFilePath", qualifiedByName = "pathToString")
+  @Mapping(target = "csvId", source = "csvId")
+  @Mapping(target = "recipient", source = "recipient")
   @Mapping(target = "amount", qualifiedByName = "bigDecimalToString")
   @Mapping(target = "currency", qualifiedByName = "currencyToString")
+  @Mapping(target = "conversationId", qualifiedByName = "uuidToString")
+  @Mapping(target = "status", source = "status")
+  @Mapping(target = "message", source = "message")
   @Mapping(target = "fee", qualifiedByName = "bigDecimalToString")
-  org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput toGrpc(PaymentOutputDto dto);
+  PipelineTypes.UnapprovedPaymentOutput toGrpc(UnapprovedPaymentOutput domain);
 
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "csvPaymentsInputFilePath", qualifiedByName = "stringToPath")
   @Mapping(target = "amount", qualifiedByName = "stringToBigDecimal")
   @Mapping(target = "currency", qualifiedByName = "stringToCurrency")
+  @Mapping(target = "conversationId", qualifiedByName = "stringToUUID")
   @Mapping(target = "fee", qualifiedByName = "stringToBigDecimal")
-  PaymentOutputDto fromGrpc(org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput grpc);
+  UnapprovedPaymentOutput fromGrpc(PipelineTypes.UnapprovedPaymentOutput grpc);
 
   @Override
-  default PaymentOutput fromExternal(org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput external) {
-    return fromDto(fromGrpc(external));
+  default UnapprovedPaymentOutput fromExternal(PipelineTypes.UnapprovedPaymentOutput external) {
+    return fromGrpc(external);
   }
 
   @Override
-  default org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput toExternal(PaymentOutput domain) {
-    return toGrpc(toDto(domain));
-  }
-
-  @Deprecated(since = "26.4.3", forRemoval = true)
-  default org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput toDtoToGrpc(PaymentOutput domain) {
-    return toExternal(domain);
-  }
-
-  @Deprecated(since = "26.4.3", forRemoval = true)
-  default PaymentOutput fromGrpcFromDto(org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput grpc) {
-    return fromExternal(grpc);
+  default PipelineTypes.UnapprovedPaymentOutput toExternal(UnapprovedPaymentOutput domain) {
+    return toGrpc(domain);
   }
 }

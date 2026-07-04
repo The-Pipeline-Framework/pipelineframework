@@ -35,6 +35,7 @@ import org.pipelineframework.awaitable.kafka.KafkaAwaitDispatchEnvelope;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
+import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
 
 /**
  * External mock provider for the CSV await/Kafka example.
@@ -52,6 +53,9 @@ public class PaymentProviderKafkaAwaitMock {
 
   @Inject
   PaymentProviderConfig paymentProviderConfig;
+
+  @Inject
+  PaymentStatusMapper paymentStatusMapper;
 
   @Inject
   @Channel(RESULT_CHANNEL)
@@ -84,7 +88,7 @@ public class PaymentProviderKafkaAwaitMock {
         dispatch.correlationId(),
         dispatch.resumeToken(),
         dispatch.interactionId(),
-        status,
+        paymentStatusMapper.toExternal(status),
         "csv-payments-mock-provider");
   }
 

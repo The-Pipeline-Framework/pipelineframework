@@ -123,6 +123,66 @@ For gRPC, field-level mapping stays in ordinary variant mappers such as `Mapper<
 - Variant names and protobuf field numbers must be unique.
 - A union can be used as a step input or output type.
 - A union cannot be used as a field inside a normal message in this first version.
-- TPF does not route variants automatically; downstream steps receive the union and handle it through normal polymorphic domain behavior.
+- Union-routed branching is opt-in. TPF only auto-routes when the pipeline authors `accepts` and one final `terminal: true` merge step.
 
 TPFGo uses this shape in the payment capture pipeline, where `PaymentOutcome` replaces a status-field result record while keeping the pipeline linear.
+
+## Union-Routed Branching
+
+TPF can route a linear pipeline by contract type without turning the DSL into a graph workflow.
+
+The decision stays in Java. YAML only declares which concrete contract types a step accepts:
+
+```yaml
+steps:
+  - name: Classify Order
+    cardinality: ONE_TO_ONE
+    inputTypeName: OrderRequest
+    outputTypeName: OrderDecision
+
+  - name: Reserve Stock
+    cardinality: ONE_TO_ONE
+    inputTypeName: OrderDecision
+    outputTypeName: StockReserved
+    accepts:
+      - PhysicalOrder
+
+  - name: Provision License
+    cardinality: ONE_TO_ONE
+    inputTypeName: OrderDecision
+    outputTypeName: LicenseProvisioned
+    accepts:
+      - DigitalOrder
+
+  - name: Request Manual Review
+    cardinality: ONE_TO_ONE
+    inputTypeName: OrderDecision
+    outputTypeName: ManualReviewRequested
+    accepts:
+      - ManualReviewOrder
+
+  - name: Finalize Order
+    cardinality: ONE_TO_ONE
+    inputTypeName: OrderCompletion
+    outputTypeName: FinalizedOrder
+    accepts:
+      - StockReserved
+      - LicenseProvisioned
+      - ManualReviewRequested
+    terminal: true
+```
+
+Rules:
+
+- The pipeline stays a linear sequence of authored steps.
+- `accepts` entries must be concrete contract types, not predicates and not union names.
+- If a step's `inputTypeName` resolves to more than one concrete alternative, explicit `accepts` is required.
+- Branch-aware routing currently supports `ONE_TO_ONE` steps only.
+- A branch-aware pipeline must declare exactly one `terminal: true` step, and it must be last.
+- A publish sink after the step sequence does not satisfy or infer the terminal merge; author the merge step explicitly.
+
+Runtime behavior:
+
+- If the current item matches a step's accepted type set, TPF executes the step normally.
+- If it does not match, TPF skips the step as `not_applicable`, records a replay event, and passes the item through unchanged.
+- The terminal merge step must accept every reachable branch-end alternative. Otherwise the build fails.

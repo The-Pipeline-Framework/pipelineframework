@@ -124,7 +124,7 @@ That continuation is the future beginning of the suspended pipeline. `AwaitConti
 2. `Await Payment Provider` is authored as `kind: await` with `cardinality: ONE_TO_ONE`.
 3. Because the await step receives a stream, TPF creates one owning await unit with one item interaction per `PaymentRecord`.
 4. The Kafka adapter publishes requests to `csv-payments.payment.requests`; the mock provider publishes completions to `csv-payments.payment.results`.
-5. Completed item outputs are `PaymentStatus` records. In the live Kafka path, completions are recorded and signalled into the live await session so `Process Payment Status` can run as downstream demand accepts them. In the fallback path, the runtime resumes per-item work from durable item continuations.
+5. Completed item outputs are `PaymentStatus` union variants. In the live Kafka path, completions are recorded and signalled into the live await session so the approved or unapproved status branch can run as downstream demand accepts it. In the fallback path, the runtime resumes per-item work from durable item continuations.
 6. In the connector-first default path, terminal `PaymentOutput` records are published by Object Publish rather than by a `ProcessCsvPaymentsOutputFileService` business step.
 
 ```mermaid

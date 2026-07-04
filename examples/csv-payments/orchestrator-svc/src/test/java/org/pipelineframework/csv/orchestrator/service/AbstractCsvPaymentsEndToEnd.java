@@ -1085,7 +1085,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     @Test
-    void providerRejectsAreRoutedToRejectSink() throws Exception {
+    void providerRejectsStillProduceOutputRows() throws Exception {
         assumeTrue(runProviderRejectScenario(), "Provider-reject scenario disabled for this E2E class.");
         assumeTrue(
                 TELEMETRY_CAPTURE_ACTIVE,
@@ -1105,31 +1105,29 @@ abstract class AbstractCsvPaymentsEndToEnd {
         resetDatabasePersistence();
         createTestCsvFiles();
 
-        ProcessRunResult runResult = orchestratorTriggerRun();
+        orchestratorTriggerRun();
 
         waitForPipelineComplete();
 
         PipelineReplayDocument replayDocument = mergeReplayDocuments(REPLAY_CAPTURE_DIR, REPLAY_FILE);
-        long rejectEvents = replayDocument.events().stream()
-                .filter(event -> "reject".equals(event.event()))
-                .count();
-        assertTrue(rejectEvents > 0, "Expected replay JSON to contain reject events.");
-
         long outputRecords = outputRecordCount(Paths.get(TEST_E2E_DIR));
-        assertTrue(outputRecords < expectedPaymentRecordCount(), "Expected fewer output records than input records.");
+        assertEquals(expectedPaymentRecordCount(), outputRecords, "Expected one output row per valid input payment.");
 
         String combinedOutput = readCombinedOutput(TEST_E2E_DIR);
-        assertFalse(combinedOutput.contains("John Doe"), "Provider-rejected recipient John Doe should not reach output.");
-        assertFalse(combinedOutput.contains("Alice Brown"), "Provider-rejected recipient Alice Brown should not reach output.");
-        assertTrue(
-                combinedOutput.contains("Jane Smith")
-                        || combinedOutput.contains("Bob Johnson")
-                        || combinedOutput.contains("Charlie Wilson"),
-                "Expected at least one successful recipient to reach output.");
-
-        assertTrue(
-                runResult.output().contains("Item reject stored in memory sink"),
-                "Expected in-memory item reject sink evidence in orchestrator logs.");
+        long expectedRejects = expectedProviderRejectCount(configuredProviderRejectProbability());
+        long actualRejectRows = combinedOutput.lines()
+                .filter(line -> line.contains("Mock payment provider rejected the payment."))
+                .count();
+        long actualApprovedRows = combinedOutput.lines()
+                .filter(line -> line.contains("Mock response"))
+                .count();
+        assertEquals(expectedRejects, actualRejectRows, "Expected one output row per deterministically rejected payment.");
+        assertEquals(
+                expectedPaymentRecordCount() - expectedRejects,
+                actualApprovedRows,
+                "Expected the remaining rows to stay on the approved output path.");
+        assertTrue(actualRejectRows > 0, "Expected provider rejection text to be rendered into output rows.");
+        assertTrue(actualApprovedRows > 0, "Expected at least one successful recipient to reach output.");
     }
 
     protected boolean runHappyPathScenario() {
@@ -1324,7 +1322,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", localhost, grpcPort);
         putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", localhost, grpcPort);
         putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", localhost, grpcPort);
-        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", localhost, grpcPort);
+        putGrpcClient(pb, "PROCESS_APPROVED_PAYMENT_STATUS", localhost, grpcPort);
+        putGrpcClient(pb, "PROCESS_UNAPPROVED_PAYMENT_STATUS", localhost, grpcPort);
+        putGrpcClient(pb, "PROCESS_FINALIZE_PAYMENT_OUTPUT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", localhost, grpcPort);
@@ -1357,7 +1357,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", inputService.getHost(), String.valueOf(inputService.getMappedPort(8444)), "/q/health/live");
         putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)), "/q/health/live");
         putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)), "/q/health/live");
-        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
+        putGrpcClient(pb, "PROCESS_APPROVED_PAYMENT_STATUS", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
+        putGrpcClient(pb, "PROCESS_UNAPPROVED_PAYMENT_STATUS", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
+        putGrpcClient(pb, "PROCESS_FINALIZE_PAYMENT_OUTPUT", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
@@ -1390,7 +1392,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", pipelineHost, pipelinePort);
         putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", pipelineHost, pipelinePort);
         putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", pipelineHost, pipelinePort);
-        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "PROCESS_APPROVED_PAYMENT_STATUS", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "PROCESS_UNAPPROVED_PAYMENT_STATUS", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "PROCESS_FINALIZE_PAYMENT_OUTPUT", pipelineHost, pipelinePort);
 
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", persistenceHost, persistencePort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", persistenceHost, persistencePort);
@@ -1757,14 +1761,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private boolean outputRecordCountReady() throws IOException {
-        if (!CUSTOM_INPUT_FILE) {
-            return true;
-        }
         long currentRecords = outputRecordCount(Paths.get(TEST_E2E_DIR));
         long expectedRecords = expectedOutputRecordCount();
         if (currentRecords >= expectedRecords) {
             LOG.infof(
-                    "Output record count reached expected custom input count: %,d/%s",
+                    "Output record count reached expected count: %,d/%s",
                     currentRecords,
                     expectedRecords);
             return true;
@@ -1774,16 +1775,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private long expectedOutputRecordCount() throws IOException {
-        long inputRecords = expectedPaymentRecordCount();
-        if (!runProviderRejectScenario()) {
-            return inputRecords;
-        }
-        double rejectProbability = configuredProviderRejectProbability();
-        if (rejectProbability <= 0.0d) {
-            return inputRecords;
-        }
-        long expectedRejects = expectedProviderRejectCount(rejectProbability);
-        return Math.max(0L, inputRecords - expectedRejects);
+        return expectedPaymentRecordCount();
     }
 
     private long expectedProviderRejectCount(double rejectProbability) throws IOException {
@@ -2524,7 +2516,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertEquals("completed", replayDocument.status(), "Expected merged replay to complete successfully.");
         assertReplayStepEvents(replayDocument, "ProcessCsvPaymentsInput");
         assertReplayStepEvents(replayDocument, "AwaitPaymentProvider");
-        assertReplayStepEvents(replayDocument, "ProcessPaymentStatus");
+        assertReplayStepEvents(replayDocument, "ProcessApprovedPaymentStatus");
+        assertReplayStepEvents(replayDocument, "ProcessUnapprovedPaymentStatus");
+        assertReplayMergeNode(replayDocument, "FinalizePaymentOutput");
+        assertReplayStepEvents(replayDocument, "ProcessFinalizePaymentOutput");
         assertReplayStepEvents(replayDocument, "PersistencePaymentRecordSideEffect");
         assertReplayStepEvents(replayDocument, "PersistencePaymentOutputSideEffect");
         assertReplayStepEvents(replayDocument, "ObjectIngest");
@@ -2542,7 +2537,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "Expected merged replay to contain input-to-await flow events.");
         assertTrue(
                 replayDocument.events().stream().anyMatch(event ->
-                        "ProcessPaymentStatus".equals(event.step())
+                        ("ProcessApprovedPaymentStatus".equals(event.step())
+                                || "ProcessUnapprovedPaymentStatus".equals(event.step()))
                                 && "AwaitPaymentProvider".equals(event.from())),
                 "Expected merged replay to contain await-resume flow events.");
 
@@ -2557,7 +2553,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         "store".equals(transition.relationKind())),
                 "Expected store transitions in merged replay topology.");
         assertReplayLifecycleEvents(replayDocument);
-        assertItemizedAwaitLiveFlowStartsBeforeUnitDispatchCompletes(replayDocument);
+        assertItemizedAwaitLiveFlowStartsBeforeUnitCompletes(replayDocument);
     }
 
     private void assertReplayLifecycleEvents(PipelineReplayDocument replayDocument) {
@@ -2599,21 +2595,23 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "Expected await lifecycle events to include expected item count once dispatch size is known.");
     }
 
-    private void assertItemizedAwaitLiveFlowStartsBeforeUnitDispatchCompletes(PipelineReplayDocument replayDocument) {
+    private void assertItemizedAwaitLiveFlowStartsBeforeUnitCompletes(PipelineReplayDocument replayDocument) {
         Comparator<PipelineExecutionEvent> playbackOrder = Comparator
                 .comparingDouble(AbstractCsvPaymentsEndToEnd::playbackTimeForEvent)
                 .thenComparingLong(event -> event.sequence() == null ? Long.MAX_VALUE : event.sequence());
         PipelineExecutionEvent firstPaymentStatusEvent = replayDocument.events().stream()
-                .filter(event -> "ProcessPaymentStatus".equals(event.step()))
+                .filter(event ->
+                        "ProcessApprovedPaymentStatus".equals(event.step())
+                                || "ProcessUnapprovedPaymentStatus".equals(event.step()))
                 .min(playbackOrder)
-                .orElseThrow(() -> new AssertionError("Expected ProcessPaymentStatus replay events."));
-        PipelineExecutionEvent awaitUnitDispatchCompleteEvent = replayDocument.events().stream()
-                .filter(event -> AWAIT_UNIT_DISPATCH_COMPLETE.equals(event.event()))
+                .orElseThrow(() -> new AssertionError("Expected payment-status branch replay events."));
+        PipelineExecutionEvent awaitUnitCompletedEvent = replayDocument.events().stream()
+                .filter(event -> AWAIT_UNIT_COMPLETED.equals(event.event()))
                 .min(playbackOrder)
-                .orElseThrow(() -> new AssertionError("Expected await_unit_dispatch_complete replay events."));
+                .orElseThrow(() -> new AssertionError("Expected await_unit_completed replay events."));
         assertTrue(
-                playbackOrder.compare(firstPaymentStatusEvent, awaitUnitDispatchCompleteEvent) < 0,
-                "Expected connector-first Kafka ONE_TO_ONE await to process completed items through the live session before unit dispatch completes.");
+                playbackOrder.compare(firstPaymentStatusEvent, awaitUnitCompletedEvent) < 0,
+                "Expected connector-first Kafka ONE_TO_ONE await to process completed items through the live session before the await unit completes.");
     }
 
     private void assertReplayEvent(PipelineReplayDocument replayDocument, String eventName) {
@@ -2650,6 +2648,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertTrue(
                 replayDocument.events().stream().anyMatch(event -> stepName.equals(event.step())),
                 "Expected merged replay to contain direct events for " + stepName + ".");
+    }
+
+    private void assertReplayMergeNode(PipelineReplayDocument replayDocument, String stepName) {
+        assertTrue(
+                replayDocument.events().stream().anyMatch(event ->
+                        stepName.equals(event.from()) || stepName.equals(event.to())),
+                "Expected merged replay to contain merge flow events for " + stepName + ".");
     }
 
     private static String nullSafe(String value) {

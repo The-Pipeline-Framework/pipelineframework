@@ -9,8 +9,6 @@ import com.opencsv.CSVWriter;
 import com.opencsv.bean.StatefulBeanToCsv;
 import com.opencsv.bean.StatefulBeanToCsvBuilder;
 import org.pipelineframework.csv.common.domain.PaymentOutput;
-import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.common.domain.PaymentStatus;
 import org.pipelineframework.objectpublish.ObjectPayloadChunk;
 import org.pipelineframework.objectpublish.ObjectPublishGroupRenderer;
 import org.pipelineframework.objectpublish.StreamingObjectPublishMapper;
@@ -22,36 +20,23 @@ public final class CsvPaymentOutputPublishMapper implements StreamingObjectPubli
 
     @Override
     public String groupKey(PaymentOutput item) {
-        Path inputFile = inputFile(item);
-        Path fileName = inputFile.getFileName();
-        if (fileName == null) {
-            throw new IllegalArgumentException("Payment output input file path must have a file name");
+        if (item == null) {
+            throw new IllegalArgumentException("Payment output must not be null");
         }
-        return fileName.toString();
+        if (item.getCsvPaymentsOutputFilename() != null && !item.getCsvPaymentsOutputFilename().isBlank()) {
+            return item.getCsvPaymentsOutputFilename();
+        }
+        Path inputFile = item.getCsvPaymentsInputFilePath();
+        if (inputFile == null || inputFile.getFileName() == null) {
+            throw new IllegalArgumentException(
+                "Payment output must include csvPaymentsOutputFilename or csvPaymentsInputFilePath");
+        }
+        return inputFile.getFileName().toString();
     }
 
     @Override
     public ObjectPublishGroupRenderer<PaymentOutput> openGroup(String groupKey, PaymentOutput firstItem) {
         return new CsvPaymentOutputGroupRenderer(groupKey);
-    }
-
-    private Path inputFile(PaymentOutput item) {
-        if (item == null) {
-            throw new IllegalArgumentException("Payment output must not be null");
-        }
-        PaymentStatus status = item.getPaymentStatus();
-        if (status == null) {
-            throw new IllegalArgumentException("Payment output must include paymentStatus");
-        }
-        PaymentRecord record = status.getPaymentRecord();
-        if (record == null) {
-            throw new IllegalArgumentException("Payment output paymentStatus must include paymentRecord");
-        }
-        Path inputFile = record.getCsvPaymentsInputFilePath();
-        if (inputFile == null) {
-            throw new IllegalArgumentException("Payment output paymentRecord must include csvPaymentsInputFilePath");
-        }
-        return inputFile.toAbsolutePath().normalize();
     }
 
     private static final class CsvPaymentOutputGroupRenderer implements ObjectPublishGroupRenderer<PaymentOutput> {

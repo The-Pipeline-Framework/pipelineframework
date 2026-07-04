@@ -18,44 +18,45 @@ package org.pipelineframework.csv.common.mapper;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import org.pipelineframework.csv.common.domain.ApprovedPaymentStatus;
-import org.pipelineframework.csv.common.domain.PaymentStatus;
-import org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus;
+import org.pipelineframework.csv.common.domain.ApprovedPaymentOutput;
+import org.pipelineframework.csv.common.domain.PaymentOutputBranch;
+import org.pipelineframework.csv.common.domain.UnapprovedPaymentOutput;
 import org.pipelineframework.csv.grpc.PipelineTypes;
 import org.pipelineframework.mapper.Mapper;
 
 @ApplicationScoped
-public class PaymentStatusMapper implements Mapper<PaymentStatus, PipelineTypes.PaymentStatus> {
+public class PaymentOutputBranchMapper
+    implements Mapper<PaymentOutputBranch, PipelineTypes.PaymentOutputBranch> {
 
-  @Inject ApprovedPaymentStatusMapper approvedMapper;
+  @Inject ApprovedPaymentOutputMapper approvedMapper;
 
-  @Inject UnapprovedPaymentStatusMapper unapprovedMapper;
+  @Inject UnapprovedPaymentOutputMapper unapprovedMapper;
 
   @Override
-  public PaymentStatus fromExternal(PipelineTypes.PaymentStatus external) {
+  public PaymentOutputBranch fromExternal(PipelineTypes.PaymentOutputBranch external) {
     if (external == null) {
       return null;
     }
     return switch (external.getOutcomeCase()) {
       case APPROVED -> approvedMapper.fromExternal(external.getApproved());
       case UNAPPROVED -> unapprovedMapper.fromExternal(external.getUnapproved());
-      case OUTCOME_NOT_SET -> throw new IllegalArgumentException("PaymentStatus outcome is not set");
+      case OUTCOME_NOT_SET -> throw new IllegalArgumentException("PaymentOutputBranch outcome is not set");
     };
   }
 
   @Override
-  public PipelineTypes.PaymentStatus toExternal(PaymentStatus domain) {
+  public PipelineTypes.PaymentOutputBranch toExternal(PaymentOutputBranch domain) {
     if (domain == null) {
       return null;
     }
-    PipelineTypes.PaymentStatus.Builder builder = PipelineTypes.PaymentStatus.newBuilder();
-    if (domain instanceof ApprovedPaymentStatus approved) {
+    PipelineTypes.PaymentOutputBranch.Builder builder = PipelineTypes.PaymentOutputBranch.newBuilder();
+    if (domain instanceof ApprovedPaymentOutput approved) {
       return builder.setApproved(approvedMapper.toExternal(approved)).build();
     }
-    if (domain instanceof UnapprovedPaymentStatus unapproved) {
+    if (domain instanceof UnapprovedPaymentOutput unapproved) {
       return builder.setUnapproved(unapprovedMapper.toExternal(unapproved)).build();
     }
     throw new IllegalArgumentException(
-        "Unsupported PaymentStatus type: " + domain.getClass().getName());
+        "Unsupported PaymentOutputBranch type: " + domain.getClass().getName());
   }
 }

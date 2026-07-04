@@ -36,7 +36,7 @@ This is still durable await, not a plain in-memory request/reply stream. If the 
 
 This handles crash recovery, fast providers, and broker redelivery safely. A completion that cannot be accepted by a live session is recorded, then released through durable continuation only when the parent execution is actually waiting on that unit. Duplicate completions resolve through the same interaction record instead of re-running the continuation.
 
-For `csv-payments`, `Process Csv Payments Input` emits `PaymentRecord` rows incrementally, `Await Payment Provider` dispatches each row as an item interaction, and `Process Payment Status` runs as completions are accepted by the live session or durable fallback. Terminal Object Publish writes `PaymentOutput` objects before the execution is marked successful.
+For `csv-payments`, `Process Csv Payments Input` emits `PaymentRecord` rows incrementally, `Await Payment Provider` dispatches each row as an item interaction, the approved or unapproved status branch runs as completions are accepted by the live session or durable fallback, and `Finalize Payment Output` performs the terminal merge before Object Publish writes `PaymentOutput` objects.
 
 ```mermaid
 sequenceDiagram

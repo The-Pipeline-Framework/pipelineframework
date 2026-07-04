@@ -93,13 +93,37 @@ output:
 
 ```yaml
 steps:
-  - name: ProcessPaymentStatus
-    service: org.pipelineframework.csv.service.ProcessPaymentStatusService
+  - name: ProcessApprovedPaymentStatus
+    service: org.pipelineframework.csv.service.ProcessApprovedPaymentStatusService
     cardinality: ONE_TO_ONE
-    input: org.pipelineframework.csv.common.domain.PaymentStatus
-    inputTypeName: PaymentStatus
+    input: org.pipelineframework.csv.common.domain.ApprovedPaymentStatus
+    inputTypeName: ApprovedPaymentStatus
+    accepts:
+      - ApprovedPaymentStatus
+    output: org.pipelineframework.csv.common.domain.ApprovedPaymentOutput
+    outputTypeName: ApprovedPaymentOutput
+
+  - name: ProcessUnapprovedPaymentStatus
+    service: org.pipelineframework.csv.service.ProcessUnapprovedPaymentStatusService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus
+    inputTypeName: UnapprovedPaymentStatus
+    accepts:
+      - UnapprovedPaymentStatus
+    output: org.pipelineframework.csv.common.domain.UnapprovedPaymentOutput
+    outputTypeName: UnapprovedPaymentOutput
+
+  - name: FinalizePaymentOutput
+    service: org.pipelineframework.csv.service.ProcessFinalizePaymentOutputService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.csv.common.domain.PaymentOutputBranch
+    inputTypeName: PaymentOutputBranch
+    accepts:
+      - ApprovedPaymentOutput
+      - UnapprovedPaymentOutput
     output: org.pipelineframework.csv.common.domain.PaymentOutput
     outputTypeName: PaymentOutput
+    terminal: true
 ```
 
 The output binding type must match the last step output type.
@@ -122,7 +146,8 @@ The business pipeline therefore ends at the last domain transition, not at a fil
 Object Ingest
   -> Process Csv Payments Input
   -> Await Payment Provider
-  -> Process Payment Status
+  -> Process Approved Payment Status / Process Unapproved Payment Status
+  -> Finalize Payment Output
   -> Object Publish
 ```
 
@@ -252,7 +277,7 @@ Use replay to answer per-run questions:
 3. Which completions were admitted, held, dropped, or released?
 4. Which output object key was published?
 
-The built-in CSV Payments replay is the reference connector-first proof. In the captured 1k run, Object Ingest admitted one source object, `Process Payment Status` started before all parser dispatch and await completions finished, and Object Publish wrote the terminal output object before success. See [Replay And Live Topology](/operate/observability/replay#csv-payments-built-in-proof) for the measured timings and checksum.
+The built-in CSV Payments replay is the reference connector-first proof. In the captured 1k run, Object Ingest admitted one source object, the approved and unapproved status branches started before all parser dispatch and await completions finished, `Finalize Payment Output` merged those paths, and Object Publish wrote the terminal output object before success. See [Replay And Live Topology](/operate/observability/replay#csv-payments-built-in-proof) for the measured timings.
 
 See [Metrics](/operate/observability/metrics), [Await Boundary Operations](/operate/await-boundaries), and [Replay And Live Topology](/operate/observability/replay).
 
