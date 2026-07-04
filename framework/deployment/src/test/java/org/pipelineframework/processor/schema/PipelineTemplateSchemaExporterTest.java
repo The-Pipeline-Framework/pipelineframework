@@ -229,6 +229,25 @@ class PipelineTemplateSchemaExporterTest {
     }
 
     @Test
+    void branchAwareStepShapesExposeAcceptsAndTerminal() {
+        JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
+
+        JsonObject internalStep = definitions.getAsJsonObject("delegatedOrInternalStep");
+        JsonObject internalProperties = internalStep.getAsJsonObject("properties");
+        assertTrue(internalProperties.has("accepts"));
+        assertTrue(internalProperties.has("terminal"));
+        assertEquals("boolean", internalProperties.getAsJsonObject("terminal").get("type").getAsString());
+
+        JsonObject accepts = internalProperties.getAsJsonObject("accepts");
+        assertEquals("array", accepts.get("type").getAsString());
+        assertEquals("^[A-Z][A-Za-z0-9_]*$", accepts.getAsJsonObject("items").get("pattern").getAsString());
+
+        assertTrue(definitions.getAsJsonObject("awaitTemplateStep").getAsJsonObject("properties").has("accepts"));
+        assertTrue(definitions.getAsJsonObject("commandTemplateStep").getAsJsonObject("properties").has("terminal"));
+        assertTrue(definitions.getAsJsonObject("queryTemplateStep").getAsJsonObject("properties").has("accepts"));
+    }
+
+    @Test
     void deterministicTopLevelOrderingKeepsSchemaStableForConsumers() {
         JsonObject schema = parse(PipelineTemplateSchemaExporter.schemaJson());
         List<String> keys = new ArrayList<>();

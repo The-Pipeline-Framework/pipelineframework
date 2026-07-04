@@ -123,6 +123,21 @@ class OperatorLinkValidationBuildStepsTest {
     }
 
     @Test
+    void skipsAdjacentValidationForBranchAwarePipelines() throws Exception {
+        Index index = indexOf(Source.class, Sink.class, MapperOne.class, MapperTwo.class);
+        OperatorBuildItem source = operator(index, Source.class, "Source", classType(String.class), uniType(String.class));
+        OperatorBuildItem sink = operator(index, Sink.class, "Sink", classType(Integer.class), uniType(Integer.class));
+
+        assertDoesNotThrow(() -> buildSteps.validateOperatorLinks(
+            List.of(source, sink),
+            new PipelineConfigBuildItem(List.of(
+                new PipelineConfigBuildItem.StepConfig("Source", "com.example.Source::map"),
+                new PipelineConfigBuildItem.StepConfig("Sink", "com.example.Sink::map")), true),
+            emptyRegistry(),
+            new io.quarkus.deployment.builditem.CombinedIndexBuildItem(index, index)));
+    }
+
+    @Test
     void failsForRawTypeWithIncompatibleGenerics() throws Exception {
         Index index = indexOf(Source.class, Sink.class, MapperOne.class, MapperTwo.class);
         Type listOfString = listType(String.class);

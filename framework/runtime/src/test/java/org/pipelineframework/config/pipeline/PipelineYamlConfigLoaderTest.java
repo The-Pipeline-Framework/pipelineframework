@@ -259,6 +259,44 @@ class PipelineYamlConfigLoaderTest {
     }
 
     @Test
+    void loadsBranchRoutingAcceptsAndTerminalFields() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            platform: "COMPUTE"
+            steps:
+              - name: "Finalize"
+                inputTypeName: "com.example.OrderCompletion"
+                outputTypeName: "com.example.FinalizedOrder"
+                accepts:
+                  - "StockReserved"
+                  - "LicenseProvisioned"
+                terminal: true
+            """));
+
+        PipelineYamlStep step = config.steps().getFirst();
+        assertEquals(List.of("StockReserved", "LicenseProvisioned"), step.accepts());
+        assertTrue(step.terminal());
+    }
+
+    @Test
+    void rejectsPredicateStyleRoutingKeys() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                steps:
+                  - name: "Reserve Stock"
+                    inputTypeName: "com.example.PhysicalOrder"
+                    outputTypeName: "com.example.StockReserved"
+                    when: "country == 'ES'"
+                """)));
+
+        assertTrue(exception.getMessage().contains("unsupported predicate-style routing keys"));
+        assertTrue(exception.getMessage().contains("when"));
+    }
+
+    @Test
     void rejectsNonPositiveObjectSourcePollInterval() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
             new PipelineYamlConfigLoader().load(new StringReader("""

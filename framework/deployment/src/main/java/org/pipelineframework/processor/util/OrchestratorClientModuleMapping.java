@@ -219,7 +219,7 @@ public class OrchestratorClientModuleMapping {
     public String resolveModuleName(PipelineStepModel model) {
         String clientName = OrchestratorClientNaming.clientNameForModel(model);
         if (clientName != null) {
-            String override = stepToModule.get(clientName);
+            String override = resolveStepOverride(clientName);
             if (override != null) {
                 return override;
             }
@@ -270,7 +270,7 @@ public class OrchestratorClientModuleMapping {
             return null;
         }
         String normalized = normalizeClientToken(clientName);
-        String moduleName = stepToModule.get(normalized);
+        String moduleName = resolveStepOverride(normalized);
         if (moduleName == null && normalized.startsWith("observe-") && normalized.endsWith("-side-effect")) {
             String middle = normalized.substring("observe-".length(), normalized.length() - "-side-effect".length());
             String aspect = middle;
@@ -300,6 +300,21 @@ public class OrchestratorClientModuleMapping {
             return null;
         }
         return new ClientConfig(normalized, module.host(), module.port(), tlsConfigurationName);
+    }
+
+    private String resolveStepOverride(String clientName) {
+        if (clientName == null || clientName.isBlank()) {
+            return null;
+        }
+        String normalized = normalizeClientToken(clientName);
+        String override = stepToModule.get(normalized);
+        if (override != null) {
+            return override;
+        }
+        if (normalized.startsWith("process-")) {
+            return stepToModule.get(normalized.substring("process-".length()));
+        }
+        return null;
     }
 
     private static String parsePortValue(String value, String moduleName, ProcessingEnvironment env) {

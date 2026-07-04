@@ -16,12 +16,16 @@ import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.pipeline.PipelineYamlStep;
+import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateUnion;
+import org.pipelineframework.config.template.PipelineTemplateUnionVariant;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.TypeMapping;
+import org.pipelineframework.processor.routing.PipelineBranchingPlan;
 
 /**
  * Writes pipeline telemetry metadata for item-boundary inference.
@@ -147,21 +151,7 @@ public class PipelineTelemetryMetadataGenerator {
                     resolvePluginActorKind(resolvePluginKind(sideEffectService, sideEffectStep))));
             }
         }
-        List<ReplayTopologyTransition> transitions = new ArrayList<>();
-        for (int i = 0; i < baseSteps.size() - 1; i++) {
-            ReplayTopologyStep from = baseSteps.get(i);
-            ReplayTopologyStep to = baseSteps.get(i + 1);
-            transitions.add(new ReplayTopologyTransition(
-                from.step() + "->" + to.step(),
-                from.runtimeStepClass(),
-                to.runtimeStepClass(),
-                from.step(),
-                to.step(),
-                from.service(),
-                to.service(),
-                from.cardinality(),
-                "primary"));
-        }
+        List<ReplayTopologyTransition> transitions = buildPrimaryTransitions(ctx, baseSteps);
         index = appendAwaitActors(baseSteps, configStepsByToken, steps, transitions, index);
         index = appendPersistenceStore(baseSteps, steps, transitions, index);
         for (ReplayTopologyStep step : steps) {
@@ -195,6 +185,181 @@ public class PipelineTelemetryMetadataGenerator {
         try (var output = resourceFile.openWriter()) {
             output.write(writer.toString());
         }
+    }
+
+    private List<ReplayTopologyTransition> buildPrimaryTransitions(
+        PipelineCompilationContext ctx,
+        List<ReplayTopologyStep> baseSteps
+    ) {
+        if (ctx.getBranchingPlan() == null || !ctx.getBranchingPlan().branchAware()) {
+            return buildLinearPrimaryTransitions(baseSteps);
+        }
+        List<ReplayTopologyTransition> transitions = buildBranchAwarePrimaryTransitions(ctx, baseSteps);
+        return transitions.isEmpty() ? buildLinearPrimaryTransitions(baseSteps) : transitions;
+    }
+
+    private List<ReplayTopologyTransition> buildLinearPrimaryTransitions(List<ReplayTopologyStep> baseSteps) {
+        List<ReplayTopologyTransition> transitions = new ArrayList<>();
+        for (int i = 0; i < baseSteps.size() - 1; i++) {
+            ReplayTopologyStep from = baseSteps.get(i);
+            ReplayTopologyStep to = baseSteps.get(i + 1);
+            transitions.add(primaryTransition(from, to));
+        }
+        return transitions;
+    }
+
+    private List<ReplayTopologyTransition> buildBranchAwarePrimaryTransitions(
+        PipelineCompilationContext ctx,
+        List<ReplayTopologyStep> baseSteps
+    ) {
+        PipelineBranchingPlan plan = ctx.getBranchingPlan();
+        if (plan == null || plan.steps().isEmpty()) {
+            return List.of();
+        }
+        Map<String, ReplayTopologyStep> baseStepsByToken = new LinkedHashMap<>();
+        Set<String> branchAwareStepNames = new LinkedHashSet<>();
+        List<ResolvedBranchTopologyStep> resolvedSteps = new ArrayList<>();
+        for (ReplayTopologyStep baseStep : baseSteps) {
+            baseStepsByToken.putIfAbsent(normalizeStepToken(baseStep.step()), baseStep);
+            baseStepsByToken.putIfAbsent(normalizeStepToken(baseStep.service()), baseStep);
+            baseStepsByToken.putIfAbsent(normalizeStepToken(baseStep.runtimeStepClass()), baseStep);
+        }
+        for (PipelineBranchingPlan.BranchStep step : plan.steps()) {
+            ReplayTopologyStep topologyStep = baseStepsByToken.get(normalizeStepToken(step.stepName()));
+            if (topologyStep == null) {
+                continue;
+            }
+            branchAwareStepNames.add(topologyStep.step());
+            resolvedSteps.add(new ResolvedBranchTopologyStep(
+                step,
+                topologyStep,
+                new LinkedHashSet<>(step.acceptedContractTypes()),
+                new LinkedHashSet<>(step.producedLeafContractTypes())));
+        }
+        if (resolvedSteps.isEmpty()) {
+            return List.of();
+        }
+
+        List<ReplayTopologyTransition> transitions = new ArrayList<>();
+        Set<String> transitionKeys = new LinkedHashSet<>();
+        Set<String> reachableTypes = initialReachableLeafTypes(ctx, resolvedSteps.get(0).step());
+
+        for (int index = 0; index < resolvedSteps.size(); index++) {
+            ResolvedBranchTopologyStep current = resolvedSteps.get(index);
+            Set<String> applicable = intersection(reachableTypes, current.acceptedContractTypes());
+            Set<String> skipped = new LinkedHashSet<>(reachableTypes);
+            skipped.removeAll(current.acceptedContractTypes());
+
+            if (!applicable.isEmpty()) {
+                for (String producedType : current.producedLeafContractTypes()) {
+                    ResolvedBranchTopologyStep next = firstAcceptingStep(resolvedSteps, index + 1, producedType);
+                    if (next != null) {
+                        addTransition(transitions, transitionKeys, primaryTransition(current.topologyStep(), next.topologyStep()));
+                    }
+                }
+                reachableTypes = new LinkedHashSet<>(skipped);
+                reachableTypes.addAll(current.producedLeafContractTypes());
+            } else {
+                reachableTypes = new LinkedHashSet<>(skipped);
+            }
+        }
+
+        for (int index = 0; index < baseSteps.size() - 1; index++) {
+            ReplayTopologyStep from = baseSteps.get(index);
+            ReplayTopologyStep to = baseSteps.get(index + 1);
+            if (branchAwareStepNames.contains(from.step()) && branchAwareStepNames.contains(to.step())) {
+                continue;
+            }
+            addTransition(transitions, transitionKeys, primaryTransition(from, to));
+        }
+        return transitions;
+    }
+
+    private Set<String> initialReachableLeafTypes(
+        PipelineCompilationContext ctx,
+        PipelineBranchingPlan.BranchStep firstStep
+    ) {
+        Set<String> resolved = expandLeafContractTypes(ctx, firstStep.inputContractName());
+        if (!resolved.isEmpty()) {
+            return resolved;
+        }
+        return new LinkedHashSet<>(firstStep.acceptedContractTypes());
+    }
+
+    private Set<String> expandLeafContractTypes(PipelineCompilationContext ctx, String contractName) {
+        if (contractName == null || contractName.isBlank()) {
+            return Set.of();
+        }
+        if (!(ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig templateConfig)) {
+            return Set.of(contractName);
+        }
+        return expandLeafContractTypes(templateConfig, contractName, new LinkedHashSet<>());
+    }
+
+    private Set<String> expandLeafContractTypes(
+        PipelineTemplateConfig templateConfig,
+        String contractName,
+        Set<String> visited
+    ) {
+        if (contractName == null || contractName.isBlank() || !visited.add(contractName)) {
+            return Set.of();
+        }
+        if (templateConfig.messages().containsKey(contractName)) {
+            return Set.of(contractName);
+        }
+        PipelineTemplateUnion union = templateConfig.unions().get(contractName);
+        if (union == null) {
+            return Set.of(contractName);
+        }
+        Set<String> expanded = new LinkedHashSet<>();
+        for (PipelineTemplateUnionVariant variant : union.variants().values()) {
+            expanded.addAll(expandLeafContractTypes(templateConfig, variant.type(), visited));
+        }
+        return expanded;
+    }
+
+    private Set<String> intersection(Set<String> left, Set<String> right) {
+        Set<String> intersection = new LinkedHashSet<>(left);
+        intersection.retainAll(right);
+        return intersection;
+    }
+
+    private ResolvedBranchTopologyStep firstAcceptingStep(
+        List<ResolvedBranchTopologyStep> steps,
+        int startIndex,
+        String contractType
+    ) {
+        for (int index = startIndex; index < steps.size(); index++) {
+            ResolvedBranchTopologyStep candidate = steps.get(index);
+            if (candidate.acceptedContractTypes().contains(contractType)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private void addTransition(
+        List<ReplayTopologyTransition> transitions,
+        Set<String> transitionKeys,
+        ReplayTopologyTransition transition
+    ) {
+        String key = transition.from() + "->" + transition.to() + ":" + transition.relationKind();
+        if (transitionKeys.add(key)) {
+            transitions.add(transition);
+        }
+    }
+
+    private ReplayTopologyTransition primaryTransition(ReplayTopologyStep from, ReplayTopologyStep to) {
+        return new ReplayTopologyTransition(
+            from.step() + "->" + to.step(),
+            from.runtimeStepClass(),
+            to.runtimeStepClass(),
+            from.step(),
+            to.step(),
+            from.service(),
+            to.service(),
+            from.cardinality(),
+            "primary");
     }
 
     /**
@@ -904,6 +1069,14 @@ public class PipelineTelemetryMetadataGenerator {
             return "";
         }
         return name.replaceAll("[^A-Za-z0-9]", "").toLowerCase();
+    }
+
+    private record ResolvedBranchTopologyStep(
+        PipelineBranchingPlan.BranchStep step,
+        ReplayTopologyStep topologyStep,
+        Set<String> acceptedContractTypes,
+        Set<String> producedLeafContractTypes
+    ) {
     }
 
     /**

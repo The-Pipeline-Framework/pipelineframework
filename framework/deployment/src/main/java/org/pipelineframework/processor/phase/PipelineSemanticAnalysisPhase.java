@@ -22,6 +22,7 @@ import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.ServiceApiKind;
 import org.pipelineframework.processor.ir.StreamingShape;
+import org.pipelineframework.processor.routing.PipelineBranchRoutingPlanner;
 
 /**
  * Performs semantic analysis and policy decisions on discovered models.
@@ -70,6 +71,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         validateProviderHints(ctx);
         validateFunctionPlatformConstraints(ctx);
         validateYamlDrivenSteps(ctx);
+        ctx.setBranchingPlan(new PipelineBranchRoutingPlanner().plan(ctx).orElse(null));
 
         // Analyze streaming shapes and other semantic properties
         // This phase focuses on semantic analysis without building bindings or calling renderers

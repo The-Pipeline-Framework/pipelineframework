@@ -58,6 +58,11 @@ public class StepDefinitionParser {
         "between",
         "like",
         "isNull");
+    private static final Set<String> REJECTED_BRANCH_PREDICATE_KEYS = Set.of(
+        "when",
+        "condition",
+        "predicate",
+        "expression");
     /**
      * Legacy suffix used to resolve short-form internal step types.
      * For legacy internal steps, {@code input/output: Foo} resolves to
@@ -92,6 +97,8 @@ public class StepDefinitionParser {
         "config",
         "query",
         "capture",
+        "accepts",
+        "terminal",
         "runOnVirtualThreads");
     private final BiConsumer<Diagnostic.Kind, String> diagnosticReporter;
     private final String legacyInternalPackageSuffix;
@@ -202,7 +209,15 @@ public class StepDefinitionParser {
             LOG.warnf("Skipping step with null or blank name: %s", stepData);
             return null;
         }
+        reportRejectedBranchPredicateKeys(name, stepData);
         reportUnknownStepKeys(name, stepData);
+        if (version < 2 && (stepData.containsKey("accepts") || Boolean.TRUE.equals(stepData.get("terminal")))) {
+            String message = "Skipping step '" + name
+                + "': accepts/terminal branch routing requires version: 2";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            throw new StepSkippedException();
+        }
 
         PipelineTemplateStepExecution remoteExecution;
         try {
@@ -360,6 +375,11 @@ public class StepDefinitionParser {
         if (!isBlank(outputTypeName) && outputType == null) {
             return null;
         }
+        List<String> accepts = parseStringList(stepData.get("accepts"), name, "accepts");
+        if (accepts == null) {
+            throw new StepSkippedException();
+        }
+        boolean terminal = parseOptionalBoolean(stepData, name, "terminal");
 
         String inboundMapperName = getStringValue(stepData, "inboundMapper");
         String outboundMapperName = getStringValue(stepData, "outboundMapper");
@@ -494,7 +514,9 @@ public class StepDefinitionParser {
                 inputType,
                 outputType,
                 StreamingShape.UNARY_UNARY,
-                false);
+                false,
+                accepts,
+                terminal);
         }
 
         if (kind == StepKind.AWAIT) {
@@ -550,7 +572,9 @@ public class StepDefinitionParser {
                 inputType,
                 outputType,
                 resolvedShape,
-                false);
+                false,
+                accepts,
+                terminal);
         }
 
         if (kind == StepKind.COMMAND) {
@@ -622,7 +646,9 @@ public class StepDefinitionParser {
                 inputType,
                 outputType,
                 StreamingShape.UNARY_UNARY,
-                false);
+                false,
+                accepts,
+                terminal);
         }
 
         if (kind == StepKind.QUERY) {
@@ -700,7 +726,9 @@ public class StepDefinitionParser {
                 inputType,
                 outputType,
                 StreamingShape.UNARY_UNARY,
-                false);
+                false,
+                accepts,
+                terminal);
         }
 
         // Create the execution class name
@@ -722,7 +750,9 @@ public class StepDefinitionParser {
             inputType,
             outputType,
             parseStreamingShapeHint(stepData, name),
-            runOnVirtualThreads);
+            runOnVirtualThreads,
+            accepts,
+            terminal);
     }
 
     private boolean parseOptionalBoolean(Map<String, Object> stepData, String stepName, String fieldName) {
@@ -1429,6 +1459,23 @@ public class StepDefinitionParser {
             + String.join(", ", unknownKeys);
         LOG.warn(message);
         report(Diagnostic.Kind.WARNING, message);
+    }
+
+    private void reportRejectedBranchPredicateKeys(String stepName, Map<String, Object> stepData) {
+        Set<String> rejectedKeys = new HashSet<>();
+        for (String key : stepData.keySet()) {
+            if (REJECTED_BRANCH_PREDICATE_KEYS.contains(key)) {
+                rejectedKeys.add(key);
+            }
+        }
+        if (rejectedKeys.isEmpty()) {
+            return;
+        }
+        String message = "Skipping step '" + stepName + "': predicate-style routing keys are not supported ("
+            + String.join(", ", rejectedKeys) + "). Use type-based accepts/terminal routing only.";
+        LOG.warn(message);
+        report(Diagnostic.Kind.ERROR, message);
+        throw new StepSkippedException();
     }
 
     /**
