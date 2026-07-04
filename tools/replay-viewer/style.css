@@ -749,6 +749,11 @@ button:disabled {
   box-shadow: 0 0 12px rgb(255 100 124 / 40%);
 }
 
+.legend-swatch--skip {
+  background: #9fb3ff;
+  box-shadow: 0 0 12px rgb(159 179 255 / 42%);
+}
+
 .legend-swatch--branch {
   background: #caa6ff;
   box-shadow: 0 0 12px rgb(202 166 255 / 40%);
@@ -782,10 +787,7 @@ button:disabled {
   box-shadow: 0 0 14px rgb(92 200 255 / 42%);
 }
 
-.legend-node-primary {
-  background: `#5cc8ff`;
-  box-shadow: 0 0 14px rgb(92 200 255 / 42%);
-}
+.legend-node--primary {
   background: #5cc8ff;
   box-shadow: 0 0 14px rgb(92 200 255 / 42%);
 }
