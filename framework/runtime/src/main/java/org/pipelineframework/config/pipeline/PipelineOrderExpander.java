@@ -157,11 +157,20 @@ public final class PipelineOrderExpander {
         }
         String normalizedStep = normalizeStepToken(stepClassName);
         for (String target : targetSteps) {
-            if (normalizedStep.equalsIgnoreCase(normalizeStepToken(target))) {
+            if (matchesNormalizedStepToken(normalizedStep, normalizeStepToken(target))) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static boolean matchesNormalizedStepToken(String candidate, String target) {
+        if (candidate == null || candidate.isBlank() || target == null || target.isBlank()) {
+            return false;
+        }
+        return candidate.equalsIgnoreCase(target)
+            || stripProcessPrefix(candidate).equalsIgnoreCase(target)
+            || candidate.equalsIgnoreCase(stripProcessPrefix(target));
     }
 
     /**
@@ -323,6 +332,13 @@ public final class PipelineOrderExpander {
         }
         simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep)(_Subclass)?$", "");
         return toClassToken(simple);
+    }
+
+    private static String stripProcessPrefix(String token) {
+        if (token == null) {
+            return "";
+        }
+        return token.startsWith("Process") ? token.substring("Process".length()) : token;
     }
 
     private static String buildSideEffectClientStep(

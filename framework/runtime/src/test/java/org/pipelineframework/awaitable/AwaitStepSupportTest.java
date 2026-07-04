@@ -361,7 +361,7 @@ class AwaitStepSupportTest {
     }
 
     @Test
-    void kafkaOneToOneStreamKeepsDispatchPermitUntilCompletionIsAcceptedDownstream() {
+    void kafkaOneToOneStreamDispatchesFiniteSourceBeforeCompletionsAreAccepted() {
         AwaitStepSupport support = support();
         support.pipelineConfig.maxConcurrency(1);
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
@@ -369,7 +369,7 @@ class AwaitStepSupportTest {
 
         AwaitStepDescriptor testDescriptor = kafkaDescriptor();
         List<AwaitInteractionRecord> dispatched = new CopyOnWriteArrayList<>();
-        DemandSource source = new DemandSource("first", "second");
+        DemandSource source = new DemandSource("first", "second", "third");
         AtomicInteger dispatchCompleteCalls = new AtomicInteger();
 
         when(awaitCoordinator.createOrGetItem(
@@ -401,7 +401,7 @@ class AwaitStepSupportTest {
         when(awaitCoordinator.markDispatchComplete(
             org.mockito.ArgumentMatchers.eq("tenant1"),
             org.mockito.ArgumentMatchers.anyString(),
-            org.mockito.ArgumentMatchers.eq(2),
+            org.mockito.ArgumentMatchers.eq(3),
             anyLong()))
             .thenAnswer(invocation -> {
                 dispatchCompleteCalls.incrementAndGet();
@@ -415,9 +415,9 @@ class AwaitStepSupportTest {
                 1L,
                 AwaitUnitStatus.COMPLETED,
                 null,
-                2,
-                2,
-                java.util.Set.of("item:0", "item:1"),
+                3,
+                3,
+                java.util.Set.of("item:0", "item:1", "item:2"),
                 true,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
@@ -429,33 +429,35 @@ class AwaitStepSupportTest {
                 Multi.createFrom().publisher(source))
             .subscribe().withSubscriber(AssertSubscriber.create(1));
 
-        waitUntil(() -> dispatched.size() == 1);
-        assertEquals(1, source.emitted());
+        waitUntil(() -> dispatched.size() == 3);
+        waitUntil(() -> dispatchCompleteCalls.get() == 1);
+        assertEquals(3, source.emitted());
 
         support.liveCompletionRegistry.signal(
             itemRecord(0, AwaitInteractionStatus.COMPLETED, "first", "approved-first"),
-            awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 2, 1, false))
+            awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 3, 1, false))
             .await().indefinitely();
 
         subscriber.awaitItems(1, Duration.ofSeconds(5));
         subscriber.assertItems("approved-first");
-        waitUntil(() -> dispatched.size() == 2);
-        assertEquals(2, source.emitted());
 
-        subscriber.request(1);
+        subscriber.request(2);
         support.liveCompletionRegistry.signal(
             itemRecord(1, AwaitInteractionStatus.COMPLETED, "second", "approved-second"),
-            awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 2, 2, false))
+            awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 3, 2, false))
+            .await().indefinitely();
+        support.liveCompletionRegistry.signal(
+            itemRecord(2, AwaitInteractionStatus.COMPLETED, "third", "approved-third"),
+            awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 3, 3, false))
             .await().indefinitely();
 
-        subscriber.awaitItems(2, Duration.ofSeconds(5));
-        waitUntil(() -> dispatchCompleteCalls.get() == 1);
+        subscriber.awaitItems(3, Duration.ofSeconds(5));
         subscriber.awaitCompletion(Duration.ofSeconds(5));
-        subscriber.assertItems("approved-first", "approved-second");
+        subscriber.assertItems("approved-first", "approved-second", "approved-third");
         org.mockito.Mockito.verify(awaitCoordinator).markDispatchComplete(
             org.mockito.ArgumentMatchers.eq("tenant1"),
             org.mockito.ArgumentMatchers.anyString(),
-            org.mockito.ArgumentMatchers.eq(2),
+            org.mockito.ArgumentMatchers.eq(3),
             anyLong());
     }
 

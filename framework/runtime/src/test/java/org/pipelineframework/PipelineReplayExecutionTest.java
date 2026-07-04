@@ -40,6 +40,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.pipelineframework.branching.StepBranchingDescriptor;
 import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineStepConfig;
 import org.pipelineframework.config.pipeline.PipelineJson;
@@ -424,6 +425,51 @@ class PipelineReplayExecutionTest {
             .anyMatch(step -> "reject".equals(step.pluginKind()) && step.step().equals("Rejects Rejecting")));
     }
 
+    @Test
+    void emitsSkipReplayEventForNonApplicableBranchStep() {
+        CollectingExporter exporter = new CollectingExporter();
+        PipelineTelemetry telemetry = new PipelineTelemetry(new ReplayEnabledPipelineStepConfig(), exporter, branchSkipTopology());
+
+        Uni<DigitalPayload> input = Uni.createFrom().item(new DigitalPayload("digital-1"));
+        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
+            0,
+            "PhysicalOnly",
+            PhysicalOnlyStep.class.getName(),
+            PhysicalPayload.class.getName(),
+            PhysicalPayload.class,
+            List.of("PhysicalPayload"),
+            List.of(PhysicalPayload.class.getName()),
+            List.of(PhysicalPayload.class),
+            false);
+
+        Object current = PipelineStepExecutor.applyOneToOneUnchecked(
+            new PhysicalOnlyStep(),
+            input,
+            false,
+            4,
+            telemetry,
+            runContext,
+            null,
+            null,
+            null,
+            descriptor);
+        Object output = ((Uni<?>) telemetry.instrumentRunCompletion(current, runContext)).await().indefinitely();
+
+        assertEquals(new DigitalPayload("digital-1"), output);
+        PipelineExecutionEvent skip = exporter.events.stream()
+            .filter(event -> "skip".equals(event.event()))
+            .findFirst()
+            .orElseThrow();
+        assertEquals("PhysicalOnly", skip.step());
+        assertEquals("not_applicable", skip.attributes().get("reason"));
+        assertEquals("PhysicalPayload", skip.attributes().get("acceptedTypes"));
+        assertTrue(exporter.events.stream().noneMatch(event ->
+            "start".equals(event.event()) && "PhysicalOnly".equals(event.step())));
+        assertTrue(exporter.events.stream().noneMatch(event ->
+            "success".equals(event.event()) && "PhysicalOnly".equals(event.step())));
+    }
+
     private PipelineReplayTopology topology() {
         String step1 = PrefixStep.class.getName();
         String step2 = SplitStep.class.getName();
@@ -507,7 +553,24 @@ class PipelineReplayExecutionTest {
             ));
     }
 
+    private PipelineReplayTopology branchSkipTopology() {
+        String step = PhysicalOnlyStep.class.getName();
+        return new PipelineReplayTopology(
+            "order-routing",
+            List.of(new PipelineReplayTopology.Step(step, "PhysicalOnly", "PhysicalOnlyService", "one-to-one", 0, false, null, null)),
+            List.of());
+    }
+
     record Payload(String value) {
+    }
+
+    record PhysicalPayload(String id) {
+    }
+
+    record PhysicalHandled(String id) {
+    }
+
+    record DigitalPayload(String id) {
     }
 
     abstract static class BaseStep implements Configurable {
@@ -598,6 +661,13 @@ class PipelineReplayExecutionTest {
         @Override
         public Uni<Payload> applyOneToOne(Payload in) {
             return Uni.createFrom().failure(new IllegalStateException("reject this"));
+        }
+    }
+
+    static final class PhysicalOnlyStep extends BaseStep implements StepOneToOne<PhysicalPayload, PhysicalHandled> {
+        @Override
+        public Uni<PhysicalHandled> applyOneToOne(PhysicalPayload in) {
+            return Uni.createFrom().item(new PhysicalHandled(in.id()));
         }
     }
 
