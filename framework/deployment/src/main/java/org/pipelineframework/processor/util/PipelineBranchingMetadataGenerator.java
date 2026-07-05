@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.logging.Logger;
+import javax.tools.Diagnostic;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.tools.StandardLocation;
 
@@ -45,20 +46,23 @@ public final class PipelineBranchingMetadataGenerator {
         if (ctx == null || ctx.getBranchingPlan() == null || !ctx.getBranchingPlan().branchAware()) {
             return;
         }
+        PipelineBranchingPlan plan = ctx.getBranchingPlan();
         List<PipelineStepModel> orderedModels = orderedModels(ctx);
         if (orderedModels.isEmpty()) {
             return;
         }
         Map<String, PipelineStepModel> modelsByStepName = indexModelsByStepName(orderedModels);
         List<StepMetadata> steps = new ArrayList<>();
-        for (PipelineBranchingPlan.BranchStep step : ctx.getBranchingPlan().steps()) {
+        for (PipelineBranchingPlan.BranchStep step : plan.steps()) {
             PipelineStepModel model = modelsByStepName.get(normalizeStepToken(step.stepName()));
             if (model == null) {
+                warn(ctx, "Branch-aware step '" + step.stepName()
+                    + "' could not be matched to a runtime step model while generating branching metadata.");
                 continue;
             }
             String runtimeStepClass = runtimeStepClass(model, ctx);
             boolean transportMappedRuntime = usesTransportMappedRuntime(model, ctx);
-            String inputRuntimeClass = runtimeInputType(model, ctx, transportMappedRuntime);
+            String inputRuntimeClass = runtimeInputType(model, ctx, transportMappedRuntime).orElse(null);
             List<String> acceptedRuntimeClasses = step.acceptedDomainTypes().stream()
                 .map(type -> runtimeAcceptedType(type, ctx, transportMappedRuntime))
                 .toList();
@@ -74,12 +78,7 @@ public final class PipelineBranchingMetadataGenerator {
         if (steps.isEmpty()) {
             return;
         }
-        int terminalStepIndex = steps.stream()
-            .filter(StepMetadata::terminal)
-            .mapToInt(StepMetadata::index)
-            .findFirst()
-            .orElse(-1);
-        BranchingMetadata metadata = new BranchingMetadata(terminalStepIndex, steps);
+        BranchingMetadata metadata = new BranchingMetadata(plan.terminalStepIndex(), steps);
         if (processingEnv != null) {
             javax.tools.FileObject resourceFile = processingEnv.getFiler()
                 .createResource(StandardLocation.CLASS_OUTPUT, "", RESOURCE, (javax.lang.model.element.Element[]) null);
@@ -90,12 +89,16 @@ public final class PipelineBranchingMetadataGenerator {
     }
 
     private List<PipelineStepModel> orderedModels(PipelineCompilationContext ctx) {
-        PipelineYamlConfig config = loadPipelineConfig(ctx);
-        if (config == null || config.steps() == null || config.steps().isEmpty()) {
-            return ctx.getStepModels() == null ? List.of() : ctx.getStepModels().stream().filter(model -> !model.sideEffect()).toList();
+        List<PipelineStepModel> stepModels = ctx.getStepModels() == null ? List.of() : ctx.getStepModels();
+        Optional<PipelineYamlConfig> config = loadPipelineConfig(ctx);
+        if (config.isEmpty() || config.orElseThrow().steps() == null || config.orElseThrow().steps().isEmpty()) {
+            return stepModels.stream().filter(model -> !model.sideEffect()).toList();
+        }
+        if (stepModels.isEmpty()) {
+            return List.of();
         }
         Map<String, PipelineStepModel> byToken = new LinkedHashMap<>();
-        for (PipelineStepModel model : ctx.getStepModels()) {
+        for (PipelineStepModel model : stepModels) {
             if (model.sideEffect()) {
                 continue;
             }
@@ -105,7 +108,7 @@ public final class PipelineBranchingMetadataGenerator {
         }
         List<PipelineStepModel> ordered = new ArrayList<>();
         Set<PipelineStepModel> added = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-        for (PipelineYamlStep step : config.steps()) {
+        for (PipelineYamlStep step : config.orElseThrow().steps()) {
             if (step == null || step.name() == null) {
                 continue;
             }
@@ -114,7 +117,7 @@ public final class PipelineBranchingMetadataGenerator {
                 ordered.add(model);
             }
         }
-        for (PipelineStepModel model : ctx.getStepModels()) {
+        for (PipelineStepModel model : stepModels) {
             if (!model.sideEffect() && added.add(model)) {
                 ordered.add(model);
             }
@@ -132,15 +135,15 @@ public final class PipelineBranchingMetadataGenerator {
         return models;
     }
 
-    private PipelineYamlConfig loadPipelineConfig(PipelineCompilationContext ctx) {
+    private Optional<PipelineYamlConfig> loadPipelineConfig(PipelineCompilationContext ctx) {
         Optional<java.nio.file.Path> configPath = resolvePipelineConfigPath(ctx);
         if (configPath.isEmpty()) {
-            return null;
+            return Optional.empty();
         }
         PipelineYamlConfigLoader loader = processingEnv != null
             ? new PipelineYamlConfigLoader(processingEnv.getOptions()::get, System::getenv)
             : new PipelineYamlConfigLoader(key -> null, System::getenv);
-        return loader.load(configPath.get());
+        return Optional.of(loader.load(configPath.get()));
     }
 
     private Optional<java.nio.file.Path> resolvePipelineConfigPath(PipelineCompilationContext ctx) {
@@ -183,21 +186,9 @@ public final class PipelineBranchingMetadataGenerator {
     }
 
     private String clientClass(PipelineStepModel model, PipelineCompilationContext ctx) {
-        String suffix = specialClientSuffix(model, ctx);
-        return model.servicePackage() + ".pipeline." + stripTrailingService(model.generatedName()) + suffix;
-    }
-
-    private String specialClientSuffix(PipelineStepModel model, PipelineCompilationContext ctx) {
-        if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
-            return "AwaitClientStep";
-        }
-        if (model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)) {
-            return "CommandClientStep";
-        }
-        if (model.enabledTargets().contains(GenerationTarget.QUERY_CLIENT_STEP)) {
-            return "QueryClientStep";
-        }
-        return java.util.Objects.requireNonNullElse(ctx.getTransportMode(), PipelineTransport.GRPC).clientStepSuffix();
+        return ClientStepClassNames.className(
+            model,
+            java.util.Objects.requireNonNullElse(ctx.getTransportMode(), PipelineTransport.GRPC));
     }
 
     private String runtimeAcceptedType(ClassName domainType, PipelineCompilationContext ctx, boolean transportMappedRuntime) {
@@ -207,7 +198,9 @@ public final class PipelineBranchingMetadataGenerator {
         PipelineTransport transportMode = java.util.Objects.requireNonNullElse(ctx.getTransportMode(), PipelineTransport.GRPC);
         TypeName transportType = clientStepType(domainType, transportMode, pipelineBasePackage(ctx, domainType));
         if (transportType instanceof ClassName className) {
-            if (transportMode == PipelineTransport.GRPC && ctx.getProcessingEnv() != null) {
+            if (transportMode == PipelineTransport.GRPC
+                && ctx.getProcessingEnv() != null
+                && ctx.getProcessingEnv().getElementUtils() != null) {
                 javax.lang.model.element.TypeElement element = ctx.getProcessingEnv().getElementUtils()
                     .getTypeElement(className.canonicalName());
                 if (element == null) {
@@ -221,21 +214,21 @@ public final class PipelineBranchingMetadataGenerator {
         return transportType.toString();
     }
 
-    private String runtimeInputType(PipelineStepModel model, PipelineCompilationContext ctx, boolean transportMappedRuntime) {
+    private Optional<String> runtimeInputType(PipelineStepModel model, PipelineCompilationContext ctx, boolean transportMappedRuntime) {
         TypeName inputType = model.inputMapping() == null ? null : model.inputMapping().domainType();
         if (!(inputType instanceof ClassName className)) {
-            return inputType == null ? null : inputType.toString();
+            return inputType == null ? Optional.empty() : Optional.of(inputType.toString());
         }
         if (!transportMappedRuntime) {
-            return className.reflectionName();
+            return Optional.of(className.reflectionName());
         }
         TypeName transportType = clientStepType(className, java.util.Objects.requireNonNullElse(
             ctx.getTransportMode(),
             PipelineTransport.GRPC), pipelineBasePackage(ctx, className));
         if (transportType instanceof ClassName transportClassName) {
-            return transportClassName.reflectionName();
+            return Optional.of(transportClassName.reflectionName());
         }
-        return transportType.toString();
+        return Optional.of(transportType.toString());
     }
 
     private String pipelineBasePackage(PipelineCompilationContext ctx, ClassName domainType) {
@@ -283,6 +276,14 @@ public final class PipelineBranchingMetadataGenerator {
             return "";
         }
         return value.replaceAll("[^A-Za-z0-9]", "").toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private void warn(PipelineCompilationContext ctx, String message) {
+        if (processingEnv != null && processingEnv.getMessager() != null) {
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, message);
+        } else {
+            LOGGER.warning(message);
+        }
     }
 
     private record BranchingMetadata(

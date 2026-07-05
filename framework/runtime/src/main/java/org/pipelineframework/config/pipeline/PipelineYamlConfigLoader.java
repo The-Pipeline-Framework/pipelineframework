@@ -62,7 +62,6 @@ import org.yaml.snakeyaml.Yaml;
 public class PipelineYamlConfigLoader {
     private static final Logger LOG = Logger.getLogger(PipelineYamlConfigLoader.class.getName());
     private static final int MAX_NESTING_DEPTH = 100;
-    private static final List<String> REJECTED_BRANCH_PREDICATE_KEYS = List.of("when", "condition", "predicate", "expression");
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
 
@@ -298,9 +297,7 @@ public class PipelineYamlConfigLoader {
     }
 
     private void rejectBranchPredicateKeys(Map<?, ?> stepMap, String stepName) {
-        List<String> rejected = REJECTED_BRANCH_PREDICATE_KEYS.stream()
-            .filter(stepMap::containsKey)
-            .toList();
+        List<String> rejected = BranchRoutingRules.rejectedPredicateKeys(stepMap);
         if (rejected.isEmpty()) {
             return;
         }

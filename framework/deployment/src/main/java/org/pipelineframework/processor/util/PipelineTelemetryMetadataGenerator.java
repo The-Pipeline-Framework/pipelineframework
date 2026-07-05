@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.logging.Logger;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.tools.StandardLocation;
 
@@ -36,6 +37,7 @@ public class PipelineTelemetryMetadataGenerator {
     private static final String REPLAY_TOPOLOGY_RESOURCE_PATH = "META-INF/pipeline/replay-topology.json";
     private static final String ITEM_INPUT_TYPE_KEY = "pipeline.telemetry.item-input-type";
     private static final String ITEM_OUTPUT_TYPE_KEY = "pipeline.telemetry.item-output-type";
+    private static final Logger LOGGER = Logger.getLogger(PipelineTelemetryMetadataGenerator.class.getName());
 
     private final ProcessingEnvironment processingEnv;
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -195,7 +197,11 @@ public class PipelineTelemetryMetadataGenerator {
             return buildLinearPrimaryTransitions(baseSteps);
         }
         List<ReplayTopologyTransition> transitions = buildBranchAwarePrimaryTransitions(ctx, baseSteps);
-        return transitions.isEmpty() ? buildLinearPrimaryTransitions(baseSteps) : transitions;
+        if (transitions.isEmpty()) {
+            LOGGER.warning("Branch-aware replay topology resolved no primary transitions for pipeline '"
+                + resolvePipelineName(ctx) + "'.");
+        }
+        return transitions;
     }
 
     private List<ReplayTopologyTransition> buildLinearPrimaryTransitions(List<ReplayTopologyStep> baseSteps) {
@@ -252,9 +258,12 @@ public class PipelineTelemetryMetadataGenerator {
 
             if (!applicable.isEmpty()) {
                 for (String producedType : current.producedLeafContractTypes()) {
-                    ResolvedBranchTopologyStep next = firstAcceptingStep(resolvedSteps, index + 1, producedType);
-                    if (next != null) {
-                        addTransition(transitions, transitionKeys, primaryTransition(current.topologyStep(), next.topologyStep()));
+                    Optional<ResolvedBranchTopologyStep> next = firstAcceptingStep(resolvedSteps, index + 1, producedType);
+                    if (next.isPresent()) {
+                        addTransition(
+                            transitions,
+                            transitionKeys,
+                            primaryTransition(current.topologyStep(), next.orElseThrow().topologyStep()));
                     }
                 }
                 reachableTypes = new LinkedHashSet<>(skipped);
@@ -324,7 +333,7 @@ public class PipelineTelemetryMetadataGenerator {
         return intersection;
     }
 
-    private ResolvedBranchTopologyStep firstAcceptingStep(
+    private Optional<ResolvedBranchTopologyStep> firstAcceptingStep(
         List<ResolvedBranchTopologyStep> steps,
         int startIndex,
         String contractType
@@ -332,10 +341,10 @@ public class PipelineTelemetryMetadataGenerator {
         for (int index = startIndex; index < steps.size(); index++) {
             ResolvedBranchTopologyStep candidate = steps.get(index);
             if (candidate.acceptedContractTypes().contains(contractType)) {
-                return candidate;
+                return Optional.of(candidate);
             }
         }
-        return null;
+        return Optional.empty();
     }
 
     private void addTransition(
@@ -1239,11 +1248,7 @@ public class PipelineTelemetryMetadataGenerator {
      * @return the fully-qualified client step class name (package + ".pipeline." + generated name without "Service" + transport suffix)
      */
     private String resolveClientStepClassName(PipelineStepModel model, PipelineTransport transportMode) {
-        String suffix = model.enabledTargets().contains(GenerationTarget.COMMAND_CLIENT_STEP)
-            ? "CommandClientStep"
-            : transportMode.clientStepSuffix();
-        return model.servicePackage() + ".pipeline." +
-            model.generatedName().replace("Service", "") + suffix;
+        return ClientStepClassNames.className(model, transportMode);
     }
 
     private String cardinality(StreamingShape shape) {
