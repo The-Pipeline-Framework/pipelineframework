@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.util.Set;
 
 import com.google.protobuf.Int32Value;
+import com.google.protobuf.Value;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -226,6 +227,27 @@ class TransitionCommandEnvelopeTest {
         ExecutionInputSnapshot snapshot = assertInstanceOf(ExecutionInputSnapshot.class, decoded.inputPayload());
         Int32Value decodedPayload = assertInstanceOf(Int32Value.class, snapshot.payload());
         assertEquals(42, decodedPayload.getValue());
+    }
+
+    @Test
+    void preservesProtobufOneofPayloadAcrossEnvelopeRoundTrip() {
+        JsonTransitionPayloadCodec configuredCodec = codecAllowingPrefixes("com.google.protobuf.");
+        TransitionWorkerCommand command = command(new ExecutionInputSnapshot(
+            ExecutionInputShape.UNI,
+            Value.newBuilder().setStringValue("approved").build()));
+
+        TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
+            command,
+            "pipeline-1",
+            "bundle-1",
+            "trace-1",
+            configuredCodec.encode(command.inputPayload()));
+        TransitionWorkerCommand decoded = envelope.toCommand(configuredCodec);
+
+        ExecutionInputSnapshot snapshot = assertInstanceOf(ExecutionInputSnapshot.class, decoded.inputPayload());
+        Value decodedPayload = assertInstanceOf(Value.class, snapshot.payload());
+        assertEquals(Value.KindCase.STRING_VALUE, decodedPayload.getKindCase());
+        assertEquals("approved", decodedPayload.getStringValue());
     }
 
     @Test

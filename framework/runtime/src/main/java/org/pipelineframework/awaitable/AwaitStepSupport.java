@@ -381,12 +381,10 @@ public class AwaitStepSupport {
                             + " is terminal with status " + record.status()
                             + " and cannot be accepted by the live await stream."));
                 }
-                Uni<Void> accepted = session.awaitAccepted(record);
                 if (record.status() == AwaitInteractionStatus.WAITING) {
-                    return awaitCoordinator.dispatch(descriptor, record)
-                        .chain(dispatched -> accepted.replaceWith(dispatched));
+                    return awaitCoordinator.dispatch(descriptor, record);
                 }
-                return accepted.replaceWith(record);
+                return Uni.createFrom().item(record);
             }));
     }
 

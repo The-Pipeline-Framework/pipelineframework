@@ -102,4 +102,28 @@ class PipelineOrderExpanderTest {
             expanded
         );
     }
+
+    @Test
+    void matchesStepScopedAspectTargetAgainstGeneratedProcessClientStepName() {
+        PipelineYamlConfig config = new PipelineYamlConfig(
+            "org.example",
+            "GRPC",
+            List.of(new PipelineYamlStep("Finalize Payment Output", "PaymentOutputBranch", "PaymentOutput")),
+            List.of(new PipelineYamlAspect("persistence", true, "STEPS", "AFTER_STEP", List.of("FinalizePaymentOutput")))
+        );
+
+        List<String> expanded = PipelineOrderExpander.expand(
+            List.of("org.example.service.pipeline.ProcessFinalizePaymentOutputGrpcClientStep"),
+            config,
+            null
+        );
+
+        assertEquals(
+            List.of(
+                "org.example.service.pipeline.ProcessFinalizePaymentOutputGrpcClientStep",
+                "org.example.service.pipeline.PersistencePaymentOutputSideEffectGrpcClientStep"
+            ),
+            expanded
+        );
+    }
 }

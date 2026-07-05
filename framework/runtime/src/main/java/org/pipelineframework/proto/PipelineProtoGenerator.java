@@ -133,7 +133,7 @@ public class PipelineProtoGenerator {
         writeIdlSnapshot(resolvedModuleDir, config);
 
         boolean v2 = config.version() >= 2;
-        List<ResolvedStep> resolvedSteps = normalizeSteps(steps);
+        List<ResolvedStep> resolvedSteps = normalizeSteps(steps, v2);
         List<AspectDefinition> aspectDefinitions = toAspectDefinitions(config.aspects());
 
         if (v2) {
@@ -264,7 +264,7 @@ public class PipelineProtoGenerator {
         }
     }
 
-    private List<ResolvedStep> normalizeSteps(List<PipelineTemplateStep> steps) {
+    private List<ResolvedStep> normalizeSteps(List<PipelineTemplateStep> steps, boolean v2) {
         List<ResolvedStep> resolved = new ArrayList<>();
         ResolvedStep previous = null;
         for (int i = 0; i < steps.size(); i++) {
@@ -273,7 +273,7 @@ public class PipelineProtoGenerator {
             String serviceNameFormatted = formatForClassName(stripProcessPrefix(step.name()));
             String inputTypeName = step.inputTypeName();
             List<PipelineTemplateField> inputFields = step.inputFields();
-            if (i > 0 && previous != null) {
+            if (!v2 && i > 0 && previous != null) {
                 inputTypeName = previous.outputTypeName();
                 inputFields = copyFields(previous.outputFields());
             }
@@ -627,7 +627,7 @@ public class PipelineProtoGenerator {
             builder.append('\n');
         }
 
-        renderService(builder, step, previous, firstStep);
+        renderService(builder, step, previous, firstStep, v2);
         builder.append('\n');
         renderAspectServices(builder, step, firstStep, aspects);
         return builder.toString();
@@ -809,12 +809,13 @@ public class PipelineProtoGenerator {
         StringBuilder builder,
         ResolvedStep step,
         ResolvedStep previous,
-        boolean firstStep
+        boolean firstStep,
+        boolean v2
     ) {
         builder.append("service Process")
             .append(step.serviceNameFormatted())
             .append("Service {\n");
-        String inputType = firstStep ? step.inputTypeName() : previous.outputTypeName();
+        String inputType = (v2 || firstStep || previous == null) ? step.inputTypeName() : previous.outputTypeName();
         String outputType = step.outputTypeName();
         CardinalitySemantics canonicalCardinality = CardinalitySemantics.fromString(step.cardinality());
         if (canonicalCardinality == CardinalitySemantics.ONE_TO_MANY) {

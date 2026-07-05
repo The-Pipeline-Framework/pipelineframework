@@ -35,6 +35,8 @@ import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.AwaitStreamOneToOneStep;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
+import org.pipelineframework.branching.PipelineBranchRoutingException;
+import org.pipelineframework.branching.StepBranchingDescriptor;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.blocking.BlockingExecutionSupport;
 import org.pipelineframework.context.PipelineContext;
@@ -54,9 +56,11 @@ import org.pipelineframework.step.blocking.StepOneToOneBlocking;
 import org.pipelineframework.step.functional.ManyToOne;
 import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
 
+import static java.util.Optional.of;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineStepExecutorTest {
@@ -211,6 +215,133 @@ class PipelineStepExecutorTest {
     }
 
     @Test
+    void branchAwareOneToOneSkipsNonApplicableItemsAndPassesThemThrough() {
+        ReserveStockStep step = new ReserveStockStep();
+        StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
+            1,
+            "Reserve Stock",
+            step.getClass().getName(),
+            PhysicalOrder.class.getName(),
+            PhysicalOrder.class,
+            List.of("PhysicalOrder"),
+            List.of(PhysicalOrder.class.getName()),
+            List.of(PhysicalOrder.class),
+            false);
+
+        Object result = PipelineStepExecutor.applyOneToOneUnchecked(
+            step,
+            Uni.createFrom().item(new DigitalOrder("o-1")),
+            false,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null,
+            descriptor);
+
+        Object output = ((Uni<?>) result).await().atMost(Duration.ofSeconds(5));
+        assertTrue(output instanceof DigitalOrder);
+        assertEquals("o-1", ((DigitalOrder) output).id());
+        assertEquals(0, step.invocations());
+    }
+
+    @Test
+    void branchAwareOneToOneExtractsAcceptedUnionVariantBeforeInvokingStep() {
+        ApprovePaymentStep step = new ApprovePaymentStep();
+        StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
+            2,
+            "Approve Payment",
+            step.getClass().getName(),
+            ApprovedPaymentStatusMessage.class.getName(),
+            ApprovedPaymentStatusMessage.class,
+            List.of("ApprovedPaymentStatus"),
+            List.of(ApprovedPaymentStatusMessage.class.getName()),
+            List.of(ApprovedPaymentStatusMessage.class),
+            false);
+
+        Object result = PipelineStepExecutor.applyOneToOneUnchecked(
+            step,
+            Uni.createFrom().item(PaymentStatusEnvelope.approved("p-1")),
+            false,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null,
+            descriptor);
+
+        Object output = ((Uni<?>) result).await().atMost(Duration.ofSeconds(5));
+        assertEquals("approved:p-1", output);
+        assertEquals(1, step.invocations());
+    }
+
+    @Test
+    void branchAwareTerminalRejectsUnexpectedRuntimeType() {
+        ReserveStockStep step = new ReserveStockStep();
+        StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
+            4,
+            "Finalize",
+            step.getClass().getName(),
+            StockReserved.class.getName(),
+            StockReserved.class,
+            List.of("StockReserved"),
+            List.of(StockReserved.class.getName()),
+            List.of(StockReserved.class),
+            true);
+
+        Object result = PipelineStepExecutor.applyOneToOneUnchecked(
+            step,
+            Uni.createFrom().item(new DigitalOrder("o-2")),
+            false,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null,
+            descriptor);
+
+        PipelineBranchRoutingException exception = assertThrows(
+            PipelineBranchRoutingException.class,
+            () -> ((Uni<?>) result).await().atMost(Duration.ofSeconds(5)));
+        assertTrue(exception.getMessage().contains("Finalize"));
+        assertTrue(exception.getMessage().contains(DigitalOrder.class.getName()));
+    }
+
+    @Test
+    void branchAwareOneToOneWrapsAcceptedVariantIntoTerminalUnionInput() {
+        FinalizePaymentStep step = new FinalizePaymentStep();
+        StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
+            5,
+            "Finalize Payment Output",
+            step.getClass().getName(),
+            PaymentOutputBranchEnvelope.class.getName(),
+            PaymentOutputBranchEnvelope.class,
+            List.of("ApprovedPaymentOutput"),
+            List.of(ApprovedPaymentOutputMessage.class.getName()),
+            List.of(ApprovedPaymentOutputMessage.class),
+            true);
+
+        Object result = PipelineStepExecutor.applyOneToOneUnchecked(
+            step,
+            Uni.createFrom().item(new ApprovedPaymentOutputMessage("p-42")),
+            false,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null,
+            descriptor);
+
+        Object output = ((Uni<?>) result).await().atMost(Duration.ofSeconds(5));
+        assertEquals("finalized:p-42", output);
+        assertEquals(1, step.invocations());
+    }
+
+    @Test
     void oneToManyMergeProducesExpandedItems() {
         Object result = PipelineStepExecutor.applyOneToManyUnchecked(
             new ExpandingOneToManyStep(),
@@ -352,6 +483,99 @@ class PipelineStepExecutorTest {
             null,
             awaitContext);
         Object awaited = new PipelineStepExecutor().applyStep(
+            new SuspendingAwaitStep(),
+            source,
+            org.pipelineframework.config.ParallelismPolicy.AUTO,
+            16,
+            null,
+            null,
+            null,
+            null,
+            new AwaitExecutionContext("tenant", "execution", 1));
+
+        AssertSubscriber<String> subscriber = ((Multi<String>) awaited)
+            .subscribe()
+            .withSubscriber(AssertSubscriber.create(Long.MAX_VALUE));
+
+        Throwable failure = subscriber.awaitFailure(Duration.ofSeconds(5)).getFailure();
+
+        assertTrue(failure instanceof AwaitSuspendedException);
+        assertEquals(1, opened.get());
+        assertEquals(3, nextCalls.get());
+    }
+
+    @Test
+    void awaitStreamStepIgnoresBranchingDescriptorAndPreservesWholeStreamSemantics() {
+        AtomicInteger opened = new AtomicInteger();
+        AtomicInteger nextCalls = new AtomicInteger();
+        BlockingExecutionSupport blocking = new BlockingExecutionSupport();
+        class IteratorSourceStep extends ConfigurableStep implements StepOneToMany<String, String> {
+            @Override
+            public Multi<String> applyOneToMany(String input) {
+                return blocking.emitIterator(false, () -> {
+                    opened.incrementAndGet();
+                    return new CloseableIterator<>() {
+                        private int index;
+
+                        @Override
+                        public boolean hasNext() {
+                            return index < 3;
+                        }
+
+                        @Override
+                        public String next() {
+                            index++;
+                            nextCalls.incrementAndGet();
+                            return input + "-" + index;
+                        }
+
+                        @Override
+                        public void close() {
+                        }
+                    };
+                });
+            }
+        }
+        class SuspendingAwaitStep extends ConfigurableStep implements AwaitStreamOneToOneStep<String, String> {
+            @Override
+            public Multi<String> applyAwaitPerItem(Multi<String> input) {
+                return input.onItem()
+                    .transformToUniAndConcatenate(item -> Uni.createFrom().item(item))
+                    .collect()
+                    .asList()
+                    .onItem()
+                    .transformToMulti(ignored -> Multi.createFrom().failure(
+                        new AwaitSuspendedException("tenant", "execution", "unit", 1)));
+            }
+        }
+
+        AwaitExecutionContext awaitContext = new AwaitExecutionContext("tenant", "execution", 0);
+        Object source = PipelineStepExecutor.applyOneToManyUnchecked(
+            new IteratorSourceStep(),
+            Uni.createFrom().item("x"),
+            false,
+            16,
+            null,
+            null,
+            null,
+            awaitContext);
+        PipelineStepExecutor executor = new PipelineStepExecutor();
+        executor.branchingRegistry = new org.pipelineframework.branching.PipelineBranchingRegistry() {
+            @Override
+            public java.util.Optional<StepBranchingDescriptor> descriptorFor(Class<?> stepClass) {
+                return of(new StepBranchingDescriptor(
+                    1,
+                    "Await",
+                    stepClass.getName(),
+                    String.class.getName(),
+                    String.class,
+                    List.of("String"),
+                    List.of(String.class.getName()),
+                    List.of(String.class),
+                    false));
+            }
+        };
+        Object awaited = executor.applyStep(
             new SuspendingAwaitStep(),
             source,
             org.pipelineframework.config.ParallelismPolicy.AUTO,
@@ -592,6 +816,21 @@ class PipelineStepExecutorTest {
         }
     }
 
+    static final class ApprovePaymentStep extends ConfigurableStep
+        implements StepOneToOne<ApprovedPaymentStatusMessage, String> {
+        private final AtomicInteger invocations = new AtomicInteger();
+
+        @Override
+        public Uni<String> applyOneToOne(ApprovedPaymentStatusMessage input) {
+            invocations.incrementAndGet();
+            return Uni.createFrom().item("approved:" + input.paymentId());
+        }
+
+        int invocations() {
+            return invocations.get();
+        }
+    }
+
     static final class ExpandingOneToManyStep extends ConfigurableStep implements StepOneToMany<String, String> {
         @Override
         public Multi<String> applyOneToMany(String in) {
@@ -740,6 +979,103 @@ class PipelineStepExecutorTest {
         @Override
         public List<String> applyBatchBlocking(List<String> inputs) {
             return inputs.stream().map(item -> item + "-mapped").toList();
+        }
+    }
+
+    record PhysicalOrder(String id) {
+    }
+
+    record DigitalOrder(String id) {
+    }
+
+    record StockReserved(String id) {
+    }
+
+    record ApprovedPaymentStatusMessage(String paymentId) {
+    }
+
+    record ApprovedPaymentOutputMessage(String paymentId) {
+    }
+
+    static final class PaymentStatusEnvelope {
+        private final ApprovedPaymentStatusMessage approved;
+
+        private PaymentStatusEnvelope(ApprovedPaymentStatusMessage approved) {
+            this.approved = approved;
+        }
+
+        static PaymentStatusEnvelope approved(String paymentId) {
+            return new PaymentStatusEnvelope(new ApprovedPaymentStatusMessage(paymentId));
+        }
+
+        public boolean hasApproved() {
+            return approved != null;
+        }
+
+        public ApprovedPaymentStatusMessage getApproved() {
+            return approved;
+        }
+    }
+
+    static final class PaymentOutputBranchEnvelope {
+        private final ApprovedPaymentOutputMessage approved;
+
+        private PaymentOutputBranchEnvelope(ApprovedPaymentOutputMessage approved) {
+            this.approved = approved;
+        }
+
+        public boolean hasApproved() {
+            return approved != null;
+        }
+
+        public ApprovedPaymentOutputMessage getApproved() {
+            return approved;
+        }
+
+        public static Builder newBuilder() {
+            return new Builder();
+        }
+
+        public static final class Builder {
+            private ApprovedPaymentOutputMessage approved;
+
+            public Builder setApproved(ApprovedPaymentOutputMessage approved) {
+                this.approved = approved;
+                return this;
+            }
+
+            public PaymentOutputBranchEnvelope build() {
+                return new PaymentOutputBranchEnvelope(approved);
+            }
+        }
+    }
+
+    static final class ReserveStockStep extends ConfigurableStep implements StepOneToOne<PhysicalOrder, StockReserved> {
+        private final AtomicInteger invocations = new AtomicInteger();
+
+        @Override
+        public Uni<StockReserved> applyOneToOne(PhysicalOrder in) {
+            invocations.incrementAndGet();
+            return Uni.createFrom().item(new StockReserved(in.id()));
+        }
+
+        int invocations() {
+            return invocations.get();
+        }
+    }
+
+    static final class FinalizePaymentStep extends ConfigurableStep
+        implements StepOneToOne<PaymentOutputBranchEnvelope, String> {
+        private final AtomicInteger invocations = new AtomicInteger();
+
+        @Override
+        public Uni<String> applyOneToOne(PaymentOutputBranchEnvelope input) {
+            invocations.incrementAndGet();
+            return Uni.createFrom().item("finalized:" + input.getApproved().paymentId());
+        }
+
+        int invocations() {
+            return invocations.get();
         }
     }
 }
