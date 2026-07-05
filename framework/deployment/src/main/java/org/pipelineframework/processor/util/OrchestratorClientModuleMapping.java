@@ -219,9 +219,9 @@ public class OrchestratorClientModuleMapping {
     public String resolveModuleName(PipelineStepModel model) {
         String clientName = OrchestratorClientNaming.clientNameForModel(model);
         if (clientName != null) {
-            String override = resolveStepOverride(clientName);
-            if (override != null) {
-                return override;
+            Optional<String> override = resolveStepOverride(clientName);
+            if (override.isPresent()) {
+                return override.orElseThrow();
             }
         }
         if (model.sideEffect()) {
@@ -270,7 +270,7 @@ public class OrchestratorClientModuleMapping {
             return null;
         }
         String normalized = normalizeClientToken(clientName);
-        String moduleName = resolveStepOverride(normalized);
+        String moduleName = resolveStepOverride(normalized).orElse(null);
         if (moduleName == null && normalized.startsWith("observe-") && normalized.endsWith("-side-effect")) {
             String middle = normalized.substring("observe-".length(), normalized.length() - "-side-effect".length());
             String aspect = middle;
@@ -302,19 +302,19 @@ public class OrchestratorClientModuleMapping {
         return new ClientConfig(normalized, module.host(), module.port(), tlsConfigurationName);
     }
 
-    private String resolveStepOverride(String clientName) {
+    private Optional<String> resolveStepOverride(String clientName) {
         if (clientName == null || clientName.isBlank()) {
-            return null;
+            return Optional.empty();
         }
         String normalized = normalizeClientToken(clientName);
         String override = stepToModule.get(normalized);
         if (override != null) {
-            return override;
+            return Optional.of(override);
         }
         if (normalized.startsWith("process-")) {
-            return stepToModule.get(normalized.substring("process-".length()));
+            return Optional.ofNullable(stepToModule.get(normalized.substring("process-".length())));
         }
-        return null;
+        return Optional.empty();
     }
 
     private static String parsePortValue(String value, String moduleName, ProcessingEnvironment env) {

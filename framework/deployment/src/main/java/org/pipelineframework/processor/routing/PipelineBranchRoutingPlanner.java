@@ -59,8 +59,8 @@ public final class PipelineBranchRoutingPlanner {
             return Optional.empty();
         }
 
-        Map<String, StepDefinition> definitionsByName = indexStepDefinitions(ctx, templateSteps);
-        if (definitionsByName == null) {
+        Optional<Map<String, StepDefinition>> definitionsByName = indexStepDefinitions(ctx, templateSteps);
+        if (definitionsByName.isEmpty()) {
             return Optional.empty();
         }
 
@@ -73,20 +73,20 @@ public final class PipelineBranchRoutingPlanner {
             if (templateStep == null) {
                 continue;
             }
-            StepDefinition stepDefinition = definitionsByName.get(normalizeStepName(templateStep.name()));
+            StepDefinition stepDefinition = definitionsByName.orElseThrow().get(normalizeStepName(templateStep.name()));
             if (stepDefinition == null) {
                 error(ctx, "Branch-aware step '" + templateStep.name()
                     + "' was not resolved into a step definition. Fix existing YAML or parser errors first.");
                 valid = false;
                 continue;
             }
-            ResolvedStep resolved = resolveStep(ctx, templateConfig, templateStep, stepDefinition, index);
-            if (resolved == null) {
+            Optional<ResolvedStep> resolved = resolveStep(ctx, templateConfig, templateStep, stepDefinition, index);
+            if (resolved.isEmpty()) {
                 valid = false;
                 continue;
             }
-            resolvedSteps.add(resolved);
-            if (resolved.terminal()) {
+            resolvedSteps.add(resolved.orElseThrow());
+            if (resolved.orElseThrow().terminal()) {
                 terminalCount++;
                 terminalIndex = index;
             }
@@ -138,7 +138,7 @@ public final class PipelineBranchRoutingPlanner {
         return Optional.empty();
     }
 
-    private Map<String, StepDefinition> indexStepDefinitions(
+    private Optional<Map<String, StepDefinition>> indexStepDefinitions(
         PipelineCompilationContext ctx,
         List<PipelineTemplateStep> templateSteps
     ) {
@@ -157,7 +157,7 @@ public final class PipelineBranchRoutingPlanner {
         }
         if (!duplicateNames.isEmpty()) {
             error(ctx, "Branch-aware pipelines require unique step names. Duplicate names: " + duplicateNames);
-            return null;
+            return Optional.empty();
         }
 
         boolean valid = true;
@@ -170,10 +170,10 @@ public final class PipelineBranchRoutingPlanner {
                 valid = false;
             }
         }
-        return valid ? indexed : null;
+        return valid ? Optional.of(indexed) : Optional.empty();
     }
 
-    private ResolvedStep resolveStep(
+    private Optional<ResolvedStep> resolveStep(
         PipelineCompilationContext ctx,
         PipelineTemplateConfig templateConfig,
         PipelineTemplateStep templateStep,
@@ -182,22 +182,22 @@ public final class PipelineBranchRoutingPlanner {
     ) {
         if (isBlank(templateStep.inputTypeName())) {
             error(ctx, "Branch-aware step '" + templateStep.name() + "' must declare inputTypeName.");
-            return null;
+            return Optional.empty();
         }
         if (isBlank(templateStep.outputTypeName())) {
             error(ctx, "Branch-aware step '" + templateStep.name() + "' must declare outputTypeName.");
-            return null;
+            return Optional.empty();
         }
 
         Set<String> inputLeafTypes = expandLeafTypes(ctx, templateConfig, templateStep.inputTypeName(),
             templateStep.name(), "inputTypeName", false);
         if (inputLeafTypes == null) {
-            return null;
+            return Optional.empty();
         }
         Set<String> outputLeafTypes = expandLeafTypes(ctx, templateConfig, templateStep.outputTypeName(),
             templateStep.name(), "outputTypeName", false);
         if (outputLeafTypes == null) {
-            return null;
+            return Optional.empty();
         }
 
         boolean oneToOneCardinality = "ONE_TO_ONE".equalsIgnoreCase(templateStep.cardinality());
@@ -208,7 +208,7 @@ public final class PipelineBranchRoutingPlanner {
                 || outputLeafTypes.size() != 1)) {
             error(ctx, "Branch-aware routing currently supports ONE_TO_ONE steps once type-based routing is in play. Step '"
                 + templateStep.name() + "' declares cardinality '" + templateStep.cardinality() + "'.");
-            return null;
+            return Optional.empty();
         }
 
         Set<String> acceptedLeafTypes = new LinkedHashSet<>();
@@ -216,23 +216,23 @@ public final class PipelineBranchRoutingPlanner {
             for (String accepted : templateStep.accepts()) {
                 if (isBlank(accepted)) {
                     error(ctx, "Step '" + templateStep.name() + "' declares a blank accepts entry.");
-                    return null;
+                    return Optional.empty();
                 }
                 if (templateConfig.unions().containsKey(accepted)) {
                     error(ctx, "Step '" + templateStep.name() + "' accepts '" + accepted
                         + "', but accepts may reference only concrete contract types, not unions.");
-                    return null;
+                    return Optional.empty();
                 }
                 Set<String> acceptedLeaf = expandLeafTypes(ctx, templateConfig, accepted, templateStep.name(), "accepts", true);
                 if (acceptedLeaf == null) {
-                    return null;
+                    return Optional.empty();
                 }
                 acceptedLeafTypes.addAll(acceptedLeaf);
             }
             if (!inputLeafTypes.containsAll(acceptedLeafTypes)) {
                 error(ctx, "Step '" + templateStep.name() + "' accepts " + acceptedLeafTypes
                     + " but inputTypeName '" + templateStep.inputTypeName() + "' resolves to " + inputLeafTypes + ".");
-                return null;
+                return Optional.empty();
             }
         } else {
             if (inputLeafTypes.size() != 1) {
@@ -240,7 +240,7 @@ public final class PipelineBranchRoutingPlanner {
                     + "' resolves inputTypeName '" + templateStep.inputTypeName()
                     + "' to multiple alternatives " + inputLeafTypes
                     + ". Explicit accepts is required.");
-                return null;
+                return Optional.empty();
             }
             acceptedLeafTypes.addAll(inputLeafTypes);
         }
@@ -249,34 +249,29 @@ public final class PipelineBranchRoutingPlanner {
             error(ctx, "Terminal step '" + templateStep.name()
                 + "' must declare one concrete terminal output type. outputTypeName '"
                 + templateStep.outputTypeName() + "' resolves to " + outputLeafTypes + ".");
-            return null;
+            return Optional.empty();
         }
 
         List<ClassName> acceptedDomainTypes = acceptedLeafTypes.stream()
             .map(typeName -> ClassName.get(templateConfig.basePackage() + ".common.domain", typeName))
             .toList();
         if (!validateAssignableAcceptedTypes(ctx, templateStep, stepDefinition, acceptedDomainTypes)) {
-            return null;
+            return Optional.empty();
         }
 
-        return new ResolvedStep(
+        return Optional.of(new ResolvedStep(
             index,
             templateStep,
             stepDefinition,
+            List.copyOf(inputLeafTypes),
             List.copyOf(acceptedLeafTypes),
             List.copyOf(outputLeafTypes),
-            acceptedDomainTypes);
+            acceptedDomainTypes));
     }
 
     private boolean validateReachability(PipelineCompilationContext ctx, List<ResolvedStep> resolvedSteps) {
         ResolvedStep firstStep = resolvedSteps.getFirst();
-        Set<String> reachable = new LinkedHashSet<>(expandLeafTypes(
-            ctx,
-            requireTemplateConfig(ctx),
-            firstStep.templateStep().inputTypeName(),
-            firstStep.templateStep().name(),
-            "inputTypeName",
-            false));
+        Set<String> reachable = new LinkedHashSet<>(firstStep.inputLeafTypes());
         for (ResolvedStep step : resolvedSteps) {
             Set<String> unreachable = new LinkedHashSet<>(step.acceptedLeafTypes());
             unreachable.removeAll(reachable);
@@ -407,6 +402,7 @@ public final class PipelineBranchRoutingPlanner {
         int index,
         PipelineTemplateStep templateStep,
         StepDefinition stepDefinition,
+        List<String> inputLeafTypes,
         List<String> acceptedLeafTypes,
         List<String> producedLeafTypes,
         List<ClassName> acceptedDomainTypes

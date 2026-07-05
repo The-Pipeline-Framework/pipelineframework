@@ -38,6 +38,7 @@ import java.util.logging.Logger;
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
 import org.pipelineframework.config.boundary.PipelineCheckpointConfig;
+import org.pipelineframework.config.pipeline.BranchRoutingRules;
 import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
 import org.pipelineframework.config.boundary.PipelineObjectFilterConfig;
 import org.pipelineframework.config.boundary.PipelineObjectIdentityConfig;
@@ -66,7 +67,6 @@ public class PipelineTemplateConfigLoader {
     private static final Logger LOG = Logger.getLogger(PipelineTemplateConfigLoader.class.getName());
     private static final int MAX_NESTING_DEPTH = 100;
     private static final String DEFAULT_TRANSPORT = "GRPC";
-    private static final Set<String> REJECTED_BRANCH_PREDICATE_KEYS = Set.of("when", "condition", "predicate", "expression");
     private static final PipelinePlatform DEFAULT_PLATFORM = PipelinePlatform.COMPUTE;
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
@@ -663,17 +663,7 @@ public class PipelineTemplateConfigLoader {
     }
 
     private void rejectBranchPredicateKeys(Map<?, ?> stepMap, String stepName) {
-        List<String> rejected = REJECTED_BRANCH_PREDICATE_KEYS.stream()
-            .filter(stepMap::containsKey)
-            .sorted()
-            .toList();
-        if (rejected.isEmpty()) {
-            return;
-        }
-        throw new IllegalStateException(
-            "Step '" + (stepName == null ? "<unnamed>" : stepName)
-                + "' declares unsupported predicate-style routing keys: " + String.join(", ", rejected)
-                + ". Use type-based accepts/terminal routing only.");
+        BranchRoutingRules.rejectPredicateKeys(stepMap, stepName, IllegalStateException::new);
     }
 
     private PipelineTemplateStepExecution readExecution(Object executionObj, int version, String stepName) {

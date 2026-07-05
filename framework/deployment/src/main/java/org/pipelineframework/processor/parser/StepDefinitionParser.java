@@ -29,6 +29,8 @@ import java.util.function.BiConsumer;
 import java.util.regex.Pattern;
 import javax.tools.Diagnostic;
 
+import org.pipelineframework.config.pipeline.BranchRoutingRules;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.squareup.javapoet.ClassName;
@@ -58,11 +60,6 @@ public class StepDefinitionParser {
         "between",
         "like",
         "isNull");
-    private static final Set<String> REJECTED_BRANCH_PREDICATE_KEYS = Set.of(
-        "when",
-        "condition",
-        "predicate",
-        "expression");
     /**
      * Legacy suffix used to resolve short-form internal step types.
      * For legacy internal steps, {@code input/output: Foo} resolves to
@@ -1462,12 +1459,7 @@ public class StepDefinitionParser {
     }
 
     private void reportRejectedBranchPredicateKeys(String stepName, Map<String, Object> stepData) {
-        Set<String> rejectedKeys = new HashSet<>();
-        for (String key : stepData.keySet()) {
-            if (REJECTED_BRANCH_PREDICATE_KEYS.contains(key)) {
-                rejectedKeys.add(key);
-            }
-        }
+        Set<String> rejectedKeys = new HashSet<>(BranchRoutingRules.rejectedPredicateKeys(stepData));
         if (rejectedKeys.isEmpty()) {
             return;
         }
