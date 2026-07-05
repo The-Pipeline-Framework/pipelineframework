@@ -297,14 +297,7 @@ public class PipelineYamlConfigLoader {
     }
 
     private void rejectBranchPredicateKeys(Map<?, ?> stepMap, String stepName) {
-        List<String> rejected = BranchRoutingRules.rejectedPredicateKeys(stepMap);
-        if (rejected.isEmpty()) {
-            return;
-        }
-        throw new IllegalArgumentException(
-            "step '" + (stepName == null ? "<unnamed>" : stepName)
-                + "' declares unsupported predicate-style routing keys: " + String.join(", ", rejected)
-                + ". Use type-based accepts/terminal routing only.");
+        BranchRoutingRules.rejectPredicateKeys(stepMap, stepName, IllegalArgumentException::new);
     }
 
     private Map<String, Object> readCommandConfig(Map<?, ?> stepMap, String stepName) {

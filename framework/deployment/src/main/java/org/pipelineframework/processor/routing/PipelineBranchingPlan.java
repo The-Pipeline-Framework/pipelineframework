@@ -23,6 +23,13 @@ public record PipelineBranchingPlan(
             if (steps.isEmpty()) {
                 throw new IllegalArgumentException("Branch-aware plans must contain at least one step.");
             }
+            for (int i = 0; i < steps.size(); i++) {
+                if (steps.get(i).index() != i) {
+                    throw new IllegalArgumentException(
+                        "BranchStep index mismatch at position " + i + ": expected " + i + " but was "
+                            + steps.get(i).index() + ".");
+                }
+            }
             if (terminalStepIndex < 0 || terminalStepIndex >= steps.size()) {
                 throw new IllegalArgumentException("terminalStepIndex out of bounds for branch-aware plan.");
             }

@@ -663,14 +663,7 @@ public class PipelineTemplateConfigLoader {
     }
 
     private void rejectBranchPredicateKeys(Map<?, ?> stepMap, String stepName) {
-        List<String> rejected = BranchRoutingRules.rejectedPredicateKeys(stepMap);
-        if (rejected.isEmpty()) {
-            return;
-        }
-        throw new IllegalStateException(
-            "Step '" + (stepName == null ? "<unnamed>" : stepName)
-                + "' declares unsupported predicate-style routing keys: " + String.join(", ", rejected)
-                + ". Use type-based accepts/terminal routing only.");
+        BranchRoutingRules.rejectPredicateKeys(stepMap, stepName, IllegalStateException::new);
     }
 
     private PipelineTemplateStepExecution readExecution(Object executionObj, int version, String stepName) {
