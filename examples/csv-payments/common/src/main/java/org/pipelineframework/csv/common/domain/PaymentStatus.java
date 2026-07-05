@@ -18,6 +18,7 @@ package org.pipelineframework.csv.common.domain;
 
 import static java.text.MessageFormat.format;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import jakarta.persistence.Column;
 import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.PrePersist;
@@ -36,6 +37,7 @@ import lombok.experimental.Accessors;
 @Setter
 @Accessors(chain = true)
 @NoArgsConstructor
+@JsonDeserialize(using = PaymentStatusJsonDeserializer.class)
 public abstract sealed class PaymentStatus extends BaseEntity implements Serializable
     permits ApprovedPaymentStatus, UnapprovedPaymentStatus {
 

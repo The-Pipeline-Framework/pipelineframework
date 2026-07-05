@@ -27,6 +27,9 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.AwaitPayloadSupport;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitCompletionEnvelope;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.csv.common.domain.ApprovedPaymentStatus;
+import org.pipelineframework.csv.common.domain.PaymentStatus;
+import org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus;
 import org.pipelineframework.csv.grpc.PipelineTypes;
 
 class PaymentStatusAwaitPayloadSupportTest {
@@ -74,6 +77,49 @@ class PaymentStatusAwaitPayloadSupportTest {
     PipelineTypes.PaymentStatus rebuilt = assertInstanceOf(PipelineTypes.PaymentStatus.class, coerced);
     assertTrue(rebuilt.hasApproved());
     assertEquals(union.getApproved().getReference(), rebuilt.getApproved().getReference());
+  }
+
+  @Test
+  void awaitPayloadCoercionRebuildsApprovedDomainVariantFromWrappedUnionPayload() throws Exception {
+    PaymentStatus status = roundTripDomainStatus(PaymentStatusVariantMapperTestData.approvedStatus());
+
+    ApprovedPaymentStatus approved = assertInstanceOf(ApprovedPaymentStatus.class, status);
+    assertEquals("approved-ref", approved.getReference());
+    assertEquals("Complete", approved.getStatus());
+  }
+
+  @Test
+  void awaitPayloadCoercionRebuildsUnapprovedDomainVariantFromWrappedUnionPayload() throws Exception {
+    PaymentStatus status = roundTripDomainStatus(PaymentStatusVariantMapperTestData.unapprovedStatus());
+
+    UnapprovedPaymentStatus unapproved = assertInstanceOf(UnapprovedPaymentStatus.class, status);
+    assertEquals("rejected-ref", unapproved.getReference());
+    assertEquals("Rejected", unapproved.getStatus());
+  }
+
+  private PaymentStatus roundTripDomainStatus(PaymentStatus original) throws Exception {
+    PipelineTypes.PaymentStatus union = mapper.toExternal(original);
+    KafkaAwaitCompletionEnvelope envelope =
+        new KafkaAwaitCompletionEnvelope(
+            "tenant-1",
+            "interaction-1",
+            "corr-1",
+            "resume-token",
+            "idempotency-key",
+            union,
+            "actor");
+
+    KafkaAwaitCompletionEnvelope parsed =
+        PipelineJson.mapper()
+            .readValue(
+                PipelineJson.mapper().writeValueAsString(envelope), KafkaAwaitCompletionEnvelope.class);
+
+    Object payload = parsed.responsePayload();
+    Map<?, ?> payloadMap = assertInstanceOf(Map.class, payload);
+    assertTrue(!payloadMap.isEmpty());
+
+    Object coerced = AwaitPayloadSupport.coercePayload(payload, PaymentStatus.class);
+    return assertInstanceOf(PaymentStatus.class, coerced);
   }
 
   private static void setField(Object target, String fieldName, Object value) {
