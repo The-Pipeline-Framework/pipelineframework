@@ -38,6 +38,7 @@ import java.util.logging.Logger;
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
 import org.pipelineframework.config.boundary.PipelineCheckpointConfig;
+import org.pipelineframework.config.pipeline.BranchRoutingRules;
 import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
 import org.pipelineframework.config.boundary.PipelineObjectFilterConfig;
 import org.pipelineframework.config.boundary.PipelineObjectIdentityConfig;
@@ -537,7 +538,9 @@ public class PipelineTemplateConfigLoader {
                 step.outputTypeName(),
                 outputFields,
                 step.outboundMapper(),
-                step.execution()));
+                step.execution(),
+                step.accepts(),
+                step.terminal()));
         }
         return resolved;
     }
@@ -628,6 +631,7 @@ public class PipelineTemplateConfigLoader {
                 continue;
             }
             String name = readString(stepMap, "name");
+            rejectBranchPredicateKeys(stepMap, name);
             String cardinality = readString(stepMap, "cardinality");
             String inputType = readString(stepMap, "inputTypeName");
             String outputType = readString(stepMap, "outputTypeName");
@@ -636,6 +640,12 @@ public class PipelineTemplateConfigLoader {
             String inboundMapper = readString(stepMap, "inboundMapper");
             String outboundMapper = readString(stepMap, "outboundMapper");
             PipelineTemplateStepExecution execution = readExecution(stepMap.get("execution"), version, name);
+            List<String> accepts = readStringList(stepMap, "accepts");
+            boolean terminal = readBoolean(stepMap, "terminal", false);
+            if (version < 2 && (stepMap.containsKey("accepts") || terminal)) {
+                throw new IllegalStateException(
+                    "Step '" + name + "' declares accepts/terminal, but branch-aware routing requires version: 2");
+            }
             stepInfos.add(new PipelineTemplateStep(
                 name,
                 cardinality,
@@ -645,9 +655,15 @@ public class PipelineTemplateConfigLoader {
                 outputType,
                 outputFields,
                 outboundMapper,
-                execution));
+                execution,
+                accepts,
+                terminal));
         }
         return stepInfos;
+    }
+
+    private void rejectBranchPredicateKeys(Map<?, ?> stepMap, String stepName) {
+        BranchRoutingRules.rejectPredicateKeys(stepMap, stepName, IllegalStateException::new);
     }
 
     private PipelineTemplateStepExecution readExecution(Object executionObj, int version, String stepName) {

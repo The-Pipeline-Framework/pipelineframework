@@ -253,6 +253,7 @@ public class PipelineYamlConfigLoader {
                 continue;
             }
             String name = readString(stepMap, "name");
+            rejectBranchPredicateKeys(stepMap, name);
             String kind = readString(stepMap, "kind");
             String cardinality = readString(stepMap, "cardinality");
             String inputType = firstNonBlank(readString(stepMap, "inputTypeName"), readString(stepMap, "input"));
@@ -268,6 +269,8 @@ public class PipelineYamlConfigLoader {
             Map<String, Object> commandConfig = readCommandConfig(stepMap, name);
             String queryId = trimToNull(readString(stepMap, "query"));
             PipelineYamlQueryCapture queryCapture = readQueryCapture(stepMap, name);
+            List<String> accepts = readStringList(stepMap, "accepts");
+            boolean terminal = readBoolean(stepMap, "terminal", false);
             if (name != null && !name.isBlank()) {
                 stepInfos.add(new PipelineYamlStep(
                     name,
@@ -285,10 +288,16 @@ public class PipelineYamlConfigLoader {
                     duplicatePolicy,
                     commandConfig,
                     queryId,
-                    queryCapture));
+                    queryCapture,
+                    accepts,
+                    terminal));
             }
         }
         return stepInfos;
+    }
+
+    private void rejectBranchPredicateKeys(Map<?, ?> stepMap, String stepName) {
+        BranchRoutingRules.rejectPredicateKeys(stepMap, stepName, IllegalArgumentException::new);
     }
 
     private Map<String, Object> readCommandConfig(Map<?, ?> stepMap, String stepName) {

@@ -1453,6 +1453,16 @@ public final class PipelineTemplateSchemaExporter {
         "outboundMapper": {
           "type": "string",
           "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+        },
+        "accepts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Za-z0-9_]*$"
+          }
+        },
+        "terminal": {
+          "type": "boolean"
         }
       },
       "allOf": [
@@ -1545,6 +1555,16 @@ public final class PipelineTemplateSchemaExporter {
         "runOnVirtualThreads": {
           "type": "boolean",
           "description": "Whether this YAML-declared internal blocking step should use virtual-thread offload."
+        },
+        "accepts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Za-z0-9_]*$"
+          }
+        },
+        "terminal": {
+          "type": "boolean"
         }
       },
       "oneOf": [
@@ -1823,6 +1843,16 @@ public final class PipelineTemplateSchemaExporter {
         },
         "flowBoundaryRationale": {
           "type": "string"
+        },
+        "accepts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Za-z0-9_]*$"
+          }
+        },
+        "terminal": {
+          "type": "boolean"
         }
       },
       "allOf": [
@@ -1945,6 +1975,16 @@ public final class PipelineTemplateSchemaExporter {
         },
         "flowBoundaryRationale": {
           "type": "string"
+        },
+        "accepts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Za-z0-9_]*$"
+          }
+        },
+        "terminal": {
+          "type": "boolean"
         }
       },
       "allOf": [
@@ -2026,6 +2066,16 @@ public final class PipelineTemplateSchemaExporter {
         },
         "flowBoundaryRationale": {
           "type": "string"
+        },
+        "accepts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Za-z0-9_]*$"
+          }
+        },
+        "terminal": {
+          "type": "boolean"
         }
       },
       "allOf": [

@@ -22,10 +22,16 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
+import org.pipelineframework.config.template.PipelinePlatform;
+import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateMessage;
+import org.pipelineframework.config.template.PipelineTemplateUnion;
+import org.pipelineframework.config.template.PipelineTemplateUnionVariant;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.*;
+import org.pipelineframework.processor.routing.PipelineBranchingPlan;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -233,6 +239,115 @@ class PipelineTelemetryMetadataGeneratorTest {
     }
 
     @Test
+    void writesBranchAwareReplayTopologyWithSplitAndMergePrimaryTransitions() throws IOException {
+        PipelineCompilationContext ctx = buildContext();
+        writeApplicationProperties("com.example.PaymentRecord", "com.example.PaymentOutput");
+        writePipelineYaml("""
+            basePackage: com.example.pipeline
+            transport: GRPC
+            steps:
+              - name: Process Csv Payments Input
+                input: com.example.CsvPaymentsInputFile
+                output: com.example.PaymentRecord
+              - name: Await Payment Provider
+                input: com.example.PaymentRecord
+                output: com.example.PaymentStatus
+              - name: Process Approved Payment Status
+                input: com.example.ApprovedPaymentStatus
+                output: com.example.ApprovedPaymentOutput
+              - name: Process Unapproved Payment Status
+                input: com.example.UnapprovedPaymentStatus
+                output: com.example.UnapprovedPaymentOutput
+              - name: Finalize Payment Output
+                input: com.example.PaymentOutputBranch
+                output: com.example.PaymentOutput
+            """);
+
+        ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
+            2,
+            "payments",
+            "com.example",
+            "GRPC",
+            PipelinePlatform.COMPUTE,
+            java.util.Map.of(
+                "CsvPaymentsInputFile", message("CsvPaymentsInputFile"),
+                "PaymentRecord", message("PaymentRecord"),
+                "ApprovedPaymentStatus", message("ApprovedPaymentStatus"),
+                "UnapprovedPaymentStatus", message("UnapprovedPaymentStatus"),
+                "ApprovedPaymentOutput", message("ApprovedPaymentOutput"),
+                "UnapprovedPaymentOutput", message("UnapprovedPaymentOutput"),
+                "PaymentOutput", message("PaymentOutput")
+            ),
+            java.util.Map.of(
+                "PaymentStatus", new PipelineTemplateUnion(
+                    "PaymentStatus",
+                    java.util.Map.of(
+                        "approved", new PipelineTemplateUnionVariant("approved", "ApprovedPaymentStatus", 1),
+                        "unapproved", new PipelineTemplateUnionVariant("unapproved", "UnapprovedPaymentStatus", 2)
+                    )),
+                "PaymentOutputBranch", new PipelineTemplateUnion(
+                    "PaymentOutputBranch",
+                    java.util.Map.of(
+                        "approved", new PipelineTemplateUnionVariant("approved", "ApprovedPaymentOutput", 1),
+                        "unapproved", new PipelineTemplateUnionVariant("unapproved", "UnapprovedPaymentOutput", 2)
+                    ))
+            ),
+            java.util.List.of(),
+            java.util.Map.of(),
+            null,
+            null,
+            null
+        ));
+
+        ctx.setBranchingPlan(new PipelineBranchingPlan(
+            true,
+            4,
+            java.util.List.of(
+                new PipelineBranchingPlan.BranchStep(0, "Process Csv Payments Input", "CsvPaymentsInputFile",
+                    "PaymentRecord", java.util.List.of("CsvPaymentsInputFile"), java.util.List.of("PaymentRecord"),
+                    java.util.List.of(classType("CsvPaymentsInputFile")), false),
+                new PipelineBranchingPlan.BranchStep(1, "Await Payment Provider", "PaymentRecord",
+                    "PaymentStatus", java.util.List.of("PaymentRecord"),
+                    java.util.List.of("ApprovedPaymentStatus", "UnapprovedPaymentStatus"),
+                    java.util.List.of(classType("PaymentRecord")), false),
+                new PipelineBranchingPlan.BranchStep(2, "Process Approved Payment Status", "ApprovedPaymentStatus",
+                    "ApprovedPaymentOutput", java.util.List.of("ApprovedPaymentStatus"),
+                    java.util.List.of("ApprovedPaymentOutput"),
+                    java.util.List.of(classType("ApprovedPaymentStatus")), false),
+                new PipelineBranchingPlan.BranchStep(3, "Process Unapproved Payment Status", "UnapprovedPaymentStatus",
+                    "UnapprovedPaymentOutput", java.util.List.of("UnapprovedPaymentStatus"),
+                    java.util.List.of("UnapprovedPaymentOutput"),
+                    java.util.List.of(classType("UnapprovedPaymentStatus")), false),
+                new PipelineBranchingPlan.BranchStep(4, "Finalize Payment Output", "PaymentOutputBranch",
+                    "PaymentOutput", java.util.List.of("ApprovedPaymentOutput", "UnapprovedPaymentOutput"),
+                    java.util.List.of("PaymentOutput"),
+                    java.util.List.of(classType("ApprovedPaymentOutput"), classType("UnapprovedPaymentOutput")), true)
+            )));
+
+        ctx.setStepModels(List.of(
+            step("ProcessCsvPaymentsInputService", "com.example.pipeline", type("CsvPaymentsInputFile"), type("PaymentRecord"), false),
+            step("AwaitPaymentProviderService", "com.example.pipeline", type("PaymentRecord"), type("PaymentStatus"), false),
+            step("ProcessApprovedPaymentStatusService", "com.example.pipeline", type("ApprovedPaymentStatus"), type("ApprovedPaymentOutput"), false),
+            step("ProcessUnapprovedPaymentStatusService", "com.example.pipeline", type("UnapprovedPaymentStatus"), type("UnapprovedPaymentOutput"), false),
+            step("FinalizePaymentOutputService", "com.example.pipeline", type("PaymentOutputBranch"), type("PaymentOutput"), false),
+            step("ProcessFinalizePaymentOutputService", "com.example.pipeline", type("PaymentOutput"), type("PublishedPaymentOutput"), false)
+        ));
+
+        new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv()).writeTelemetryMetadata(ctx);
+
+        JsonObject topology = readReplayTopologyJson();
+        findTransition(topology, "ProcessCsvPaymentsInput", "AwaitPaymentProvider");
+        findTransition(topology, "AwaitPaymentProvider", "ProcessApprovedPaymentStatus");
+        findTransition(topology, "AwaitPaymentProvider", "ProcessUnapprovedPaymentStatus");
+        findTransition(topology, "ProcessApprovedPaymentStatus", "FinalizePaymentOutput");
+        findTransition(topology, "ProcessUnapprovedPaymentStatus", "FinalizePaymentOutput");
+        findTransition(topology, "FinalizePaymentOutput", "ProcessFinalizePaymentOutput");
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> findTransition(topology, "ProcessApprovedPaymentStatus", "ProcessUnapprovedPaymentStatus"));
+    }
+
+    @Test
     void failsFastForInvalidYamlCardinality() throws IOException {
         PipelineCompilationContext ctx = buildContext();
         writeApplicationProperties("com.example.InputFolder", "com.example.PaymentOutput");
@@ -414,6 +529,14 @@ class PipelineTelemetryMetadataGeneratorTest {
 
     private TypeName type(String simpleName) {
         return ClassName.get("com.example", simpleName);
+    }
+
+    private ClassName classType(String simpleName) {
+        return ClassName.get("com.example", simpleName);
+    }
+
+    private PipelineTemplateMessage message(String name) {
+        return new PipelineTemplateMessage(name, List.of(), null);
     }
 
     private PipelineStepModel csvStep(

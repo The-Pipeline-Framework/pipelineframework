@@ -54,7 +54,8 @@ public final class PipelineConfigBuildSteps {
         if (configPath.isEmpty()) {
             return new PipelineConfigBuildItem(List.of());
         }
-        return new PipelineConfigBuildItem(readDelegatedSteps(configPath.get()));
+        Object root = readYaml(configPath.get());
+        return new PipelineConfigBuildItem(readDelegatedSteps(configPath.get(), root), isBranchAware(root));
     }
 
     /**
@@ -95,8 +96,7 @@ public final class PipelineConfigBuildSteps {
      * @return a list of delegated step configurations; empty if no valid delegated steps are present
      * @throws DeploymentException if the YAML root is not a mapping, the file cannot be read, or parsing detects invalid configuration
      */
-    private List<PipelineConfigBuildItem.StepConfig> readDelegatedSteps(Path configPath) {
-        Object root = readYaml(configPath);
+    private List<PipelineConfigBuildItem.StepConfig> readDelegatedSteps(Path configPath, Object root) {
         if (!(root instanceof Map<?, ?> rootMap)) {
             throw new DeploymentException("pipeline config root must be a map: " + configPath);
         }
@@ -124,6 +124,29 @@ public final class PipelineConfigBuildSteps {
             }
         }
         return delegatedSteps;
+    }
+
+    private boolean isBranchAware(Object root) {
+        if (!(root instanceof Map<?, ?> rootMap)) {
+            return false;
+        }
+        Object stepsObj = rootMap.get("steps");
+        if (!(stepsObj instanceof Iterable<?> steps)) {
+            return false;
+        }
+        for (Object item : steps) {
+            if (!(item instanceof Map<?, ?> stepMap)) {
+                continue;
+            }
+            if (stepMap.containsKey("accepts")) {
+                return true;
+            }
+            Object terminal = stepMap.get("terminal");
+            if (Boolean.TRUE.equals(terminal) || "true".equalsIgnoreCase(String.valueOf(terminal))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
