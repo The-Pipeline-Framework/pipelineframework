@@ -110,7 +110,7 @@ public final class PipelineBranchingResourceLoader {
                 bestLoadable,
                 best.steps().size());
             List<BranchingStep> filtered = best.steps().stream()
-                .filter(step -> isLoadable(step.runtimeStepClass(), classLoader))
+                .filter(step -> isStepFullyLoadable(step, classLoader))
                 .toList();
             return new BranchingResource(best.terminalStepIndex(), filtered);
         }
@@ -120,7 +120,21 @@ public final class PipelineBranchingResourceLoader {
     private static int countLoadableSteps(BranchingResource resource, ClassLoader classLoader) {
         int count = 0;
         for (BranchingStep step : resource.steps()) {
-            if (isLoadable(step.runtimeStepClass(), classLoader)) {
+            if (!isLoadable(step.runtimeStepClass(), classLoader)) {
+                continue;
+            }
+            if (step.inputRuntimeClass() != null && !step.inputRuntimeClass().isBlank()
+                && !isLoadable(step.inputRuntimeClass(), classLoader)) {
+                continue;
+            }
+            boolean allAcceptedLoadable = true;
+            for (String acceptedClass : step.acceptedRuntimeClasses()) {
+                if (!isLoadable(acceptedClass, classLoader)) {
+                    allAcceptedLoadable = false;
+                    break;
+                }
+            }
+            if (allAcceptedLoadable) {
                 count++;
             }
         }
@@ -134,9 +148,25 @@ public final class PipelineBranchingResourceLoader {
         try {
             Class.forName(className, false, classLoader);
             return true;
-        } catch (Throwable ignored) {
+        } catch (ClassNotFoundException | LinkageError ignored) {
             return false;
         }
+    }
+
+    private static boolean isStepFullyLoadable(BranchingStep step, ClassLoader classLoader) {
+        if (!isLoadable(step.runtimeStepClass(), classLoader)) {
+            return false;
+        }
+        if (step.inputRuntimeClass() != null && !step.inputRuntimeClass().isBlank()
+            && !isLoadable(step.inputRuntimeClass(), classLoader)) {
+            return false;
+        }
+        for (String acceptedClass : step.acceptedRuntimeClasses()) {
+            if (!isLoadable(acceptedClass, classLoader)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static int intValue(Object value, int defaultValue) {

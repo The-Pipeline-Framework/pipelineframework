@@ -7,11 +7,13 @@ import java.util.Optional;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import io.quarkus.arc.Unremovable;
+import io.quarkus.runtime.Startup;
 import org.pipelineframework.config.pipeline.PipelineBranchingResourceLoader;
 
 /**
  * Holds runtime branch-routing descriptors keyed by runtime step class.
  */
+@Startup
 @ApplicationScoped
 @Unremovable
 public class PipelineBranchingRegistry {
@@ -43,11 +45,18 @@ public class PipelineBranchingRegistry {
                     "Branch-aware step '" + step.step() + "' at index " + step.index()
                         + " has null or blank runtimeStepClass in branching metadata. The branching.json resource is malformed.");
             }
+            // Verify runtimeStepClass is loadable; defer resolution of input and accepted types
+            try {
+                Class.forName(runtimeStepClass, false, classLoader);
+            } catch (ClassNotFoundException e) {
+                throw new IllegalStateException(
+                    "Failed to resolve runtime step class '" + runtimeStepClass + "' for branch-aware step '" + step.step() + "'", e);
+            }
             List<Class<?>> acceptedRuntimeTypes = new java.util.ArrayList<>();
             for (String className : step.acceptedRuntimeClasses()) {
-                acceptedRuntimeTypes.add(resolveClass(className, classLoader, step.step()));
+                acceptedRuntimeTypes.add(resolveSoftClass(className, classLoader));
             }
-            Class<?> inputRuntimeType = resolveOptionalClass(step.inputRuntimeClass(), classLoader, step.step(), "input runtime");
+            Class<?> inputRuntimeType = resolveSoftClass(step.inputRuntimeClass(), classLoader);
             StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
                 step.index(),
                 step.step(),
@@ -58,7 +67,13 @@ public class PipelineBranchingRegistry {
                 step.acceptedRuntimeClasses(),
                 acceptedRuntimeTypes,
                 step.terminal());
-            descriptors.put(runtimeStepClass, descriptor);
+            StepBranchingDescriptor existing = descriptors.put(runtimeStepClass, descriptor);
+            if (existing != null) {
+                throw new IllegalStateException(
+                    "Duplicate runtimeStepClass '" + runtimeStepClass
+                    + "' detected: step '" + step.step() + "' at index " + step.index()
+                    + " conflicts with existing step '" + existing.stepName() + "' at index " + existing.index());
+            }
         }
         return Map.copyOf(descriptors);
     }
@@ -82,6 +97,17 @@ public class PipelineBranchingRegistry {
             throw new IllegalStateException(
                 "Failed to resolve " + label + " class '" + className + "' for branch-aware step '" + stepName + "'",
                 e);
+        }
+    }
+
+    private Class<?> resolveSoftClass(String className, ClassLoader classLoader) {
+        if (className == null || className.isBlank()) {
+            return null;
+        }
+        try {
+            return Class.forName(className, false, classLoader);
+        } catch (ClassNotFoundException e) {
+            return null;
         }
     }
 
