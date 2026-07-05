@@ -111,11 +111,92 @@ class PipelineBranchingMetadataGeneratorTest {
             finalize.get("inputRuntimeClass").getAsString());
     }
 
+    @Test
+    void writesAwaitAndQueryClientSuffixesAndSkipsUnmatchedSteps() throws IOException {
+        Path classOutput = tempDir.resolve("class-output-alt");
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(Map.of());
+        when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
+        RoundEnvironment roundEnv = mock(RoundEnvironment.class);
+
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        ctx.setTransportMode(PipelineTransport.GRPC);
+        ctx.setOrchestratorGenerated(true);
+        ctx.setStepModels(List.of(
+            stepModel(
+                "AwaitProvider",
+                "com.example.order.awaiting",
+                "ApprovalPending",
+                "ApprovalResult",
+                Set.of(GenerationTarget.AWAIT_CLIENT_STEP)),
+            stepModel(
+                "LookupOrder",
+                "com.example.order.query",
+                "LookupOrderRequest",
+                "LookupOrderResult",
+                Set.of(GenerationTarget.QUERY_CLIENT_STEP))));
+        ctx.setBranchingPlan(new PipelineBranchingPlan(
+            true,
+            1,
+            List.of(
+                new PipelineBranchingPlan.BranchStep(
+                    0,
+                    "Await Provider",
+                    "ApprovalPending",
+                    "ApprovalResult",
+                    List.of("ApprovalPending"),
+                    List.of("ApprovalResult"),
+                    List.of(ClassName.get("com.example.common.domain", "ApprovalPending")),
+                    false),
+                new PipelineBranchingPlan.BranchStep(
+                    1,
+                    "Lookup Order",
+                    "LookupOrderRequest",
+                    "LookupOrderResult",
+                    List.of("LookupOrderRequest"),
+                    List.of("LookupOrderResult"),
+                    List.of(ClassName.get("com.example.common.domain", "LookupOrderRequest")),
+                    true),
+                new PipelineBranchingPlan.BranchStep(
+                    2,
+                    "Missing Step",
+                    "MissingRequest",
+                    "MissingResult",
+                    List.of("MissingRequest"),
+                    List.of("MissingResult"),
+                    List.of(ClassName.get("com.example.common.domain", "MissingRequest")),
+                    false))));
+
+        new PipelineBranchingMetadataGenerator(processingEnv).writeBranchingMetadata(ctx);
+
+        Path metadataFile = classOutput.resolve("META-INF/pipeline/branching.json");
+        JsonObject metadata = new Gson().fromJson(Files.readString(metadataFile), JsonObject.class);
+        assertEquals(1, metadata.get("terminalStepIndex").getAsInt());
+        assertEquals(2, metadata.getAsJsonArray("steps").size());
+        assertEquals(
+            "com.example.order.awaiting.pipeline.AwaitProviderAwaitClientStep",
+            metadata.getAsJsonArray("steps").get(0).getAsJsonObject().get("runtimeStepClass").getAsString());
+        assertEquals(
+            "com.example.order.query.pipeline.LookupOrderQueryClientStep",
+            metadata.getAsJsonArray("steps").get(1).getAsJsonObject().get("runtimeStepClass").getAsString());
+    }
+
     private static PipelineStepModel stepModel(
         String serviceName,
         String servicePackage,
         String inputType,
         String outputType
+    ) {
+        return stepModel(serviceName, servicePackage, inputType, outputType, Set.of(GenerationTarget.CLIENT_STEP));
+    }
+
+    private static PipelineStepModel stepModel(
+        String serviceName,
+        String servicePackage,
+        String inputType,
+        String outputType,
+        Set<GenerationTarget> enabledTargets
     ) {
         return new PipelineStepModel.Builder()
             .serviceName(serviceName)
@@ -125,7 +206,7 @@ class PipelineBranchingMetadataGeneratorTest {
             .inputMapping(new TypeMapping(ClassName.get("com.example.common.domain", inputType), null, false))
             .outputMapping(new TypeMapping(ClassName.get("com.example.common.domain", outputType), null, false))
             .streamingShape(StreamingShape.UNARY_UNARY)
-            .enabledTargets(Set.of(GenerationTarget.CLIENT_STEP))
+            .enabledTargets(enabledTargets)
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
             .build();

@@ -62,7 +62,6 @@ import org.yaml.snakeyaml.Yaml;
 public class PipelineYamlConfigLoader {
     private static final Logger LOG = Logger.getLogger(PipelineYamlConfigLoader.class.getName());
     private static final int MAX_NESTING_DEPTH = 100;
-    private static final List<String> REJECTED_BRANCH_PREDICATE_KEYS = List.of("when", "condition", "predicate", "expression");
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
 
@@ -298,16 +297,7 @@ public class PipelineYamlConfigLoader {
     }
 
     private void rejectBranchPredicateKeys(Map<?, ?> stepMap, String stepName) {
-        List<String> rejected = REJECTED_BRANCH_PREDICATE_KEYS.stream()
-            .filter(stepMap::containsKey)
-            .toList();
-        if (rejected.isEmpty()) {
-            return;
-        }
-        throw new IllegalArgumentException(
-            "step '" + (stepName == null ? "<unnamed>" : stepName)
-                + "' declares unsupported predicate-style routing keys: " + String.join(", ", rejected)
-                + ". Use type-based accepts/terminal routing only.");
+        BranchRoutingRules.rejectPredicateKeys(stepMap, stepName, IllegalArgumentException::new);
     }
 
     private Map<String, Object> readCommandConfig(Map<?, ?> stepMap, String stepName) {
