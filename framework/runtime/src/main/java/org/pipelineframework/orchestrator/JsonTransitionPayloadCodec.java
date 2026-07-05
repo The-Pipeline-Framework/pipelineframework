@@ -81,7 +81,7 @@ public class JsonTransitionPayloadCodec implements TransitionPayloadCodec {
                 "Unsupported transition payload type: " + payloadTypeId);
         }
         try {
-            String encodedPayload = payload instanceof MessageOrBuilder protobuf
+            String encodedPayload = payload instanceof Message protobuf
                 ? JsonFormat.printer().omittingInsignificantWhitespace().print(protobuf)
                 : mapper.writeValueAsString(payload);
             return new SerializedTransitionPayload(

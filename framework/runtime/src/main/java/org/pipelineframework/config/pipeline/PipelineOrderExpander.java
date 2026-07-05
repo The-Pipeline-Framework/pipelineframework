@@ -338,7 +338,13 @@ public final class PipelineOrderExpander {
         if (token == null) {
             return "";
         }
-        return token.startsWith("Process") ? token.substring("Process".length()) : token;
+        if (token.startsWith("Process") && token.length() > "Process".length()) {
+            char nextChar = token.charAt("Process".length());
+            if (Character.isUpperCase(nextChar)) {
+                return token.substring("Process".length());
+            }
+        }
+        return token;
     }
 
     private static String buildSideEffectClientStep(
