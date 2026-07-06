@@ -61,43 +61,23 @@ When changing layout support in csv-payments, update all of:
 
 ## Runtime and Build Commands
 
-Framework:
+Load `AGENTS.validation.md` before choosing validation commands for non-trivial changes.
 
-- Build: `./mvnw -f framework/pom.xml clean install`
-- Verify: `./mvnw -f framework/pom.xml verify`
+Most common gates:
 
-Root project:
-
-- Build: `./mvnw clean install`
-- Verify: `./mvnw verify`
-
-CSV payments targeted examples:
-
-- Pipeline-runtime orchestrator verification:
-  `./examples/csv-payments/build-pipeline-runtime.sh -pl orchestrator-svc -Dcsv.runtime.layout=pipeline-runtime -Dtest=PipelineRuntimeTopologyTest -Dit.test=CsvPaymentsPipelineRuntimeEndToEndIT verify`
-
-- Monolith verification:
-  `./examples/csv-payments/build-monolith.sh -DskipTests`
-
-Search targeted example:
-
-- Function platform smoke verification (build-switch based; no Lambda Maven profile):
-  `./mvnw -f examples/search/pom.xml -pl orchestrator-svc -am -Dpipeline.platform=FUNCTION -Dpipeline.transport=REST -Dpipeline.rest.naming.strategy=RESOURCEFUL -DskipTests compile`
-  `./mvnw -f examples/search/pom.xml -pl orchestrator-svc -Dpipeline.platform=FUNCTION -Dpipeline.transport=REST -Dpipeline.rest.naming.strategy=RESOURCEFUL -Dtest=LambdaMockEventServerSmokeTest test`
-
-Targeted unit-test coverage helper:
-
-- Generate deterministic JaCoCo coverage for a single framework module + test slice:
-  `./scripts/coverage-targeted.sh runtime FunctionTransportBridgeTest,UnaryFunctionTransportBridgeTest`
-  `./scripts/coverage-targeted.sh deployment RestFunctionHandlerRendererTest`
-- Helper output includes report path and LINE/BRANCH percentages from module-local `target/site/jacoco/jacoco.xml`.
-
-Node/docs surfaces:
-
-- AI SDK compile/test surface: `./mvnw -f ai-sdk/pom.xml test`
-- Template generator tests live in the separate `The-Pipeline-Framework/tpf-mcp-bridge` repository. The generator-facing schema is exported from `framework/deployment` as `META-INF/pipeline/pipeline-template-schema.json` and consumed by that repo.
-- Web UI type/build checks: `npm --prefix web-ui run check`, `npm --prefix web-ui run build`
+- Framework verify: `./mvnw -f framework/pom.xml verify`
+- Root verify: `./mvnw verify`
 - Docs build: `npm --prefix docs run build`
+
+## Maven Cache Policy
+
+Multiple Codex worktrees may point at clones of this repo at the same time. Keep Maven cache behavior explicit:
+
+- Use the shared Maven local repository, `~/.m2/repository`, by default. It stores downloaded dependencies and artifacts written by `mvn install`; override with `-Dmaven.repo.local=...` only when isolation is required.
+- Use the worktree-local Maven build cache, `${session.executionRootDirectory}/.maven-build-cache`, for reusable build outputs. This is configured in `.mvn/maven-build-cache-config.xml` to avoid cross-worktree build-output leakage from the default `~/.m2/build-cache`.
+- Use a worktree-local Maven repository such as `.mvn-local` only for tasks that require `mvn install`, generated scaffold smoke tests, or external repo/generated project consumption of `org.pipelineframework:*` artifacts.
+
+Normal reactor builds should resolve reactor modules directly, not through `~/.m2/repository`. The collision risk is when TPF examples, templates, generated projects, or other external consumers depend on same-version `org.pipelineframework:*` artifacts outside the current reactor.
 
 ## Architecture Notes
 

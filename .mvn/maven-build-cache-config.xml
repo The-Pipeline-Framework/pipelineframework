@@ -1,0 +1,9 @@
+<cache xmlns="http://apache.org">
+    <configuration>
+        <enabled>true</enabled>
+        <!-- This forces the cache location to be inside the specific worktree directory -->
+        <local>
+            <location>${session.executionRootDirectory}/.maven-build-cache</location>
+        </local>
+    </configuration>
+</cache>
