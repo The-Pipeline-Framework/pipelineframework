@@ -24,11 +24,7 @@ Supporting repo surfaces:
 
 ### Current State (Post-PA Era)
 
-- Compilation is YAML-driven first, with annotation processing and model phases enforcing contracts before runtime.
-- Operator steps are first-class (`operator: fully.qualified.Class::method`) and are resolved/validated at build time.
-- Mapper model uses `Mapper<Domain, External>` and pair-based matching for boundary validation.
-- Function platform (`pipeline.platform=FUNCTION`) is an actively used runtime path and must stay semantically aligned with other runtime paths.
-- Runtime lineage behavior (split/merge envelopes) is treated as deterministic behavior, not best-effort metadata.
+For planning, PR slicing, architecture tradeoffs, roadmap shaping, or docs IA strategy, read `AGENTS.planning.md`. For ordinary implementation work, use this file plus the smallest relevant local context.
 
 ## Canonical Terms
 
