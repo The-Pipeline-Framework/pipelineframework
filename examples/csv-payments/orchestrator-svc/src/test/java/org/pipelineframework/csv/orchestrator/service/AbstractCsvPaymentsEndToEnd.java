@@ -1833,9 +1833,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private long expectedProviderRejectCount(double rejectProbability) throws IOException {
-        return inputCsvIds()
-                .filter(csvId -> shouldSimulateProviderReject(rejectProbability, csvId))
-                .count();
+        try (Stream<String> ids = inputCsvIds()) {
+            return ids
+                    .filter(csvId -> shouldSimulateProviderReject(rejectProbability, csvId))
+                    .count();
+        }
     }
 
     private static boolean shouldSimulateProviderReject(double probability, String simulationKey) {
