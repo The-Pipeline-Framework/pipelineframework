@@ -32,32 +32,15 @@ Supporting repo surfaces:
 
 ## Canonical Terms
 
-- **Runtime layout**: logical runtime shape declared in runtime mapping (`modular`, `pipeline-runtime`, `monolith`).
-- **Build topology**: Maven module/POM structure that physically builds deployables for a layout.
+Load `AGENTS.glossary.md` when terminology, docs wording, transport/platform naming, architecture explanations, or public-facing copy matters.
 
-These are related but not identical. Runtime mapping does not automatically reshape Maven modules.
+Always keep these distinctions active:
 
-## CSV Payments Reference Topologies
-
-Current example entrypoints:
-
-- Modular: `examples/csv-payments/pom.xml`
-- Pipeline-runtime: `examples/csv-payments/pom.pipeline-runtime.xml`
-- Monolith: `examples/csv-payments/pom.monolith.xml`
-
-Helper scripts:
-
-- `examples/csv-payments/build-pipeline-runtime.sh`
-- `examples/csv-payments/build-monolith.sh`
-
-When changing layout support in csv-payments, update all of:
-
-1. Topology POM/script
-2. Runtime mapping YAML
-3. Topology test(s)
-4. E2E IT path (through `AbstractCsvPaymentsEndToEnd`)
-5. Relevant CI workflows under `.github/workflows/` (at minimum `full-tests.yml` and any `e2e-csv-*.yml` jobs that cover the changed layout)
-6. Runtime-layout docs under `docs/deploy/runtime-layouts/`
+- **Functional core / imperative shell**: business logic stays typed and transport-neutral; TPF owns generated adapters, connectors, await handling, persistence, caching, replay, telemetry, retries, and deployment/runtime integration.
+- **Pipeline**: a strongly typed application flow, not a CI/CD pipeline, generic workflow diagram, or arbitrary orchestration graph.
+- **Transport mode**: only `GRPC`, `REST`, and `LOCAL` as `pipeline.transport` values. `FUNCTION`, `HTTP_LAMBDA`, `PROTOBUF_HTTP_V1`, and `ENVELOPE_HTTP_V1` are separate platform/deployment/wire-protocol concepts.
+- **Runtime layout vs build topology**: runtime layout is the logical runtime shape; build topology is the Maven/JAR/container structure that physically builds deployables.
+- **Connector vs plugin**: connectors model typed I/O boundaries; plugins provide cross-cutting framework extensions such as persistence, caching, telemetry, or logging.
 
 ## Runtime and Build Commands
 
