@@ -1116,7 +1116,7 @@ function showsThroughputCounter(step) {
     return true;
   }
   if (step.pluginKind === "reject") {
-    return true;
+    return false;
   }
   const role = resolveDisplayRole(step);
   return role === "object-ingest"
@@ -3485,7 +3485,6 @@ function recordReplayCounters(rawEvent) {
   }
   if (event.event === "skip") {
     const skipCount = Math.max(inputCount, 1);
-    markCounterEvidence(state, skipCount);
     state.skips += skipCount;
     return;
   }
