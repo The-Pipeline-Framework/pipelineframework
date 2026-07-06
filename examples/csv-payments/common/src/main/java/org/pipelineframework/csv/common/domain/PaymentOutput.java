@@ -16,70 +16,9 @@
 
 package org.pipelineframework.csv.common.domain;
 
-import com.opencsv.bean.CsvBindByName;
-import com.opencsv.bean.CsvIgnore;
-import com.opencsv.bean.CsvNumber;
-import jakarta.persistence.*;
-import java.io.Serializable;
-import java.math.BigDecimal;
-import java.util.Currency;
-import java.util.Objects;
-import java.util.UUID;
-import lombok.*;
+import jakarta.persistence.Entity;
+import lombok.NoArgsConstructor;
 
 @Entity
-@Getter
-@Setter
 @NoArgsConstructor
-public class PaymentOutput extends BaseEntity implements Serializable {
-
-    @CsvIgnore @Transient private PaymentStatus paymentStatus;
-
-    // en-UK locale to match the format of the (mock) payment service
-    @CsvBindByName(column = "CSV Id")
-    String csvId;
-
-    @CsvBindByName(column = "Recipient")
-    String recipient;
-
-    @CsvBindByName(column = "Amount", locale = "en-UK")
-    @CsvNumber("#,###.00")
-    BigDecimal amount;
-
-    @CsvBindByName(column = "Currency")
-    Currency currency;
-
-    @CsvBindByName(column = "Reference")
-    UUID conversationId;
-
-    @CsvBindByName(column = "Status")
-    Long status;
-
-    @CsvBindByName(column = "Message")
-    String message;
-
-    @CsvBindByName(column = "Fee", locale = "en-UK")
-    @CsvNumber("#,###.00")
-    BigDecimal fee;
-
-  @PrePersist
-  protected void useStablePaymentOutputId() {
-    CsvPaymentsStableIdSupport.stableId(
-            "PaymentOutput", csvId, recipient, amount, currency, status, message)
-        .ifPresent(stableId -> id = stableId);
-  }
-
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
-    PaymentOutput that = (PaymentOutput) o;
-    return this.id != null && this.id.equals(that.id);
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hash(id);
-  }
-
-}
+public class PaymentOutput extends AbstractPaymentOutput {}

@@ -63,13 +63,17 @@ flowchart LR
     B --> C["Await Payment Provider<br/>max in-flight interactions"]
     C --> D["Kafka/provider<br/>external latency"]
     D --> E["Live await session<br/>durable completion first"]
-    E --> F["Process Payment Status"]
-    F --> G["Object Publish<br/>streaming target session"]
-    C -. "durable fallback" .-> H["WAITING_EXTERNAL<br/>item continuations"]
-    H -. "restart or no live session" .-> F
+    E --> F["Process Approved Payment Status"]
+    E --> G["Process Unapproved Payment Status"]
+    F --> H["Finalize Payment Output"]
+    G --> H
+    H --> I["Object Publish<br/>streaming target session"]
+    C -. "durable fallback" .-> J["WAITING_EXTERNAL<br/>item continuations"]
+    J -. "restart or no live session" .-> F
+    J -. "restart or no live session" .-> G
 ```
 
-The repo proof run for the built-in CSV Payments replay used a `250/s` payment-provider permit setting. It processed 1k records in `13.426s` of replay time and showed `Process Payment Status` starting at `1.575s`, before the parser finished at `8.243s` and before the last await completion at `13.400s`. The observed await dispatch-to-completion latency was p50 `2613.9ms` and p95 `3147.9ms`; that includes provider permit wait, any configured provider response delay, Kafka transit, and completion admission. The overlap is the backpressure signal to look for: the parser, brokered await, status step, and terminal Object Publish are moving as connected live segments, with durable fallback available for recovery.
+The repo proof run for the built-in CSV Payments replay used a `250/s` payment-provider permit setting. It processed 1k records in `15.621s` of replay time and showed the approved or unapproved status branches starting at `2.001s`, before the parser finished at `6.901s` and before the last await completion at `15.585s`. The overlap is the backpressure signal to look for: the parser, brokered await, branch-specific status steps, terminal merge, and Object Publish are moving as connected live segments, with durable fallback available for recovery.
 
 ### Retry amplification example (real-world)
 

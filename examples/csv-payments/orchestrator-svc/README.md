@@ -14,10 +14,13 @@ graph TD
     C --> E[Process CSV Payments Input]
     E --> F[Await Payment Provider]
     F --> G[Kafka Completion]
-    G --> H[Process Payment Status Service]
-    H --> I[Object Publish]
-    D --> J[CSV Objects]
-    I --> K[Output CSV Files]
+    G --> H[Process Approved Payment Status]
+    G --> I[Process Unapproved Payment Status]
+    H --> J[Finalize Payment Output]
+    I --> J
+    J --> K[Object Publish]
+    D --> L[CSV Objects]
+    K --> M[Output CSV Files]
     
     style A fill:#4CAF50,stroke:#388E3C
     style B fill:#2196F3,stroke:#0D47A1
@@ -27,9 +30,11 @@ graph TD
     style F fill:#9C27B0,stroke:#4A148C
     style G fill:#9C27B0,stroke:#4A148C
     style H fill:#9C27B0,stroke:#4A148C
-    style I fill:#FF9800,stroke:#E65100
-    style J fill:#FFEB3B,stroke:#F57F17
-    style K fill:#FFEB3B,stroke:#F57F17
+    style I fill:#9C27B0,stroke:#4A148C
+    style J fill:#2196F3,stroke:#0D47A1
+    style K fill:#FF9800,stroke:#E65100
+    style L fill:#FFEB3B,stroke:#F57F17
+    style M fill:#FFEB3B,stroke:#F57F17
 ```
 
 ## Functionality
@@ -75,7 +80,9 @@ sequenceDiagram
     participant AwaitUnit
     participant Kafka
     participant Provider
-    participant StatusService
+    participant ApprovedStatus
+    participant UnapprovedStatus
+    participant Finalize
     participant ObjectPublish
     
     User->>Orchestrator: --ingest-once
@@ -89,8 +96,15 @@ sequenceDiagram
         Provider-->>Kafka: Payment completion
         Kafka-->>AwaitUnit: Admit completion
         AwaitUnit-->>Orchestrator: Release item continuation
-        Orchestrator->>StatusService: Process status
-        StatusService-->>Orchestrator: PaymentOutput
+        alt Approved completion
+            Orchestrator->>ApprovedStatus: Process approved status
+            ApprovedStatus-->>Orchestrator: ApprovedPaymentOutput
+        else Unapproved completion
+            Orchestrator->>UnapprovedStatus: Process unapproved status
+            UnapprovedStatus-->>Orchestrator: UnapprovedPaymentOutput
+        end
+        Orchestrator->>Finalize: Merge terminal output
+        Finalize-->>Orchestrator: PaymentOutput
     end
     Orchestrator->>ObjectPublish: Publish terminal output
     ObjectPublish-->>User: Output files generated
@@ -100,7 +114,8 @@ sequenceDiagram
 1. **File Admission**: Object Ingest lists the configured object source and admits accepted objects into queue-async executions.
 2. **Record Processing**: The input service parses each admitted CSV file into payment records.
 3. **Awaited Provider Completion**: The await adapter dispatches provider requests and resumes the execution from correlated completions.
-4. **Output Publication**: Object Publish streams terminal `PaymentOutput` records into grouped output files.
+4. **Branch-Specific Status Processing**: Approved and unapproved completions flow through separate business steps and then converge at `Finalize Payment Output`.
+5. **Output Publication**: Object Publish streams terminal `PaymentOutput` records into grouped output files.
 
 ### Connector-First Observability
 
@@ -118,7 +133,7 @@ Use replay JSON for the high-cardinality details: source object key, await unit 
 ### gRPC Communication
 The service communicates with other services via gRPC, using clients injected with `@GrpcClient`:
 - Processing input CSV files
-- Processing payment statuses
+- Processing approved and unapproved payment statuses plus the terminal finalize step
 
 ### Error Handling
 - Implements retry mechanisms with exponential backoff for transient errors (like throttling)

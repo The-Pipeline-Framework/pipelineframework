@@ -58,7 +58,9 @@ services:
         protocols:
           - grpcs
         paths:
-          - /ProcessPaymentStatusService/remoteProcess
+          - /ProcessApprovedPaymentStatusService/remoteProcess
+          - /ProcessUnapprovedPaymentStatusService/remoteProcess
+          - /ProcessFinalizePaymentOutputService/remoteProcess
         strip_path: false
 
   - name: payment-status-svc-rest
@@ -69,7 +71,9 @@ services:
         protocols:
           - https
         paths:
-          - /api/v1/process-payment-status-reactive/process
+          - /api/v1/process-approved-payment-status-reactive/process
+          - /api/v1/process-unapproved-payment-status-reactive/process
+          - /api/v1/process-finalize-payment-output-reactive/process
         strip_path: false
     plugins:
       - name: cors

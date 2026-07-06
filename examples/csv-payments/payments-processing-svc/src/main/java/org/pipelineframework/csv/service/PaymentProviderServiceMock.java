@@ -28,8 +28,10 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import lombok.NonNull;
 import org.jboss.logging.Logger;
+import org.pipelineframework.csv.common.domain.ApprovedPaymentStatus;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
+import org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus;
 
 @SuppressWarnings("UnstableApiUsage")
 @ApplicationScoped
@@ -81,12 +83,15 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
     
     LOG.debug("Rate limiter permit acquired successfully");
 
-    PaymentStatus paymentStatus = new PaymentStatus();
+    PaymentStatus paymentStatus =
+        shouldSimulate(rejectProbability, simulationKey(paymentRecord), "provider-reject")
+            ? new UnapprovedPaymentStatus()
+            : new ApprovedPaymentStatus();
     paymentStatus.setId(UUID.randomUUID());
     paymentStatus.setReference("101");
     paymentStatus.setConversationId(UUID.randomUUID());
     paymentStatus.setStatusCode(1000L);
-    if (shouldSimulate(rejectProbability, simulationKey(paymentRecord), "provider-reject")) {
+    if (paymentStatus instanceof UnapprovedPaymentStatus) {
       paymentStatus.setStatus("Rejected");
       paymentStatus.setMessage("Mock payment provider rejected the payment.");
     } else {

@@ -30,8 +30,8 @@ The canonical modular flow is:
 3. `Await Payment Provider` is an authored `ONE_TO_ONE` await step that creates one durable await interaction per `PaymentRecord` as rows arrive.
 4. The Kafka await adapter publishes request envelopes to `csv-payments.payment.requests`.
 5. `payments-processing-svc` acts as the external mock provider, consumes those envelopes, calls `PaymentProviderServiceMock`, and publishes completion envelopes to `csv-payments.payment.results`.
-6. The TPF Kafka completion consumer admits each completion idempotently, resumes the owning queue-async execution when the await unit is complete, and passes ordered `PaymentStatus` items downstream.
-7. `Process Payment Status` rejects provider terminal status `Rejected` into the normal reject path and maps accepted statuses to `PaymentOutput`.
+6. The TPF Kafka completion consumer admits each completion idempotently, resumes the owning queue-async execution when the await unit is complete, and passes ordered `PaymentStatus` union variants downstream.
+7. `Process Approved Payment Status` and `Process Unapproved Payment Status` handle the two provider outcomes, then `Finalize Payment Output` merges them into the terminal `PaymentOutput`.
 8. Object Publish streams terminal `PaymentOutput` values into grouped CSV output files.
 
 This is durable brokered completion, not polling. Kafka delivery remains at-least-once; TPF handles idempotent completion admission and ordered await-unit reconstruction for the resumed pipeline.
@@ -466,11 +466,17 @@ Example:
   test
 ```
 
-`provider-reject-probability` returns a business-level `PaymentStatus.status=Rejected`, and the
-`ProcessPaymentStatusService` step maps that terminal outcome into the framework item-reject
-channel via `NonRetryableException`. Technical timeouts still surface as exceptions and therefore
-participate in the normal retry path. Malformed CSV handling is separate: today malformed input
-fails at file scope rather than as a per-record reject.
+`provider-reject-probability` now returns the `UnapprovedPaymentStatus` branch of the
+`PaymentStatus` union. The default object-publish pipeline routes that branch through
+`Process Unapproved Payment Status` and the explicit terminal merge step `Finalize Payment Output`,
+so rejected provider responses still produce normal `PaymentOutput` rows with the rejection text.
+Technical timeouts still surface as exceptions and therefore participate in the normal retry path.
+Malformed CSV handling is separate: today malformed input fails at file scope rather than as a
+per-record reject.
+
+The object publish sink does not imply the branch merge. The branch-aware proof in
+`config/pipeline.yaml` keeps `terminal: true` on `Finalize Payment Output`, then publishes the
+merged `PaymentOutput` rows through Object Publish.
 
 ## Getting Started
 

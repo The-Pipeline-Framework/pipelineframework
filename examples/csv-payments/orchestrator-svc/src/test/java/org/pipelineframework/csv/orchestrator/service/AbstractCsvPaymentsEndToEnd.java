@@ -28,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.sql.Connection;
@@ -121,6 +122,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final long TEMPO_SEARCH_TIMEOUT_SECONDS = 90L;
     private static final long TEMPO_SEARCH_POLL_MILLIS = 2_000L;
     private static final long TEMPO_LOCAL_PAUSE_SECONDS = 600L;
+    private static final long MALFORMED_REJECT_EXPECTED_OUTPUT_RECORDS = 2L;
     private static final HttpClient HTTP_CLIENT =
             HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private static final Path DEV_CERTS_DIR =
@@ -819,14 +821,46 @@ abstract class AbstractCsvPaymentsEndToEnd {
         if (!Files.isRegularFile(jar)) {
             return true;
         }
+        if (!runtimeMappingMatchesActiveLayout()) {
+            return true;
+        }
         long packagedAt = Files.getLastModifiedTime(jar).toMillis();
         long classesAt = latestModifiedUnder(Paths.get(System.getProperty("user.dir")).resolve("target/classes"));
         long mainSourcesAt = latestModifiedUnder(Paths.get(System.getProperty("user.dir")).resolve("src/main"));
         long pomAt = Files.getLastModifiedTime(Paths.get(System.getProperty("user.dir")).resolve("pom.xml")).toMillis();
+        long runtimeMappingAt = Files.getLastModifiedTime(desiredRuntimeMappingPath()).toMillis();
         long runtimeAt = codeSourceModified(PipelineTelemetry.class);
-        long latestDependencyAt = Math.max(runtimeAt, pomAt);
+        long latestDependencyAt = Math.max(Math.max(runtimeAt, pomAt), runtimeMappingAt);
         long latestLocalAt = Math.max(classesAt, mainSourcesAt);
         return packagedAt < latestDependencyAt || packagedAt < latestLocalAt;
+    }
+
+    private static boolean runtimeMappingMatchesActiveLayout() throws IOException {
+        if (MONOLITH_LAYOUT || PIPELINE_RUNTIME_LAYOUT) {
+            return true;
+        }
+        return Files.mismatch(activeRuntimeMappingPath(), desiredRuntimeMappingPath()) == -1L;
+    }
+
+    private static Path activeRuntimeMappingPath() {
+        return Paths.get(System.getProperty("user.dir"))
+                .resolve("../config/pipeline.runtime.yaml")
+                .normalize()
+                .toAbsolutePath();
+    }
+
+    private static Path desiredRuntimeMappingPath() {
+        Path configDir = Paths.get(System.getProperty("user.dir"))
+                .resolve("../config/runtime-mapping")
+                .normalize()
+                .toAbsolutePath();
+        if (MONOLITH_LAYOUT) {
+            return configDir.resolve("monolith.yaml");
+        }
+        if (PIPELINE_RUNTIME_LAYOUT) {
+            return configDir.resolve("pipeline-runtime.yaml");
+        }
+        return configDir.resolve("modular-strict.yaml");
     }
 
     private static long latestModifiedUnder(Path root) throws IOException {
@@ -875,6 +909,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         Path processDir = moduleDir;
         List<String> command = new ArrayList<>();
         String mavenRepoLocal = System.getProperty("maven.repo.local", "").trim();
+        Path activeRuntimeMapping = activeRuntimeMappingPath();
+        Path desiredRuntimeMapping = desiredRuntimeMappingPath();
+        Path runtimeMappingBackup = null;
         if (MONOLITH_LAYOUT) {
             processDir = moduleDir.getParent();
             command.add("bash");
@@ -900,35 +937,48 @@ abstract class AbstractCsvPaymentsEndToEnd {
             }
             command.add("package");
         }
-        ProcessBuilder pb = new ProcessBuilder(command);
-        pb.directory(processDir.toFile());
-        pb.environment().put("CSV_RUNTIME_LAYOUT", RUNTIME_LAYOUT);
-        if (!mavenRepoLocal.isBlank()) {
-            String existingMavenArgs = pb.environment().getOrDefault("MAVEN_ARGS", "").trim();
-            String repoArg = "-Dmaven.repo.local=" + mavenRepoLocal;
-            pb.environment().put(
-                    "MAVEN_ARGS",
-                    existingMavenArgs.isBlank() ? repoArg : existingMavenArgs + " " + repoArg);
-        }
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
-        StringBuilder output = new StringBuilder();
-        try (BufferedReader reader =
-                new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line).append(System.lineSeparator());
-            }
-        }
         try {
-            int exitCode = process.waitFor();
-            assertEquals(
-                    0,
-                    exitCode,
-                    "Failed to rebuild packaged orchestrator. Output tail:\n" + tailLines(output.toString(), 120));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Interrupted while rebuilding packaged orchestrator.", e);
+            if (!MONOLITH_LAYOUT && Files.mismatch(activeRuntimeMapping, desiredRuntimeMapping) != -1L) {
+                runtimeMappingBackup = Files.createTempFile("pipeline-runtime", ".yaml");
+                Files.copy(activeRuntimeMapping, runtimeMappingBackup, StandardCopyOption.REPLACE_EXISTING);
+                Files.copy(desiredRuntimeMapping, activeRuntimeMapping, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.directory(processDir.toFile());
+            pb.environment().put("CSV_RUNTIME_LAYOUT", RUNTIME_LAYOUT);
+            if (!mavenRepoLocal.isBlank()) {
+                String existingMavenArgs = pb.environment().getOrDefault("MAVEN_ARGS", "").trim();
+                String repoArg = "-Dmaven.repo.local=" + mavenRepoLocal;
+                pb.environment().put(
+                        "MAVEN_ARGS",
+                        existingMavenArgs.isBlank() ? repoArg : existingMavenArgs + " " + repoArg);
+            }
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append(System.lineSeparator());
+                }
+            }
+            try {
+                int exitCode = process.waitFor();
+                assertEquals(
+                        0,
+                        exitCode,
+                        "Failed to rebuild packaged orchestrator. Output tail:\n" + tailLines(output.toString(), 120));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Interrupted while rebuilding packaged orchestrator.", e);
+            }
+        } finally {
+            if (runtimeMappingBackup != null) {
+                Files.copy(runtimeMappingBackup, activeRuntimeMapping, StandardCopyOption.REPLACE_EXISTING);
+                Files.deleteIfExists(runtimeMappingBackup);
+            }
         }
     }
 
@@ -1064,7 +1114,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "PIPELINE_DEFAULTS_RETRY_WAIT_MS", "10",
                 "PIPELINE_ITEM_REJECT_PROVIDER", "memory"));
 
-        waitForPipelineComplete();
+        waitForPipelineComplete(MALFORMED_REJECT_EXPECTED_OUTPUT_RECORDS);
 
         Set<String> expectedRecipients = Set.of("Valid Recipient One", "Valid Recipient Two");
         verifyOutputFilesForRecipients(TEST_E2E_DIR, expectedRecipients, "Malformed Recipient", 2);
@@ -1085,7 +1135,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     @Test
-    void providerRejectsAreRoutedToRejectSink() throws Exception {
+    void providerRejectsStillProduceOutputRows() throws Exception {
         assumeTrue(runProviderRejectScenario(), "Provider-reject scenario disabled for this E2E class.");
         assumeTrue(
                 TELEMETRY_CAPTURE_ACTIVE,
@@ -1105,31 +1155,30 @@ abstract class AbstractCsvPaymentsEndToEnd {
         resetDatabasePersistence();
         createTestCsvFiles();
 
-        ProcessRunResult runResult = orchestratorTriggerRun();
+        orchestratorTriggerRun();
 
         waitForPipelineComplete();
 
         PipelineReplayDocument replayDocument = mergeReplayDocuments(REPLAY_CAPTURE_DIR, REPLAY_FILE);
-        long rejectEvents = replayDocument.events().stream()
-                .filter(event -> "reject".equals(event.event()))
-                .count();
-        assertTrue(rejectEvents > 0, "Expected replay JSON to contain reject events.");
-
+        assertReplayCoverage(replayDocument, true);
         long outputRecords = outputRecordCount(Paths.get(TEST_E2E_DIR));
-        assertTrue(outputRecords < expectedPaymentRecordCount(), "Expected fewer output records than input records.");
+        assertEquals(expectedPaymentRecordCount(), outputRecords, "Expected one output row per valid input payment.");
 
         String combinedOutput = readCombinedOutput(TEST_E2E_DIR);
-        assertFalse(combinedOutput.contains("John Doe"), "Provider-rejected recipient John Doe should not reach output.");
-        assertFalse(combinedOutput.contains("Alice Brown"), "Provider-rejected recipient Alice Brown should not reach output.");
-        assertTrue(
-                combinedOutput.contains("Jane Smith")
-                        || combinedOutput.contains("Bob Johnson")
-                        || combinedOutput.contains("Charlie Wilson"),
-                "Expected at least one successful recipient to reach output.");
-
-        assertTrue(
-                runResult.output().contains("Item reject stored in memory sink"),
-                "Expected in-memory item reject sink evidence in orchestrator logs.");
+        long expectedRejects = expectedProviderRejectCount(configuredProviderRejectProbability());
+        long actualRejectRows = combinedOutput.lines()
+                .filter(line -> line.contains("Mock payment provider rejected the payment."))
+                .count();
+        long actualApprovedRows = combinedOutput.lines()
+                .filter(line -> line.contains("Mock response"))
+                .count();
+        assertEquals(expectedRejects, actualRejectRows, "Expected one output row per deterministically rejected payment.");
+        assertEquals(
+                expectedPaymentRecordCount() - expectedRejects,
+                actualApprovedRows,
+                "Expected the remaining rows to stay on the approved output path.");
+        assertTrue(actualRejectRows > 0, "Expected provider rejection text to be rendered into output rows.");
+        assertTrue(actualApprovedRows > 0, "Expected at least one successful recipient to reach output.");
     }
 
     protected boolean runHappyPathScenario() {
@@ -1324,7 +1373,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", localhost, grpcPort);
         putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", localhost, grpcPort);
         putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", localhost, grpcPort);
-        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", localhost, grpcPort);
+        putGrpcClient(pb, "PROCESS_APPROVED_PAYMENT_STATUS", localhost, grpcPort);
+        putGrpcClient(pb, "PROCESS_UNAPPROVED_PAYMENT_STATUS", localhost, grpcPort);
+        putGrpcClient(pb, "PROCESS_FINALIZE_PAYMENT_OUTPUT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", localhost, grpcPort);
@@ -1357,7 +1408,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", inputService.getHost(), String.valueOf(inputService.getMappedPort(8444)), "/q/health/live");
         putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)), "/q/health/live");
         putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)), "/q/health/live");
-        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
+        putGrpcClient(pb, "PROCESS_APPROVED_PAYMENT_STATUS", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
+        putGrpcClient(pb, "PROCESS_UNAPPROVED_PAYMENT_STATUS", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
+        putGrpcClient(pb, "PROCESS_FINALIZE_PAYMENT_OUTPUT", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
@@ -1390,7 +1443,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", pipelineHost, pipelinePort);
         putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", pipelineHost, pipelinePort);
         putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", pipelineHost, pipelinePort);
-        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "PROCESS_APPROVED_PAYMENT_STATUS", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "PROCESS_UNAPPROVED_PAYMENT_STATUS", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "PROCESS_FINALIZE_PAYMENT_OUTPUT", pipelineHost, pipelinePort);
 
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", persistenceHost, persistencePort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", persistenceHost, persistencePort);
@@ -1713,6 +1768,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
      */
     @SuppressWarnings("BusyWait")
     private void waitForPipelineComplete() throws InterruptedException, IOException {
+        waitForPipelineComplete(expectedOutputRecordCount());
+    }
+
+    private void waitForPipelineComplete(long expectedRecords) throws InterruptedException, IOException {
         LOG.info("Waiting for pipeline to complete processing...");
 
         // Check for output files to be created before continuing
@@ -1727,7 +1786,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 outputFilesExist = files.anyMatch(path -> path.toString().endsWith(".out"));
             }
 
-            if (outputFilesExist && outputRecordCountReady()) {
+            if (outputFilesExist && outputRecordCountReady(expectedRecords)) {
                 LOG.info("Output files detected, pipeline processing completed");
                 return;
             }
@@ -1756,15 +1815,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         + "s");
     }
 
-    private boolean outputRecordCountReady() throws IOException {
-        if (!CUSTOM_INPUT_FILE) {
-            return true;
-        }
+    private boolean outputRecordCountReady(long expectedRecords) throws IOException {
         long currentRecords = outputRecordCount(Paths.get(TEST_E2E_DIR));
-        long expectedRecords = expectedOutputRecordCount();
         if (currentRecords >= expectedRecords) {
             LOG.infof(
-                    "Output record count reached expected custom input count: %,d/%s",
+                    "Output record count reached expected count: %,d/%s",
                     currentRecords,
                     expectedRecords);
             return true;
@@ -1774,29 +1829,12 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private long expectedOutputRecordCount() throws IOException {
-        long inputRecords = expectedPaymentRecordCount();
-        if (!runProviderRejectScenario()) {
-            return inputRecords;
-        }
-        double rejectProbability = configuredProviderRejectProbability();
-        if (rejectProbability <= 0.0d) {
-            return inputRecords;
-        }
-        long expectedRejects = expectedProviderRejectCount(rejectProbability);
-        return Math.max(0L, inputRecords - expectedRejects);
+        return expectedPaymentRecordCount();
     }
 
     private long expectedProviderRejectCount(double rejectProbability) throws IOException {
-        if (!CUSTOM_INPUT_FILE) {
-            return 0L;
-        }
-        try (Stream<String> lines = Files.lines(resolveCustomInputCsvFile())) {
-            return lines.skip(1)
-                    .map(String::trim)
-                    .filter(line -> !line.isBlank())
-                    .map(line -> line.split(",", 2))
-                    .filter(columns -> columns.length > 0 && !columns[0].isBlank())
-                    .map(columns -> columns[0].trim())
+        try (Stream<String> ids = inputCsvIds()) {
+            return ids
                     .filter(csvId -> shouldSimulateProviderReject(rejectProbability, csvId))
                     .count();
         }
@@ -2033,12 +2071,37 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private long expectedPaymentRecordCount() throws IOException {
-        if (!CUSTOM_INPUT_FILE) {
-            return 5L;
+        try (Stream<String> ids = inputCsvIds()) {
+            return ids.count();
         }
-        try (Stream<String> lines = Files.lines(resolveCustomInputCsvFile())) {
-            return Math.max(0L, lines.count() - 1L);
+    }
+
+    private Stream<String> inputCsvIds() throws IOException {
+        if (CUSTOM_INPUT_FILE) {
+            return csvIdsFromFile(resolveCustomInputCsvFile());
         }
+        List<Path> inputFiles;
+        try (Stream<Path> files = Files.list(Paths.get(TEST_E2E_DIR))) {
+            inputFiles = files
+                    .filter(path -> path.toString().endsWith(".csv"))
+                    .sorted()
+                    .toList();
+        }
+        Stream<String> ids = Stream.empty();
+        for (Path inputFile : inputFiles) {
+            ids = Stream.concat(ids, csvIdsFromFile(inputFile));
+        }
+        return ids;
+    }
+
+    private Stream<String> csvIdsFromFile(Path inputFile) throws IOException {
+        return Files.lines(inputFile)
+                .skip(1)
+                .map(String::trim)
+                .filter(line -> !line.isBlank())
+                .map(line -> line.split(",", 2))
+                .filter(columns -> columns.length > 0 && !columns[0].isBlank())
+                .map(columns -> columns[0].trim());
     }
 
     private static double configuredProviderRejectProbability() {
@@ -2521,10 +2584,27 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private void assertReplayCoverage(PipelineReplayDocument replayDocument) {
+        assertReplayCoverage(replayDocument, false);
+    }
+
+    private void assertReplayCoverage(
+            PipelineReplayDocument replayDocument, boolean requireUnapprovedBranch) {
         assertEquals("completed", replayDocument.status(), "Expected merged replay to complete successfully.");
         assertReplayStepEvents(replayDocument, "ProcessCsvPaymentsInput");
         assertReplayStepEvents(replayDocument, "AwaitPaymentProvider");
-        assertReplayStepEvents(replayDocument, "ProcessPaymentStatus");
+        boolean approvedBranchSeen = hasReplayStepEvents(replayDocument, "ProcessApprovedPaymentStatus");
+        boolean unapprovedBranchSeen =
+                hasReplayStepEvents(replayDocument, "ProcessUnapprovedPaymentStatus");
+        assertTrue(
+                approvedBranchSeen || unapprovedBranchSeen,
+                "Expected merged replay to contain at least one payment-status branch.");
+        if (requireUnapprovedBranch) {
+            assertTrue(
+                    unapprovedBranchSeen,
+                    "Expected merged replay to contain unapproved branch events.");
+        }
+        assertReplayMergeNode(replayDocument, "FinalizePaymentOutput");
+        assertReplayStepEvents(replayDocument, "ProcessFinalizePaymentOutput");
         assertReplayStepEvents(replayDocument, "PersistencePaymentRecordSideEffect");
         assertReplayStepEvents(replayDocument, "PersistencePaymentOutputSideEffect");
         assertReplayStepEvents(replayDocument, "ObjectIngest");
@@ -2542,7 +2622,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "Expected merged replay to contain input-to-await flow events.");
         assertTrue(
                 replayDocument.events().stream().anyMatch(event ->
-                        "ProcessPaymentStatus".equals(event.step())
+                        ("ProcessApprovedPaymentStatus".equals(event.step())
+                                || "ProcessUnapprovedPaymentStatus".equals(event.step()))
                                 && "AwaitPaymentProvider".equals(event.from())),
                 "Expected merged replay to contain await-resume flow events.");
 
@@ -2557,7 +2638,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         "store".equals(transition.relationKind())),
                 "Expected store transitions in merged replay topology.");
         assertReplayLifecycleEvents(replayDocument);
-        assertItemizedAwaitLiveFlowStartsBeforeUnitDispatchCompletes(replayDocument);
+        assertItemizedAwaitLiveFlowStartsBeforeUnitCompletes(replayDocument);
     }
 
     private void assertReplayLifecycleEvents(PipelineReplayDocument replayDocument) {
@@ -2599,27 +2680,33 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "Expected await lifecycle events to include expected item count once dispatch size is known.");
     }
 
-    private void assertItemizedAwaitLiveFlowStartsBeforeUnitDispatchCompletes(PipelineReplayDocument replayDocument) {
+    private void assertItemizedAwaitLiveFlowStartsBeforeUnitCompletes(PipelineReplayDocument replayDocument) {
         Comparator<PipelineExecutionEvent> playbackOrder = Comparator
                 .comparingDouble(AbstractCsvPaymentsEndToEnd::playbackTimeForEvent)
                 .thenComparingLong(event -> event.sequence() == null ? Long.MAX_VALUE : event.sequence());
         PipelineExecutionEvent firstPaymentStatusEvent = replayDocument.events().stream()
-                .filter(event -> "ProcessPaymentStatus".equals(event.step()))
+                .filter(event ->
+                        "ProcessApprovedPaymentStatus".equals(event.step())
+                                || "ProcessUnapprovedPaymentStatus".equals(event.step()))
                 .min(playbackOrder)
-                .orElseThrow(() -> new AssertionError("Expected ProcessPaymentStatus replay events."));
-        PipelineExecutionEvent awaitUnitDispatchCompleteEvent = replayDocument.events().stream()
-                .filter(event -> AWAIT_UNIT_DISPATCH_COMPLETE.equals(event.event()))
+                .orElseThrow(() -> new AssertionError("Expected payment-status branch replay events."));
+        PipelineExecutionEvent awaitUnitCompletedEvent = replayDocument.events().stream()
+                .filter(event -> AWAIT_UNIT_COMPLETED.equals(event.event()))
                 .min(playbackOrder)
-                .orElseThrow(() -> new AssertionError("Expected await_unit_dispatch_complete replay events."));
+                .orElseThrow(() -> new AssertionError("Expected await_unit_completed replay events."));
         assertTrue(
-                playbackOrder.compare(firstPaymentStatusEvent, awaitUnitDispatchCompleteEvent) < 0,
-                "Expected connector-first Kafka ONE_TO_ONE await to process completed items through the live session before unit dispatch completes.");
+                playbackOrder.compare(firstPaymentStatusEvent, awaitUnitCompletedEvent) < 0,
+                "Expected connector-first Kafka ONE_TO_ONE await to process completed items through the live session before the await unit completes.");
     }
 
     private void assertReplayEvent(PipelineReplayDocument replayDocument, String eventName) {
         assertTrue(
                 replayDocument.events().stream().anyMatch(event -> eventName.equals(event.event())),
                 "Expected merged replay to contain " + eventName + " events.");
+    }
+
+    private boolean hasReplayStepEvents(PipelineReplayDocument replayDocument, String stepName) {
+        return replayDocument.events().stream().anyMatch(event -> stepName.equals(event.step()));
     }
 
     private void assertNoReplayStepEvents(PipelineReplayDocument replayDocument, String stepName) {
@@ -2650,6 +2737,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertTrue(
                 replayDocument.events().stream().anyMatch(event -> stepName.equals(event.step())),
                 "Expected merged replay to contain direct events for " + stepName + ".");
+    }
+
+    private void assertReplayMergeNode(PipelineReplayDocument replayDocument, String stepName) {
+        assertTrue(
+                replayDocument.events().stream().anyMatch(event ->
+                        stepName.equals(event.from()) || stepName.equals(event.to())),
+                "Expected merged replay to contain merge flow events for " + stepName + ".");
     }
 
     private static String nullSafe(String value) {

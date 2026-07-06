@@ -65,6 +65,39 @@ class PipelineRuntimeMappingResolverTest {
         assertEquals("cache", resolution.clientOverrides().get("observe-latency-payload-side-effect"));
     }
 
+    @Test
+    void resolvesExplicitAuthoredStepIdsWithoutProcessPrefix() throws IOException {
+        Path mappingFile = tempDir.resolve("pipeline.runtime.yaml");
+        Files.writeString(mappingFile, """
+            version: 1
+            layout: modular
+            validation: auto
+            defaults:
+              runtime: local
+              module: per-step
+            runtimes:
+              local: {}
+            modules:
+              payment-status-svc:
+                runtime: local
+            steps:
+              finalize-payment-output:
+                module: payment-status-svc
+            """);
+
+        PipelineRuntimeMapping mapping = new PipelineRuntimeMappingLoader().load(mappingFile);
+        PipelineStepModel step =
+            stepModel("ProcessFinalizePaymentOutputService", "org.example.payments.service");
+
+        PipelineRuntimeMappingResolver resolver = new PipelineRuntimeMappingResolver(mapping, null);
+        PipelineRuntimeMappingResolution resolution = resolver.resolve(List.of(step));
+
+        assertEquals("payment-status-svc", resolution.moduleAssignments().get(step));
+        assertEquals(
+            "payment-status-svc",
+            resolution.clientOverrides().get("process-finalize-payment-output"));
+    }
+
     private PipelineStepModel stepModel(String serviceName, String servicePackage) {
         ClassName className = ClassName.get(servicePackage, serviceName);
         return new PipelineStepModel.Builder()

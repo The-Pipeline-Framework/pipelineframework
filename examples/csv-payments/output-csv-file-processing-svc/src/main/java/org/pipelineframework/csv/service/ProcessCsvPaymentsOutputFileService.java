@@ -32,9 +32,8 @@ import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 import org.pipelineframework.annotation.PipelineStep;
-import org.pipelineframework.csv.common.domain.*;
-import org.pipelineframework.csv.common.mapper.CsvPaymentsOutputFileMapper;
-import org.pipelineframework.csv.common.mapper.PaymentOutputMapper;
+import org.pipelineframework.csv.common.domain.CsvPaymentsOutputFile;
+import org.pipelineframework.csv.common.domain.PaymentOutput;
 import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
 
 /**
@@ -89,11 +88,7 @@ public class ProcessCsvPaymentsOutputFileService
                   // Group by input file path
                   Map<Path, List<PaymentOutput>> groupedOutputs =
                           paymentOutputs.stream()
-                                  .collect(Collectors.groupingBy(po -> po.getPaymentStatus()
-                                          .getPaymentRecord()
-                                          .getCsvPaymentsInputFilePath()
-                                          .toAbsolutePath()
-                                          .normalize()));
+                                  .collect(Collectors.groupingBy(this::inputFilePath));
 
                   logger.infof("Grouped %d file(s)", groupedOutputs.size());
                   groupedOutputs.forEach((k, v) ->
@@ -166,13 +161,18 @@ public class ProcessCsvPaymentsOutputFileService
   protected CsvPaymentsOutputFile getCsvPaymentsOutputFile(PaymentOutput paymentOutput)
       throws IOException {
     assert paymentOutput != null;
-    PaymentStatus paymentStatus = paymentOutput.getPaymentStatus();
-    assert paymentStatus != null;
-    PaymentRecord paymentRecord = paymentStatus.getPaymentRecord();
-    assert paymentRecord != null;
-    Path csvPaymentsInputFilePath = paymentRecord.getCsvPaymentsInputFilePath();
+    Path csvPaymentsInputFilePath = inputFilePath(paymentOutput);
 
     return new CsvPaymentsOutputFile(csvPaymentsInputFilePath);
+  }
+
+  private Path inputFilePath(PaymentOutput paymentOutput) {
+    Path csvPaymentsInputFilePath = paymentOutput.getCsvPaymentsInputFilePath();
+    if (csvPaymentsInputFilePath == null) {
+      throw new IllegalArgumentException(
+          "Payment output must include csvPaymentsInputFilePath for legacy output-file processing");
+    }
+    return csvPaymentsInputFilePath.toAbsolutePath().normalize();
   }
 
 }

@@ -549,8 +549,9 @@ public class PipelineRuntimeMappingResolver {
      */
     private List<String> stepCandidates(PipelineStepModel model) {
         List<String> candidates = new ArrayList<>();
+        String rawBaseName = OrchestratorClientNaming.baseServiceName(model.serviceName());
         String serviceName = safeLower(model.serviceName());
-        String baseName = safeLower(OrchestratorClientNaming.baseServiceName(model.serviceName()));
+        String baseName = safeLower(rawBaseName);
         String clientName = safeLower(OrchestratorClientNaming.clientNameForModel(model));
         if (!serviceName.isBlank()) {
             candidates.add(serviceName);
@@ -561,7 +562,7 @@ public class PipelineRuntimeMappingResolver {
         if (!clientName.isBlank()) {
             candidates.add(clientName);
         }
-        String kebab = safeLower(OrchestratorClientNaming.toKebabCase(baseName));
+        String kebab = safeLower(OrchestratorClientNaming.toKebabCase(rawBaseName));
         if (!kebab.isBlank()) {
             candidates.add(kebab);
         }

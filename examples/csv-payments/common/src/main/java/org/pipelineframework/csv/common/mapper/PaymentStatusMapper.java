@@ -16,70 +16,46 @@
 
 package org.pipelineframework.csv.common.mapper;
 
-import org.mapstruct.BeanMapping;
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import org.mapstruct.ReportingPolicy;
-import org.mapstruct.factory.Mappers;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import org.pipelineframework.csv.common.domain.ApprovedPaymentStatus;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
-import org.pipelineframework.csv.common.dto.PaymentStatusDto;
+import org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus;
+import org.pipelineframework.csv.grpc.PipelineTypes;
+import org.pipelineframework.mapper.Mapper;
 
-@SuppressWarnings("unused")
-@Mapper(
-    componentModel = "jakarta",
-    uses = {CommonConverters.class, PaymentRecordMapper.class},
-    unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper<PaymentStatus, org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus> {
+@ApplicationScoped
+public class PaymentStatusMapper implements Mapper<PaymentStatus, PipelineTypes.PaymentStatus> {
 
-  PaymentStatusMapper INSTANCE = Mappers.getMapper( PaymentStatusMapper.class );
+  @Inject ApprovedPaymentStatusMapper approvedMapper;
 
-  // Domain ↔ DTO
-  PaymentStatusDto toDto(PaymentStatus entity);
-
-  @Mapping(target = "customerReference", ignore = true)
-  PaymentStatus fromDto(PaymentStatusDto dto);
-
-  // DTO ↔ gRPC
-  @BeanMapping(unmappedTargetPolicy = ReportingPolicy.IGNORE)
-  @Mapping(target = "id", qualifiedByName = "uuidToString")
-  @Mapping(target = "fee", qualifiedByName = "bigDecimalToString")
-  @Mapping(target = "conversationId", qualifiedByName = "uuidToString")
-  @Mapping(target = "statusCode", qualifiedByName = "longToString")
-  @Mapping(target = "paymentRecordId", qualifiedByName = "uuidToString")
-  @Mapping(target = "paymentRecord")
-  org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus toGrpc(PaymentStatusDto dto);
-
-  /**
-   * Converts a gRPC org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus message into a PaymentStatusDto.
-   *
-   * @param grpcRequest the gRPC PaymentStatus message to convert
-   * @return the DTO representation of the provided gRPC PaymentStatus
-   */
-  @Mapping(target = "id", qualifiedByName = "stringToUUID")
-  @Mapping(target = "fee", qualifiedByName = "stringToBigDecimal")
-  @Mapping(target = "conversationId", qualifiedByName = "stringToUUID")
-  @Mapping(target = "statusCode", qualifiedByName = "stringToLong")
-  @Mapping(target = "paymentRecordId", qualifiedByName = "stringToUUID")
-  @Mapping(target = "paymentRecord")
-  PaymentStatusDto fromGrpc(org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus grpcRequest);
+  @Inject UnapprovedPaymentStatusMapper unapprovedMapper;
 
   @Override
-  default PaymentStatus fromExternal(org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus external) {
-    return fromDto(fromGrpc(external));
+  public PaymentStatus fromExternal(PipelineTypes.PaymentStatus external) {
+    if (external == null) {
+      return null;
+    }
+    return switch (external.getOutcomeCase()) {
+      case APPROVED -> approvedMapper.fromExternal(external.getApproved());
+      case UNAPPROVED -> unapprovedMapper.fromExternal(external.getUnapproved());
+      case OUTCOME_NOT_SET -> throw new IllegalArgumentException("PaymentStatus outcome is not set");
+    };
   }
 
   @Override
-  default org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus toExternal(PaymentStatus domain) {
-    return toGrpc(toDto(domain));
-  }
-
-  @Deprecated(since = "26.4.3", forRemoval = true)
-  default org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus toDtoToGrpc(PaymentStatus domain) {
-    return toExternal(domain);
-  }
-
-  @Deprecated(since = "26.4.3", forRemoval = true)
-  default PaymentStatus fromGrpcFromDto(org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus grpc) {
-    return fromExternal(grpc);
+  public PipelineTypes.PaymentStatus toExternal(PaymentStatus domain) {
+    if (domain == null) {
+      return null;
+    }
+    PipelineTypes.PaymentStatus.Builder builder = PipelineTypes.PaymentStatus.newBuilder();
+    if (domain instanceof ApprovedPaymentStatus approved) {
+      return builder.setApproved(approvedMapper.toExternal(approved)).build();
+    }
+    if (domain instanceof UnapprovedPaymentStatus unapproved) {
+      return builder.setUnapproved(unapprovedMapper.toExternal(unapproved)).build();
+    }
+    throw new IllegalArgumentException(
+        "Unsupported PaymentStatus type: " + domain.getClass().getName());
   }
 }
