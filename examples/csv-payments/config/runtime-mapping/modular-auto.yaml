@@ -32,5 +32,5 @@ steps:
     module: payment-status-svc
   process-unapproved-payment-status:
     module: payment-status-svc
-  finalize-payment-output:
+  process-finalize-payment-output:
     module: payment-status-svc

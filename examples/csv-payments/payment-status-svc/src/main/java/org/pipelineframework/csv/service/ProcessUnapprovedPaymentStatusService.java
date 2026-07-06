@@ -17,14 +17,12 @@
 package org.pipelineframework.csv.service;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import lombok.Getter;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.csv.common.domain.UnapprovedPaymentOutput;
 import org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus;
 
 @PipelineStep
 @ApplicationScoped
-@Getter
 public class ProcessUnapprovedPaymentStatusService
     extends AbstractProcessPaymentStatusService<
         UnapprovedPaymentStatus, UnapprovedPaymentOutput> {

@@ -113,7 +113,7 @@ steps:
     output: org.pipelineframework.csv.common.domain.UnapprovedPaymentOutput
     outputTypeName: UnapprovedPaymentOutput
 
-  - name: FinalizePaymentOutput
+  - name: Finalize Payment Output
     service: org.pipelineframework.csv.service.ProcessFinalizePaymentOutputService
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.csv.common.domain.PaymentOutputBranch

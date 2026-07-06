@@ -17,6 +17,7 @@
 package org.pipelineframework.csv.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.math.BigDecimal;
 import java.nio.file.Path;
@@ -29,6 +30,7 @@ import org.pipelineframework.csv.common.domain.PaymentOutput;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.UnapprovedPaymentOutput;
 import org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus;
+import org.pipelineframework.step.NonRetryableException;
 
 class PaymentStatusBranchingServicesTest {
 
@@ -84,6 +86,55 @@ class PaymentStatusBranchingServicesTest {
     assertEquals(branchOutput.getStatus(), finalOutput.getStatus());
     assertEquals(branchOutput.getMessage(), finalOutput.getMessage());
     assertEquals(branchOutput.getFee(), finalOutput.getFee());
+  }
+
+  @Test
+  void finalMergeCopiesUnapprovedBranchOutputIntoPublishedPaymentOutput() {
+    UnapprovedPaymentOutput branchOutput =
+        unapprovedService.process(unapprovedStatus()).await().indefinitely();
+
+    PaymentOutput finalOutput = finalizeService.process(branchOutput).await().indefinitely();
+
+    assertEquals(branchOutput.getCsvPaymentsOutputFilename(), finalOutput.getCsvPaymentsOutputFilename());
+    assertEquals(branchOutput.getCsvPaymentsInputFilePath(), finalOutput.getCsvPaymentsInputFilePath());
+    assertEquals(branchOutput.getCsvId(), finalOutput.getCsvId());
+    assertEquals(branchOutput.getRecipient(), finalOutput.getRecipient());
+    assertEquals(branchOutput.getAmount(), finalOutput.getAmount());
+    assertEquals(branchOutput.getCurrency(), finalOutput.getCurrency());
+    assertEquals(branchOutput.getConversationId(), finalOutput.getConversationId());
+    assertEquals(branchOutput.getStatus(), finalOutput.getStatus());
+    assertEquals(branchOutput.getMessage(), finalOutput.getMessage());
+    assertEquals(branchOutput.getFee(), finalOutput.getFee());
+  }
+
+  @Test
+  void approvedStatusWithoutPaymentRecordFailsFast() {
+    ApprovedPaymentStatus status = approvedStatus();
+    status.setPaymentRecord(null);
+
+    NonRetryableException failure =
+        assertThrows(
+            NonRetryableException.class,
+            () -> approvedService.process(status).await().indefinitely());
+
+    assertEquals(
+        "ApprovedPaymentStatus must include paymentRecord for CSV output mapping",
+        failure.getMessage());
+  }
+
+  @Test
+  void unapprovedStatusWithoutInputFilePathFailsFast() {
+    UnapprovedPaymentStatus status = unapprovedStatus();
+    status.getPaymentRecord().setCsvPaymentsInputFilePath(null);
+
+    NonRetryableException failure =
+        assertThrows(
+            NonRetryableException.class,
+            () -> unapprovedService.process(status).await().indefinitely());
+
+    assertEquals(
+        "UnapprovedPaymentStatus must include csvPaymentsInputFilePath for CSV output naming",
+        failure.getMessage());
   }
 
   private static PaymentRecord paymentRecord() {

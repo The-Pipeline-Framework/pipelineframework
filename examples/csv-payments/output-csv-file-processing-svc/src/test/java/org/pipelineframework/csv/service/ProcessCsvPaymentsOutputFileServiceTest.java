@@ -62,10 +62,11 @@ class ProcessCsvPaymentsOutputFileServiceTest {
     assertThat(results).isNotEmpty();
     for (CsvPaymentsOutputFile resultFile : results) {
       List<String> lines = Files.readAllLines(resultFile.getFilepath());
-      assertThat(lines).hasSizeGreaterThanOrEqualTo(2);
+      assertThat(lines).hasSize(3);
       assertThat(lines.get(0))
           .contains("AMOUNT", "CSV ID", "CURRENCY", "FEE", "MESSAGE", "RECIPIENT", "REFERENCE", "STATUS");
-      assertThat(lines.get(1)).containsAnyOf("100.00", "450.01");
+      assertThat(lines.get(1)).contains("100.00", "recipient123");
+      assertThat(lines.get(2)).contains("450.01", "234recipient");
     }
   }
 
@@ -82,7 +83,7 @@ class ProcessCsvPaymentsOutputFileServiceTest {
     List<CsvPaymentsOutputFile> results =
         service.process(multiPaymentOutputFromMultipleFiles()).collect().asList().await().indefinitely();
 
-    assertThat(results).isNotEmpty();
+    assertThat(results).hasSize(2);
     for (CsvPaymentsOutputFile resultFile : results) {
       List<String> lines = Files.readAllLines(resultFile.getFilepath());
       assertThat(lines).hasSizeGreaterThanOrEqualTo(2);

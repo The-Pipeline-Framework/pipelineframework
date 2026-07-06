@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -144,7 +145,7 @@ public class ProcessCsvPaymentsOutputFileService
                                       .toMulti();
                           });
               })
-              .filter(java.util.Objects::nonNull);
+              .filter(Objects::nonNull);
   }
 
   /**

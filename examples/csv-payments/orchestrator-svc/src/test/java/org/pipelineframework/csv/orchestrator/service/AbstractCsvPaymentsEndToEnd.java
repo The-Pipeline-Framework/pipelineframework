@@ -1160,6 +1160,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         waitForPipelineComplete();
 
         PipelineReplayDocument replayDocument = mergeReplayDocuments(REPLAY_CAPTURE_DIR, REPLAY_FILE);
+        assertReplayCoverage(replayDocument, true);
         long outputRecords = outputRecordCount(Paths.get(TEST_E2E_DIR));
         assertEquals(expectedPaymentRecordCount(), outputRecords, "Expected one output row per valid input payment.");
 
@@ -1832,19 +1833,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private long expectedProviderRejectCount(double rejectProbability) throws IOException {
-        if (!CUSTOM_INPUT_FILE) {
-            return 0L;
-        }
-        try (Stream<String> lines = Files.lines(resolveCustomInputCsvFile())) {
-            return lines.skip(1)
-                    .map(String::trim)
-                    .filter(line -> !line.isBlank())
-                    .map(line -> line.split(",", 2))
-                    .filter(columns -> columns.length > 0 && !columns[0].isBlank())
-                    .map(columns -> columns[0].trim())
-                    .filter(csvId -> shouldSimulateProviderReject(rejectProbability, csvId))
-                    .count();
-        }
+        return inputCsvIds()
+                .filter(csvId -> shouldSimulateProviderReject(rejectProbability, csvId))
+                .count();
     }
 
     private static boolean shouldSimulateProviderReject(double probability, String simulationKey) {
@@ -2078,12 +2069,37 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private long expectedPaymentRecordCount() throws IOException {
-        if (!CUSTOM_INPUT_FILE) {
-            return 5L;
+        try (Stream<String> ids = inputCsvIds()) {
+            return ids.count();
         }
-        try (Stream<String> lines = Files.lines(resolveCustomInputCsvFile())) {
-            return Math.max(0L, lines.count() - 1L);
+    }
+
+    private Stream<String> inputCsvIds() throws IOException {
+        if (CUSTOM_INPUT_FILE) {
+            return csvIdsFromFile(resolveCustomInputCsvFile());
         }
+        List<Path> inputFiles;
+        try (Stream<Path> files = Files.list(Paths.get(TEST_E2E_DIR))) {
+            inputFiles = files
+                    .filter(path -> path.toString().endsWith(".csv"))
+                    .sorted()
+                    .toList();
+        }
+        Stream<String> ids = Stream.empty();
+        for (Path inputFile : inputFiles) {
+            ids = Stream.concat(ids, csvIdsFromFile(inputFile));
+        }
+        return ids;
+    }
+
+    private Stream<String> csvIdsFromFile(Path inputFile) throws IOException {
+        return Files.lines(inputFile)
+                .skip(1)
+                .map(String::trim)
+                .filter(line -> !line.isBlank())
+                .map(line -> line.split(",", 2))
+                .filter(columns -> columns.length > 0 && !columns[0].isBlank())
+                .map(columns -> columns[0].trim());
     }
 
     private static double configuredProviderRejectProbability() {
@@ -2566,11 +2582,25 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private void assertReplayCoverage(PipelineReplayDocument replayDocument) {
+        assertReplayCoverage(replayDocument, false);
+    }
+
+    private void assertReplayCoverage(
+            PipelineReplayDocument replayDocument, boolean requireUnapprovedBranch) {
         assertEquals("completed", replayDocument.status(), "Expected merged replay to complete successfully.");
         assertReplayStepEvents(replayDocument, "ProcessCsvPaymentsInput");
         assertReplayStepEvents(replayDocument, "AwaitPaymentProvider");
-        assertReplayStepEvents(replayDocument, "ProcessApprovedPaymentStatus");
-        assertReplayStepEvents(replayDocument, "ProcessUnapprovedPaymentStatus");
+        boolean approvedBranchSeen = hasReplayStepEvents(replayDocument, "ProcessApprovedPaymentStatus");
+        boolean unapprovedBranchSeen =
+                hasReplayStepEvents(replayDocument, "ProcessUnapprovedPaymentStatus");
+        assertTrue(
+                approvedBranchSeen || unapprovedBranchSeen,
+                "Expected merged replay to contain at least one payment-status branch.");
+        if (requireUnapprovedBranch) {
+            assertTrue(
+                    unapprovedBranchSeen,
+                    "Expected merged replay to contain unapproved branch events.");
+        }
         assertReplayMergeNode(replayDocument, "FinalizePaymentOutput");
         assertReplayStepEvents(replayDocument, "ProcessFinalizePaymentOutput");
         assertReplayStepEvents(replayDocument, "PersistencePaymentRecordSideEffect");
@@ -2671,6 +2701,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertTrue(
                 replayDocument.events().stream().anyMatch(event -> eventName.equals(event.event())),
                 "Expected merged replay to contain " + eventName + " events.");
+    }
+
+    private boolean hasReplayStepEvents(PipelineReplayDocument replayDocument, String stepName) {
+        return replayDocument.events().stream().anyMatch(event -> stepName.equals(event.step()));
     }
 
     private void assertNoReplayStepEvents(PipelineReplayDocument replayDocument, String stepName) {

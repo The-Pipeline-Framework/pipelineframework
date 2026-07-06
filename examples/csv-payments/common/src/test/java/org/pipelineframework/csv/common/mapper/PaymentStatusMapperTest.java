@@ -72,6 +72,16 @@ class PaymentStatusMapperTest {
     assertEquals(status.getReference(), mapped.getReference());
   }
 
+  @Test
+  void unwrapsUnapprovedUnionArmBackToDomainSubtype() {
+    var status = PaymentStatusVariantMapperTestData.unapprovedStatus();
+
+    PaymentStatus mapped = mapper.fromExternal(mapper.toExternal(status));
+
+    assertTrue(mapped instanceof org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus);
+    assertEquals(status.getReference(), mapped.getReference());
+  }
+
   private static void setField(Object target, String fieldName, Object value) {
     try {
       java.lang.reflect.Field field = target.getClass().getDeclaredField(fieldName);

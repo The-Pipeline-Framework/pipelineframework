@@ -47,10 +47,14 @@ final class PaymentStatusJsonDeserializer extends JsonDeserializer<PaymentStatus
     if ("Rejected".equalsIgnoreCase(status)) {
       return toUnapproved(node, parser);
     }
-    if (status != null && !status.isBlank()) {
+    if ("Complete".equalsIgnoreCase(status) || "Completed".equalsIgnoreCase(status)) {
       return toApproved(node, parser);
     }
-    throw new IOException("Unsupported PaymentStatus payload: unable to resolve approved/unapproved branch");
+    if (status != null && !status.isBlank()) {
+      throw new IOException("Unsupported PaymentStatus status value: " + status);
+    }
+    throw new IOException(
+        "Unsupported PaymentStatus payload: unable to resolve approved/unapproved branch");
   }
 
   private static ApprovedPaymentStatus toApproved(JsonNode node, JsonParser parser) throws IOException {
@@ -106,12 +110,27 @@ final class PaymentStatusJsonDeserializer extends JsonDeserializer<PaymentStatus
     }
   }
 
-  private static Long longValue(JsonNode node, String fieldName) {
+  private static Long longValue(JsonNode node, String fieldName) throws IOException {
     JsonNode value = node.get(fieldName);
-    return value == null || value.isNull() ? null : value.asLong();
+    if (value == null || value.isNull()) {
+      return null;
+    }
+    if (value.isIntegralNumber()) {
+      return value.longValue();
+    }
+    String text = value.asText(null);
+    if (text == null || text.isBlank()) {
+      return null;
+    }
+    try {
+      return Long.parseLong(text);
+    } catch (NumberFormatException e) {
+      throw new IOException(
+          "Invalid long for PaymentStatus field '" + fieldName + "': " + text, e);
+    }
   }
 
-  private static BigDecimal decimal(JsonNode node, String fieldName) {
+  private static BigDecimal decimal(JsonNode node, String fieldName) throws IOException {
     JsonNode value = node.get(fieldName);
     if (value == null || value.isNull()) {
       return null;
@@ -120,7 +139,15 @@ final class PaymentStatusJsonDeserializer extends JsonDeserializer<PaymentStatus
       return value.decimalValue();
     }
     String text = value.asText(null);
-    return text == null || text.isBlank() ? null : new BigDecimal(text);
+    if (text == null || text.isBlank()) {
+      return null;
+    }
+    try {
+      return new BigDecimal(text);
+    } catch (NumberFormatException e) {
+      throw new IOException(
+          "Invalid decimal for PaymentStatus field '" + fieldName + "': " + text, e);
+    }
   }
 
   private static String text(JsonNode node, String fieldName) {

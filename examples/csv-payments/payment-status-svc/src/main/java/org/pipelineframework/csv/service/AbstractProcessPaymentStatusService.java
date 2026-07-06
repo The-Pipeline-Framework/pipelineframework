@@ -29,6 +29,8 @@ import org.pipelineframework.step.NonRetryableException;
 abstract class AbstractProcessPaymentStatusService<I extends PaymentStatus, O extends PaymentOutputBranch>
     implements ReactiveService<I, O> {
 
+  private final Logger logger = Logger.getLogger(getClass());
+
   @Override
   public Uni<O> process(I paymentStatus) {
     PaymentRecord paymentRecord = paymentStatus.getPaymentRecord();
@@ -65,7 +67,6 @@ abstract class AbstractProcessPaymentStatusService<I extends PaymentStatus, O ex
         .item(output)
         .invoke(
             result -> {
-              Logger logger = Logger.getLogger(getClass());
               MDC.put("serviceId", getClass().toString());
               logger.infof("Executed command on %s --> %s", paymentStatus, result);
               MDC.remove("serviceId");

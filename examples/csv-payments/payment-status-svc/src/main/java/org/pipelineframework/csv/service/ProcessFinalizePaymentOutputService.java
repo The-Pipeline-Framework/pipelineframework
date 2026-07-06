@@ -18,7 +18,6 @@ package org.pipelineframework.csv.service;
 
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
-import lombok.Getter;
 import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 import org.pipelineframework.annotation.PipelineStep;
@@ -28,7 +27,6 @@ import org.pipelineframework.service.ReactiveService;
 
 @PipelineStep
 @ApplicationScoped
-@Getter
 public class ProcessFinalizePaymentOutputService
     implements ReactiveService<PaymentOutputBranch, PaymentOutput> {
 

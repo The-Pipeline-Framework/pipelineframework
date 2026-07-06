@@ -55,6 +55,9 @@ public interface UnapprovedPaymentStatusMapper
 
   @Override
   default UnapprovedPaymentStatus fromExternal(PipelineTypes.UnapprovedPaymentStatus external) {
+    if (external == null) {
+      return null;
+    }
     UnapprovedPaymentStatus mapped = fromGrpcPayload(external);
     mapped.setPaymentRecord(fromPaymentRecord(external.getPaymentRecord()));
     return mapped;
@@ -62,6 +65,9 @@ public interface UnapprovedPaymentStatusMapper
 
   @Override
   default PipelineTypes.UnapprovedPaymentStatus toExternal(UnapprovedPaymentStatus domain) {
+    if (domain == null) {
+      return null;
+    }
     return toGrpcPayload(domain).toBuilder()
         .setPaymentRecord(toPaymentRecord(domain.getPaymentRecord()))
         .build();

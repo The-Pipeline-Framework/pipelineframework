@@ -338,6 +338,7 @@ steps:
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.csv.common.domain.PaymentOutputBranch
     inputTypeName: PaymentOutputBranch
+    inboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputBranchMapper
     accepts:
       - ApprovedPaymentOutput
       - UnapprovedPaymentOutput
