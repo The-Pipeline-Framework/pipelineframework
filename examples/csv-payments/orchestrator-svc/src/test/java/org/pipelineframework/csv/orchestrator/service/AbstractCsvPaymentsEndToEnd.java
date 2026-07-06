@@ -28,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.sql.Connection;
@@ -121,6 +122,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final long TEMPO_SEARCH_TIMEOUT_SECONDS = 90L;
     private static final long TEMPO_SEARCH_POLL_MILLIS = 2_000L;
     private static final long TEMPO_LOCAL_PAUSE_SECONDS = 600L;
+    private static final long MALFORMED_REJECT_EXPECTED_OUTPUT_RECORDS = 2L;
     private static final HttpClient HTTP_CLIENT =
             HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private static final Path DEV_CERTS_DIR =
@@ -819,14 +821,46 @@ abstract class AbstractCsvPaymentsEndToEnd {
         if (!Files.isRegularFile(jar)) {
             return true;
         }
+        if (!runtimeMappingMatchesActiveLayout()) {
+            return true;
+        }
         long packagedAt = Files.getLastModifiedTime(jar).toMillis();
         long classesAt = latestModifiedUnder(Paths.get(System.getProperty("user.dir")).resolve("target/classes"));
         long mainSourcesAt = latestModifiedUnder(Paths.get(System.getProperty("user.dir")).resolve("src/main"));
         long pomAt = Files.getLastModifiedTime(Paths.get(System.getProperty("user.dir")).resolve("pom.xml")).toMillis();
+        long runtimeMappingAt = Files.getLastModifiedTime(desiredRuntimeMappingPath()).toMillis();
         long runtimeAt = codeSourceModified(PipelineTelemetry.class);
-        long latestDependencyAt = Math.max(runtimeAt, pomAt);
+        long latestDependencyAt = Math.max(Math.max(runtimeAt, pomAt), runtimeMappingAt);
         long latestLocalAt = Math.max(classesAt, mainSourcesAt);
         return packagedAt < latestDependencyAt || packagedAt < latestLocalAt;
+    }
+
+    private static boolean runtimeMappingMatchesActiveLayout() throws IOException {
+        if (MONOLITH_LAYOUT || PIPELINE_RUNTIME_LAYOUT) {
+            return true;
+        }
+        return Files.mismatch(activeRuntimeMappingPath(), desiredRuntimeMappingPath()) == -1L;
+    }
+
+    private static Path activeRuntimeMappingPath() {
+        return Paths.get(System.getProperty("user.dir"))
+                .resolve("../config/pipeline.runtime.yaml")
+                .normalize()
+                .toAbsolutePath();
+    }
+
+    private static Path desiredRuntimeMappingPath() {
+        Path configDir = Paths.get(System.getProperty("user.dir"))
+                .resolve("../config/runtime-mapping")
+                .normalize()
+                .toAbsolutePath();
+        if (MONOLITH_LAYOUT) {
+            return configDir.resolve("monolith.yaml");
+        }
+        if (PIPELINE_RUNTIME_LAYOUT) {
+            return configDir.resolve("pipeline-runtime.yaml");
+        }
+        return configDir.resolve("modular-strict.yaml");
     }
 
     private static long latestModifiedUnder(Path root) throws IOException {
@@ -875,6 +909,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         Path processDir = moduleDir;
         List<String> command = new ArrayList<>();
         String mavenRepoLocal = System.getProperty("maven.repo.local", "").trim();
+        Path activeRuntimeMapping = activeRuntimeMappingPath();
+        Path desiredRuntimeMapping = desiredRuntimeMappingPath();
+        Path runtimeMappingBackup = null;
         if (MONOLITH_LAYOUT) {
             processDir = moduleDir.getParent();
             command.add("bash");
@@ -900,35 +937,48 @@ abstract class AbstractCsvPaymentsEndToEnd {
             }
             command.add("package");
         }
-        ProcessBuilder pb = new ProcessBuilder(command);
-        pb.directory(processDir.toFile());
-        pb.environment().put("CSV_RUNTIME_LAYOUT", RUNTIME_LAYOUT);
-        if (!mavenRepoLocal.isBlank()) {
-            String existingMavenArgs = pb.environment().getOrDefault("MAVEN_ARGS", "").trim();
-            String repoArg = "-Dmaven.repo.local=" + mavenRepoLocal;
-            pb.environment().put(
-                    "MAVEN_ARGS",
-                    existingMavenArgs.isBlank() ? repoArg : existingMavenArgs + " " + repoArg);
-        }
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
-        StringBuilder output = new StringBuilder();
-        try (BufferedReader reader =
-                new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line).append(System.lineSeparator());
-            }
-        }
         try {
-            int exitCode = process.waitFor();
-            assertEquals(
-                    0,
-                    exitCode,
-                    "Failed to rebuild packaged orchestrator. Output tail:\n" + tailLines(output.toString(), 120));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Interrupted while rebuilding packaged orchestrator.", e);
+            if (!MONOLITH_LAYOUT && Files.mismatch(activeRuntimeMapping, desiredRuntimeMapping) != -1L) {
+                runtimeMappingBackup = Files.createTempFile("pipeline-runtime", ".yaml");
+                Files.copy(activeRuntimeMapping, runtimeMappingBackup, StandardCopyOption.REPLACE_EXISTING);
+                Files.copy(desiredRuntimeMapping, activeRuntimeMapping, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.directory(processDir.toFile());
+            pb.environment().put("CSV_RUNTIME_LAYOUT", RUNTIME_LAYOUT);
+            if (!mavenRepoLocal.isBlank()) {
+                String existingMavenArgs = pb.environment().getOrDefault("MAVEN_ARGS", "").trim();
+                String repoArg = "-Dmaven.repo.local=" + mavenRepoLocal;
+                pb.environment().put(
+                        "MAVEN_ARGS",
+                        existingMavenArgs.isBlank() ? repoArg : existingMavenArgs + " " + repoArg);
+            }
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append(System.lineSeparator());
+                }
+            }
+            try {
+                int exitCode = process.waitFor();
+                assertEquals(
+                        0,
+                        exitCode,
+                        "Failed to rebuild packaged orchestrator. Output tail:\n" + tailLines(output.toString(), 120));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Interrupted while rebuilding packaged orchestrator.", e);
+            }
+        } finally {
+            if (runtimeMappingBackup != null) {
+                Files.copy(runtimeMappingBackup, activeRuntimeMapping, StandardCopyOption.REPLACE_EXISTING);
+                Files.deleteIfExists(runtimeMappingBackup);
+            }
         }
     }
 
@@ -1064,7 +1114,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "PIPELINE_DEFAULTS_RETRY_WAIT_MS", "10",
                 "PIPELINE_ITEM_REJECT_PROVIDER", "memory"));
 
-        waitForPipelineComplete();
+        waitForPipelineComplete(MALFORMED_REJECT_EXPECTED_OUTPUT_RECORDS);
 
         Set<String> expectedRecipients = Set.of("Valid Recipient One", "Valid Recipient Two");
         verifyOutputFilesForRecipients(TEST_E2E_DIR, expectedRecipients, "Malformed Recipient", 2);
@@ -1717,6 +1767,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
      */
     @SuppressWarnings("BusyWait")
     private void waitForPipelineComplete() throws InterruptedException, IOException {
+        waitForPipelineComplete(expectedOutputRecordCount());
+    }
+
+    private void waitForPipelineComplete(long expectedRecords) throws InterruptedException, IOException {
         LOG.info("Waiting for pipeline to complete processing...");
 
         // Check for output files to be created before continuing
@@ -1731,7 +1785,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 outputFilesExist = files.anyMatch(path -> path.toString().endsWith(".out"));
             }
 
-            if (outputFilesExist && outputRecordCountReady()) {
+            if (outputFilesExist && outputRecordCountReady(expectedRecords)) {
                 LOG.info("Output files detected, pipeline processing completed");
                 return;
             }
@@ -1760,9 +1814,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         + "s");
     }
 
-    private boolean outputRecordCountReady() throws IOException {
+    private boolean outputRecordCountReady(long expectedRecords) throws IOException {
         long currentRecords = outputRecordCount(Paths.get(TEST_E2E_DIR));
-        long expectedRecords = expectedOutputRecordCount();
         if (currentRecords >= expectedRecords) {
             LOG.infof(
                     "Output record count reached expected count: %,d/%s",
