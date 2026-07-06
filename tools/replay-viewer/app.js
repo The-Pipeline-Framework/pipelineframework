@@ -429,6 +429,15 @@ function normalizeTopologyForDisplay(topology, events = []) {
     return { topology, aliases: {} };
   }
   const aliases = {};
+  const stepsByName = new Map(topology.steps.map((step) => [step.step, step]));
+  const primaryTransitions = topology.transitions.filter((transition) =>
+    (transition?.relationKind ?? "primary") === "primary");
+  const primaryInboundCounts = new Map();
+  const primaryOutboundCounts = new Map();
+  for (const transition of primaryTransitions) {
+    primaryOutboundCounts.set(transition.from, (primaryOutboundCounts.get(transition.from) ?? 0) + 1);
+    primaryInboundCounts.set(transition.to, (primaryInboundCounts.get(transition.to) ?? 0) + 1);
+  }
   const directEventSteps = new Set(events.map((event) => event?.step).filter(Boolean));
   const eventBearingPrimarySteps = topology.steps.filter((step) =>
     resolveDisplayRole(step) === "primary" && !step.sideEffect && directEventSteps.has(step.step)
@@ -444,6 +453,18 @@ function normalizeTopologyForDisplay(topology, events = []) {
       hiddenSteps.add(step.step);
       continue;
     }
+    const collapseTarget = collapseDisplayProcessStep(
+      step,
+      stepsByName,
+      primaryTransitions,
+      primaryInboundCounts,
+      primaryOutboundCounts,
+      directEventSteps
+    );
+    if (collapseTarget) {
+      aliases[collapseTarget] = step.step;
+      hiddenSteps.add(collapseTarget);
+    }
     if (isInternalAwaitClientStep(step.step) && defaultAwaitStep) {
       aliases[step.step] = defaultAwaitStep;
       hiddenSteps.add(step.step);
@@ -453,6 +474,8 @@ function normalizeTopologyForDisplay(topology, events = []) {
       && resolveDisplayRole(step) === "primary"
       && !step.sideEffect
       && !directEventSteps.has(step.step)
+      && (primaryInboundCounts.get(step.step) ?? 0) < 2
+      && (primaryOutboundCounts.get(step.step) ?? 0) < 2
       && isGeneratedBaseTopologyStep(step)
     ) {
       hiddenSteps.add(step.step);
@@ -466,14 +489,76 @@ function normalizeTopologyForDisplay(topology, events = []) {
   if (hiddenSteps.size === 0) {
     return { topology, aliases };
   }
+  const remappedSteps = topology.steps
+    .filter((step) => !hiddenSteps.has(step.step))
+    .map((step) => Object.assign({}, step, {
+      parentStep: aliasStepName(step.parentStep, aliases)
+    }));
+  const seenTransitions = new Set();
+  const remappedTransitions = [];
+  for (const transition of topology.transitions) {
+    const remappedFrom = aliasStepName(transition.from, aliases);
+    const remappedTo = aliasStepName(transition.to, aliases);
+    if (!remappedFrom || !remappedTo || hiddenSteps.has(remappedFrom) || hiddenSteps.has(remappedTo) || remappedFrom === remappedTo) {
+      continue;
+    }
+    const dedupeKey = `${remappedFrom}|${remappedTo}|${transition?.relationKind ?? "primary"}|${transition?.cardinality ?? ""}`;
+    if (seenTransitions.has(dedupeKey)) {
+      continue;
+    }
+    seenTransitions.add(dedupeKey);
+    remappedTransitions.push(Object.assign({}, transition, {
+      from: remappedFrom,
+      to: remappedTo
+    }));
+  }
   return {
     topology: Object.assign({}, topology, {
-      steps: topology.steps.filter((step) => !hiddenSteps.has(step.step)),
-      transitions: topology.transitions
-        .filter((transition) => !hiddenSteps.has(transition.from) && !hiddenSteps.has(transition.to))
+      steps: remappedSteps,
+      transitions: remappedTransitions
     }),
     aliases
   };
+}
+
+function collapseDisplayProcessStep(
+  step,
+  stepsByName,
+  primaryTransitions,
+  primaryInboundCounts,
+  primaryOutboundCounts,
+  directEventSteps
+) {
+  if (!isGeneratedBaseTopologyStep(step) || directEventSteps.has(step.step)) {
+    return null;
+  }
+  const inboundCount = primaryInboundCounts.get(step.step) ?? 0;
+  const outboundCount = primaryOutboundCounts.get(step.step) ?? 0;
+  if (inboundCount < 2 && outboundCount < 2) {
+    return null;
+  }
+  const outgoingPrimary = primaryTransitions.filter((transition) => transition.from === step.step);
+  if (outgoingPrimary.length !== 1) {
+    return null;
+  }
+  const targetStepName = outgoingPrimary[0]?.to;
+  const targetStep = stepsByName.get(targetStepName);
+  if (!targetStep || targetStep.sideEffect || resolveDisplayRole(targetStep) !== "primary" || isGeneratedBaseTopologyStep(targetStep)) {
+    return null;
+  }
+  if (!directEventSteps.has(targetStep.step)) {
+    return null;
+  }
+  return (primaryInboundCounts.get(targetStep.step) ?? 0) === 1
+    ? targetStep.step
+    : null;
+}
+
+function aliasStepName(stepName, aliases) {
+  if (!stepName) {
+    return stepName;
+  }
+  return aliases[stepName] ?? stepName;
 }
 
 function uniqueStepName(baseName, existingStepNames) {
@@ -1019,6 +1104,22 @@ function isNamedSupportActor(step) {
     || role === "external-provider"
     || role === "store"
     || role === "object-ingest"
+    || role === "object-publish"
+    || role === "query-connector";
+}
+
+function showsThroughputCounter(step) {
+  if (!step) {
+    return false;
+  }
+  if (!step.sideEffect) {
+    return true;
+  }
+  if (step.pluginKind === "reject") {
+    return false;
+  }
+  const role = resolveDisplayRole(step);
+  return role === "object-ingest"
     || role === "object-publish"
     || role === "query-connector";
 }
@@ -1827,6 +1928,8 @@ function computeAutomaticLayoutPositions(topology) {
   const baseSteps = steps.filter((step) => !step.sideEffect);
   const sideEffects = steps.filter((step) => step.sideEffect);
   const sideEffectsByParent = new Map();
+  const primaryBranchLayout = analyzePrimaryBranchLayout(baseSteps, transitions);
+  const mainlineSteps = baseSteps.filter((step) => !primaryBranchLayout.branchNodes.has(step.step));
 
   for (const step of sideEffects) {
     const parentStep = step.parentStep || "__unattached__";
@@ -1836,15 +1939,16 @@ function computeAutomaticLayoutPositions(topology) {
     sideEffectsByParent.get(parentStep).push(step);
   }
 
-  const spacing = baseSteps.length > 4 ? 3.5 : 4.35;
-  const totalWidth = Math.max(0, (baseSteps.length - 1) * spacing);
-  baseSteps.forEach((step, index) => {
+  const spacing = mainlineSteps.length > 4 ? 3.5 : 4.35;
+  const totalWidth = Math.max(0, (mainlineSteps.length - 1) * spacing);
+  mainlineSteps.forEach((step, index) => {
     const x = index * spacing - totalWidth / 2;
-    const stagger = baseSteps.length > 4
+    const stagger = mainlineSteps.length > 4
       ? (index % 2 === 0 ? 0.34 : -0.34)
       : (index % 2 === 0 ? 0.18 : -0.18);
     positions.set(step.step, new THREE.Vector3(x, PRIMARY_ROW_Y + stagger, 0));
   });
+  applyPrimaryBranchLayout(positions, primaryBranchLayout);
 
   for (const step of sideEffects) {
     const role = resolveDisplayRole(step);
@@ -1910,6 +2014,133 @@ function computeAutomaticLayoutPositions(topology) {
   });
 
   return positions;
+}
+
+function analyzePrimaryBranchLayout(baseSteps, transitions) {
+  const baseStepNames = new Set(baseSteps.map((step) => step.step));
+  const orderedBaseSteps = [...baseSteps].sort((left, right) =>
+    (left.index ?? Number.MAX_SAFE_INTEGER) - (right.index ?? Number.MAX_SAFE_INTEGER));
+  const primaryTransitions = transitions.filter((transition) =>
+    (transition?.relationKind ?? "primary") === "primary"
+      && baseStepNames.has(transition.from)
+      && baseStepNames.has(transition.to));
+  const outbound = new Map();
+  const inbound = new Map();
+  const stepIndex = new Map(orderedBaseSteps.map((step, index) => [step.step, index]));
+  for (const step of orderedBaseSteps) {
+    outbound.set(step.step, []);
+    inbound.set(step.step, []);
+  }
+  for (const transition of primaryTransitions) {
+    outbound.get(transition.from)?.push(transition.to);
+    inbound.get(transition.to)?.push(transition.from);
+  }
+
+  const branchNodes = new Set();
+  const branchGroups = [];
+  const consumedSplits = new Set();
+  for (const step of orderedBaseSteps) {
+    const branchStarts = outbound.get(step.step) ?? [];
+    if (branchStarts.length < 2 || consumedSplits.has(step.step)) {
+      continue;
+    }
+    const merge = findPrimaryBranchMerge(branchStarts, outbound, inbound, stepIndex);
+    if (!merge) {
+      continue;
+    }
+    const paths = branchStarts
+      .map((branchStart) => tracePrimaryBranchPath(branchStart, merge, outbound))
+      .filter((path) => path.length > 0);
+    if (paths.length < 2) {
+      continue;
+    }
+    consumedSplits.add(step.step);
+    for (const path of paths) {
+      for (const branchNode of path) {
+        branchNodes.add(branchNode);
+      }
+    }
+    branchGroups.push({ split: step.step, merge, paths });
+  }
+  return { branchNodes, branchGroups };
+}
+
+function findPrimaryBranchMerge(branchStarts, outbound, inbound, stepIndex) {
+  if (!Array.isArray(branchStarts) || branchStarts.length < 2) {
+    return null;
+  }
+  let shared = null;
+  for (const branchStart of branchStarts) {
+    const descendants = collectPrimaryDescendants(branchStart, outbound);
+    shared = shared == null
+      ? descendants
+      : new Set([...shared].filter((candidate) => descendants.has(candidate)));
+  }
+  if (!shared || shared.size === 0) {
+    return null;
+  }
+  return [...shared]
+    .filter((candidate) => (inbound.get(candidate)?.length ?? 0) > 1)
+    .sort((left, right) => (stepIndex.get(left) ?? Number.MAX_SAFE_INTEGER) - (stepIndex.get(right) ?? Number.MAX_SAFE_INTEGER))[0]
+    ?? null;
+}
+
+function collectPrimaryDescendants(startStep, outbound) {
+  const queue = [startStep];
+  const visited = new Set();
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+    for (const next of outbound.get(current) ?? []) {
+      if (!visited.has(next)) {
+        queue.push(next);
+      }
+    }
+  }
+  return visited;
+}
+
+function tracePrimaryBranchPath(branchStart, mergeStep, outbound) {
+  const path = [];
+  const visited = new Set();
+  let cursor = branchStart;
+  while (cursor && cursor !== mergeStep && !visited.has(cursor)) {
+    path.push(cursor);
+    visited.add(cursor);
+    const nextSteps = outbound.get(cursor) ?? [];
+    if (nextSteps.length !== 1) {
+      break;
+    }
+    cursor = nextSteps[0];
+  }
+  return cursor === mergeStep ? path : [];
+}
+
+function applyPrimaryBranchLayout(positions, branchLayout) {
+  for (const group of branchLayout.branchGroups) {
+    const splitPosition = positions.get(group.split);
+    const mergePosition = positions.get(group.merge);
+    if (!splitPosition || !mergePosition) {
+      continue;
+    }
+    const span = Math.max(mergePosition.x - splitPosition.x, 2.4);
+    const branchY = Math.min(splitPosition.y, mergePosition.y) - BRANCH_ROW_OFFSET_Y - 0.12;
+    group.paths.forEach((path, branchIndex) => {
+      const laneCenter = splitPosition.x + (span * (branchIndex + 1) / (group.paths.length + 1));
+      path.forEach((stepName, stepIndex) => {
+        const offsetX = path.length === 1
+          ? 0
+          : ((stepIndex / (path.length - 1)) - 0.5) * Math.min(1.15, span * 0.22);
+        positions.set(stepName, new THREE.Vector3(
+          laneCenter + offsetX,
+          branchY - Math.floor(stepIndex / 3) * 0.62,
+          0));
+      });
+    });
+  }
 }
 
 function buildTopology(topology) {
@@ -2039,7 +2270,7 @@ function registerNode(step, position) {
     scene.add(sprite);
     nodeLabelSprites.set(step.step, sprite);
   }
-  if (!isSideEffect || namedSupportActor) {
+  if (showsThroughputCounter(step)) {
     const valueSprite = buildThroughputCounterSprite("—|—");
     valueSprite.position.copy(position).add(isSideEffect ? new THREE.Vector3(0, -0.3, 0) : new THREE.Vector3(0, 0, 0));
     scene.add(valueSprite);
@@ -2946,12 +3177,14 @@ function stateForStep(stepName) {
       received: 0,
       sent: 0,
       inFlight: 0,
+      skips: 0,
       rejects: 0,
       known: false,
       receivedKnown: true,
       sentKnown: true,
       peakPressure: 0,
       peakInFlight: 0,
+      peakCounterBacklog: 0,
       activeInputKeys: new Set()
     });
   }
@@ -3028,6 +3261,7 @@ function recordReceived(state, itemCount) {
   markCounterEvidence(state, itemCount);
   if (itemCount > 0) {
     state.received += itemCount;
+    updateCounterBacklogPeak(state);
   }
 }
 
@@ -3035,6 +3269,7 @@ function recordSent(state, itemCount) {
   markCounterEvidence(state, itemCount);
   if (itemCount > 0) {
     state.sent += itemCount;
+    updateCounterBacklogPeak(state);
   }
 }
 
@@ -3111,31 +3346,65 @@ function updatePeakPressure(state) {
   state.peakPressure = Math.max(state.peakPressure ?? 0, state.inFlight ?? 0);
 }
 
-function pressureForState(state) {
+function updateCounterBacklogPeak(state) {
+  state.peakCounterBacklog = Math.max(
+    state.peakCounterBacklog ?? 0,
+    Math.max(0, (state.received ?? 0) - (state.sent ?? 0))
+  );
+}
+
+function usesCounterDeltaPressure(stepName) {
+  if (!stepName || isInternalAwaitClientStep(stepName)) {
+    return false;
+  }
+  const displayStep = resolveStepDefinition(stepName);
+  if (!displayStep || displayStep.sideEffect || displayStep.pluginKind === "reject") {
+    return false;
+  }
+  for (const [rawStepName, displayStepName] of displayStepAliases.entries()) {
+    if (displayStepName !== stepName || rawStepName === stepName || isInternalAwaitClientStep(rawStepName)) {
+      continue;
+    }
+    const rawStep = resolveRawStepDefinition(rawStepName);
+    if (rawStep && !rawStep.sideEffect && resolveDisplayRole(rawStep) === "primary") {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pressureForStep(stepName, state) {
   if (!state?.receivedKnown || !state?.sentKnown) {
     return null;
+  }
+  if (usesCounterDeltaPressure(stepName)) {
+    return Math.max(0, (state.received ?? 0) - (state.sent ?? 0));
   }
   return Math.max(0, state.inFlight ?? 0);
 }
 
-function pressureRatioForState(state) {
-  const pressure = pressureForState(state);
+function pressureRatioForStep(stepName, state) {
+  const pressure = pressureForStep(stepName, state);
   if (pressure == null) {
     return null;
   }
-  const capacity = replayBackpressureCapacity ?? state.peakInFlight ?? state.peakPressure;
+  const capacity = usesCounterDeltaPressure(stepName)
+    ? (replayBackpressureCapacity ?? state.peakCounterBacklog)
+    : (replayBackpressureCapacity ?? state.peakInFlight ?? state.peakPressure);
   if (!Number.isFinite(capacity) || capacity <= 0) {
     return pressure > 0 ? 1 : 0;
   }
   return clamp(pressure / capacity, 0, 1);
 }
 
-function pressureCapacityForState(state) {
-  const pressure = pressureForState(state);
+function pressureCapacityForStep(stepName, state) {
+  const pressure = pressureForStep(stepName, state);
   if (pressure == null) {
     return null;
   }
-  const capacity = replayBackpressureCapacity ?? state.peakInFlight ?? state.peakPressure;
+  const capacity = usesCounterDeltaPressure(stepName)
+    ? (replayBackpressureCapacity ?? state.peakCounterBacklog)
+    : (replayBackpressureCapacity ?? state.peakInFlight ?? state.peakPressure);
   return Number.isFinite(capacity) && capacity > 0 ? capacity : null;
 }
 
@@ -3150,13 +3419,17 @@ function tooltipForStep(stepName) {
   if (step.pluginKind === "reject") {
     return `${label}: rejected ${state.rejects}`;
   }
+  if (state.skips > 0 && display.unknown) {
+    return `${label}: skipped ${state.skips}; received/sent counters unknown for this replay.`;
+  }
   if (display.unknown) {
     return `${label}: received/sent counters unknown for this replay.`;
   }
-  const pressure = pressureForState(state) ?? 0;
-  const capacity = pressureCapacityForState(state);
+  const pressure = pressureForStep(stepName, state) ?? 0;
+  const capacity = pressureCapacityForStep(stepName, state);
   const capacityText = capacity == null ? "observed peak" : `${capacity} capacity`;
-  return `${label}: received ${formatCounterValue(state.received, state.receivedKnown)}, sent ${formatCounterValue(state.sent, state.sentKnown)}, queued pressure ${pressure} (${capacityText}).`;
+  const skipText = state.skips > 0 ? `, skipped ${state.skips}` : "";
+  return `${label}: received ${formatCounterValue(state.received, state.receivedKnown)}, sent ${formatCounterValue(state.sent, state.sentKnown)}${skipText}, queued pressure ${pressure} (${capacityText}).`;
 }
 
 function rejectStepNameFor(stepName) {
@@ -3208,6 +3481,11 @@ function recordReplayCounters(rawEvent) {
     return;
   }
   if (event.event === "cache_hit") {
+    return;
+  }
+  if (event.event === "skip") {
+    const skipCount = Math.max(inputCount, 1);
+    state.skips += skipCount;
     return;
   }
   if (event.event === "reject") {
@@ -3592,6 +3870,16 @@ function processEvent(rawEvent) {
     spawnPulse(displayTargets.primaryStep, 0xff7c8f, EFFECT_PRESETS.pulse.errorPrimary, event.startTime);
     queueBackgroundFlash("#ff647c", event.startTime, 0.95, 0.58);
     itemAnchors.set(event.itemId, event.to || event.step);
+  } else if (event.event === "skip") {
+    highlightStep(event.step, EFFECT_PRESETS.node.defaultHoldSeconds + 0.35, event.startTime);
+    spawnPulse(event.step, 0x9fb3ff, {
+      duration: 0.78,
+      startScale: 0.98,
+      endScale: 1.92,
+      opacity: 0.6
+    }, event.startTime);
+    queueBackgroundFlash("#9fb3ff", event.startTime, 0.72, 0.28);
+    itemAnchors.set(event.itemId, event.from || event.step);
   } else if (event.event === "emit") {
     spawnEmitSpark(event);
     itemAnchors.set(event.itemId, event.to || event.step);
@@ -3787,7 +4075,7 @@ function updateNodes(timeSeconds) {
       : display.unknown
         ? "—|—"
         : `${formatCounterValue(state.received, state.receivedKnown)}|${formatCounterValue(state.sent, state.sentKnown)}`;
-    const pressureRatio = step?.pluginKind === "reject" || display.unknown ? null : pressureRatioForState(state);
+    const pressureRatio = step?.pluginKind === "reject" || display.unknown ? null : pressureRatioForStep(stepName, state);
     if (sprite.userData.text !== expectedText) {
       if (step?.pluginKind === "reject") {
         replaceSpriteText(sprite, expectedText, {

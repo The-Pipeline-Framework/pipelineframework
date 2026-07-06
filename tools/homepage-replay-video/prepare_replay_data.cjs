@@ -102,38 +102,110 @@ function spreadAcrossSegment(items, segmentStart, segmentEnd) {
 }
 
 function orderedMainlineSteps(steps, transitions) {
-  const mainlineSteps = steps
+  const branchLayout = analyzePrimaryBranchLayout(steps, transitions);
+  const baseSteps = steps
     .filter((step) => step && step.sideEffect !== true && !isConnectorStep(step))
     .sort((left, right) => (left.index ?? Number.MAX_SAFE_INTEGER) - (right.index ?? Number.MAX_SAFE_INTEGER));
-  const mainlineIds = new Set(mainlineSteps.map((step) => step.step));
-  const mainlineTransitions = transitions.filter((transition) => mainlineIds.has(transition.from) && mainlineIds.has(transition.to));
-  const targets = new Set(mainlineTransitions.map((transition) => transition.to));
-  const starts = mainlineSteps.filter((step) => !targets.has(step.step));
-  const start = starts[0] ?? mainlineSteps[0];
-  if (!start) {
-    return [];
+  return baseSteps.filter((step) => !branchLayout.branchNodes.has(step.step));
+}
+
+function analyzePrimaryBranchLayout(steps, transitions) {
+  const baseSteps = steps
+    .filter((step) => step && step.sideEffect !== true && !isConnectorStep(step))
+    .sort((left, right) => (left.index ?? Number.MAX_SAFE_INTEGER) - (right.index ?? Number.MAX_SAFE_INTEGER));
+  const baseStepNames = new Set(baseSteps.map((step) => step.step));
+  const primaryTransitions = transitions.filter((transition) =>
+    (transition?.relationKind ?? "primary") === "primary"
+      && baseStepNames.has(transition.from)
+      && baseStepNames.has(transition.to));
+  const outbound = new Map();
+  const inbound = new Map();
+  const stepIndex = new Map(baseSteps.map((step, index) => [step.step, index]));
+  for (const step of baseSteps) {
+    outbound.set(step.step, []);
+    inbound.set(step.step, []);
   }
-  const byFrom = new Map();
-  for (const transition of mainlineTransitions) {
-    if (!byFrom.has(transition.from)) {
-      byFrom.set(transition.from, transition);
+  for (const transition of primaryTransitions) {
+    outbound.get(transition.from)?.push(transition.to);
+    inbound.get(transition.to)?.push(transition.from);
+  }
+
+  const branchNodes = new Set();
+  const branchGroups = [];
+  for (const step of baseSteps) {
+    const branchStarts = outbound.get(step.step) ?? [];
+    if (branchStarts.length < 2) {
+      continue;
     }
+    const merge = findPrimaryBranchMerge(branchStarts, outbound, inbound, stepIndex);
+    if (!merge) {
+      continue;
+    }
+    const paths = branchStarts
+      .map((branchStart) => tracePrimaryBranchPath(branchStart, merge, outbound))
+      .filter((path) => path.length > 0);
+    if (paths.length < 2) {
+      continue;
+    }
+    for (const path of paths) {
+      for (const branchNode of path) {
+        branchNodes.add(branchNode);
+      }
+    }
+    branchGroups.push({ split: step.step, merge, paths });
   }
-  const byId = new Map(mainlineSteps.map((step) => [step.step, step]));
-  const ordered = [];
+  return { branchNodes, branchGroups };
+}
+
+function findPrimaryBranchMerge(branchStarts, outbound, inbound, stepIndex) {
+  let shared = null;
+  for (const branchStart of branchStarts) {
+    const descendants = collectPrimaryDescendants(branchStart, outbound);
+    shared = shared == null
+      ? descendants
+      : new Set([...shared].filter((candidate) => descendants.has(candidate)));
+  }
+  if (!shared || shared.size === 0) {
+    return null;
+  }
+  return [...shared]
+    .filter((candidate) => (inbound.get(candidate)?.length ?? 0) > 1)
+    .sort((left, right) => (stepIndex.get(left) ?? Number.MAX_SAFE_INTEGER) - (stepIndex.get(right) ?? Number.MAX_SAFE_INTEGER))[0]
+    ?? null;
+}
+
+function collectPrimaryDescendants(startStep, outbound) {
+  const queue = [startStep];
   const visited = new Set();
-  let cursor = start.step;
-  while (cursor && byId.has(cursor) && !visited.has(cursor)) {
-    visited.add(cursor);
-    ordered.push(byId.get(cursor));
-    cursor = byFrom.get(cursor)?.to;
-  }
-  for (const step of mainlineSteps) {
-    if (!visited.has(step.step)) {
-      ordered.push(step);
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+    for (const next of outbound.get(current) ?? []) {
+      if (!visited.has(next)) {
+        queue.push(next);
+      }
     }
   }
-  return ordered;
+  return visited;
+}
+
+function tracePrimaryBranchPath(branchStart, mergeStep, outbound) {
+  const path = [];
+  const visited = new Set();
+  let cursor = branchStart;
+  while (cursor && cursor !== mergeStep && !visited.has(cursor)) {
+    path.push(cursor);
+    visited.add(cursor);
+    const nextSteps = outbound.get(cursor) ?? [];
+    if (nextSteps.length !== 1) {
+      break;
+    }
+    cursor = nextSteps[0];
+  }
+  return cursor === mergeStep ? path : [];
 }
 
 function deriveProviderId(awaitStep) {
@@ -143,6 +215,7 @@ function deriveProviderId(awaitStep) {
 }
 
 function buildNodeSet(steps, transitions) {
+  const branchLayout = analyzePrimaryBranchLayout(steps, transitions);
   const mainline = orderedMainlineSteps(steps, transitions);
   const awaitStep = mainline.find((step) => displayRole(step) === "await");
   const explicitBroker = steps.find((step) => displayRole(step) === "broker");
@@ -155,11 +228,21 @@ function buildNodeSet(steps, transitions) {
   const objectPublishStep = steps.find(isObjectPublishStep);
   const persistenceSteps = steps.filter((step) => displayRole(step) === "persistence-plugin");
   const nodes = [];
+  const businessSteps = steps
+    .filter((step) => step && step.sideEffect !== true && !isConnectorStep(step))
+    .sort((left, right) => (left.index ?? Number.MAX_SAFE_INTEGER) - (right.index ?? Number.MAX_SAFE_INTEGER));
+  const roleByBusinessStep = new Map();
+  let primaryRoleIndex = 0;
+  for (const step of businessSteps) {
+    const role = displayRole(step) === "await"
+      ? "await"
+      : PRIMARY_ROLES[Math.min(primaryRoleIndex++, PRIMARY_ROLES.length - 1)];
+    roleByBusinessStep.set(step.step, role);
+  }
   const primaryCount = mainline.length;
   const minX = -4.15;
   const maxX = 4.15;
   const xSpan = primaryCount <= 1 ? 0 : maxX - minX;
-  let primaryRoleIndex = 0;
 
   if (objectIngestStep) {
     nodes.push({
@@ -178,7 +261,7 @@ function buildNodeSet(steps, transitions) {
     const awaitRole = displayRole(step) === "await";
     const centerOffset = primaryCount <= 1 ? 0.5 : index / (primaryCount - 1);
     const edgeLift = Math.abs(centerOffset - 0.5) * 1.08;
-    const role = awaitRole ? "await" : PRIMARY_ROLES[Math.min(primaryRoleIndex++, PRIMARY_ROLES.length - 1)];
+    const role = roleByBusinessStep.get(step.step) ?? (awaitRole ? "await" : "primary-a");
     nodes.push({
       id: step.step,
       sourceId: step.step,
@@ -190,6 +273,38 @@ function buildNodeSet(steps, transitions) {
       scale: awaitRole ? 1.22 : 1.08
     });
   });
+
+  for (const group of branchLayout.branchGroups) {
+    const splitNode = nodes.find((node) => node.id === group.split);
+    const mergeNode = nodes.find((node) => node.id === group.merge);
+    if (!splitNode || !mergeNode) {
+      continue;
+    }
+    const span = Math.max(mergeNode.x - splitNode.x, 2.6);
+    const branchY = Math.min(splitNode.y, mergeNode.y) - 2.2;
+    group.paths.forEach((path, branchIndex) => {
+      const laneCenter = splitNode.x + (span * (branchIndex + 1) / (group.paths.length + 1));
+      path.forEach((stepId, stepIndex) => {
+        const step = businessSteps.find((candidate) => candidate.step === stepId);
+        if (!step) {
+          return;
+        }
+        const offsetX = path.length === 1
+          ? 0
+          : ((stepIndex / (path.length - 1)) - 0.5) * Math.min(1.18, span * 0.22);
+        nodes.push({
+          id: step.step,
+          sourceId: step.step,
+          role: roleByBusinessStep.get(step.step) ?? "primary-b",
+          tier: "primary",
+          x: Number((laneCenter + offsetX).toFixed(3)),
+          y: Number((branchY - Math.floor(stepIndex / 3) * 0.62).toFixed(3)),
+          z: 0.42,
+          scale: 1.02
+        });
+      });
+    });
+  }
 
   if (objectPublishStep) {
     nodes.push({
@@ -244,7 +359,7 @@ function buildNodeSet(steps, transitions) {
       scale: 0.86
     });
   }
-  return { nodes, mainline, awaitStep, persistenceSteps, objectIngestStep, objectPublishStep };
+  return { nodes, mainline, awaitStep, persistenceSteps, objectIngestStep, objectPublishStep, branchLayout };
 }
 
 function edgeId(from, to, kind) {
@@ -269,14 +384,11 @@ function buildEdges(transitions, nodes, mainline, awaitStep, persistenceSteps, o
     }
   };
 
-  for (let index = 0; index < mainline.length - 1; index += 1) {
-    const from = mainline[index].step;
-    const to = mainline[index + 1].step;
-    const transition = transitions.find((candidate) => candidate.from === from && candidate.to === to);
-    if (!transition) {
+  for (const transition of transitions) {
+    if ((transition?.relationKind ?? "primary") !== "primary") {
       continue;
     }
-    addEdge(from, to, "primary", transition.cardinality ?? "one-to-one");
+    addEdge(transition.from, transition.to, "primary", transition.cardinality ?? "one-to-one");
   }
   if (objectIngestStep && mainline[0]) {
     addEdge(objectIngestStep.step, mainline[0].step, "ingest");
@@ -335,17 +447,14 @@ function findEdge(edges, from, to, kind) {
   return edges.find((edge) => edge.from === from && edge.to === to && edge.kind === kind);
 }
 
-function buildPulses(replay, edges, mainline, awaitStep, persistenceSteps, objectIngestStep, objectPublishStep) {
+function buildPulses(replay, edges, mainline, awaitStep, persistenceSteps, objectIngestStep, objectPublishStep, branchLayout) {
   const events = Array.isArray(replay.events) ? replay.events : [];
   const pulses = [];
-  const mainlineEdges = [];
-  for (let index = 0; index < mainline.length - 1; index += 1) {
-    const from = mainline[index].step;
-    const to = mainline[index + 1].step;
-    mainlineEdges.push({ from, to, edge: findEdge(edges, from, to, "primary") });
-  }
+  const primaryEdges = edges.filter((edge) => edge.kind === "primary");
+  const branchNodeNames = branchLayout?.branchNodes ?? new Set();
+  const mergeStepNames = new Set((branchLayout?.branchGroups ?? []).map((group) => group.merge));
 
-  mainlineEdges.forEach((entry, index) => {
+  primaryEdges.forEach((entry, index) => {
     const matches = events.filter((event) =>
       eventMatches(event, entry.from, entry.to, "emit")
         || (event.event === "start" && event.step === entry.to && event.from === entry.from)
@@ -354,10 +463,12 @@ function buildPulses(replay, edges, mainline, awaitStep, persistenceSteps, objec
       ? [SEGMENTS.ingress[1] - 0.1, SEGMENTS.request[0] + 0.55]
       : entry.from === awaitStep?.step
         ? SEGMENTS.completion
-        : index === mainlineEdges.length - 1
+        : branchNodeNames.has(entry.from) || branchNodeNames.has(entry.to) || mergeStepNames.has(entry.to)
           ? SEGMENTS.continuation
-          : SEGMENTS.request;
-    pulses.push(...pulseBundle(entry.edge, "primary", sampleEvenly(matches, index === 0 ? 3 : 12), ...segment, 0.86, 0.13, "#8eeeff"));
+          : index === primaryEdges.length - 1
+            ? SEGMENTS.continuation
+            : SEGMENTS.request;
+    pulses.push(...pulseBundle(entry, "primary", sampleEvenly(matches, index === 0 ? 3 : 10), ...segment, 0.86, 0.13, "#8eeeff"));
   });
 
   if (objectIngestStep && mainline[0]) {
@@ -379,14 +490,13 @@ function buildPulses(replay, edges, mainline, awaitStep, persistenceSteps, objec
   if (awaitStep) {
     const awaitIndex = mainline.findIndex((step) => step.step === awaitStep.step);
     const previous = mainline[awaitIndex - 1]?.step;
-    const next = mainline[awaitIndex + 1]?.step;
     const requestItems = sampleEvenly(
       events.filter((event) => eventMatches(event, previous, awaitStep.step, "emit")
         || (event.event === "start" && event.step === awaitStep.step && event.from === previous)),
       14
     );
     const completionItems = sampleEvenly(
-      events.filter((event) => event.event === "start" && event.step === next && event.from === awaitStep.step),
+      events.filter((event) => event.event === "start" && event.from === awaitStep.step),
       10
     );
     const broker = edges.find((edge) => edge.from === awaitStep.step && edge.kind === "request")?.to;
@@ -448,7 +558,7 @@ function main() {
   const replay = JSON.parse(fs.readFileSync(input, "utf8"));
   const steps = Array.isArray(replay.topology?.steps) ? replay.topology.steps : [];
   const transitions = Array.isArray(replay.topology?.transitions) ? replay.topology.transitions : [];
-  const { nodes, mainline, awaitStep, persistenceSteps, objectIngestStep, objectPublishStep } = buildNodeSet(steps, transitions);
+  const { nodes, mainline, awaitStep, persistenceSteps, objectIngestStep, objectPublishStep, branchLayout } = buildNodeSet(steps, transitions);
   const edges = buildEdges(transitions, nodes, mainline, awaitStep, persistenceSteps, objectIngestStep, objectPublishStep);
   const cinematic = {
     sourceReplay: path
@@ -463,7 +573,7 @@ function main() {
     phases: SEGMENTS,
     nodes,
     edges,
-    pulses: buildPulses(replay, edges, mainline, awaitStep, persistenceSteps, objectIngestStep, objectPublishStep),
+    pulses: buildPulses(replay, edges, mainline, awaitStep, persistenceSteps, objectIngestStep, objectPublishStep, branchLayout),
     highlights: buildHighlights(nodes)
   };
   fs.mkdirSync(path.dirname(output), { recursive: true });

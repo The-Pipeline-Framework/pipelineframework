@@ -64,20 +64,50 @@
       "sourceId": "AwaitPaymentProvider",
       "role": "await",
       "tier": "primary",
-      "x": 0,
-      "y": 1.55,
+      "x": -1.383,
+      "y": 1.73,
       "z": 1.15,
       "scale": 1.22
     },
     {
-      "id": "ProcessPaymentStatus",
-      "sourceId": "ProcessPaymentStatus",
-      "role": "primary-b",
+      "id": "FinalizePaymentOutput",
+      "sourceId": "FinalizePaymentOutput",
+      "role": "primary-d",
+      "tier": "primary",
+      "x": 1.383,
+      "y": 1.73,
+      "z": 0.755,
+      "scale": 1.08
+    },
+    {
+      "id": "ProcessFinalizePaymentOutput",
+      "sourceId": "ProcessFinalizePaymentOutput",
+      "role": "primary-e",
       "tier": "primary",
       "x": 4.15,
       "y": 2.09,
       "z": 0.665,
       "scale": 1.08
+    },
+    {
+      "id": "ProcessUnapprovedPaymentStatus",
+      "sourceId": "ProcessUnapprovedPaymentStatus",
+      "role": "primary-c",
+      "tier": "primary",
+      "x": -0.461,
+      "y": -0.47,
+      "z": 0.42,
+      "scale": 1.02
+    },
+    {
+      "id": "ProcessApprovedPaymentStatus",
+      "sourceId": "ProcessApprovedPaymentStatus",
+      "role": "primary-b",
+      "tier": "primary",
+      "x": 0.461,
+      "y": -0.47,
+      "z": 0.42,
+      "scale": 1.02
     },
     {
       "id": "ObjectPublish",
@@ -94,7 +124,7 @@
       "sourceId": "AwaitPaymentProviderKafkaBroker",
       "role": "broker",
       "tier": "support",
-      "x": -1.9,
+      "x": -3.283,
       "y": 4.18,
       "z": 0.92,
       "scale": 0.84,
@@ -105,7 +135,7 @@
       "sourceId": "PaymentProvider",
       "role": "provider",
       "tier": "support",
-      "x": 2.05,
+      "x": 0.667,
       "y": 4.52,
       "z": 0.22,
       "scale": 0.92,
@@ -131,9 +161,37 @@
       "cardinality": "one-to-many"
     },
     {
-      "id": "AwaitPaymentProvider->ProcessPaymentStatus:primary",
+      "id": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary",
       "from": "AwaitPaymentProvider",
-      "to": "ProcessPaymentStatus",
+      "to": "ProcessUnapprovedPaymentStatus",
+      "kind": "primary",
+      "cardinality": "one-to-one"
+    },
+    {
+      "id": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary",
+      "from": "AwaitPaymentProvider",
+      "to": "ProcessApprovedPaymentStatus",
+      "kind": "primary",
+      "cardinality": "one-to-one"
+    },
+    {
+      "id": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "from": "ProcessApprovedPaymentStatus",
+      "to": "FinalizePaymentOutput",
+      "kind": "primary",
+      "cardinality": "one-to-one"
+    },
+    {
+      "id": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "from": "ProcessUnapprovedPaymentStatus",
+      "to": "FinalizePaymentOutput",
+      "kind": "primary",
+      "cardinality": "one-to-one"
+    },
+    {
+      "id": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary",
+      "from": "FinalizePaymentOutput",
+      "to": "ProcessFinalizePaymentOutput",
       "kind": "primary",
       "cardinality": "one-to-one"
     },
@@ -145,8 +203,8 @@
       "cardinality": "one-to-one"
     },
     {
-      "id": "ProcessPaymentStatus->ObjectPublish:publish",
-      "from": "ProcessPaymentStatus",
+      "id": "ProcessFinalizePaymentOutput->ObjectPublish:publish",
+      "from": "ProcessFinalizePaymentOutput",
       "to": "ObjectPublish",
       "kind": "publish",
       "cardinality": "one-to-one"
@@ -187,8 +245,8 @@
       "cardinality": "one-to-one"
     },
     {
-      "id": "ProcessPaymentStatus->Database:store",
-      "from": "ProcessPaymentStatus",
+      "id": "ProcessFinalizePaymentOutput->Database:store",
+      "from": "ProcessFinalizePaymentOutput",
       "to": "Database",
       "kind": "store",
       "cardinality": "one-to-one"
@@ -511,8 +569,17 @@
       "color": "#c1b4ff"
     },
     {
-      "id": "AwaitPaymentProvider->ProcessPaymentStatus:primary:primary:1",
-      "edgeId": "AwaitPaymentProvider->ProcessPaymentStatus:primary",
+      "id": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary:primary:1",
+      "edgeId": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary",
+      "kind": "primary",
+      "start": 6.35,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary:primary:1",
+      "edgeId": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary",
       "kind": "primary",
       "start": 6.35,
       "duration": 0.86,
@@ -538,22 +605,13 @@
       "color": "#8fa9ff"
     },
     {
-      "id": "ProcessPaymentStatus->Database:store:store:1",
-      "edgeId": "ProcessPaymentStatus->Database:store",
+      "id": "ProcessFinalizePaymentOutput->Database:store:store:1",
+      "edgeId": "ProcessFinalizePaymentOutput->Database:store",
       "kind": "store",
       "start": 6.53,
       "duration": 1.08,
       "size": 0.115,
       "color": "#6fd9ff"
-    },
-    {
-      "id": "AwaitPaymentProvider->ProcessPaymentStatus:primary:primary:2",
-      "edgeId": "AwaitPaymentProvider->ProcessPaymentStatus:primary",
-      "kind": "primary",
-      "start": 6.586,
-      "duration": 0.86,
-      "size": 0.13,
-      "color": "#8eeeff"
     },
     {
       "id": "PaymentProvider->AwaitPaymentProviderKafkaBroker:completion:completion:2",
@@ -565,6 +623,24 @@
       "color": "#c1b4ff"
     },
     {
+      "id": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary:primary:2",
+      "edgeId": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary",
+      "kind": "primary",
+      "start": 6.639,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary:primary:2",
+      "edgeId": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary",
+      "kind": "primary",
+      "start": 6.639,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
       "id": "AwaitPaymentProviderKafkaBroker->AwaitPaymentProvider:completion:completion:2",
       "edgeId": "AwaitPaymentProviderKafkaBroker->AwaitPaymentProvider:completion",
       "kind": "completion",
@@ -572,15 +648,6 @@
       "duration": 0.92,
       "size": 0.12,
       "color": "#8fa9ff"
-    },
-    {
-      "id": "AwaitPaymentProvider->ProcessPaymentStatus:primary:primary:3",
-      "edgeId": "AwaitPaymentProvider->ProcessPaymentStatus:primary",
-      "kind": "primary",
-      "start": 6.823,
-      "duration": 0.86,
-      "size": 0.13,
-      "color": "#8eeeff"
     },
     {
       "id": "PaymentProvider->AwaitPaymentProviderKafkaBroker:completion:completion:3",
@@ -592,6 +659,24 @@
       "color": "#c1b4ff"
     },
     {
+      "id": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary:primary:3",
+      "edgeId": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary",
+      "kind": "primary",
+      "start": 6.928,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary:primary:3",
+      "edgeId": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary",
+      "kind": "primary",
+      "start": 6.928,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
       "id": "AwaitPaymentProviderKafkaBroker->AwaitPaymentProvider:completion:completion:3",
       "edgeId": "AwaitPaymentProviderKafkaBroker->AwaitPaymentProvider:completion",
       "kind": "completion",
@@ -599,15 +684,6 @@
       "duration": 0.92,
       "size": 0.12,
       "color": "#8fa9ff"
-    },
-    {
-      "id": "AwaitPaymentProvider->ProcessPaymentStatus:primary:primary:4",
-      "edgeId": "AwaitPaymentProvider->ProcessPaymentStatus:primary",
-      "kind": "primary",
-      "start": 7.059,
-      "duration": 0.86,
-      "size": 0.13,
-      "color": "#8eeeff"
     },
     {
       "id": "PaymentProvider->AwaitPaymentProviderKafkaBroker:completion:completion:4",
@@ -619,8 +695,8 @@
       "color": "#c1b4ff"
     },
     {
-      "id": "ProcessPaymentStatus->Database:store:store:2",
-      "edgeId": "ProcessPaymentStatus->Database:store",
+      "id": "ProcessFinalizePaymentOutput->Database:store:store:2",
+      "edgeId": "ProcessFinalizePaymentOutput->Database:store",
       "kind": "store",
       "start": 7.147,
       "duration": 1.08,
@@ -628,10 +704,19 @@
       "color": "#6fd9ff"
     },
     {
-      "id": "AwaitPaymentProvider->ProcessPaymentStatus:primary:primary:5",
-      "edgeId": "AwaitPaymentProvider->ProcessPaymentStatus:primary",
+      "id": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary:primary:4",
+      "edgeId": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary",
       "kind": "primary",
-      "start": 7.295,
+      "start": 7.217,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary:primary:4",
+      "edgeId": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary",
+      "kind": "primary",
+      "start": 7.217,
       "duration": 0.86,
       "size": 0.13,
       "color": "#8eeeff"
@@ -655,10 +740,19 @@
       "color": "#c1b4ff"
     },
     {
-      "id": "AwaitPaymentProvider->ProcessPaymentStatus:primary:primary:6",
-      "edgeId": "AwaitPaymentProvider->ProcessPaymentStatus:primary",
+      "id": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary:primary:5",
+      "edgeId": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary",
       "kind": "primary",
-      "start": 7.532,
+      "start": 7.506,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary:primary:5",
+      "edgeId": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary",
+      "kind": "primary",
+      "start": 7.506,
       "duration": 0.86,
       "size": 0.13,
       "color": "#8eeeff"
@@ -682,8 +776,8 @@
       "color": "#c1b4ff"
     },
     {
-      "id": "ProcessPaymentStatus->Database:store:store:3",
-      "edgeId": "ProcessPaymentStatus->Database:store",
+      "id": "ProcessFinalizePaymentOutput->Database:store:store:3",
+      "edgeId": "ProcessFinalizePaymentOutput->Database:store",
       "kind": "store",
       "start": 7.764,
       "duration": 1.08,
@@ -691,10 +785,19 @@
       "color": "#6fd9ff"
     },
     {
-      "id": "AwaitPaymentProvider->ProcessPaymentStatus:primary:primary:7",
-      "edgeId": "AwaitPaymentProvider->ProcessPaymentStatus:primary",
+      "id": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary:primary:6",
+      "edgeId": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary",
       "kind": "primary",
-      "start": 7.768,
+      "start": 7.794,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary:primary:6",
+      "edgeId": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary",
+      "kind": "primary",
+      "start": 7.794,
       "duration": 0.86,
       "size": 0.13,
       "color": "#8eeeff"
@@ -718,10 +821,19 @@
       "color": "#c1b4ff"
     },
     {
-      "id": "AwaitPaymentProvider->ProcessPaymentStatus:primary:primary:8",
-      "edgeId": "AwaitPaymentProvider->ProcessPaymentStatus:primary",
+      "id": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary:primary:7",
+      "edgeId": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary",
       "kind": "primary",
-      "start": 8.005,
+      "start": 8.083,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary:primary:7",
+      "edgeId": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary",
+      "kind": "primary",
+      "start": 8.083,
       "duration": 0.86,
       "size": 0.13,
       "color": "#8eeeff"
@@ -745,17 +857,26 @@
       "color": "#c1b4ff"
     },
     {
-      "id": "AwaitPaymentProvider->ProcessPaymentStatus:primary:primary:9",
-      "edgeId": "AwaitPaymentProvider->ProcessPaymentStatus:primary",
+      "id": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary:primary:8",
+      "edgeId": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary",
       "kind": "primary",
-      "start": 8.241,
+      "start": 8.372,
       "duration": 0.86,
       "size": 0.13,
       "color": "#8eeeff"
     },
     {
-      "id": "ProcessPaymentStatus->Database:store:store:4",
-      "edgeId": "ProcessPaymentStatus->Database:store",
+      "id": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary:primary:8",
+      "edgeId": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary",
+      "kind": "primary",
+      "start": 8.372,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessFinalizePaymentOutput->Database:store:store:4",
+      "edgeId": "ProcessFinalizePaymentOutput->Database:store",
       "kind": "store",
       "start": 8.381,
       "duration": 1.08,
@@ -781,10 +902,46 @@
       "color": "#c1b4ff"
     },
     {
-      "id": "AwaitPaymentProvider->ProcessPaymentStatus:primary:primary:10",
-      "edgeId": "AwaitPaymentProvider->ProcessPaymentStatus:primary",
+      "id": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary:primary:1",
+      "edgeId": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary",
       "kind": "primary",
-      "start": 8.477,
+      "start": 8.55,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary:primary:1",
+      "edgeId": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 8.55,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary:primary:1",
+      "edgeId": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 8.55,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary:primary:9",
+      "edgeId": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary",
+      "kind": "primary",
+      "start": 8.661,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary:primary:9",
+      "edgeId": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary",
+      "kind": "primary",
+      "start": 8.661,
       "duration": 0.86,
       "size": 0.13,
       "color": "#8eeeff"
@@ -799,15 +956,6 @@
       "color": "#8fa9ff"
     },
     {
-      "id": "AwaitPaymentProvider->ProcessPaymentStatus:primary:primary:11",
-      "edgeId": "AwaitPaymentProvider->ProcessPaymentStatus:primary",
-      "kind": "primary",
-      "start": 8.714,
-      "duration": 0.86,
-      "size": 0.13,
-      "color": "#8eeeff"
-    },
-    {
       "id": "PaymentProvider->AwaitPaymentProviderKafkaBroker:completion:completion:10",
       "edgeId": "PaymentProvider->AwaitPaymentProviderKafkaBroker:completion",
       "kind": "completion",
@@ -817,8 +965,44 @@
       "color": "#c1b4ff"
     },
     {
-      "id": "AwaitPaymentProvider->ProcessPaymentStatus:primary:primary:12",
-      "edgeId": "AwaitPaymentProvider->ProcessPaymentStatus:primary",
+      "id": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary:primary:2",
+      "edgeId": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 8.806,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary:primary:2",
+      "edgeId": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 8.806,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary:primary:2",
+      "edgeId": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 8.806,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary:primary:10",
+      "edgeId": "AwaitPaymentProvider->ProcessUnapprovedPaymentStatus:primary",
+      "kind": "primary",
+      "start": 8.95,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary:primary:10",
+      "edgeId": "AwaitPaymentProvider->ProcessApprovedPaymentStatus:primary",
       "kind": "primary",
       "start": 8.95,
       "duration": 0.86,
@@ -835,8 +1019,8 @@
       "color": "#8fa9ff"
     },
     {
-      "id": "ProcessPaymentStatus->Database:store:store:5",
-      "edgeId": "ProcessPaymentStatus->Database:store",
+      "id": "ProcessFinalizePaymentOutput->Database:store:store:5",
+      "edgeId": "ProcessFinalizePaymentOutput->Database:store",
       "kind": "store",
       "start": 8.999,
       "duration": 1.08,
@@ -844,8 +1028,89 @@
       "color": "#6fd9ff"
     },
     {
-      "id": "ProcessPaymentStatus->Database:store:store:6",
-      "edgeId": "ProcessPaymentStatus->Database:store",
+      "id": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary:primary:3",
+      "edgeId": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 9.061,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary:primary:3",
+      "edgeId": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 9.061,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary:primary:3",
+      "edgeId": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 9.061,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary:primary:4",
+      "edgeId": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 9.317,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary:primary:4",
+      "edgeId": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 9.317,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary:primary:4",
+      "edgeId": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 9.317,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary:primary:5",
+      "edgeId": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 9.572,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary:primary:5",
+      "edgeId": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 9.572,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary:primary:5",
+      "edgeId": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 9.572,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessFinalizePaymentOutput->Database:store:store:6",
+      "edgeId": "ProcessFinalizePaymentOutput->Database:store",
       "kind": "store",
       "start": 9.616,
       "duration": 1.08,
@@ -853,8 +1118,62 @@
       "color": "#6fd9ff"
     },
     {
-      "id": "ProcessPaymentStatus->Database:store:store:7",
-      "edgeId": "ProcessPaymentStatus->Database:store",
+      "id": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary:primary:6",
+      "edgeId": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 9.828,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary:primary:6",
+      "edgeId": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 9.828,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary:primary:6",
+      "edgeId": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 9.828,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary:primary:7",
+      "edgeId": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 10.083,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary:primary:7",
+      "edgeId": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 10.083,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary:primary:7",
+      "edgeId": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 10.083,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessFinalizePaymentOutput->Database:store:store:7",
+      "edgeId": "ProcessFinalizePaymentOutput->Database:store",
       "kind": "store",
       "start": 10.233,
       "duration": 1.08,
@@ -862,8 +1181,62 @@
       "color": "#6fd9ff"
     },
     {
-      "id": "ProcessPaymentStatus->ObjectPublish:publish:publish:1",
-      "edgeId": "ProcessPaymentStatus->ObjectPublish:publish",
+      "id": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary:primary:8",
+      "edgeId": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 10.339,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary:primary:8",
+      "edgeId": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 10.339,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary:primary:8",
+      "edgeId": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 10.339,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary:primary:9",
+      "edgeId": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 10.594,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary:primary:9",
+      "edgeId": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 10.594,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary:primary:9",
+      "edgeId": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 10.594,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessFinalizePaymentOutput->ObjectPublish:publish:publish:1",
+      "edgeId": "ProcessFinalizePaymentOutput->ObjectPublish:publish",
       "kind": "publish",
       "start": 10.75,
       "duration": 0.45,
@@ -871,8 +1244,35 @@
       "color": "#ffe08a"
     },
     {
-      "id": "ProcessPaymentStatus->Database:store:store:8",
-      "edgeId": "ProcessPaymentStatus->Database:store",
+      "id": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary:primary:10",
+      "edgeId": "ProcessApprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 10.85,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary:primary:10",
+      "edgeId": "ProcessUnapprovedPaymentStatus->FinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 10.85,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary:primary:10",
+      "edgeId": "FinalizePaymentOutput->ProcessFinalizePaymentOutput:primary",
+      "kind": "primary",
+      "start": 10.85,
+      "duration": 0.86,
+      "size": 0.13,
+      "color": "#8eeeff"
+    },
+    {
+      "id": "ProcessFinalizePaymentOutput->Database:store:store:8",
+      "edgeId": "ProcessFinalizePaymentOutput->Database:store",
       "kind": "store",
       "start": 10.85,
       "duration": 1.08,
@@ -880,8 +1280,8 @@
       "color": "#6fd9ff"
     },
     {
-      "id": "ProcessPaymentStatus->ObjectPublish:publish:publish:2",
-      "edgeId": "ProcessPaymentStatus->ObjectPublish:publish",
+      "id": "ProcessFinalizePaymentOutput->ObjectPublish:publish:publish:2",
+      "edgeId": "ProcessFinalizePaymentOutput->ObjectPublish:publish",
       "kind": "publish",
       "start": 11.55,
       "duration": 0.45,
