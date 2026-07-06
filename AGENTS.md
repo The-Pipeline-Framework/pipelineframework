@@ -1,103 +1,57 @@
 # The Pipeline Framework
 
-## Project Overview
-
-The Pipeline Framework (TPF) is a Java framework for reactive pipeline systems on Quarkus 3.33.1+.
-It generates transport adapters at build time from pipeline metadata:
-
-- gRPC server/client artifacts
-- REST resource/client artifacts
-- local client artifacts for in-process transport
+The Pipeline Framework (TPF) is a Java framework for strongly typed application flows.
+Keep the core pure. Connect to reality.
 
 Core modules:
-
-- `framework/runtime`: runtime APIs, execution engine, telemetry, config loading
-- `framework/deployment`: annotation processor and code generation phases
+- `framework/pom.xml`: Parent POM of the mult-module Maven project
+- `framework/deployment`: compiler and code generation phases (Quarkus/canonical)
+- `framework/runtime-core`: framework-neutral TPF abstractions
+- `framework/runtime`: runtime APIs, execution engine, telemetry, config loading (Quarkus/canonical)
+- `framework/runtime-spring`: runtime APIs, execution engine, telemetry, config loading (Springboot))
 
 Supporting repo surfaces:
 
 - `examples`: reference applications, topology smoke paths, and end-to-end compatibility surfaces
 - `ai-sdk`: standalone Java SDK used for delegation/operator stress testing and mapper/transport exercises
-- `tpf-mcp-bridge` (separate repo): MCP bridge and template generator snapshot
-- `web-ui`: SvelteKit Canvas/web UI
 - `docs`: VitePress documentation site
+- `web-ui`: SvelteKit Canvas/web UI (unmaintained)
 
-### Current State (Post-PA Era)
+tpf-mcp-bridge lives in a separate repo now. It holds the MCP bridge and the template generator.
 
-- Compilation is YAML-driven first, with annotation processing and model phases enforcing contracts before runtime.
-- Operator steps are first-class (`operator: fully.qualified.Class::method`) and are resolved/validated at build time.
-- Mapper model uses `Mapper<Domain, External>` and pair-based matching for boundary validation.
-- Function platform (`pipeline.platform=FUNCTION`) is an actively used runtime path and must stay semantically aligned with other runtime paths.
-- Runtime lineage behavior (split/merge envelopes) is treated as deterministic behavior, not best-effort metadata.
+For planning, PR slicing, architecture tradeoffs, roadmap shaping, or docs IA strategy, read `AGENTS.planning.md`. For ordinary implementation work, use this file plus the smallest relevant local context.
 
 ## Canonical Terms
 
-- **Runtime layout**: logical runtime shape declared in runtime mapping (`modular`, `pipeline-runtime`, `monolith`).
-- **Build topology**: Maven module/POM structure that physically builds deployables for a layout.
+Load `AGENTS.glossary.md` when terminology, docs wording, transport/platform naming, architecture explanations, or public-facing copy matters.
 
-These are related but not identical. Runtime mapping does not automatically reshape Maven modules.
+Always keep these distinctions active:
 
-## CSV Payments Reference Topologies
-
-Current example entrypoints:
-
-- Modular: `examples/csv-payments/pom.xml`
-- Pipeline-runtime: `examples/csv-payments/pom.pipeline-runtime.xml`
-- Monolith: `examples/csv-payments/pom.monolith.xml`
-
-Helper scripts:
-
-- `examples/csv-payments/build-pipeline-runtime.sh`
-- `examples/csv-payments/build-monolith.sh`
-
-When changing layout support in csv-payments, update all of:
-
-1. Topology POM/script
-2. Runtime mapping YAML
-3. Topology test(s)
-4. E2E IT path (through `AbstractCsvPaymentsEndToEnd`)
-5. Relevant CI workflows under `.github/workflows/` (at minimum `full-tests.yml` and any `e2e-csv-*.yml` jobs that cover the changed layout)
-6. Runtime-layout docs under `docs/deploy/runtime-layouts/`
+- **Functional core / imperative shell**: business logic stays typed and transport-neutral; TPF owns generated adapters, connectors, await handling, persistence, caching, replay, telemetry, retries, and deployment/runtime integration.
+- **Pipeline**: a strongly typed application flow, not a CI/CD pipeline, generic workflow diagram, or arbitrary orchestration graph.
+- **Transport mode**: only `GRPC`, `REST`, and `LOCAL` as `pipeline.transport` values. `FUNCTION`, `HTTP_LAMBDA`, `PROTOBUF_HTTP_V1`, and `ENVELOPE_HTTP_V1` are separate platform/deployment/wire-protocol concepts.
+- **Runtime layout vs build topology**: runtime layout is the logical runtime shape; build topology is the Maven/JAR/container structure that physically builds deployables.
+- **Connector vs plugin**: connectors model typed I/O boundaries; plugins provide cross-cutting framework extensions such as persistence, caching, telemetry, or logging.
 
 ## Runtime and Build Commands
 
-Framework:
+Load `AGENTS.validation.md` before choosing validation commands for non-trivial changes.
 
-- Build: `./mvnw -f framework/pom.xml clean install`
-- Verify: `./mvnw -f framework/pom.xml verify`
+Most common gates:
 
-Root project:
-
-- Build: `./mvnw clean install`
-- Verify: `./mvnw verify`
-
-CSV payments targeted examples:
-
-- Pipeline-runtime orchestrator verification:
-  `./examples/csv-payments/build-pipeline-runtime.sh -pl orchestrator-svc -Dcsv.runtime.layout=pipeline-runtime -Dtest=PipelineRuntimeTopologyTest -Dit.test=CsvPaymentsPipelineRuntimeEndToEndIT verify`
-
-- Monolith verification:
-  `./examples/csv-payments/build-monolith.sh -DskipTests`
-
-Search targeted example:
-
-- Function platform smoke verification (build-switch based; no Lambda Maven profile):
-  `./mvnw -f examples/search/pom.xml -pl orchestrator-svc -am -Dpipeline.platform=FUNCTION -Dpipeline.transport=REST -Dpipeline.rest.naming.strategy=RESOURCEFUL -DskipTests compile`
-  `./mvnw -f examples/search/pom.xml -pl orchestrator-svc -Dpipeline.platform=FUNCTION -Dpipeline.transport=REST -Dpipeline.rest.naming.strategy=RESOURCEFUL -Dtest=LambdaMockEventServerSmokeTest test`
-
-Targeted unit-test coverage helper:
-
-- Generate deterministic JaCoCo coverage for a single framework module + test slice:
-  `./scripts/coverage-targeted.sh runtime FunctionTransportBridgeTest,UnaryFunctionTransportBridgeTest`
-  `./scripts/coverage-targeted.sh deployment RestFunctionHandlerRendererTest`
-- Helper output includes report path and LINE/BRANCH percentages from module-local `target/site/jacoco/jacoco.xml`.
-
-Node/docs surfaces:
-
-- AI SDK compile/test surface: `./mvnw -f ai-sdk/pom.xml test`
-- Template generator tests live in the separate `The-Pipeline-Framework/tpf-mcp-bridge` repository. The generator-facing schema is exported from `framework/deployment` as `META-INF/pipeline/pipeline-template-schema.json` and consumed by that repo.
-- Web UI type/build checks: `npm --prefix web-ui run check`, `npm --prefix web-ui run build`
+- Framework verify: `./mvnw -f framework/pom.xml verify`
+- Root verify: `./mvnw verify`
 - Docs build: `npm --prefix docs run build`
+
+## Maven Cache Policy
+
+Multiple Codex worktrees may point at clones of this repo at the same time. Keep Maven cache behavior explicit:
+
+- Use the shared Maven local repository, `~/.m2/repository`, by default. It stores downloaded dependencies and artifacts written by `mvn install`; override with `-Dmaven.repo.local=...` only when isolation is required.
+- Use the worktree-local Maven build cache, `${session.executionRootDirectory}/.maven-build-cache`, for reusable build outputs. This is configured in `.mvn/maven-build-cache-config.xml` to avoid cross-worktree build-output leakage from the default `~/.m2/build-cache`.
+- Use a worktree-local Maven repository such as `.mvn-local` only for tasks that require `mvn install`, generated scaffold smoke tests, or external repo/generated project consumption of `org.pipelineframework:*` artifacts.
+
+Normal reactor builds should resolve reactor modules directly, not through `~/.m2/repository`. The collision risk is when TPF examples, templates, generated projects, or other external consumers depend on same-version `org.pipelineframework:*` artifacts outside the current reactor.
 
 ## Architecture Notes
 
@@ -105,35 +59,57 @@ Node/docs surfaces:
 - Telemetry metadata is emitted to `META-INF/pipeline/telemetry.json` at build time.
 - Runtime is reactive-first; blocking work must be explicitly offloaded.
 
-### Steps and Aspects
+### Deployment Patterns And Wire Protocols
 
-- `@PipelineStep` services are converted into IR and binding models, then rendered per generation target.
-- Aspects are semantic side effects expanded during compilation.
-- Side effects, plugins, and synthetics are first-class in mapping/target resolution.
-
-### Transport Modes
-
-- `GRPC`: remote client/server generation
-- `REST`: REST resource/client generation
-- `LOCAL`: in-process client generation (no remote hop)
-- `HTTP_LAMBDA` (deployment pattern): HTTP/Lambda-style runtime path implemented as `pipeline.transport=REST` with `pipeline.platform=FUNCTION`
-
-### Platform Modes
-
-- `FUNCTION`: function handler path (including Lambda-oriented flows)
-- `COMPUTE`: service/resource execution path
+- `HTTP_LAMBDA`: deployment/platform pattern implemented as `pipeline.transport=REST` with `pipeline.platform=FUNCTION`
+- `PROTOBUF_HTTP_V1`: protobuf-over-HTTP wire/envelope protocol for remote HTTP step-host/operator boundaries
+- `ENVELOPE_HTTP_V1`: loose-envelope HTTP wire protocol for remote HTTP step-host/operator boundaries
 
 Transport and platform are orthogonal dimensions; avoid coupling operator category directly to transport decisions.
 
 ## Current Engineering Invariants
 
-- Operator contract failures should be raised at build time whenever possible (resolution, shape, cardinality/link compatibility).
-- gRPC-bound flows require descriptor availability and compatible bindings at generation/binding phases.
-- Mapper inference/selection should remain pair-accurate (`Domain` + `External`) and deterministic in ambiguity diagnostics.
-- Split/merge lineage IDs and ordering must be deterministic and replay-safe across runtime adapters.
-- FUNCTION vs COMPUTE/REST paths should preserve equivalent behavior for cardinality and failure semantics unless explicitly documented.
-- New TPF control-plane storage should prefer immutable internal records. For new Dynamo-backed coordinator stores, avoid `UpdateItem`/upsert semantics; prefer conditional writes, immutable records, and append-only event records. Existing execution/await stores are legacy exceptions until explicitly redesigned.
+Compilation and contracts:
+
+- YAML-driven compilation is the primary contract source. Annotations may mark services or compatibility paths, but YAML/model phases should own flow shape, step order, cardinality, transport/platform choices, operators, connectors, and semantic step kinds.
+- Contract failures should surface at build time whenever possible: step resolution, operator method shape, mapper compatibility, cardinality/link compatibility, connector declarations, transport requirements, and generated artifact availability.
+- Mapper inference and selection must remain pair-accurate (`Domain` + `External`) and deterministic in ambiguity diagnostics.
+- gRPC-bound flows require descriptor availability and compatible bindings during generation/binding phases.
+- Generated artifacts are part of the contract. Pipeline order, telemetry metadata, runtime descriptions, generated adapters, function handlers, and template-generator schema exports should not drift from the compiler model.
+
+Runtime semantics:
+
+- Transport mode, platform mode, deployment pattern, wire/envelope protocol, and worker invocation protocol must stay distinct. Do not treat `FUNCTION`, `HTTP_LAMBDA`, `PROTOBUF_HTTP_V1`, or `ENVELOPE_HTTP_V1` as peers of `GRPC`, `REST`, and `LOCAL`.
+- FUNCTION and COMPUTE paths should preserve equivalent cardinality, mapper, rejection, failure, and lineage semantics unless a difference is explicitly documented and validated.
+- Runtime layout and build topology are related but not interchangeable. Runtime mapping changes generated placement/calls; it does not automatically reshape Maven modules, POMs, or deployable packaging.
+- Split/merge lineage IDs and ordering must be deterministic and replay-safe across runtime adapters, platform modes, and generated transports.
+- Reactive execution is the default. Blocking work must be explicitly offloaded, documented by the relevant execution hint, and validated in the runtime path that uses it.
+
+Boundaries and I/O shells:
+
+- Business functions should stay focused on typed domain transformations. Persistence, transport, retries, correlation, polling, replay capture, and deployment wiring belong in the imperative shell.
+- Connectors model I/O admission/publication and captured external reality. Plugins model cross-cutting side effects. Do not blur connector semantics into generic plugin behavior or hide external I/O in business steps when a connector/runtime primitive exists.
+- Await boundaries must preserve durable wait state, correlation, completion admission, timeout, duplicate completion handling, and resume semantics. Transport adapters may vary; await semantics should not.
+- Checkpoint handoff is a cross-pipeline ownership boundary. After admission, the downstream pipeline owns retry/DLQ and lifecycle semantics.
+- Persistence, caching, materialization, execution state, await state, and checkpoint handoff are separate state surfaces. Do not substitute one for another without explicit design rationale.
+
+Durability and storage:
+
+- New TPF control-plane storage should prefer immutable internal records. For new Dynamo-backed coordinator stores, avoid `UpdateItem`/upsert semantics; prefer conditional writes, immutable records, and append-only event records.
+- Existing execution/await stores are legacy exceptions until explicitly redesigned. Do not use their mutable patterns as precedent for new durable control-plane code.
+- Idempotency keys, dispatch identifiers, checkpoint identifiers, and correlation identifiers must remain stable and replay-safe across retries and adapter boundaries.
+
+Portability:
+
+- Quarkus is the canonical production runtime today, but framework-neutral semantics should live in `runtime-core` when they are not inherently Quarkus-specific.
+- Spring support is emerging and limited. Do not claim Spring parity unless the matching compiler/runtime path and smoke coverage exist.
+- Renderer-specific code should adapt the shared model; it should not redefine TPF semantics independently for Quarkus, Spring, function providers, or template generation.
+
+Coding guardrails:
+
 - New code should not use `return null`; use `Optional`, empty collections, explicit result records, or exceptions. Existing legacy/null-heavy code is not a precedent for new work.
+- Prefer explicit result types and immutable records for new internal state. Avoid hidden mutable globals, broad static utility accretion, and "God classes".
+- New semantic step kinds (`kind: await`, `kind: command`, query steps, object I/O, or future DSL-owned I/O shells) must update compiler/runtime support, validation tests, user docs, telemetry/replay metadata, replay-viewer rendering/legend, and affected examples or generator paths together.
 
 ## Persistence Plugin Notes
 
@@ -146,9 +122,7 @@ Keep both forms aligned in docs and processor behavior.
 
 ## Testing Conventions
 
-- Unit tests: `*Test` (Surefire)
-- Integration tests: `*IT` (Failsafe)
-- E2E tests using containers should run in `verify` unless there is an explicit reason otherwise.
+Unit tests use `*Test` with Surefire. Integration tests use `*IT` with Failsafe. E2E tests using containers should run in `verify` unless there is an explicit reason otherwise.
 
 ## Docs Source of Truth
 
@@ -164,29 +138,28 @@ Canonical docs live under top-level route directories:
 `docs/guide/**` files are redirect/noindex compatibility stubs only. Do not add real content there. Move or merge useful guide-stub content into the canonical top-level route.
 
 Use links between these areas when a feature spans both implementation and app usage.
-Prefer the split annotation-processor guide under `docs/evolve/annotation-processor/` over older compatibility pages when both exist.
-
-## Canonical Entry Docs
-
-- `docs/deploy/runtime-layouts/index.md`
-- `docs/develop/pipeline-compilation/index.md`
-- `docs/develop/operators.md`
-- `docs/develop/testing.md`
-- `docs/design/persistence.md`
-- `docs/develop/using-plugins.md`
-- `docs/evolve/annotation-processor/index.md`
-- `docs/evolve/compiler-pipeline-architecture.md`
-- `docs/evolve/plugins-architecture.md`
-- `docs/evolve/publishing.md`
-- `docs/evolve/ci-guidelines.md`
-- `docs/evolve/tpfgo/index.md`
 
 ## Agent Working Rules for This Repo
 
-- Prefer `rg`/`rg --files` for searching.
-- Do not perform destructive git operations unless explicitly requested.
-- Do not commit/push unless explicitly requested.
-- If unexpected unrelated working-tree changes appear mid-task, stop and ask.
+This is a large multi-surface repository. Do not start tasks with broad recursive search.
+
+Use Repowise first for orientation and discovery before broad repo search, but treat it as an index, not authority.
+Do not refresh or rebuild Repowise automatically unless explicitly requested.
+Repowise may point at a canonical indexed checkout, not the active worktree.
+Verify conclusions against source before editing.
+
+For planning, PR slicing, roadmap, or architecture tradeoff work, load `AGENTS.planning.md`. For implementation work, read only the source files needed for the current decision and run the smallest validation command that proves the claim.
+
+TPF-specific scoping rules:
+
+- Core semantics usually live under `framework/runtime-core` `framework/runtime` and `framework/deployment`.
+- Runtime integrations should stay scoped:
+  - Spring work: `core + spring`, not Quarkus unless parity is claimed.
+  - Quarkus work: `core + quarkus`, not Spring unless parity is claimed.
+- Examples are compatibility surfaces, not disposable demos.
+- Docs should be updated with semantic changes, but do not scan all docs unless the affected concept is unclear.
+- Replay/web-ui is relevant when execution semantics, telemetry, step lifecycle, or visual replay state changes.
+- `tpf-mcp-bridge` is separate; only involve it when template generation, schema export, scaffold generation, or generated project behavior changes.
 - Treat `examples/` and `ai-sdk/` as compatibility/reference surfaces, not disposable demos, when framework semantics change.
 - Keep user-facing docs (`design`/`develop`/`deploy`/`operate`/`value`) free of internal planning terminology unless the topic is explicitly implementation-internal (`docs/evolve/`).
 - Prefer enriching existing canonical docs pages over introducing standalone “feature islands” that duplicate navigation.
@@ -199,15 +172,60 @@ Prefer the split annotation-processor guide under `docs/evolve/annotation-proces
 - Keep risk registers, update reports, and future-work tracking out of user-facing docs unless they are actionable operator runbooks; place backlog/planning artifacts under `docs/evolve/` or external issue trackers.
 - When changing operator or mapper semantics, update code + tests + docs together in the same change set.
 - When adding or changing a semantic step kind (`kind: await`, `kind: command`, query steps, object I/O, or future DSL-owned I/O shells), update compiler/runtime support, validation tests, user docs, telemetry/replay metadata, replay-viewer node rendering/legend, and any affected example replay datasets or generation paths in the same change set.
-- When changing runtime-layout, generator, or Canvas/web UI semantics, update `web-ui`, affected docs, tests, and the separate `The-Pipeline-Framework/tpf-mcp-bridge` repository when applicable.
+- Do not write procedural code that leads to "God classes" e.g. with 'static' methods.
+- Use available Java FP patterns and language features whenever possible
+- Do not `return null` or pass null values as parameters (use Optional<> instead)
 
-## PR Slicing Criteria
+## Git Safety
 
-When planning or proposing PRs, optimize for cohesive slices rather than many small PRs.
+- Do not perform destructive git operations unless explicitly requested.
+- Do not commit or push unless explicitly requested.
+- If unexpected unrelated working-tree changes appear mid-task, stop and ask.
 
-- One production risk per PR (for example: transport parity, durable state, DLQ durability, or crash-recovery semantics).
-- One clear validation gate per PR: 1-3 deterministic CI commands that prove the slice.
-- No mixed intent in the same PR (avoid combining unrelated runtime logic, docs refactors, and generator rewrites).
-- Bounded blast radius (prefer a single module or a single execution path per PR unless explicitly approved).
-- Mergeable independently: each PR must be shippable without requiring hidden follow-up fixes.
-- Default target is fewer, larger-cohesive PRs per workstream (typically 1-2), not many micro-PRs.
+## Token Discipline
+
+Prefer Repowise MCP context over broad grep, but do not call every Repowise tool by default. Keep routine implementation context small; load the planning supplement only when the task is actually planning-shaped.
+
+<!-- REPOWISE_AGENTS:START — Do not edit below this line. Auto-generated by Repowise. -->
+## Repowise Codebase Context For pipelineframework
+
+This repository is indexed by Repowise. Use the Repowise MCP tools for codebase orientation, discovery, implementation context, modification risk, design rationale, and cleanup planning. MCP data reflects the last index run; verify against source files before editing.
+
+Last indexed: 2026-07-06 (commit 1c72fd0de). Confidence: 100%.
+### Architecture
+The Pipeline Framework is a Java reactive pipeline framework that consumes annotated pipeline definitions, configuration files, domain/operator code, and deployment topology settings, compiles them into runtime metadata and generated adapters, and produces executable Quarkus-based pipeline services, function handlers, telemetry artifacts, replay data, examples, and developer documentation. This repository is a monorepo for the framework runtime, annotation-processing compiler, documentation site, examples, infrastructure templates, replay tooling, and supporting UI surfaces. Its core purpose is to let developers model business workflows as ordered pipeline steps, validate those workflows at build time, generate the correct runtime bindings, and run them across local, REST, gRPC, function, modular, pipeline-runtime, or monolith deployment shapes. The repository is documentation-heavy and framework-centric: Java is the primary implementation language, Markdown is a major part of the project surface, and JavaScript powers the docs site, replay viewer, and UI tooling.
+### Key Modules
+| Module | Purpose | Owner |
+|--------|---------|-------|
+| `framework/deployment/src/main/java/org/pipelineframework/processor` | The pipelineframework/processor module is the compiler orchestration layer of… | - |
+### Entry Points
+- `framework/runtime/src/main/java/org/pipelineframework/config/PipelineStepConfig.java`
+- `framework/runtime/src/main/java/org/pipelineframework/orchestrator/PipelineOrchestratorConfig.java`
+- `framework/runtime/src/main/java/org/pipelineframework/config/StepConfig.java`
+- `framework/deployment/src/main/java/org/pipelineframework/processor/PipelineStepProcessor.java`
+- `examples/checkout/nextjs-ui/lib/checkout-flow.js`
+- `examples/csv-payments/common/src/main/java/org/pipelineframework/csv/common/domain/PaymentRecord.java`
+- `examples/search/common/src/main/java/org/pipelineframework/search/common/domain/CrawlRequest.java`
+- `framework/runtime/src/main/java/org/pipelineframework/telemetry/PipelineTelemetry.java`
+- `framework/runtime/src/main/java/org/pipelineframework/config/PipelineConfig.java`
+- `framework/deployment/src/test/java/org/pipelineframework/processor/renderer/SpringRestClientStepRendererTest.java`
+### Risk Hotspots
+| File | Churn | 90d Commits | Owner |
+|------|-------|-------------|-------|
+| `framework/runtime/src/main/java/org/pipelineframework/config/template/PipelineTemplateConfigLoader.java` | 100.0th percentile | 16 | mariano.barcia |
+| `examples/csv-payments/orchestrator-svc/src/test/java/org/pipelineframework/csv/orchestrator/service/AbstractCsvPaymentsEndToEnd.java` | 98.6th percentile | 29 | mariano.barcia |
+| `framework/runtime/src/main/java/org/pipelineframework/config/pipeline/PipelineYamlConfigLoader.java` | 97.2th percentile | 24 | Mariano Barcia |
+| `framework/deployment/src/main/java/org/pipelineframework/processor/parser/StepDefinitionParser.java` | 95.8th percentile | 25 | mariano.barcia |
+| `framework/runtime/src/main/java/org/pipelineframework/PipelineStepExecutor.java` | 94.4th percentile | 11 | mariano.barcia |
+
+### Repowise MCP Workflow
+
+- Overview: call `get_overview()` at the start of an unfamiliar task to orient on architecture, modules, entry points, and tech stack.
+- Search: call `search_codebase(query="...")` when locating where a concept, symbol, feature, or behavior is implemented.
+- Context: call `get_context(targets=["path/or/symbol", "..."])` for enriched docs, ownership, decisions, callers, and related files before relying on raw source alone.
+- Risk: call `get_risk(targets=["path/to/file.py"])` before modifying shared utilities, public APIs, hotspots, high-coupling modules, or files with unknown dependents.
+- Why: call `get_why(query="...")` before architectural changes or when the user asks why code is structured a certain way.
+- Dead code: call `get_dead_code(safe_only=true)` before cleanup or removal work; treat lower-confidence findings as candidates to investigate.
+- Connections: call `get_context(targets=["..."], include=["callers", "callees"])` when tracing how a symbol connects to the rest of the code.
+
+<!-- REPOWISE_AGENTS:END -->
