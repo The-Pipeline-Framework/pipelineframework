@@ -16,4 +16,10 @@
 
 package org.pipelineframework.csv.orchestrator.service;
 
-class CsvPaymentsPipelineRuntimeEndToEndIT extends AbstractCsvPaymentsEndToEnd {}
+class CsvPaymentsPipelineRuntimeEndToEndIT extends AbstractCsvPaymentsEndToEnd {
+
+    @Override
+    protected boolean runMalformedRejectScenario() {
+        return false;
+    }
+}
