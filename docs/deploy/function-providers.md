@@ -65,6 +65,8 @@ If you need queue-backed recovery, checkpoint handoff, or orchestrator-managed H
 
 An all-serverless durable coordinator would be a separate design, backed by durable services such as DynamoDB, SQS, and EventBridge-style scheduling. Current `FUNCTION` support should be read as serverless adapter support, not as that architecture.
 
+The current architecture spike for that future path is [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator). It evaluates TPF-native single-shot coordinator actions first, and provider durable workflow engines such as Lambda durable functions, Step Functions, Azure Durable Functions, and Google Cloud Workflows as possible later adapters.
+
 ## Quick Start
 
 ### AWS Lambda

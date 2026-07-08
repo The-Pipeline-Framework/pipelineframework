@@ -19,4 +19,3 @@ Use this page when the Search Azure Functions verification lane fails.
 - Terraform plan/apply output
 
 For the original detailed notes, see [Search Azure Functions Reference](/deploy/search-azure-functions-reference#troubleshooting).
-

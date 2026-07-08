@@ -314,6 +314,7 @@ const mainSidebar = [
                     {text: 'Bundle Contract', link: '/evolve/durable-coordinator/bundle-contract'},
                     {text: 'Pipeline Contract And Release Model', link: '/evolve/durable-coordinator/pipeline-contract-release-model'},
                     {text: 'Runtime Boundaries And Performance', link: '/evolve/durable-coordinator/runtime-boundaries-performance'},
+                    {text: 'All-Serverless Coordinator', link: '/evolve/durable-coordinator/all-serverless-coordinator'},
                     {text: 'Local APIs', link: '/evolve/durable-coordinator/local-apis'},
                     {text: 'Self-Hosted Deployment', link: '/evolve/durable-coordinator/self-hosted-deployment'},
                     {text: 'Self-Hosted HA Roadmap', link: '/evolve/durable-coordinator/self-hosted-ha-roadmap'},

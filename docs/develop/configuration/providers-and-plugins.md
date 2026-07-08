@@ -22,4 +22,3 @@ Provider and plugin configuration selects framework-owned shell behavior around 
 - [Field Materialization](/design/materialization)
 - [State Model](/design/state-model)
 - [Using Plugins](/develop/using-plugins)
-

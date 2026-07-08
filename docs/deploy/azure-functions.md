@@ -40,6 +40,8 @@ This path is not:
 
 Azure Durable Functions do not change TPF runtime semantics. If you need queue-backed HA, checkpoint handoff, or orchestrator-managed crash recovery, use the `COMPUTE` + `QUEUE_ASYNC` path.
 
+For the future all-serverless durable coordinator design track, see [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator). That design is not current Azure Functions support.
+
 ## Example verification surface
 
 The current repo verification surface for Azure is located in `examples/search`.

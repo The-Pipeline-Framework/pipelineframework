@@ -29,4 +29,3 @@ steps:
 ```
 
 For the full legacy reference, see [Operator Delegation Reference](/develop/extension/operator-delegation-reference#migration-guide).
-

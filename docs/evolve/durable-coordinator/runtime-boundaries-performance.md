@@ -4,6 +4,62 @@ The release runtime cutover adds coordinator-side concepts, but it does not make
 
 For the role split behind the terms coordinator, transition worker, and `orchestrator-svc`, start with [Coordinator And Worker Topology](/evolve/durable-coordinator/coordinator-worker-topology).
 
+The durable coordinator is the recovery and operations path, not the lowest-latency path. Low-latency request/response applications should start with `SYNC` or a local compute deployment and add `QUEUE_ASYNC` only where durable acceptance, await resume, retry/DLQ, release pinning, or operator recovery is worth the coordination cost.
+
+## Runtime Mode Positioning
+
+| Mode | Best fit | Performance posture |
+| --- | --- | --- |
+| `SYNC` local/compute | low-latency request/response paths | no durable coordinator hop; caller waits for the pipeline result |
+| One-process `QUEUE_ASYNC` | local demo and adoption proof | durable runtime semantics are visible, but process-local providers are not HA |
+| Compute-first `QUEUE_ASYNC` HA | self-host recovery, await, DLQ/re-drive, release pinning | extra state/queue/worker hops are deliberate durability boundaries |
+| Current `FUNCTION` | serverless invocation packaging and adapter semantics | platform invocation availability only; not TPF-owned durable HA |
+| Future all-serverless HA | separate design track | likely higher coordination latency because wakeups, queues, timers, and claims are provider events/functions |
+
+```mermaid
+flowchart LR
+    Client["Client"]
+    Sync["SYNC pipeline call"]
+    Steps["Local step/runtime calls"]
+    Result["Result"]
+
+    Client --> Sync --> Steps --> Result
+```
+
+```mermaid
+flowchart LR
+    Client["Client"]
+    Coordinator["Coordinator service"]
+    Store["Dynamo-style state"]
+    Queue["SQS-style work queue"]
+    Worker["Transition worker"]
+
+    Client --> Coordinator
+    Coordinator --> Store
+    Coordinator --> Queue
+    Queue --> Coordinator
+    Coordinator --> Worker
+    Worker --> Coordinator
+    Coordinator --> Store
+```
+
+```mermaid
+flowchart LR
+    Event["API / queue / timer event"]
+    Fn["Single-shot coordinator action"]
+    Store["Durable state"]
+    Queue["Durable queue"]
+    WorkerFn["Stateless transition worker"]
+
+    Event --> Fn
+    Fn --> Store
+    Fn --> Queue
+    Queue --> WorkerFn
+    WorkerFn --> Store
+```
+
+The third diagram is future work, not current `FUNCTION` support. The design spike is [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator).
+
 ## Runtime Mapping
 
 Runtime layout and worker selection stay orthogonal.

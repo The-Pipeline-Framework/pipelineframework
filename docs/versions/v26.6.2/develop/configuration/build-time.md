@@ -29,4 +29,3 @@ Use build-time settings when the compiler needs to understand the contract befor
 - provider availability required for generation.
 
 Avoid using runtime properties to compensate for a mismatched generated model. If a step contract, mapper, or transport shape is wrong, fix the YAML or Java contract and rebuild.
-

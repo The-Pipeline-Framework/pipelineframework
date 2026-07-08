@@ -29,6 +29,8 @@ pipeline.orchestrator.mode=QUEUE_ASYNC
 
 Use [Queue-Async Runtime](/deploy/orchestrator-runtime/queue-async) before relying on background execution in production-style environments.
 
+For latency and topology tradeoffs between `SYNC`, compute-first `QUEUE_ASYNC`, current `FUNCTION`, and future all-serverless HA, see [Runtime Boundaries And Performance](/evolve/durable-coordinator/runtime-boundaries-performance).
+
 `kind: await` and `kind: command` are framework-owned I/O shells on top of `QUEUE_ASYNC`. Await owns suspend/resume around a deferred external result. Command owns idempotent external effects that should be recorded, retried, replayed, or dead-lettered as part of the pipeline lifecycle.
 
 ## Generated Transport Entry Points

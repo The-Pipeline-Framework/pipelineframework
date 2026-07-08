@@ -28,4 +28,3 @@ Runtime settings should not change the business contract. They should change dep
 - how work is scheduled,
 - how failures are retried or surfaced,
 - how telemetry and health are exposed.
-

@@ -54,7 +54,7 @@ Use this shape for production-style recovery tests and self-host pilots.
 
 The coordinator persists execution and await state in DynamoDB-style tables, dispatches work through SQS-style queues, and publishes terminal execution failures to a durable DLQ. Workers can still be local, REST, gRPC, or SQS request/reply workers, but a separated REST or gRPC worker is the clearer operational boundary.
 
-This is the TPF-owned HA path. Current `FUNCTION` builds are serverless invocation artifacts; they do not own durable execution records, await units, leases, DLQ/re-drive, or release pinning inside the function runtime. An all-serverless durable coordinator would require a different architecture backed by durable services such as DynamoDB, SQS, and EventBridge-style scheduling.
+This is the TPF-owned HA path. Current `FUNCTION` builds are serverless invocation artifacts; they do not own durable execution records, await units, leases, DLQ/re-drive, or release pinning inside the function runtime. An all-serverless durable coordinator would require a different architecture backed by durable services such as DynamoDB, SQS, and EventBridge-style scheduling; see [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator).
 
 Minimum coordinator configuration:
 

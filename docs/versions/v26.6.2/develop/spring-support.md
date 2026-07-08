@@ -47,4 +47,3 @@ Use the Spring path only when you are validating the emerging renderer/runtime s
 - [Framework Portability Assessment](/versions/v26.6.2/evolve/framework-portability-assessment/)
 - [Runtime Split](/versions/v26.6.2/evolve/framework-portability-assessment/runtime-split)
 - [Code Generation Portability](/versions/v26.6.2/evolve/framework-portability-assessment/code-generation)
-

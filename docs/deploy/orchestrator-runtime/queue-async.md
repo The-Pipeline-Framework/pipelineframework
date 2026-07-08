@@ -4,6 +4,8 @@
 
 It can use in-process providers for local development or durable providers such as DynamoDB/SQS-backed implementations for production-style recovery. To get real HA behaviour, use durable providers and more than one worker-capable runtime instance. `memory` + `event` is useful for local development, but it does not give crash-surviving distributed recovery.
 
+For boundary-cost and runtime-mode tradeoffs, see [Runtime Boundaries And Performance](/evolve/durable-coordinator/runtime-boundaries-performance).
+
 ## Durable Execution
 
 Durable execution means accepted work is recorded outside the current JVM or process before the runtime depends on it. If a worker crashes or the application restarts, another worker can recover the stored execution and run it again after the lease expires.

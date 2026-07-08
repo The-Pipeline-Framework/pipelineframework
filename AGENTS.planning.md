@@ -105,4 +105,3 @@ Pick the smallest validation set that proves the planned slice. Common gates:
 - targeted coverage: `./scripts/coverage-targeted.sh <module> <tests>`.
 
 If a planned change affects release notes, version snapshots, routes, or docs IA, include docs build and route/link checks in the validation gate.
-

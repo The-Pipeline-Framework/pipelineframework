@@ -37,4 +37,3 @@ After validation:
 5. create or verify the GitHub release.
 
 For detailed Central plugin, GPG, and troubleshooting notes, see [Publishing Reference](/evolve/publishing-reference).
-

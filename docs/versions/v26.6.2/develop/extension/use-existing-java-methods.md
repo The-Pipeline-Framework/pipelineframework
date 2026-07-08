@@ -27,4 +27,3 @@ The operator reference keeps the boundary explicit. TPF can still validate the m
 - the method does not own durable correlation or long-running wait state.
 
 For low-level details, see [Operator Delegation Reference](/versions/v26.6.2/develop/extension/operator-delegation-reference#option-1--use-operator-types-directly).
-

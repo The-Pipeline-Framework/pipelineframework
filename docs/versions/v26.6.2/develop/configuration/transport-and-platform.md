@@ -26,4 +26,3 @@ Transport and platform are related, but they are not the same dimension. For exa
 - [REST Client Endpoints](/versions/v26.6.2/develop/configuration/all-settings#rest-client-endpoints)
 - [Function Transport Context Attributes](/versions/v26.6.2/develop/configuration/all-settings#function-transport-context-attributes-function-handlersadapters)
 - [Lambda-Focused Configuration](/versions/v26.6.2/develop/configuration/lambda-focused)
-

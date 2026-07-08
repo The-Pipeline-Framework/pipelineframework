@@ -38,6 +38,8 @@ That means:
 2. they do not replace `COMPUTE` + `QUEUE_ASYNC`,
 3. checkpoint handoff and queue-backed HA still belong to the orchestrator runtime path rather than the function-provider path.
 
+For the future all-serverless durable coordinator design track, see [All-Serverless Durable Coordinator](/evolve/durable-coordinator/all-serverless-coordinator). That design is not current Cloud Run functions support.
+
 ## Example verification surface
 
 The current repo verification surface for Google Cloud Run functions is located in `examples/search`.

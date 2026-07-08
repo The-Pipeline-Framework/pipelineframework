@@ -43,4 +43,3 @@ When the schema or generated scaffold semantics change, validate both sides:
 - [Template Generator Reference](/evolve/template-generator)
 - [Pipeline Compilation](/develop/pipeline-compilation/)
 - [Pipeline Studio](/design/pipeline-studio/)
-

@@ -32,4 +32,3 @@ Coordinate a bridge release when:
 4. Compile a generated scaffold against the intended framework version.
 
 For user-facing context, see [MCP and Template Generation](/versions/v26.6.2/develop/mcp-template-generation).
-
