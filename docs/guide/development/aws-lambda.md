@@ -21,6 +21,8 @@ This page is the canonical TPF guide for `FUNCTION` platform builds that target 
 
 Use Lambda mode for stateless or caller-retried function invocations. Use the durable coordinator path when the application requires TPF-owned recovery, await resume, DLQ/re-drive, or checkpoint handoff.
 
+For the future all-serverless durable coordinator design track, see [All-Serverless Durable Coordinator](/guide/evolve/durable-coordinator/all-serverless-coordinator). That design is not current Lambda support.
+
 Supported FUNCTION step shapes today:
 
 | Step shape | Status in FUNCTION mode | Notes |

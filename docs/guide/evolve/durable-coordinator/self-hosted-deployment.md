@@ -56,6 +56,8 @@ The coordinator persists execution and await state in DynamoDB-style tables, dis
 
 This is the TPF-owned HA path. Current `FUNCTION` builds are serverless invocation artifacts; they do not own durable execution records, await units, leases, DLQ/re-drive, or release pinning inside the function runtime. An all-serverless durable coordinator would require a different architecture backed by durable services such as DynamoDB, SQS, and EventBridge-style scheduling.
 
+This shape optimizes for durable recovery and operator control, not lowest single-request latency. For runtime-mode performance tradeoffs and hop diagrams, see [Runtime Boundaries And Performance](/guide/evolve/durable-coordinator/runtime-boundaries-performance).
+
 Minimum coordinator configuration:
 
 ```properties

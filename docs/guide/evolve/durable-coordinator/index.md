@@ -4,6 +4,8 @@ The durable coordinator is the self-hostable control-plane boundary for `QUEUE_A
 
 It owns execution state, leases, retry/DLQ, await units, release activation, worker dispatch, and status/result APIs. Step code still runs in workers: local in-process workers, REST workers, gRPC workers, or SQS request/reply workers.
 
+The durable coordinator is the recovery and operations path, not the lowest-latency path. For mode selection and hop diagrams, see [Runtime Boundaries And Performance](/guide/evolve/durable-coordinator/runtime-boundaries-performance). For the future FUNCTION/all-serverless HA design track, see [All-Serverless Durable Coordinator](/guide/evolve/durable-coordinator/all-serverless-coordinator).
+
 If you are trying to understand what happened to the old "orchestrator", start with [Coordinator And Worker Topology](/guide/evolve/durable-coordinator/coordinator-worker-topology). The short version is that `orchestrator-svc` and `pipeline.orchestrator.*` remain historical module/config names, while self-host HA splits runtime responsibility into a coordinator role and one or more transition worker roles.
 
 This section is implementation-facing. Application usage remains in [Orchestrator Runtime](/guide/development/orchestrator-runtime/). The first runnable reference is `examples/restaurant-approval/self-host`.
@@ -52,10 +54,11 @@ sequenceDiagram
 8. [Contract And Release Identity](/guide/evolve/durable-coordinator/bundle-contract) explains generated contracts, release activation, and execution pinning.
 9. [Pipeline Contract And Release Model](/guide/evolve/durable-coordinator/pipeline-contract-release-model) describes contract/release descriptors, artifacts, deployment plans, and drift detection.
 10. [Runtime Boundaries And Performance](/guide/evolve/durable-coordinator/runtime-boundaries-performance) explains runtime mapping, patterns, package boundaries, and hot-path guardrails.
-11. [Local APIs](/guide/evolve/durable-coordinator/local-apis) documents the current default-disabled control-plane and admin APIs.
-12. [Self-Hosted Deployment](/guide/evolve/durable-coordinator/self-hosted-deployment) gives the production-ish self-host topology, configuration, and operator runbooks.
-13. [Self-Hosted HA Roadmap](/guide/evolve/durable-coordinator/self-hosted-ha-roadmap) records the milestone closeout and deferred hardening.
-14. [Self-Hosted Milestone](/guide/evolve/durable-coordinator/self-hosted-milestone) gives the adoption entry points and current proof matrix.
+11. [All-Serverless Durable Coordinator](/guide/evolve/durable-coordinator/all-serverless-coordinator) evaluates whether `QueueAsyncCoordinator` can become single-shot actions for FUNCTION/all-serverless HA.
+12. [Local APIs](/guide/evolve/durable-coordinator/local-apis) documents the current default-disabled control-plane and admin APIs.
+13. [Self-Hosted Deployment](/guide/evolve/durable-coordinator/self-hosted-deployment) gives the production-ish self-host topology, configuration, and operator runbooks.
+14. [Self-Hosted HA Roadmap](/guide/evolve/durable-coordinator/self-hosted-ha-roadmap) records the milestone closeout and deferred hardening.
+15. [Self-Hosted Milestone](/guide/evolve/durable-coordinator/self-hosted-milestone) gives the adoption entry points and current proof matrix.
 
 ## Limits
 

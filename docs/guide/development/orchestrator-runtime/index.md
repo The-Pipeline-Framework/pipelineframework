@@ -28,6 +28,8 @@ pipeline.orchestrator.mode=QUEUE_ASYNC
 
 Use [Queue-Async Runtime](/guide/development/orchestrator-runtime/queue-async) before relying on background execution in production-style environments.
 
+Runtime mode is also a performance choice. `SYNC` is the low-latency request/response path. `QUEUE_ASYNC` adds durable admission, queue dispatch, lease ownership, retry/DLQ, and status/result visibility. Those boundaries are intentional recovery costs, not free upgrades over synchronous execution. For the implementation-facing latency-hop diagrams, see [Runtime Boundaries And Performance](/guide/evolve/durable-coordinator/runtime-boundaries-performance).
+
 ## Generated Transport Entry Points
 
 Generated orchestrator entry points use the selected transport. Transport modes are `REST`, `gRPC`, and `LOCAL`; platform modes are `COMPUTE` and `FUNCTION`.

@@ -22,6 +22,8 @@ This page is the canonical TPF guide for `FUNCTION` platform builds that target 
 
 Use Cloud Run functions mode for stateless or caller-retried function invocations. Use the durable coordinator path when the application requires TPF-owned recovery, await resume, DLQ/re-drive, or checkpoint handoff.
 
+For the future all-serverless durable coordinator design track, see [All-Serverless Durable Coordinator](/guide/evolve/durable-coordinator/all-serverless-coordinator). That design is not current Cloud Run functions support.
+
 ## Cloud Run functions vs Cloud Run services
 
 This page covers **Cloud Run functions**, the serverless function product path.

@@ -26,6 +26,8 @@ Important runtime constraint:
 
 Use `FUNCTION` when you want serverless invocation packaging for supported handlers and can rely on caller/platform retries plus application idempotency. Use `COMPUTE` + `QUEUE_ASYNC` when the pipeline needs TPF-owned durable execution state, await recovery, DLQ/re-drive, or checkpoint-style orchestration semantics.
 
+`FUNCTION` should not be positioned as a low-latency replacement for `SYNC` or as the current HA replacement for the durable coordinator. Provider gateway hops, cold starts, event routing, and platform retry semantics are deployment tradeoffs. For runtime-mode performance positioning, see [Runtime Boundaries And Performance](/guide/evolve/durable-coordinator/runtime-boundaries-performance).
+
 ## Architecture
 
 ### Step-Level Handlers
@@ -64,6 +66,8 @@ It does not currently document or implement:
 If you need queue-backed recovery, checkpoint handoff, or orchestrator-managed HA, use the `COMPUTE` + `QUEUE_ASYNC` path instead of treating function providers as a replacement for that runtime model.
 
 An all-serverless durable coordinator would be a separate design, backed by durable services such as DynamoDB, SQS, and EventBridge-style scheduling. Current `FUNCTION` support should be read as serverless adapter support, not as that architecture.
+
+The current architecture spike for that future path is [All-Serverless Durable Coordinator](/guide/evolve/durable-coordinator/all-serverless-coordinator). It evaluates TPF-native single-shot coordinator actions first, and provider durable workflow engines such as Lambda durable functions, Step Functions, Azure Durable Functions, and Google Cloud Workflows as possible later adapters.
 
 ## Quick Start
 

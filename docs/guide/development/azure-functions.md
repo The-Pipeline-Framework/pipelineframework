@@ -22,6 +22,8 @@ This page is the canonical The Pipeline Framework (TPF) guide for `FUNCTION` pla
 
 Use Azure Functions mode for stateless or caller-retried function invocations. Use the durable coordinator path when the application requires TPF-owned recovery, await resume, DLQ/re-drive, or checkpoint handoff.
 
+For the future all-serverless durable coordinator design track, see [All-Serverless Durable Coordinator](/guide/evolve/durable-coordinator/all-serverless-coordinator). That design is not current Azure Functions support.
+
 ## What this path covers
 
 TPF keeps the typed Java business flow unchanged while generating Azure-specific entry points around it.
