@@ -20,7 +20,10 @@ import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.ServiceApiKind;
 import org.pipelineframework.processor.ir.StreamingShape;
+import org.pipelineframework.processor.routing.PipelineBranchingPlan;
+import org.pipelineframework.processor.routing.PipelineBranchRoutingPlanner;
 
 /**
  * Performs semantic analysis and policy decisions on discovered models.
@@ -69,6 +72,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         validateProviderHints(ctx);
         validateFunctionPlatformConstraints(ctx);
         validateYamlDrivenSteps(ctx);
+        ctx.setBranchingPlan(new PipelineBranchRoutingPlanner().plan(ctx).orElseGet(PipelineBranchingPlan::disabled));
 
         // Analyze streaming shapes and other semantic properties
         // This phase focuses on semantic analysis without building bindings or calling renderers
@@ -449,6 +453,9 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         // Validate the step models created from YAML
         for (PipelineStepModel model : ctx.getStepModels()) {
             if (model.delegateService() != null) {
+                if (isSpringLocalDelegate(ctx, model)) {
+                    continue;
+                }
                 // Validate that the delegate service exists
                 var delegateElement = elementUtils.getTypeElement(model.delegateService().canonicalName());
                 if (delegateElement == null) {
@@ -536,6 +543,14 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                 }
             }
         }
+    }
+
+    private boolean isSpringLocalDelegate(PipelineCompilationContext ctx, PipelineStepModel model) {
+        return SpringRendererProfileSupport.isSpringProfile(ctx)
+            && model.remoteExecution() == null
+            && !model.sideEffect()
+            && model.streamingShape() == StreamingShape.UNARY_UNARY
+            && (model.serviceApiKind() == ServiceApiKind.REACTIVE || model.serviceApiKind() == ServiceApiKind.BLOCKING);
     }
 
     /**

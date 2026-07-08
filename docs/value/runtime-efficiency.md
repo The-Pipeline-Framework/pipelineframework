@@ -25,8 +25,8 @@ YAML-first generation also helps performance work stay concrete: the generated f
 
 <div class="value-links">
 
-- [Performance](/guide/development/performance)
-- [Pipeline Compilation](/guide/build/pipeline-compilation)
-- [Architecture](/guide/evolve/architecture)
+- [Performance](/develop/performance)
+- [Pipeline Compilation](/develop/pipeline-compilation/)
+- [Architecture](/evolve/architecture)
 
 </div>

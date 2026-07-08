@@ -39,6 +39,7 @@ import org.pipelineframework.awaitable.sqs.SqsAwaitDispatchEnvelope;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
+import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sqs.SqsClient;
@@ -66,6 +67,9 @@ public class PaymentProviderSqsAwaitMock {
   @Inject
   PaymentProviderConfig paymentProviderConfig;
 
+  @Inject
+  PaymentStatusMapper paymentStatusMapper;
+
   private volatile SqsClient client;
   private volatile ExecutorService pollExecutor;
   private volatile Future<?> pollFuture;
@@ -78,10 +82,12 @@ public class PaymentProviderSqsAwaitMock {
   PaymentProviderSqsAwaitMock(
       PaymentProviderServiceMock paymentProvider,
       PaymentProviderConfig paymentProviderConfig,
-      SqsClient client) {
+      SqsClient client,
+      PaymentStatusMapper paymentStatusMapper) {
     this.paymentProvider = paymentProvider;
     this.paymentProviderConfig = paymentProviderConfig;
     this.client = client;
+    this.paymentStatusMapper = paymentStatusMapper;
   }
 
   void onStartup(@Observes StartupEvent event) {
@@ -222,7 +228,7 @@ public class PaymentProviderSqsAwaitMock {
         dispatch.correlationId(),
         dispatch.resumeToken(),
         dispatch.interactionId(),
-        status,
+        paymentStatusMapper.toExternal(status),
         "csv-payments-sqs-mock-provider");
   }
 

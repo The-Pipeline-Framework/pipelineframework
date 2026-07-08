@@ -749,14 +749,57 @@ button:disabled {
   box-shadow: 0 0 12px rgb(255 100 124 / 40%);
 }
 
+.legend-swatch--skip {
+  background: #9fb3ff;
+  box-shadow: 0 0 12px rgb(159 179 255 / 42%);
+}
+
 .legend-swatch--branch {
   background: #caa6ff;
   box-shadow: 0 0 12px rgb(202 166 255 / 40%);
 }
 
+.legend-swatch-ingest {
+  background: #8bffa5;
+  box-shadow: 0 0 12px rgb(139 255 165 / 40%);
+}
+
+.legend-swatch-publish {
+  background: #86f0cf;
+  box-shadow: 0 0 12px rgb(134 240 207 / 40%);
+}
+
+.legend-swatch-querydb {
+  background: #67b2f3;
+  box-shadow: 0 0 12px rgb(103 178 243 / 40%);
+}
+
 .legend-swatch--cache {
   background: #8bffa5;
   box-shadow: 0 0 12px rgb(139 255 165 / 40%);
+}
+
+.legend-node {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #5cc8ff;
+  box-shadow: 0 0 14px rgb(92 200 255 / 42%);
+}
+
+.legend-node--primary {
+  background: #5cc8ff;
+  box-shadow: 0 0 14px rgb(92 200 255 / 42%);
+}
+
+.legend-node--await {
+  background: #78c8ff;
+  box-shadow: 0 0 14px rgb(120 200 255 / 42%);
+}
+
+.legend-node--command {
+  background: #ffd166;
+  box-shadow: 0 0 14px rgb(255 209 102 / 40%);
 }
 
 .legend-list--support {

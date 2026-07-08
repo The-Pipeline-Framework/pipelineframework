@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Properties;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
 
@@ -23,18 +24,40 @@ class CsvPaymentsAwaitPersistenceScopeTest {
 
         assertTrue(pipelineYaml.contains("aspects:\n  persistence:"), "Expected persistence aspect in pipeline.yaml");
         assertTrue(pipelineYaml.contains("scope: STEPS"), "Persistence should be scoped to selected steps");
-        assertTrue(
+        assertFalse(
                 pipelineYaml.contains("- ProcessFolderService"),
-                "Persistence should include the folder ingestion step");
+                "Default persistence should not target the legacy folder ingestion step");
         assertTrue(
-                pipelineYaml.contains("- ProcessCsvPaymentsInputService"),
+                pipelineYaml.contains("- ProcessCsvPaymentsInput"),
                 "Persistence should include the CSV parsing step");
         assertTrue(
-                pipelineYaml.contains("- ProcessPaymentStatusService"),
-                "Persistence should include post-await status processing with idempotent entity keys");
+                pipelineYaml.contains("name: Process Approved Payment Status"),
+                "Pipeline should declare the approved branch processing step");
         assertTrue(
+                pipelineYaml.contains("name: Process Unapproved Payment Status"),
+                "Pipeline should declare the unapproved branch processing step");
+        assertTrue(
+                pipelineYaml.contains("- FinalizePaymentOutput"),
+                "Persistence should include the explicit terminal merge step before object publish");
+        assertFalse(
+                pipelineYaml.contains("- ProcessApprovedPaymentStatus"),
+                "Persistence should not target the approved branch projection step");
+        assertFalse(
+                pipelineYaml.contains("- ProcessUnapprovedPaymentStatus"),
+                "Persistence should not target the unapproved branch projection step");
+        assertFalse(
                 pipelineYaml.contains("- ProcessCsvPaymentsOutputFileService"),
-                "Persistence should include output generation with idempotent entity keys");
+                "Default persistence should not target the legacy output-file step");
+        assertTrue(
+                Pattern.compile("(?m)^\\s*input\\s*:\\s*\\R\\s*from\\s*:\\s*csv-payment-files\\s*$")
+                        .matcher(pipelineYaml)
+                        .find(),
+                "Default pipeline should use object ingest");
+        assertTrue(
+                Pattern.compile("(?m)^\\s*output\\s*:\\s*\\R\\s*to\\s*:\\s*csv-payment-output-files\\s*$")
+                        .matcher(pipelineYaml)
+                        .find(),
+                "Default pipeline should use object publish");
         assertFalse(
                 pipelineYaml.contains("- Await Payment Provider"),
                 "Persistence should not target the replayable await boundary");

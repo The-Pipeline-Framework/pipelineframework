@@ -11,6 +11,7 @@ import jakarta.inject.Inject;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.Message;
+import com.google.protobuf.MessageOrBuilder;
 import com.google.protobuf.util.JsonFormat;
 import org.pipelineframework.config.pipeline.PipelineJson;
 
@@ -80,10 +81,13 @@ public class JsonTransitionPayloadCodec implements TransitionPayloadCodec {
                 "Unsupported transition payload type: " + payloadTypeId);
         }
         try {
+            String encodedPayload = payload instanceof Message protobuf
+                ? JsonFormat.printer().omittingInsignificantWhitespace().print(protobuf)
+                : mapper.writeValueAsString(payload);
             return new SerializedTransitionPayload(
                 payloadTypeId,
                 ENCODING,
-                mapper.writeValueAsString(payload));
+                encodedPayload);
         } catch (Exception e) {
             throw new IllegalArgumentException(
                 "Failed to encode transition payload type "

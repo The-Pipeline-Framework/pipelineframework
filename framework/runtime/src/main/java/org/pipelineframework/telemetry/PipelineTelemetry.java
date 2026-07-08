@@ -717,6 +717,19 @@ public class PipelineTelemetry {
         }
     }
 
+    public void recordReplaySkip(
+        Class<?> stepClass,
+        RunContext runContext,
+        Object inputItem,
+        List<String> acceptedTypes
+    ) {
+        if (!replayEnabled || replayTracker == null || stepClass == null || runContext == null || !runContext.enabled()) {
+            return;
+        }
+        String currentType = inputItem == null ? "null" : inputItem.getClass().getName();
+        replayTracker.recordSkip(resolveStepClassName(stepClass), runContext, inputItem, currentType, acceptedTypes);
+    }
+
     public void recordReplayCacheHit(Object scope) {
         if (scope instanceof ExecutionReplayTracker.StepExecutionScope replayScope && replayTracker != null) {
             replayTracker.recordCacheHit(replayScope);
@@ -728,6 +741,20 @@ public class PipelineTelemetry {
             return;
         }
         replayTracker.recordAwaitLifecycle(lifecycleEvent, Instant.now());
+    }
+
+    public void recordConnectorReplayEvent(
+        String connectorStep,
+        String service,
+        String eventName,
+        String from,
+        String to,
+        Map<String, String> attributes
+    ) {
+        if (!replayEnabled || replayTracker == null) {
+            return;
+        }
+        replayTracker.recordConnectorEvent(connectorStep, service, eventName, from, to, attributes, Instant.now());
     }
 
     private Span startStepSpan(Class<?> stepClass, RunContext runContext, boolean perItemOperation) {

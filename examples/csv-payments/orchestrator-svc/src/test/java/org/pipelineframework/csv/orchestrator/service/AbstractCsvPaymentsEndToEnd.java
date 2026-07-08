@@ -28,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.sql.Connection;
@@ -61,6 +62,7 @@ import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -70,6 +72,8 @@ import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.utility.DockerImageName;
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.Yaml;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -80,6 +84,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.telemetry.PipelineExecutionEvent;
 import org.pipelineframework.telemetry.PipelineReplayDocument;
+import org.pipelineframework.telemetry.PipelineReplayRunParameters;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 import org.pipelineframework.telemetry.PipelineReplayTopology;
 
@@ -117,6 +122,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final long TEMPO_SEARCH_TIMEOUT_SECONDS = 90L;
     private static final long TEMPO_SEARCH_POLL_MILLIS = 2_000L;
     private static final long TEMPO_LOCAL_PAUSE_SECONDS = 600L;
+    private static final long MALFORMED_REJECT_EXPECTED_OUTPUT_RECORDS = 2L;
     private static final HttpClient HTTP_CLIENT =
             HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private static final Path DEV_CERTS_DIR =
@@ -153,10 +159,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final String MODULAR_IMAGE_TAG = resolveModularImageTag();
     private static final String CSV_E2E_INPUT_FILE = System.getProperty("csv.e2e.input.file", "").trim();
     private static final boolean CUSTOM_INPUT_FILE = !CSV_E2E_INPUT_FILE.isBlank();
-    private static final String READER_DEMAND_PACER_ROWS_PER_PERIOD =
-            System.getProperty("csv.e2e.reader-demand-pacer.rows-per-period", "").trim();
-    private static final String READER_DEMAND_PACER_MILLIS_PERIOD =
-            System.getProperty("csv.e2e.reader-demand-pacer.millis-period", "").trim();
     private static volatile boolean orchestratorPackagingVerified;
 
     // Containers are lazily created so monolith mode does not require service cert binds.
@@ -210,6 +212,40 @@ abstract class AbstractCsvPaymentsEndToEnd {
         return "localhost/csv-payments/" + serviceName + ":" + MODULAR_IMAGE_TAG;
     }
 
+    private static void verifyModularServiceImagesMatchDockerArchitecture() {
+        if (!Boolean.parseBoolean(System.getProperty("csv.e2e.verify.image.architecture", "true"))) {
+            return;
+        }
+        String dockerArchitecture = normalizeDockerArchitecture(
+                DockerClientFactory.instance().getInfo().getArchitecture());
+        for (String image : List.of(
+                modularImage("persistence-svc"),
+                modularImage("input-csv-file-processing-svc"),
+                modularImage("payments-processing-svc"),
+                modularImage("payment-status-svc"))) {
+            String imageArchitecture = normalizeDockerArchitecture(
+                    DockerClientFactory.instance().client().inspectImageCmd(image).exec().getArch());
+            assertEquals(
+                    dockerArchitecture,
+                    imageArchitecture,
+                    "Image architecture for " + image + " must match Docker server architecture. "
+                            + "Rebuild the CSV Payments modular images with "
+                            + "./examples/csv-payments/build-modular-telemetry-images.sh "
+                            + "-Dmaven.repo.local=\"$PWD/.m2/repository\" or set csv.e2e.image.tag to a matching image tag.");
+        }
+    }
+
+    private static String normalizeDockerArchitecture(String architecture) {
+        if (architecture == null || architecture.isBlank()) {
+            return "";
+        }
+        return switch (architecture.trim().toLowerCase()) {
+            case "x86_64" -> "amd64";
+            case "aarch64" -> "arm64";
+            default -> architecture.trim().toLowerCase();
+        };
+    }
+
     /**
          * Prepare test artifacts and start the containers required for the end-to-end CSV payments tests.
          *
@@ -253,13 +289,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
             Startables.deepStart(Stream.of(getPostgresContainer(), getKafkaContainer())).join();
         }
         ensureKafkaTopics();
+        verifyModularServiceImagesMatchDockerArchitecture();
 
         Stream.Builder<GenericContainer<?>> services = Stream.builder();
         services.add(getPersistenceService());
         services.add(getInputCsvService());
         services.add(getPaymentsProcessingService());
         services.add(getPaymentStatusService());
-        services.add(getOutputCsvService());
 
         Startables.deepStart(services.build()).join();
         logObservabilityEndpoints();
@@ -621,6 +657,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private static void configureObservabilityContainerEnv(Map<String, String> env) {
+        configureProviderOverrideEnv(env);
         if (TEMPO_VERIFICATION_ACTIVE) {
             configureTempoEnv(env, lgtmCollectorContainerEndpoint());
             return;
@@ -629,11 +666,31 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private static void configureObservabilityProcessEnv(Map<String, String> env) {
+        configureProviderOverrideEnv(env);
         if (TEMPO_VERIFICATION_ACTIVE) {
             configureTempoEnv(env, lgtmCollectorHostEndpoint());
             return;
         }
         configureReplayCaptureEnv(env, REPLAY_CAPTURE_DIR.toAbsolutePath().toString());
+    }
+
+    private static void configureProviderOverrideEnv(Map<String, String> env) {
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.permits-per-second",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_PERMITS_PER_SECOND");
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.timeout-millis",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_TIMEOUT_MILLIS");
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.provider-timeout-probability",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_PROVIDER_TIMEOUT_PROBABILITY");
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.provider-reject-probability",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_PROVIDER_REJECT_PROBABILITY");
     }
 
     private static void configureReplayCaptureEnv(Map<String, String> env, String replayCapturePath) {
@@ -656,28 +713,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
         env.put("PIPELINE_TELEMETRY_REPLAY_ENABLED", "true");
         env.put("PIPELINE_TELEMETRY_REPLAY_EXPORTER", "file");
         env.put("PIPELINE_TELEMETRY_REPLAY_FILE_PATH", replayCapturePath);
-        if (!READER_DEMAND_PACER_ROWS_PER_PERIOD.isBlank()) {
-            env.put("CSV_PAYMENTS_READER_DEMAND_PACER_ROWS_PER_PERIOD", READER_DEMAND_PACER_ROWS_PER_PERIOD);
-        }
-        if (!READER_DEMAND_PACER_MILLIS_PERIOD.isBlank()) {
-            env.put("CSV_PAYMENTS_READER_DEMAND_PACER_MILLIS_PERIOD", READER_DEMAND_PACER_MILLIS_PERIOD);
-        }
-        putOptionalEnvOverride(
-                env,
-                "csv-payments.payment-provider.permits-per-second",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_PERMITS_PER_SECOND");
-        putOptionalEnvOverride(
-                env,
-                "csv-payments.payment-provider.timeout-millis",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_TIMEOUT_MILLIS");
-        putOptionalEnvOverride(
-                env,
-                "csv-payments.payment-provider.provider-timeout-probability",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_PROVIDER_TIMEOUT_PROBABILITY");
-        putOptionalEnvOverride(
-                env,
-                "csv-payments.payment-provider.provider-reject-probability",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_PROVIDER_REJECT_PROBABILITY");
     }
 
     private static void configureTempoEnv(Map<String, String> env, String otlpEndpoint) {
@@ -699,20 +734,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
         env.put("PIPELINE_TELEMETRY_TRACING_ENABLED", "true");
         env.put("PIPELINE_TELEMETRY_TRACING_PER_ITEM", "true");
         env.put("PIPELINE_TELEMETRY_METRICS_ENABLED", "false");
-        if (!READER_DEMAND_PACER_ROWS_PER_PERIOD.isBlank()) {
-            env.put("CSV_PAYMENTS_READER_DEMAND_PACER_ROWS_PER_PERIOD", READER_DEMAND_PACER_ROWS_PER_PERIOD);
-        }
-        if (!READER_DEMAND_PACER_MILLIS_PERIOD.isBlank()) {
-            env.put("CSV_PAYMENTS_READER_DEMAND_PACER_MILLIS_PERIOD", READER_DEMAND_PACER_MILLIS_PERIOD);
-        }
-        putOptionalEnvOverride(
-                env,
-                "csv-payments.payment-provider.permits-per-second",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_PERMITS_PER_SECOND");
-        putOptionalEnvOverride(
-                env,
-                "csv-payments.payment-provider.timeout-millis",
-                "CSV_PAYMENTS_PAYMENT_PROVIDER_TIMEOUT_MILLIS");
     }
 
     private static String lgtmCollectorContainerEndpoint() {
@@ -800,14 +821,51 @@ abstract class AbstractCsvPaymentsEndToEnd {
         if (!Files.isRegularFile(jar)) {
             return true;
         }
+        if (!runtimeMappingMatchesActiveLayout()) {
+            return true;
+        }
         long packagedAt = Files.getLastModifiedTime(jar).toMillis();
         long classesAt = latestModifiedUnder(Paths.get(System.getProperty("user.dir")).resolve("target/classes"));
         long mainSourcesAt = latestModifiedUnder(Paths.get(System.getProperty("user.dir")).resolve("src/main"));
         long pomAt = Files.getLastModifiedTime(Paths.get(System.getProperty("user.dir")).resolve("pom.xml")).toMillis();
+        long runtimeMappingAt = Files.getLastModifiedTime(desiredRuntimeMappingPath()).toMillis();
         long runtimeAt = codeSourceModified(PipelineTelemetry.class);
-        long latestDependencyAt = Math.max(runtimeAt, pomAt);
+        long latestDependencyAt = Math.max(Math.max(runtimeAt, pomAt), runtimeMappingAt);
         long latestLocalAt = Math.max(classesAt, mainSourcesAt);
         return packagedAt < latestDependencyAt || packagedAt < latestLocalAt;
+    }
+
+    private static boolean runtimeMappingMatchesActiveLayout() throws IOException {
+        if (MONOLITH_LAYOUT || PIPELINE_RUNTIME_LAYOUT) {
+            return true;
+        }
+        return runtimeMappingsMatch(activeRuntimeMappingPath(), desiredRuntimeMappingPath());
+    }
+
+    static boolean runtimeMappingsMatch(Path activeRuntimeMapping, Path desiredRuntimeMapping) throws IOException {
+        return Files.isRegularFile(activeRuntimeMapping)
+                && Files.mismatch(activeRuntimeMapping, desiredRuntimeMapping) == -1L;
+    }
+
+    private static Path activeRuntimeMappingPath() {
+        return Paths.get(System.getProperty("user.dir"))
+                .resolve("../config/pipeline.runtime.yaml")
+                .normalize()
+                .toAbsolutePath();
+    }
+
+    private static Path desiredRuntimeMappingPath() {
+        Path configDir = Paths.get(System.getProperty("user.dir"))
+                .resolve("../config/runtime-mapping")
+                .normalize()
+                .toAbsolutePath();
+        if (MONOLITH_LAYOUT) {
+            return configDir.resolve("monolith.yaml");
+        }
+        if (PIPELINE_RUNTIME_LAYOUT) {
+            return configDir.resolve("pipeline-runtime.yaml");
+        }
+        return configDir.resolve("modular-strict.yaml");
     }
 
     private static long latestModifiedUnder(Path root) throws IOException {
@@ -854,45 +912,91 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static void rebuildPackagedOrchestrator() throws IOException {
         Path moduleDir = Paths.get(System.getProperty("user.dir")).toAbsolutePath().normalize();
         Path processDir = moduleDir;
-        String[] command;
+        List<String> command = new ArrayList<>();
+        String mavenRepoLocal = System.getProperty("maven.repo.local", "").trim();
+        Path activeRuntimeMapping = activeRuntimeMappingPath();
+        Path desiredRuntimeMapping = desiredRuntimeMappingPath();
+        Path runtimeMappingBackup = null;
+        boolean runtimeMappingCreated = false;
         if (MONOLITH_LAYOUT) {
             processDir = moduleDir.getParent();
-            command = new String[] {"bash", "build-monolith.sh", "-DskipTests"};
-        } else {
-            command =
-                    new String[] {
-                        "../../../mvnw",
-                        "-f",
-                        "../pom.xml",
-                        "-pl",
-                        "orchestrator-svc",
-                        "-am",
-                        "-DskipTests",
-                        "package"
-                    };
-        }
-        ProcessBuilder pb = new ProcessBuilder(command);
-        pb.directory(processDir.toFile());
-        pb.environment().put("CSV_RUNTIME_LAYOUT", RUNTIME_LAYOUT);
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
-        StringBuilder output = new StringBuilder();
-        try (BufferedReader reader =
-                new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line).append(System.lineSeparator());
+            command.add("bash");
+            command.add("build-monolith.sh");
+            command.add("-DskipTests");
+            command.add("-Dquarkus.container-image.build=false");
+            command.add("-Dquarkus.container-image.push=false");
+            if (!mavenRepoLocal.isBlank()) {
+                command.add("-Dmaven.repo.local=" + mavenRepoLocal);
             }
+        } else {
+            command.add("../../../mvnw");
+            command.add("-f");
+            command.add("../pom.xml");
+            command.add("-pl");
+            command.add("orchestrator-svc");
+            command.add("-am");
+            command.add("-DskipTests");
+            command.add("-Dquarkus.container-image.build=false");
+            command.add("-Dquarkus.container-image.push=false");
+            if (!mavenRepoLocal.isBlank()) {
+                command.add("-Dmaven.repo.local=" + mavenRepoLocal);
+            }
+            command.add("package");
         }
         try {
-            int exitCode = process.waitFor();
-            assertEquals(
-                    0,
-                    exitCode,
-                    "Failed to rebuild packaged orchestrator. Output tail:\n" + tailLines(output.toString(), 120));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Interrupted while rebuilding packaged orchestrator.", e);
+            if (!MONOLITH_LAYOUT && !runtimeMappingsMatch(activeRuntimeMapping, desiredRuntimeMapping)) {
+                if (Files.isRegularFile(activeRuntimeMapping)) {
+                    Path backup = Files.createTempFile("pipeline-runtime", ".yaml");
+                    try {
+                        Files.copy(activeRuntimeMapping, backup, StandardCopyOption.REPLACE_EXISTING);
+                    } catch (IOException e) {
+                        Files.deleteIfExists(backup);
+                        throw e;
+                    }
+                    runtimeMappingBackup = backup;
+                } else {
+                    runtimeMappingCreated = true;
+                }
+                Files.copy(desiredRuntimeMapping, activeRuntimeMapping, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.directory(processDir.toFile());
+            pb.environment().put("CSV_RUNTIME_LAYOUT", RUNTIME_LAYOUT);
+            if (!mavenRepoLocal.isBlank()) {
+                String existingMavenArgs = pb.environment().getOrDefault("MAVEN_ARGS", "").trim();
+                String repoArg = "-Dmaven.repo.local=" + mavenRepoLocal;
+                pb.environment().put(
+                        "MAVEN_ARGS",
+                        existingMavenArgs.isBlank() ? repoArg : existingMavenArgs + " " + repoArg);
+            }
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append(System.lineSeparator());
+                }
+            }
+            try {
+                int exitCode = process.waitFor();
+                assertEquals(
+                        0,
+                        exitCode,
+                        "Failed to rebuild packaged orchestrator. Output tail:\n" + tailLines(output.toString(), 120));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Interrupted while rebuilding packaged orchestrator.", e);
+            }
+        } finally {
+            if (runtimeMappingBackup != null) {
+                Files.copy(runtimeMappingBackup, activeRuntimeMapping, StandardCopyOption.REPLACE_EXISTING);
+                Files.deleteIfExists(runtimeMappingBackup);
+            } else if (runtimeMappingCreated) {
+                Files.deleteIfExists(activeRuntimeMapping);
+            }
         }
     }
 
@@ -989,10 +1093,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         // Create test CSV files as the shell script does
         createTestCsvFiles();
 
-        // Trigger the orchestrator to process the input directory
-        String inputPath = MONOLITH_LAYOUT ? TEST_E2E_DIR : TEST_E2E_TARGET_DIR;
-        String inputDirJson = "{ \"path\": \"" + inputPath + "\" }";
-        orchestratorTriggerRun(inputDirJson);
+        orchestratorTriggerRun();
 
         // Wait for the pipeline to complete
         waitForPipelineComplete();
@@ -1024,17 +1125,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         createValidAndMalformedCsvFiles();
 
-        String inputPath = MONOLITH_LAYOUT ? TEST_E2E_DIR : TEST_E2E_TARGET_DIR;
-        String inputDirJson = "{ \"path\": \"" + inputPath + "\" }";
         ProcessRunResult runResult = orchestratorTriggerRun(
-            inputDirJson,
             Map.of(
                 "PIPELINE_DEFAULTS_RECOVER_ON_FAILURE", "true",
                 "PIPELINE_DEFAULTS_RETRY_LIMIT", "1",
                 "PIPELINE_DEFAULTS_RETRY_WAIT_MS", "10",
                 "PIPELINE_ITEM_REJECT_PROVIDER", "memory"));
 
-        waitForPipelineComplete();
+        waitForPipelineComplete(MALFORMED_REJECT_EXPECTED_OUTPUT_RECORDS);
 
         Set<String> expectedRecipients = Set.of("Valid Recipient One", "Valid Recipient Two");
         verifyOutputFilesForRecipients(TEST_E2E_DIR, expectedRecipients, "Malformed Recipient", 2);
@@ -1055,7 +1153,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     @Test
-    void providerRejectsAreRoutedToRejectSink() throws Exception {
+    void providerRejectsStillProduceOutputRows() throws Exception {
         assumeTrue(runProviderRejectScenario(), "Provider-reject scenario disabled for this E2E class.");
         assumeTrue(
                 TELEMETRY_CAPTURE_ACTIVE,
@@ -1075,33 +1173,30 @@ abstract class AbstractCsvPaymentsEndToEnd {
         resetDatabasePersistence();
         createTestCsvFiles();
 
-        String inputPath = MONOLITH_LAYOUT ? TEST_E2E_DIR : TEST_E2E_TARGET_DIR;
-        String inputDirJson = "{ \"path\": \"" + inputPath + "\" }";
-        ProcessRunResult runResult = orchestratorTriggerRun(inputDirJson);
+        orchestratorTriggerRun();
 
         waitForPipelineComplete();
 
         PipelineReplayDocument replayDocument = mergeReplayDocuments(REPLAY_CAPTURE_DIR, REPLAY_FILE);
-        long rejectEvents = replayDocument.events().stream()
-                .filter(event -> "reject".equals(event.event()))
-                .count();
-        assertTrue(rejectEvents > 0, "Expected replay JSON to contain reject events.");
-
+        assertReplayCoverage(replayDocument, true);
         long outputRecords = outputRecordCount(Paths.get(TEST_E2E_DIR));
-        assertTrue(outputRecords < expectedPaymentRecordCount(), "Expected fewer output records than input records.");
+        assertEquals(expectedPaymentRecordCount(), outputRecords, "Expected one output row per valid input payment.");
 
         String combinedOutput = readCombinedOutput(TEST_E2E_DIR);
-        assertFalse(combinedOutput.contains("John Doe"), "Provider-rejected recipient John Doe should not reach output.");
-        assertFalse(combinedOutput.contains("Alice Brown"), "Provider-rejected recipient Alice Brown should not reach output.");
-        assertTrue(
-                combinedOutput.contains("Jane Smith")
-                        || combinedOutput.contains("Bob Johnson")
-                        || combinedOutput.contains("Charlie Wilson"),
-                "Expected at least one successful recipient to reach output.");
-
-        assertTrue(
-                runResult.output().contains("Item reject stored in memory sink"),
-                "Expected in-memory item reject sink evidence in orchestrator logs.");
+        long expectedRejects = expectedProviderRejectCount(configuredProviderRejectProbability());
+        long actualRejectRows = combinedOutput.lines()
+                .filter(line -> line.contains("Mock payment provider rejected the payment."))
+                .count();
+        long actualApprovedRows = combinedOutput.lines()
+                .filter(line -> line.contains("Mock response"))
+                .count();
+        assertEquals(expectedRejects, actualRejectRows, "Expected one output row per deterministically rejected payment.");
+        assertEquals(
+                expectedPaymentRecordCount() - expectedRejects,
+                actualApprovedRows,
+                "Expected the remaining rows to stay on the approved output path.");
+        assertTrue(actualRejectRows > 0, "Expected provider rejection text to be rendered into output rows.");
+        assertTrue(actualApprovedRows > 0, "Expected at least one successful recipient to reach output.");
     }
 
     protected boolean runHappyPathScenario() {
@@ -1121,18 +1216,16 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     /**
-     * Start the orchestrator JAR in a separate JVM configured to use the test services and process CSV files from the given input directory.
+     * Start the orchestrator JAR in a separate JVM configured to run one object ingest poll.
      *
-     * @param inputDir path to the directory containing input CSV files to process
      * @throws Exception if the process cannot be started, times out, or exits with a non-zero exit code
      */
-    @SuppressWarnings("SameParameterValue")
-    private ProcessRunResult orchestratorTriggerRun(String inputDir) throws Exception {
-        return orchestratorTriggerRun(inputDir, Map.of());
+    private ProcessRunResult orchestratorTriggerRun() throws Exception {
+        return orchestratorTriggerRun(Map.of());
     }
 
-    private ProcessRunResult orchestratorTriggerRun(String inputDir, Map<String, String> envOverrides) throws Exception {
-        LOG.infof("Triggering Orchestrator with input dir: %s", inputDir);
+    private ProcessRunResult orchestratorTriggerRun(Map<String, String> envOverrides) throws Exception {
+        LOG.info("Triggering Orchestrator object ingest once");
 
         String jarPath =
                 MONOLITH_LAYOUT
@@ -1162,9 +1255,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         "--enable-preview",
                         "-jar",
                         jar.toString(),
-                        "-i=" + inputDir);
+                        "--ingest-once");
 
         pb.environment().put("QUARKUS_PROFILE", "test");
+        pb.environment().put("PIPELINE_CONFIG", writeE2ePipelineConfig().toString());
+        pb.environment().put("PIPELINE_OBJECT_INGEST_AUTOSTART", "false");
         pb.environment().put("QUARKUS_JIB_JVM_ADDITIONAL_ARGUMENTS", "--enable-preview");
         pb.environment().put("PIPELINE_ORCHESTRATOR_MODE", "QUEUE_ASYNC");
         pb.environment().put("PIPELINE_ORCHESTRATOR_RESUME_TOKEN_SECRET", E2E_RESUME_TOKEN_SECRET);
@@ -1293,17 +1388,16 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         String localhost = "localhost";
         String grpcPort = "8443";
-        putGrpcClient(pb, "PROCESS_FOLDER", localhost, grpcPort);
         putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", localhost, grpcPort);
         putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", localhost, grpcPort);
         putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", localhost, grpcPort);
-        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", localhost, grpcPort);
-        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_OUTPUT_FILE", localhost, grpcPort);
+        putGrpcClient(pb, "PROCESS_APPROVED_PAYMENT_STATUS", localhost, grpcPort);
+        putGrpcClient(pb, "PROCESS_UNAPPROVED_PAYMENT_STATUS", localhost, grpcPort);
+        putGrpcClient(pb, "PROCESS_FINALIZE_PAYMENT_OUTPUT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT", localhost, grpcPort);
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT", localhost, grpcPort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", localhost, grpcPort);
     }
 
@@ -1320,7 +1414,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
         GenericContainer<?> inputService = getInputCsvService();
         GenericContainer<?> paymentsService = getPaymentsProcessingService();
         GenericContainer<?> statusService = getPaymentStatusService();
-        GenericContainer<?> outputService = getOutputCsvService();
         GenericContainer<?> persistence = getPersistenceService();
         pb.environment()
             .put(
@@ -1330,17 +1423,16 @@ abstract class AbstractCsvPaymentsEndToEnd {
             .put(
                 "CLIENT_TRUSTSTORE_PATH",
                 DEV_CERTS_DIR.resolve("orchestrator-svc/client-truststore.jks").toString());
-        putGrpcClient(pb, "PROCESS_FOLDER", inputService.getHost(), String.valueOf(inputService.getMappedPort(8444)), "/q/health/live");
         putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", inputService.getHost(), String.valueOf(inputService.getMappedPort(8444)), "/q/health/live");
         putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)), "/q/health/live");
         putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)), "/q/health/live");
-        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
-        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_OUTPUT_FILE", outputService.getHost(), String.valueOf(outputService.getMappedPort(8447)), "/q/health/live");
+        putGrpcClient(pb, "PROCESS_APPROVED_PAYMENT_STATUS", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
+        putGrpcClient(pb, "PROCESS_UNAPPROVED_PAYMENT_STATUS", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
+        putGrpcClient(pb, "PROCESS_FINALIZE_PAYMENT_OUTPUT", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
     }
 
@@ -1366,42 +1458,110 @@ abstract class AbstractCsvPaymentsEndToEnd {
         String persistenceHost = persistence.getHost();
         String persistencePort = String.valueOf(persistence.getMappedPort(8448));
 
-        putGrpcClient(pb, "PROCESS_FOLDER", pipelineHost, pipelinePort);
         putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", pipelineHost, pipelinePort);
         putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", pipelineHost, pipelinePort);
         putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", pipelineHost, pipelinePort);
-        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", pipelineHost, pipelinePort);
-        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_OUTPUT_FILE", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "PROCESS_APPROVED_PAYMENT_STATUS", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "PROCESS_UNAPPROVED_PAYMENT_STATUS", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "PROCESS_FINALIZE_PAYMENT_OUTPUT", pipelineHost, pipelinePort);
 
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", persistenceHost, persistencePort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", persistenceHost, persistencePort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", persistenceHost, persistencePort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT", persistenceHost, persistencePort);
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT", persistenceHost, persistencePort);
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", persistenceHost, persistencePort);
     }
 
-    private static void ensureKafkaTopics() {
-        Map<String, Object> config = Map.of(
-            AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG,
-            getKafkaContainer().getBootstrapServers());
-        try (AdminClient admin = AdminClient.create(config)) {
-            admin.createTopics(List.of(
-                new NewTopic(PAYMENT_REQUEST_TOPIC, 1, (short) 1),
-                new NewTopic(PAYMENT_RESULT_TOPIC, 1, (short) 1)))
-                .all()
-                .get(30, TimeUnit.SECONDS);
-        } catch (ExecutionException e) {
-            if (e.getCause() instanceof TopicExistsException) {
-                return;
-            }
-            throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", e);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", e);
+    private static Path writeE2ePipelineConfig() throws IOException {
+        Path config = Paths.get(TEST_E2E_DIR, "pipeline-e2e.yaml");
+        Path canonical = Paths.get(System.getProperty("user.dir"))
+                .resolve("../config/pipeline.yaml")
+                .normalize()
+                .toAbsolutePath();
+        String root = Paths.get(TEST_E2E_DIR).toAbsolutePath().normalize().toString();
+        Map<String, Object> yaml = loadYamlMap(canonical);
+        Map<String, Object> source = childMap(childMap(yaml, "sources"), "csv-payment-files");
+        childMap(source, "location").put("root", root);
+        childMap(source, "poll").put("enabled", false);
+
+        Map<String, Object> publish = childMap(childMap(yaml, "publish"), "csv-payment-output-files");
+        childMap(publish, "location").put("root", root);
+
+        if (!MONOLITH_LAYOUT) {
+            childMap(source, "location").put("localPathRoot", TEST_E2E_TARGET_DIR);
         }
+        DumperOptions options = new DumperOptions();
+        options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+        options.setPrettyFlow(true);
+        Files.writeString(config, new Yaml(options).dump(yaml), StandardCharsets.UTF_8);
+        return config.toAbsolutePath().normalize();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> loadYamlMap(Path path) throws IOException {
+        Object loaded;
+        try (var reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            loaded = new Yaml().load(reader);
+        }
+        if (loaded instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        throw new IllegalStateException("Expected YAML object in " + path);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> childMap(Map<String, Object> parent, String key) {
+        Object child = parent.get(key);
+        if (child instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        throw new IllegalStateException("Expected YAML object at key '" + key + "'");
+    }
+
+    private static void ensureKafkaTopics() {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(120);
+        Throwable lastFailure = null;
+        int attempt = 0;
+
+        while (System.nanoTime() < deadline) {
+            attempt++;
+            Map<String, Object> config = Map.of(
+                AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG,
+                getKafkaContainer().getBootstrapServers(),
+                AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG,
+                "10000",
+                AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG,
+                "15000");
+            try (AdminClient admin = AdminClient.create(config)) {
+                admin.createTopics(List.of(
+                    new NewTopic(PAYMENT_REQUEST_TOPIC, 1, (short) 1),
+                    new NewTopic(PAYMENT_RESULT_TOPIC, 1, (short) 1)))
+                    .all()
+                    .get(15, TimeUnit.SECONDS);
+                return;
+            } catch (ExecutionException e) {
+                if (e.getCause() instanceof TopicExistsException) {
+                    return;
+                }
+                lastFailure = e;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", e);
+            } catch (Exception e) {
+                lastFailure = e;
+            }
+
+            if (System.nanoTime() < deadline) {
+                LOG.warnf(lastFailure, "Kafka topic creation attempt %d failed; retrying.", attempt);
+                try {
+                    Thread.sleep(2_000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", e);
+                }
+            }
+        }
+        throw new IllegalStateException("Failed to create Kafka topics for CSV payments E2E", lastFailure);
     }
 
     private static boolean isExpectedClosedStream(IOException e) {
@@ -1626,6 +1786,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
      */
     @SuppressWarnings("BusyWait")
     private void waitForPipelineComplete() throws InterruptedException, IOException {
+        waitForPipelineComplete(expectedOutputRecordCount());
+    }
+
+    private void waitForPipelineComplete(long expectedRecords) throws InterruptedException, IOException {
         LOG.info("Waiting for pipeline to complete processing...");
 
         // Check for output files to be created before continuing
@@ -1640,7 +1804,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 outputFilesExist = files.anyMatch(path -> path.toString().endsWith(".out"));
             }
 
-            if (outputFilesExist && outputRecordCountReady()) {
+            if (outputFilesExist && outputRecordCountReady(expectedRecords)) {
                 LOG.info("Output files detected, pipeline processing completed");
                 return;
             }
@@ -1669,15 +1833,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         + "s");
     }
 
-    private boolean outputRecordCountReady() throws IOException {
-        if (!CUSTOM_INPUT_FILE) {
-            return true;
-        }
+    private boolean outputRecordCountReady(long expectedRecords) throws IOException {
         long currentRecords = outputRecordCount(Paths.get(TEST_E2E_DIR));
-        long expectedRecords = expectedOutputRecordCount();
         if (currentRecords >= expectedRecords) {
             LOG.infof(
-                    "Output record count reached expected custom input count: %,d/%s",
+                    "Output record count reached expected count: %,d/%s",
                     currentRecords,
                     expectedRecords);
             return true;
@@ -1687,29 +1847,12 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private long expectedOutputRecordCount() throws IOException {
-        long inputRecords = expectedPaymentRecordCount();
-        if (!runProviderRejectScenario()) {
-            return inputRecords;
-        }
-        double rejectProbability = configuredProviderRejectProbability();
-        if (rejectProbability <= 0.0d) {
-            return inputRecords;
-        }
-        long expectedRejects = expectedProviderRejectCount(rejectProbability);
-        return Math.max(0L, inputRecords - expectedRejects);
+        return expectedPaymentRecordCount();
     }
 
     private long expectedProviderRejectCount(double rejectProbability) throws IOException {
-        if (!CUSTOM_INPUT_FILE) {
-            return 0L;
-        }
-        try (Stream<String> lines = Files.lines(resolveCustomInputCsvFile())) {
-            return lines.skip(1)
-                    .map(String::trim)
-                    .filter(line -> !line.isBlank())
-                    .map(line -> line.split(",", 2))
-                    .filter(columns -> columns.length > 0 && !columns[0].isBlank())
-                    .map(columns -> columns[0].trim())
+        try (Stream<String> ids = inputCsvIds()) {
+            return ids
                     .filter(csvId -> shouldSimulateProviderReject(rejectProbability, csvId))
                     .count();
         }
@@ -1946,12 +2089,37 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private long expectedPaymentRecordCount() throws IOException {
-        if (!CUSTOM_INPUT_FILE) {
-            return 5L;
+        try (Stream<String> ids = inputCsvIds()) {
+            return ids.count();
         }
-        try (Stream<String> lines = Files.lines(resolveCustomInputCsvFile())) {
-            return Math.max(0L, lines.count() - 1L);
+    }
+
+    private Stream<String> inputCsvIds() throws IOException {
+        if (CUSTOM_INPUT_FILE) {
+            return csvIdsFromFile(resolveCustomInputCsvFile());
         }
+        List<Path> inputFiles;
+        try (Stream<Path> files = Files.list(Paths.get(TEST_E2E_DIR))) {
+            inputFiles = files
+                    .filter(path -> path.toString().endsWith(".csv"))
+                    .sorted()
+                    .toList();
+        }
+        Stream<String> ids = Stream.empty();
+        for (Path inputFile : inputFiles) {
+            ids = Stream.concat(ids, csvIdsFromFile(inputFile));
+        }
+        return ids;
+    }
+
+    private Stream<String> csvIdsFromFile(Path inputFile) throws IOException {
+        return Files.lines(inputFile)
+                .skip(1)
+                .map(String::trim)
+                .filter(line -> !line.isBlank())
+                .map(line -> line.split(",", 2))
+                .filter(columns -> columns.length > 0 && !columns[0].isBlank())
+                .map(columns -> columns[0].trim());
     }
 
     private static double configuredProviderRejectProbability() {
@@ -2273,6 +2441,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         documents.sort(Comparator.comparing(PipelineReplayDocument::startedAt));
 
         PipelineReplayDocument canonical = selectCanonicalReplayDocument(documents);
+        PipelineReplayRunParameters runParameters = selectMergedRunParameters(documents);
         Instant earliestStart = documents.getFirst().startedAt();
         List<PipelineExecutionEvent> shiftedEvents = new ArrayList<>();
         boolean completedFragmentPresent = documents.stream().anyMatch(document -> "completed".equals(document.status()));
@@ -2388,7 +2557,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 status,
                 failureType,
                 failureMessage,
-                canonical.runParameters(),
+                runParameters,
                 canonical.topology(),
                 List.copyOf(renumbered));
         Files.createDirectories(outputFile.getParent());
@@ -2416,16 +2585,53 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 .orElseThrow(() -> new IllegalStateException("No replay documents available to merge."));
     }
 
+    private static PipelineReplayRunParameters selectMergedRunParameters(List<PipelineReplayDocument> documents) throws Exception {
+        Map<String, PipelineReplayRunParameters> distinctRunParameters = new LinkedHashMap<>();
+        for (PipelineReplayDocument document : documents) {
+            if (document.runParameters() == null) {
+                continue;
+            }
+            distinctRunParameters.put(
+                    PipelineJson.mapper().writeValueAsString(document.runParameters()),
+                    document.runParameters());
+        }
+        if (distinctRunParameters.size() > 1) {
+            fail("Replay fragments disagree on runParameters; merged replay parameters must be run-level metadata.");
+        }
+        return distinctRunParameters.values().stream().findFirst().orElse(null);
+    }
+
     private void assertReplayCoverage(PipelineReplayDocument replayDocument) {
+        assertReplayCoverage(replayDocument, false);
+    }
+
+    private void assertReplayCoverage(
+            PipelineReplayDocument replayDocument, boolean requireUnapprovedBranch) {
         assertEquals("completed", replayDocument.status(), "Expected merged replay to complete successfully.");
-        assertReplayStepEvents(replayDocument, "ProcessFolder");
         assertReplayStepEvents(replayDocument, "ProcessCsvPaymentsInput");
-        assertReplayStepEvents(replayDocument, "ProcessPaymentStatus");
-        assertReplayStepEvents(replayDocument, "ProcessCsvPaymentsOutputFile");
-        assertReplayStepEvents(replayDocument, "PersistenceCsvPaymentsInputFileSideEffect");
+        assertReplayStepEvents(replayDocument, "AwaitPaymentProvider");
+        boolean approvedBranchSeen = hasReplayStepEvents(replayDocument, "ProcessApprovedPaymentStatus");
+        boolean unapprovedBranchSeen =
+                hasReplayStepEvents(replayDocument, "ProcessUnapprovedPaymentStatus");
+        assertTrue(
+                approvedBranchSeen || unapprovedBranchSeen,
+                "Expected merged replay to contain at least one payment-status branch.");
+        if (requireUnapprovedBranch) {
+            assertTrue(
+                    unapprovedBranchSeen,
+                    "Expected merged replay to contain unapproved branch events.");
+        }
+        assertReplayMergeNode(replayDocument, "FinalizePaymentOutput");
+        assertReplayStepEvents(replayDocument, "ProcessFinalizePaymentOutput");
         assertReplayStepEvents(replayDocument, "PersistencePaymentRecordSideEffect");
         assertReplayStepEvents(replayDocument, "PersistencePaymentOutputSideEffect");
-        assertReplayStepEvents(replayDocument, "PersistenceCsvPaymentsOutputFileSideEffect");
+        assertReplayStepEvents(replayDocument, "ObjectIngest");
+        assertReplayStepEvents(replayDocument, "ObjectPublish");
+        assertReplayEvent(replayDocument, "object_ingest_submitted");
+        assertReplayEvent(replayDocument, "object_publish_published");
+        assertNoReplayStepEvents(replayDocument, "ProcessFolder");
+        assertNoReplayStepEvents(replayDocument, "ProcessCsvPaymentsOutputFile");
+        assertNoReplayStepEvents(replayDocument, "PersistenceCsvPaymentsOutputFileSideEffect");
         assertTrue(
                 replayDocument.events().stream().anyMatch(event ->
                         "ProcessCsvPaymentsInput".equals(event.step())
@@ -2434,7 +2640,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "Expected merged replay to contain input-to-await flow events.");
         assertTrue(
                 replayDocument.events().stream().anyMatch(event ->
-                        "ProcessPaymentStatus".equals(event.step())
+                        ("ProcessApprovedPaymentStatus".equals(event.step())
+                                || "ProcessUnapprovedPaymentStatus".equals(event.step()))
                                 && "AwaitPaymentProvider".equals(event.from())),
                 "Expected merged replay to contain await-resume flow events.");
 
@@ -2449,7 +2656,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         "store".equals(transition.relationKind())),
                 "Expected store transitions in merged replay topology.");
         assertReplayLifecycleEvents(replayDocument);
-        assertItemizedAwaitContinuationsStartBeforeUnitCompletes(replayDocument);
+        assertItemizedAwaitLiveFlowStartsBeforeUnitCompletes(replayDocument);
     }
 
     private void assertReplayLifecycleEvents(PipelineReplayDocument replayDocument) {
@@ -2491,27 +2698,42 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "Expected await lifecycle events to include expected item count once dispatch size is known.");
     }
 
-    private void assertItemizedAwaitContinuationsStartBeforeUnitCompletes(PipelineReplayDocument replayDocument) {
+    private void assertItemizedAwaitLiveFlowStartsBeforeUnitCompletes(PipelineReplayDocument replayDocument) {
         Comparator<PipelineExecutionEvent> playbackOrder = Comparator
                 .comparingDouble(AbstractCsvPaymentsEndToEnd::playbackTimeForEvent)
                 .thenComparingLong(event -> event.sequence() == null ? Long.MAX_VALUE : event.sequence());
         PipelineExecutionEvent firstPaymentStatusEvent = replayDocument.events().stream()
-                .filter(event -> "ProcessPaymentStatus".equals(event.step()))
+                .filter(event ->
+                        "ProcessApprovedPaymentStatus".equals(event.step())
+                                || "ProcessUnapprovedPaymentStatus".equals(event.step()))
                 .min(playbackOrder)
-                .orElseThrow(() -> new AssertionError("Expected ProcessPaymentStatus replay events."));
+                .orElseThrow(() -> new AssertionError("Expected payment-status branch replay events."));
         PipelineExecutionEvent awaitUnitCompletedEvent = replayDocument.events().stream()
                 .filter(event -> AWAIT_UNIT_COMPLETED.equals(event.event()))
                 .min(playbackOrder)
                 .orElseThrow(() -> new AssertionError("Expected await_unit_completed replay events."));
         assertTrue(
                 playbackOrder.compare(firstPaymentStatusEvent, awaitUnitCompletedEvent) < 0,
-                "Expected ONE_TO_ONE await item continuations to reach ProcessPaymentStatus before the full await unit completes.");
+                "Expected connector-first Kafka ONE_TO_ONE await to process completed items through the live session before the await unit completes.");
     }
 
     private void assertReplayEvent(PipelineReplayDocument replayDocument, String eventName) {
         assertTrue(
                 replayDocument.events().stream().anyMatch(event -> eventName.equals(event.event())),
                 "Expected merged replay to contain " + eventName + " events.");
+    }
+
+    private boolean hasReplayStepEvents(PipelineReplayDocument replayDocument, String stepName) {
+        return replayDocument.events().stream().anyMatch(event -> stepName.equals(event.step()));
+    }
+
+    private void assertNoReplayStepEvents(PipelineReplayDocument replayDocument, String stepName) {
+        assertFalse(
+                replayDocument.events().stream().anyMatch(event ->
+                        stepName.equals(event.step())
+                                || stepName.equals(event.from())
+                                || stepName.equals(event.to())),
+                "Expected connector-first replay to omit legacy " + stepName + " events.");
     }
 
     private static boolean isAwaitSuspensionFragment(PipelineReplayDocument document) {
@@ -2533,6 +2755,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertTrue(
                 replayDocument.events().stream().anyMatch(event -> stepName.equals(event.step())),
                 "Expected merged replay to contain direct events for " + stepName + ".");
+    }
+
+    private void assertReplayMergeNode(PipelineReplayDocument replayDocument, String stepName) {
+        assertTrue(
+                replayDocument.events().stream().anyMatch(event ->
+                        stepName.equals(event.from()) || stepName.equals(event.to())),
+                "Expected merged replay to contain merge flow events for " + stepName + ".");
     }
 
     private static String nullSafe(String value) {

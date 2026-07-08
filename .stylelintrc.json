@@ -3,6 +3,7 @@
     "stylelint-config-standard-scss"
   ],
   "rules": {
-    "media-feature-range-notation": "prefix"
+    "media-feature-range-notation": "prefix",
+    "selector-class-pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*(--[a-z0-9]+)?$"
   }
 }

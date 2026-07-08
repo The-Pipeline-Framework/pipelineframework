@@ -35,26 +35,73 @@ cp "$MODULAR_MAPPING" "$ACTIVE_MAPPING"
 cd "$ROOT_DIR"
 
 IMAGE_TAG="${CSV_E2E_TELEMETRY_IMAGE_TAG:-otel}"
-case "$(uname -m)" in
-  x86_64|amd64)
-    DEFAULT_IMAGE_PLATFORMS="linux/amd64"
-    ;;
-  arm64|aarch64)
-    DEFAULT_IMAGE_PLATFORMS="linux/arm64/v8"
-    ;;
-  *)
-    DEFAULT_IMAGE_PLATFORMS="linux/amd64"
-    ;;
-esac
+
+resolve_default_image_platforms() {
+  local docker_arch
+  docker_arch="$(docker version --format '{{.Server.Arch}}' 2>/dev/null || uname -m)"
+  case "$docker_arch" in
+    x86_64|amd64)
+      echo "linux/amd64"
+      ;;
+    arm64|aarch64)
+      echo "linux/arm64/v8"
+      ;;
+    *)
+      echo "linux/amd64"
+      ;;
+  esac
+}
+
+DEFAULT_IMAGE_PLATFORMS="$(resolve_default_image_platforms)"
 IMAGE_PLATFORMS="${CSV_E2E_IMAGE_PLATFORMS:-$DEFAULT_IMAGE_PLATFORMS}"
 MAVEN_IMAGE_THREADS="${CSV_E2E_IMAGE_MAVEN_THREADS:-1}"
+
+expected_arch() {
+  case "$IMAGE_PLATFORMS" in
+    linux/amd64)
+      echo "amd64"
+      ;;
+    linux/arm64|linux/arm64/v8)
+      echo "arm64"
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
+verify_image_architecture() {
+  local expected
+  expected="$(expected_arch)"
+  if [[ -z "$expected" ]]; then
+    echo "Skipping local image architecture check for multi/unknown platform set: $IMAGE_PLATFORMS"
+    return
+  fi
+
+  local service actual image
+  for service in \
+    persistence-svc \
+    input-csv-file-processing-svc \
+    payments-processing-svc \
+    payment-status-svc \
+    output-csv-file-processing-svc \
+    orchestrator-svc
+  do
+    image="localhost/csv-payments/${service}:${IMAGE_TAG}"
+    actual="$(docker image inspect "$image" --format '{{.Architecture}}' 2>/dev/null || true)"
+    if [[ "$actual" != "$expected" ]]; then
+      echo "Image architecture mismatch for $image: expected $expected from $IMAGE_PLATFORMS, got ${actual:-<missing>}" >&2
+      exit 1
+    fi
+  done
+}
 
 # Jib writes shared cache metadata during image packaging; keep this reactor serialized
 # unless a caller explicitly opts into parallelism.
 ./mvnw -T "$MAVEN_IMAGE_THREADS" -f examples/csv-payments/pom.xml -DskipTests clean package \
   -Dtpf.build.transport=GRPC \
   -Dquarkus.container-image.tag="${IMAGE_TAG}" \
-  -Dquarkus.container-image.platforms="${IMAGE_PLATFORMS}" \
+  -Dquarkus.jib.platforms="${IMAGE_PLATFORMS}" \
   -Dquarkus.otel.enabled=true \
   -Dquarkus.otel.sdk.disabled=false \
   -Dquarkus.otel.metrics.enabled=false \
@@ -64,3 +111,5 @@ MAVEN_IMAGE_THREADS="${CSV_E2E_IMAGE_MAVEN_THREADS:-1}"
   -Dquarkus.otel.traces.sampler=parentbased_always_on \
   -Dquarkus.otel.traces.sampler.arg=1.0 \
   "$@"
+
+verify_image_architecture

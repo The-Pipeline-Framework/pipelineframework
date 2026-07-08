@@ -56,7 +56,13 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("pipelineInputBoundary"));
         assertTrue(definitions.has("pipelineOutputBoundary"));
         assertTrue(definitions.has("pipelineSources"));
+        assertTrue(definitions.has("pipelinePublishTargets"));
         assertTrue(definitions.has("objectSource"));
+        assertTrue(definitions.has("queryDefinition"));
+        assertTrue(definitions.has("jpaQueryDefinition"));
+        assertTrue(definitions.has("queryCapture"));
+        assertTrue(definitions.has("queryTemplateStep"));
+        assertTrue(definitions.has("objectPublishTarget"));
         assertTrue(definitions.has("delegatedOrInternalStep"));
         assertTrue(definitions.has("v2Execution"));
         assertTrue(definitions.has("awaitTemplateStep"));
@@ -69,7 +75,48 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(properties.has("input"));
         assertTrue(properties.has("output"));
         assertTrue(properties.has("sources"));
+        assertTrue(properties.has("queries"));
+        assertTrue(properties.has("publish"));
         assertTrue(properties.has("materialization"));
+    }
+
+    @Test
+    void queryStepSchemaRequiresQueryReferenceAndCaptureFields() {
+        JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
+        JsonObject queryDefinition = definitions.getAsJsonObject("queryDefinition");
+        JsonObject queryProperties = queryDefinition.getAsJsonObject("properties");
+        assertEquals("jpa", queryProperties.getAsJsonObject("connector").get("const").getAsString());
+        assertContains(queryDefinition.getAsJsonArray("required"), "jpa");
+
+        JsonObject jpaDefinition = definitions.getAsJsonObject("jpaQueryDefinition");
+        assertContains(jpaDefinition.getAsJsonArray("required"), "entity");
+        assertContains(jpaDefinition.getAsJsonArray("required"), "where");
+        JsonObject jpaProperties = jpaDefinition.getAsJsonObject("properties");
+        assertTrue(jpaProperties.has("orderBy"));
+        assertTrue(jpaProperties.has("limit"));
+        JsonObject whereDefinition = jpaProperties.getAsJsonObject("where");
+        JsonArray whereShapes = whereDefinition.getAsJsonObject("additionalProperties").getAsJsonArray("oneOf");
+        assertEquals(2, whereShapes.size());
+        JsonObject predicateObject = whereShapes.get(1).getAsJsonObject();
+        JsonObject predicateProperties = predicateObject.getAsJsonObject("properties");
+        assertTrue(predicateProperties.has("eq"));
+        assertTrue(predicateProperties.has("gte"));
+        assertTrue(predicateProperties.has("between"));
+        assertTrue(predicateProperties.has("isNull"));
+        assertTrue(predicateProperties.getAsJsonObject("isNull").has("oneOf"));
+        JsonObject orderByDefinition = jpaProperties.getAsJsonObject("orderBy");
+        assertEquals(1, orderByDefinition.get("minProperties").getAsInt());
+        assertTrue(orderByDefinition.getAsJsonObject("additionalProperties").has("pattern"));
+        assertTrue(jpaDefinition.has("allOf"));
+        assertTrue(definitions.has("jpaPredicateScalar"));
+        assertTrue(definitions.getAsJsonObject("jpaPredicateScalar").has("anyOf"));
+
+        JsonObject queryStep = definitions.getAsJsonObject("queryTemplateStep");
+
+        JsonObject properties = queryStep.getAsJsonObject("properties");
+        assertTrue(properties.has("query"));
+        assertTrue(properties.has("capture"));
+        assertContains(queryStep.getAsJsonArray("required"), "query");
     }
 
     @Test
@@ -82,6 +129,18 @@ class PipelineTemplateSchemaExporterTest {
         assertEquals(2, oneOf.size());
         assertContains(oneOf.get(0).getAsJsonObject().getAsJsonArray("required"), "source");
         assertContains(oneOf.get(1).getAsJsonObject().getAsJsonArray("required"), "from");
+    }
+
+    @Test
+    void objectOutputBoundaryRequiresTargetReference() {
+        JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
+        JsonObject objectOutput = definitions.getAsJsonObject("objectOutputBoundary");
+
+        assertContains(objectOutput.getAsJsonArray("required"), "consumes");
+        JsonArray oneOf = objectOutput.getAsJsonArray("oneOf");
+        assertEquals(2, oneOf.size());
+        assertContains(oneOf.get(0).getAsJsonObject().getAsJsonArray("required"), "target");
+        assertContains(oneOf.get(1).getAsJsonObject().getAsJsonArray("required"), "to");
     }
 
     @Test
@@ -140,6 +199,52 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(transport.getAsJsonObject("properties").has("config"));
         assertTrue(transport.getAsJsonObject("properties").has("request"));
         assertTrue(transport.getAsJsonObject("properties").has("callback"));
+    }
+
+    @Test
+    void remoteExecutionProtocolEnumIncludesEnvelopeCompatibilityProtocol() {
+        JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
+        JsonObject execution = definitions.getAsJsonObject("v2Execution");
+        JsonArray protocols = execution.getAsJsonObject("properties")
+            .getAsJsonObject("protocol")
+            .getAsJsonArray("enum");
+
+        assertContains(protocols, "PROTOBUF_HTTP_V1");
+        assertContains(protocols, "ENVELOPE_HTTP_V1");
+    }
+
+    @Test
+    void internalStepShapeIncludesVirtualThreadHint() {
+        JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
+        JsonObject step = definitions.getAsJsonObject("delegatedOrInternalStep");
+        JsonObject properties = step.getAsJsonObject("properties");
+
+        JsonObject runOnVirtualThreads = properties.getAsJsonObject("runOnVirtualThreads");
+        assertNotNull(runOnVirtualThreads);
+        assertEquals("boolean", text(runOnVirtualThreads, "type"));
+        JsonArray allOf = step.getAsJsonArray("allOf");
+        assertTrue(allOf.toString().contains("\"operator\""));
+        assertTrue(allOf.toString().contains("\"delegate\""));
+        assertTrue(allOf.toString().contains("\"runOnVirtualThreads\""));
+    }
+
+    @Test
+    void branchAwareStepShapesExposeAcceptsAndTerminal() {
+        JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
+
+        JsonObject internalStep = definitions.getAsJsonObject("delegatedOrInternalStep");
+        JsonObject internalProperties = internalStep.getAsJsonObject("properties");
+        assertTrue(internalProperties.has("accepts"));
+        assertTrue(internalProperties.has("terminal"));
+        assertEquals("boolean", internalProperties.getAsJsonObject("terminal").get("type").getAsString());
+
+        JsonObject accepts = internalProperties.getAsJsonObject("accepts");
+        assertEquals("array", accepts.get("type").getAsString());
+        assertEquals("^[A-Z][A-Za-z0-9_]*$", accepts.getAsJsonObject("items").get("pattern").getAsString());
+
+        assertTrue(definitions.getAsJsonObject("awaitTemplateStep").getAsJsonObject("properties").has("accepts"));
+        assertTrue(definitions.getAsJsonObject("commandTemplateStep").getAsJsonObject("properties").has("terminal"));
+        assertTrue(definitions.getAsJsonObject("queryTemplateStep").getAsJsonObject("properties").has("accepts"));
     }
 
     @Test

@@ -10,7 +10,7 @@
     <div class="app-shell">
       <main class="viewer-page">
         <header class="viewer-shell-bar" aria-label="Replay viewer navigation">
-          <a id="backToDocsLink" class="shell-link" href="/guide/operations/observability/replay">Back to docs</a>
+          <a id="backToDocsLink" class="shell-link" href="/operate/observability/replay">Back to docs</a>
         </header>
         <section class="player-panel">
           <section class="viewport" id="playerSurface">
@@ -220,14 +220,27 @@
                   <span>received | sent; ring shows queued pressure waiting at the node</span>
                 </div>
               </div>
+              <h4>Connectors</h4>
+              <div class="legend-list">
+                <div class="legend-item"><span class="legend-swatch legend-swatch-ingest"></span><span>Object Ingest source feeds pipeline input</span></div>
+                <div class="legend-item"><span class="legend-swatch legend-swatch-publish"></span><span>Object Publish makes terminal output durable</span></div>
+                <div class="legend-item"><span class="legend-swatch legend-swatch-querydb"></span><span>JPA Query connector supplies database snapshots</span></div>
+              </div>
               <h4>Event motion</h4>
               <div class="legend-list">
                 <div class="legend-item"><span class="legend-swatch legend-swatch--start"></span><span>start / success transit</span></div>
                 <div class="legend-item"><span class="legend-swatch legend-swatch--emit"></span><span>emit / fan-out</span></div>
                 <div class="legend-item"><span class="legend-swatch legend-swatch--emit"></span><span>cache hit</span></div>
+                <div class="legend-item"><span class="legend-swatch legend-swatch--skip"></span><span>skip / pass-through</span></div>
                 <div class="legend-item"><span class="legend-swatch legend-swatch--retry"></span><span>retry loop</span></div>
                 <div class="legend-item"><span class="legend-swatch legend-swatch--error"></span><span>error burst</span></div>
                 <div class="legend-item"><span class="legend-swatch legend-swatch--branch"></span><span>DB/store transit</span></div>
+              </div>
+              <h4>Step nodes</h4>
+              <div class="legend-list">
+                <div class="legend-item"><span class="legend-node legend-node--primary"></span><span>business transition</span></div>
+                <div class="legend-item"><span class="legend-node legend-node--await"></span><span>await boundary</span></div>
+                <div class="legend-item"><span class="legend-node legend-node--command"></span><span>command / effect boundary</span></div>
               </div>
               <h4>Support actors</h4>
               <div class="legend-list legend-list--support">

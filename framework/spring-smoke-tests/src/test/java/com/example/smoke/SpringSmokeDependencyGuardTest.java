@@ -16,6 +16,7 @@ class SpringSmokeDependencyGuardTest {
         "io.quarkus.",
         "jakarta.enterprise.",
         "io.vertx.",
+        "io.smallrye.mutiny",
         "org.jboss.resteasy.",
         "jakarta.ws.rs.");
 
@@ -24,6 +25,13 @@ class SpringSmokeDependencyGuardTest {
         assertThrows(
             ClassNotFoundException.class,
             () -> Class.forName("org.pipelineframework.service.ReactiveService"));
+    }
+
+    @Test
+    void springSmokePomDoesNotDeclareDirectMutinyDependency() throws IOException {
+        Path pom = Path.of(System.getProperty("user.dir"), "pom.xml");
+        String content = Files.readString(pom);
+        assertFalse(content.contains("<artifactId>mutiny</artifactId>"), "Spring smoke module must not declare Mutiny directly");
     }
 
     @Test

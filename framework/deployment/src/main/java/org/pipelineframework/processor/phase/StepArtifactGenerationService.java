@@ -21,9 +21,10 @@ import org.pipelineframework.processor.renderer.GenerationContext;
 import org.pipelineframework.processor.renderer.GrpcServiceAdapterRenderer;
 import org.pipelineframework.processor.renderer.PipelineRenderer;
 import org.pipelineframework.processor.renderer.RemoteOperatorAdapterRenderer;
-import org.pipelineframework.processor.renderer.RestClientStepRenderer;
 import org.pipelineframework.processor.renderer.AbstractFunctionHandlerRenderer;
 import org.pipelineframework.processor.renderer.AwaitClientStepRenderer;
+import org.pipelineframework.processor.renderer.CommandClientStepRenderer;
+import org.pipelineframework.processor.renderer.QueryClientStepRenderer;
 import org.pipelineframework.processor.renderer.RestResourceRenderer;
 import org.pipelineframework.processor.util.ResourceNameUtils;
 import org.pipelineframework.processor.util.RoleMetadataGenerator;
@@ -77,6 +78,7 @@ class StepArtifactGenerationService {
     void generateArtifactsForModel(
             PipelineCompilationContext ctx,
             PipelineStepModel model,
+            Integer stepIndex,
             GrpcBinding grpcBinding,
             RestBinding restBinding,
             LocalBinding localBinding,
@@ -88,14 +90,31 @@ class StepArtifactGenerationService {
             GrpcServiceAdapterRenderer grpcRenderer,
             ClientStepRenderer clientRenderer,
             PipelineRenderer<LocalBinding> localClientRenderer,
-            RestClientStepRenderer restClientRenderer,
+            PipelineRenderer<RestBinding> restClientRenderer,
             PipelineRenderer<RestBinding> restRenderer,
             AbstractFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer,
-            AwaitClientStepRenderer awaitClientStepRenderer) throws IOException {
+            AwaitClientStepRenderer awaitClientStepRenderer,
+            CommandClientStepRenderer commandClientStepRenderer,
+            QueryClientStepRenderer queryClientStepRenderer) throws IOException {
         for (GenerationTarget target : model.enabledTargets()) {
             switch (target) {
+                case COMMAND_CLIENT_STEP -> {
+                    String baseName = ResourceNameUtils.normalizeBaseName(model.generatedName());
+                    String commandClientClassName = model.servicePackage() + PIPELINE_DOT + baseName + "CommandClientStep";
+                    DeploymentRole clientRole = resolveClientRole(model.deploymentRole());
+                    commandClientStepRenderer.render(model, new GenerationContext(
+                        ctx.getProcessingEnv(),
+                        pathResolver.resolveRoleOutputDir(ctx, clientRole),
+                        clientRole,
+                        enabledAspects,
+                        cacheKeyGenerator,
+                        descriptorSet,
+                        ctx.getTransportMode(),
+                        ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config ? config.basePackage() : null));
+                    roleMetadataGenerator.recordClassWithRole(commandClientClassName, clientRole.name());
+                }
                 case AWAIT_CLIENT_STEP -> {
                     String baseName = ResourceNameUtils.normalizeBaseName(model.generatedName());
                     String awaitClientClassName = model.servicePackage() + PIPELINE_DOT + baseName + "AwaitClientStep";
@@ -110,6 +129,21 @@ class StepArtifactGenerationService {
                         ctx.getTransportMode(),
                         ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config ? config.basePackage() : null));
                     roleMetadataGenerator.recordClassWithRole(awaitClientClassName, clientRole.name());
+                }
+                case QUERY_CLIENT_STEP -> {
+                    String baseName = ResourceNameUtils.normalizeBaseName(model.generatedName());
+                    String queryClientClassName = model.servicePackage() + PIPELINE_DOT + baseName + "QueryClientStep";
+                    DeploymentRole clientRole = resolveClientRole(model.deploymentRole());
+                    queryClientStepRenderer.render(model, new GenerationContext(
+                        ctx.getProcessingEnv(),
+                        pathResolver.resolveRoleOutputDir(ctx, clientRole),
+                        clientRole,
+                        enabledAspects,
+                        cacheKeyGenerator,
+                        descriptorSet,
+                        ctx.getTransportMode(),
+                        ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config ? config.basePackage() : null));
+                    roleMetadataGenerator.recordClassWithRole(queryClientClassName, clientRole.name());
                 }
                 case GRPC_SERVICE -> {
                     if (model.deploymentRole() == DeploymentRole.PLUGIN_SERVER
@@ -241,7 +275,10 @@ class StepArtifactGenerationService {
                         localClientRole,
                         enabledAspects,
                         cacheKeyGenerator,
-                        descriptorSet));
+                        descriptorSet,
+                        ctx.getTransportMode(),
+                        ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config ? config.basePackage() : null,
+                        stepIndex));
                     roleMetadataGenerator.recordClassWithRole(localClientClassName, localClientRole.name());
                 }
                 case REST_RESOURCE -> {
@@ -367,7 +404,7 @@ class StepArtifactGenerationService {
             GrpcServiceAdapterRenderer grpcRenderer,
             ClientStepRenderer clientRenderer,
             PipelineRenderer<LocalBinding> localClientRenderer,
-            RestClientStepRenderer restClientRenderer,
+            PipelineRenderer<RestBinding> restClientRenderer,
             PipelineRenderer<RestBinding> restRenderer,
             AbstractFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
@@ -375,6 +412,7 @@ class StepArtifactGenerationService {
         generateArtifactsForModel(
             ctx,
             model,
+            null,
             grpcBinding,
             restBinding,
             localBinding,
@@ -391,7 +429,9 @@ class StepArtifactGenerationService {
             restFunctionHandlerRenderer,
             blockingReactiveBridgeRenderer,
             remoteOperatorAdapterRenderer,
-            new AwaitClientStepRenderer());
+            new AwaitClientStepRenderer(),
+            new CommandClientStepRenderer(),
+            new QueryClientStepRenderer());
     }
 
     private DeploymentRole resolveClientRole(DeploymentRole serverRole) {

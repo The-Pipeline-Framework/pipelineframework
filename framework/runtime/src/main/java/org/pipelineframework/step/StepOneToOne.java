@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
+import org.pipelineframework.invocation.TransportBoundaryInvocation;
 import org.pipelineframework.step.functional.OneToOne;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 
@@ -63,7 +64,7 @@ public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, ItemRe
           : Uni.createFrom().failure(t);
     }
 
-    return input
+    Uni<O> output = input
         // Step 1: Null item becomes explicit failure
         .onItem()
         .ifNull()
@@ -78,7 +79,15 @@ public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, ItemRe
           } catch (Throwable thrown) {
             return Uni.createFrom().failure(thrown);
           }
-        })
+        });
+    if (this instanceof TransportBoundaryInvocation) {
+      return output.onItem().invoke(out -> {
+        if (LOG.isDebugEnabled()) {
+          LOG.debugf("Step %s processed item: %s", this.getClass().getSimpleName(), out);
+        }
+      });
+    }
+    return output
         // Step 3: Apply retry policy for transient failures
         .onFailure(this::shouldRetry)
         .invoke(t -> PipelineTelemetry.recordRetry(this.getClass(), t))

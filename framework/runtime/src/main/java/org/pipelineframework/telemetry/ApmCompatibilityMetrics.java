@@ -31,14 +31,10 @@ import io.opentelemetry.api.metrics.Meter;
  */
 public final class ApmCompatibilityMetrics {
 
-    private static final Meter METER = GlobalOpenTelemetry.getMeter("org.pipelineframework.apm");
-
-    private static final LongCounter TRANSACTION_COUNT =
-        METER.counterBuilder("apm.service.transaction.count").build();
-    private static final LongCounter ERROR_COUNT =
-        METER.counterBuilder("apm.service.error.count").build();
-    private static final DoubleHistogram TRANSACTION_DURATION =
-        METER.histogramBuilder("apm.service.transaction.duration").setUnit("ms").build();
+    private static volatile Meter meter;
+    private static volatile LongCounter transactionCount;
+    private static volatile LongCounter errorCount;
+    private static volatile DoubleHistogram transactionDuration;
 
     private static final AttributeKey<String> TRANSACTION_TYPE = AttributeKey.stringKey("transaction.type");
     private static final AttributeKey<String> TRANSACTION_NAME = AttributeKey.stringKey("transaction.name");
@@ -64,15 +60,39 @@ public final class ApmCompatibilityMetrics {
         record(durationMs, true);
     }
 
+    static void resetForTest() {
+        meter = null;
+        transactionCount = null;
+        errorCount = null;
+        transactionDuration = null;
+    }
+
     private static void record(double durationMs, boolean error) {
+        ensureInitialized();
         Attributes attributes = Attributes.builder()
             .put(TRANSACTION_TYPE, "Other")
             .put(TRANSACTION_NAME, "OtherTransaction/OrchestratorService/Run")
             .build();
-        TRANSACTION_COUNT.add(1, attributes);
-        TRANSACTION_DURATION.record(durationMs, attributes);
+        transactionCount.add(1, attributes);
+        transactionDuration.record(durationMs, attributes);
         if (error) {
-            ERROR_COUNT.add(1, attributes);
+            errorCount.add(1, attributes);
+        }
+    }
+
+    private static void ensureInitialized() {
+        if (meter != null) {
+            return;
+        }
+        synchronized (ApmCompatibilityMetrics.class) {
+            if (meter != null) {
+                return;
+            }
+            Meter localMeter = GlobalOpenTelemetry.getMeter("org.pipelineframework.apm");
+            transactionCount = localMeter.counterBuilder("apm.service.transaction.count").build();
+            errorCount = localMeter.counterBuilder("apm.service.error.count").build();
+            transactionDuration = localMeter.histogramBuilder("apm.service.transaction.duration").setUnit("ms").build();
+            meter = localMeter;
         }
     }
 }

@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.pipelineframework.csv</groupId>
         <artifactId>csv-payments-parent</artifactId>
-        <version>26.6.2-SNAPSHOT</version>
+        <version>26.6.3-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -34,6 +34,11 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>persistence-plugin</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>object-ingest-connector</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -168,7 +173,6 @@
                                     <arg value="${project.basedir}/../input-csv-file-processing-svc/src/main/java"/>
                                     <arg value="${project.basedir}/../payments-processing-svc/src/main/java"/>
                                     <arg value="${project.basedir}/../payment-status-svc/src/main/java"/>
-                                    <arg value="${project.basedir}/../output-csv-file-processing-svc/src/main/java"/>
                                     <arg value="${project.basedir}/../orchestrator-svc/src/main/java"/>
                                 </exec>
                                 <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
@@ -181,11 +185,6 @@
                                 </copy>
                                 <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
                                     <fileset dir="${project.basedir}/../payment-status-svc/src/main/java"/>
-                                </copy>
-                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
-                                    <fileset dir="${project.basedir}/../output-csv-file-processing-svc/src/main/java">
-                                        <exclude name="org/pipelineframework/csv/service/ExecutorProducer.java"/>
-                                    </fileset>
                                 </copy>
                                 <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
                                     <fileset dir="${project.basedir}/../orchestrator-svc/src/main/java"/>

@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -33,6 +34,7 @@ import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.ReactiveReturnKind;
 import org.pipelineframework.processor.ir.ServiceApiKind;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
@@ -213,7 +215,105 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             case AWAIT -> {
                 yield createAwaitStepModel(ctx, stepDef, ctxWarningLogger);
             }
+            case COMMAND -> {
+                yield createCommandStepModel(ctx, stepDef, ctxWarningLogger);
+            }
+            case QUERY -> {
+                yield createQueryStepModel(ctx, stepDef, ctxWarningLogger);
+            }
         };
+    }
+
+    private PipelineStepModel createCommandStepModel(
+            PipelineCompilationContext ctx,
+            org.pipelineframework.processor.ir.StepDefinition stepDef,
+            Consumer<String> ctxWarningLogger) {
+        if (stepDef.inputType() == null || stepDef.outputType() == null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Command step '" + stepDef.name() + "' must resolve both input and output domain types");
+            return null;
+        }
+        StreamingShape streamingShape = stepDef.streamingShapeHint() != null
+            ? stepDef.streamingShapeHint()
+            : StreamingShape.UNARY_UNARY;
+        if (streamingShape != StreamingShape.UNARY_UNARY) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Command step '" + stepDef.name() + "' supports only ONE_TO_ONE cardinality in v1");
+            return null;
+        }
+
+        String templateBasePackage = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            ? config.basePackage()
+            : null;
+        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage, ctx);
+        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage, ctx);
+
+        String serviceName = toYamlServiceName(stepDef.name());
+        String servicePackage = deriveYamlServicePackage(inputType, ctxWarningLogger);
+        return new PipelineStepModel.Builder()
+            .serviceName(serviceName)
+            .generatedName(serviceName)
+            .servicePackage(servicePackage)
+            .serviceClassName(ClassName.get("org.pipelineframework.command", "CommandStepDescriptor"))
+            .inputMapping(new TypeMapping(inputType, null, false, inputType))
+            .outputMapping(new TypeMapping(outputType, null, false, outputType))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(java.util.Set.of(GenerationTarget.COMMAND_CLIENT_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .sideEffect(false)
+            .cacheKeyGenerator(stepDef.commandIdGenerator())
+            .orderingRequirement(OrderingRequirement.RELAXED)
+            .threadSafety(ThreadSafety.SAFE)
+            .build();
+    }
+
+    private PipelineStepModel createQueryStepModel(
+            PipelineCompilationContext ctx,
+            org.pipelineframework.processor.ir.StepDefinition stepDef,
+            Consumer<String> ctxWarningLogger) {
+        if (stepDef.inputType() == null || stepDef.outputType() == null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Query step '" + stepDef.name() + "' must resolve both input and output domain types");
+            return null;
+        }
+        StreamingShape streamingShape = stepDef.streamingShapeHint() != null
+            ? stepDef.streamingShapeHint()
+            : StreamingShape.UNARY_UNARY;
+        if (streamingShape != StreamingShape.UNARY_UNARY) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Query step '" + stepDef.name() + "' supports only ONE_TO_ONE cardinality in v1");
+            return null;
+        }
+
+        String templateBasePackage = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            ? config.basePackage()
+            : null;
+        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), null, templateBasePackage, ctx);
+        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), null, templateBasePackage, ctx);
+
+        String serviceName = toYamlServiceName(stepDef.name());
+        String servicePackage = deriveYamlServicePackage(inputType, ctxWarningLogger);
+        return new PipelineStepModel.Builder()
+            .serviceName(serviceName)
+            .generatedName(serviceName)
+            .servicePackage(servicePackage)
+            .serviceClassName(ClassName.get("org.pipelineframework.query", "QueryStepDescriptor"))
+            .inputMapping(new TypeMapping(inputType, null, false, inputType))
+            .outputMapping(new TypeMapping(outputType, null, false, outputType))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(java.util.Set.of(GenerationTarget.QUERY_CLIENT_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .sideEffect(false)
+            .cacheKeyGenerator(null)
+            .orderingRequirement(OrderingRequirement.RELAXED)
+            .threadSafety(ThreadSafety.SAFE)
+            .build();
     }
 
     private PipelineStepModel createAwaitStepModel(
@@ -330,14 +430,17 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         SupportedServiceSignature serviceSignature = resolveSupportedInternalSignature(
+            ctx,
             serviceClass,
             ctx.getProcessingEnv().getTypeUtils(),
-            ctx.getProcessingEnv().getMessager());
+            ctx.getProcessingEnv().getMessager(),
+            true);
         if (serviceSignature == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Internal step service '" + stepDef.executionClass().canonicalName()
-                    + "' must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out> method for step '"
+                    + "' must implement exactly one supported service interface or declare exactly one public process(In): Uni<Out>"
+                    + springPlainMethodHint(ctx, true) + " method for step '"
                     + stepDef.name() + "'");
             return null;
         }
@@ -401,13 +504,16 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         String serviceName = toYamlServiceName(stepDef.name());
+        ExecutionMode resolvedExecutionMode = executionMode(ctx, stepDef, serviceSignature.apiKind());
         return extractedModel.toBuilder()
             .serviceName(serviceName)
             .generatedName(serviceName)
             .inputMapping(new TypeMapping(inputType, inboundMapper, inboundMapper != null, inputType))
             .outputMapping(new TypeMapping(outputType, outboundMapper, outboundMapper != null, outputType))
             .streamingShape(serviceSignature.shape())
+            .executionMode(resolvedExecutionMode)
             .serviceApiKind(serviceSignature.apiKind())
+            .reactiveReturnKind(serviceSignature.reactiveReturnKind())
             .build();
     }
 
@@ -454,6 +560,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .sideEffect(false)
             .cacheKeyGenerator(null)
             .serviceApiKind(serviceSignature.apiKind())
+            .reactiveReturnKind(serviceSignature.reactiveReturnKind())
             .build();
     }
 
@@ -497,6 +604,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ? DeploymentRole.PLUGIN_CLIENT
             : DeploymentRole.ORCHESTRATOR_CLIENT;
 
+        ExecutionMode resolvedExecutionMode = executionMode(ctx, stepDef, null);
         return new PipelineStepModel.Builder()
             .serviceName(serviceName)
             .generatedName(serviceName)
@@ -514,7 +622,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 outputType))
             .streamingShape(streamingShape)
             .enabledTargets(targets)
-            .executionMode(ExecutionMode.DEFAULT)
+            .executionMode(resolvedExecutionMode)
             .deploymentRole(crossModuleRole)
             .sideEffect(false)
             .cacheKeyGenerator(null)
@@ -598,7 +706,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             PipelineCompilationContext ctx,
             org.pipelineframework.processor.ir.StepDefinition stepDef) {
 
-        // Validate that the delegate service exists and implements a reactive service interface
+        // Validate that the delegate service exists and exposes a supported step contract.
         TypeElement delegateElement = ctx.getProcessingEnv().getElementUtils()
             .getTypeElement(stepDef.executionClass().canonicalName());
 
@@ -611,23 +719,34 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         var typeUtils = ctx.getProcessingEnv().getTypeUtils();
-        ReactiveSignature reactiveSignature = resolveReactiveSignature(
+        Optional<SupportedServiceSignature> delegateSignature = resolveSupportedDelegatedSignature(
+            ctx,
             delegateElement,
             typeUtils,
-            ctx.getProcessingEnv().getMessager());
-        if (reactiveSignature == null) {
+            ctx.getProcessingEnv().getMessager(),
+            stepDef.delegatedMethodName());
+        if (delegateSignature.isEmpty()) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Delegate service '" + stepDef.executionClass().canonicalName() +
-                "' must implement one of: ReactiveService, ReactiveStreamingService, "
-                    + "ReactiveStreamingClientService, "
-                    + "ReactiveBidirectionalStreamingService for step '" +
-                stepDef.name() + "'");
+                    stepDef.delegatedMethodName().map(method -> "::" + method).orElse("")
+                    + "' must expose a supported step contract for step '" + stepDef.name() + "'");
+            return null;
+        }
+        SupportedServiceSignature resolvedDelegateSignature = delegateSignature.get();
+        StreamingShape yamlShape = stepDef.streamingShapeHint();
+        if (yamlShape != null && yamlShape != resolvedDelegateSignature.shape()) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Delegated step '" + stepDef.name() + "' declares cardinality "
+                    + yamlShape + " in YAML, but delegate '" + stepDef.executionClass().canonicalName()
+                    + stepDef.delegatedMethodName().map(method -> "::" + method).orElse("")
+                    + "' implements " + resolvedDelegateSignature.shape() + " semantics.");
             return null;
         }
 
-        TypeName inputType = stepDef.inputType() != null ? stepDef.inputType() : reactiveSignature.inputType();
-        TypeName outputType = stepDef.outputType() != null ? stepDef.outputType() : reactiveSignature.outputType();
+        TypeName inputType = stepDef.inputType() != null ? stepDef.inputType() : resolvedDelegateSignature.inputType();
+        TypeName outputType = stepDef.outputType() != null ? stepDef.outputType() : resolvedDelegateSignature.outputType();
         if (inputType == null || outputType == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
@@ -638,8 +757,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
 
         boolean fallbackGloballyEnabled = isMapperFallbackGloballyEnabled(ctx);
         boolean fallbackRequested = stepDef.mapperFallback() == MapperFallbackMode.JACKSON;
-        boolean typesDiffer = !inputType.equals(reactiveSignature.inputType())
-            || !outputType.equals(reactiveSignature.outputType());
+        boolean typesDiffer = !inputType.equals(resolvedDelegateSignature.inputType())
+            || !outputType.equals(resolvedDelegateSignature.outputType());
         boolean allowFallbackNoMapper = stepDef.externalMapper() == null
             && fallbackRequested
             && fallbackGloballyEnabled
@@ -650,8 +769,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             stepDef,
             inputType,
             outputType,
-            reactiveSignature.inputType(),
-            reactiveSignature.outputType(),
+            resolvedDelegateSignature.inputType(),
+            resolvedDelegateSignature.outputType(),
             allowFallbackNoMapper);
         MapperFallbackMode effectiveFallback = MapperFallbackMode.NONE;
 
@@ -680,7 +799,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                     + "': no operator mapper provided and YAML types ["
                     + inputType + " -> " + outputType
                     + "] do not match delegate types ["
-                    + reactiveSignature.inputType() + " -> " + reactiveSignature.outputType() + "]."
+                    + resolvedDelegateSignature.inputType() + " -> " + resolvedDelegateSignature.outputType() + "]."
                     + fallbackMessage);
             return null;
         }
@@ -695,8 +814,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         // Create type mappings based on the input/output types specified in the YAML
-        TypeMapping inputMapping = new TypeMapping(inputType, null, false, reactiveSignature.inputType());
-        TypeMapping outputMapping = new TypeMapping(outputType, null, false, reactiveSignature.outputType());
+        TypeMapping inputMapping = new TypeMapping(inputType, null, false, resolvedDelegateSignature.inputType());
+        TypeMapping outputMapping = new TypeMapping(outputType, null, false, resolvedDelegateSignature.outputType());
 
         // Derive package from execution class or use default
         String servicePackage = stepDef.executionClass().packageName().isEmpty()
@@ -712,7 +831,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .serviceClassName(stepDef.executionClass())
             .inputMapping(inputMapping)
             .outputMapping(outputMapping)
-            .streamingShape(reactiveSignature.shape())
+            .streamingShape(resolvedDelegateSignature.shape())
             .enabledTargets(targets)
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.PIPELINE_SERVER)
@@ -721,8 +840,11 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .orderingRequirement(OrderingRequirement.RELAXED)
             .threadSafety(ThreadSafety.SAFE)
             .delegateService(stepDef.executionClass())
+            .delegateMethodName(stepDef.delegatedMethodName())
             .externalMapper(externalMapper)
             .mapperFallbackMode(effectiveFallback)
+            .serviceApiKind(resolvedDelegateSignature.apiKind())
+            .reactiveReturnKind(resolvedDelegateSignature.reactiveReturnKind())
             .build();
     }
 
@@ -1045,10 +1167,148 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return matches.isEmpty() ? null : matches.get(0);
     }
 
+    private Optional<SupportedServiceSignature> resolveSupportedDelegatedSignature(
+            PipelineCompilationContext ctx,
+            TypeElement delegateElement,
+            Types typeUtils,
+            javax.annotation.processing.Messager messager,
+            Optional<String> delegatedMethodName) {
+        if (delegatedMethodName.isPresent() && isSpringRendererProfile(ctx)) {
+            return resolveSpringDelegatedMethodSignature(ctx, delegateElement, messager, delegatedMethodName.get());
+        }
+        if (delegatedMethodName.isPresent()) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Class::method delegated operators are currently supported only by the Spring renderer profile.");
+            return Optional.empty();
+        }
+        if (isSpringRendererProfile(ctx)) {
+            return Optional.ofNullable(resolveSupportedInternalSignature(ctx, delegateElement, typeUtils, messager, false));
+        }
+        ReactiveSignature reactiveSignature = resolveReactiveSignature(delegateElement, typeUtils, messager);
+        if (reactiveSignature == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new SupportedServiceSignature(
+            ServiceApiKind.REACTIVE,
+            reactiveSignature.shape(),
+            reactiveSignature.inputType(),
+            reactiveSignature.outputType(),
+            ReactiveReturnKind.MUTINY_UNI,
+            null));
+    }
+
+    private Optional<SupportedServiceSignature> resolveSpringDelegatedMethodSignature(
+            PipelineCompilationContext ctx,
+            TypeElement delegateElement,
+            javax.annotation.processing.Messager messager,
+            String delegatedMethodName) {
+        List<ExecutableElement> publicInstanceMatches = new ArrayList<>();
+        boolean staticMatch = false;
+        boolean namedMethodExists = false;
+        for (Element enclosed : delegateElement.getEnclosedElements()) {
+            if (!(enclosed instanceof ExecutableElement method)
+                || !delegatedMethodName.contentEquals(method.getSimpleName())) {
+                continue;
+            }
+            namedMethodExists = true;
+            if (method.getModifiers().contains(Modifier.STATIC)) {
+                staticMatch = true;
+                continue;
+            }
+            if (method.getModifiers().contains(Modifier.PUBLIC)) {
+                publicInstanceMatches.add(method);
+            }
+        }
+        if (publicInstanceMatches.isEmpty()) {
+            String reason = staticMatch
+                ? "is static, but Spring delegated operator methods must be instance bean methods"
+                : namedMethodExists
+                    ? "is not public"
+                    : "was not found";
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Spring delegated operator '" + delegateElement.getQualifiedName() + "::" + delegatedMethodName
+                    + "' " + reason + ".");
+            return Optional.empty();
+        }
+        if (publicInstanceMatches.size() > 1) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Spring delegated operator '" + delegateElement.getQualifiedName() + "::" + delegatedMethodName
+                    + "' is overloaded. Declare exactly one public instance method with that name.");
+            return Optional.empty();
+        }
+
+        ExecutableElement method = publicInstanceMatches.getFirst();
+        if (method.getParameters().size() != 1) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Spring delegated operator '" + delegateElement.getQualifiedName() + "::" + delegatedMethodName
+                    + "' must declare exactly one input parameter.");
+            return Optional.empty();
+        }
+        TypeMirror returnType = method.getReturnType();
+        if (returnType.getKind() == TypeKind.VOID) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Spring delegated operator '" + delegateElement.getQualifiedName() + "::" + delegatedMethodName
+                    + "' must return an output value.");
+            return Optional.empty();
+        }
+
+        TypeName inputType = boxIfPrimitive(TypeName.get(method.getParameters().getFirst().asType()));
+        if (returnType instanceof DeclaredType declaredReturn && declaredReturn.getTypeArguments().size() == 1) {
+            if (isDeclaredType(declaredReturn, "reactor.core.publisher.Mono")) {
+                return Optional.of(new SupportedServiceSignature(
+                    ServiceApiKind.REACTIVE,
+                    StreamingShape.UNARY_UNARY,
+                    inputType,
+                    boxIfPrimitive(TypeName.get(declaredReturn.getTypeArguments().getFirst())),
+                    ReactiveReturnKind.REACTOR_MONO,
+                    null));
+            }
+            if (isDeclaredType(declaredReturn, "java.util.concurrent.CompletionStage")) {
+                return Optional.of(new SupportedServiceSignature(
+                    ServiceApiKind.REACTIVE,
+                    StreamingShape.UNARY_UNARY,
+                    inputType,
+                    boxIfPrimitive(TypeName.get(declaredReturn.getTypeArguments().getFirst())),
+                    ReactiveReturnKind.COMPLETION_STAGE,
+                    null));
+            }
+        }
+
+        if (returnType instanceof DeclaredType declaredReturn && (
+            isDeclaredType(declaredReturn, "reactor.core.publisher.Mono")
+                || isDeclaredType(declaredReturn, "java.util.concurrent.CompletionStage")
+                || isDeclaredType(declaredReturn, "io.smallrye.mutiny.Uni")
+                || isDeclaredType(declaredReturn, "io.smallrye.mutiny.Multi")
+                || isDeclaredType(declaredReturn, "reactor.core.publisher.Flux"))) {
+            String kind = ((TypeElement) declaredReturn.asElement()).getQualifiedName().toString();
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Spring delegated operator '" + delegateElement.getQualifiedName() + "::" + delegatedMethodName
+                    + "' does not support return type '" + kind
+                    + "'; use Mono<Out>, CompletionStage<Out>, or a blocking return value.");
+            return Optional.empty();
+        }
+
+        return Optional.of(new SupportedServiceSignature(
+            ServiceApiKind.BLOCKING,
+            StreamingShape.UNARY_UNARY,
+            inputType,
+            boxIfPrimitive(TypeName.get(returnType)),
+            ReactiveReturnKind.MUTINY_UNI,
+            null));
+    }
+
     private SupportedServiceSignature resolveSupportedInternalSignature(
+            PipelineCompilationContext ctx,
             TypeElement serviceElement,
             Types typeUtils,
-            javax.annotation.processing.Messager messager) {
+            javax.annotation.processing.Messager messager,
+            boolean allowSpringCompletionStageProcess) {
         List<SupportedServiceSignature> blockingMatches = new ArrayList<>();
         List<String> blockingMatchNames = new ArrayList<>();
 
@@ -1121,7 +1381,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return null;
         }
         if (combinedMatches.isEmpty()) {
-            return resolvePlainUniProcessSignature(serviceElement, messager);
+            return resolvePlainUnaryProcessSignature(ctx, serviceElement, messager, allowSpringCompletionStageProcess)
+                .orElse(null);
         }
         SupportedServiceSignature match = combinedMatches.get(0);
         if (match.materializingWarning() != null) {
@@ -1133,24 +1394,63 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return match;
     }
 
-    private SupportedServiceSignature resolvePlainUniProcessSignature(
+    private Optional<SupportedServiceSignature> resolvePlainUnaryProcessSignature(
+            PipelineCompilationContext ctx,
             TypeElement serviceElement,
-            javax.annotation.processing.Messager messager) {
+            javax.annotation.processing.Messager messager,
+            boolean allowSpringCompletionStageProcess) {
         List<SupportedServiceSignature> matches = new ArrayList<>();
+        List<String> invalidProcessReasons = new ArrayList<>();
+        boolean springProfile = isSpringRendererProfile(ctx);
         for (Element enclosed : serviceElement.getEnclosedElements()) {
             if (!(enclosed instanceof ExecutableElement method)) {
                 continue;
             }
-            if (!method.getSimpleName().contentEquals("process")
-                || !method.getModifiers().contains(Modifier.PUBLIC)
-                || method.getModifiers().contains(Modifier.STATIC)
-                || method.getParameters().size() != 1) {
+            if (!method.getModifiers().contains(Modifier.PUBLIC)
+                || method.getModifiers().contains(Modifier.STATIC)) {
                 continue;
             }
+            String methodName = method.getSimpleName().toString();
             TypeMirror returnType = method.getReturnType();
-            if (!(returnType instanceof DeclaredType declaredReturn)
-                || !isDeclaredType(declaredReturn, "io.smallrye.mutiny.Uni")
+            if ("process".equals(methodName) && method.getParameters().size() != 1) {
+                invalidProcessReasons.add("process method must accept exactly one input parameter");
+                continue;
+            }
+            if ("process".equals(methodName) && returnType.getKind() == TypeKind.VOID) {
+                invalidProcessReasons.add("process method must return a typed output");
+                continue;
+            }
+            if ("processBlocking".equals(methodName) && method.getParameters().size() != 1) {
+                invalidProcessReasons.add("processBlocking method must accept exactly one input parameter");
+                continue;
+            }
+            if ("processBlocking".equals(methodName) && springProfile && returnType.getKind() != TypeKind.VOID) {
+                matches.add(new SupportedServiceSignature(
+                    ServiceApiKind.BLOCKING,
+                    StreamingShape.UNARY_UNARY,
+                    TypeName.get(method.getParameters().getFirst().asType()),
+                    TypeName.get(returnType),
+                    // Blocking services do not have a reactive return. Renderers branch on
+                    // ServiceApiKind first; this value is retained only for model compatibility.
+                    ReactiveReturnKind.MUTINY_UNI,
+                    null));
+                continue;
+            }
+            if (!"process".equals(methodName)
+                || !(returnType instanceof DeclaredType declaredReturn)
                 || declaredReturn.getTypeArguments().size() != 1) {
+                continue;
+            }
+            ReactiveReturnKind reactiveReturnKind;
+            if (isDeclaredType(declaredReturn, "io.smallrye.mutiny.Uni")) {
+                reactiveReturnKind = ReactiveReturnKind.MUTINY_UNI;
+            } else if (springProfile && isDeclaredType(declaredReturn, "reactor.core.publisher.Mono")) {
+                reactiveReturnKind = ReactiveReturnKind.REACTOR_MONO;
+            } else if (springProfile
+                && allowSpringCompletionStageProcess
+                && isDeclaredType(declaredReturn, "java.util.concurrent.CompletionStage")) {
+                reactiveReturnKind = ReactiveReturnKind.COMPLETION_STAGE;
+            } else {
                 continue;
             }
             matches.add(new SupportedServiceSignature(
@@ -1158,6 +1458,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 StreamingShape.UNARY_UNARY,
                 TypeName.get(method.getParameters().getFirst().asType()),
                 TypeName.get(declaredReturn.getTypeArguments().getFirst()),
+                reactiveReturnKind,
                 null));
         }
 
@@ -1165,10 +1466,56 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             messager.printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Internal service '" + serviceElement.getQualifiedName()
-                    + "' declares multiple public process(In): Uni<Out> methods. Please declare exactly one.");
-            return null;
+                    + "' declares multiple public process(In): Uni<Out>"
+                    + springPlainMethodHint(ctx, allowSpringCompletionStageProcess)
+                    + " methods. Please declare exactly one.");
+            return Optional.empty();
         }
-        return matches.isEmpty() ? null : matches.getFirst();
+        if (matches.isEmpty() && !invalidProcessReasons.isEmpty()) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Internal service '" + serviceElement.getQualifiedName()
+                    + "' has unsupported process method shape: "
+                    + invalidProcessReasons.stream().distinct().collect(Collectors.joining("; ")));
+        }
+        return matches.isEmpty() ? Optional.empty() : Optional.of(matches.getFirst());
+    }
+
+    private ExecutionMode executionMode(
+            PipelineCompilationContext ctx,
+            org.pipelineframework.processor.ir.StepDefinition stepDef,
+            ServiceApiKind serviceApiKind) {
+        ExecutionMode mode = stepDef.runOnVirtualThreads() ? ExecutionMode.VIRTUAL_THREADS : ExecutionMode.DEFAULT;
+        if (mode == ExecutionMode.VIRTUAL_THREADS && serviceApiKind == ServiceApiKind.REACTIVE) {
+            printVirtualThreadError(
+                ctx,
+                "Internal step '" + stepDef.name()
+                    + "' sets runOnVirtualThreads, but virtual-thread offload is valid only for blocking internal services.");
+        } else if (mode == ExecutionMode.VIRTUAL_THREADS && serviceApiKind == null) {
+            printVirtualThreadError(
+                ctx,
+                "Internal step '" + stepDef.name()
+                    + "' sets runOnVirtualThreads, but the service class must be available at build time to verify blocking execution.");
+        }
+        return mode;
+    }
+
+    private void printVirtualThreadError(PipelineCompilationContext ctx, String message) {
+        if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
+            ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR, message);
+        }
+    }
+
+    private boolean isSpringRendererProfile(PipelineCompilationContext ctx) {
+        return ctx != null && "spring".equalsIgnoreCase(ctx.getRendererProfile());
+    }
+
+    private String springPlainMethodHint(PipelineCompilationContext ctx, boolean includeCompletionStage) {
+        if (!isSpringRendererProfile(ctx)) {
+            return "";
+        }
+        String completionStageShape = includeCompletionStage ? " or process(In): CompletionStage<Out>" : "";
+        return " or process(In): Mono<Out>" + completionStageShape + " or processBlocking(In): Out";
     }
 
     private boolean isDeclaredType(DeclaredType declaredType, String qualifiedName) {
@@ -1219,6 +1566,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             shape,
             TypeName.get(declared.getTypeArguments().get(0)),
             TypeName.get(declared.getTypeArguments().get(1)),
+            ReactiveReturnKind.MUTINY_UNI,
             materializingWarning));
         matchNames.add(interfaceName);
     }
@@ -1414,6 +1762,35 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return null;
     }
 
+    /**
+     * Boxes primitive TypeName values to their wrapper types.
+     * This ensures model types are always non-primitive, preventing invalid generic signatures.
+     */
+    private static TypeName boxIfPrimitive(TypeName typeName) {
+        if (typeName.isPrimitive()) {
+            if (typeName.equals(TypeName.INT)) {
+                return TypeName.get(Integer.class);
+            } else if (typeName.equals(TypeName.LONG)) {
+                return TypeName.get(Long.class);
+            } else if (typeName.equals(TypeName.BOOLEAN)) {
+                return TypeName.get(Boolean.class);
+            } else if (typeName.equals(TypeName.DOUBLE)) {
+                return TypeName.get(Double.class);
+            } else if (typeName.equals(TypeName.FLOAT)) {
+                return TypeName.get(Float.class);
+            } else if (typeName.equals(TypeName.SHORT)) {
+                return TypeName.get(Short.class);
+            } else if (typeName.equals(TypeName.BYTE)) {
+                return TypeName.get(Byte.class);
+            } else if (typeName.equals(TypeName.CHAR)) {
+                return TypeName.get(Character.class);
+            }
+        } else if (typeName.equals(TypeName.VOID)) {
+            return TypeName.get(Void.class);
+        }
+        return typeName;
+    }
+
     private record ReactiveSignature(StreamingShape shape, TypeName inputType, TypeName outputType) {
     }
 
@@ -1422,6 +1799,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         StreamingShape shape,
         TypeName inputType,
         TypeName outputType,
+        ReactiveReturnKind reactiveReturnKind,
         String materializingWarning
     ) {
     }

@@ -1,22 +1,26 @@
-# Persistence Portability
+---
+title: Redirecting...
+search: false
+head:
+  - - meta
+    - name: robots
+      content: noindex
+  - - meta
+    - http-equiv: refresh
+      content: 0;url=/evolve/framework-portability-assessment/persistence
+---
 
-Panache is isolated to the persistence plugin surface and does not leak broadly into `framework/runtime/src/main`.
+<script setup>
+import {onMounted} from 'vue'
+import {withBase} from 'vitepress'
 
-Current SPI state:
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.location.replace(withBase('/evolve/framework-portability-assessment/persistence'))
+  }
+})
+</script>
 
-- `PersistenceProvider<T>` returns `Uni<T>`.
-- `ExecutionStateStore` and `Await*Store` contracts are Mutiny-oriented and live beside existing provider implementations.
-- Store providers are present in plugin modules, not only runtime core.
+# Redirecting...
 
-Proposed migration:
-
-- Move core interfaces to neutral async types (`CompletionStage` / `Publisher` boundary as needed).
-- Keep provider implementations in framework-specific modules.
-
-Proposed modules:
-
-- `tpf-store-core`
-- `tpf-store-inmemory`
-- `tpf-store-dynamo`
-- `tpf-store-quarkus-hibernate-reactive`
-- `tpf-store-spring-r2dbc`
+This page moved to [/evolve/framework-portability-assessment/persistence](/evolve/framework-portability-assessment/persistence).

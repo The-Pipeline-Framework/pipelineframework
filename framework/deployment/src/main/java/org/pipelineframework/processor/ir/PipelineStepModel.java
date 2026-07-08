@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.ir;
 
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 
 import com.squareup.javapoet.ClassName;
@@ -28,10 +29,12 @@ import org.pipelineframework.parallelism.ThreadSafety;
  * @param orderingRequirement Gets the ordering requirement for the generated client step.
  * @param threadSafety Gets the thread safety declaration for the generated client step.
  * @param delegateService Gets the delegate service class if this is a delegation step, otherwise null.
+ * @param delegateMethodName Gets the delegate method name when a delegated step uses Class::method syntax.
  * @param externalMapper Gets the operator mapper class if operator mapping is used, otherwise null.
  * @param mapperFallbackMode Gets mapper fallback mode used when no explicit/inferred mapper matches.
  * @param remoteExecution Gets remote operator execution metadata when the step is remote, otherwise null.
  * @param serviceApiKind Distinguishes reactive-authored from blocking-authored internal services.
+ * @param reactiveReturnKind Identifies the reactive return library used by unary reactive services.
  */
 public record PipelineStepModel(
         String serviceName,
@@ -49,10 +52,12 @@ public record PipelineStepModel(
         OrderingRequirement orderingRequirement,
         ThreadSafety threadSafety,
         ClassName delegateService,
+        Optional<String> delegateMethodName,
         ClassName externalMapper,
         MapperFallbackMode mapperFallbackMode,
         PipelineTemplateStepExecution remoteExecution,
-        ServiceApiKind serviceApiKind
+        ServiceApiKind serviceApiKind,
+        ReactiveReturnKind reactiveReturnKind
 ) {
     /**
          * Creates a new PipelineStepModel with the supplied service identity, type mappings and generation configuration.
@@ -95,7 +100,54 @@ public record PipelineStepModel(
             ClassName externalMapper,
             MapperFallbackMode mapperFallbackMode,
             PipelineTemplateStepExecution remoteExecution,
-            ServiceApiKind serviceApiKind) {
+            ServiceApiKind serviceApiKind,
+            ReactiveReturnKind reactiveReturnKind) {
+        this(serviceName,
+            generatedName,
+            servicePackage,
+            serviceClassName,
+            inputMapping,
+            outputMapping,
+            streamingShape,
+            enabledTargets,
+            executionMode,
+            deploymentRole,
+            sideEffect,
+            cacheKeyGenerator,
+            orderingRequirement,
+            threadSafety,
+            delegateService,
+            Optional.empty(),
+            externalMapper,
+            mapperFallbackMode,
+            remoteExecution,
+            serviceApiKind,
+            reactiveReturnKind);
+    }
+
+    @SuppressWarnings("ConstantValue")
+    @Deprecated
+    public PipelineStepModel(String serviceName,
+            String generatedName,
+            String servicePackage,
+            ClassName serviceClassName,
+            TypeMapping inputMapping,
+            TypeMapping outputMapping,
+            StreamingShape streamingShape,
+            Set<GenerationTarget> enabledTargets,
+            ExecutionMode executionMode,
+            DeploymentRole deploymentRole,
+            boolean sideEffect,
+            ClassName cacheKeyGenerator,
+            OrderingRequirement orderingRequirement,
+            ThreadSafety threadSafety,
+            ClassName delegateService,
+            Optional<String> delegateMethodName,
+            ClassName externalMapper,
+            MapperFallbackMode mapperFallbackMode,
+            PipelineTemplateStepExecution remoteExecution,
+            ServiceApiKind serviceApiKind,
+            ReactiveReturnKind reactiveReturnKind) {
         // Validate non-null invariants
         if (serviceName == null)
             throw new IllegalArgumentException("serviceName cannot be null");
@@ -129,10 +181,58 @@ public record PipelineStepModel(
         this.orderingRequirement = orderingRequirement != null ? orderingRequirement : OrderingRequirement.RELAXED;
         this.threadSafety = threadSafety != null ? threadSafety : ThreadSafety.SAFE;
         this.delegateService = delegateService;
+        this.delegateMethodName = normalizeOptionalString(delegateMethodName);
         this.externalMapper = externalMapper;
         this.mapperFallbackMode = mapperFallbackMode == null ? MapperFallbackMode.NONE : mapperFallbackMode;
         this.remoteExecution = remoteExecution;
         this.serviceApiKind = serviceApiKind == null ? ServiceApiKind.REACTIVE : serviceApiKind;
+        this.reactiveReturnKind = reactiveReturnKind == null ? ReactiveReturnKind.MUTINY_UNI : reactiveReturnKind;
+    }
+
+    /**
+     * @deprecated prefer {@link Builder} for construction.
+     */
+    @Deprecated
+    public PipelineStepModel(String serviceName,
+            String generatedName,
+            String servicePackage,
+            ClassName serviceClassName,
+            TypeMapping inputMapping,
+            TypeMapping outputMapping,
+            StreamingShape streamingShape,
+            Set<GenerationTarget> enabledTargets,
+            ExecutionMode executionMode,
+            DeploymentRole deploymentRole,
+            boolean sideEffect,
+            ClassName cacheKeyGenerator,
+            OrderingRequirement orderingRequirement,
+            ThreadSafety threadSafety,
+            ClassName delegateService,
+            ClassName externalMapper,
+            MapperFallbackMode mapperFallbackMode,
+            PipelineTemplateStepExecution remoteExecution,
+            ServiceApiKind serviceApiKind) {
+        this(serviceName,
+            generatedName,
+            servicePackage,
+            serviceClassName,
+            inputMapping,
+            outputMapping,
+            streamingShape,
+            enabledTargets,
+            executionMode,
+            deploymentRole,
+            sideEffect,
+            cacheKeyGenerator,
+            orderingRequirement,
+            threadSafety,
+            delegateService,
+            Optional.empty(),
+            externalMapper,
+            mapperFallbackMode,
+            remoteExecution,
+            serviceApiKind,
+            ReactiveReturnKind.MUTINY_UNI);
     }
 
     /**
@@ -170,10 +270,12 @@ public record PipelineStepModel(
             orderingRequirement,
             threadSafety,
             delegateService,
+            Optional.empty(),
             externalMapper,
             MapperFallbackMode.NONE,
             null,
-            ServiceApiKind.REACTIVE);
+            ServiceApiKind.REACTIVE,
+            ReactiveReturnKind.MUTINY_UNI);
     }
 
     /**
@@ -212,10 +314,12 @@ public record PipelineStepModel(
             orderingRequirement,
             threadSafety,
             delegateService,
+            Optional.empty(),
             externalMapper,
             mapperFallbackMode,
             null,
-            ServiceApiKind.REACTIVE);
+            ServiceApiKind.REACTIVE,
+            ReactiveReturnKind.MUTINY_UNI);
     }
 
     /**
@@ -265,10 +369,12 @@ public record PipelineStepModel(
             OrderingRequirement.RELAXED,
             ThreadSafety.SAFE,
             null,
+            Optional.empty(),
             null,
             MapperFallbackMode.NONE,
             null,
-            ServiceApiKind.REACTIVE);
+            ServiceApiKind.REACTIVE,
+            ReactiveReturnKind.MUTINY_UNI);
     }
 
     /**
@@ -287,6 +393,14 @@ public record PipelineStepModel(
      */
     public TypeName outboundDomainType() {
         return outputMapping.domainType();
+    }
+
+    private static Optional<String> normalizeOptionalString(Optional<String> value) {
+        if (value == null || value.isEmpty()) {
+            return Optional.empty();
+        }
+        String normalized = value.get().trim();
+        return normalized.isBlank() ? Optional.empty() : Optional.of(normalized);
     }
 
     /**
@@ -315,10 +429,12 @@ public record PipelineStepModel(
         private OrderingRequirement orderingRequirement = OrderingRequirement.RELAXED;
         private ThreadSafety threadSafety = ThreadSafety.SAFE;
         private ClassName delegateService;
+        private Optional<String> delegateMethodName = Optional.empty();
         private ClassName externalMapper;
         private MapperFallbackMode mapperFallbackMode = MapperFallbackMode.NONE;
         private PipelineTemplateStepExecution remoteExecution;
         private ServiceApiKind serviceApiKind = ServiceApiKind.REACTIVE;
+        private ReactiveReturnKind reactiveReturnKind = ReactiveReturnKind.MUTINY_UNI;
 
         /**
          * Sets the service name.
@@ -497,6 +613,28 @@ public record PipelineStepModel(
         }
 
         /**
+         * Configure the delegate method name for Class::method delegated steps.
+         *
+         * @param delegateMethodName the delegate method name, or {@code null} for default service methods
+         * @return this builder instance
+         */
+        public Builder delegateMethodName(String delegateMethodName) {
+            this.delegateMethodName = normalizeOptionalString(Optional.ofNullable(delegateMethodName));
+            return this;
+        }
+
+        /**
+         * Configure the delegate method name for Class::method delegated steps.
+         *
+         * @param delegateMethodName optional delegate method name
+         * @return this builder instance
+         */
+        public Builder delegateMethodName(Optional<String> delegateMethodName) {
+            this.delegateMethodName = normalizeOptionalString(delegateMethodName);
+            return this;
+        }
+
+        /**
          * Specifies a custom operator mapper class used to map between domain and operator types.
          *
          * @param externalMapper the operator mapper ClassName to use, or {@code null} to indicate no operator mapping
@@ -541,6 +679,17 @@ public record PipelineStepModel(
         }
 
         /**
+         * Sets the reactive return library for unary reactive services.
+         *
+         * @param reactiveReturnKind reactive return library marker
+         * @return this {@link PipelineStepModel.Builder} for chaining
+         */
+        public Builder reactiveReturnKind(ReactiveReturnKind reactiveReturnKind) {
+            this.reactiveReturnKind = reactiveReturnKind;
+            return this;
+        }
+
+        /**
          * Create a PipelineStepModel populated from the builder's current state.
          *
          * @return a PipelineStepModel populated with the builder's state
@@ -581,10 +730,12 @@ public record PipelineStepModel(
                 orderingRequirement,
                 threadSafety,
                 delegateService,
+                delegateMethodName,
                 externalMapper,
                 mapperFallbackMode,
                 remoteExecution,
-                serviceApiKind);
+                serviceApiKind,
+                reactiveReturnKind);
         }
     }
     
@@ -611,10 +762,12 @@ public record PipelineStepModel(
             orderingRequirement,
             threadSafety,
             delegateService,
+            delegateMethodName,
             externalMapper,
             mapperFallbackMode,
             remoteExecution,
-            serviceApiKind
+            serviceApiKind,
+            reactiveReturnKind
         );
     }
 
@@ -647,9 +800,11 @@ public record PipelineStepModel(
             .orderingRequirement(orderingRequirement)
             .threadSafety(threadSafety)
             .delegateService(delegateService)
+            .delegateMethodName(delegateMethodName)
             .externalMapper(externalMapper)
             .mapperFallbackMode(mapperFallbackMode)
             .remoteExecution(remoteExecution)
-            .serviceApiKind(serviceApiKind);
+            .serviceApiKind(serviceApiKind)
+            .reactiveReturnKind(reactiveReturnKind);
     }
 }

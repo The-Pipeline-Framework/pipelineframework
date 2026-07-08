@@ -30,16 +30,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.MockitoAnnotations;
-import org.pipelineframework.blocking.BlockingIteratorPacer;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.util.DemandPacerConfig;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProcessCsvPaymentsInputServiceTest {
 
@@ -60,19 +58,7 @@ class ProcessCsvPaymentsInputServiceTest {
                         + ",Jane Smith,200.50,EUR\n";
         Files.writeString(tempCsvFile, csvContent);
         MockitoAnnotations.openMocks(this);
-        service =
-                new ProcessCsvPaymentsInputService(
-                        new DemandPacerConfig() {
-                            @Override
-                            public long rowsPerPeriod() {
-                                return 10;
-                            }
-
-                            @Override
-                            public long millisPeriod() {
-                                return 100;
-                            }
-                        });
+        service = new ProcessCsvPaymentsInputService();
     }
 
     @AfterEach
@@ -113,11 +99,12 @@ class ProcessCsvPaymentsInputServiceTest {
     }
 
     @Test
-    void iterateBlockingReturnsPacedIterator() throws Exception {
+    void iterateBlockingReturnsNonEmptyIterator() throws Exception {
         CsvPaymentsInputFile csvFile = new CsvPaymentsInputFile(tempCsvFile.toFile());
 
         try (CloseableIterator<PaymentRecord> iterator = service.iterateBlocking(csvFile)) {
-            assertInstanceOf(BlockingIteratorPacer.class, iterator);
+            assertNotNull(iterator);
+            assertTrue(iterator.hasNext());
         }
     }
 

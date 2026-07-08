@@ -18,14 +18,19 @@ package org.pipelineframework;
 
 import java.text.MessageFormat;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import io.quarkus.arc.ClientProxy;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
+import org.pipelineframework.branching.PipelineBranchRoutingException;
+import org.pipelineframework.branching.PipelineBranchingRegistry;
+import org.pipelineframework.branching.StepBranchingDescriptor;
 import org.pipelineframework.cache.CacheKeyTarget;
 import org.pipelineframework.cache.CachePolicy;
 import org.pipelineframework.cache.CachePolicyEnforcer;
@@ -55,6 +60,9 @@ class PipelineStepExecutor {
     private static final Logger logger = Logger.getLogger(PipelineStepExecutor.class);
     private static final PipelineInvocationRuntime DEFAULT_INVOCATION_RUNTIME = new PipelineInvocationRuntime();
 
+    @Inject
+    PipelineBranchingRegistry branchingRegistry;
+
     @SuppressWarnings("unchecked")
     Object applyStep(
         Object step,
@@ -67,10 +75,14 @@ class PipelineStepExecutor {
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot) {
         Object resolvedStep = unwrapClientProxy(step).orElse(step);
+        StepBranchingDescriptor branchingDescriptor = branchingRegistry == null
+            ? null
+            : branchingRegistry.descriptorFor(resolvedStep.getClass()).orElse(null);
         if (resolvedStep instanceof AwaitStreamOneToOneStep<?, ?> awaitStep && current instanceof Multi<?>) {
             return applyAwaitStreamOneToOneUnchecked(
                 awaitStep,
                 current,
+                null,
                 telemetry,
                 telemetryContext,
                 contextSnapshot,
@@ -82,14 +94,14 @@ class PipelineStepExecutor {
                 parallelismPolicy,
                 PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_ONE);
             return applyOneToOneUnchecked(stepOneToOne, current, parallel, maxConcurrency, telemetry, telemetryContext, cacheReadSupport,
-                contextSnapshot, awaitContextSnapshot);
+                contextSnapshot, awaitContextSnapshot, branchingDescriptor);
         } else if (resolvedStep instanceof StepOneToOneCompletableFuture<?, ?> stepFuture) {
             boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
                 stepFuture,
                 parallelismPolicy,
                 PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_ONE_FUTURE);
             return applyOneToOneFutureUnchecked(stepFuture, current, parallel, maxConcurrency, telemetry, telemetryContext,
-                contextSnapshot, awaitContextSnapshot);
+                contextSnapshot, awaitContextSnapshot, branchingDescriptor);
         } else if (resolvedStep instanceof StepOneToMany<?, ?> stepOneToMany) {
             boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
                 stepOneToMany,
@@ -105,7 +117,7 @@ class PipelineStepExecutor {
         } else if (resolvedStep instanceof ReactiveService<?, ?> reactiveService) {
             var adapter = new ReactiveServiceStepAdapter((ReactiveService<Object, Object>) reactiveService);
             return applyOneToOneUnchecked(adapter, current, false, maxConcurrency, telemetry, telemetryContext, cacheReadSupport,
-                contextSnapshot, awaitContextSnapshot);
+                contextSnapshot, awaitContextSnapshot, branchingDescriptor);
         } else if (resolvedStep instanceof ReactiveStreamingService<?, ?> streamingService) {
             var adapter = new ReactiveStreamingServiceStepAdapter((ReactiveStreamingService<Object, Object>) streamingService);
             return applyOneToManyUnchecked(adapter, current, false, maxConcurrency, telemetry, telemetryContext,
@@ -222,6 +234,31 @@ class PipelineStepExecutor {
         PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot) {
+        return applyOneToOneUnchecked(
+            step,
+            current,
+            parallel,
+            maxConcurrency,
+            telemetry,
+            telemetryContext,
+            cacheReadSupport,
+            contextSnapshot,
+            awaitContextSnapshot,
+            null);
+    }
+
+    @SuppressWarnings({"unchecked"})
+    static <I, O> Object applyOneToOneUnchecked(
+        StepOneToOne<I, O> step,
+        Object current,
+        boolean parallel,
+        int maxConcurrency,
+        PipelineTelemetry telemetry,
+        PipelineTelemetry.RunContext telemetryContext,
+        PipelineCacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot,
+        StepBranchingDescriptor branchingDescriptor) {
         if (current instanceof Uni<?>) {
             Uni<I> input = (Uni<I>) current;
             if (telemetry != null) {
@@ -230,12 +267,16 @@ class PipelineStepExecutor {
             Uni<O> result = input
                 .onItem()
                 .transformToUni(item -> {
+                    I applicable = applicableInput(branchingDescriptor, item);
+                    if (applicable == null) {
+                        return skippedUni(step.getClass(), item, branchingDescriptor, telemetry, telemetryContext);
+                    }
                     var replayScope = telemetry == null
                         ? null
-                        : telemetry.beginReplayStep(step.getClass(), telemetryContext, false, item);
+                        : telemetry.beginReplayStep(step.getClass(), telemetryContext, false, applicable);
                     Uni<O> scoped = applyOneToOneWithCache(
                         step,
-                        item,
+                        applicable,
                         cacheReadSupport,
                         contextSnapshot,
                         awaitContextSnapshot,
@@ -267,12 +308,16 @@ class PipelineStepExecutor {
                 return multi
                     .onItem()
                     .transformToUni(item -> {
+                    I applicable = applicableInput(branchingDescriptor, item);
+                    if (applicable == null) {
+                        return skippedUni(step.getClass(), item, branchingDescriptor, telemetry, telemetryContext);
+                    }
                     var replayScope = telemetry == null
                         ? null
-                        : telemetry.beginReplayStep(step.getClass(), telemetryContext, true, item);
+                        : telemetry.beginReplayStep(step.getClass(), telemetryContext, true, applicable);
                         Uni<O> result = applyOneToOneWithCache(
                             step,
-                            item,
+                            applicable,
                             cacheReadSupport,
                             contextSnapshot,
                             awaitContextSnapshot,
@@ -297,12 +342,16 @@ class PipelineStepExecutor {
             return multi
                 .onItem()
                 .transformToUni(item -> {
+                    I applicable = applicableInput(branchingDescriptor, item);
+                    if (applicable == null) {
+                        return skippedUni(step.getClass(), item, branchingDescriptor, telemetry, telemetryContext);
+                    }
                     var replayScope = telemetry == null
                         ? null
-                        : telemetry.beginReplayStep(step.getClass(), telemetryContext, true, item);
+                        : telemetry.beginReplayStep(step.getClass(), telemetryContext, true, applicable);
                     Uni<O> result = applyOneToOneWithCache(
                         step,
-                        item,
+                        applicable,
                         cacheReadSupport,
                         contextSnapshot,
                         awaitContextSnapshot,
@@ -332,6 +381,7 @@ class PipelineStepExecutor {
     private static <I, O> Multi<O> applyAwaitStreamOneToOneUnchecked(
         AwaitStreamOneToOneStep<I, O> step,
         Object current,
+        StepBranchingDescriptor branchingDescriptor,
         PipelineTelemetry telemetry,
         PipelineTelemetry.RunContext telemetryContext,
         PipelineContext contextSnapshot,
@@ -340,7 +390,36 @@ class PipelineStepExecutor {
         if (telemetry != null) {
             input = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, input);
         }
-        Multi<I> finalInput = input;
+        Multi<I> finalInput = scopedMultiInput(input, contextSnapshot, awaitContextSnapshot);
+        if (branchingDescriptor != null) {
+            Multi<O> result = finalInput
+                .onItem()
+                .transformToMulti(item -> {
+                    I applicable = applicableInput(branchingDescriptor, item);
+                    if (applicable == null) {
+                        return skippedMulti(step.getClass(), item, branchingDescriptor, telemetry, telemetryContext);
+                    }
+                    var replayScope = telemetry == null
+                        ? null
+                        : telemetry.beginReplayStep(step.getClass(), telemetryContext, true, applicable);
+                    Multi<O> scoped = withStepExecutionMulti(
+                        contextSnapshot,
+                        awaitContextSnapshot,
+                        () -> step.applyAwaitPerItem(Multi.createFrom().item(applicable)))
+                        .onItem().invoke(output -> {
+                            if (telemetry != null) {
+                                telemetry.recordReplayOutput(replayScope, output);
+                            }
+                        });
+                    return telemetry == null
+                        ? scoped
+                        : telemetry.instrumentStepMulti(step.getClass(), scoped, telemetryContext, true, replayScope);
+                })
+                .concatenate();
+            return telemetry == null
+                ? result
+                : telemetry.instrumentItemProduced(step.getClass(), telemetryContext, result);
+        }
         Multi<O> result = withStepExecutionMulti(
             contextSnapshot,
             awaitContextSnapshot,
@@ -506,30 +585,48 @@ class PipelineStepExecutor {
         PipelineTelemetry.RunContext telemetryContext,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot) {
+        return applyOneToOneFutureUnchecked(
+            step,
+            current,
+            parallel,
+            maxConcurrency,
+            telemetry,
+            telemetryContext,
+            contextSnapshot,
+            awaitContextSnapshot,
+            null);
+    }
+
+    @SuppressWarnings("unchecked")
+    static <I, O> Object applyOneToOneFutureUnchecked(
+        StepOneToOneCompletableFuture<I, O> step,
+        Object current,
+        boolean parallel,
+        int maxConcurrency,
+        PipelineTelemetry telemetry,
+        PipelineTelemetry.RunContext telemetryContext,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot,
+        StepBranchingDescriptor branchingDescriptor) {
         if (current instanceof Uni<?>) {
             Uni<I> input = (Uni<I>) current;
             if (telemetry != null) {
                 input = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, input);
             }
-            Uni<I> finalInput = input;
-            var replayScope = telemetry == null
-                ? null
-                : telemetry.beginPendingReplayStep(step.getClass(), telemetryContext, false);
-            if (telemetry != null) {
-                finalInput = finalInput.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item));
-            }
-            Uni<I> replayInput = finalInput;
-            Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> step.apply(replayInput))
-                .onItem().invoke(output -> {
-                    if (telemetry != null) {
-                        telemetry.recordReplayOutput(replayScope, output);
-                    }
-                });
-            if (telemetry == null) {
-                return result;
-            }
-            result = telemetry.instrumentItemProduced(step.getClass(), telemetryContext, result);
-            return telemetry.instrumentStepUni(step.getClass(), result, telemetryContext, false, replayScope);
+            Uni<O> result = input.onItem().transformToUni(item ->
+                applicableInput(branchingDescriptor, item) != null
+                    ? executeFutureUnary(
+                        step,
+                        applicableInput(branchingDescriptor, item),
+                        telemetry,
+                        telemetryContext,
+                        contextSnapshot,
+                        awaitContextSnapshot,
+                        false)
+                    : skippedUni(step.getClass(), item, branchingDescriptor, telemetry, telemetryContext));
+            return telemetry == null
+                ? result
+                : telemetry.instrumentItemProduced(step.getClass(), telemetryContext, result);
         } else if (current instanceof Multi<?>) {
             Multi<I> multi = (Multi<I>) current;
             if (telemetry != null) {
@@ -539,48 +636,121 @@ class PipelineStepExecutor {
                 return multi
                     .onItem()
                     .transformToUni(item -> {
-                        var replayScope = telemetry == null
-                            ? null
-                            : telemetry.beginReplayStep(step.getClass(), telemetryContext, true, item);
-                        Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot,
-                            () -> step.apply(Uni.createFrom().item(item)))
-                            .onItem().invoke(output -> {
-                                if (telemetry != null) {
-                                    telemetry.recordReplayOutput(replayScope, output);
-                                }
-                            });
-                        if (telemetry == null) {
-                            return result;
-                        }
-                        result = telemetry.instrumentItemProduced(step.getClass(), telemetryContext, result);
-                        return telemetry.instrumentStepUni(step.getClass(), result, telemetryContext, true, replayScope);
+                        I applicable = applicableInput(branchingDescriptor, item);
+                        return applicable != null
+                            ? executeFutureUnary(step, applicable, telemetry, telemetryContext, contextSnapshot, awaitContextSnapshot, true)
+                            : skippedUni(step.getClass(), item, branchingDescriptor, telemetry, telemetryContext);
                     })
                     .merge(maxConcurrency);
             }
             return multi
                 .onItem()
                 .transformToUni(item -> {
-                    var replayScope = telemetry == null
-                        ? null
-                        : telemetry.beginReplayStep(step.getClass(), telemetryContext, true, item);
-                    Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot,
-                        () -> step.apply(Uni.createFrom().item(item)))
-                        .onItem().invoke(output -> {
-                            if (telemetry != null) {
-                                telemetry.recordReplayOutput(replayScope, output);
-                            }
-                        });
-                    if (telemetry == null) {
-                        return result;
-                    }
-                    result = telemetry.instrumentItemProduced(step.getClass(), telemetryContext, result);
-                    return telemetry.instrumentStepUni(step.getClass(), result, telemetryContext, true, replayScope);
+                    I applicable = applicableInput(branchingDescriptor, item);
+                    return applicable != null
+                        ? executeFutureUnary(step, applicable, telemetry, telemetryContext, contextSnapshot, awaitContextSnapshot, true)
+                        : skippedUni(step.getClass(), item, branchingDescriptor, telemetry, telemetryContext);
                 })
                 .concatenate();
         }
         throw new IllegalArgumentException(MessageFormat.format(
             "Unsupported current type for StepOneToOneCompletableFuture: {0}",
             current == null ? "null" : current.getClass().getName()));
+    }
+
+    private static <I, O> Uni<O> executeFutureUnary(
+        StepOneToOneCompletableFuture<I, O> step,
+        I item,
+        PipelineTelemetry telemetry,
+        PipelineTelemetry.RunContext telemetryContext,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot,
+        boolean perItemOperation) {
+        var replayScope = telemetry == null
+            ? null
+            : telemetry.beginReplayStep(step.getClass(), telemetryContext, perItemOperation, item);
+        Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot,
+            () -> step.apply(Uni.createFrom().item(item)))
+            .onItem().invoke(output -> {
+                if (telemetry != null) {
+                    telemetry.recordReplayOutput(replayScope, output);
+                }
+            });
+        return telemetry == null
+            ? result
+            : telemetry.instrumentStepUni(step.getClass(), result, telemetryContext, perItemOperation, replayScope);
+    }
+
+    private static boolean accepts(StepBranchingDescriptor branchingDescriptor, Object item) {
+        return branchingDescriptor == null || branchingDescriptor.accepts(item);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <I> I applicableInput(StepBranchingDescriptor branchingDescriptor, Object item) {
+        if (branchingDescriptor == null) {
+            return (I) item;
+        }
+        return (I) branchingDescriptor.applicableItem(item);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <O> Uni<O> skippedUni(
+        Class<?> stepClass,
+        Object item,
+        StepBranchingDescriptor branchingDescriptor,
+        PipelineTelemetry telemetry,
+        PipelineTelemetry.RunContext telemetryContext) {
+        if (branchingDescriptor == null) {
+            return (Uni<O>) (Uni<?>) Uni.createFrom().item(item);
+        }
+        if (branchingDescriptor.terminal()) {
+            return Uni.createFrom().failure(terminalMismatch(branchingDescriptor, item));
+        }
+        if (item != null && "org.pipelineframework.csv.grpc.PipelineTypes$PaymentStatus".equals(item.getClass().getName())) {
+            logger.infof(
+                "Branch-aware skip for step %s on PaymentStatus payload: %s",
+                branchingDescriptor.stepName(),
+                item);
+        }
+        if (telemetry != null) {
+            telemetry.recordReplaySkip(stepClass, telemetryContext, item, branchingDescriptor.acceptedContracts());
+        }
+        return (Uni<O>) (Uni<?>) Uni.createFrom().item(item);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <O> Multi<O> skippedMulti(
+        Class<?> stepClass,
+        Object item,
+        StepBranchingDescriptor branchingDescriptor,
+        PipelineTelemetry telemetry,
+        PipelineTelemetry.RunContext telemetryContext) {
+        if (branchingDescriptor == null) {
+            return (Multi<O>) (Multi<?>) Multi.createFrom().item(item);
+        }
+        if (branchingDescriptor.terminal()) {
+            return Multi.createFrom().failure(terminalMismatch(branchingDescriptor, item));
+        }
+        if (item != null && "org.pipelineframework.csv.grpc.PipelineTypes$PaymentStatus".equals(item.getClass().getName())) {
+            logger.infof(
+                "Branch-aware skip for step %s on PaymentStatus payload: %s",
+                branchingDescriptor.stepName(),
+                item);
+        }
+        if (telemetry != null) {
+            telemetry.recordReplaySkip(stepClass, telemetryContext, item, branchingDescriptor.acceptedContracts());
+        }
+        return (Multi<O>) (Multi<?>) Multi.createFrom().item(item);
+    }
+
+    private static PipelineBranchRoutingException terminalMismatch(
+        StepBranchingDescriptor branchingDescriptor,
+        Object item) {
+        String currentType = item == null ? "null" : item.getClass().getName();
+        return new PipelineBranchRoutingException(
+            "Branch-aware terminal step '" + branchingDescriptor.stepName()
+                + "' cannot accept runtime item type '" + currentType
+                + "'. Accepted contracts: " + branchingDescriptor.acceptedContracts());
     }
 
     @SuppressWarnings({"unchecked"})
@@ -625,8 +795,13 @@ class PipelineStepExecutor {
             if (telemetry != null) {
                 finalInput = finalInput.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item));
             }
-            Uni<I> replayInput = finalInput;
-            Multi<O> result = withStepExecutionMulti(contextSnapshot, awaitContextSnapshot, () -> step.apply(replayInput))
+            Uni<I> replayInput = scopedUniInput(finalInput, contextSnapshot, awaitContextSnapshot);
+            Multi<O> result = withStepExecutionMulti(
+                contextSnapshot,
+                awaitContextSnapshot,
+                () -> awaitContextSnapshot == null
+                    ? step.apply(replayInput)
+                    : applyOneToManyForAwaitParent(step, replayInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
                         telemetry.recordReplayOutput(replayScope, output);
@@ -692,6 +867,43 @@ class PipelineStepExecutor {
             current == null ? "null" : current.getClass().getName()));
     }
 
+    private static <I, O> Multi<O> applyOneToManyForAwaitParent(StepOneToMany<I, O> step, Uni<I> input) {
+        return input.onItem().transformToMulti(item -> step.applyOneToMany(item)
+            .onItem().transform(output -> {
+                if (logger.isDebugEnabled()) {
+                    logger.debugf(
+                        "Step %s emitted item: %s",
+                        step.getClass().getSimpleName(),
+                        output);
+                }
+                return output;
+            })
+            .onFailure(step::shouldRetry)
+            .invoke(t -> PipelineTelemetry.recordRetry(step.getClass(), t))
+            .onFailure(step::shouldRetry)
+            .retry()
+            .withBackOff(step.retryWait(), step.maxBackoff())
+            .withJitter(step.jitter() ? 0.5 : 0.0)
+            .atMost(step.retryLimit())
+            .onFailure().recoverWithMulti(t -> {
+                if (step.shouldPropagateWithoutRecovery(t)) {
+                    return Multi.createFrom().failure(t);
+                }
+                logger.infof(
+                    "Step %s completed all retries (%s attempts) with failure: %s",
+                    step.getClass().getSimpleName(),
+                    step.retryLimit(),
+                    t.getMessage()
+                );
+                if (step.recoverOnFailure()) {
+                    List<I> sample = item == null ? List.of() : List.of(item);
+                    return step.rejectStream(sample, item == null ? 0L : 1L, t)
+                        .onItem().transformToMulti(ignored -> Multi.createFrom().empty());
+                }
+                return Multi.createFrom().failure(t);
+            }));
+    }
+
     @SuppressWarnings("unchecked")
     static <I, O> Object applyManyToOneUnchecked(
         ManyToOne<I, O> step,
@@ -721,7 +933,8 @@ class PipelineStepExecutor {
             Multi<I> finalInput = telemetry == null
                 ? input
                 : input.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item));
-            Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> step.apply(finalInput))
+            Multi<I> scopedInput = scopedMultiInput(finalInput, contextSnapshot, awaitContextSnapshot);
+            Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> step.apply(scopedInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
                         telemetry.recordReplayOutput(replayScope, output);
@@ -743,7 +956,8 @@ class PipelineStepExecutor {
             Multi<I> finalInput = telemetry == null
                 ? input.toMulti()
                 : input.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item)).toMulti();
-            Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> step.apply(finalInput))
+            Multi<I> scopedInput = scopedMultiInput(finalInput, contextSnapshot, awaitContextSnapshot);
+            Uni<O> result = withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> step.apply(scopedInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
                         telemetry.recordReplayOutput(replayScope, output);
@@ -790,7 +1004,8 @@ class PipelineStepExecutor {
             Multi<I> finalInput = telemetry == null
                 ? input.toMulti()
                 : input.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item)).toMulti();
-            Multi<O> result = withStepExecutionMulti(contextSnapshot, awaitContextSnapshot, () -> step.apply(finalInput))
+            Multi<I> scopedInput = scopedMultiInput(finalInput, contextSnapshot, awaitContextSnapshot);
+            Multi<O> result = withStepExecutionMulti(contextSnapshot, awaitContextSnapshot, () -> step.apply(scopedInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
                         telemetry.recordReplayOutput(replayScope, output);
@@ -813,7 +1028,8 @@ class PipelineStepExecutor {
             Multi<I> finalInput = telemetry == null
                 ? typedInput
                 : typedInput.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item));
-            Multi<O> result = withStepExecutionMulti(contextSnapshot, awaitContextSnapshot, () -> step.apply(finalInput))
+            Multi<I> scopedInput = scopedMultiInput(finalInput, contextSnapshot, awaitContextSnapshot);
+            Multi<O> result = withStepExecutionMulti(contextSnapshot, awaitContextSnapshot, () -> step.apply(scopedInput))
                 .onItem().invoke(output -> {
                     if (telemetry != null) {
                         telemetry.recordReplayOutput(replayScope, output);
@@ -829,5 +1045,25 @@ class PipelineStepExecutor {
             "Unsupported current type for StepManyToMany: type={0} value={1}",
             current == null ? "null" : current.getClass().getName(),
             current));
+    }
+
+    private static <T> Uni<T> scopedUniInput(
+        Uni<T> input,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot) {
+        if (contextSnapshot == null && awaitContextSnapshot == null) {
+            return input;
+        }
+        return withStepExecutionUni(contextSnapshot, awaitContextSnapshot, () -> input);
+    }
+
+    private static <T> Multi<T> scopedMultiInput(
+        Multi<T> input,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot) {
+        if (contextSnapshot == null && awaitContextSnapshot == null) {
+            return input;
+        }
+        return withStepExecutionMulti(contextSnapshot, awaitContextSnapshot, () -> input);
     }
 }

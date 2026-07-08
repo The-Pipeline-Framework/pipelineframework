@@ -16,17 +16,19 @@
 
 package org.pipelineframework.context;
 
+import org.pipelineframework.runtime.core.TpfContextHeaders;
+
 /**
  * Standard headers used for pipeline context propagation.
  */
 public final class PipelineContextHeaders {
 
     /** Header name for pipeline version tags. */
-    public static final String VERSION = "x-pipeline-version";
+    public static final String VERSION = TpfContextHeaders.VERSION;
     /** Header name for pipeline replay mode. */
-    public static final String REPLAY = "x-pipeline-replay";
+    public static final String REPLAY = TpfContextHeaders.REPLAY;
     /** Header name for cache policy overrides. */
-    public static final String CACHE_POLICY = "x-pipeline-cache-policy";
+    public static final String CACHE_POLICY = TpfContextHeaders.CACHE_POLICY;
     /** Header name for cache status propagation. */
     public static final String CACHE_STATUS = "x-pipeline-cache-status";
     /** Canonical Protobuf-over-HTTP transport metadata namespace (intentionally distinct from legacy x-pipeline-*). */

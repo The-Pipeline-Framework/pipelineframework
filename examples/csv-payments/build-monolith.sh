@@ -37,15 +37,24 @@ cp "$MONOLITH_MAPPING" "$ACTIVE_MAPPING"
 echo "Building orchestrator-svc to generate LOCAL client sources..."
 PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-LOCAL}"
 
-# Ensure module parent POM is available in local repository for Quarkus bootstrap/codegen.
-"$ROOT_DIR/scripts/ci/bootstrap-local-repo-prereqs.sh" csv
-
 ORCHESTRATOR_ARGS=()
 for arg in "$@"; do
-  if [[ "$arg" == "-DskipTests" ]]; then
+  if [[ "$arg" == "-DskipTests" \
+    || "$arg" == -Dmaven.repo.local=* \
+    || "$arg" == -Dquarkus.container-image.* \
+    || "$arg" == -Dquarkus.jib.* ]]; then
     ORCHESTRATOR_ARGS+=("$arg")
   fi
 done
+
+# Ensure module parent POM is available in local repository for Quarkus bootstrap/codegen.
+for arg in "${ORCHESTRATOR_ARGS[@]}"; do
+  if [[ "$arg" == -Dmaven.repo.local=* ]]; then
+    export MAVEN_ARGS="${MAVEN_ARGS:+$MAVEN_ARGS }$arg"
+  fi
+done
+"$ROOT_DIR/scripts/ci/bootstrap-local-repo-prereqs.sh" csv
+
 "$MVN_BIN" -f "$CSV_DIR/pom.pipeline-runtime.xml" -Dcsv.runtime.layout=monolith -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean install -pl orchestrator-svc -am "${ORCHESTRATOR_ARGS[@]}"
 
 echo "Building monolith..."

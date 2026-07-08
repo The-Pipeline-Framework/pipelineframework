@@ -17,9 +17,12 @@
 package org.pipelineframework.blocking;
 
 import java.util.List;
+import java.util.concurrent.Flow;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -59,26 +62,11 @@ public class BlockingExecutionSupport {
     }
 
     public <T> Multi<T> emitIterator(boolean useVirtualThreads, Supplier<? extends CloseableIterator<T>> supplier) {
-        return supply(useVirtualThreads, supplier::get)
-            .onItem()
-            .transformToMulti(iterator -> iterator == null
-                ? Multi.createFrom().empty()
-                : emitIteratorItems(useVirtualThreads, iterator));
-    }
-
-    private <T> Multi<T> emitIteratorItems(boolean useVirtualThreads, CloseableIterator<T> iterator) {
-        IteratorEmissionState<T> state = new IteratorEmissionState<>(iterator);
-        return Multi.createBy()
-            .repeating()
-            .uni(() -> state, current -> supply(useVirtualThreads, current::nextResult))
-            .until(IteratorResult::done)
-            .onItem()
-            .transform(result -> result.item())
-            .onTermination()
-            .call(() -> supply(useVirtualThreads, () -> {
-                state.close();
-                return Boolean.TRUE;
-            }));
+        PipelineContext context = PipelineContextHolder.get();
+        TransportDispatchMetadata transport = TransportDispatchMetadataHolder.get();
+        Executor executor = selectExecutor(useVirtualThreads);
+        return Multi.createFrom().publisher(subscriber ->
+            subscriber.onSubscribe(new IteratorSubscription<>(subscriber, supplier, executor, context, transport)));
     }
 
     private Executor selectExecutor(boolean useVirtualThreads) {
@@ -118,56 +106,171 @@ public class BlockingExecutionSupport {
         }
     }
 
+    private static void withCapturedContext(
+        PipelineContext context,
+        TransportDispatchMetadata transport,
+        Runnable runnable
+    ) {
+        withCapturedContext(context, transport, () -> {
+            runnable.run();
+            return Boolean.TRUE;
+        });
+    }
+
     @PreDestroy
     void close() {
         virtualThreadExecutor.shutdown();
     }
 
-    private static final class IteratorEmissionState<T> {
-        private final CloseableIterator<T> iterator;
-        private boolean completed;
-        private boolean closed;
+    private static final class IteratorSubscription<T> implements Flow.Subscription {
+        private final Flow.Subscriber<? super T> subscriber;
+        private final Supplier<? extends CloseableIterator<T>> supplier;
+        private final Executor executor;
+        private final PipelineContext context;
+        private final TransportDispatchMetadata transport;
+        private final AtomicLong requested = new AtomicLong();
+        private final AtomicInteger workInProgress = new AtomicInteger();
+        private CloseableIterator<T> iterator;
+        private volatile boolean closed;
+        private volatile boolean completed;
 
-        private IteratorEmissionState(CloseableIterator<T> iterator) {
-            this.iterator = iterator;
+        private IteratorSubscription(
+            Flow.Subscriber<? super T> subscriber,
+            Supplier<? extends CloseableIterator<T>> supplier,
+            Executor executor,
+            PipelineContext context,
+            TransportDispatchMetadata transport
+        ) {
+            this.subscriber = subscriber;
+            this.supplier = supplier;
+            this.executor = executor;
+            this.context = context;
+            this.transport = transport;
         }
 
-        private synchronized IteratorResult<T> nextResult() {
-            if (closed) {
-                return IteratorResult.completedResult();
+        @Override
+        public void request(long n) {
+            if (n <= 0) {
+                fail(new IllegalArgumentException("request amount must be positive"));
+                return;
             }
-            if (completed) {
-                return IteratorResult.completedResult();
-            }
-            if (!iterator.hasNext()) {
-                completed = true;
-                return IteratorResult.completedResult();
-            }
-            return IteratorResult.nextItem(iterator.next());
+            addRequested(n);
+            scheduleDrain();
         }
 
-        private synchronized void close() {
+        @Override
+        public void cancel() {
+            close();
+        }
+
+        private void scheduleDrain() {
+            if (workInProgress.getAndIncrement() == 0) {
+                executor.execute(this::drainWithContext);
+            }
+        }
+
+        private void drainWithContext() {
+            withCapturedContext(context, transport, this::drain);
+        }
+
+        private void drain() {
+            int missed = 1;
+            while (true) {
+                while (requested.get() > 0 && !closed && !completed) {
+                    T item;
+                    try {
+                        if (iterator == null) {
+                            iterator = supplier.get();
+                            if (iterator == null) {
+                                completed = true;
+                                subscriber.onComplete();
+                                return;
+                            }
+                        }
+                        if (!iterator.hasNext()) {
+                            completed = true;
+                            closeIterator();
+                            subscriber.onComplete();
+                            return;
+                        }
+                        item = iterator.next();
+                    } catch (Throwable failure) {
+                        fail(failure);
+                        return;
+                    }
+                    if (item == null) {
+                        fail(new NullPointerException("Blocking iterator emitted null item"));
+                        return;
+                    }
+                    requested.decrementAndGet();
+                    try {
+                        subscriber.onNext(item);
+                    } catch (Throwable failure) {
+                        fail(failure);
+                        return;
+                    }
+                    if (requested.get() == 0 && !closed && !completed) {
+                        try {
+                            if (!iterator.hasNext()) {
+                                completed = true;
+                                closeIterator();
+                                subscriber.onComplete();
+                                return;
+                            }
+                        } catch (Throwable failure) {
+                            fail(failure);
+                            return;
+                        }
+                    }
+                }
+                missed = workInProgress.addAndGet(-missed);
+                if (missed == 0) {
+                    return;
+                }
+            }
+        }
+
+        private void addRequested(long n) {
+            requested.updateAndGet(current -> {
+                long updated = current + n;
+                return updated < 0 ? Long.MAX_VALUE : updated;
+            });
+        }
+
+        private void fail(Throwable failure) {
             if (closed) {
                 return;
             }
             closed = true;
+            try {
+                closeIterator();
+            } catch (Throwable closeFailure) {
+                failure.addSuppressed(closeFailure);
+            }
+            subscriber.onError(failure);
+        }
+
+        private void close() {
+            if (closed || completed) {
+                return;
+            }
+            closed = true;
+            executor.execute(() -> withCapturedContext(context, transport, this::closeIterator));
+        }
+
+        private void closeIterator() {
+            if (iterator == null) {
+                return;
+            }
             try {
                 iterator.close();
             } catch (RuntimeException e) {
                 throw e;
             } catch (Exception e) {
                 throw new RuntimeException("Failed to close blocking iterator", e);
+            } finally {
+                iterator = null;
             }
-        }
-    }
-
-    private record IteratorResult<T>(boolean done, T item) {
-        private static <T> IteratorResult<T> completedResult() {
-            return new IteratorResult<>(true, null);
-        }
-
-        private static <T> IteratorResult<T> nextItem(T item) {
-            return new IteratorResult<>(false, item);
         }
     }
 }

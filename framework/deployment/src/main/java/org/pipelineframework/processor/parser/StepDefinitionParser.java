@@ -23,9 +23,13 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.regex.Pattern;
 import javax.tools.Diagnostic;
+
+import org.pipelineframework.config.pipeline.BranchRoutingRules;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -45,6 +49,17 @@ public class StepDefinitionParser {
 
     private static final Logger LOG = Logger.getLogger(StepDefinitionParser.class);
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
+    private static final Pattern JPA_PATH = Pattern.compile("[A-Za-z_$][A-Za-z\\d_$]*(\\.[A-Za-z_$][A-Za-z\\d_$]*)*");
+    private static final Set<String> JPA_PREDICATE_OPERATORS = Set.of(
+        "eq",
+        "in",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between",
+        "like",
+        "isNull");
     /**
      * Legacy suffix used to resolve short-form internal step types.
      * For legacy internal steps, {@code input/output: Foo} resolves to
@@ -72,7 +87,16 @@ public class StepDefinitionParser {
         "kind",
         "await",
         "timeout",
-        "idempotencyKeyFields");
+        "idempotencyKeyFields",
+        "command",
+        "commandIdGenerator",
+        "duplicatePolicy",
+        "config",
+        "query",
+        "capture",
+        "accepts",
+        "terminal",
+        "runOnVirtualThreads");
     private final BiConsumer<Diagnostic.Kind, String> diagnosticReporter;
     private final String legacyInternalPackageSuffix;
 
@@ -129,6 +153,7 @@ public class StepDefinitionParser {
         Map<String, Object> templateData = YAML_MAPPER.readValue(yamlContent, Map.class);
         String basePackage = getStringValue(templateData, "basePackage");
         int version = parseVersion(templateData);
+        Map<String, QueryDefinition> queryDefinitions = parseQueryDefinitions(templateData);
 
         Object stepsObj = templateData.get("steps");
         if (!(stepsObj instanceof List)) {
@@ -145,7 +170,12 @@ public class StepDefinitionParser {
             }
             @SuppressWarnings("unchecked")
             Map<String, Object> stepData = (Map<String, Object>) stepObj;
-            StepDefinition stepDef = parseStepDefinition(stepData, basePackage, version);
+            StepDefinition stepDef;
+            try {
+                stepDef = parseStepDefinition(stepData, basePackage, version, queryDefinitions);
+            } catch (StepSkippedException ignored) {
+                continue;
+            }
             if (stepDef != null) {
                 stepDefinitions.add(stepDef);
             }
@@ -166,13 +196,25 @@ public class StepDefinitionParser {
      * @param stepData the map containing step configuration data (YAML-derived keys described above)
      * @return a StepDefinition for the parsed step, or null if the step is invalid, unsupported, or should be skipped
      */
-    private StepDefinition parseStepDefinition(Map<String, Object> stepData, String basePackage, int version) {
+    private StepDefinition parseStepDefinition(
+            Map<String, Object> stepData,
+            String basePackage,
+            int version,
+            Map<String, QueryDefinition> queryDefinitions) {
         String name = getStringValue(stepData, "name");
         if (isBlank(name)) {
             LOG.warnf("Skipping step with null or blank name: %s", stepData);
             return null;
         }
+        reportRejectedBranchPredicateKeys(name, stepData);
         reportUnknownStepKeys(name, stepData);
+        if (version < 2 && (stepData.containsKey("accepts") || Boolean.TRUE.equals(stepData.get("terminal")))) {
+            String message = "Skipping step '" + name
+                + "': accepts/terminal branch routing requires version: 2";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            throw new StepSkippedException();
+        }
 
         PipelineTemplateStepExecution remoteExecution;
         try {
@@ -187,7 +229,10 @@ public class StepDefinitionParser {
         String serviceClassName = getStringValue(stepData, "service");
         String rawKind = getStringValue(stepData, "kind");
         boolean awaitStep = "await".equalsIgnoreCase(rawKind);
+        boolean commandStep = "command".equalsIgnoreCase(rawKind);
+        boolean queryStep = "query".equalsIgnoreCase(rawKind);
         String delegatedClassName = null;
+        Optional<String> delegatedMethodName = Optional.empty();
 
         if (!isBlank(operatorClassName) && !isBlank(delegateClassName)) {
             String message = "Skipping step '" + name + "': 'operator' and 'delegate' are aliases and are mutually exclusive";
@@ -196,9 +241,19 @@ public class StepDefinitionParser {
             return null;
         }
         if (!isBlank(operatorClassName)) {
-            delegatedClassName = normalizeDelegatedExecutionClassName(operatorClassName);
+            Optional<DelegatedReference> delegatedReference = parseDelegatedReference(operatorClassName, name, "operator");
+            if (delegatedReference.isEmpty()) {
+                return null;
+            }
+            delegatedClassName = delegatedReference.get().className();
+            delegatedMethodName = delegatedReference.get().methodName();
         } else if (!isBlank(delegateClassName)) {
-            delegatedClassName = normalizeDelegatedExecutionClassName(delegateClassName);
+            Optional<DelegatedReference> delegatedReference = parseDelegatedReference(delegateClassName, name, "delegate");
+            if (delegatedReference.isEmpty()) {
+                return null;
+            }
+            delegatedClassName = delegatedReference.get().className();
+            delegatedMethodName = delegatedReference.get().methodName();
         }
 
         if (!isBlank(delegatedClassName) && !isBlank(serviceClassName)) {
@@ -216,14 +271,32 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
+        if (commandStep && (!isBlank(delegatedClassName) || !isBlank(serviceClassName) || remoteExecution != null)) {
+            String message = "Skipping step '" + name
+                + "': command steps are framework-owned effect boundaries and cannot declare 'service', 'operator', 'delegate',"
+                + " or remote 'execution'; use 'kind: command' with a command connector and id generator";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        if (queryStep && (!isBlank(delegatedClassName) || !isBlank(serviceClassName) || remoteExecution != null)) {
+            String message = "Skipping step '" + name
+                + "': query steps are framework-owned read boundaries and cannot declare 'service', 'operator', 'delegate',"
+                + " or remote 'execution'; use 'kind: query' with a referenced query connector definition";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
         if (!isBlank(rawKind)
             && !awaitStep
+            && !commandStep
+            && !queryStep
             && !"internal".equalsIgnoreCase(rawKind)
             && !"delegated".equalsIgnoreCase(rawKind)
             && !"delegate".equalsIgnoreCase(rawKind)
             && !"remote".equalsIgnoreCase(rawKind)) {
             String message = "Skipping step '" + name + "': unsupported kind '" + rawKind
-                + "'. Allowed values: internal, delegated, remote, await";
+                + "'. Allowed values: internal, delegated, remote, await, command, query";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             return null;
@@ -235,13 +308,20 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
-        boolean inferredLegacyInternal = !awaitStep && isBlank(delegatedClassName) && isBlank(serviceClassName);
+        boolean runOnVirtualThreads = parseOptionalBoolean(stepData, name, "runOnVirtualThreads");
+        boolean inferredLegacyInternal = !awaitStep && !commandStep && !queryStep && isBlank(delegatedClassName) && isBlank(serviceClassName);
 
         StepKind kind;
         String executionClassName;
 
         if (awaitStep) {
             kind = StepKind.AWAIT;
+            executionClassName = null;
+        } else if (commandStep) {
+            kind = StepKind.COMMAND;
+            executionClassName = null;
+        } else if (queryStep) {
+            kind = StepKind.QUERY;
             executionClassName = null;
         } else if (remoteExecution != null) {
             kind = StepKind.REMOTE;
@@ -261,6 +341,13 @@ public class StepDefinitionParser {
             }
             kind = StepKind.INTERNAL;
             executionClassName = inferredService;
+        }
+        if (stepData.containsKey("runOnVirtualThreads") && kind != StepKind.INTERNAL) {
+            String message = "Skipping step '" + name
+                + "': runOnVirtualThreads is valid only for internal service steps";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            throw new StepSkippedException();
         }
 
         // Parse input and output types
@@ -285,6 +372,11 @@ public class StepDefinitionParser {
         if (!isBlank(outputTypeName) && outputType == null) {
             return null;
         }
+        List<String> accepts = parseStringList(stepData.get("accepts"), name, "accepts");
+        if (accepts == null) {
+            throw new StepSkippedException();
+        }
+        boolean terminal = parseOptionalBoolean(stepData, name, "terminal");
 
         String inboundMapperName = getStringValue(stepData, "inboundMapper");
         String outboundMapperName = getStringValue(stepData, "outboundMapper");
@@ -408,10 +500,20 @@ public class StepDefinitionParser {
                 null,
                 null,
                 null,
+                Map.of(),
+                null,
+                Map.of(),
+                List.of(),
+                null,
+                null,
+                null,
                 MapperFallbackMode.NONE,
                 inputType,
                 outputType,
-                StreamingShape.UNARY_UNARY);
+                StreamingShape.UNARY_UNARY,
+                false,
+                accepts,
+                terminal);
         }
 
         if (kind == StepKind.AWAIT) {
@@ -456,10 +558,174 @@ public class StepDefinitionParser {
                 null,
                 null,
                 null,
+                Map.of(),
+                null,
+                Map.of(),
+                List.of(),
+                null,
+                null,
+                null,
                 MapperFallbackMode.NONE,
                 inputType,
                 outputType,
-                resolvedShape);
+                resolvedShape,
+                false,
+                accepts,
+                terminal);
+        }
+
+        if (kind == StepKind.COMMAND) {
+            if (inboundMapper != null || outboundMapper != null || externalMapper != null || mapperFallback != MapperFallbackMode.NONE) {
+                String message = "Skipping step '" + name
+                    + "': command steps cannot declare mapper fields in this slice; use typed command input/output contracts";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            if (inputType == null || outputType == null) {
+                String message = "Skipping step '" + name + "': command steps must provide input and output types";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            StreamingShape shape = parseStreamingShapeHint(stepData, name);
+            if (shape != null && shape != StreamingShape.UNARY_UNARY) {
+                String message = "Skipping step '" + name
+                    + "': command steps support only ONE_TO_ONE cardinality in v1";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            String command = getStringValue(stepData, "command");
+            if (isBlank(command)) {
+                String message = "Skipping step '" + name + "': command steps must declare command";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            String commandIdGeneratorName = getStringValue(stepData, "commandIdGenerator");
+            ClassName commandIdGenerator = parseOptionalClassName(commandIdGeneratorName, name, "commandIdGenerator", basePackage, false);
+            if (commandIdGenerator == null) {
+                return null;
+            }
+            String rawDuplicatePolicy = getStringValue(stepData, "duplicatePolicy");
+            String duplicatePolicy = normalizeDuplicatePolicy(rawDuplicatePolicy);
+            if (!isBlank(rawDuplicatePolicy) && duplicatePolicy == null) {
+                String message = "Skipping step '" + name + "': unsupported duplicatePolicy '"
+                    + rawDuplicatePolicy + "'. Allowed values: RETURN_RECORDED, FAIL";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            Map<String, Object> commandConfig = parseCommandConfig(stepData, name);
+            if (commandConfig == null) {
+                return null;
+            }
+            return new StepDefinition(
+                name,
+                StepKind.COMMAND,
+                null,
+                null,
+                Map.of(),
+                null,
+                List.of(),
+                command,
+                commandIdGenerator,
+                duplicatePolicy,
+                commandConfig,
+                null,
+                Map.of(),
+                List.of(),
+                null,
+                null,
+                null,
+                MapperFallbackMode.NONE,
+                inputType,
+                outputType,
+                StreamingShape.UNARY_UNARY,
+                false,
+                accepts,
+                terminal);
+        }
+
+        if (kind == StepKind.QUERY) {
+            if (inboundMapper != null || outboundMapper != null || externalMapper != null || mapperFallback != MapperFallbackMode.NONE) {
+                String message = "Skipping step '" + name
+                    + "': query steps cannot declare mapper fields in this slice; use typed query input/output contracts";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            if (inputType == null || outputType == null) {
+                String message = "Skipping step '" + name + "': query steps must provide input and output types";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            StreamingShape shape = parseStreamingShapeHint(stepData, name);
+            if (shape != null && shape != StreamingShape.UNARY_UNARY) {
+                String message = "Skipping step '" + name
+                    + "': query steps support only ONE_TO_ONE cardinality in v1";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            String queryId = getStringValue(stepData, "query");
+            if (isBlank(queryId)) {
+                String message = "Skipping step '" + name + "': query steps must reference a top-level query id";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            QueryDefinition queryDefinition = queryDefinitions.get(queryId);
+            if (queryDefinition == null) {
+                String message = "Skipping step '" + name + "': query '" + queryId + "' is not defined under top-level queries";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            if (!typeNameMatches(inputType, queryDefinition.inputType())
+                || !typeNameMatches(outputType, queryDefinition.outputType())) {
+                String message = "Skipping step '" + name + "': query step types ["
+                    + inputType + " -> " + outputType + "] do not match query '" + queryId + "' types ["
+                    + queryDefinition.inputType() + " -> " + queryDefinition.outputType() + "]";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            Map<String, Object> captureConfig = parseQueryCaptureConfig(stepData, name);
+            if (captureConfig == null) {
+                return null;
+            }
+            List<String> keyFields = parseStringList(captureConfig.get("keyFields"), name, "capture.keyFields");
+            if (keyFields == null) {
+                return null;
+            }
+            return new StepDefinition(
+                name,
+                StepKind.QUERY,
+                null,
+                null,
+                Map.of(),
+                null,
+                List.of(),
+                null,
+                null,
+                null,
+                Map.of(),
+                queryId,
+                captureConfig,
+                keyFields,
+                null,
+                null,
+                null,
+                MapperFallbackMode.NONE,
+                inputType,
+                outputType,
+                StreamingShape.UNARY_UNARY,
+                false,
+                accepts,
+                terminal);
         }
 
         // Create the execution class name
@@ -473,13 +739,298 @@ public class StepDefinitionParser {
             name,
             kind,
             executionClass,
+            delegatedMethodName,
             inboundMapper,
             outboundMapper,
             externalMapper,
             mapperFallback,
             inputType,
             outputType,
-            parseStreamingShapeHint(stepData, name));
+            parseStreamingShapeHint(stepData, name),
+            runOnVirtualThreads,
+            accepts,
+            terminal);
+    }
+
+    private boolean parseOptionalBoolean(Map<String, Object> stepData, String stepName, String fieldName) {
+        if (!stepData.containsKey(fieldName)) {
+            return false;
+        }
+        Object value = stepData.get(fieldName);
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        String message = "Skipping step '" + stepName + "': " + fieldName + " must be a boolean";
+        LOG.warn(message);
+        report(Diagnostic.Kind.ERROR, message);
+        throw new StepSkippedException();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, QueryDefinition> parseQueryDefinitions(Map<String, Object> templateData) {
+        Object queriesObj = templateData.get("queries");
+        if (!(queriesObj instanceof Map<?, ?> queriesMap)) {
+            return Map.of();
+        }
+        java.util.LinkedHashMap<String, QueryDefinition> queries = new java.util.LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : queriesMap.entrySet()) {
+            String id = entry.getKey() == null ? null : entry.getKey().toString();
+            if (isBlank(id)) {
+                continue;
+            }
+            if (!(entry.getValue() instanceof Map<?, ?> rawQueryMap)) {
+                String message = "Skipping query '" + id + "': query definition must be a map";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                continue;
+            }
+            Map<String, Object> queryMap = (Map<String, Object>) rawQueryMap;
+            String connector = getStringValue(queryMap, "connector");
+            String inputType = firstNonBlank(getStringValue(queryMap, "inputType"), getStringValue(queryMap, "input"));
+            String outputType = firstNonBlank(getStringValue(queryMap, "outputType"), getStringValue(queryMap, "output"));
+            if (isBlank(connector) || isBlank(inputType) || isBlank(outputType)) {
+                String message = "Skipping query '" + id + "': connector, input, and output must be declared";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                continue;
+            }
+            if (!"jpa".equals(connector)) {
+                String message = "Skipping query '" + id + "': connector supports only jpa in v1";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                continue;
+            }
+            if (queryMap.containsKey("config")) {
+                String message = "Skipping query '" + id + "': config is not supported; use jpa";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                continue;
+            }
+            if (!validateJpaQueryDefinition(id, queryMap)) {
+                continue;
+            }
+            queries.put(id, new QueryDefinition(id, connector, inputType, outputType));
+        }
+        return Map.copyOf(queries);
+    }
+
+    @SuppressWarnings("unchecked")
+    private boolean validateJpaQueryDefinition(String id, Map<String, Object> queryMap) {
+        Object jpaObj = queryMap.get("jpa");
+        if (!(jpaObj instanceof Map<?, ?> rawJpaMap)) {
+            String message = "Skipping query '" + id + "': jpa must be defined as a map";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        Map<String, Object> jpaMap = (Map<String, Object>) rawJpaMap;
+        if (isBlank(getStringValue(jpaMap, "entity"))) {
+            String message = "Skipping query '" + id + "': jpa.entity must be declared";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        Object whereObj = jpaMap.get("where");
+        if (!(whereObj instanceof Map<?, ?> whereMap) || whereMap.isEmpty()) {
+            String message = "Skipping query '" + id + "': jpa.where must be a non-empty map";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        if (!validJpaWhereMap(whereMap)) {
+            String message = "Skipping query '" + id + "': jpa.where entries must use supported predicate shapes";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        Object projectionObj = jpaMap.get("projection");
+        if (projectionObj != null) {
+            if (!(projectionObj instanceof Map<?, ?> projectionMap) || !allJpaPathMapEntries(projectionMap)) {
+                String message = "Skipping query '" + id + "': jpa.projection entries must be non-blank property paths";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return false;
+            }
+        }
+        Object orderByObj = jpaMap.get("orderBy");
+        Map<?, ?> orderByMap = null;
+        if (orderByObj != null) {
+            if (!(orderByObj instanceof Map<?, ?> rawOrderByMap) || !allOrderByEntries(rawOrderByMap)) {
+                String message = "Skipping query '" + id + "': jpa.orderBy entries must be property paths with asc or desc";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return false;
+            }
+            orderByMap = rawOrderByMap;
+        }
+        Object limitObj = jpaMap.get("limit");
+        if (limitObj != null) {
+            if (!isOne(limitObj) || orderByMap == null || orderByMap.isEmpty()) {
+                String message = "Skipping query '" + id + "': jpa.limit supports only 1 and requires orderBy";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return false;
+            }
+        }
+        String result = getStringValue(jpaMap, "result");
+        if (!isBlank(result) && !"single".equals(result)) {
+            String message = "Skipping query '" + id + "': jpa.result supports only single in v1";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        return true;
+    }
+
+    private boolean validJpaWhereMap(Map<?, ?> map) {
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            if (!isJpaPath(entry.getKey())) {
+                return false;
+            }
+            Object value = entry.getValue();
+            if (value instanceof String text) {
+                if (text.isBlank()) {
+                    return false;
+                }
+                continue;
+            }
+            if (!(value instanceof Map<?, ?> operatorMap) || operatorMap.size() != 1) {
+                return false;
+            }
+            Map.Entry<?, ?> operatorEntry = operatorMap.entrySet().iterator().next();
+            String operator = operatorEntry.getKey() == null ? null : operatorEntry.getKey().toString().trim();
+            if (operator == null || !JPA_PREDICATE_OPERATORS.contains(operator)) {
+                return false;
+            }
+            if (!validPredicateValue(operator, operatorEntry.getValue())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean validPredicateValue(String operator, Object value) {
+        if ("isNull".equals(operator)) {
+            if (value instanceof Boolean) {
+                return true;
+            }
+            if (value instanceof String text) {
+                return "true".equalsIgnoreCase(text.trim()) || "false".equalsIgnoreCase(text.trim());
+            }
+            return false;
+        }
+        if ("between".equals(operator)) {
+            return value instanceof List<?> list && list.size() == 2 && list.stream().allMatch(this::isNonBlankScalar);
+        }
+        if ("in".equals(operator)) {
+            if (value instanceof List<?> list) {
+                return !list.isEmpty() && list.stream().allMatch(this::isNonBlankScalar);
+            }
+            return isNonBlankScalar(value);
+        }
+        return isNonBlankScalar(value);
+    }
+
+    private boolean isNonBlankScalar(Object value) {
+        return value != null
+            && !(value instanceof Map<?, ?>)
+            && !(value instanceof List<?>)
+            && !value.toString().isBlank();
+    }
+
+    private boolean allJpaPathMapEntries(Map<?, ?> map) {
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            if (!isJpaPath(entry.getKey()) || !isJpaPath(entry.getValue())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean allOrderByEntries(Map<?, ?> map) {
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            String direction = entry.getValue() == null ? null : entry.getValue().toString().trim();
+            if (!isJpaPath(entry.getKey()) || (!"asc".equalsIgnoreCase(direction) && !"desc".equalsIgnoreCase(direction))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isJpaPath(Object value) {
+        return value != null && JPA_PATH.matcher(value.toString().trim()).matches();
+    }
+
+    private boolean isOne(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue() == 1 && number.doubleValue() == 1.0d;
+        }
+        return value != null && "1".equals(value.toString().trim());
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseCommandConfig(Map<String, Object> stepData, String stepName) {
+        Object configObj = stepData.get("config");
+        if (configObj == null) {
+            return Map.of();
+        }
+        if (!(configObj instanceof Map<?, ?> configMap)) {
+            String message = "Skipping step '" + stepName + "': command config must be a map";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        return (Map<String, Object>) normalizeMap(configMap);
+    }
+
+    private String normalizeDuplicatePolicy(String duplicatePolicy) {
+        if (isBlank(duplicatePolicy)) {
+            return null;
+        }
+        String normalized = duplicatePolicy.trim().toUpperCase(java.util.Locale.ROOT);
+        return switch (normalized) {
+            case "RETURN_RECORDED" -> "RETURN_RECORDED";
+            case "FAIL" -> "FAIL";
+            default -> null;
+        };
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseQueryCaptureConfig(Map<String, Object> stepData, String stepName) {
+        Object captureObj = stepData.get("capture");
+        if (captureObj == null) {
+            return Map.of();
+        }
+        if (!(captureObj instanceof Map<?, ?> captureMap)) {
+            String message = "Skipping step '" + stepName + "': capture must be a map";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        if (captureMap.containsKey("mode")) {
+            String message = "Skipping step '" + stepName
+                + "': capture.mode is not supported in v1; capture behavior is controlled by keyFields";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        return (Map<String, Object>) normalizeMap(captureMap);
+    }
+
+    private boolean typeNameMatches(ClassName stepType, String queryType) {
+        // Query step type matching is intentionally canonical-only. YAML step types and
+        // top-level query definitions must use the same naming format, preferably FQCNs.
+        if (stepType == null || isBlank(queryType)) {
+            return false;
+        }
+        if (stepType.canonicalName().equals(queryType)) {
+            return true;
+        }
+        return false;
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        return isBlank(primary) ? fallback : primary;
     }
 
     @SuppressWarnings("unchecked")
@@ -687,6 +1238,9 @@ public class StepDefinitionParser {
         return value == null ? null : value.toString();
     }
 
+    private record QueryDefinition(String id, String connector, String inputType, String outputType) {
+    }
+
     private ClassName parseOptionalStepMapper(String mapperName, String stepName, String fieldName) {
         if (isBlank(mapperName)) {
             return null;
@@ -763,9 +1317,10 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             throw new IllegalArgumentException(message);
         }
-        if (!"PROTOBUF_HTTP_V1".equalsIgnoreCase(execution.protocol())) {
+        if (!"PROTOBUF_HTTP_V1".equalsIgnoreCase(execution.protocol())
+            && !"ENVELOPE_HTTP_V1".equalsIgnoreCase(execution.protocol())) {
             String message = "Skipping step '" + stepName
-                + "': remote execution requires execution.protocol=PROTOBUF_HTTP_V1";
+                + "': remote execution requires execution.protocol=PROTOBUF_HTTP_V1 or ENVELOPE_HTTP_V1";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             throw new IllegalArgumentException(message);
@@ -903,6 +1458,18 @@ public class StepDefinitionParser {
         report(Diagnostic.Kind.WARNING, message);
     }
 
+    private void reportRejectedBranchPredicateKeys(String stepName, Map<String, Object> stepData) {
+        Set<String> rejectedKeys = new HashSet<>(BranchRoutingRules.rejectedPredicateKeys(stepData));
+        if (rejectedKeys.isEmpty()) {
+            return;
+        }
+        String message = "Skipping step '" + stepName + "': predicate-style routing keys are not supported ("
+            + String.join(", ", rejectedKeys) + "). Use type-based accepts/terminal routing only.";
+        LOG.warn(message);
+        report(Diagnostic.Kind.ERROR, message);
+        throw new StepSkippedException();
+    }
+
     /**
      * Forwards a diagnostic message to the configured diagnostic reporter.
      *
@@ -913,15 +1480,31 @@ public class StepDefinitionParser {
         diagnosticReporter.accept(kind, message);
     }
 
-    private String normalizeDelegatedExecutionClassName(String delegatedValue) {
+    private Optional<DelegatedReference> parseDelegatedReference(String delegatedValue, String stepName, String fieldName) {
         if (isBlank(delegatedValue)) {
-            return delegatedValue;
+            return Optional.empty();
         }
         int separator = delegatedValue.indexOf("::");
-        if (separator <= 0) {
-            return delegatedValue;
+        if (separator < 0) {
+            return Optional.of(new DelegatedReference(delegatedValue.trim(), Optional.empty()));
         }
-        return delegatedValue.substring(0, separator).trim();
+        String className = delegatedValue.substring(0, separator).trim();
+        String methodName = delegatedValue.substring(separator + 2).trim();
+        if (className.isBlank() || methodName.isBlank() || delegatedValue.indexOf("::", separator + 2) >= 0) {
+            String message = "Skipping step '" + stepName + "': invalid " + fieldName
+                + " reference '" + delegatedValue + "'. Expected <class> or <class>::<method>";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return Optional.empty();
+        }
+        if (!isValidIdentifier(methodName)) {
+            String message = "Skipping step '" + stepName + "': invalid " + fieldName
+                + " method name '" + methodName + "'";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return Optional.empty();
+        }
+        return Optional.of(new DelegatedReference(className, Optional.of(methodName)));
     }
 
     /**
@@ -1027,6 +1610,9 @@ public class StepDefinitionParser {
         return value == null || value.isBlank();
     }
 
+    private record DelegatedReference(String className, Optional<String> methodName) {
+    }
+
     /**
      * Parse a fully qualified Java class name string into a ClassName representation.
      *
@@ -1111,5 +1697,11 @@ public class StepDefinitionParser {
             }
         }
         return true;
+    }
+
+    private static final class StepSkippedException extends RuntimeException {
+        private StepSkippedException() {
+            super(null, null, false, false);
+        }
     }
 }

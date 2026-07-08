@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.pipelineframework.csv</groupId>
         <artifactId>csv-payments-parent</artifactId>
-        <version>26.6.2-SNAPSHOT</version>
+        <version>26.6.3-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -23,7 +23,6 @@
         <pipeline.runtime.source.dir.input>${pipeline.runtime.source.root}/input-csv-file-processing-svc/src/main/java</pipeline.runtime.source.dir.input>
         <pipeline.runtime.source.dir.payments>${pipeline.runtime.source.root}/payments-processing-svc/src/main/java</pipeline.runtime.source.dir.payments>
         <pipeline.runtime.source.dir.status>${pipeline.runtime.source.root}/payment-status-svc/src/main/java</pipeline.runtime.source.dir.status>
-        <pipeline.runtime.source.dir.output>${pipeline.runtime.source.root}/output-csv-file-processing-svc/src/main/java</pipeline.runtime.source.dir.output>
         <pipeline.runtime.source.exclude.executor>org/pipelineframework/csv/service/ExecutorProducer.java</pipeline.runtime.source.exclude.executor>
         <pipeline.runtime.duplicate.check.script>${pipeline.runtime.source.root}/build-tools/check-duplicate-sources.sh</pipeline.runtime.duplicate.check.script>
     </properties>
@@ -39,6 +38,11 @@
             <artifactId>persistence-plugin</artifactId>
             <version>${project.version}</version>
             <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>object-ingest-connector</artifactId>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -165,7 +169,6 @@
                                     <arg value="${pipeline.runtime.source.dir.input}"/>
                                     <arg value="${pipeline.runtime.source.dir.payments}"/>
                                     <arg value="${pipeline.runtime.source.dir.status}"/>
-                                    <arg value="${pipeline.runtime.source.dir.output}"/>
                                 </exec>
                                 <copy todir="${project.build.directory}/pipeline-runtime-sources">
                                     <fileset dir="${pipeline.runtime.source.dir.input}"/>
@@ -177,11 +180,6 @@
                                 </copy>
                                 <copy todir="${project.build.directory}/pipeline-runtime-sources">
                                     <fileset dir="${pipeline.runtime.source.dir.status}"/>
-                                </copy>
-                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
-                                    <fileset dir="${pipeline.runtime.source.dir.output}">
-                                        <exclude name="${pipeline.runtime.source.exclude.executor}"/>
-                                    </fileset>
                                 </copy>
                             </target>
                         </configuration>

@@ -22,6 +22,7 @@ import java.util.concurrent.CancellationException;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
+import io.smallrye.mutiny.CompositeException;
 import org.pipelineframework.config.StepConfig;
 
 /**
@@ -154,6 +155,13 @@ default String backpressureStrategy() { return effectiveConfig().backpressureStr
             for (Throwable suppressed : current.getSuppressed()) {
                 if (suppressed != null) {
                     queue.add(suppressed);
+                }
+            }
+            if (current instanceof CompositeException composite) {
+                for (Throwable causeItem : composite.getCauses()) {
+                    if (causeItem != null) {
+                        queue.add(causeItem);
+                    }
                 }
             }
         }

@@ -5,11 +5,11 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.service.blocking.BlockingService;
 import org.pipelineframework.service.blocking.BlockingIteratorService;
 import org.pipelineframework.service.blocking.BlockingStreamingService;
@@ -172,6 +172,50 @@ class BlockingExecutionSupportTest {
     }
 
     @Test
+    void emitIteratorReadsOnlyWhenDownstreamRequestsItems() {
+        AtomicInteger nextCalls = new AtomicInteger();
+        AtomicInteger hasNextCalls = new AtomicInteger();
+
+        AssertSubscriber<String> subscriber = support.emitIterator(false, () -> new CloseableIterator<String>() {
+            private int index;
+
+            @Override
+            public boolean hasNext() {
+                hasNextCalls.incrementAndGet();
+                return index < 3;
+            }
+
+            @Override
+            public String next() {
+                nextCalls.incrementAndGet();
+                return "item-" + ++index;
+            }
+
+            @Override
+            public void close() {
+            }
+        }).subscribe().withSubscriber(AssertSubscriber.create(0));
+
+        subscriber.assertHasNotReceivedAnyItem();
+        assertTrue(nextCalls.get() == 0);
+        assertTrue(hasNextCalls.get() == 0);
+
+        subscriber.request(1).awaitItems(1);
+        assertTrue(nextCalls.get() == 1);
+        subscriber.assertItems("item-1");
+
+        subscriber.request(1).awaitItems(2);
+        assertTrue(nextCalls.get() == 2);
+        subscriber.assertItems("item-1", "item-2");
+
+        subscriber.request(1).awaitItems(3);
+        assertTrue(nextCalls.get() == 3);
+        subscriber.assertItems("item-1", "item-2", "item-3");
+        subscriber.awaitCompletion(Duration.ofSeconds(5));
+        subscriber.assertCompleted();
+    }
+
+    @Test
     void emitIteratorClosesOnFailure() throws Exception {
         CountDownLatch closed = new CountDownLatch(1);
 
@@ -203,30 +247,31 @@ class BlockingExecutionSupportTest {
     }
 
     @Test
-    void blockingIteratorServiceReactiveAdapterUsesVirtualThreadsWhenAnnotated() {
-        AtomicBoolean openOnVirtualThread = new AtomicBoolean(false);
+    void blockingIteratorServiceReactiveAdapterRunsOnWorkerThreadByDefault() {
+        AtomicReference<Thread> openThread = new AtomicReference<>();
+        Thread caller = Thread.currentThread();
 
-        List<String> values = new VirtualIteratorService(openOnVirtualThread).process("ok")
+        List<String> values = new DefaultIteratorService(openThread).process("ok")
             .collect()
             .asList()
             .await()
             .atMost(Duration.ofSeconds(5));
 
-        assertTrue(openOnVirtualThread.get());
+        assertNotEquals(caller, openThread.get());
+        assertFalse(openThread.get().isVirtual());
         assertTrue(values.equals(List.of("ok-1", "ok-2")));
     }
 
-    @PipelineStep(runOnVirtualThreads = true)
-    static final class VirtualIteratorService implements BlockingIteratorService<String, String> {
-        private final AtomicBoolean openOnVirtualThread;
+    static final class DefaultIteratorService implements BlockingIteratorService<String, String> {
+        private final AtomicReference<Thread> openThread;
 
-        private VirtualIteratorService(AtomicBoolean openOnVirtualThread) {
-            this.openOnVirtualThread = openOnVirtualThread;
+        private DefaultIteratorService(AtomicReference<Thread> openThread) {
+            this.openThread = openThread;
         }
 
         @Override
         public CloseableIterator<String> iterateBlocking(String processableObj) {
-            openOnVirtualThread.set(Thread.currentThread().isVirtual());
+            openThread.set(Thread.currentThread());
             return new CloseableIterator<String>() {
                 private int index;
 

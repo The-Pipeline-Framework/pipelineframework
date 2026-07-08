@@ -53,18 +53,29 @@ class SpringRestResourceRendererTest {
         assertTrue(source.contains("import org.springframework.web.bind.annotation.PostMapping;"));
         assertTrue(source.contains("import org.springframework.web.bind.annotation.RequestMapping;"));
         assertTrue(source.contains("import org.springframework.web.bind.annotation.RequestBody;"));
+        assertTrue(source.contains("import org.springframework.web.bind.annotation.RequestHeader;"));
         assertTrue(source.contains("import org.springframework.web.bind.annotation.RestController;"));
+        assertTrue(source.contains("import org.pipelineframework.runtime.core.TpfContextHeaders;"));
+        assertTrue(source.contains("import org.pipelineframework.runtime.core.TpfExecutionContext;"));
         assertTrue(source.contains("import reactor.core.publisher.Mono;"));
         assertTrue(source.contains("private final SpringPipelineRunner pipelineRunner;"));
         assertTrue(source.contains("public PaymentResource(SpringPipelineRunner pipelineRunner,"));
-        assertTrue(source.contains("public Mono<PaymentStatusDto> process(@RequestBody PaymentRecordDto inputDto)"));
+        assertTrue(source.contains("public Mono<PaymentStatusDto> process(@RequestBody PaymentRecordDto inputDto,"));
+        assertTrue(source.contains("@RequestHeader(name = TpfContextHeaders.VERSION, required = false) String tpfVersionTag"));
+        assertTrue(source.contains("@RequestHeader(name = TpfContextHeaders.REPLAY, required = false) String tpfReplayMode"));
+        assertTrue(source.contains("@RequestHeader(name = TpfContextHeaders.CACHE_POLICY, required = false) String tpfCachePolicy"));
+        assertTrue(source.contains("return Mono.defer(() -> {"));
+        assertTrue(source.contains("try (TpfExecutionContext.Scope tpfContextScope = TpfExecutionContext.withHeaders(tpfVersionTag, tpfReplayMode, tpfCachePolicy))"));
         assertTrue(source.contains("PaymentRecord inputDomain = this.inboundMapper.fromExternal(inputDto);"));
         assertTrue(source.contains("return Mono.fromCompletionStage(this.pipelineRunner.run(inputDomain))"));
-        assertTrue(source.contains(".map(output -> this.outboundMapper.toExternal((PaymentStatus) output));"));
+        assertTrue(source.contains(".map(output -> this.outboundMapper.toExternal((PaymentStatus) output))"));
+        assertFalse(source.contains(".doFinally(signalType -> tpfContextScope.close())"));
+        assertFalse(source.contains("catch (RuntimeException | Error failure)"));
         assertFalse(source.contains("io.quarkus."));
         assertFalse(source.contains("jakarta.enterprise."));
         assertFalse(source.contains("jakarta.inject."));
         assertFalse(source.contains("io.vertx."));
+        assertFalse(source.contains("io.smallrye.mutiny"));
         assertFalse(source.contains("org.jboss.resteasy."));
         assertFalse(source.contains("jakarta.ws.rs."));
     }
@@ -91,11 +102,62 @@ class SpringRestResourceRendererTest {
     }
 
     @Test
-    void rejectsBlockingAuthoredService() {
+    void rendersBlockingAuthoredRestResource() throws Exception {
+        SpringRestResourceRenderer renderer = new SpringRestResourceRenderer();
+
+        renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.BLOCKING), "/payments"),
+            new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null));
+
+        Path resource = tempDir.resolve("com/example/service/pipeline/PaymentResource.java");
+        String source = Files.readString(resource);
+        assertTrue(source.contains("private final SpringPipelineRunner pipelineRunner;"));
+        assertTrue(source.contains("return Mono.fromCompletionStage(this.pipelineRunner.run(inputDomain))"));
+    }
+
+    @Test
+    void blockingRestResourceContainsNoQuarkusOrMutinyImports() throws Exception {
+        SpringRestResourceRenderer renderer = new SpringRestResourceRenderer();
+
+        renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.BLOCKING), null),
+            new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null));
+
+        Path resource = tempDir.resolve("com/example/service/pipeline/PaymentResource.java");
+        String source = Files.readString(resource);
+        assertFalse(source.contains("io.quarkus."), "Blocking REST resource must not contain Quarkus imports");
+        assertFalse(source.contains("jakarta.enterprise."), "Blocking REST resource must not contain CDI imports");
+        assertFalse(source.contains("io.vertx."), "Blocking REST resource must not contain Vert.x imports");
+        assertFalse(source.contains("io.smallrye.mutiny"), "Blocking REST resource must not contain Mutiny imports");
+        assertFalse(source.contains("org.jboss.resteasy."), "Blocking REST resource must not contain RESTEasy imports");
+        assertFalse(source.contains("jakarta.ws.rs."), "Blocking REST resource must not contain JAX-RS imports");
+    }
+
+    @Test
+    void blockingRestResourceWithVirtualThreadsModeBehavesSameAsDefault() throws Exception {
+        SpringRestResourceRenderer renderer = new SpringRestResourceRenderer();
+
+        // With virtual threads execution mode - REST resource delegates to SpringPipelineRunner,
+        // not to a blocking call directly, so the REST resource output should be the same.
+        PipelineStepModel virtualThreadsModel = modelBuilder(StreamingShape.UNARY_UNARY, ServiceApiKind.BLOCKING)
+            .executionMode(ExecutionMode.VIRTUAL_THREADS)
+            .build();
+
+        renderer.render(new RestBinding(virtualThreadsModel, "/payments"),
+            new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null));
+
+        Path resource = tempDir.resolve("com/example/service/pipeline/PaymentResource.java");
+        String source = Files.readString(resource);
+        assertTrue(source.contains("return Mono.fromCompletionStage(this.pipelineRunner.run(inputDomain))"),
+            "REST resource must still route through SpringPipelineRunner for virtual-threads blocking steps");
+        assertFalse(source.contains("RuntimeAdapters"),
+            "REST resource must not call RuntimeAdapters directly; that is the local client step's job");
+    }
+
+    @Test
+    void rejectsBlockingIteratorResource() {
         SpringRestResourceRenderer renderer = new SpringRestResourceRenderer();
 
         assertThrows(IllegalArgumentException.class,
-            () -> renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.BLOCKING), null),
+            () -> renderer.render(new RestBinding(model(StreamingShape.UNARY_UNARY, ServiceApiKind.BLOCKING_ITERATOR), null),
                 new GenerationContext(null, tempDir, DeploymentRole.REST_SERVER, Set.of(), null, null)));
     }
 

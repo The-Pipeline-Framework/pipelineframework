@@ -55,7 +55,7 @@
       },
       "id": 2,
       "options": {
-        "content": "## TraceQL quick queries\n\n```traceql\n{ name = \"tpf.pipeline.run\" && resource.service.name = \"orchestrator-svc\" }\n```\n\n```traceql\n{ name = \"tpf.step\" && span[\"tpf.pipeline\"] = \"csv-payments\" }\n```\n\n```traceql\n{ name = \"tpf.step\" && span[\"tpf.step\"] = \"ProcessPaymentStatus\" }\n```\n\nSpan events emitted by the framework:\n\n- `tpf.step.start`\n- `tpf.step.emit`\n- `tpf.step.retry`\n- `tpf.step.success`\n- `tpf.step.error`",
+        "content": "## TraceQL quick queries\n\n```traceql\n{ name = \"tpf.pipeline.run\" && resource.service.name = \"orchestrator-svc\" }\n```\n\n```traceql\n{ name = \"tpf.step\" && span[\"tpf.pipeline\"] = \"csv-payments\" }\n```\n\n```traceql\n{ name = \"tpf.step\" && (span[\"tpf.step\"] = \"ProcessApprovedPaymentStatus\" || span[\"tpf.step\"] = \"ProcessUnapprovedPaymentStatus\" || span[\"tpf.step\"] = \"ProcessFinalizePaymentOutput\") }\n```\n\nSpan events emitted by the framework:\n\n- `tpf.step.start`\n- `tpf.step.emit`\n- `tpf.step.retry`\n- `tpf.step.success`\n- `tpf.step.error`",
         "mode": "markdown"
       },
       "pluginVersion": "12.2.0",

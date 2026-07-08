@@ -23,6 +23,7 @@ import javax.tools.StandardLocation;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateStep;
 import org.pipelineframework.config.boundary.PipelineObjectInputConfig;
+import org.pipelineframework.config.boundary.PipelineObjectOutputConfig;
 
 /**
  * Validates checkpoint publication/subscription declarations loaded from pipeline YAML.
@@ -32,6 +33,9 @@ final class CheckpointBoundaryValidator {
     private static final String QUEUE_ASYNC = "QUEUE_ASYNC";
     private static final String MAPPER_INTERFACE = "org.pipelineframework.mapper.Mapper";
     private static final String OBJECT_SNAPSHOT_MAPPER_INTERFACE = "org.pipelineframework.objectingest.ObjectSnapshotMapper";
+    private static final String OBJECT_PUBLISH_MAPPER_INTERFACE = "org.pipelineframework.objectpublish.ObjectPublishMapper";
+    private static final String STREAMING_OBJECT_PUBLISH_MAPPER_INTERFACE =
+        "org.pipelineframework.objectpublish.StreamingObjectPublishMapper";
 
     void validate(
         PipelineTemplateConfig templateConfig,
@@ -46,7 +50,8 @@ final class CheckpointBoundaryValidator {
         boolean hasInputSubscription = templateConfig.input() != null && templateConfig.input().subscription() != null;
         boolean hasObjectInput = templateConfig.input() != null && templateConfig.input().object() != null;
         boolean hasOutputCheckpoint = templateConfig.output() != null && templateConfig.output().checkpoint() != null;
-        if (!hasInputSubscription && !hasObjectInput && !hasOutputCheckpoint) {
+        boolean hasObjectOutput = templateConfig.output() != null && templateConfig.output().object() != null;
+        if (!hasInputSubscription && !hasObjectInput && !hasOutputCheckpoint && !hasObjectOutput) {
             return;
         }
         if (templateConfig.platform() != null && templateConfig.platform().name().equals("FUNCTION")) {
@@ -55,16 +60,21 @@ final class CheckpointBoundaryValidator {
         if (steps.isEmpty()) {
             throw new IllegalStateException("Checkpoint publication/subscription requires at least one pipeline step");
         }
-        String orchestratorMode = loadOrchestratorMode(moduleDir, processingEnv);
-        if (!QUEUE_ASYNC.equalsIgnoreCase(orchestratorMode)) {
-            throw new IllegalStateException(
-                "Checkpoint publication/subscription requires pipeline.orchestrator.mode=QUEUE_ASYNC");
+        if (hasInputSubscription || hasOutputCheckpoint) {
+            String orchestratorMode = loadOrchestratorMode(moduleDir, processingEnv);
+            if (!QUEUE_ASYNC.equalsIgnoreCase(orchestratorMode)) {
+                throw new IllegalStateException(
+                    "Checkpoint publication/subscription requires pipeline.orchestrator.mode=QUEUE_ASYNC");
+            }
         }
         if (hasInputSubscription) {
             validateSubscriptionMapper(templateConfig, processingEnv);
         }
         if (hasObjectInput) {
             validateObjectInput(templateConfig, processingEnv);
+        }
+        if (hasObjectOutput) {
+            validateObjectOutput(templateConfig, processingEnv);
         }
         String publication = hasOutputCheckpoint ? templateConfig.output().checkpoint().publication() : null;
         if (hasOutputCheckpoint && (publication == null || publication.isBlank())) {
@@ -74,6 +84,120 @@ final class CheckpointBoundaryValidator {
             messager.printMessage(Diagnostic.Kind.NOTE,
                 "Checkpoint publication enabled for publication '" + publication + "'");
         }
+    }
+
+    private void validateObjectOutput(PipelineTemplateConfig templateConfig, ProcessingEnvironment processingEnv) {
+        PipelineObjectOutputConfig objectOutput = templateConfig.output().object();
+        Map<String, ?> publish = templateConfig.publish() == null ? Map.of() : templateConfig.publish();
+        if (!publish.containsKey(objectOutput.target())) {
+            throw new IllegalStateException("output object publish target not found: " + objectOutput.target());
+        }
+        String lastStepOutput = templateConfig.steps().getLast().outputTypeName();
+        String expected = objectOutput.typeName() == null ? objectOutput.type() : objectOutput.typeName();
+        if (expected == null || expected.isBlank()) {
+            throw new IllegalStateException("Object output must declare a non-blank type or typeName");
+        }
+        if (lastStepOutput != null && !lastStepOutput.isBlank() && !typeMatches(lastStepOutput, expected)) {
+            throw new IllegalStateException(
+                "Object output consumes type '" + expected + "' must match last step output '" + lastStepOutput + "'");
+        }
+        validateObjectOutputMapper(objectOutput, expected, processingEnv);
+        validateTerminalOutputMapper(templateConfig, expected, processingEnv);
+    }
+
+    private void validateObjectOutputMapper(
+        PipelineObjectOutputConfig objectOutput,
+        String expected,
+        ProcessingEnvironment processingEnv
+    ) {
+        if (processingEnv == null) {
+            return;
+        }
+        String mapperClass = objectOutput.mapper();
+        if (mapperClass == null || mapperClass.isBlank()) {
+            return;
+        }
+        TypeElement mapperElement = processingEnv.getElementUtils().getTypeElement(mapperClass);
+        if (mapperElement == null) {
+            throw new IllegalStateException("Object output mapper type not found: " + mapperClass);
+        }
+        Types types = processingEnv.getTypeUtils();
+        Optional<DeclaredType> mapperType = findImplementedInterface(mapperElement, OBJECT_PUBLISH_MAPPER_INTERFACE, processingEnv)
+            .or(() -> findImplementedInterface(mapperElement, STREAMING_OBJECT_PUBLISH_MAPPER_INTERFACE, processingEnv));
+        if (mapperType.isEmpty()) {
+            throw new IllegalStateException(
+                "Object output mapper '" + mapperClass + "' must implement "
+                    + OBJECT_PUBLISH_MAPPER_INTERFACE + " or " + STREAMING_OBJECT_PUBLISH_MAPPER_INTERFACE);
+        }
+        DeclaredType declared = mapperType.get();
+        if (declared.getTypeArguments().size() != 1) {
+            throw new IllegalStateException(
+                "Object output mapper '" + mapperClass
+                    + "' must declare exactly one type argument for ObjectPublishMapper<PipelineOutput>");
+        }
+        String mappedType = declared.getTypeArguments().getFirst().toString();
+        if (!typeMatches(expected, mappedType)) {
+            throw new IllegalStateException(
+                "Object output mapper '" + mapperClass + "' must declare ObjectPublishMapper<"
+                    + expected + ">");
+        }
+    }
+
+    private void validateTerminalOutputMapper(
+        PipelineTemplateConfig templateConfig,
+        String expected,
+        ProcessingEnvironment processingEnv
+    ) {
+        if (processingEnv == null || "LOCAL".equalsIgnoreCase(templateConfig.transport())) {
+            return;
+        }
+        PipelineTemplateStep terminalStep = templateConfig.steps().getLast();
+        String outboundMapper = terminalStep.outboundMapper();
+        if (outboundMapper == null || outboundMapper.isBlank()) {
+            throw new IllegalStateException(
+                "Object output requires terminal step outboundMapper to adapt transport output back to " + expected);
+        }
+        TypeElement mapperElement = processingEnv.getElementUtils().getTypeElement(outboundMapper);
+        if (mapperElement == null) {
+            throw new IllegalStateException("Terminal output mapper type not found: " + outboundMapper);
+        }
+        Optional<DeclaredType> mapperType = findImplementedInterface(mapperElement, MAPPER_INTERFACE, processingEnv);
+        if (mapperType.isEmpty()) {
+            throw new IllegalStateException(
+                "Terminal output mapper '" + outboundMapper + "' must implement " + MAPPER_INTERFACE);
+        }
+        DeclaredType declared = mapperType.get();
+        if (declared.getTypeArguments().size() != 2) {
+            throw new IllegalStateException(
+                "Terminal output mapper '" + outboundMapper
+                    + "' must declare Mapper<PipelineOutput, ExternalOutput>");
+        }
+        String domainType = declared.getTypeArguments().getFirst().toString();
+        if (!typeMatches(expected, domainType)) {
+            throw new IllegalStateException(
+                "Terminal output mapper '" + outboundMapper + "' must declare Mapper<"
+                    + expected + ", ExternalOutput>");
+        }
+    }
+
+    private Optional<DeclaredType> findImplementedInterface(
+        TypeElement element,
+        String interfaceName,
+        ProcessingEnvironment processingEnv
+    ) {
+        TypeElement mapperInterface = processingEnv.getElementUtils().getTypeElement(interfaceName);
+        if (mapperInterface == null) {
+            throw new IllegalStateException("Mapper interface not found: " + interfaceName);
+        }
+        TypeMirror rawMapperInterfaceType = mapperInterface.asType();
+        if (!(rawMapperInterfaceType instanceof DeclaredType mapperInterfaceType)) {
+            throw new IllegalStateException("Mapper interface not resolvable as declared type: " + interfaceName);
+        }
+        return findImplementedInterface(
+            element.asType(),
+            mapperInterfaceType,
+            processingEnv.getTypeUtils(),
+            new HashSet<>());
     }
 
     private void validateObjectInput(PipelineTemplateConfig templateConfig, ProcessingEnvironment processingEnv) {

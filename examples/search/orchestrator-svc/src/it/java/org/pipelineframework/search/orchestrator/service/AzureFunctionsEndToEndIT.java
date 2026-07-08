@@ -166,8 +166,8 @@ class AzureFunctionsEndToEndIT {
      */
     @Test
     void testFanOutFanInCardinality() throws Exception {
-        // Test ONE_TO_MANY -> MANY_TO_ONE pipeline path
-        // This exercises Tokenize Content (fan-out) and Index Document (fan-in)
+        // Test ONE_TO_MANY -> command -> MANY_TO_ONE pipeline path.
+        // This exercises Tokenize Content fan-out, command indexing, and Summarize Index Writes fan-in.
         String pipelineRunUrl = functionAppUrl + "/api/pipeline/run";
 
         UUID testDocId = UUID.randomUUID();

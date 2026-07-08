@@ -796,4 +796,5 @@ class PipelineStepProcessorTest {
         // The processor should generate REST resource only for the annotated step
         // with REST transport
     }
+
 }

@@ -28,6 +28,8 @@ import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.config.StepConfig;
+import org.pipelineframework.invocation.TransportBoundaryDescriptor;
+import org.pipelineframework.invocation.TransportBoundaryInvocation;
 import org.pipelineframework.step.StepOneToOne;
 
 class StepOneToOneTest {
@@ -75,6 +77,35 @@ class StepOneToOneTest {
 
         boolean rejectCalled() {
             return rejectCalled.get();
+        }
+    }
+
+    static class TransportFailingStep implements StepOneToOne<String, String>, TransportBoundaryInvocation {
+        private final AtomicInteger applyCalls = new AtomicInteger();
+
+        @Override
+        public Uni<String> applyOneToOne(String input) {
+            applyCalls.incrementAndGet();
+            return Uni.createFrom().failure(new IllegalStateException("remote unary failed"));
+        }
+
+        @Override
+        public StepConfig effectiveConfig() {
+            return new StepConfig().retryLimit(3);
+        }
+
+        @Override
+        public void initialiseWithConfig(StepConfig config) {
+            // no-op
+        }
+
+        @Override
+        public TransportBoundaryDescriptor transportBoundary() {
+            return new TransportBoundaryDescriptor("grpc", "SideEffect.remoteProcess");
+        }
+
+        int applyCalls() {
+            return applyCalls.get();
         }
     }
 
@@ -134,5 +165,17 @@ class StepOneToOneTest {
         assertEquals("interaction", failure.unitId());
         assertEquals(1, applyCalls.get());
         assertFalse(step.rejectCalled());
+    }
+
+    @Test
+    void transportBoundaryUnaryDoesNotApplyGenericStepRetry() {
+        TransportFailingStep step = new TransportFailingStep();
+
+        IllegalStateException failure = assertThrows(
+                IllegalStateException.class,
+                () -> step.apply(Uni.createFrom().item("x")).await().indefinitely());
+
+        assertEquals("remote unary failed", failure.getMessage());
+        assertEquals(1, step.applyCalls());
     }
 }

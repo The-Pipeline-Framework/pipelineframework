@@ -68,8 +68,8 @@ class CsvPaymentsStableIdSupportTest {
   @Test
   void paymentStatusUsesStableCompletionIdOnPersist() {
     UUID paymentRecordId = UUID.randomUUID();
-    PaymentStatus first = paymentStatus(paymentRecordId);
-    PaymentStatus duplicate = paymentStatus(paymentRecordId);
+    ApprovedPaymentStatus first = paymentStatus(paymentRecordId);
+    ApprovedPaymentStatus duplicate = paymentStatus(paymentRecordId);
     assertNotEquals(first.getId(), duplicate.getId());
 
     first.useStablePaymentStatusId();
@@ -100,14 +100,15 @@ class CsvPaymentsStableIdSupportTest {
     return output;
   }
 
-  private static PaymentStatus paymentStatus(UUID paymentRecordId) {
-    return new PaymentStatus()
-        .setReference("101")
-        .setStatus("Complete")
-        .setStatusCode(1000L)
-        .setMessage("Mock response")
-        .setFee(new BigDecimal("1.01"))
-        .setConversationId(UUID.randomUUID())
-        .setPaymentRecordId(paymentRecordId);
+  private static ApprovedPaymentStatus paymentStatus(UUID paymentRecordId) {
+    ApprovedPaymentStatus paymentStatus = new ApprovedPaymentStatus();
+    paymentStatus.setReference("101");
+    paymentStatus.setStatus("Complete");
+    paymentStatus.setStatusCode(1000L);
+    paymentStatus.setMessage("Mock response");
+    paymentStatus.setFee(new BigDecimal("1.01"));
+    paymentStatus.setConversationId(UUID.randomUUID());
+    paymentStatus.setPaymentRecordId(paymentRecordId);
+    return paymentStatus;
   }
 }

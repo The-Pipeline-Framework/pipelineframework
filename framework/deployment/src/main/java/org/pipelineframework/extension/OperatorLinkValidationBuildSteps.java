@@ -54,8 +54,12 @@ public final class OperatorLinkValidationBuildSteps {
     @Produce(ArtifactResultBuildItem.class)
     void validateOperatorLinks(
             List<OperatorBuildItem> steps,
+            PipelineConfigBuildItem pipelineConfig,
             MapperRegistryBuildItem mapperRegistry,
             CombinedIndexBuildItem combinedIndex) {
+        if (pipelineConfig != null && pipelineConfig.branchAware()) {
+            return;
+        }
         validateOperatorLinks(steps, mapperRegistry, combinedIndex.getIndex());
     }
 

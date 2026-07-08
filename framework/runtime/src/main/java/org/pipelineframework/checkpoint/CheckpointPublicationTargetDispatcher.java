@@ -15,6 +15,20 @@ public interface CheckpointPublicationTargetDispatcher {
     PublicationTargetKind kind();
 
     /**
+     * Resolve one configured target for this dispatcher kind.
+     *
+     * @param publication logical publication name
+     * @param targetId configured target id
+     * @param target target configuration
+     * @return resolved target configuration
+     */
+    ResolvedCheckpointPublicationTarget resolveTarget(
+        String publication,
+        String targetId,
+        PipelineHandoffConfig.TargetConfig target
+    );
+
+    /**
      * Dispatch one published checkpoint to the resolved target.
      *
      * @param target resolved target configuration

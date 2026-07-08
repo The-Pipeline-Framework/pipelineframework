@@ -1,49 +1,26 @@
-# Health Checks
+---
+title: Redirecting...
+search: false
+head:
+  - - meta
+    - name: robots
+      content: noindex
+  - - meta
+    - http-equiv: refresh
+      content: 0;url=/operate/observability/health-checks
+---
 
-Expose liveness and readiness so orchestration platforms can manage your services safely.
+<script setup>
+import {onMounted} from 'vue'
+import {withBase} from 'vitepress'
 
-## Built-in Checks
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.location.replace(withBase('/operate/observability/health-checks'))
+  }
+})
+</script>
 
-Quarkus provides default endpoints that report service health and readiness.
+# Redirecting...
 
-Common endpoints:
-
-1. `/q/health` (aggregate)
-2. `/q/health/live` (liveness)
-3. `/q/health/ready` (readiness)
-
-## Pipeline Startup Checks
-
-The orchestrator performs startup health checks for dependent services before running a pipeline.
-These are controlled by `pipeline.health.startup-timeout` and will fail startup if required services
-are unhealthy.
-
-## Custom Checks
-
-Add checks for dependencies such as databases or external APIs.
-
-```java
-@Readiness
-@ApplicationScoped
-public class PaymentProviderHealthCheck implements HealthCheck {
-    @Inject
-    PaymentProviderClient client;
-
-    @Override
-    public HealthCheckResponse call() {
-        try {
-            client.ping();
-            return HealthCheckResponse.up("payment-provider");
-        } catch (Exception error) {
-            return HealthCheckResponse.down("payment-provider");
-        }
-    }
-}
-```
-
-## Design Notes
-
-1. Keep checks fast.
-2. Fail readiness when critical dependencies are down.
-3. Use graceful degradation when possible.
-4. Keep startup checks aligned with pipeline dependencies.
+This page moved to [/operate/observability/health-checks](/operate/observability/health-checks).

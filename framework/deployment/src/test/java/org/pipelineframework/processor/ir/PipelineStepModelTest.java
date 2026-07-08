@@ -281,6 +281,7 @@ class PipelineStepModelTest {
                 .build();
 
         assertEquals(ServiceApiKind.REACTIVE, model.serviceApiKind());
+        assertEquals(ReactiveReturnKind.MUTINY_UNI, model.reactiveReturnKind());
     }
 
     @Test
@@ -322,6 +323,25 @@ class PipelineStepModelTest {
     }
 
     @Test
+    void builderCanSetReactiveReturnKind() {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+                .serviceName("TestService")
+                .generatedName("TestService")
+                .servicePackage("com.example")
+                .serviceClassName(ClassName.get("com.example", "TestService"))
+                .inputMapping(new TypeMapping(TypeName.INT, TypeName.INT, false))
+                .outputMapping(new TypeMapping(TypeName.INT, TypeName.INT, false))
+                .streamingShape(StreamingShape.UNARY_UNARY)
+                .enabledTargets(Set.of(GenerationTarget.CLIENT_STEP))
+                .executionMode(ExecutionMode.DEFAULT)
+                .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+                .reactiveReturnKind(ReactiveReturnKind.REACTOR_MONO)
+                .build();
+
+        assertEquals(ReactiveReturnKind.REACTOR_MONO, model.reactiveReturnKind());
+    }
+
+    @Test
     void toBuilderPreservesServiceApiKind() {
         PipelineStepModel original = new PipelineStepModel.Builder()
                 .serviceName("TestService")
@@ -340,6 +360,7 @@ class PipelineStepModelTest {
         PipelineStepModel rebuilt = original.toBuilder().build();
 
         assertEquals(ServiceApiKind.BLOCKING, rebuilt.serviceApiKind());
+        assertEquals(ReactiveReturnKind.MUTINY_UNI, rebuilt.reactiveReturnKind());
     }
 
     @Test
@@ -359,11 +380,13 @@ class PipelineStepModelTest {
                 .build();
 
         PipelineStepModel modified = original.toBuilder()
-                .serviceApiKind(ServiceApiKind.BLOCKING_ITERATOR)
+                .reactiveReturnKind(ReactiveReturnKind.REACTOR_MONO)
                 .build();
 
         assertEquals(ServiceApiKind.REACTIVE, original.serviceApiKind());
-        assertEquals(ServiceApiKind.BLOCKING_ITERATOR, modified.serviceApiKind());
+        assertEquals(ReactiveReturnKind.MUTINY_UNI, original.reactiveReturnKind());
+        assertEquals(ServiceApiKind.REACTIVE, modified.serviceApiKind());
+        assertEquals(ReactiveReturnKind.REACTOR_MONO, modified.reactiveReturnKind());
     }
 
     @Test
@@ -390,6 +413,7 @@ class PipelineStepModelTest {
                 null /* serviceApiKind */);
 
         assertEquals(ServiceApiKind.REACTIVE, model.serviceApiKind());
+        assertEquals(ReactiveReturnKind.MUTINY_UNI, model.reactiveReturnKind());
     }
 
     @Test
@@ -411,6 +435,7 @@ class PipelineStepModelTest {
         PipelineStepModel modified = original.withDeploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT);
 
         assertEquals(ServiceApiKind.BLOCKING_ITERATOR, modified.serviceApiKind());
+        assertEquals(ReactiveReturnKind.MUTINY_UNI, modified.reactiveReturnKind());
         assertEquals(DeploymentRole.ORCHESTRATOR_CLIENT, modified.deploymentRole());
     }
 

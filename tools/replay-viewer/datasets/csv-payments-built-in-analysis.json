@@ -1,0 +1,153 @@
+{
+  "sourceReplay": "tools/replay-viewer/datasets/csv-payments-built-in.json",
+  "generatedFrom": "examples/csv-payments/orchestrator-svc/target/test-e2e/replay/csv-payments-replay.json",
+  "inputFile": "examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv",
+  "artifactProviderPermitsPerSecond": 250,
+  "artifactRun": {
+    "providerPermitsPerSecond": 250,
+    "sourceReplay": "tools/replay-viewer/datasets/csv-payments-built-in.json",
+    "outputFile": "examples/csv-payments/orchestrator-svc/target/test-e2e/payments_1k.csv.out",
+    "itemCount": 1000,
+    "wallTimeSeconds": 13.426,
+    "throughputItemsPerSecond": 74.482,
+    "replayEventCount": 12007,
+    "replayDurationMs": 13426,
+    "replayEventCounts": {
+      "object_ingest_listed": 1,
+      "object_ingest_submitted": 1,
+      "start": 3001,
+      "emit": 4000,
+      "success": 3001,
+      "await_interaction_dispatched": 1000,
+      "await_unit_item_completed": 1000,
+      "await_unit_dispatch_complete": 1,
+      "object_publish_grouped": 1,
+      "object_publish_published": 1
+    },
+    "replayStepEventCounts": {
+      "ObjectIngest": 2,
+      "ProcessCsvPaymentsInput": 1002,
+      "PersistencePaymentRecordSideEffect": 3000,
+      "AwaitPaymentProvider": 2001,
+      "ProcessPaymentStatus": 3000,
+      "PersistencePaymentOutputSideEffect": 3000,
+      "ObjectPublish": 2
+    },
+    "outputSha256": "a29a39ea8ac078bfaff3d53236eefd8020922bfd89266f77ca3ed3826794e784",
+    "liveAwait": {
+      "firstStatusBeforeDispatchComplete": true,
+      "firstStatusBeforeAllAwaitCompletions": true,
+      "firstPublishAfterLastStatus": true,
+      "awaitExecutionWaitingEvents": 0,
+      "objectPublishGroupedEvents": 1,
+      "objectPublishPublishedEvents": 1
+    },
+    "timing": {
+      "firstInputSeconds": 0.19807075000000002,
+      "lastInputSeconds": 8.243330042,
+      "firstAwaitDispatchSeconds": 1.257546,
+      "lastAwaitDispatchSeconds": 11.320125,
+      "firstAwaitCompletionSeconds": 1.55874,
+      "lastAwaitCompletionSeconds": 13.400011,
+      "firstStatusSeconds": 1.574662292,
+      "lastStatusSeconds": 13.40859525,
+      "firstPublishSeconds": 13.416315,
+      "lastPublishSeconds": 13.425913
+    },
+    "awaitDispatchToCompletionLatency": {
+      "count": 1000,
+      "minMs": 301.194,
+      "p50Ms": 2613.892,
+      "p90Ms": 3125.096,
+      "p95Ms": 3147.899,
+      "p99Ms": 3172.407,
+      "maxMs": 3188.111,
+      "averageMs": 2277.271
+    }
+  },
+  "proofRuns": {
+    "monolith1k": {
+      "inputFile": "examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv",
+      "providerPermitsPerSecond": 250,
+      "pipelineSeconds": 9,
+      "mavenWallSeconds": 124.93,
+      "outputRecords": 1000,
+      "databaseRecords": 1000,
+      "demandPacerOverrides": false
+    },
+    "monolith10k": {
+      "inputFile": "examples/csv-payments/input-csv-file-processing-svc/csv/payments_10k.csv",
+      "providerPermitsPerSecond": 250,
+      "pipelineSeconds": 80,
+      "mavenWallSeconds": 200.11,
+      "outputRecords": 10000,
+      "databaseRecords": 10000,
+      "outputSha256": "cf8996e7d593202dd6f9f9405b82e95e69d48544c3edec830f64afabc703a023",
+      "demandPacerOverrides": false
+    },
+    "modularTelemetry1k": {
+      "inputFile": "examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv",
+      "providerPermitsPerSecond": 250,
+      "pipelineSeconds": 13,
+      "replayDurationSeconds": 13.426,
+      "mavenWallSeconds": 90.06,
+      "outputRecords": 1000,
+      "databaseRecords": 1000,
+      "demandPacerOverrides": false
+    }
+  },
+  "comparisonRuns": [
+    {
+      "providerPermitsPerSecond": 250,
+      "sourceReplay": "tools/replay-viewer/datasets/csv-payments-built-in.json",
+      "outputFile": "examples/csv-payments/orchestrator-svc/target/test-e2e/payments_1k.csv.out",
+      "itemCount": 1000,
+      "wallTimeSeconds": 13.426,
+      "throughputItemsPerSecond": 74.482,
+      "replayEventCount": 12007,
+      "replayDurationMs": 13426,
+      "replayEventCounts": {
+        "object_ingest_listed": 1,
+        "object_ingest_submitted": 1,
+        "start": 3001,
+        "emit": 4000,
+        "success": 3001,
+        "await_interaction_dispatched": 1000,
+        "await_unit_item_completed": 1000,
+        "await_unit_dispatch_complete": 1,
+        "object_publish_grouped": 1,
+        "object_publish_published": 1
+      },
+      "replayStepEventCounts": {
+        "ObjectIngest": 2,
+        "ProcessCsvPaymentsInput": 1002,
+        "PersistencePaymentRecordSideEffect": 3000,
+        "AwaitPaymentProvider": 2001,
+        "ProcessPaymentStatus": 3000,
+        "PersistencePaymentOutputSideEffect": 3000,
+        "ObjectPublish": 2
+      },
+      "outputSha256": "a29a39ea8ac078bfaff3d53236eefd8020922bfd89266f77ca3ed3826794e784",
+      "liveAwait": {
+        "firstStatusBeforeDispatchComplete": true,
+        "firstStatusBeforeAllAwaitCompletions": true,
+        "firstPublishAfterLastStatus": true,
+        "awaitExecutionWaitingEvents": 0,
+        "objectPublishGroupedEvents": 1,
+        "objectPublishPublishedEvents": 1
+      },
+      "timing": {
+        "firstInputSeconds": 0.19807075000000002,
+        "lastInputSeconds": 8.243330042,
+        "firstAwaitDispatchSeconds": 1.257546,
+        "lastAwaitDispatchSeconds": 11.320125,
+        "firstAwaitCompletionSeconds": 1.55874,
+        "lastAwaitCompletionSeconds": 13.400011,
+        "firstStatusSeconds": 1.574662292,
+        "lastStatusSeconds": 13.40859525,
+        "firstPublishSeconds": 13.416315,
+        "lastPublishSeconds": 13.425913
+      }
+    }
+  ]
+}

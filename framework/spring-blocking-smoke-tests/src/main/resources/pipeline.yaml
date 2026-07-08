@@ -1,0 +1,12 @@
+appName: "Spring Blocking REST Smoke"
+basePackage: "com.example.blocking"
+transport: "REST"
+platform: "COMPUTE"
+steps:
+  - name: "payment"
+    service: "com.example.blocking.service.PaymentService"
+    input: "com.example.blocking.domain.PaymentRecord"
+    inboundMapper: "com.example.blocking.mapper.PaymentRecordMapper"
+    output: "com.example.blocking.domain.PaymentStatus"
+    outboundMapper: "com.example.blocking.mapper.PaymentStatusMapper"
+    runOnVirtualThreads: true

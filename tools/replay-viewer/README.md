@@ -54,7 +54,7 @@ The local replay file picker is shown only while `Custom replay` is selected.
 
 If an imported replay predates `runParameters`, the viewer keeps working and shows `Run parameters unavailable`.
 
-When the viewer is hosted from the docs site, the shell exposes a persistent `Back to docs` link to `/guide/operations/observability/replay`. It stays visible even when the player chrome is hidden.
+When the viewer is hosted from the docs site, the shell exposes a persistent `Back to docs` link to `/operate/observability/replay`. It stays visible even when the player chrome is hidden.
 
 ## Built-in datasets
 

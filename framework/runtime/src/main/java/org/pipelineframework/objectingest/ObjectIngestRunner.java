@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.ServiceLoader;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -14,6 +15,8 @@ import org.pipelineframework.config.boundary.PipelineObjectInputConfig;
 import org.pipelineframework.config.boundary.PipelineObjectPayloadConfig;
 import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
+import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
+import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 
 /**
  * Runtime-neutral listing poller and async admission engine for object sources.
@@ -32,6 +35,7 @@ public final class ObjectIngestRunner implements AutoCloseable {
     private final boolean ownsExecutor;
     private volatile ScheduledFuture<?> future;
     private volatile ObjectSnapshotMapper<Object> resolvedMapper;
+    private volatile List<ObjectIngestInputAdapter<?, ?>> resolvedInputAdapters;
 
     public ObjectIngestRunner(
         PipelineYamlConfig config,
@@ -75,6 +79,25 @@ public final class ObjectIngestRunner implements AutoCloseable {
             .orElse(false);
     }
 
+    public static Optional<ObjectIngestRunner> loadFromDefaultConfig(
+        ObjectExecutionAdmission admission,
+        ObjectIngestTelemetry telemetry
+    ) {
+        Optional<java.nio.file.Path> configPath = locateConfig();
+        if (configPath.isEmpty()) {
+            return Optional.empty();
+        }
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath.get());
+        if (config.input() == null || config.input().object() == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new ObjectIngestRunner(
+            config,
+            ObjectSourceRegistry.load(),
+            admission,
+            telemetry));
+    }
+
     public synchronized void start() {
         if (!enabled()) {
             return;
@@ -97,13 +120,26 @@ public final class ObjectIngestRunner implements AutoCloseable {
         telemetry.listed(source.name(), source.provider(), items.size());
         int submitted = 0;
         int failed = 0;
+        java.util.ArrayList<String> executionIds = new java.util.ArrayList<>();
         for (ObjectSourceItem item : items) {
             try {
                 ObjectSnapshot snapshot = snapshot(source, provider, item);
                 Object domainInput = mapper().map(snapshot);
+                Object pipelineInput = adaptForAdmission(domainInput);
                 String idempotencyKey = ObjectIdentity.executionKey(source.name(), snapshot, source.identity());
-                admission.submit(domainInput, DEFAULT_TENANT_ID, idempotencyKey).await().atMost(Duration.ofSeconds(30));
-                telemetry.submitted(source.name(), source.provider(), item.key());
+                org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto accepted =
+                    admission.submit(pipelineInput, DEFAULT_TENANT_ID, idempotencyKey).await().atMost(Duration.ofSeconds(30));
+                if (accepted == null) {
+                    throw new IllegalStateException("Object execution admission returned null accepted response");
+                }
+                if (accepted.executionId() != null && !accepted.executionId().isBlank()) {
+                    executionIds.add(accepted.executionId());
+                }
+                if (accepted.duplicate()) {
+                    telemetry.duplicate(source.name(), source.provider(), item.key());
+                } else {
+                    telemetry.submitted(source.name(), source.provider(), item.key());
+                }
                 submitted++;
             } catch (RuntimeException e) {
                 telemetry.failed(source.name(), source.provider(), item.key(), e);
@@ -111,7 +147,7 @@ public final class ObjectIngestRunner implements AutoCloseable {
                 failed++;
             }
         }
-        return new PollResult(items.size(), submitted, failed);
+        return new PollResult(items.size(), submitted, failed, List.copyOf(executionIds));
     }
 
     @Override
@@ -172,6 +208,46 @@ public final class ObjectIngestRunner implements AutoCloseable {
         }
     }
 
+    private Object adaptForAdmission(Object domainInput) {
+        Objects.requireNonNull(domainInput, "Object Ingest mapped input must not be null");
+        for (ObjectIngestInputAdapter<?, ?> adapter : inputAdapters()) {
+            Class<?> domainType = adapter.domainType();
+            if (domainType != null && domainType.isInstance(domainInput)) {
+                return adaptWith(adapter, domainInput);
+            }
+        }
+        return domainInput;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object adaptWith(ObjectIngestInputAdapter<?, ?> adapter, Object domainInput) {
+        return ((ObjectIngestInputAdapter<Object, Object>) adapter).toPipelineInput(domainInput);
+    }
+
+    @SuppressWarnings("rawtypes")
+    private List<ObjectIngestInputAdapter<?, ?>> inputAdapters() {
+        List<ObjectIngestInputAdapter<?, ?>> adapters = resolvedInputAdapters;
+        if (adapters != null) {
+            return adapters;
+        }
+        synchronized (this) {
+            adapters = resolvedInputAdapters;
+            if (adapters != null) {
+                return adapters;
+            }
+            ClassLoader loader = Thread.currentThread().getContextClassLoader();
+            ServiceLoader<ObjectIngestInputAdapter> serviceLoader = loader == null
+                ? ServiceLoader.load(ObjectIngestInputAdapter.class)
+                : ServiceLoader.load(ObjectIngestInputAdapter.class, loader);
+            java.util.ArrayList<ObjectIngestInputAdapter<?, ?>> loaded = new java.util.ArrayList<>();
+            for (ObjectIngestInputAdapter<?, ?> adapter : serviceLoader) {
+                loaded.add(adapter);
+            }
+            resolvedInputAdapters = List.copyOf(loaded);
+            return resolvedInputAdapters;
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private ObjectSnapshotMapper<Object> createMapper(PipelineObjectInputConfig input) {
         String mapperClassName = ObjectText.normalize(input.mapper())
@@ -214,6 +290,26 @@ public final class ObjectIngestRunner implements AutoCloseable {
         return source;
     }
 
-    public record PollResult(int listed, int submitted, int failed) {
+    public record PollResult(int listed, int submitted, int failed, List<String> executionIds) {
+    }
+
+    private static Optional<java.nio.file.Path> locateConfig() {
+        Optional<String> explicit = firstNonBlank(System.getProperty("pipeline.config"), System.getenv("PIPELINE_CONFIG"));
+        if (explicit.isPresent()) {
+            return Optional.of(java.nio.file.Path.of(explicit.get()).toAbsolutePath().normalize());
+        }
+        try {
+            return new PipelineYamlConfigLocator().locate(java.nio.file.Path.of(System.getProperty("user.dir")));
+        } catch (RuntimeException e) {
+            LOG.debugf(e, "Object ingest pipeline config discovery failed");
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<String> firstNonBlank(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) {
+            return Optional.of(primary.trim());
+        }
+        return fallback == null || fallback.isBlank() ? Optional.empty() : Optional.of(fallback.trim());
     }
 }

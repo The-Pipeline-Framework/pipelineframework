@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXAMPLE_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 REPO_ROOT="$(cd "${EXAMPLE_DIR}/../.." && pwd)"
 MVN_BIN="${MVN_BIN:-${REPO_ROOT}/mvnw}"
+read -r -a EXTRA_MAVEN_ARGS <<< "${TPF_MAVEN_ARGS:-}"
 
 if [[ ! -x "${MVN_BIN}" ]]; then
   echo "ERROR: Maven wrapper not found or not executable at ${MVN_BIN}" >&2
@@ -38,6 +39,27 @@ export TPF_CSV_RUNTIME_IMAGE="${TPF_CSV_RUNTIME_IMAGE:-${expected_runtime_image}
 export TPF_CSV_PERSISTENCE_IMAGE="${TPF_CSV_PERSISTENCE_IMAGE:-${expected_persistence_image}}"
 export TPF_SKIP_FRAMEWORK_INSTALL="${TPF_SKIP_FRAMEWORK_INSTALL:-false}"
 
+run_with_retries() {
+  local description="$1"
+  shift
+  local max_attempts="${TPF_CONTAINER_IMAGE_BUILD_ATTEMPTS:-3}"
+  local retry_delay_seconds="${TPF_CONTAINER_IMAGE_BUILD_RETRY_DELAY_SECONDS:-10}"
+  local attempt=1
+  local status=0
+
+  while true; do
+    "$@" && return 0
+    status=$?
+    if (( attempt >= max_attempts )); then
+      echo "ERROR: ${description} failed after ${attempt} attempt(s)." >&2
+      return "${status}"
+    fi
+    echo "WARN: ${description} failed on attempt ${attempt}/${max_attempts}; retrying in ${retry_delay_seconds}s..." >&2
+    sleep "${retry_delay_seconds}"
+    attempt=$((attempt + 1))
+  done
+}
+
 require_matching_image() {
   local name="$1"
   local actual="$2"
@@ -56,15 +78,13 @@ require_matching_image "TPF_CSV_PERSISTENCE_IMAGE" "${TPF_CSV_PERSISTENCE_IMAGE}
 
 if [[ "${TPF_SKIP_FRAMEWORK_INSTALL}" != "true" ]]; then
   echo "Installing root project POM for local SNAPSHOT parent resolution..."
-  "${MVN_BIN}" -N install
+  "${MVN_BIN}" "${EXTRA_MAVEN_ARGS[@]}" -N install
   echo "Installing current framework SNAPSHOT for the CSV example build..."
-  "${MVN_BIN}" -f "${REPO_ROOT}/pom.xml" -N install
-  "${MVN_BIN}" -f "${REPO_ROOT}/framework/pom.xml" clean install
+  "${MVN_BIN}" "${EXTRA_MAVEN_ARGS[@]}" -f "${REPO_ROOT}/pom.xml" -N install
+  "${MVN_BIN}" "${EXTRA_MAVEN_ARGS[@]}" -f "${REPO_ROOT}/framework/pom.xml" clean install
 fi
 
-COMMON_BUILD_PROPS=(
-  -Dpipeline.config="${TPF_CSV_PIPELINE_CONFIG}"
-)
+COMMON_BUILD_PROPS=()
 
 if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "sqs" ]]; then
   COMMON_BUILD_PROPS+=(
@@ -84,24 +104,30 @@ else
 fi
 
 echo "Building CSV pipeline-runtime topology images with gRPC step transport and ${TPF_CSV_AWAIT_TRANSPORT} await config..."
-IMAGE_REGISTRY="${IMAGE_REGISTRY}" \
-IMAGE_GROUP="${IMAGE_GROUP}" \
-IMAGE_TAG="${IMAGE_TAG}" \
-PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT}" \
-PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG}" \
-"${EXAMPLE_DIR}/build-pipeline-runtime.sh" \
+run_with_retries "CSV pipeline-runtime topology image build" \
+  env \
+  IMAGE_REGISTRY="${IMAGE_REGISTRY}" \
+  IMAGE_GROUP="${IMAGE_GROUP}" \
+  IMAGE_TAG="${IMAGE_TAG}" \
+  PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT}" \
+  PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG}" \
+  "${EXAMPLE_DIR}/build-pipeline-runtime.sh" \
+  "${EXTRA_MAVEN_ARGS[@]}" \
   "${COMMON_BUILD_PROPS[@]}" \
   -DskipTests \
   -Dquarkus.container-image.build=true \
   -Dquarkus.container-image.push=false
 
 echo "Rebuilding CSV coordinator image with the long-running service entrypoint..."
-IMAGE_REGISTRY="${IMAGE_REGISTRY}" \
-IMAGE_GROUP="${IMAGE_GROUP}" \
-IMAGE_TAG="${IMAGE_TAG}" \
-PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT}" \
-PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG}" \
-"${EXAMPLE_DIR}/build-pipeline-runtime.sh" \
+run_with_retries "CSV coordinator service image build" \
+  env \
+  IMAGE_REGISTRY="${IMAGE_REGISTRY}" \
+  IMAGE_GROUP="${IMAGE_GROUP}" \
+  IMAGE_TAG="${IMAGE_TAG}" \
+  PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT}" \
+  PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG}" \
+  "${EXAMPLE_DIR}/build-pipeline-runtime.sh" \
+  "${EXTRA_MAVEN_ARGS[@]}" \
   -pl orchestrator-svc \
   "${COMMON_BUILD_PROPS[@]}" \
   -DskipTests \

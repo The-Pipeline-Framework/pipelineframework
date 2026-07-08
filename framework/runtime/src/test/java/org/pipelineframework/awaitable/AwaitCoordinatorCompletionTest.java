@@ -15,6 +15,7 @@ import jakarta.enterprise.inject.UnsatisfiedResolutionException;
 import jakarta.enterprise.util.TypeLiteral;
 
 import com.google.protobuf.DescriptorProtos;
+import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 import org.pipelineframework.awaitable.spi.AwaitTransportAdapter;
@@ -375,6 +376,38 @@ class AwaitCoordinatorCompletionTest {
         assertTrue(error.getMessage().contains("pipeline.orchestrator.await-aggregate-max-output-items=1"));
     }
 
+    @Test
+    void dispatchReturnsCompletedRecordWhenCompletionWinsMetadataRace() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        coordinator.adapters = new SimpleInstance<>(List.of(new FastCompletionAdapter(coordinator)));
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "FastAwait",
+            java.util.Map.class.getName(),
+            java.util.Map.class.getName(),
+            java.time.Duration.ofMinutes(10),
+            "interactionId",
+            "fast-completion",
+            Map.of(),
+            List.of("paymentRecordId"));
+        AwaitCreateResult created = coordinator.createOrGet(
+            descriptor,
+            "tenant-1",
+            "exec-1",
+            2,
+            "cause-1",
+            java.util.Map.of("paymentRecordId", "p-1"),
+            null,
+            null).await().indefinitely();
+
+        AwaitInteractionRecord dispatched = coordinator.dispatch(descriptor, created.record()).await().indefinitely();
+
+        assertEquals(AwaitInteractionStatus.COMPLETED, dispatched.status());
+        assertEquals(
+            AwaitInteractionStatus.COMPLETED,
+            store.get("tenant-1", created.record().interactionId()).await().indefinitely().orElseThrow().status());
+    }
+
     private static AwaitCoordinator coordinator(InMemoryAwaitInteractionStore store) {
         return coordinator(store, null);
     }
@@ -486,6 +519,29 @@ class AwaitCoordinatorCompletionTest {
         @Override
         public java.util.stream.Stream<T> stream() {
             return items.stream();
+        }
+    }
+
+    private record FastCompletionAdapter(AwaitCoordinator coordinator) implements AwaitTransportAdapter<Object> {
+
+        @Override
+        public String type() {
+            return "fast-completion";
+        }
+
+        @Override
+        public Uni<AwaitDispatchResult> dispatch(AwaitDispatchRequest<Object> request) {
+            AwaitInteractionRecord interaction = request.interaction();
+            AwaitCompletionCommand completion = new AwaitCompletionCommand(
+                interaction.tenantId(),
+                interaction.interactionId(),
+                null,
+                "completion-" + interaction.interactionId(),
+                Map.of("status", "approved"),
+                "fast-provider",
+                System.currentTimeMillis());
+            return coordinator.complete(completion)
+                .replaceWith(new AwaitDispatchResult(Map.of("provider", "fast")));
         }
     }
 }

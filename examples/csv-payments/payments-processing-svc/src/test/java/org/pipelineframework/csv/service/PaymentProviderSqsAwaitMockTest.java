@@ -19,6 +19,7 @@ package org.pipelineframework.csv.service;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
@@ -27,6 +28,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Currency;
 import java.util.Map;
@@ -36,11 +38,18 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.pipelineframework.awaitable.AwaitPayloadSupport;
 import org.pipelineframework.awaitable.sqs.SqsAwaitCompletionEnvelope;
 import org.pipelineframework.awaitable.sqs.SqsAwaitDispatchEnvelope;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.csv.common.domain.ApprovedPaymentStatus;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
+import org.pipelineframework.csv.common.mapper.ApprovedPaymentStatusMapperImpl;
+import org.pipelineframework.csv.common.mapper.CommonConverters;
+import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
+import org.pipelineframework.csv.common.mapper.UnapprovedPaymentStatusMapperImpl;
+import org.pipelineframework.csv.grpc.PipelineTypes;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
 import software.amazon.awssdk.services.sqs.model.Message;
@@ -61,7 +70,8 @@ class PaymentProviderSqsAwaitMockTest {
     mockProvider = new PaymentProviderSqsAwaitMock(
         paymentProvider,
         new FakePaymentProviderConfig(),
-        client);
+        client,
+        paymentStatusMapper());
   }
 
   @Test
@@ -91,7 +101,8 @@ class PaymentProviderSqsAwaitMockTest {
             && completion.correlationId().equals("corr-1")
             && completion.resumeToken().equals("resume-token")
             && completion.idempotencyKey().equals("interaction-1")
-            && completion.actor().equals("csv-payments-sqs-mock-provider");
+            && completion.actor().equals("csv-payments-sqs-mock-provider")
+            && assertApprovedPayload(completion);
       } catch (Exception e) {
         throw new AssertionError(e);
       }
@@ -235,6 +246,18 @@ class PaymentProviderSqsAwaitMockTest {
         .build();
   }
 
+  private static boolean assertApprovedPayload(SqsAwaitCompletionEnvelope completion) {
+    Map<?, ?> payload = (Map<?, ?>) completion.responsePayload();
+    if (!payload.containsKey("approved")) {
+      return false;
+    }
+    PipelineTypes.PaymentStatus rebuilt = (PipelineTypes.PaymentStatus)
+        AwaitPayloadSupport.coercePayload(payload, PipelineTypes.PaymentStatus.class);
+    assertTrue(rebuilt.hasApproved());
+    assertEquals("provider-ref", rebuilt.getApproved().getReference());
+    return true;
+  }
+
   private static String dispatchJson(PaymentRecord paymentRecord) throws Exception {
     SqsAwaitDispatchEnvelope dispatch = new SqsAwaitDispatchEnvelope(
         "tenant-1",
@@ -257,20 +280,22 @@ class PaymentProviderSqsAwaitMockTest {
         .setRecipient("alice")
         .setAmount(new BigDecimal("12.34"))
         .setCurrency(Currency.getInstance("EUR"));
+    paymentRecord.setCsvPaymentsInputFilePath(Path.of("/tmp/payments.csv"));
     paymentRecord.setId(UUID.randomUUID());
     return paymentRecord;
   }
 
   private static PaymentStatus validPaymentStatus(PaymentRecord paymentRecord) {
-    return new PaymentStatus()
-        .setReference("provider-ref")
-        .setStatus("Completed")
-        .setMessage("settled")
-        .setFee(new BigDecimal("0.12"))
-        .setConversationId(UUID.randomUUID())
-        .setStatusCode(1000L)
-        .setPaymentRecord(paymentRecord)
-        .setPaymentRecordId(paymentRecord.getId());
+    ApprovedPaymentStatus paymentStatus = new ApprovedPaymentStatus();
+    paymentStatus.setReference("provider-ref");
+    paymentStatus.setStatus("Completed");
+    paymentStatus.setMessage("settled");
+    paymentStatus.setFee(new BigDecimal("0.12"));
+    paymentStatus.setConversationId(UUID.randomUUID());
+    paymentStatus.setStatusCode(1000L);
+    paymentStatus.setPaymentRecord(paymentRecord);
+    paymentStatus.setPaymentRecordId(paymentRecord.getId());
+    return paymentStatus;
   }
 
   private static final class FakePaymentProviderConfig implements PaymentProviderConfig {
@@ -347,6 +372,31 @@ class PaymentProviderSqsAwaitMockTest {
           return 1;
         }
       };
+    }
+  }
+
+  private static PaymentStatusMapper paymentStatusMapper() {
+    CommonConverters commonConverters = new CommonConverters();
+
+    ApprovedPaymentStatusMapperImpl approved = new ApprovedPaymentStatusMapperImpl();
+    setField(approved, "commonConverters", commonConverters);
+
+    UnapprovedPaymentStatusMapperImpl unapproved = new UnapprovedPaymentStatusMapperImpl();
+    setField(unapproved, "commonConverters", commonConverters);
+
+    PaymentStatusMapper mapper = new PaymentStatusMapper();
+    setField(mapper, "approvedMapper", approved);
+    setField(mapper, "unapprovedMapper", unapproved);
+    return mapper;
+  }
+
+  private static void setField(Object target, String fieldName, Object value) {
+    try {
+      java.lang.reflect.Field field = target.getClass().getDeclaredField(fieldName);
+      field.setAccessible(true);
+      field.set(target, value);
+    } catch (ReflectiveOperationException e) {
+      throw new IllegalStateException("Failed to set field " + fieldName, e);
     }
   }
 }

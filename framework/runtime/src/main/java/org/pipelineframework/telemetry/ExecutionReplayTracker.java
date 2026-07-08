@@ -157,6 +157,100 @@ final class ExecutionReplayTracker {
         addAwaitSpanEvent(lifecycleEvent);
     }
 
+    void recordConnectorEvent(
+        String connectorStep,
+        String service,
+        String eventName,
+        String from,
+        String to,
+        Map<String, String> attributes,
+        Instant occurredAt
+    ) {
+        if (!enabled() || connectorStep == null || connectorStep.isBlank() || eventName == null || eventName.isBlank()) {
+            return;
+        }
+        PipelineReplayTopology.Step step = topology.steps() == null
+            ? null
+            : topology.steps().stream()
+                .filter(candidate -> connectorStep.equals(candidate.step()))
+                .findFirst()
+                .orElse(null);
+        String resolvedService = service == null || service.isBlank()
+            ? (step == null ? connectorStep : step.service())
+            : service;
+        PipelineExecutionEvent event = new PipelineExecutionEvent(
+            null,
+            null,
+            null,
+            null,
+            topology.pipeline(),
+            connectorStep,
+            resolvedService,
+            eventName,
+            0d,
+            0d,
+            0L,
+            from,
+            to,
+            step == null ? "one-to-one" : step.cardinality(),
+            List.of(),
+            null,
+            null,
+            null,
+            null,
+            attributes == null ? Map.of() : Map.copyOf(attributes));
+        exporter.emitControlEvent(topology.pipeline(), occurredAt, topology, event);
+    }
+
+    void recordSkip(
+        String runtimeStepClass,
+        PipelineTelemetry.RunContext runContext,
+        Object inputItem,
+        String currentType,
+        List<String> acceptedTypes
+    ) {
+        if (!enabled() || runtimeStepClass == null || runContext == null || runContext.replayState() == null) {
+            return;
+        }
+        PipelineReplayTopology.Step descriptor = descriptor(runtimeStepClass);
+        if (descriptor == null) {
+            return;
+        }
+        PipelineReplayTopology.Transition inbound = inbound(runtimeStepClass);
+        ItemLineage lineage = inputItem == null ? null : lookupOrCreateLineage(runContext, inputItem);
+        double nowSeconds = secondsSinceRunStart(runContext, System.nanoTime());
+        Map<String, String> attributes = new LinkedHashMap<>();
+        attributes.put("reason", "not_applicable");
+        if (currentType != null && !currentType.isBlank()) {
+            attributes.put("currentType", currentType);
+        }
+        if (acceptedTypes != null && !acceptedTypes.isEmpty()) {
+            attributes.put("acceptedTypes", String.join(",", acceptedTypes));
+        }
+        PipelineExecutionEvent event = new PipelineExecutionEvent(
+            lineage == null ? null : lineage.traceId(),
+            null,
+            null,
+            lineage == null ? null : lineage.itemId(),
+            topology.pipeline(),
+            descriptor.step(),
+            descriptor.service(),
+            "skip",
+            nowSeconds,
+            nowSeconds,
+            0L,
+            inbound == null ? null : inbound.from(),
+            descriptor.step(),
+            descriptor.cardinality(),
+            lineage == null ? List.of() : lineage.parentItemIds(),
+            runContext.replayState().eventSequence().incrementAndGet(),
+            null,
+            null,
+            null,
+            Map.copyOf(attributes));
+        exporter.emit(runContext.runId(), event);
+    }
+
     StepExecutionScope beginStep(
         String runtimeStepClass,
         PipelineTelemetry.RunContext runContext,

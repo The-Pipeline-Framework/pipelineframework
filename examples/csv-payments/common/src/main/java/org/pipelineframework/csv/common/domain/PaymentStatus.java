@@ -18,19 +18,29 @@ package org.pipelineframework.csv.common.domain;
 
 import static java.text.MessageFormat.format;
 
-import jakarta.persistence.*;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import jakarta.persistence.Column;
+import jakarta.persistence.MappedSuperclass;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Transient;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.UUID;
-import lombok.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.NonNull;
+import lombok.Setter;
 import lombok.experimental.Accessors;
 
-@Entity
+@MappedSuperclass
 @Getter
 @Setter
 @Accessors(chain = true)
 @NoArgsConstructor
-public class PaymentStatus extends BaseEntity implements Serializable {
+@JsonDeserialize(using = PaymentStatusJsonDeserializer.class)
+public abstract sealed class PaymentStatus extends BaseEntity implements Serializable
+    permits ApprovedPaymentStatus, UnapprovedPaymentStatus {
+
   private String customerReference;
 
   @NonNull
@@ -48,17 +58,17 @@ public class PaymentStatus extends BaseEntity implements Serializable {
   @NonNull private UUID paymentRecordId;
 
   @PrePersist
-  protected void useStablePaymentStatusId() {
+  public void useStablePaymentStatusId() {
     CsvPaymentsStableIdSupport.stableId(
-            "PaymentStatus", paymentRecordId, reference, status, statusCode, message)
+            getClass().getSimpleName(), paymentRecordId, reference, status, statusCode, message)
         .ifPresent(stableId -> id = stableId);
   }
 
   @Override
   public String toString() {
     return format(
-        "PaymentStatus'{'customerReference=''{0}'', reference=''{1}'', message=''{2}'', status={3}, fee={4}, recordId={5}'}'",
-        customerReference, reference, message, status, fee, paymentRecordId);
+        "{0}'{'reference=''{1}'', message=''{2}'', status=''{3}'', fee={4}, recordId={5}'}'",
+        getClass().getSimpleName(), reference, message, status, fee, paymentRecordId);
   }
 
   @Override

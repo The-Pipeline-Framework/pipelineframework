@@ -30,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.logging.Logger;
@@ -37,12 +38,18 @@ import java.util.logging.Logger;
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
 import org.pipelineframework.config.boundary.PipelineCheckpointConfig;
+import org.pipelineframework.config.pipeline.BranchRoutingRules;
 import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
 import org.pipelineframework.config.boundary.PipelineObjectFilterConfig;
 import org.pipelineframework.config.boundary.PipelineObjectIdentityConfig;
 import org.pipelineframework.config.boundary.PipelineObjectInputConfig;
+import org.pipelineframework.config.boundary.PipelineObjectNamingConfig;
+import org.pipelineframework.config.boundary.PipelineObjectOutputConfig;
 import org.pipelineframework.config.boundary.PipelineObjectPayloadConfig;
 import org.pipelineframework.config.boundary.PipelineObjectPollConfig;
+import org.pipelineframework.config.boundary.PipelineObjectPublishConfig;
+import org.pipelineframework.config.boundary.PipelineObjectPublishGroupingConfig;
+import org.pipelineframework.config.boundary.PipelineObjectPublishPayloadConfig;
 import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
 import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
 import org.pipelineframework.config.boundary.PipelineSubscriptionConfig;
@@ -114,13 +121,15 @@ public class PipelineTemplateConfigLoader {
             ? readUnions(rootMap)
             : new LinkedHashMap<>();
         Map<String, PipelineObjectSourceConfig> sources = readSources(rootMap);
+        Map<String, PipelineObjectPublishConfig> publish = readPublishTargets(rootMap);
         List<PipelineTemplateStep> steps = readSteps(rootMap, version);
         Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
         PipelineTemplateMaterialization materialization = readMaterialization(rootMap);
         rejectLegacyConnectors(rootMap);
         PipelineInputBoundaryConfig input = readInputBoundary(rootMap);
         validateObjectInputSource(input, sources);
-        PipelineOutputBoundaryConfig output = readOutputBoundary(rootMap);
+        PipelineOutputBoundaryConfig output = readOutputBoundary(rootMap).orElse(null);
+        validateObjectOutputTarget(output, publish);
 
         if (version >= 2) {
             collectInlineMessages(rawMessages, steps);
@@ -137,6 +146,7 @@ public class PipelineTemplateConfigLoader {
                 normalizedMessages,
                 normalizedUnions,
                 sources,
+                publish,
                 steps,
                 aspects,
                 input,
@@ -153,6 +163,7 @@ public class PipelineTemplateConfigLoader {
             Map.of(),
             Map.of(),
             sources,
+            publish,
             steps,
             aspects,
             input,
@@ -527,7 +538,9 @@ public class PipelineTemplateConfigLoader {
                 step.outputTypeName(),
                 outputFields,
                 step.outboundMapper(),
-                step.execution()));
+                step.execution(),
+                step.accepts(),
+                step.terminal()));
         }
         return resolved;
     }
@@ -618,6 +631,7 @@ public class PipelineTemplateConfigLoader {
                 continue;
             }
             String name = readString(stepMap, "name");
+            rejectBranchPredicateKeys(stepMap, name);
             String cardinality = readString(stepMap, "cardinality");
             String inputType = readString(stepMap, "inputTypeName");
             String outputType = readString(stepMap, "outputTypeName");
@@ -626,6 +640,12 @@ public class PipelineTemplateConfigLoader {
             String inboundMapper = readString(stepMap, "inboundMapper");
             String outboundMapper = readString(stepMap, "outboundMapper");
             PipelineTemplateStepExecution execution = readExecution(stepMap.get("execution"), version, name);
+            List<String> accepts = readStringList(stepMap, "accepts");
+            boolean terminal = readBoolean(stepMap, "terminal", false);
+            if (version < 2 && (stepMap.containsKey("accepts") || terminal)) {
+                throw new IllegalStateException(
+                    "Step '" + name + "' declares accepts/terminal, but branch-aware routing requires version: 2");
+            }
             stepInfos.add(new PipelineTemplateStep(
                 name,
                 cardinality,
@@ -635,9 +655,15 @@ public class PipelineTemplateConfigLoader {
                 outputType,
                 outputFields,
                 outboundMapper,
-                execution));
+                execution,
+                accepts,
+                terminal));
         }
         return stepInfos;
+    }
+
+    private void rejectBranchPredicateKeys(Map<?, ?> stepMap, String stepName) {
+        BranchRoutingRules.rejectPredicateKeys(stepMap, stepName, IllegalStateException::new);
     }
 
     private PipelineTemplateStepExecution readExecution(Object executionObj, int version, String stepName) {
@@ -686,9 +712,11 @@ public class PipelineTemplateConfigLoader {
         if (execution.operatorId() == null) {
             throw new IllegalStateException("Step '" + stepName + "' remote execution requires execution.operatorId");
         }
-        if (!"PROTOBUF_HTTP_V1".equalsIgnoreCase(execution.protocol())) {
+        if (!"PROTOBUF_HTTP_V1".equalsIgnoreCase(execution.protocol())
+            && !"ENVELOPE_HTTP_V1".equalsIgnoreCase(execution.protocol())) {
             throw new IllegalStateException(
-                "Step '" + stepName + "' remote execution requires execution.protocol=PROTOBUF_HTTP_V1");
+                "Step '" + stepName
+                    + "' remote execution requires execution.protocol=PROTOBUF_HTTP_V1 or ENVELOPE_HTTP_V1");
         }
         PipelineTemplateRemoteTarget target = execution.target();
         if (target == null) {
@@ -1007,6 +1035,70 @@ public class PipelineTemplateConfigLoader {
         return Map.copyOf(sources);
     }
 
+    private Map<String, PipelineObjectPublishConfig> readPublishTargets(Map<?, ?> rootMap) {
+        Object publishObj = rootMap.get("publish");
+        if (publishObj == null) {
+            return Map.of();
+        }
+        if (!(publishObj instanceof Map<?, ?> publishMap)) {
+            throw new IllegalArgumentException("pipeline publish targets must be defined as a YAML map");
+        }
+        Map<String, PipelineObjectPublishConfig> targets = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : publishMap.entrySet()) {
+            String name = stringify(entry.getKey());
+            if (name == null) {
+                throw new IllegalArgumentException("pipeline publish target name must not be blank");
+            }
+            if (!(entry.getValue() instanceof Map<?, ?> targetMap)) {
+                throw new IllegalArgumentException("publish target '" + name + "' must be declared as a YAML map");
+            }
+            targets.put(name, new PipelineObjectPublishConfig(
+                name,
+                readRequiredString(targetMap, "kind", "publish target '" + name + "'"),
+                readRequiredString(targetMap, "provider", "publish target '" + name + "'"),
+                readObjectMap(targetMap, "location"),
+                readObjectNaming(targetMap),
+                readObjectPublishPayload(targetMap),
+                readObjectPublishGrouping(targetMap)));
+        }
+        return Map.copyOf(targets);
+    }
+
+    private PipelineObjectNamingConfig readObjectNaming(Map<?, ?> targetMap) {
+        Object namingObj = targetMap.get("naming");
+        if (namingObj == null) {
+            return PipelineObjectNamingConfig.defaults();
+        }
+        if (!(namingObj instanceof Map<?, ?> namingMap)) {
+            throw new IllegalArgumentException("publish.naming must be declared as a YAML map");
+        }
+        return new PipelineObjectNamingConfig(readString(namingMap, "keyTemplate"));
+    }
+
+    private PipelineObjectPublishPayloadConfig readObjectPublishPayload(Map<?, ?> targetMap) {
+        Object payloadObj = targetMap.get("payload");
+        if (payloadObj == null) {
+            return PipelineObjectPublishPayloadConfig.defaults();
+        }
+        if (!(payloadObj instanceof Map<?, ?> payloadMap)) {
+            throw new IllegalArgumentException("publish.payload must be declared as a YAML map");
+        }
+        return new PipelineObjectPublishPayloadConfig(
+            readString(payloadMap, "contentType"),
+            readCharset(payloadMap, "charset", StandardCharsets.UTF_8));
+    }
+
+    private PipelineObjectPublishGroupingConfig readObjectPublishGrouping(Map<?, ?> targetMap) {
+        Object groupingObj = targetMap.get("grouping");
+        if (groupingObj == null) {
+            return PipelineObjectPublishGroupingConfig.defaults();
+        }
+        if (!(groupingObj instanceof Map<?, ?> groupingMap)) {
+            throw new IllegalArgumentException("publish.grouping must be declared as a YAML map");
+        }
+        return new PipelineObjectPublishGroupingConfig(readInt(groupingMap, "maxOpenGroups", 32));
+    }
+
     private PipelineObjectFilterConfig readObjectFilter(Map<?, ?> sourceMap) {
         Object filterObj = sourceMap.get("filter");
         if (filterObj == null) {
@@ -1285,28 +1377,77 @@ public class PipelineTemplateConfigLoader {
         }
     }
 
-    private PipelineOutputBoundaryConfig readOutputBoundary(Map<?, ?> rootMap) {
+    private Optional<PipelineOutputBoundaryConfig> readOutputBoundary(Map<?, ?> rootMap) {
         Object outputObj = rootMap.get("output");
         if (outputObj == null) {
-            return null;
+            return Optional.empty();
         }
         if (!(outputObj instanceof Map<?, ?> outputMap)) {
             throw new IllegalArgumentException("pipeline output boundary must be defined as a YAML map");
         }
         Object checkpointObj = outputMap.get("checkpoint");
-        if (checkpointObj == null) {
-            return null;
+        Object objectObj = outputMap.get("object");
+        boolean hasInlineObject = outputMap.get("to") != null || outputMap.get("consumes") != null;
+        if (checkpointObj != null && (objectObj != null || hasInlineObject)) {
+            throw new IllegalArgumentException("pipeline output boundary cannot declare both checkpoint and object");
         }
-        if (!(checkpointObj instanceof Map<?, ?> checkpointMap)) {
-            throw new IllegalArgumentException("output.checkpoint must be declared as a YAML map");
+        if (objectObj != null && hasInlineObject) {
+            throw new IllegalArgumentException("pipeline output boundary cannot mix output.object with inline to/consumes");
         }
-        Object idempotencyKeyFields = checkpointMap.get("idempotencyKeyFields");
-        if (idempotencyKeyFields != null && !(idempotencyKeyFields instanceof Iterable<?>)) {
-            throw new IllegalArgumentException("output.checkpoint.idempotencyKeyFields must be declared as a YAML list");
+        if (checkpointObj != null) {
+            if (!(checkpointObj instanceof Map<?, ?> checkpointMap)) {
+                throw new IllegalArgumentException("output.checkpoint must be declared as a YAML map");
+            }
+            Object idempotencyKeyFields = checkpointMap.get("idempotencyKeyFields");
+            if (idempotencyKeyFields != null && !(idempotencyKeyFields instanceof Iterable<?>)) {
+                throw new IllegalArgumentException("output.checkpoint.idempotencyKeyFields must be declared as a YAML list");
+            }
+            return Optional.of(new PipelineOutputBoundaryConfig(new PipelineCheckpointConfig(
+                readRequiredString(checkpointMap, "publication", "output.checkpoint"),
+                readStringList(checkpointMap, "idempotencyKeyFields"))));
         }
-        return new PipelineOutputBoundaryConfig(new PipelineCheckpointConfig(
-            readRequiredString(checkpointMap, "publication", "output.checkpoint"),
-            readStringList(checkpointMap, "idempotencyKeyFields")));
+        if (objectObj != null || hasInlineObject) {
+            Map<?, ?> objectMap;
+            if (objectObj == null) {
+                objectMap = outputMap;
+            } else if (objectObj instanceof Map<?, ?> map) {
+                objectMap = map;
+            } else {
+                throw new IllegalArgumentException("output.object must be declared as a YAML map");
+            }
+            return Optional.of(new PipelineOutputBoundaryConfig(null, readObjectOutput(objectMap)));
+        }
+        return Optional.empty();
+    }
+
+    private PipelineObjectOutputConfig readObjectOutput(Map<?, ?> outputMap) {
+        Object consumesObj = outputMap.get("consumes");
+        if (!(consumesObj instanceof Map<?, ?> consumesMap)) {
+            throw new IllegalArgumentException("output.object.consumes must be declared as a YAML map");
+        }
+        String target = readString(outputMap, "target");
+        String to = readString(outputMap, "to");
+        if (target != null && to != null) {
+            throw new IllegalArgumentException("output.object must declare only one of target or to");
+        }
+        String resolvedTarget = firstNonBlank(target, to);
+        if (resolvedTarget == null || resolvedTarget.isBlank()) {
+            throw new IllegalArgumentException("output.object must declare target or to");
+        }
+        return new PipelineObjectOutputConfig(
+            resolvedTarget,
+            readRequiredString(consumesMap, "type", "output.object.consumes"),
+            readString(consumesMap, "typeName"),
+            readRequiredString(consumesMap, "mapper", "output.object.consumes"));
+    }
+
+    private void validateObjectOutputTarget(
+        PipelineOutputBoundaryConfig output,
+        Map<String, PipelineObjectPublishConfig> publish
+    ) {
+        if (output != null && output.object() != null && !publish.containsKey(output.object().target())) {
+            throw new IllegalArgumentException("output.object publish target not found: " + output.object().target());
+        }
     }
 
     private void rejectLegacyConnectors(Map<?, ?> rootMap) {

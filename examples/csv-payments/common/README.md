@@ -13,8 +13,11 @@ The Common Module is a shared library component that provides domain models, dat
 Shared entity classes that represent the core business concepts:
 
 - `PaymentRecord`: Represents an individual payment entry from input CSV files
-- `PaymentStatus`: Contains status information for processed payments
+- `PaymentStatus`: Sealed base type for processed payment outcomes
+- `ApprovedPaymentStatus`: Approved payment outcome
+- `UnapprovedPaymentStatus`: Unapproved payment outcome
 - `PaymentOutput`: Represents a payment entry for output CSV files
+- `PaymentOutputBranch`: Sealed base type for branch-local output rows before terminal merge
 - `CsvPaymentsInputFile`: Wrapper for input CSV files
 - `CsvPaymentsOutputFile`: Wrapper for output CSV files
 - `CsvFolder`: Represents a folder containing CSV files
@@ -24,7 +27,6 @@ Shared entity classes that represent the core business concepts:
 Lightweight data containers for transferring data between services:
 
 - `PaymentRecordDto`
-- `PaymentStatusDto`
 - `PaymentOutputDto`
 
 ### Mappers
@@ -32,7 +34,8 @@ Lightweight data containers for transferring data between services:
 MapStruct-based mappers for converting between domain models, DTOs, and gRPC messages:
 
 - `PaymentRecordMapper`
-- `PaymentStatusMapper`
+- `ApprovedPaymentStatusMapper`
+- `UnapprovedPaymentStatusMapper`
 - `PaymentOutputMapper`
 - `CsvPaymentsInputFileMapper`
 - `CsvPaymentsOutputFileMapper`

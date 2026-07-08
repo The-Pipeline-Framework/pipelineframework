@@ -22,6 +22,7 @@ import java.util.concurrent.CancellationException;
 
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
+import io.smallrye.mutiny.CompositeException;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
@@ -67,6 +68,16 @@ class ConfigurableStepTest {
         TestStepOneToOne step = new TestStepOneToOne();
 
         assertFalse(step.shouldRetry(new AwaitSuspendedException("tenant", "execution", "interaction", 1)));
+    }
+
+    @Test
+    void shouldRetryRejectsAwaitSuspensionWrappedByCompositeException() {
+        TestStepOneToOne step = new TestStepOneToOne();
+        CompositeException failure = new CompositeException(
+            new AwaitSuspendedException("tenant", "execution", "interaction", 1),
+            new IllegalStateException("secondary"));
+
+        assertFalse(step.shouldRetry(failure));
     }
 
     @Test

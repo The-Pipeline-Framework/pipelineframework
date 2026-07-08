@@ -23,9 +23,16 @@ import java.util.UUID;
 import lombok.Builder;
 import lombok.Value;
 
+/**
+ * Legacy DTO for the direct CSV output-file step.
+ *
+ * @deprecated Use Object Publish with {@code CsvPaymentOutputPublishMapper}; published files are represented as
+ *             framework-owned object writes instead of this DTO.
+ */
 @Value
 @Builder
 @JsonDeserialize(builder = CsvPaymentsOutputFileDto.CsvPaymentsInputFileDtoBuilder.class)
+@Deprecated(since = "26.6.2", forRemoval = true)
 public class CsvPaymentsOutputFileDto {
   UUID id;
   Path filepath;

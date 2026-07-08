@@ -140,10 +140,21 @@ public class AwaitCoordinator {
                     claimedInteraction.version(),
                     result.metadata(),
                     System.currentTimeMillis()))
-                .onItem().transform(optional -> optional.orElseThrow(() ->
-                    new IllegalStateException("Await interaction metadata update lost OCC race: "
-                        + claimedInteraction.interactionId())))
+                .onItem().transformToUni(optional -> optional
+                    .map(Uni.createFrom()::item)
+                    .orElseGet(() -> resolvedAfterDispatchMetadataRace(claimedInteraction)))
                 .onItem().invoke(this::recordInteractionDispatched));
+    }
+
+    private Uni<AwaitInteractionRecord> resolvedAfterDispatchMetadataRace(AwaitInteractionRecord claimedInteraction) {
+        return interactionStore().get(claimedInteraction.tenantId(), claimedInteraction.interactionId())
+            .onItem().transform(optional -> {
+                if (optional.isPresent() && optional.get().status().terminal()) {
+                    return optional.get();
+                }
+                throw new IllegalStateException("Await interaction metadata update lost OCC race: "
+                    + claimedInteraction.interactionId());
+            });
     }
 
     public Uni<AwaitCompletionResult> complete(AwaitCompletionCommand command) {
@@ -329,6 +340,7 @@ public class AwaitCoordinator {
     }
 
     private void recordInteractionDispatched(AwaitInteractionRecord record) {
+        AwaitCompletionMetrics.recordInteractionDispatched(record);
         recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
             AwaitReplayLifecycleEvent.INTERACTION_DISPATCHED,
             record.executionId(),
@@ -346,6 +358,7 @@ public class AwaitCoordinator {
     }
 
     private void recordUnitDispatchComplete(AwaitUnitRecord unit) {
+        AwaitCompletionMetrics.recordUnitDispatchComplete(unit);
         recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
             AwaitReplayLifecycleEvent.UNIT_DISPATCH_COMPLETE,
             unit.executionId(),
@@ -363,7 +376,9 @@ public class AwaitCoordinator {
     }
 
     private void recordCompletionLifecycle(AwaitInteractionRecord record, AwaitUnitRecord unit) {
+        AwaitCompletionMetrics.recordCompletionAdmitted(record);
         if (record.itemInteraction()) {
+            AwaitCompletionMetrics.recordItemCompleted(record, unit);
             recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
                 AwaitReplayLifecycleEvent.UNIT_ITEM_COMPLETED,
                 record.executionId(),
@@ -398,6 +413,7 @@ public class AwaitCoordinator {
     }
 
     private void recordUnitTerminal(AwaitInteractionRecord record, AwaitUnitRecord unit) {
+        AwaitCompletionMetrics.recordUnitTerminal(record, unit);
         recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
             AwaitReplayLifecycleEvent.UNIT_TERMINAL,
             unit.executionId(),

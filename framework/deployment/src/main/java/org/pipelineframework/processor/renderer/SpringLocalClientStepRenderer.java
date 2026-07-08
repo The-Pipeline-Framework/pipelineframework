@@ -29,9 +29,11 @@ import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import org.pipelineframework.processor.PipelineStepProcessor;
+import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.LocalBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.ReactiveReturnKind;
 import org.pipelineframework.processor.ir.ServiceApiKind;
 import org.pipelineframework.processor.ir.StreamingShape;
 
@@ -50,13 +52,13 @@ public class SpringLocalClientStepRenderer implements PipelineRenderer<LocalBind
         PipelineStepModel model = binding.model();
         validateSupported(model);
 
-        TypeSpec clientStepClass = buildClientStepClass(model);
+        TypeSpec clientStepClass = buildClientStepClass(model, ctx.stepOrder());
         JavaFile.builder(model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX, clientStepClass)
             .build()
             .writeTo(ctx.outputDir());
     }
 
-    private TypeSpec buildClientStepClass(PipelineStepModel model) {
+    private TypeSpec buildClientStepClass(PipelineStepModel model, Integer stepOrder) {
         TypeName inputType = resolveDomainType(model.inboundDomainType());
         TypeName outputType = resolveDomainType(model.outboundDomainType());
         TypeName stepInterface = ParameterizedTypeName.get(
@@ -64,8 +66,9 @@ public class SpringLocalClientStepRenderer implements PipelineRenderer<LocalBind
             inputType,
             outputType);
         TypeName completionStage = ParameterizedTypeName.get(ClassName.get(CompletionStage.class), outputType);
-        TypeName serviceType = model.serviceClassName();
-        String serviceFieldName = decapitalize(model.serviceClassName().simpleName());
+        ClassName targetServiceClass = targetServiceClass(model);
+        TypeName serviceType = targetServiceClass;
+        String serviceFieldName = decapitalize(targetServiceClass.simpleName());
 
         FieldSpec serviceField = FieldSpec.builder(serviceType, serviceFieldName, Modifier.PRIVATE, Modifier.FINAL)
             .build();
@@ -79,17 +82,72 @@ public class SpringLocalClientStepRenderer implements PipelineRenderer<LocalBind
             .addModifiers(Modifier.PUBLIC)
             .returns(completionStage)
             .addParameter(inputType, "input")
-            .addStatement("return this.$N.process(input).subscribeAsCompletionStage()", serviceFieldName)
+            .addStatement(applyStatement(model), applyStatementArgs(model, serviceFieldName))
             .build();
 
-        return TypeSpec.classBuilder(getClientStepClassName(model))
+        TypeSpec.Builder classBuilder = TypeSpec.classBuilder(getClientStepClassName(model))
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(AnnotationSpec.builder(ClassName.get("org.springframework.stereotype", "Component")).build())
             .addSuperinterface(stepInterface)
             .addField(serviceField)
             .addMethod(constructor)
-            .addMethod(applyMethod)
-            .build();
+            .addMethod(applyMethod);
+        if (stepOrder != null) {
+            classBuilder.addAnnotation(AnnotationSpec.builder(ClassName.get("org.springframework.core.annotation", "Order"))
+                .addMember("value", "$L", stepOrder)
+                .build());
+        }
+        return classBuilder.build();
+    }
+
+    private ClassName targetServiceClass(PipelineStepModel model) {
+        return model.delegateService() != null ? model.delegateService() : model.serviceClassName();
+    }
+
+    private String completionStageAdapter(PipelineStepModel model) {
+        return switch (model.reactiveReturnKind()) {
+            case MUTINY_UNI -> "subscribeAsCompletionStage()";
+            case REACTOR_MONO -> "toFuture()";
+            case COMPLETION_STAGE -> "";
+        };
+    }
+
+    private String applyStatement(PipelineStepModel model) {
+        if (model.serviceApiKind() == ServiceApiKind.BLOCKING) {
+            return "return $T.executeBlocking(() -> this.$N.$N(input), $L)";
+        }
+        if (model.reactiveReturnKind() == ReactiveReturnKind.COMPLETION_STAGE) {
+            return "return this.$N.$N(input)";
+        }
+        return "return this.$N.$N(input).$L";
+    }
+
+    private Object[] applyStatementArgs(PipelineStepModel model, String serviceFieldName) {
+        String methodName = invocationMethodName(model);
+        if (model.serviceApiKind() == ServiceApiKind.BLOCKING) {
+            return new Object[] {
+                ClassName.get("org.pipelineframework.runtime.core", "RuntimeAdapters"),
+                serviceFieldName,
+                methodName,
+                model.executionMode() == ExecutionMode.VIRTUAL_THREADS
+            };
+        }
+        if (model.reactiveReturnKind() == ReactiveReturnKind.COMPLETION_STAGE) {
+            return new Object[] {
+                serviceFieldName,
+                methodName
+            };
+        }
+        return new Object[] {
+            serviceFieldName,
+            methodName,
+            completionStageAdapter(model)
+        };
+    }
+
+    private String invocationMethodName(PipelineStepModel model) {
+        return model.delegateMethodName()
+            .orElseGet(() -> model.serviceApiKind() == ServiceApiKind.BLOCKING ? "processBlocking" : "process");
     }
 
     private void validateSupported(PipelineStepModel model) {
@@ -98,18 +156,19 @@ public class SpringLocalClientStepRenderer implements PipelineRenderer<LocalBind
                 "Spring renderer profile currently supports only unary-unary LOCAL steps; step '"
                     + model.serviceName() + "' has shape " + model.streamingShape());
         }
-        if (model.serviceApiKind() != ServiceApiKind.REACTIVE) {
+        if (model.serviceApiKind() != ServiceApiKind.REACTIVE
+            && model.serviceApiKind() != ServiceApiKind.BLOCKING) {
             throw new IllegalArgumentException(
-                "Spring renderer profile currently supports only reactive-authored services; step '"
+                "Spring renderer profile currently supports only reactive or blocking unary services; step '"
                     + model.serviceName() + "' has API kind " + model.serviceApiKind());
         }
         if (model.sideEffect()) {
             throw new IllegalArgumentException(
                 "Spring renderer profile does not yet support side-effect steps; step '" + model.serviceName() + "'");
         }
-        if (model.delegateService() != null || model.remoteExecution() != null) {
+        if (model.remoteExecution() != null) {
             throw new IllegalArgumentException(
-                "Spring renderer profile currently supports only internal local steps; step '" + model.serviceName() + "'");
+                "Spring renderer profile does not support remote local steps; step '" + model.serviceName() + "'");
         }
     }
 

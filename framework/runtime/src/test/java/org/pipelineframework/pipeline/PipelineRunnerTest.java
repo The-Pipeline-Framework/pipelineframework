@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.PipelineRunner;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.awaitable.AwaitStreamOneToOneStep;
 import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.StepConfig;
@@ -179,6 +180,25 @@ class PipelineRunnerTest {
     }
 
     @Test
+    void runBindsAwaitContextPerStepForStreamingAwaitStep() {
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant-1", "exec-1", 0));
+
+        @SuppressWarnings("unchecked")
+        Multi<Object> result = (Multi<Object>) runner.run(
+            Multi.createFrom().items("first", "second"),
+            List.of(
+                new PrefixingStep("before"),
+                new AwaitStreamIndexCapturingStep(),
+                new PrefixingStep("after")));
+
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(2));
+        subscriber.awaitItems(2, Duration.ofSeconds(5)).assertCompleted();
+        subscriber.assertItems(
+            "after:await-stream-step-index=1,before:first",
+            "after:await-stream-step-index=1,before:second");
+    }
+
+    @Test
     void testRunWithFailingStepAndRecovery() {
         Multi<String> input = Multi.createFrom().items("item1", "item2");
         List<Object> steps = List.of(new TestSteps.FailingStepOneToOne(true));
@@ -318,6 +338,17 @@ class PipelineRunnerTest {
             AwaitExecutionContext context = AwaitExecutionContextHolder.get();
             int index = context == null ? -1 : context.currentStepIndex();
             return Uni.createFrom().item("await-step-index=" + index + "," + in);
+        }
+    }
+
+    static final class AwaitStreamIndexCapturingStep implements AwaitStreamOneToOneStep<String, String> {
+        @Override
+        public Multi<String> applyAwaitPerItem(Multi<String> input) {
+            return input.onItem().transform(in -> {
+                AwaitExecutionContext context = AwaitExecutionContextHolder.get();
+                int index = context == null ? -1 : context.currentStepIndex();
+                return "await-stream-step-index=" + index + "," + in;
+            });
         }
     }
 

@@ -220,6 +220,75 @@ class OrchestratorClientGenerationTest {
     }
 
     @Test
+    void mapsAuthoredStepIdsToGeneratedProcessClientNames() throws IOException {
+        Path projectRoot = initProjectRoot();
+        Path moduleDir = projectRoot.resolve("test-module");
+        Path generatedSourcesDir = moduleDir.resolve("target").resolve("generated-sources").resolve("pipeline");
+        Path moduleResourcesDir = moduleDir.resolve("src").resolve("main").resolve("resources");
+        Files.createDirectories(generatedSourcesDir);
+        Files.createDirectories(moduleResourcesDir);
+
+        String moduleOverrides = """
+            pipeline.module.search-svc.port=9000
+            pipeline.module.search-svc.steps=index-document
+            """;
+        Files.writeString(moduleResourcesDir.resolve("application.properties"), moduleOverrides);
+
+        Path pipelineYaml = projectRoot.resolve("pipeline.yaml");
+        String pipelineConfig = Files.readString(resourcePath("pipeline-search.yaml"))
+            .replace("transport: \"REST\"", "transport: \"GRPC\"");
+        Files.writeString(pipelineYaml, stripAspectsSection(pipelineConfig));
+
+        Compilation compilation = Compiler.javac()
+            .withProcessors(new PipelineStepProcessor())
+            .withOptions(
+                "-Apipeline.generatedSourcesDir=" + generatedSourcesDir,
+                "-Aprotobuf.descriptor.file=" + resourcePath("descriptor_set_search.dsc"))
+            .compile(
+                JavaFileObjects.forSourceString(
+                    "org.example.OrchestratorMarker",
+                    """
+                        package org.example;
+
+                        import org.pipelineframework.annotation.PipelineOrchestrator;
+
+                        @PipelineOrchestrator
+                        public class OrchestratorMarker {
+                        }
+                        """),
+                searchServiceStub("ProcessCrawlSourceService", "CrawlRequest", "RawDocument"),
+                searchServiceStub("ProcessParseDocumentService", "RawDocument", "ParsedDocument"),
+                searchServiceStub("ProcessTokenizeContentService", "ParsedDocument", "TokenBatch"),
+                searchServiceStub("ProcessIndexDocumentService", "TokenBatch", "IndexAck"),
+                domainStub("CrawlRequest"),
+                domainStub("RawDocument"),
+                domainStub("ParsedDocument"),
+                domainStub("TokenBatch"),
+                domainStub("IndexAck"),
+                dtoStub("CrawlRequestDto"),
+                dtoStub("RawDocumentDto"),
+                dtoStub("ParsedDocumentDto"),
+                dtoStub("TokenBatchDto"),
+                dtoStub("IndexAckDto"),
+                mapperStub("CrawlRequestMapper", "CrawlRequest", "CrawlRequestDto"),
+                mapperStub("RawDocumentMapper", "RawDocument", "RawDocumentDto"),
+                mapperStub("ParsedDocumentMapper", "ParsedDocument", "ParsedDocumentDto"),
+                mapperStub("TokenBatchMapper", "TokenBatch", "TokenBatchDto"),
+                mapperStub("IndexAckMapper", "IndexAck", "IndexAckDto"));
+
+        assertThat(compilation).succeeded();
+
+        JavaFileObject propertiesFile = compilation.generatedFile(
+            StandardLocation.CLASS_OUTPUT,
+            "META-INF/pipeline",
+            "orchestrator-clients.properties").orElseThrow();
+        String propertiesContent = propertiesFile.getCharContent(true).toString();
+
+        assertTrue(propertiesContent.contains(
+            "quarkus.grpc.clients.process-index-document.port=9000"));
+    }
+
+    @Test
     void preservesExternalizedModuleEndpointExpressions() throws IOException {
         Path projectRoot = initProjectRoot();
         Path moduleDir = projectRoot.resolve("test-module");

@@ -1,13 +1,26 @@
-# Reactive Portability
+---
+title: Redirecting...
+search: false
+head:
+  - - meta
+    - name: robots
+      content: noindex
+  - - meta
+    - http-equiv: refresh
+      content: 0;url=/evolve/framework-portability-assessment/reactive-portability
+---
 
-Three migration options for async stack:
+<script setup>
+import {onMounted} from 'vue'
+import {withBase} from 'vitepress'
 
-- Keep Mutiny internally (lowest disruption, Quarkus-friendly, Spring via adapters).
-- Migrate fully to Reactor (high disruption, no immediate benefit for Quarkus users).
-- Add staged library neutrality (best long-term if done as adapter layer).
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.location.replace(withBase('/evolve/framework-portability-assessment/reactive-portability'))
+  }
+})
+</script>
 
-Recommended path is staged neutrality: keep current Mutiny contracts and add Reactor adapters where Spring needs them.
+# Redirecting...
 
-For core store/contract boundaries, prefer `CompletionStage<T>` for unary and reactive-streams `Publisher<T>` for streams.
-
-The adaptation cost is significant because core execution classes are built around Mutiny operators (`retry`, `transform`, subscription, backpressure, failure handling). `PipelineStepExecutor`, `QueueAsyncCoordinator`, `AwaitStepSupport`, and telemetry paths need explicit semantics before adaptation.
+This page moved to [/evolve/framework-portability-assessment/reactive-portability](/evolve/framework-portability-assessment/reactive-portability).

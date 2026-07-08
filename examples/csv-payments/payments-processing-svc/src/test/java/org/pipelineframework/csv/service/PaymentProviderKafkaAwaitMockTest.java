@@ -18,6 +18,7 @@ package org.pipelineframework.csv.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -27,6 +28,7 @@ import static org.mockito.Mockito.when;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.reactive.messaging.MutinyEmitter;
 import java.math.BigDecimal;
+import java.nio.file.Path;
 import java.util.Currency;
 import java.util.Map;
 import java.util.UUID;
@@ -38,11 +40,18 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.pipelineframework.awaitable.AwaitPayloadSupport;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitCompletionEnvelope;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitDispatchEnvelope;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.csv.common.domain.ApprovedPaymentStatus;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
+import org.pipelineframework.csv.common.mapper.ApprovedPaymentStatusMapperImpl;
+import org.pipelineframework.csv.common.mapper.CommonConverters;
+import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
+import org.pipelineframework.csv.common.mapper.UnapprovedPaymentStatusMapperImpl;
+import org.pipelineframework.csv.grpc.PipelineTypes;
 
 class PaymentProviderKafkaAwaitMockTest {
 
@@ -63,6 +72,7 @@ class PaymentProviderKafkaAwaitMockTest {
     mockProvider = new PaymentProviderKafkaAwaitMock();
     mockProvider.paymentProvider = paymentProvider;
     mockProvider.paymentProviderConfig = paymentProviderConfig;
+    mockProvider.paymentStatusMapper = paymentStatusMapper();
     mockProvider.results = results;
   }
 
@@ -93,6 +103,12 @@ class PaymentProviderKafkaAwaitMockTest {
     assertEquals("resume-token", completion.resumeToken());
     assertEquals("interaction-1", completion.idempotencyKey());
     assertEquals("csv-payments-mock-provider", completion.actor());
+    Map<?, ?> payload = (Map<?, ?>) completion.responsePayload();
+    assertTrue(payload.containsKey("approved"));
+    PipelineTypes.PaymentStatus rebuilt = (PipelineTypes.PaymentStatus)
+        AwaitPayloadSupport.coercePayload(payload, PipelineTypes.PaymentStatus.class);
+    assertTrue(rebuilt.hasApproved());
+    assertEquals("provider-ref", rebuilt.getApproved().getReference());
   }
 
   @Test
@@ -148,20 +164,22 @@ class PaymentProviderKafkaAwaitMockTest {
         .setRecipient("alice")
         .setAmount(new BigDecimal("12.34"))
         .setCurrency(Currency.getInstance("EUR"));
+    paymentRecord.setCsvPaymentsInputFilePath(Path.of("/tmp/payments.csv"));
     paymentRecord.setId(UUID.randomUUID());
     return paymentRecord;
   }
 
   private static PaymentStatus validPaymentStatus(PaymentRecord paymentRecord) {
-    return new PaymentStatus()
-        .setReference("provider-ref")
-        .setStatus("Completed")
-        .setMessage("settled")
-        .setFee(new BigDecimal("0.12"))
-        .setConversationId(UUID.randomUUID())
-        .setStatusCode(1000L)
-        .setPaymentRecord(paymentRecord)
-        .setPaymentRecordId(paymentRecord.getId());
+    ApprovedPaymentStatus paymentStatus = new ApprovedPaymentStatus();
+    paymentStatus.setReference("provider-ref");
+    paymentStatus.setStatus("Completed");
+    paymentStatus.setMessage("settled");
+    paymentStatus.setFee(new BigDecimal("0.12"));
+    paymentStatus.setConversationId(UUID.randomUUID());
+    paymentStatus.setStatusCode(1000L);
+    paymentStatus.setPaymentRecord(paymentRecord);
+    paymentStatus.setPaymentRecordId(paymentRecord.getId());
+    return paymentStatus;
   }
 
   private static String dispatchJson(PaymentRecord paymentRecord) throws Exception {
@@ -185,5 +203,30 @@ class PaymentProviderKafkaAwaitMockTest {
         payload,
         () -> CompletableFuture.completedFuture(null),
         failure -> CompletableFuture.failedFuture(failure));
+  }
+
+  private static PaymentStatusMapper paymentStatusMapper() {
+    CommonConverters commonConverters = new CommonConverters();
+
+    ApprovedPaymentStatusMapperImpl approved = new ApprovedPaymentStatusMapperImpl();
+    setField(approved, "commonConverters", commonConverters);
+
+    UnapprovedPaymentStatusMapperImpl unapproved = new UnapprovedPaymentStatusMapperImpl();
+    setField(unapproved, "commonConverters", commonConverters);
+
+    PaymentStatusMapper mapper = new PaymentStatusMapper();
+    setField(mapper, "approvedMapper", approved);
+    setField(mapper, "unapprovedMapper", unapproved);
+    return mapper;
+  }
+
+  private static void setField(Object target, String fieldName, Object value) {
+    try {
+      java.lang.reflect.Field field = target.getClass().getDeclaredField(fieldName);
+      field.setAccessible(true);
+      field.set(target, value);
+    } catch (ReflectiveOperationException e) {
+      throw new IllegalStateException("Failed to set field " + fieldName, e);
+    }
   }
 }

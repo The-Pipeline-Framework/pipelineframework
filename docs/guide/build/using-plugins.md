@@ -1,31 +1,26 @@
 ---
 title: Redirecting...
+search: false
 head:
   - - meta
+    - name: robots
+      content: noindex
+  - - meta
     - http-equiv: refresh
-      content: 2;url=/guide/development/using-plugins
+      content: 0;url=/develop/using-plugins
 ---
 
 <script setup>
-import {onMounted, onUnmounted} from 'vue'
-
-let redirectTimer
+import {onMounted} from 'vue'
+import {withBase} from 'vitepress'
 
 onMounted(() => {
   if (typeof window !== 'undefined') {
-    redirectTimer = window.setTimeout(() => {
-      window.location.replace('/guide/development/using-plugins')
-    }, 1500)
-  }
-})
-
-onUnmounted(() => {
-  if (redirectTimer != null) {
-    window.clearTimeout(redirectTimer)
+    window.location.replace(withBase('/develop/using-plugins'))
   }
 })
 </script>
 
 # Redirecting...
 
-Using Plugins is available at [Development > Using Plugins](/guide/development/using-plugins).
+This page moved to [/develop/using-plugins](/develop/using-plugins).
