@@ -946,8 +946,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
         try {
             if (!MONOLITH_LAYOUT && !runtimeMappingsMatch(activeRuntimeMapping, desiredRuntimeMapping)) {
                 if (Files.isRegularFile(activeRuntimeMapping)) {
-                    runtimeMappingBackup = Files.createTempFile("pipeline-runtime", ".yaml");
-                    Files.copy(activeRuntimeMapping, runtimeMappingBackup, StandardCopyOption.REPLACE_EXISTING);
+                    Path backup = Files.createTempFile("pipeline-runtime", ".yaml");
+                    try {
+                        Files.copy(activeRuntimeMapping, backup, StandardCopyOption.REPLACE_EXISTING);
+                    } catch (IOException e) {
+                        Files.deleteIfExists(backup);
+                        throw e;
+                    }
+                    runtimeMappingBackup = backup;
                 } else {
                     runtimeMappingCreated = true;
                 }
