@@ -839,7 +839,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         if (MONOLITH_LAYOUT || PIPELINE_RUNTIME_LAYOUT) {
             return true;
         }
-        return Files.mismatch(activeRuntimeMappingPath(), desiredRuntimeMappingPath()) == -1L;
+        return runtimeMappingsMatch(activeRuntimeMappingPath(), desiredRuntimeMappingPath());
     }
 
     private static Path activeRuntimeMappingPath() {
@@ -912,6 +912,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         Path activeRuntimeMapping = activeRuntimeMappingPath();
         Path desiredRuntimeMapping = desiredRuntimeMappingPath();
         Path runtimeMappingBackup = null;
+        boolean runtimeMappingCreated = false;
         if (MONOLITH_LAYOUT) {
             processDir = moduleDir.getParent();
             command.add("bash");
@@ -938,9 +939,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
             command.add("package");
         }
         try {
-            if (!MONOLITH_LAYOUT && Files.mismatch(activeRuntimeMapping, desiredRuntimeMapping) != -1L) {
-                runtimeMappingBackup = Files.createTempFile("pipeline-runtime", ".yaml");
-                Files.copy(activeRuntimeMapping, runtimeMappingBackup, StandardCopyOption.REPLACE_EXISTING);
+            if (!MONOLITH_LAYOUT && !runtimeMappingsMatch(activeRuntimeMapping, desiredRuntimeMapping)) {
+                if (Files.isRegularFile(activeRuntimeMapping)) {
+                    runtimeMappingBackup = Files.createTempFile("pipeline-runtime", ".yaml");
+                    Files.copy(activeRuntimeMapping, runtimeMappingBackup, StandardCopyOption.REPLACE_EXISTING);
+                } else {
+                    runtimeMappingCreated = true;
+                }
                 Files.copy(desiredRuntimeMapping, activeRuntimeMapping, StandardCopyOption.REPLACE_EXISTING);
             }
 
@@ -978,8 +983,15 @@ abstract class AbstractCsvPaymentsEndToEnd {
             if (runtimeMappingBackup != null) {
                 Files.copy(runtimeMappingBackup, activeRuntimeMapping, StandardCopyOption.REPLACE_EXISTING);
                 Files.deleteIfExists(runtimeMappingBackup);
+            } else if (runtimeMappingCreated) {
+                Files.deleteIfExists(activeRuntimeMapping);
             }
         }
+    }
+
+    static boolean runtimeMappingsMatch(Path activeRuntimeMapping, Path desiredRuntimeMapping) throws IOException {
+        return Files.isRegularFile(activeRuntimeMapping)
+                && Files.mismatch(activeRuntimeMapping, desiredRuntimeMapping) == -1L;
     }
 
     /**
