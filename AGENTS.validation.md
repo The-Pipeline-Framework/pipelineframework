@@ -6,8 +6,8 @@ Load this file before choosing validation commands for non-trivial changes.
 
 Framework:
 
-- Build: `./mvnw -f framework/pom.xml clean install`
-- Verify: `./mvnw -f framework/pom.xml verify`
+- Build (warm-up worktree): `./mvnw -f framework/pom.xml clean install -DskipTests -Dgpg.skip -Dmaven.repo.local="$PWD/.m2/repository"`
+- Verify: `./mvnw -f framework/pom.xml verify -Dmaven.repo.local="$PWD/.m2/repository`
 
 Root project:
 

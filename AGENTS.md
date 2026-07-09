@@ -35,6 +35,14 @@ Always keep these distinctions active:
 
 ## Runtime and Build Commands
 
+This repository uses an isolated Maven local repository per worktree. Always include:
+
+    -Dmaven.repo.local="$PWD/.m2/repository"
+
+on every Maven invocation.
+
+Use `install -DskipTests -Dgpg.skip` only when warming the worktree cache or publishing patched framework artifacts into that local repository.
+
 Load `AGENTS.validation.md` before choosing validation commands for non-trivial changes.
 
 Most common gates:
@@ -43,20 +51,11 @@ Most common gates:
 - Root verify: `./mvnw verify`
 - Docs build: `npm --prefix docs run build`
 
-## Maven Cache Policy
-
-Multiple Codex worktrees may point at clones of this repo at the same time. Keep Maven cache behavior explicit:
-
-- Use the shared Maven local repository, `~/.m2/repository`, by default. It stores downloaded dependencies and artifacts written by `mvn install`; override with `-Dmaven.repo.local=...` only when isolation is required.
-- Use the worktree-local Maven build cache, `${session.executionRootDirectory}/.maven-build-cache`, for reusable build outputs. This is configured in `.mvn/maven-build-cache-config.xml` to avoid cross-worktree build-output leakage from the default `~/.m2/build-cache`.
-- Use a worktree-local Maven repository such as `.mvn-local` only for tasks that require `mvn install`, generated scaffold smoke tests, or external repo/generated project consumption of `org.pipelineframework:*` artifacts.
-
-Normal reactor builds should resolve reactor modules directly, not through `~/.m2/repository`. The collision risk is when TPF examples, templates, generated projects, or other external consumers depend on same-version `org.pipelineframework:*` artifacts outside the current reactor.
-
 ## Architecture Notes
 
 - Pipeline order is emitted to `META-INF/pipeline/order.json` at build time.
 - Telemetry metadata is emitted to `META-INF/pipeline/telemetry.json` at build time.
+- Branching metadata is emitted to `META-INF/pipeline/branching.json` at build time.
 - Runtime is reactive-first; blocking work must be explicitly offloaded.
 
 ### Deployment Patterns And Wire Protocols
@@ -191,13 +190,14 @@ Prefer Repowise MCP context over broad grep, but do not call every Repowise tool
 
 This repository is indexed by Repowise. Use the Repowise MCP tools for codebase orientation, discovery, implementation context, modification risk, design rationale, and cleanup planning. MCP data reflects the last index run; verify against source files before editing.
 
-Last indexed: 2026-07-06 (commit 1c72fd0de). Confidence: 100%.
+Last indexed: 2026-07-09 (commit 8691bbf2e). Confidence: 100%.
 ### Architecture
-The Pipeline Framework is a Java reactive pipeline framework that consumes annotated pipeline definitions, configuration files, domain/operator code, and deployment topology settings, compiles them into runtime metadata and generated adapters, and produces executable Quarkus-based pipeline services, function handlers, telemetry artifacts, replay data, examples, and developer documentation. This repository is a monorepo for the framework runtime, annotation-processing compiler, documentation site, examples, infrastructure templates, replay tooling, and supporting UI surfaces. Its core purpose is to let developers model business workflows as ordered pipeline steps, validate those workflows at build time, generate the correct runtime bindings, and run them across local, REST, gRPC, function, modular, pipeline-runtime, or monolith deployment shapes. The repository is documentation-heavy and framework-centric: Java is the primary implementation language, Markdown is a major part of the project surface, and JavaScript powers the docs site, replay viewer, and UI tooling.
+Using tpf-technical-writer for repository-facing documentation language, and I’ll rely on the provided repo summary plus available repo context rather than editing files. I’m pulling the repository overview from the local Repowise index now so the page reflects the indexed architecture rather than only the prompt summary. The Pipeline Framework consumes YAML runtime mappings plus annotated Java pipeline steps, operators, mappers, and configuration, compiles them through build-time validation and code-generation phases, and produces reactive Quarkus runtime artifacts for local, REST, gRPC, and function-oriented pipeline execution. This repository is a Java-first monorepo for building transport-neutral reactive pipeline systems.
 ### Key Modules
 | Module | Purpose | Owner |
 |--------|---------|-------|
 | `framework/deployment/src/main/java/org/pipelineframework/processor` | The pipelineframework/processor module is the compiler orchestration layer of… | - |
+| `examples/csv-payments` | I’ll use the TPF documentation skill for repo-specific wording and keep the… | - |
 ### Entry Points
 - `framework/runtime/src/main/java/org/pipelineframework/config/PipelineStepConfig.java`
 - `framework/runtime/src/main/java/org/pipelineframework/orchestrator/PipelineOrchestratorConfig.java`
@@ -205,18 +205,18 @@ The Pipeline Framework is a Java reactive pipeline framework that consumes annot
 - `framework/deployment/src/main/java/org/pipelineframework/processor/PipelineStepProcessor.java`
 - `examples/checkout/nextjs-ui/lib/checkout-flow.js`
 - `examples/csv-payments/common/src/main/java/org/pipelineframework/csv/common/domain/PaymentRecord.java`
+- `examples/csv-payments/common/src/main/java/org/pipelineframework/csv/common/domain/PaymentStatus.java`
 - `examples/search/common/src/main/java/org/pipelineframework/search/common/domain/CrawlRequest.java`
 - `framework/runtime/src/main/java/org/pipelineframework/telemetry/PipelineTelemetry.java`
 - `framework/runtime/src/main/java/org/pipelineframework/config/PipelineConfig.java`
-- `framework/deployment/src/test/java/org/pipelineframework/processor/renderer/SpringRestClientStepRendererTest.java`
 ### Risk Hotspots
 | File | Churn | 90d Commits | Owner |
 |------|-------|-------------|-------|
-| `framework/runtime/src/main/java/org/pipelineframework/config/template/PipelineTemplateConfigLoader.java` | 100.0th percentile | 16 | mariano.barcia |
-| `examples/csv-payments/orchestrator-svc/src/test/java/org/pipelineframework/csv/orchestrator/service/AbstractCsvPaymentsEndToEnd.java` | 98.6th percentile | 29 | mariano.barcia |
-| `framework/runtime/src/main/java/org/pipelineframework/config/pipeline/PipelineYamlConfigLoader.java` | 97.2th percentile | 24 | Mariano Barcia |
-| `framework/deployment/src/main/java/org/pipelineframework/processor/parser/StepDefinitionParser.java` | 95.8th percentile | 25 | mariano.barcia |
-| `framework/runtime/src/main/java/org/pipelineframework/PipelineStepExecutor.java` | 94.4th percentile | 11 | mariano.barcia |
+| `tools/replay-viewer/datasets/csv-payments-built-in.json` | 100.0th percentile | 12 | mariano.barcia |
+| `tools/replay-viewer/app.js` | 99.4th percentile | 22 | mariano.barcia |
+| `tools/homepage-replay-video/data/csv-payments-cinematic.json` | 98.9th percentile | 9 | mariano.barcia |
+| `docs/public/replay-viewer-app/datasets/csv-payments-built-in.json` | 98.3th percentile | 7 | Mariano Barcia |
+| `examples/csv-payments/orchestrator-svc/src/test/java/org/pipelineframework/csv/orchestrator/service/AbstractCsvPaymentsEndToEnd.java` | 97.7th percentile | 31 | mariano.barcia |
 
 ### Repowise MCP Workflow
 

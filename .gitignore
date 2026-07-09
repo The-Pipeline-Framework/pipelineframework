@@ -21,6 +21,7 @@ bin/
 
 # Maven caches
 .maven-build-cache/
+**/.maven-build-cache/
 .mvn-local/
 
 ### VS Code ###
