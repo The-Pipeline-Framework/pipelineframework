@@ -67,16 +67,16 @@ public record StepBranchingDescriptor(
             Optional<Method> hasMethod = findHasMethod(itemClass, suffix);
             method.trySetAccessible();
             hasMethod.ifPresent(Method::trySetAccessible);
-            return Optional.of(new VariantExtractor(method, hasMethod.orElse(null)));
+            return Optional.of(new VariantExtractor(method, hasMethod));
         }
         return Optional.empty();
     }
 
-    private record VariantExtractor(Method getter, Method hasMethod) {
+    private record VariantExtractor(Method getter, Optional<Method> hasMethod) {
 
         private Optional<Object> extract(Object item) {
             try {
-                if (hasMethod != null && !Boolean.TRUE.equals(hasMethod.invoke(item))) {
+                if (hasMethod.isPresent() && !Boolean.TRUE.equals(hasMethod.get().invoke(item))) {
                     return Optional.empty();
                 }
                 return Optional.ofNullable(getter.invoke(item));
