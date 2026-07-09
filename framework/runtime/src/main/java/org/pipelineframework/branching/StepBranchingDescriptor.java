@@ -22,7 +22,7 @@ public record StepBranchingDescriptor(
     boolean terminal
 ) {
 
-    private static final ConcurrentHashMap<MethodCacheKey, Optional<Object>> extractionCache = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<MethodCacheKey, Optional<VariantExtractor>> extractionCache = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<Class<?>, Method[]> sortedMethodsCache = new ConcurrentHashMap<>();
 
     public boolean accepts(Object item) {
@@ -42,10 +42,11 @@ public record StepBranchingDescriptor(
     private Optional<Object> extractAcceptedVariant(Object item) {
         Class<?> itemClass = item.getClass();
         MethodCacheKey cacheKey = new MethodCacheKey(itemClass, this);
-        Optional<Object> cached = extractionCache.get(cacheKey);
-        if (cached != null) {
-            return cached;
-        }
+        Optional<VariantExtractor> extractor = extractionCache.computeIfAbsent(cacheKey, ignored -> findExtractor(itemClass));
+        return extractor.flatMap(candidate -> candidate.extract(item).filter(this::matchesAcceptedInstance));
+    }
+
+    private Optional<VariantExtractor> findExtractor(Class<?> itemClass) {
         Method[] methods = getSortedMethods(itemClass);
         for (Method method : methods) {
             if (method.getParameterCount() != 0 || !method.getName().startsWith("get")) {
@@ -64,31 +65,25 @@ public record StepBranchingDescriptor(
                 continue;
             }
             Optional<Method> hasMethod = findHasMethod(itemClass, suffix);
+            method.trySetAccessible();
+            hasMethod.ifPresent(Method::trySetAccessible);
+            return Optional.of(new VariantExtractor(method, hasMethod));
+        }
+        return Optional.empty();
+    }
+
+    private record VariantExtractor(Method getter, Optional<Method> hasMethod) {
+
+        private Optional<Object> extract(Object item) {
             try {
-                if (hasMethod.isPresent()) {
-                    Method has = hasMethod.get();
-                    has.trySetAccessible();
-                    if (!Boolean.TRUE.equals(has.invoke(item))) {
-                        continue;
-                    }
+                if (hasMethod.isPresent() && !Boolean.TRUE.equals(hasMethod.get().invoke(item))) {
+                    return Optional.empty();
                 }
-                method.trySetAccessible();
-                Object candidate = method.invoke(item);
-                if (candidate == null) {
-                    continue;
-                }
-                if (matchesAcceptedInstance(candidate)) {
-                    Optional<Object> result = Optional.of(candidate);
-                    extractionCache.put(cacheKey, result);
-                    return result;
-                }
+                return Optional.ofNullable(getter.invoke(item));
             } catch (ReflectiveOperationException ignored) {
-                // Fall through to the next candidate getter.
+                return Optional.empty();
             }
         }
-        Optional<Object> result = Optional.empty();
-        extractionCache.put(cacheKey, result);
-        return result;
     }
 
     private Object wrapAcceptedVariant(Object item) {

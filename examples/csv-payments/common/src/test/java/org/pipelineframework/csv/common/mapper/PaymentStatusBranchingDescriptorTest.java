@@ -25,6 +25,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.branching.StepBranchingDescriptor;
+import org.pipelineframework.csv.common.domain.ApprovedPaymentStatus;
 import org.pipelineframework.csv.grpc.PipelineTypes;
 
 class PaymentStatusBranchingDescriptorTest {
@@ -68,6 +69,44 @@ class PaymentStatusBranchingDescriptorTest {
         assertInstanceOf(PipelineTypes.ApprovedPaymentStatus.class, extracted);
     assertNotNull(approved);
     assertEquals(union.getApproved().getReference(), approved.getReference());
+  }
+
+  @Test
+  void extractsFreshApprovedProtoVariantForEachPaymentStatusUnionWrapper() {
+    ApprovedPaymentStatus firstStatus = PaymentStatusVariantMapperTestData.approvedStatus();
+    firstStatus.setReference("approved-first");
+    firstStatus.getPaymentRecord().setRecipient("First Recipient");
+    ApprovedPaymentStatus secondStatus = PaymentStatusVariantMapperTestData.approvedStatus();
+    secondStatus.setReference("approved-second");
+    secondStatus.getPaymentRecord().setRecipient("Second Recipient");
+    StepBranchingDescriptor descriptor = approvedDescriptor();
+
+    PipelineTypes.ApprovedPaymentStatus first =
+        assertInstanceOf(
+            PipelineTypes.ApprovedPaymentStatus.class,
+            descriptor.applicableItem(mapper.toExternal(firstStatus)));
+    PipelineTypes.ApprovedPaymentStatus second =
+        assertInstanceOf(
+            PipelineTypes.ApprovedPaymentStatus.class,
+            descriptor.applicableItem(mapper.toExternal(secondStatus)));
+
+    assertEquals("approved-first", first.getReference());
+    assertEquals("First Recipient", first.getPaymentRecord().getRecipient());
+    assertEquals("approved-second", second.getReference());
+    assertEquals("Second Recipient", second.getPaymentRecord().getRecipient());
+  }
+
+  private static StepBranchingDescriptor approvedDescriptor() {
+    return new StepBranchingDescriptor(
+        2,
+        "Process Approved Payment Status",
+        "test.Step",
+        PipelineTypes.ApprovedPaymentStatus.class.getName(),
+        PipelineTypes.ApprovedPaymentStatus.class,
+        List.of("ApprovedPaymentStatus"),
+        List.of(PipelineTypes.ApprovedPaymentStatus.class.getName()),
+        List.of(PipelineTypes.ApprovedPaymentStatus.class),
+        false);
   }
 
   private static void setField(Object target, String fieldName, Object value) {
