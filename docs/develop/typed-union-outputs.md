@@ -123,7 +123,7 @@ For gRPC, field-level mapping stays in ordinary variant mappers such as `Mapper<
 - Variant names and protobuf field numbers must be unique.
 - A union can be used as a step input or output type.
 - A union cannot be used as a field inside a normal message in this first version.
-- Union-routed branching is opt-in. TPF only auto-routes when the pipeline authors `accepts` and one final `terminal: true` merge step.
+- Union-routed branching is opt-in. TPF detects branch awareness from `accepts`, `terminal: true`, or a step's `inputTypeName` alone.
 
 TPFGo uses this shape in the payment capture pipeline, where `PaymentOutcome` replaces a status-field result record while keeping the pipeline linear.
 
@@ -176,6 +176,7 @@ Rules:
 
 - The pipeline stays a linear sequence of authored steps.
 - `accepts` entries must be concrete contract types, not predicates and not union names.
+- If a step's `inputTypeName` resolves to a single concrete message type, `accepts` is optional. TPF implicitly uses that type as the accepted type.
 - If a step's `inputTypeName` resolves to more than one concrete alternative, explicit `accepts` is required.
 - Branch-aware routing currently supports `ONE_TO_ONE` steps only.
 - A branch-aware pipeline must declare exactly one `terminal: true` step, and it must be last.
@@ -186,3 +187,20 @@ Runtime behavior:
 - If the current item matches a step's accepted type set, TPF executes the step normally.
 - If it does not match, TPF skips the step as `not_applicable`, records a replay event, and passes the item through unchanged.
 - The terminal merge step must accept every reachable branch-end alternative. Otherwise the build fails.
+
+When a step's `inputTypeName` references a concrete message (not a union), `accepts` can be omitted and TPF implicitly uses that single type:
+
+```yaml
+steps:
+  - name: Reserve Stock
+    inputTypeName: PhysicalOrder
+    outputTypeName: StockReserved
+    # no accepts — implicitly accepts PhysicalOrder
+
+  - name: Provision License
+    inputTypeName: DigitalOrder
+    outputTypeName: LicenseProvisioned
+    # no accepts — implicitly accepts DigitalOrder
+```
+
+This is equivalent to writing `accepts: [PhysicalOrder]` and `accepts: [DigitalOrder]`. Explicit `accepts` is still required when the step should handle multiple union alternatives. The `accepts` keyword also makes the accepted contract set visible at a glance in the YAML for complex pipelines — choose whichever communicates intent more clearly.

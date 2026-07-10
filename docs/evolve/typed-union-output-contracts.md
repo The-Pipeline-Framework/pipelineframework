@@ -95,9 +95,25 @@ steps:
     terminal: true
 ```
 
+When a step's `inputTypeName` resolves to a single concrete message type (not a union), `accepts` can be omitted. TPF implicitly uses that type as the step's accepted type:
+
+```yaml
+steps:
+  - name: Reserve Stock
+    inputTypeName: PhysicalOrder
+    outputTypeName: StockReserved
+
+  - name: Provision License
+    inputTypeName: DigitalOrder
+    outputTypeName: LicenseProvisioned
+```
+
+This is equivalent to the explicit `accepts` form above. Explicit `accepts` is required when the step's `inputTypeName` is a union with multiple variants and the step handles a subset of them.
+
 Compiler rules:
 
 - `accepts` may reference concrete contract types only.
+- if `accepts` is omitted and `inputTypeName` is a single concrete message, that type becomes the accepted type implicitly.
 - union inputs with multiple concrete alternatives require explicit `accepts`.
 - branch-aware pipelines are `ONE_TO_ONE` only in v1.
 - there must be exactly one `terminal: true` step, and it must be last.
