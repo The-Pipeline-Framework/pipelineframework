@@ -205,7 +205,7 @@ class PipelineBranchRoutingPlannerTest {
     }
 
     @Test
-    void rejectsUnionInputWithoutExplicitAccepts() {
+    void implicitlyAcceptsAllUnionVariantsWhenAcceptsOmitted() {
         List<String> diagnostics = new ArrayList<>();
         PipelineCompilationContext ctx = context(diagnostics);
         ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
@@ -232,10 +232,12 @@ class PipelineBranchRoutingPlannerTest {
 
         var plan = planner.plan(ctx);
 
-        assertTrue(plan.isEmpty());
-        assertTrue(diagnostics.stream().anyMatch(message ->
-                message.contains("Explicit accepts is required") && message.contains("OrderDecision")),
-            diagnostics.toString());
+        assertTrue(plan.isPresent(), diagnostics.toString());
+        assertTrue(plan.orElseThrow().branchAware());
+        java.util.Set<String> expected = java.util.Set.of("PhysicalOrder", "DigitalOrder", "ManualReviewOrder");
+        java.util.Set<String> actual = new java.util.LinkedHashSet<>(plan.orElseThrow().steps().get(1).acceptedContractTypes());
+        assertEquals(expected, actual);
+        assertTrue(diagnostics.isEmpty(), diagnostics.toString());
     }
 
     @Test

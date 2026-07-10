@@ -237,13 +237,6 @@ public final class PipelineBranchRoutingPlanner {
                 return Optional.empty();
             }
         } else {
-            if (inputLeafTypes.size() != 1) {
-                error(ctx, "Step '" + templateStep.name()
-                    + "' resolves inputTypeName '" + templateStep.inputTypeName()
-                    + "' to multiple alternatives " + inputLeafTypes
-                    + ". Explicit accepts is required.");
-                return Optional.empty();
-            }
             acceptedLeafTypes.addAll(inputLeafTypes);
         }
 
