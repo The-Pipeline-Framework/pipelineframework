@@ -141,6 +141,9 @@ public final class PipelineConfigBuildSteps {
             if (stepMap.containsKey("accepts")) {
                 return true;
             }
+            if (stepMap.containsKey("inputTypeName")) {
+                return true;
+            }
             Object terminal = stepMap.get("terminal");
             if (Boolean.TRUE.equals(terminal) || "true".equalsIgnoreCase(String.valueOf(terminal))) {
                 return true;

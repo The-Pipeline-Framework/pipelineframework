@@ -164,6 +164,47 @@ class PipelineBranchRoutingPlannerTest {
     }
 
     @Test
+    void autoResolvesAcceptedTypesFromInputTypeNameWhenAcceptsOmitted() {
+        List<String> diagnostics = new ArrayList<>();
+        PipelineCompilationContext ctx = context(diagnostics);
+        ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
+            2,
+            "Order Routing",
+            "com.example.order",
+            "GRPC",
+            PipelinePlatform.COMPUTE,
+            messages(),
+            unions(),
+            List.of(
+                step("classifyOrder", "OrderRequest", "OrderDecision", List.of(), false),
+                step("reserveStock", "PhysicalOrder", "StockReserved", List.of(), false),
+                step("provisionLicense", "DigitalOrder", "LicenseProvisioned", List.of(), false),
+                step("requestManualReview", "ManualReviewOrder", "ManualReviewRequested", List.of(), false),
+                step("finalize", "OrderCompletion", "FinalizedOrder",
+                    List.of("StockReserved", "LicenseProvisioned", "ManualReviewRequested"), true)),
+            Map.of(),
+            null,
+            null,
+            null));
+        ctx.setStepDefinitions(List.of(
+            stepDefinition("classifyOrder", "OrderRequest", "OrderDecision"),
+            stepDefinition("reserveStock", "PhysicalOrder", "StockReserved"),
+            stepDefinition("provisionLicense", "DigitalOrder", "LicenseProvisioned"),
+            stepDefinition("requestManualReview", "ManualReviewOrder", "ManualReviewRequested"),
+            stepDefinition("finalize", "OrderCompletion", "FinalizedOrder")));
+
+        var plan = planner.plan(ctx);
+
+        assertTrue(plan.isPresent(), diagnostics.toString());
+        assertTrue(plan.orElseThrow().branchAware());
+        assertEquals(4, plan.orElseThrow().terminalStepIndex());
+        assertEquals(List.of("PhysicalOrder"), plan.orElseThrow().steps().get(1).acceptedContractTypes());
+        assertEquals(List.of("DigitalOrder"), plan.orElseThrow().steps().get(2).acceptedContractTypes());
+        assertEquals(List.of("ManualReviewOrder"), plan.orElseThrow().steps().get(3).acceptedContractTypes());
+        assertTrue(diagnostics.isEmpty(), diagnostics.toString());
+    }
+
+    @Test
     void rejectsUnionInputWithoutExplicitAccepts() {
         List<String> diagnostics = new ArrayList<>();
         PipelineCompilationContext ctx = context(diagnostics);

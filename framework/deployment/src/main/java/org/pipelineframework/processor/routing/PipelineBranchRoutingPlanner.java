@@ -49,7 +49,7 @@ public final class PipelineBranchRoutingPlanner {
 
         boolean branchAware = templateSteps.stream()
             .filter(Objects::nonNull)
-            .anyMatch(step -> !step.accepts().isEmpty() || step.terminal());
+            .anyMatch(step -> !step.accepts().isEmpty() || step.terminal() || step.inputTypeName() != null);
         if (!branchAware) {
             return Optional.of(PipelineBranchingPlan.disabled());
         }
