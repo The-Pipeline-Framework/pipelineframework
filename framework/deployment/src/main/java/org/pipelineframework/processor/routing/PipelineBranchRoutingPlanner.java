@@ -47,9 +47,11 @@ public final class PipelineBranchRoutingPlanner {
             return Optional.of(PipelineBranchingPlan.disabled());
         }
 
+        Map<String, PipelineTemplateUnion> unions = templateConfig.unions();
         boolean branchAware = templateSteps.stream()
             .filter(Objects::nonNull)
-            .anyMatch(step -> !step.accepts().isEmpty() || step.terminal());
+            .anyMatch(step -> !step.accepts().isEmpty() || step.terminal()
+                || (step.inputTypeName() != null && unions.containsKey(step.inputTypeName())));
         if (!branchAware) {
             return Optional.of(PipelineBranchingPlan.disabled());
         }
