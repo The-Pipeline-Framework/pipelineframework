@@ -99,10 +99,6 @@ steps:
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.tpfgo.common.domain.PaymentOutcome
     inputTypeName: PaymentOutcome
-    accepts:
-      - PaymentCaptured
-      - PaymentRejected
-      - PaymentRequiresReview
     output: org.pipelineframework.tpfgo.common.domain.TerminalOrderState
     outputTypeName: TerminalOrderState
     outboundMapper: org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.TerminalOrderStateMapper

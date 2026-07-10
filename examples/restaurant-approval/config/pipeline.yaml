@@ -159,8 +159,5 @@ steps:
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.restaurantapproval.common.domain.RestaurantDecision
     inputTypeName: RestaurantDecision
-    accepts:
-      - RestaurantOrderAccepted
-      - RestaurantOrderDeclined
     output: org.pipelineframework.restaurantapproval.common.domain.TerminalOrderState
     outputTypeName: TerminalOrderState
