@@ -278,6 +278,64 @@ class PipelineBranchRoutingPlannerTest {
     }
 
     @Test
+    void linearTemplateWithOnlyConcreteInputTypesIsNotBranchAware() {
+        List<String> diagnostics = new ArrayList<>();
+        PipelineCompilationContext ctx = context(diagnostics);
+        ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
+            2,
+            "Linear Pipeline",
+            "com.example.pipeline",
+            "GRPC",
+            PipelinePlatform.COMPUTE,
+            messages(),
+            Map.of(),
+            List.of(
+                step("processOrder", "OrderRequest", "OrderDecision", List.of(), false),
+                step("finalize", "OrderDecision", "FinalizedOrder", List.of(), false)),
+            Map.of(),
+            null,
+            null,
+            null));
+        ctx.setStepDefinitions(List.of(
+            stepDefinition("processOrder", "OrderRequest", "OrderDecision"),
+            stepDefinition("finalize", "OrderDecision", "FinalizedOrder")));
+
+        var plan = planner.plan(ctx);
+
+        assertTrue(plan.isPresent(), diagnostics.toString());
+        assertFalse(plan.orElseThrow().branchAware());
+        assertTrue(diagnostics.isEmpty(), diagnostics.toString());
+    }
+
+    @Test
+    void v1TemplateWithStepsIsNotBranchAware() {
+        List<String> diagnostics = new ArrayList<>();
+        PipelineCompilationContext ctx = context(diagnostics);
+        ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
+            1,
+            "Simple Pipeline",
+            "com.example.pipeline",
+            "GRPC",
+            PipelinePlatform.COMPUTE,
+            Map.of(),
+            Map.of(),
+            List.of(
+                step("processOrder", "OrderRequest", "OrderDecision", List.of(), false)),
+            Map.of(),
+            null,
+            null,
+            null));
+        ctx.setStepDefinitions(List.of(
+            stepDefinition("processOrder", "OrderRequest", "OrderDecision")));
+
+        var plan = planner.plan(ctx);
+
+        assertTrue(plan.isPresent(), diagnostics.toString());
+        assertFalse(plan.orElseThrow().branchAware());
+        assertTrue(diagnostics.isEmpty(), diagnostics.toString());
+    }
+
+    @Test
     void rejectsBranchAwareStepWhenAcceptedJavaTypeCannotBeResolved() {
         List<String> diagnostics = new ArrayList<>();
         Messager messager = mock(Messager.class);
