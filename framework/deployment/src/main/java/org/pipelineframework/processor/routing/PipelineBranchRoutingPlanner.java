@@ -250,7 +250,8 @@ public final class PipelineBranchRoutingPlanner {
         List<ClassName> acceptedDomainTypes = acceptedLeafTypes.stream()
             .map(typeName -> ClassName.get(templateConfig.basePackage() + ".common.domain", typeName))
             .toList();
-        if (!validateAssignableAcceptedTypes(ctx, templateStep, stepDefinition, acceptedDomainTypes)) {
+        if (!templateStep.accepts().isEmpty()
+            && !validateAssignableAcceptedTypes(ctx, templateStep, stepDefinition, acceptedDomainTypes)) {
             return Optional.empty();
         }
 

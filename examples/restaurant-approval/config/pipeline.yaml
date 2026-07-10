@@ -161,3 +161,4 @@ steps:
     inputTypeName: RestaurantDecision
     output: org.pipelineframework.restaurantapproval.common.domain.TerminalOrderState
     outputTypeName: TerminalOrderState
+    terminal: true
