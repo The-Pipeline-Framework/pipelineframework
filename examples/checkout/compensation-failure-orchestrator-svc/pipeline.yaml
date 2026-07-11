@@ -102,6 +102,7 @@ steps:
     output: org.pipelineframework.tpfgo.common.domain.TerminalOrderState
     outputTypeName: TerminalOrderState
     outboundMapper: org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.TerminalOrderStateMapper
+    terminal: true
 input:
   subscription:
     publication: tpfgo.payment.capture-result.v1

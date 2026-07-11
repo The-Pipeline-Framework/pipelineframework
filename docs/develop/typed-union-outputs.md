@@ -123,7 +123,7 @@ For gRPC, field-level mapping stays in ordinary variant mappers such as `Mapper<
 - Variant names and protobuf field numbers must be unique.
 - A union can be used as a step input or output type.
 - A union cannot be used as a field inside a normal message in this first version.
-- Union-routed branching is opt-in. TPF only auto-routes when the pipeline authors `accepts` and one final `terminal: true` merge step.
+- Union-routed branching is opt-in. TPF detects branch awareness from `accepts`, `terminal: true`, or a step's `inputTypeName` alone.
 
 TPFGo uses this shape in the payment capture pipeline, where `PaymentOutcome` replaces a status-field result record while keeping the pipeline linear.
 
@@ -165,10 +165,6 @@ steps:
     cardinality: ONE_TO_ONE
     inputTypeName: OrderCompletion
     outputTypeName: FinalizedOrder
-    accepts:
-      - StockReserved
-      - LicenseProvisioned
-      - ManualReviewRequested
     terminal: true
 ```
 
@@ -176,7 +172,8 @@ Rules:
 
 - The pipeline stays a linear sequence of authored steps.
 - `accepts` entries must be concrete contract types, not predicates and not union names.
-- If a step's `inputTypeName` resolves to more than one concrete alternative, explicit `accepts` is required.
+- If `accepts` is omitted, TPF implicitly accepts every concrete leaf type resolved from `inputTypeName`.
+- A union input therefore accepts all of its variants by default. Use explicit `accepts` when the step handles only a subset.
 - Branch-aware routing currently supports `ONE_TO_ONE` steps only.
 - A branch-aware pipeline must declare exactly one `terminal: true` step, and it must be last.
 - A publish sink after the step sequence does not satisfy or infer the terminal merge; author the merge step explicitly.
@@ -186,3 +183,32 @@ Runtime behavior:
 - If the current item matches a step's accepted type set, TPF executes the step normally.
 - If it does not match, TPF skips the step as `not_applicable`, records a replay event, and passes the item through unchanged.
 - The terminal merge step must accept every reachable branch-end alternative. Otherwise the build fails.
+
+When a step's `inputTypeName` references a concrete message, omitting `accepts` implicitly accepts that message:
+
+```yaml
+steps:
+  - name: Reserve Stock
+    inputTypeName: PhysicalOrder
+    outputTypeName: StockReserved
+    # no accepts — implicitly accepts PhysicalOrder
+
+  - name: Provision License
+    inputTypeName: DigitalOrder
+    outputTypeName: LicenseProvisioned
+    # no accepts — implicitly accepts DigitalOrder
+```
+
+This is equivalent to writing `accepts: [PhysicalOrder]` and `accepts: [DigitalOrder]`.
+
+When `inputTypeName` references a union, omitting `accepts` implicitly accepts every variant. That is normally the clearest declaration for a terminal merge:
+
+```yaml
+- name: Finalize Order
+  cardinality: ONE_TO_ONE
+  inputTypeName: OrderCompletion
+  outputTypeName: FinalizedOrder
+  terminal: true
+```
+
+Here `Finalize Order` accepts `StockReserved`, `LicenseProvisioned`, and `ManualReviewRequested` because those are the variants of `OrderCompletion`. Listing all three under `accepts` is equivalent but unnecessary. Use explicit `accepts` for branch-specific steps that handle only part of a union.

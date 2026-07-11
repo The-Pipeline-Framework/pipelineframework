@@ -1,6 +1,7 @@
 package org.pipelineframework.branching;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -22,7 +23,7 @@ public record StepBranchingDescriptor(
     boolean terminal
 ) {
 
-    private static final ConcurrentHashMap<MethodCacheKey, Optional<VariantExtractor>> extractionCache = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<MethodCacheKey, List<VariantExtractor>> extractionCache = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<Class<?>, Method[]> sortedMethodsCache = new ConcurrentHashMap<>();
 
     public boolean accepts(Object item) {
@@ -36,17 +37,26 @@ public record StepBranchingDescriptor(
         if (matchesAcceptedInstance(item)) {
             return wrapAcceptedVariant(item);
         }
-        return extractAcceptedVariant(item).orElse(null);
+        return extractAcceptedVariant(item)
+            .map(this::wrapAcceptedVariant)
+            .orElse(null);
     }
 
     private Optional<Object> extractAcceptedVariant(Object item) {
         Class<?> itemClass = item.getClass();
         MethodCacheKey cacheKey = new MethodCacheKey(itemClass, this);
-        Optional<VariantExtractor> extractor = extractionCache.computeIfAbsent(cacheKey, ignored -> findExtractor(itemClass));
-        return extractor.flatMap(candidate -> candidate.extract(item).filter(this::matchesAcceptedInstance));
+        List<VariantExtractor> extractors = extractionCache.computeIfAbsent(
+            cacheKey,
+            ignored -> findExtractors(itemClass));
+        return extractors.stream()
+            .map(candidate -> candidate.extract(item))
+            .flatMap(Optional::stream)
+            .filter(this::matchesAcceptedInstance)
+            .findFirst();
     }
 
-    private Optional<VariantExtractor> findExtractor(Class<?> itemClass) {
+    private List<VariantExtractor> findExtractors(Class<?> itemClass) {
+        List<VariantExtractor> extractors = new ArrayList<>();
         Method[] methods = getSortedMethods(itemClass);
         for (Method method : methods) {
             if (method.getParameterCount() != 0 || !method.getName().startsWith("get")) {
@@ -67,9 +77,9 @@ public record StepBranchingDescriptor(
             Optional<Method> hasMethod = findHasMethod(itemClass, suffix);
             method.trySetAccessible();
             hasMethod.ifPresent(Method::trySetAccessible);
-            return Optional.of(new VariantExtractor(method, hasMethod));
+            extractors.add(new VariantExtractor(method, hasMethod));
         }
-        return Optional.empty();
+        return List.copyOf(extractors);
     }
 
     private record VariantExtractor(Method getter, Optional<Method> hasMethod) {

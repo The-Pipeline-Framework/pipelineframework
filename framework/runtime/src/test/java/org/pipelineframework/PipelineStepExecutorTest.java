@@ -342,6 +342,72 @@ class PipelineStepExecutorTest {
     }
 
     @Test
+    void branchAwareOneToOneRewrapsExtractedUnionVariantIntoTerminalInput() {
+        FinalizePaymentStep step = new FinalizePaymentStep();
+        StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
+            6,
+            "Finalize Payment Output",
+            step.getClass().getName(),
+            PaymentOutputBranchEnvelope.class.getName(),
+            PaymentOutputBranchEnvelope.class,
+            List.of("ApprovedPaymentOutput"),
+            List.of(ApprovedPaymentOutputMessage.class.getName()),
+            List.of(ApprovedPaymentOutputMessage.class),
+            true);
+
+        Object result = PipelineStepExecutor.applyOneToOneUnchecked(
+            step,
+            Uni.createFrom().item(PaymentOutputBranchEnvelope.newBuilder()
+                .setApproved(new ApprovedPaymentOutputMessage("p-43"))
+                .build()),
+            false,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null,
+            descriptor);
+
+        Object output = ((Uni<?>) result).await().atMost(Duration.ofSeconds(5));
+        assertEquals("finalized:p-43", output);
+        assertEquals(1, step.invocations());
+    }
+
+    @Test
+    void branchAwareTerminalSelectsActiveVariantWhenMultipleAlternativesAreAccepted() {
+        FinalizePaymentStep step = new FinalizePaymentStep();
+        StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
+            6,
+            "Finalize Payment Output",
+            step.getClass().getName(),
+            PaymentOutputBranchEnvelope.class.getName(),
+            PaymentOutputBranchEnvelope.class,
+            List.of("ApprovedPaymentOutput", "RejectedPaymentOutput"),
+            List.of(ApprovedPaymentOutputMessage.class.getName(), RejectedPaymentOutputMessage.class.getName()),
+            List.of(ApprovedPaymentOutputMessage.class, RejectedPaymentOutputMessage.class),
+            true);
+
+        Object result = PipelineStepExecutor.applyOneToOneUnchecked(
+            step,
+            Uni.createFrom().item(PaymentOutputBranchEnvelope.newBuilder()
+                .setRejected(new RejectedPaymentOutputMessage("p-44"))
+                .build()),
+            false,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null,
+            descriptor);
+
+        Object output = ((Uni<?>) result).await().atMost(Duration.ofSeconds(5));
+        assertEquals("rejected:p-44", output);
+        assertEquals(1, step.invocations());
+    }
+
+    @Test
     void oneToManyMergeProducesExpandedItems() {
         Object result = PipelineStepExecutor.applyOneToManyUnchecked(
             new ExpandingOneToManyStep(),
@@ -997,6 +1063,9 @@ class PipelineStepExecutorTest {
     record ApprovedPaymentOutputMessage(String paymentId) {
     }
 
+    record RejectedPaymentOutputMessage(String paymentId) {
+    }
+
     static final class PaymentStatusEnvelope {
         private final ApprovedPaymentStatusMessage approved;
 
@@ -1019,9 +1088,14 @@ class PipelineStepExecutorTest {
 
     static final class PaymentOutputBranchEnvelope {
         private final ApprovedPaymentOutputMessage approved;
+        private final RejectedPaymentOutputMessage rejected;
 
-        private PaymentOutputBranchEnvelope(ApprovedPaymentOutputMessage approved) {
+        private PaymentOutputBranchEnvelope(
+            ApprovedPaymentOutputMessage approved,
+            RejectedPaymentOutputMessage rejected
+        ) {
             this.approved = approved;
+            this.rejected = rejected;
         }
 
         public boolean hasApproved() {
@@ -1032,20 +1106,34 @@ class PipelineStepExecutorTest {
             return approved;
         }
 
+        public boolean hasRejected() {
+            return rejected != null;
+        }
+
+        public RejectedPaymentOutputMessage getRejected() {
+            return rejected;
+        }
+
         public static Builder newBuilder() {
             return new Builder();
         }
 
         public static final class Builder {
             private ApprovedPaymentOutputMessage approved;
+            private RejectedPaymentOutputMessage rejected;
 
             public Builder setApproved(ApprovedPaymentOutputMessage approved) {
                 this.approved = approved;
                 return this;
             }
 
+            public Builder setRejected(RejectedPaymentOutputMessage rejected) {
+                this.rejected = rejected;
+                return this;
+            }
+
             public PaymentOutputBranchEnvelope build() {
-                return new PaymentOutputBranchEnvelope(approved);
+                return new PaymentOutputBranchEnvelope(approved, rejected);
             }
         }
     }
@@ -1071,7 +1159,10 @@ class PipelineStepExecutorTest {
         @Override
         public Uni<String> applyOneToOne(PaymentOutputBranchEnvelope input) {
             invocations.incrementAndGet();
-            return Uni.createFrom().item("finalized:" + input.getApproved().paymentId());
+            String result = input.hasApproved()
+                ? "finalized:" + input.getApproved().paymentId()
+                : "rejected:" + input.getRejected().paymentId();
+            return Uni.createFrom().item(result);
         }
 
         int invocations() {

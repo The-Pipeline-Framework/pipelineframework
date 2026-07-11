@@ -98,8 +98,7 @@ steps:
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.csv.common.domain.ApprovedPaymentStatus
     inputTypeName: ApprovedPaymentStatus
-    accepts:
-      - ApprovedPaymentStatus
+    # accepts omitted — implicitly accepts ApprovedPaymentStatus
     output: org.pipelineframework.csv.common.domain.ApprovedPaymentOutput
     outputTypeName: ApprovedPaymentOutput
 
@@ -108,8 +107,7 @@ steps:
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus
     inputTypeName: UnapprovedPaymentStatus
-    accepts:
-      - UnapprovedPaymentStatus
+    # accepts omitted — implicitly accepts UnapprovedPaymentStatus
     output: org.pipelineframework.csv.common.domain.UnapprovedPaymentOutput
     outputTypeName: UnapprovedPaymentOutput
 

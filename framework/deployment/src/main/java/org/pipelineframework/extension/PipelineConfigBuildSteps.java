@@ -30,9 +30,11 @@ import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Loads delegated operator step configuration from pipeline YAML at Quarkus build time.
@@ -130,6 +132,7 @@ public final class PipelineConfigBuildSteps {
         if (!(root instanceof Map<?, ?> rootMap)) {
             return false;
         }
+        Set<String> unionNames = declaredUnionNames(rootMap);
         Object stepsObj = rootMap.get("steps");
         if (!(stepsObj instanceof Iterable<?> steps)) {
             return false;
@@ -141,12 +144,30 @@ public final class PipelineConfigBuildSteps {
             if (stepMap.containsKey("accepts")) {
                 return true;
             }
+            String inputTypeName = stringValue(stepMap, "inputTypeName");
+            if (!isBlank(inputTypeName) && unionNames.contains(inputTypeName.trim())) {
+                return true;
+            }
             Object terminal = stepMap.get("terminal");
             if (Boolean.TRUE.equals(terminal) || "true".equalsIgnoreCase(String.valueOf(terminal))) {
                 return true;
             }
         }
         return false;
+    }
+
+    private Set<String> declaredUnionNames(Map<?, ?> rootMap) {
+        Object unionsObj = rootMap.get("unions");
+        if (!(unionsObj instanceof Map<?, ?> unions)) {
+            return Set.of();
+        }
+        Set<String> unionNames = new LinkedHashSet<>();
+        for (Object key : unions.keySet()) {
+            if (key != null) {
+                unionNames.add(String.valueOf(key).trim());
+            }
+        }
+        return unionNames;
     }
 
     /**

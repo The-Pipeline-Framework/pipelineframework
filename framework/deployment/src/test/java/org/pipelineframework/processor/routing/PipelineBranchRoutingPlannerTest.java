@@ -164,7 +164,48 @@ class PipelineBranchRoutingPlannerTest {
     }
 
     @Test
-    void rejectsUnionInputWithoutExplicitAccepts() {
+    void autoResolvesAcceptedTypesFromInputTypeNameWhenAcceptsOmitted() {
+        List<String> diagnostics = new ArrayList<>();
+        PipelineCompilationContext ctx = context(diagnostics);
+        ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
+            2,
+            "Order Routing",
+            "com.example.order",
+            "GRPC",
+            PipelinePlatform.COMPUTE,
+            messages(),
+            unions(),
+            List.of(
+                step("classifyOrder", "OrderRequest", "OrderDecision", List.of(), false),
+                step("reserveStock", "PhysicalOrder", "StockReserved", List.of(), false),
+                step("provisionLicense", "DigitalOrder", "LicenseProvisioned", List.of(), false),
+                step("requestManualReview", "ManualReviewOrder", "ManualReviewRequested", List.of(), false),
+                step("finalize", "OrderCompletion", "FinalizedOrder",
+                    List.of("StockReserved", "LicenseProvisioned", "ManualReviewRequested"), true)),
+            Map.of(),
+            null,
+            null,
+            null));
+        ctx.setStepDefinitions(List.of(
+            stepDefinition("classifyOrder", "OrderRequest", "OrderDecision"),
+            stepDefinition("reserveStock", "PhysicalOrder", "StockReserved"),
+            stepDefinition("provisionLicense", "DigitalOrder", "LicenseProvisioned"),
+            stepDefinition("requestManualReview", "ManualReviewOrder", "ManualReviewRequested"),
+            stepDefinition("finalize", "OrderCompletion", "FinalizedOrder")));
+
+        var plan = planner.plan(ctx);
+
+        assertTrue(plan.isPresent(), diagnostics.toString());
+        assertTrue(plan.orElseThrow().branchAware());
+        assertEquals(4, plan.orElseThrow().terminalStepIndex());
+        assertEquals(List.of("PhysicalOrder"), plan.orElseThrow().steps().get(1).acceptedContractTypes());
+        assertEquals(List.of("DigitalOrder"), plan.orElseThrow().steps().get(2).acceptedContractTypes());
+        assertEquals(List.of("ManualReviewOrder"), plan.orElseThrow().steps().get(3).acceptedContractTypes());
+        assertTrue(diagnostics.isEmpty(), diagnostics.toString());
+    }
+
+    @Test
+    void implicitlyAcceptsAllUnionVariantsWhenAcceptsOmitted() {
         List<String> diagnostics = new ArrayList<>();
         PipelineCompilationContext ctx = context(diagnostics);
         ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
@@ -191,10 +232,61 @@ class PipelineBranchRoutingPlannerTest {
 
         var plan = planner.plan(ctx);
 
-        assertTrue(plan.isEmpty());
-        assertTrue(diagnostics.stream().anyMatch(message ->
-                message.contains("Explicit accepts is required") && message.contains("OrderDecision")),
-            diagnostics.toString());
+        assertTrue(plan.isPresent(), diagnostics.toString());
+        assertTrue(plan.orElseThrow().branchAware());
+        java.util.Set<String> expected = java.util.Set.of("PhysicalOrder", "DigitalOrder", "ManualReviewOrder");
+        java.util.Set<String> actual = new java.util.LinkedHashSet<>(plan.orElseThrow().steps().get(1).acceptedContractTypes());
+        assertEquals(expected, actual);
+        assertTrue(diagnostics.isEmpty(), diagnostics.toString());
+    }
+
+    @Test
+    void resolvesImplicitUnionAcceptedTypesFromSharedDomainPackage() {
+        List<String> diagnostics = new ArrayList<>();
+        PipelineCompilationContext ctx = context(diagnostics);
+        ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
+            2,
+            "Compensation Finalize",
+            "org.pipelineframework.tpfgo.compensation.failure",
+            "GRPC",
+            PipelinePlatform.COMPUTE,
+            Map.of(
+                "PaymentCaptured", message("PaymentCaptured"),
+                "PaymentRejected", message("PaymentRejected"),
+                "PaymentRequiresReview", message("PaymentRequiresReview"),
+                "TerminalOrderState", message("TerminalOrderState")),
+            Map.of(
+                "PaymentOutcome", new PipelineTemplateUnion(
+                    "PaymentOutcome",
+                    Map.of(
+                        "captured", new PipelineTemplateUnionVariant("captured", "PaymentCaptured", 1),
+                        "rejected", new PipelineTemplateUnionVariant("rejected", "PaymentRejected", 2),
+                        "review", new PipelineTemplateUnionVariant("review", "PaymentRequiresReview", 3)))),
+            List.of(
+                step("compensationFinalizeOrder", "PaymentOutcome", "TerminalOrderState", List.of(), true)),
+            Map.of(),
+            null,
+            null,
+            null));
+        ctx.setStepDefinitions(List.of(
+            stepDefinition(
+                "compensationFinalizeOrder",
+                "org.pipelineframework.tpfgo.compensation.failure.pipeline",
+                "org.pipelineframework.tpfgo.common.domain.PaymentOutcome",
+                "org.pipelineframework.tpfgo.common.domain.TerminalOrderState")));
+
+        var plan = planner.plan(ctx);
+
+        assertTrue(plan.isPresent(), diagnostics.toString());
+        assertEquals(
+            java.util.Set.of(
+                "org.pipelineframework.tpfgo.common.domain.PaymentCaptured",
+                "org.pipelineframework.tpfgo.common.domain.PaymentRejected",
+                "org.pipelineframework.tpfgo.common.domain.PaymentRequiresReview"),
+            plan.orElseThrow().steps().getFirst().acceptedDomainTypes().stream()
+                .map(ClassName::canonicalName)
+                .collect(java.util.stream.Collectors.toSet()));
+        assertTrue(diagnostics.isEmpty(), diagnostics.toString());
     }
 
     @Test
@@ -234,6 +326,64 @@ class PipelineBranchRoutingPlannerTest {
                 message.contains("does not cover all reachable branch-end alternatives")
                     && message.contains("ManualReviewRequested")),
             diagnostics.toString());
+    }
+
+    @Test
+    void linearTemplateWithOnlyConcreteInputTypesIsNotBranchAware() {
+        List<String> diagnostics = new ArrayList<>();
+        PipelineCompilationContext ctx = context(diagnostics);
+        ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
+            2,
+            "Linear Pipeline",
+            "com.example.pipeline",
+            "GRPC",
+            PipelinePlatform.COMPUTE,
+            messages(),
+            Map.of(),
+            List.of(
+                step("processOrder", "OrderRequest", "OrderDecision", List.of(), false),
+                step("finalize", "OrderDecision", "FinalizedOrder", List.of(), false)),
+            Map.of(),
+            null,
+            null,
+            null));
+        ctx.setStepDefinitions(List.of(
+            stepDefinition("processOrder", "OrderRequest", "OrderDecision"),
+            stepDefinition("finalize", "OrderDecision", "FinalizedOrder")));
+
+        var plan = planner.plan(ctx);
+
+        assertTrue(plan.isPresent(), diagnostics.toString());
+        assertFalse(plan.orElseThrow().branchAware());
+        assertTrue(diagnostics.isEmpty(), diagnostics.toString());
+    }
+
+    @Test
+    void v1TemplateWithStepsIsNotBranchAware() {
+        List<String> diagnostics = new ArrayList<>();
+        PipelineCompilationContext ctx = context(diagnostics);
+        ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
+            1,
+            "Simple Pipeline",
+            "com.example.pipeline",
+            "GRPC",
+            PipelinePlatform.COMPUTE,
+            Map.of(),
+            Map.of(),
+            List.of(
+                step("processOrder", "OrderRequest", "OrderDecision", List.of(), false)),
+            Map.of(),
+            null,
+            null,
+            null));
+        ctx.setStepDefinitions(List.of(
+            stepDefinition("processOrder", "OrderRequest", "OrderDecision")));
+
+        var plan = planner.plan(ctx);
+
+        assertTrue(plan.isPresent(), diagnostics.toString());
+        assertFalse(plan.orElseThrow().branchAware());
+        assertTrue(diagnostics.isEmpty(), diagnostics.toString());
     }
 
     @Test
@@ -310,6 +460,11 @@ class PipelineBranchRoutingPlannerTest {
         assertTrue(diagnostics.stream().anyMatch(message ->
                 message.contains("accepted type 'com.example.order.common.domain.LicenseProvisioned'")
                     && message.contains("could not be resolved during branch routing validation")),
+            diagnostics.toString());
+        assertTrue(diagnostics.stream().anyMatch(message ->
+                message.contains("WARNING:Union contract 'OrderCompletion' variant 'license'")
+                    && message.contains("com.example.order.common.domain.LicenseProvisioned")
+                    && message.contains("skipping runtime type indexing")),
             diagnostics.toString());
         assertFalse(diagnostics.isEmpty());
     }
@@ -404,6 +559,20 @@ class PipelineBranchRoutingPlannerTest {
             MapperFallbackMode.NONE,
             ClassName.get("com.example.order.common.domain", inputTypeName),
             ClassName.get("com.example.order.common.domain", outputTypeName),
+            StreamingShape.UNARY_UNARY);
+    }
+
+    private static StepDefinition stepDefinition(String name, String servicePackage, String inputTypeName, String outputTypeName) {
+        return new StepDefinition(
+            name,
+            StepKind.INTERNAL,
+            ClassName.get(servicePackage, capitalize(name) + "Service"),
+            null,
+            null,
+            null,
+            MapperFallbackMode.NONE,
+            ClassName.bestGuess(inputTypeName),
+            ClassName.bestGuess(outputTypeName),
             StreamingShape.UNARY_UNARY);
     }
 
