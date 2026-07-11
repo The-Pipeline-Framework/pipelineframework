@@ -342,6 +342,39 @@ class PipelineStepExecutorTest {
     }
 
     @Test
+    void branchAwareOneToOneRewrapsExtractedUnionVariantIntoTerminalInput() {
+        FinalizePaymentStep step = new FinalizePaymentStep();
+        StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
+            6,
+            "Finalize Payment Output",
+            step.getClass().getName(),
+            PaymentOutputBranchEnvelope.class.getName(),
+            PaymentOutputBranchEnvelope.class,
+            List.of("ApprovedPaymentOutput"),
+            List.of(ApprovedPaymentOutputMessage.class.getName()),
+            List.of(ApprovedPaymentOutputMessage.class),
+            true);
+
+        Object result = PipelineStepExecutor.applyOneToOneUnchecked(
+            step,
+            Uni.createFrom().item(PaymentOutputBranchEnvelope.newBuilder()
+                .setApproved(new ApprovedPaymentOutputMessage("p-43"))
+                .build()),
+            false,
+            16,
+            null,
+            null,
+            null,
+            null,
+            null,
+            descriptor);
+
+        Object output = ((Uni<?>) result).await().atMost(Duration.ofSeconds(5));
+        assertEquals("finalized:p-43", output);
+        assertEquals(1, step.invocations());
+    }
+
+    @Test
     void oneToManyMergeProducesExpandedItems() {
         Object result = PipelineStepExecutor.applyOneToManyUnchecked(
             new ExpandingOneToManyStep(),

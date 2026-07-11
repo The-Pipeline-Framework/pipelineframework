@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -72,6 +73,55 @@ class PipelineConfigBuildStepsTest {
                 DeploymentException.class,
                 () -> new PipelineConfigBuildSteps().loadPipelineConfig());
         assertTrue(ex.getMessage().contains("defines both operator and delegate"));
+    }
+
+    @Test
+    void detectsBranchAwareRoutingOnlyForUnionTypedInputsOrExplicitMarkers() throws Exception {
+        Path config = tempDir.resolve("pipeline.yaml");
+        Files.writeString(config, """
+            unions:
+              PaymentOutcome:
+                variants:
+                  captured:
+                    type: PaymentCaptured
+                    number: 1
+                  rejected:
+                    type: PaymentRejected
+                    number: 2
+            steps:
+              - name: "Linear Step"
+                inputTypeName: "PaymentRecord"
+                outputTypeName: "PaymentOutcome"
+              - name: "Terminal Step"
+                inputTypeName: "PaymentOutcome"
+                outputTypeName: "TerminalOrderState"
+                terminal: true
+            """);
+
+        System.setProperty("pipeline.config", config.toString());
+        PipelineConfigBuildItem item = new PipelineConfigBuildSteps().loadPipelineConfig();
+
+        assertTrue(item.branchAware());
+    }
+
+    @Test
+    void doesNotTreatEveryInputTypeNameAsBranchAware() throws Exception {
+        Path config = tempDir.resolve("pipeline.yaml");
+        Files.writeString(config, """
+            steps:
+              - name: "Linear Step"
+                inputTypeName: "PaymentRecord"
+                outputTypeName: "PaymentDecision"
+              - name: "Finalize"
+                inputTypeName: "PaymentDecision"
+                outputTypeName: "Receipt"
+            """);
+
+        System.setProperty("pipeline.config", config.toString());
+        PipelineConfigBuildItem item = new PipelineConfigBuildSteps().loadPipelineConfig();
+
+        assertTrue(item.steps().isEmpty());
+        assertFalse(item.branchAware());
     }
 
     private static void restoreProperty(String key, String value) {

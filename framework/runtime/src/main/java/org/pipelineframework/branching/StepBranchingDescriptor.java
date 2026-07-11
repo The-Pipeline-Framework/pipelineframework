@@ -36,7 +36,9 @@ public record StepBranchingDescriptor(
         if (matchesAcceptedInstance(item)) {
             return wrapAcceptedVariant(item);
         }
-        return extractAcceptedVariant(item).orElse(null);
+        return extractAcceptedVariant(item)
+            .map(this::wrapAcceptedVariant)
+            .orElse(null);
     }
 
     private Optional<Object> extractAcceptedVariant(Object item) {

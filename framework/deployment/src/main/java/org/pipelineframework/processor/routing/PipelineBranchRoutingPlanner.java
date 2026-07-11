@@ -65,6 +65,11 @@ public final class PipelineBranchRoutingPlanner {
         if (definitionsByName.isEmpty()) {
             return Optional.empty();
         }
+        Map<String, ClassName> contractRuntimeTypes = indexContractRuntimeTypes(
+            ctx,
+            templateConfig,
+            templateSteps,
+            definitionsByName.orElseThrow());
 
         List<ResolvedStep> resolvedSteps = new ArrayList<>();
         boolean valid = true;
@@ -82,7 +87,13 @@ public final class PipelineBranchRoutingPlanner {
                 valid = false;
                 continue;
             }
-            Optional<ResolvedStep> resolved = resolveStep(ctx, templateConfig, templateStep, stepDefinition, index);
+            Optional<ResolvedStep> resolved = resolveStep(
+                ctx,
+                templateConfig,
+                templateStep,
+                stepDefinition,
+                index,
+                contractRuntimeTypes);
             if (resolved.isEmpty()) {
                 valid = false;
                 continue;
@@ -180,7 +191,8 @@ public final class PipelineBranchRoutingPlanner {
         PipelineTemplateConfig templateConfig,
         PipelineTemplateStep templateStep,
         StepDefinition stepDefinition,
-        int index
+        int index,
+        Map<String, ClassName> contractRuntimeTypes
     ) {
         if (isBlank(templateStep.inputTypeName())) {
             error(ctx, "Branch-aware step '" + templateStep.name() + "' must declare inputTypeName.");
@@ -247,9 +259,16 @@ public final class PipelineBranchRoutingPlanner {
             return Optional.empty();
         }
 
-        List<ClassName> acceptedDomainTypes = acceptedLeafTypes.stream()
-            .map(typeName -> ClassName.get(templateConfig.basePackage() + ".common.domain", typeName))
-            .toList();
+        List<ClassName> acceptedDomainTypes = new ArrayList<>(acceptedLeafTypes.size());
+        for (String acceptedLeafType : acceptedLeafTypes) {
+            ClassName acceptedDomainType = contractRuntimeTypes.get(acceptedLeafType);
+            if (acceptedDomainType == null) {
+                error(ctx, "Step '" + templateStep.name() + "' accepted contract type '" + acceptedLeafType
+                    + "' could not be resolved to a Java runtime type during branch routing validation.");
+                return Optional.empty();
+            }
+            acceptedDomainTypes.add(acceptedDomainType);
+        }
         if (!templateStep.accepts().isEmpty()
             && !validateAssignableAcceptedTypes(ctx, templateStep, stepDefinition, acceptedDomainTypes)) {
             return Optional.empty();
@@ -263,6 +282,57 @@ public final class PipelineBranchRoutingPlanner {
             List.copyOf(acceptedLeafTypes),
             List.copyOf(outputLeafTypes),
             acceptedDomainTypes));
+    }
+
+    private Map<String, ClassName> indexContractRuntimeTypes(
+        PipelineCompilationContext ctx,
+        PipelineTemplateConfig templateConfig,
+        List<PipelineTemplateStep> templateSteps,
+        Map<String, StepDefinition> definitionsByName
+    ) {
+        Map<String, ClassName> contractRuntimeTypes = new LinkedHashMap<>();
+        for (PipelineTemplateStep templateStep : templateSteps) {
+            if (templateStep == null || isBlank(templateStep.name())) {
+                continue;
+            }
+            StepDefinition stepDefinition = definitionsByName.get(normalizeStepName(templateStep.name()));
+            if (stepDefinition == null) {
+                continue;
+            }
+            registerContractRuntimeType(ctx, templateConfig, templateStep.inputTypeName(), stepDefinition.inputType(), contractRuntimeTypes);
+            registerContractRuntimeType(ctx, templateConfig, templateStep.outputTypeName(), stepDefinition.outputType(), contractRuntimeTypes);
+        }
+        return contractRuntimeTypes;
+    }
+
+    private void registerContractRuntimeType(
+        PipelineCompilationContext ctx,
+        PipelineTemplateConfig templateConfig,
+        String contractTypeName,
+        ClassName runtimeType,
+        Map<String, ClassName> contractRuntimeTypes
+    ) {
+        if (isBlank(contractTypeName) || runtimeType == null || templateConfig == null) {
+            return;
+        }
+        if (templateConfig.messages().containsKey(contractTypeName)) {
+            contractRuntimeTypes.putIfAbsent(contractTypeName, runtimeType);
+            return;
+        }
+        PipelineTemplateUnion union = templateConfig.unions().get(contractTypeName);
+        if (union == null) {
+            return;
+        }
+        contractRuntimeTypes.putIfAbsent(contractTypeName, runtimeType);
+        for (PipelineTemplateUnionVariant variant : union.variants().values()) {
+            if (variant == null || isBlank(variant.type())) {
+                continue;
+            }
+            ClassName variantRuntimeType = ClassName.get(runtimeType.packageName(), variant.type());
+            if (isResolvable(ctx, variantRuntimeType)) {
+                contractRuntimeTypes.putIfAbsent(variant.type(), variantRuntimeType);
+            }
+        }
     }
 
     private boolean validateReachability(PipelineCompilationContext ctx, List<ResolvedStep> resolvedSteps) {
@@ -363,6 +433,13 @@ public final class PipelineBranchRoutingPlanner {
             }
         }
         return true;
+    }
+
+    private boolean isResolvable(PipelineCompilationContext ctx, ClassName type) {
+        if (ctx == null || ctx.getProcessingEnv() == null || ctx.getProcessingEnv().getElementUtils() == null) {
+            return true;
+        }
+        return ctx.getProcessingEnv().getElementUtils().getTypeElement(type.canonicalName()) != null;
     }
 
     private PipelineTemplateConfig requireTemplateConfig(PipelineCompilationContext ctx) {

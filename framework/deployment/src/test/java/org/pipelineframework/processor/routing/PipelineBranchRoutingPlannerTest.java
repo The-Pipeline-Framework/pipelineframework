@@ -241,6 +241,55 @@ class PipelineBranchRoutingPlannerTest {
     }
 
     @Test
+    void resolvesImplicitUnionAcceptedTypesFromSharedDomainPackage() {
+        List<String> diagnostics = new ArrayList<>();
+        PipelineCompilationContext ctx = context(diagnostics);
+        ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
+            2,
+            "Compensation Finalize",
+            "org.pipelineframework.tpfgo.compensation.failure",
+            "GRPC",
+            PipelinePlatform.COMPUTE,
+            Map.of(
+                "PaymentCaptured", message("PaymentCaptured"),
+                "PaymentRejected", message("PaymentRejected"),
+                "PaymentRequiresReview", message("PaymentRequiresReview"),
+                "TerminalOrderState", message("TerminalOrderState")),
+            Map.of(
+                "PaymentOutcome", new PipelineTemplateUnion(
+                    "PaymentOutcome",
+                    Map.of(
+                        "captured", new PipelineTemplateUnionVariant("captured", "PaymentCaptured", 1),
+                        "rejected", new PipelineTemplateUnionVariant("rejected", "PaymentRejected", 2),
+                        "review", new PipelineTemplateUnionVariant("review", "PaymentRequiresReview", 3)))),
+            List.of(
+                step("compensationFinalizeOrder", "PaymentOutcome", "TerminalOrderState", List.of(), true)),
+            Map.of(),
+            null,
+            null,
+            null));
+        ctx.setStepDefinitions(List.of(
+            stepDefinition(
+                "compensationFinalizeOrder",
+                "org.pipelineframework.tpfgo.compensation.failure.pipeline",
+                "org.pipelineframework.tpfgo.common.domain.PaymentOutcome",
+                "org.pipelineframework.tpfgo.common.domain.TerminalOrderState")));
+
+        var plan = planner.plan(ctx);
+
+        assertTrue(plan.isPresent(), diagnostics.toString());
+        assertEquals(
+            java.util.Set.of(
+                "org.pipelineframework.tpfgo.common.domain.PaymentCaptured",
+                "org.pipelineframework.tpfgo.common.domain.PaymentRejected",
+                "org.pipelineframework.tpfgo.common.domain.PaymentRequiresReview"),
+            plan.orElseThrow().steps().getFirst().acceptedDomainTypes().stream()
+                .map(ClassName::canonicalName)
+                .collect(java.util.stream.Collectors.toSet()));
+        assertTrue(diagnostics.isEmpty(), diagnostics.toString());
+    }
+
+    @Test
     void rejectsTerminalThatDoesNotCoverAllReachableAlternatives() {
         List<String> diagnostics = new ArrayList<>();
         PipelineCompilationContext ctx = context(diagnostics);
@@ -505,6 +554,20 @@ class PipelineBranchRoutingPlannerTest {
             MapperFallbackMode.NONE,
             ClassName.get("com.example.order.common.domain", inputTypeName),
             ClassName.get("com.example.order.common.domain", outputTypeName),
+            StreamingShape.UNARY_UNARY);
+    }
+
+    private static StepDefinition stepDefinition(String name, String servicePackage, String inputTypeName, String outputTypeName) {
+        return new StepDefinition(
+            name,
+            StepKind.INTERNAL,
+            ClassName.get(servicePackage, capitalize(name) + "Service"),
+            null,
+            null,
+            null,
+            MapperFallbackMode.NONE,
+            ClassName.bestGuess(inputTypeName),
+            ClassName.bestGuess(outputTypeName),
             StreamingShape.UNARY_UNARY);
     }
 
