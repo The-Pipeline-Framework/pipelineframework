@@ -47,6 +47,7 @@ import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.step.Configurable;
+import org.pipelineframework.step.StepManyToMany;
 import org.pipelineframework.step.StepManyToOne;
 import org.pipelineframework.step.StepOneToMany;
 import org.pipelineframework.step.StepOneToOne;
@@ -145,6 +146,30 @@ class PipelineReplayExecutionTest {
         assertEquals(2, mergeEmit.parentItemIds().size());
         assertTrue(mergeEmit.parentItemIds().contains(fanOut.get(0).itemId()));
         assertTrue(mergeEmit.parentItemIds().contains(fanOut.get(1).itemId()));
+    }
+
+    @Test
+    void emitsReplayEventsForManyToMany() {
+        CollectingExporter exporter = new CollectingExporter();
+        PipelineTelemetry telemetry = new PipelineTelemetry(new ReplayEnabledPipelineStepConfig(), exporter, manyToManyTopology());
+
+        Multi<Payload> input = Multi.createFrom().items(new Payload("alpha"), new Payload("beta"));
+        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+
+        Object current = PipelineStepExecutor.applyManyToManyUnchecked(
+            new TransformStep(), input, telemetry, runContext, null);
+        List<Payload> output = ((Multi<Payload>) telemetry.instrumentRunCompletion(current, runContext))
+            .collect().asList().await().indefinitely();
+
+        assertEquals(List.of(new Payload("transformed-alpha"), new Payload("transformed-beta")), output);
+        assertEquals(1, exporter.events.stream()
+            .filter(event -> "start".equals(event.event()) && "Transform".equals(event.step())).count());
+        assertEquals(1, exporter.events.stream()
+            .filter(event -> "success".equals(event.event()) && "Transform".equals(event.step())).count());
+        List<PipelineExecutionEvent> emitted = exporter.events.stream()
+            .filter(event -> "emit".equals(event.event()) && "Transform".equals(event.step()))
+            .toList();
+        assertEquals(2, emitted.size());
     }
 
     @Test
@@ -489,6 +514,14 @@ class PipelineReplayExecutionTest {
             ));
     }
 
+    private PipelineReplayTopology manyToManyTopology() {
+        String step = TransformStep.class.getName();
+        return new PipelineReplayTopology(
+            "csv-payments",
+            List.of(new PipelineReplayTopology.Step(step, "Transform", "TransformService", "many-to-many", 0, false, null, null)),
+            List.of());
+    }
+
     private PipelineReplayTopology retryTopology() {
         String step = RetryOnceStep.class.getName();
         return new PipelineReplayTopology(
@@ -624,6 +657,13 @@ class PipelineReplayExecutionTest {
         public Uni<Payload> applyReduce(Multi<Payload> input) {
             return input.collect().asList()
                 .onItem().transform(items -> new Payload(items.get(0).value() + "+" + items.get(1).value()));
+        }
+    }
+
+    static final class TransformStep extends BaseStep implements StepManyToMany<Payload, Payload> {
+        @Override
+        public Multi<Payload> applyTransform(Multi<Payload> input) {
+            return input.onItem().transform(item -> new Payload("transformed-" + item.value()));
         }
     }
 
