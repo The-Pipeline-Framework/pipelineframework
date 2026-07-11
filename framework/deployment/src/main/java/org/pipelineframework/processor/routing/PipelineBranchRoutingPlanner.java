@@ -324,13 +324,19 @@ public final class PipelineBranchRoutingPlanner {
             return;
         }
         contractRuntimeTypes.putIfAbsent(contractTypeName, runtimeType);
-        for (PipelineTemplateUnionVariant variant : union.variants().values()) {
+        for (Map.Entry<String, PipelineTemplateUnionVariant> entry : union.variants().entrySet()) {
+            String variantName = entry.getKey();
+            PipelineTemplateUnionVariant variant = entry.getValue();
             if (variant == null || isBlank(variant.type())) {
                 continue;
             }
             ClassName variantRuntimeType = ClassName.get(runtimeType.packageName(), variant.type());
             if (isResolvable(ctx, variantRuntimeType)) {
                 contractRuntimeTypes.putIfAbsent(variant.type(), variantRuntimeType);
+            } else {
+                report(ctx, Diagnostic.Kind.WARNING, "Union contract '" + contractTypeName
+                    + "' variant '" + variantName + "' maps to unresolved runtime type '"
+                    + variantRuntimeType.canonicalName() + "'; skipping runtime type indexing.");
             }
         }
     }

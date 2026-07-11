@@ -461,6 +461,11 @@ class PipelineBranchRoutingPlannerTest {
                 message.contains("accepted type 'com.example.order.common.domain.LicenseProvisioned'")
                     && message.contains("could not be resolved during branch routing validation")),
             diagnostics.toString());
+        assertTrue(diagnostics.stream().anyMatch(message ->
+                message.contains("WARNING:Union contract 'OrderCompletion' variant 'license'")
+                    && message.contains("com.example.order.common.domain.LicenseProvisioned")
+                    && message.contains("skipping runtime type indexing")),
+            diagnostics.toString());
         assertFalse(diagnostics.isEmpty());
     }
 
