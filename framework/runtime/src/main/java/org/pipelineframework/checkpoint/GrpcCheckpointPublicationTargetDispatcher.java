@@ -3,6 +3,7 @@ package org.pipelineframework.checkpoint;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
 import jakarta.annotation.PreDestroy;
@@ -10,6 +11,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.Context;
 import io.quarkus.arc.Unremovable;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.checkpoint.grpc.MutinyCheckpointPublicationServiceGrpc;
@@ -23,6 +25,7 @@ import org.pipelineframework.telemetry.GrpcClientTracing;
 public class GrpcCheckpointPublicationTargetDispatcher implements CheckpointPublicationTargetDispatcher {
 
     private static final long PUBLISH_DEADLINE_SECONDS = 5L;
+    private static final Executor ROOT_GRPC_CONTEXT_EXECUTOR = Context.ROOT::run;
 
     private final Map<String, ManagedChannel> channels = new ConcurrentHashMap<>();
     private final Map<String, MutinyCheckpointPublicationServiceGrpc.MutinyCheckpointPublicationServiceStub> stubs =
@@ -74,14 +77,18 @@ public class GrpcCheckpointPublicationTargetDispatcher implements CheckpointPubl
         String idempotencyKey
     ) {
         try {
-            return GrpcClientTracing.traceUnary(
-                CheckpointPublicationGrpcService.SERVICE,
-                CheckpointPublicationGrpcService.METHOD,
-                stubFor(target)
-                    .withWaitForReady()
-                    .withDeadlineAfter(PUBLISH_DEADLINE_SECONDS, TimeUnit.SECONDS)
-                    .publish(CheckpointPublicationProtoSupport.toProtoRequest(request, tenantId, idempotencyKey)))
-                .replaceWithVoid();
+            var protoRequest = CheckpointPublicationProtoSupport.toProtoRequest(request, tenantId, idempotencyKey);
+            // Checkpoint work outlives the admission RPC that scheduled it; do not inherit that RPC's cancellation.
+            return Uni.createFrom().deferred(() ->
+                GrpcClientTracing.traceUnary(
+                    CheckpointPublicationGrpcService.SERVICE,
+                    CheckpointPublicationGrpcService.METHOD,
+                    stubFor(target)
+                        .withWaitForReady()
+                        .withDeadlineAfter(PUBLISH_DEADLINE_SECONDS, TimeUnit.SECONDS)
+                    .publish(protoRequest))
+                    .replaceWithVoid())
+                .runSubscriptionOn(ROOT_GRPC_CONTEXT_EXECUTOR);
         } catch (IOException e) {
             return Uni.createFrom().failure(e);
         }
