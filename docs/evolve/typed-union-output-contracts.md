@@ -89,13 +89,10 @@ steps:
   - name: Finalize
     inputTypeName: OrderCompletion
     outputTypeName: FinalizedOrder
-    accepts:
-      - StockReserved
-      - LicenseProvisioned
     terminal: true
 ```
 
-When a step's `inputTypeName` resolves to a single concrete message type (not a union), `accepts` can be omitted. TPF implicitly uses that type as the step's accepted type:
+When `accepts` is omitted, TPF uses every concrete leaf type resolved from `inputTypeName`. For a concrete message, that is the message itself:
 
 ```yaml
 steps:
@@ -108,13 +105,15 @@ steps:
     outputTypeName: LicenseProvisioned
 ```
 
-This is equivalent to the explicit `accepts` form above. Explicit `accepts` is required when the step's `inputTypeName` is a union with multiple variants and the step handles a subset of them.
+For a union input, omitting `accepts` means that the step accepts every variant. The `Finalize` step above therefore accepts both `StockReserved` and `LicenseProvisioned`. This is the concise form for a terminal merge that handles every branch-end alternative.
+
+Declare explicit `accepts` only when a step handles a subset of the variants resolved from its union input. `Reserve Stock` and `Provision License` use that form above because each applies to one `OrderDecision` alternative.
 
 Compiler rules:
 
 - `accepts` may reference concrete contract types only.
-- if `accepts` is omitted and `inputTypeName` is a single concrete message, that type becomes the accepted type implicitly.
-- union inputs with multiple concrete alternatives require explicit `accepts`.
+- if `accepts` is omitted, every concrete leaf type resolved from `inputTypeName` becomes accepted implicitly.
+- a union input therefore accepts all of its variants by default; use explicit `accepts` to select a subset.
 - branch-aware pipelines are `ONE_TO_ONE` only in v1.
 - there must be exactly one `terminal: true` step, and it must be last.
 - the terminal step must cover every reachable branch-end alternative.

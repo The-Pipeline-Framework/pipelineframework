@@ -165,10 +165,6 @@ steps:
     cardinality: ONE_TO_ONE
     inputTypeName: OrderCompletion
     outputTypeName: FinalizedOrder
-    accepts:
-      - StockReserved
-      - LicenseProvisioned
-      - ManualReviewRequested
     terminal: true
 ```
 
@@ -176,8 +172,8 @@ Rules:
 
 - The pipeline stays a linear sequence of authored steps.
 - `accepts` entries must be concrete contract types, not predicates and not union names.
-- If a step's `inputTypeName` resolves to a single concrete message type, `accepts` is optional. TPF implicitly uses that type as the accepted type.
-- If a step's `inputTypeName` resolves to more than one concrete alternative, explicit `accepts` is required.
+- If `accepts` is omitted, TPF implicitly accepts every concrete leaf type resolved from `inputTypeName`.
+- A union input therefore accepts all of its variants by default. Use explicit `accepts` when the step handles only a subset.
 - Branch-aware routing currently supports `ONE_TO_ONE` steps only.
 - A branch-aware pipeline must declare exactly one `terminal: true` step, and it must be last.
 - A publish sink after the step sequence does not satisfy or infer the terminal merge; author the merge step explicitly.
@@ -188,7 +184,7 @@ Runtime behavior:
 - If it does not match, TPF skips the step as `not_applicable`, records a replay event, and passes the item through unchanged.
 - The terminal merge step must accept every reachable branch-end alternative. Otherwise the build fails.
 
-When a step's `inputTypeName` references a concrete message (not a union), `accepts` can be omitted and TPF implicitly uses that single type:
+When a step's `inputTypeName` references a concrete message, omitting `accepts` implicitly accepts that message:
 
 ```yaml
 steps:
@@ -203,4 +199,16 @@ steps:
     # no accepts — implicitly accepts DigitalOrder
 ```
 
-This is equivalent to writing `accepts: [PhysicalOrder]` and `accepts: [DigitalOrder]`. Explicit `accepts` is still required when the step should handle multiple union alternatives. The `accepts` keyword also makes the accepted contract set visible at a glance in the YAML for complex pipelines — choose whichever communicates intent more clearly.
+This is equivalent to writing `accepts: [PhysicalOrder]` and `accepts: [DigitalOrder]`.
+
+When `inputTypeName` references a union, omitting `accepts` implicitly accepts every variant. That is normally the clearest declaration for a terminal merge:
+
+```yaml
+- name: Finalize Order
+  cardinality: ONE_TO_ONE
+  inputTypeName: OrderCompletion
+  outputTypeName: FinalizedOrder
+  terminal: true
+```
+
+Here `Finalize Order` accepts `StockReserved`, `LicenseProvisioned`, and `ManualReviewRequested` because those are the variants of `OrderCompletion`. Listing all three under `accepts` is equivalent but unnecessary. Use explicit `accepts` for branch-specific steps that handle only part of a union.
