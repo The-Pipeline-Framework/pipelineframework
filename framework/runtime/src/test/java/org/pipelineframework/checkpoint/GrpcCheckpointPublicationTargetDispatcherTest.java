@@ -2,13 +2,24 @@ package org.pipelineframework.checkpoint;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import io.grpc.Context;
+import io.grpc.ForwardingServerCallListener;
+import io.grpc.Metadata;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
+import io.grpc.ServerInterceptors;
+import io.smallrye.mutiny.subscription.Cancellable;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.checkpoint.grpc.CheckpointPublishAcceptedResponse;
@@ -159,6 +170,82 @@ class GrpcCheckpointPublicationTargetDispatcherTest {
         }
     }
 
+    @Test
+    void dispatchDoesNotInheritCancelledInboundGrpcContext() throws Exception {
+        AtomicReference<CheckpointPublishRequest> captured = new AtomicReference<>();
+        GrpcCheckpointPublicationTargetDispatcher dispatcher = new GrpcCheckpointPublicationTargetDispatcher();
+        Server server = ServerBuilder.forPort(0)
+            .addService(new TestService(captured))
+            .build()
+            .start();
+        Context.CancellableContext inboundContext = Context.current().withCancellation();
+        try {
+            ResolvedCheckpointPublicationTarget target = new ResolvedCheckpointPublicationTarget(
+                "orders-ready",
+                "deliver",
+                PublicationTargetKind.GRPC,
+                PublicationEncoding.PROTO,
+                null,
+                null,
+                "localhost:" + server.getPort(),
+                "PLAINTEXT");
+            inboundContext.cancel(null);
+
+            inboundContext.run(() -> dispatcher.dispatch(
+                target,
+                new CheckpointPublicationRequest(
+                    "orders-ready",
+                    PipelineJson.mapper().valueToTree(new PublishedOrder("o-1"))),
+                "tenant-1",
+                "idem-1").await().atMost(Duration.ofSeconds(5)));
+
+            assertEquals("orders-ready", captured.get().getPublication());
+        } finally {
+            inboundContext.close();
+            dispatcher.shutdown();
+            server.shutdownNow();
+        }
+    }
+
+    @Test
+    void cancellingDispatchCancelsOutboundGrpcCall() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch cancelled = new CountDownLatch(1);
+        GrpcCheckpointPublicationTargetDispatcher dispatcher = new GrpcCheckpointPublicationTargetDispatcher();
+        Server server = ServerBuilder.forPort(0)
+            .addService(ServerInterceptors.intercept(
+                new CancellableTestService(started),
+                new CancellationInterceptor(cancelled)))
+            .build()
+            .start();
+        try {
+            ResolvedCheckpointPublicationTarget target = new ResolvedCheckpointPublicationTarget(
+                "orders-ready",
+                "deliver",
+                PublicationTargetKind.GRPC,
+                PublicationEncoding.PROTO,
+                null,
+                null,
+                "localhost:" + server.getPort(),
+                "PLAINTEXT");
+
+            Cancellable call = dispatcher.dispatch(
+                target,
+                new CheckpointPublicationRequest(
+                    "orders-ready",
+                    PipelineJson.mapper().valueToTree(new PublishedOrder("o-1"))),
+                "tenant-1",
+                "idem-1").subscribe().with(ignored -> { }, ignored -> { });
+
+            assertTrue(started.await(5, TimeUnit.SECONDS));
+            call.cancel();
+            assertTrue(cancelled.await(5, TimeUnit.SECONDS));
+        } finally {
+            dispatcher.shutdown();
+            server.shutdownNow();
+        }
+    }
+
     private record PublishedOrder(String orderId) {
     }
 
@@ -178,6 +265,45 @@ class GrpcCheckpointPublicationTargetDispatcherTest {
                     .setStatusUrl("/status/exec-1")
                     .setSubmittedAtEpochMs(1L)
                     .build());
+        }
+    }
+
+    private static final class CancellableTestService
+        extends MutinyCheckpointPublicationServiceGrpc.CheckpointPublicationServiceImplBase {
+        private final CountDownLatch started;
+
+        private CancellableTestService(CountDownLatch started) {
+            this.started = started;
+        }
+
+        @Override
+        public io.smallrye.mutiny.Uni<CheckpointPublishAcceptedResponse> publish(CheckpointPublishRequest request) {
+            started.countDown();
+            return io.smallrye.mutiny.Uni.createFrom().nothing();
+        }
+    }
+
+    private static final class CancellationInterceptor implements ServerInterceptor {
+        private final CountDownLatch cancelled;
+
+        private CancellationInterceptor(CountDownLatch cancelled) {
+            this.cancelled = cancelled;
+        }
+
+        @Override
+        public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+            ServerCall<ReqT, RespT> call,
+            Metadata headers,
+            ServerCallHandler<ReqT, RespT> next
+        ) {
+            return new ForwardingServerCallListener.SimpleForwardingServerCallListener<>(
+                next.startCall(call, headers)) {
+                @Override
+                public void onCancel() {
+                    cancelled.countDown();
+                    super.onCancel();
+                }
+            };
         }
     }
 }
