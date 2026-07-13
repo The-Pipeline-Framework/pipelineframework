@@ -17,6 +17,7 @@
 package org.pipelineframework.config.template;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Interprets v2 step logical contracts and Java execution bindings consistently.
@@ -27,19 +28,22 @@ public final class PipelineTemplateStepContractSyntax {
     }
 
     public static StepContracts normalize(Map<?, ?> step, int version, String stepName) {
-        String canonicalInput = stringValue(step, "input");
-        String canonicalOutput = stringValue(step, "output");
-        String legacyInput = stringValue(step, "inputTypeName");
-        String legacyOutput = stringValue(step, "outputTypeName");
-        JavaContracts java = readJava(step, stepName);
+        Optional<String> canonicalInput = stringValue(step, "input", stepName);
+        Optional<String> canonicalOutput = stringValue(step, "output", stepName);
+        Optional<String> legacyInput = stringValue(step, "inputTypeName", stepName);
+        Optional<String> legacyOutput = stringValue(step, "outputTypeName", stepName);
 
         if (version < 2) {
+            if (step.containsKey("java")) {
+                throw new IllegalStateException("Step '" + stepName + "' java bindings require version: 2.");
+            }
             return new StepContracts(legacyInput, legacyOutput,
-                canonicalInput != null ? canonicalInput : legacyInput,
-                canonicalOutput != null ? canonicalOutput : legacyOutput,
+                canonicalInput.isPresent() ? canonicalInput : legacyInput,
+                canonicalOutput.isPresent() ? canonicalOutput : legacyOutput,
                 false);
         }
 
+        JavaContracts java = readJava(step, stepName);
         Direction input = normalizeDirection("input", canonicalInput, legacyInput, java.input(), stepName);
         Direction output = normalizeDirection("output", canonicalOutput, legacyOutput, java.output(), stepName);
         return new StepContracts(input.logical(), output.logical(), input.javaType(), output.javaType(),
@@ -48,29 +52,29 @@ public final class PipelineTemplateStepContractSyntax {
 
     private static Direction normalizeDirection(
         String direction,
-        String canonical,
-        String legacy,
-        String explicitJava,
+        Optional<String> canonical,
+        Optional<String> legacy,
+        Optional<String> explicitJava,
         String stepName
     ) {
-        if (isLogicalName(canonical)) {
-            if (legacy != null && !legacy.equals(canonical)) {
+        if (canonical.filter(PipelineTemplateStepContractSyntax::isLogicalName).isPresent()) {
+            if (legacy.isPresent() && !legacy.equals(canonical)) {
                 throw new IllegalStateException("Step '" + stepName + "' declares conflicting logical " + direction
                     + " contracts in '" + direction + "' ('" + canonical + "') and '" + direction
                     + "TypeName' ('" + legacy + "').");
             }
             return new Direction(canonical, explicitJava, false);
         }
-        if (canonical != null) {
-            if (explicitJava != null && !explicitJava.equals(canonical)) {
+        if (canonical.isPresent()) {
+            if (explicitJava.isPresent() && !explicitJava.equals(canonical)) {
                 throw new IllegalStateException("Step '" + stepName + "' declares conflicting Java " + direction
                     + " contracts in legacy '" + direction + "' ('" + canonical + "') and 'java."
                     + direction + "' ('" + explicitJava + "').");
             }
             return new Direction(legacy, canonical, true);
         }
-        if (legacy != null && !isLogicalName(legacy)) {
-            return new Direction(null, legacy, true);
+        if (legacy.filter(value -> !isLogicalName(value)).isPresent()) {
+            return new Direction(Optional.empty(), legacy, true);
         }
         return new Direction(legacy, explicitJava, false);
     }
@@ -78,21 +82,25 @@ public final class PipelineTemplateStepContractSyntax {
     private static JavaContracts readJava(Map<?, ?> step, String stepName) {
         Object java = step.get("java");
         if (java == null) {
-            return new JavaContracts(null, null);
+            return new JavaContracts(Optional.empty(), Optional.empty());
         }
         if (!(java instanceof Map<?, ?> javaMap)) {
             throw new IllegalStateException("Step '" + stepName + "' java binding must be a YAML map.");
         }
-        return new JavaContracts(stringValue(javaMap, "input"), stringValue(javaMap, "output"));
+        return new JavaContracts(stringValue(javaMap, "input", stepName),
+            stringValue(javaMap, "output", stepName));
     }
 
-    private static String stringValue(Map<?, ?> values, String key) {
+    private static Optional<String> stringValue(Map<?, ?> values, String key, String stepName) {
         Object value = values.get(key);
         if (value == null) {
-            return null;
+            return Optional.empty();
         }
-        String text = value.toString().trim();
-        return text.isEmpty() ? null : text;
+        if (!(value instanceof String text)) {
+            throw new IllegalStateException("Step '" + stepName + "' " + key + " contract must be a YAML string.");
+        }
+        text = text.trim();
+        return text.isEmpty() ? Optional.empty() : Optional.of(text);
     }
 
     public static boolean isLogicalName(String value) {
@@ -100,17 +108,17 @@ public final class PipelineTemplateStepContractSyntax {
     }
 
     public record StepContracts(
-        String logicalInput,
-        String logicalOutput,
-        String javaInput,
-        String javaOutput,
+        Optional<String> logicalInput,
+        Optional<String> logicalOutput,
+        Optional<String> javaInput,
+        Optional<String> javaOutput,
         boolean usesLegacyFqcn
     ) {
     }
 
-    private record Direction(String logical, String javaType, boolean legacyFqcn) {
+    private record Direction(Optional<String> logical, Optional<String> javaType, boolean legacyFqcn) {
     }
 
-    private record JavaContracts(String input, String output) {
+    private record JavaContracts(Optional<String> input, Optional<String> output) {
     }
 }

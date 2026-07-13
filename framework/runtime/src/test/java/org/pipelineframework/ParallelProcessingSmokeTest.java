@@ -20,6 +20,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import jakarta.inject.Inject;
@@ -106,6 +108,7 @@ class ParallelProcessingSmokeTest {
         private final AtomicInteger activeExecutions = new AtomicInteger(0);
         private final AtomicInteger maxActiveExecutions = new AtomicInteger(0);
         private final CountDownLatch allExecutionsStarted;
+        private final ExecutorService executor;
         private final List<Long> executionTimestamps = new java.util.ArrayList<>();
         private final List<String> executionThreads = new java.util.ArrayList<>();
         private final List<String> results = new java.util.ArrayList<>();
@@ -116,6 +119,7 @@ class ParallelProcessingSmokeTest {
 
         public TestStepOneToOneCompletableFuture(int expectedExecutions) {
             allExecutionsStarted = new CountDownLatch(expectedExecutions);
+            executor = Executors.newFixedThreadPool(expectedExecutions);
         }
 
         @Override
@@ -146,7 +150,11 @@ class ParallelProcessingSmokeTest {
                         } finally {
                             activeExecutions.decrementAndGet();
                         }
-                    });
+                    }, executor);
+        }
+
+        void shutdown() {
+            executor.shutdownNow();
         }
 
         public List<Long> getExecutionTimestamps() {
@@ -254,15 +262,16 @@ class ParallelProcessingSmokeTest {
         StepConfig stepConfig = new StepConfig();
         step.initialiseWithConfig(stepConfig);
 
-        // When
-        Multi<String> input = Multi.createFrom().items("item1", "item2", "item3");
-        Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
+        try {
+            // When
+            Multi<String> input = Multi.createFrom().items("item1", "item2", "item3");
+            Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
 
-        // Then
-        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
-        subscriber.awaitItems(3, Duration.ofSeconds(5)).assertCompleted();
+            // Then
+            AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
+            subscriber.awaitItems(3, Duration.ofSeconds(5)).assertCompleted();
 
-        List<Object> items = subscriber.getItems();
+            List<Object> items = subscriber.getItems();
 
         // (1) Assert output content equals expected processed items
         assertEquals(3, items.size());
@@ -297,5 +306,8 @@ class ParallelProcessingSmokeTest {
                 String.format(
                         "Expected at least 2 distinct threads, but got %d threads: %s",
                         distinctThreadCount, executionThreads));
+        } finally {
+            step.shutdown();
+        }
     }
 }

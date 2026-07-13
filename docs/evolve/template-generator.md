@@ -50,18 +50,9 @@ appName: "Payment Processing Pipeline"
 basePackage: "com.example.payments"
 transport: "GRPC"
 
-messages:
+types:
   PaymentInput:
-    fields:
-      - number: 1
-        name: paymentId
-        type: uuid
-      - number: 2
-        name: amount
-        type: decimal
-      - number: 3
-        name: processedAt
-        type: timestamp
+    fields: [[1, paymentId, uuid], [2, amount, decimal], [3, processedAt, timestamp]]
 
   PaymentOutput:
     fields:

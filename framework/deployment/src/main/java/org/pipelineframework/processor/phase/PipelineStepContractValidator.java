@@ -18,6 +18,7 @@ package org.pipelineframework.processor.phase;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import javax.tools.Diagnostic;
 
 import com.squareup.javapoet.TypeName;
@@ -36,32 +37,38 @@ final class PipelineStepContractValidator {
             || config.inputContract() == null
             || models == null
             || models.size() < 2
+            || (!config.steps().isEmpty() && models.size() != config.steps().size())
             || ctx.getProcessingEnv() == null) {
             return;
         }
         for (int index = 1; index < models.size(); index++) {
             PipelineStepModel previous = models.get(index - 1);
             PipelineStepModel current = models.get(index);
-            TypeName previousOutput = domainOutput(previous);
-            TypeName currentInput = domainInput(current);
-            if (previousOutput == null || currentInput == null || Objects.equals(previousOutput, currentInput)) {
+            Optional<TypeName> previousOutput = domainOutput(previous);
+            Optional<TypeName> currentInput = domainInput(current);
+            if (previousOutput.isEmpty() || currentInput.isEmpty()
+                || Objects.equals(previousOutput.get(), currentInput.get())) {
                 continue;
             }
             ctx.getProcessingEnv().getMessager().printMessage(
                 Diagnostic.Kind.ERROR,
-                "Step '" + stepName(config, index, current) + "' resolves Java input '" + currentInput
+                "Step '" + stepName(config, index, current) + "' resolves Java input '" + currentInput.get()
                     + "', but previous step '" + stepName(config, index - 1, previous)
                     + "' resolves Java output '"
-                    + previousOutput + "'.");
+                    + previousOutput.get() + "'.");
         }
     }
 
-    private TypeName domainInput(PipelineStepModel model) {
-        return model == null || model.inputMapping() == null ? null : model.inputMapping().domainType();
+    private Optional<TypeName> domainInput(PipelineStepModel model) {
+        return model == null || model.inputMapping() == null
+            ? Optional.empty()
+            : Optional.ofNullable(model.inputMapping().domainType());
     }
 
-    private TypeName domainOutput(PipelineStepModel model) {
-        return model == null || model.outputMapping() == null ? null : model.outputMapping().domainType();
+    private Optional<TypeName> domainOutput(PipelineStepModel model) {
+        return model == null || model.outputMapping() == null
+            ? Optional.empty()
+            : Optional.ofNullable(model.outputMapping().domainType());
     }
 
     private String stepName(PipelineTemplateConfig config, int index, PipelineStepModel fallback) {

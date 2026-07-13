@@ -114,10 +114,17 @@ steps:
       - ApprovedPaymentOutput
       - UnapprovedPaymentOutput
     output: PaymentOutput
+    # Required here: adapts the final local domain result to the object-output contract.
+    # This is separate from output.consumes.mapper, which renders published object payloads.
+    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputMapper
     terminal: true
 ```
 
-The output contract must match the last step output type.
+The output contract must match the last step output type. For an object output, the terminal step also declares
+`outboundMapper` when its local domain result must be adapted to that contract. The top-level
+`output.consumes.mapper` has a different job: it renders the already-adapted terminal values into object payloads.
+Neither mapper is a `java` binding. Local service and operator Java input/output types are inferred from their
+signatures and mapper resolution; use `java` only for an explicit Java assertion or a framework-owned/remote binding.
 
 ## CSV Payments Shape
 

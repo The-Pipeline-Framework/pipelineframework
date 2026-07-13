@@ -125,7 +125,7 @@ steps:
     output: PaymentOutcome
 ```
 
-can be authored as:
+The above chain can be authored as:
 
 ```yaml
 types:

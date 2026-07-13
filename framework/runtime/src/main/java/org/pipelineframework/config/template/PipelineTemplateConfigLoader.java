@@ -668,8 +668,8 @@ public class PipelineTemplateConfigLoader {
                 warningReporter.accept("Step '" + name + "' uses deprecated fully qualified '" + "input/output"
                     + "' contracts; use logical input/output with java.input/java.output instead.");
             }
-            String inputType = contracts.logicalInput();
-            String outputType = contracts.logicalOutput();
+            String inputType = contracts.logicalInput().orElse(null);
+            String outputType = contracts.logicalOutput().orElse(null);
             List<PipelineTemplateField> inputFields = readFields(stepMap.get("inputFields"), version);
             List<PipelineTemplateField> outputFields = readFields(stepMap.get("outputFields"), version);
             String inboundMapper = readString(stepMap, "inboundMapper");

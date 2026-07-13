@@ -23,7 +23,7 @@ public class PaymentOperators {
 }
 ```
 
-For a wholly linear v2 pipeline, a scalar pipeline `input` enables logical input propagation. Each step still
+For a wholly linear v2 pipeline, `contract.input` enables logical input propagation. Each step still
 declares its output, while Java operator signatures continue to supply and validate the runtime Java types:
 
 ```yaml
@@ -37,8 +37,9 @@ types:
   PaymentOutcome:
     fields: [[1, orderId, uuid]]
 
-input: PaymentRequest
-output: PaymentOutcome
+contract:
+  input: PaymentRequest
+  output: PaymentOutcome
 
 steps:
   - name: Enrich Payment

@@ -352,8 +352,8 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.WARNING, "Step '" + name + "' uses deprecated fully qualified 'input/output'"
                 + " contracts; use logical input/output with java.input/java.output instead.");
         }
-        String inputTypeName = contracts.javaInput();
-        String outputTypeName = contracts.javaOutput();
+        String inputTypeName = contracts.javaInput().orElse(null);
+        String outputTypeName = contracts.javaOutput().orElse(null);
 
         // Keep delegated input/output optional so they can be derived from delegate generics.
         ClassName inputType = parseOptionalClassName(inputTypeName, name, "input", basePackage, inferredLegacyInternal);

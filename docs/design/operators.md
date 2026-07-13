@@ -37,7 +37,7 @@ Use a template-style v2 step with an `execution` block when the operator lives o
 ```yaml
 version: 2
 
-messages:
+types:
   ChargeRequest:
     fields:
       - number: 1
