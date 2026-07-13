@@ -16,21 +16,21 @@
 
 package org.pipelineframework.csv.common.domain;
 
-import static java.text.MessageFormat.format;
-
-import jakarta.persistence.Convert;
-import jakarta.persistence.MappedSuperclass;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.Transient;
 import java.io.File;
 import java.io.Serializable;
 import java.nio.file.Path;
 import java.util.Objects;
+import jakarta.persistence.Convert;
+import jakarta.persistence.MappedSuperclass;
+import jakarta.persistence.Transient;
+
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.experimental.Accessors;
+
+import static java.text.MessageFormat.format;
 
 @Getter
 @Setter
@@ -44,8 +44,6 @@ public abstract class BaseCsvPaymentsFile extends BaseEntity implements Serializ
   @Convert(converter = PathConverter.class)
   protected Path filepath;
 
-  @Transient private CsvFolder csvFolder;
-
   @Convert(converter = PathConverter.class)
   private Path csvFolderPath;
 
@@ -55,7 +53,6 @@ public abstract class BaseCsvPaymentsFile extends BaseEntity implements Serializ
     this.filepath = file.toPath();
     Path parent = this.filepath.getParent();
     this.csvFolderPath = parent != null ? parent : Path.of(".");
-    this.csvFolder = new CsvFolder(this.csvFolderPath);
   }
 
   @Override

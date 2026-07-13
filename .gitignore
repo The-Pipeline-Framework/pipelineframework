@@ -97,3 +97,6 @@ __pycache__/
 
 # Qwen Code local config
 .qwen/
+
+# MCP
+/.mcp.json
