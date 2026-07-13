@@ -37,8 +37,8 @@ v2 keeps `platform` and `transport` as top-level concerns and makes field typing
 
 Key points:
 
-- top-level `messages:` are the preferred contract model
-- steps still use `inputTypeName` / `outputTypeName`
+- top-level `types:` are the preferred contract model
+- steps use logical `input` / `output`; `inputTypeName` / `outputTypeName` are compatibility aliases
 - fields declare semantic `type`, not `protoType`, in normal cases
 - stable field numbers are required in v2
 
@@ -50,18 +50,9 @@ appName: "Payment Processing Pipeline"
 basePackage: "com.example.payments"
 transport: "GRPC"
 
-messages:
+types:
   PaymentInput:
-    fields:
-      - number: 1
-        name: paymentId
-        type: uuid
-      - number: 2
-        name: amount
-        type: decimal
-      - number: 3
-        name: processedAt
-        type: timestamp
+    fields: [[1, paymentId, uuid], [2, amount, decimal], [3, processedAt, timestamp]]
 
   PaymentOutput:
     fields:
@@ -78,8 +69,8 @@ messages:
 steps:
   - name: "Process Payment"
     cardinality: "ONE_TO_ONE"
-    inputTypeName: "PaymentInput"
-    outputTypeName: "PaymentOutput"
+    input: "PaymentInput"
+    output: "PaymentOutput"
 ```
 
 ## Generating a Sample Config

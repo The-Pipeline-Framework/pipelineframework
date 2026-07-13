@@ -85,4 +85,22 @@ public record PipelineTemplateStep(
     ) {
         this(name, cardinality, inputTypeName, inputFields, inboundMapper, outputTypeName, outputFields, outboundMapper, null, List.of(), false);
     }
+
+    /**
+     * Return a copy with a resolved logical input contract and its normalized fields.
+     */
+    public PipelineTemplateStep withInputContract(String resolvedInputTypeName, List<PipelineTemplateField> resolvedInputFields) {
+        return new PipelineTemplateStep(
+            name,
+            cardinality,
+            resolvedInputTypeName,
+            resolvedInputFields,
+            inboundMapper,
+            outputTypeName,
+            outputFields,
+            outboundMapper,
+            execution,
+            accepts,
+            terminal);
+    }
 }

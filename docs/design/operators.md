@@ -37,7 +37,7 @@ Use a template-style v2 step with an `execution` block when the operator lives o
 ```yaml
 version: 2
 
-messages:
+types:
   ChargeRequest:
     fields:
       - number: 1
@@ -52,8 +52,11 @@ messages:
 steps:
   - name: "Charge Card"
     cardinality: "ONE_TO_ONE"
-    inputTypeName: "ChargeRequest"
-    outputTypeName: "ChargeResult"
+    input: "ChargeRequest"
+    output: "ChargeResult"
+    java:
+      input: com.example.domain.ChargeRequest
+      output: com.example.domain.ChargeResult
     execution:
       mode: "REMOTE"
       operatorId: "charge-card"
@@ -70,8 +73,11 @@ Or provide the full URL directly:
 steps:
   - name: "Charge Card"
     cardinality: "ONE_TO_ONE"
-    inputTypeName: "ChargeRequest"
-    outputTypeName: "ChargeResult"
+    input: "ChargeRequest"
+    output: "ChargeResult"
+    java:
+      input: com.example.domain.ChargeRequest
+      output: com.example.domain.ChargeResult
     execution:
       mode: "REMOTE"
       operatorId: "charge-card"
@@ -96,8 +102,11 @@ Use `ENVELOPE_HTTP_V1` only when the external step host needs a strict TPF contr
 steps:
   - name: "Chunk Document"
     cardinality: "ONE_TO_ONE"
-    inputTypeName: "ParsedDocument"
-    outputTypeName: "ChunkResult"
+    input: "ParsedDocument"
+    output: "ChunkResult"
+    java:
+      input: com.example.domain.ParsedDocument
+      output: com.example.domain.ChunkResult
     execution:
       mode: "REMOTE"
       operatorId: "chunker"

@@ -25,39 +25,20 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.logging.Logger;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
-import org.pipelineframework.config.boundary.PipelineCheckpointConfig;
+import org.pipelineframework.config.boundary.*;
 import org.pipelineframework.config.pipeline.BranchRoutingRules;
-import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
-import org.pipelineframework.config.boundary.PipelineObjectFilterConfig;
-import org.pipelineframework.config.boundary.PipelineObjectIdentityConfig;
-import org.pipelineframework.config.boundary.PipelineObjectInputConfig;
-import org.pipelineframework.config.boundary.PipelineObjectNamingConfig;
-import org.pipelineframework.config.boundary.PipelineObjectOutputConfig;
-import org.pipelineframework.config.boundary.PipelineObjectPayloadConfig;
-import org.pipelineframework.config.boundary.PipelineObjectPollConfig;
-import org.pipelineframework.config.boundary.PipelineObjectPublishConfig;
-import org.pipelineframework.config.boundary.PipelineObjectPublishGroupingConfig;
-import org.pipelineframework.config.boundary.PipelineObjectPublishPayloadConfig;
-import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
-import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
-import org.pipelineframework.config.boundary.PipelineSubscriptionConfig;
 import org.pipelineframework.materialization.MaterializationAction;
 import org.pipelineframework.materialization.MaterializationPosition;
 import org.pipelineframework.materialization.MaterializationScope;
-import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 /**
@@ -70,12 +51,13 @@ public class PipelineTemplateConfigLoader {
     private static final PipelinePlatform DEFAULT_PLATFORM = PipelinePlatform.COMPUTE;
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
+    private final Consumer<String> warningReporter;
 
     /**
      * Creates a new PipelineTemplateConfigLoader.
      */
     public PipelineTemplateConfigLoader() {
-        this(System::getProperty, System::getenv);
+        this(System::getProperty, System::getenv, LOG::warning);
     }
 
     /**
@@ -87,8 +69,20 @@ public class PipelineTemplateConfigLoader {
      * @param envLookup function that returns an environment value for a given key, or null to disable environment lookups
      */
     public PipelineTemplateConfigLoader(Function<String, String> propertyLookup, Function<String, String> envLookup) {
+        this(propertyLookup, envLookup, LOG::warning);
+    }
+
+    /**
+     * Creates a loader with an injectable warning reporter.
+     */
+    public PipelineTemplateConfigLoader(
+        Function<String, String> propertyLookup,
+        Function<String, String> envLookup,
+        Consumer<String> warningReporter
+    ) {
         this.propertyLookup = propertyLookup == null ? key -> null : propertyLookup;
         this.envLookup = envLookup == null ? key -> null : envLookup;
+        this.warningReporter = warningReporter == null ? LOG::warning : warningReporter;
     }
 
     /**
@@ -114,8 +108,12 @@ public class PipelineTemplateConfigLoader {
         String transport = normalizeTransport(readString(rootMap, "transport"));
         PipelinePlatform resolvedPlatform = normalizePlatform(readString(rootMap, "platform"));
 
+        if (version < 2 && (rootMap.containsKey("types") || rootMap.containsKey("messages"))) {
+            throw new IllegalStateException("Top-level types/messages require version: 2");
+        }
+
         Map<String, PipelineTemplateMessage> rawMessages = version >= 2
-            ? readMessages(rootMap)
+            ? readNamedTypes(rootMap)
             : new LinkedHashMap<>();
         Map<String, PipelineTemplateUnion> rawUnions = version >= 2
             ? readUnions(rootMap)
@@ -126,6 +124,8 @@ public class PipelineTemplateConfigLoader {
         Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
         PipelineTemplateMaterialization materialization = readMaterialization(rootMap);
         rejectLegacyConnectors(rootMap);
+        String inputContract = readLogicalContract(rootMap, "input", version);
+        String outputContract = readLogicalContract(rootMap, "output", version);
         PipelineInputBoundaryConfig input = readInputBoundary(rootMap);
         validateObjectInputSource(input, sources);
         PipelineOutputBoundaryConfig output = readOutputBoundary(rootMap).orElse(null);
@@ -135,6 +135,12 @@ public class PipelineTemplateConfigLoader {
             collectInlineMessages(rawMessages, steps);
             Map<String, PipelineTemplateMessage> normalizedMessages = normalizeMessages(rawMessages);
             Map<String, PipelineTemplateUnion> normalizedUnions = normalizeUnions(rawUnions, normalizedMessages);
+            steps = new PipelineTemplateContractNormalizer().normalize(
+                inputContract,
+                outputContract,
+                steps,
+                normalizedMessages,
+                normalizedUnions);
             validateMaterialization(materialization, normalizedMessages, steps);
             steps = resolveV2Steps(steps, normalizedMessages, normalizedUnions);
             return new PipelineTemplateConfig(
@@ -151,7 +157,9 @@ public class PipelineTemplateConfigLoader {
                 aspects,
                 input,
                 output,
-                materialization);
+                materialization,
+                inputContract,
+                outputContract);
         }
 
         return new PipelineTemplateConfig(
@@ -168,7 +176,9 @@ public class PipelineTemplateConfigLoader {
             aspects,
             input,
             output,
-            materialization);
+            materialization,
+            null,
+            null);
     }
 
     /**
@@ -267,8 +277,17 @@ public class PipelineTemplateConfigLoader {
      * @return a map of message name to PipelineTemplateMessage; empty if no valid "messages" section is present
      * @throws IllegalStateException if a message name conflicts with a built-in semantic type
      */
-    private Map<String, PipelineTemplateMessage> readMessages(Map<?, ?> rootMap) {
-        Object messagesObj = rootMap.get("messages");
+    private Map<String, PipelineTemplateMessage> readNamedTypes(Map<?, ?> rootMap) {
+        boolean hasTypes = rootMap.containsKey("types");
+        boolean hasMessages = rootMap.containsKey("messages");
+        if (hasTypes && hasMessages) {
+            throw new IllegalStateException(
+                "Pipeline template cannot declare both 'types' and deprecated 'messages'; use 'types' only.");
+        }
+        if (hasMessages) {
+            warningReporter.accept("Top-level 'messages' is deprecated; use 'types'.");
+        }
+        Object messagesObj = rootMap.get(hasTypes ? "types" : "messages");
         if (!(messagesObj instanceof Map<?, ?> messagesMap)) {
             return new LinkedHashMap<>();
         }
@@ -290,7 +309,7 @@ public class PipelineTemplateConfigLoader {
                     + " valueType=" + (entry.getValue() == null ? "null" : entry.getValue().getClass().getName()));
                 continue;
             }
-            List<PipelineTemplateField> fields = readFields(messageMap.get("fields"), 2);
+            List<PipelineTemplateField> fields = readFields(messageMap.get("fields"), 2, "type '" + name + "'");
             PipelineTemplateReserved reserved = readReserved(messageMap.get("reserved"));
             messages.put(name, new PipelineTemplateMessage(name, fields, reserved));
         }
@@ -520,6 +539,8 @@ public class PipelineTemplateConfigLoader {
     ) {
         List<PipelineTemplateStep> resolved = new ArrayList<>();
         for (PipelineTemplateStep step : steps) {
+            requireLogicalContract(step.name(), "input", step.inputTypeName());
+            requireLogicalContract(step.name(), "output", step.outputTypeName());
             List<PipelineTemplateField> inputFields = resolveStepFields(
                 step.inputTypeName(), step.inputFields(), messages, unions, step.name(), "input");
             List<PipelineTemplateField> outputFields = resolveStepFields(
@@ -543,6 +564,14 @@ public class PipelineTemplateConfigLoader {
                 step.terminal()));
         }
         return resolved;
+    }
+
+    private void requireLogicalContract(String stepName, String direction, String contract) {
+        if (contract == null || contract.isBlank()) {
+            throw new IllegalStateException("Step '" + stepName + "' requires a declared logical " + direction
+                + " contract. Use '" + direction + "' for the named pipeline type; put any Java binding under 'java."
+                + direction + "'.");
+        }
     }
 
     /**
@@ -633,8 +662,14 @@ public class PipelineTemplateConfigLoader {
             String name = readString(stepMap, "name");
             rejectBranchPredicateKeys(stepMap, name);
             String cardinality = readString(stepMap, "cardinality");
-            String inputType = readString(stepMap, "inputTypeName");
-            String outputType = readString(stepMap, "outputTypeName");
+            PipelineTemplateStepContractSyntax.StepContracts contracts =
+                PipelineTemplateStepContractSyntax.normalize(stepMap, version, name);
+            if (contracts.usesLegacyFqcn()) {
+                warningReporter.accept("Step '" + name + "' uses deprecated fully qualified '" + "input/output"
+                    + "' contracts; use logical input/output with java.input/java.output instead.");
+            }
+            String inputType = contracts.logicalInput().orElse(null);
+            String outputType = contracts.logicalOutput().orElse(null);
             List<PipelineTemplateField> inputFields = readFields(stepMap.get("inputFields"), version);
             List<PipelineTemplateField> outputFields = readFields(stepMap.get("outputFields"), version);
             String inboundMapper = readString(stepMap, "inboundMapper");
@@ -745,13 +780,24 @@ public class PipelineTemplateConfigLoader {
      * @return a list of parsed PipelineTemplateField instances (empty if {@code fieldsObj} is not iterable)
      */
     private List<PipelineTemplateField> readFields(Object fieldsObj, int version) {
+        return readFields(fieldsObj, version, "inline contract");
+    }
+
+    private List<PipelineTemplateField> readFields(Object fieldsObj, int version, String owner) {
         if (!(fieldsObj instanceof Iterable<?> fields)) {
             return List.of();
         }
 
         List<PipelineTemplateField> fieldInfos = new ArrayList<>();
+        int index = 0;
         for (Object fieldObj : fields) {
+            if (version >= 2 && fieldObj instanceof List<?> tuple) {
+                fieldInfos.add(readV2FieldTuple(tuple, owner, index));
+                index++;
+                continue;
+            }
             if (!(fieldObj instanceof Map<?, ?> fieldMap)) {
+                index++;
                 continue;
             }
             if (version >= 2) {
@@ -759,8 +805,29 @@ public class PipelineTemplateConfigLoader {
             } else {
                 fieldInfos.add(readLegacyField(fieldMap));
             }
+            index++;
         }
         return fieldInfos;
+    }
+
+    private PipelineTemplateField readV2FieldTuple(List<?> tuple, String owner, int index) {
+        String expected = owner + " field " + index
+            + " must be exactly [positiveNumber, nonBlankName, type]";
+        if (tuple.size() != 3 || !(tuple.get(0) instanceof Number number)) {
+            throw new IllegalStateException(expected);
+        }
+        int fieldNumber = number.intValue();
+        String fieldName = stringify(tuple.get(1));
+        String fieldType = stringify(tuple.get(2));
+        if (fieldNumber <= 0 || number.doubleValue() != fieldNumber || fieldName == null || fieldName.isBlank()
+            || fieldType == null || fieldType.isBlank()) {
+            throw new IllegalStateException(expected);
+        }
+        Map<String, Object> fieldMap = new LinkedHashMap<>();
+        fieldMap.put("number", fieldNumber);
+        fieldMap.put("name", fieldName);
+        fieldMap.put("type", fieldType);
+        return readV2Field(fieldMap);
     }
 
     /**
@@ -1308,13 +1375,35 @@ public class PipelineTemplateConfigLoader {
         }
     }
 
+    private String readLogicalContract(Map<?, ?> rootMap, String key, int version) {
+        Object contracts = rootMap.get("contract");
+        if (contracts == null) {
+            return null;
+        }
+        if (version < 2) {
+            throw new IllegalStateException("Pipeline logical contracts require version: 2");
+        }
+        if (!(contracts instanceof Map<?, ?> contractMap)) {
+            throw new IllegalArgumentException("pipeline contract must be defined as a YAML map");
+        }
+        Object value = contractMap.get(key);
+        if (value == null) {
+            return null;
+        }
+        if (!(value instanceof String contract)) {
+            throw new IllegalArgumentException("contract." + key + " must be declared as a named type");
+        }
+        return contract.isBlank() ? null : contract.trim();
+    }
+
     private PipelineInputBoundaryConfig readInputBoundary(Map<?, ?> rootMap) {
         Object inputObj = rootMap.get("input");
         if (inputObj == null) {
             return null;
         }
         if (!(inputObj instanceof Map<?, ?> inputMap)) {
-            throw new IllegalArgumentException("pipeline input boundary must be defined as a YAML map");
+            throw new IllegalArgumentException(
+                "pipeline input boundary must be defined as a YAML map; declare a logical input as contract.input");
         }
         Object subscriptionObj = inputMap.get("subscription");
         Object objectObj = inputMap.get("object");
@@ -1383,7 +1472,8 @@ public class PipelineTemplateConfigLoader {
             return Optional.empty();
         }
         if (!(outputObj instanceof Map<?, ?> outputMap)) {
-            throw new IllegalArgumentException("pipeline output boundary must be defined as a YAML map");
+            throw new IllegalArgumentException(
+                "pipeline output boundary must be defined as a YAML map; declare a logical output as contract.output");
         }
         Object checkpointObj = outputMap.get("checkpoint");
         Object objectObj = outputMap.get("object");

@@ -88,21 +88,15 @@ class PluginHostAspectFilteringTest {
                         import io.smallrye.mutiny.Uni;
                         import jakarta.enterprise.context.ApplicationScoped;
 
-                        @PipelineStep(
-                            inputType = String.class,
-                            outputType = String.class,
-                            stepType = StepOneToOne.class,
-                            inboundMapper = com.example.StringInputMapper.class,
-                            outboundMapper = com.example.StringOutputMapper.class
-                        )
-	                        @ApplicationScoped
-	                        public class ProcessTestService implements ReactiveService<String, String> {
-	                            @Override
-	                            public Uni<String> process(String input) {
-	                                return Uni.createFrom().item(input);
-	                            }
-	                        }
-	                        """),
+                        @PipelineStep
+                        @ApplicationScoped
+                        public class ProcessTestService implements ReactiveService<String, String> {
+                            @Override
+                            public Uni<String> process(String input) {
+                                return Uni.createFrom().item(input);
+                            }
+                        }
+                        """),
                 JavaFileObjects.forSourceString(
                     "com.example.StringInputMapper",
                     """

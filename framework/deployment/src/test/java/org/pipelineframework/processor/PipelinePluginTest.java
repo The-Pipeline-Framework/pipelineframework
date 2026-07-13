@@ -107,21 +107,15 @@ class PipelinePluginTest {
                         import io.smallrye.mutiny.Uni;
                         import jakarta.enterprise.context.ApplicationScoped;
 
-                        @PipelineStep(
-                            inputType = String.class,
-                            outputType = String.class,
-                            stepType = StepOneToOne.class,
-                            inboundMapper = test.plugin.StringInputMapper.class,
-                            outboundMapper = test.plugin.StringOutputMapper.class
-                        )
-	                        @ApplicationScoped
-	                        public class ProcessTestService implements ReactiveService<String, String> {
-	                            @Override
-	                            public Uni<String> process(String input) {
-	                                return Uni.createFrom().item(input);
-	                            }
-	                        }
-	                        """),
+                        @PipelineStep
+                        @ApplicationScoped
+                        public class ProcessTestService implements ReactiveService<String, String> {
+                            @Override
+                            public Uni<String> process(String input) {
+                                return Uni.createFrom().item(input);
+                            }
+                        }
+                        """),
                 JavaFileObjects.forSourceString(
                     "test.plugin.StringInputMapper",
                     """
@@ -303,21 +297,15 @@ class PipelinePluginTest {
                         import io.smallrye.mutiny.Uni;
                         import jakarta.enterprise.context.ApplicationScoped;
 
-                        @PipelineStep(
-                            inputType = String.class,
-                            outputType = String.class,
-                            stepType = StepOneToOne.class,
-                            inboundMapper = test.plugin.StringInputMapper.class,
-                            outboundMapper = test.plugin.StringOutputMapper.class
-                        )
-	                        @ApplicationScoped
-	                        public class ProcessTestService implements ReactiveService<String, String> {
-	                            @Override
-	                            public Uni<String> process(String input) {
-	                                return Uni.createFrom().item(input);
-	                            }
-	                        }
-	                        """),
+                        @PipelineStep
+                        @ApplicationScoped
+                        public class ProcessTestService implements ReactiveService<String, String> {
+                            @Override
+                            public Uni<String> process(String input) {
+                                return Uni.createFrom().item(input);
+                            }
+                        }
+                        """),
                 JavaFileObjects.forSourceString(
                     "test.plugin.StringInputMapper",
                     """

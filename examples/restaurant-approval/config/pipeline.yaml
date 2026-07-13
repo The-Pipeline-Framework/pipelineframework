@@ -3,118 +3,52 @@ appName: Restaurant Approval
 basePackage: org.pipelineframework.restaurantapproval
 transport: REST
 runtimeLayout: monolith
-messages:
+types:
   PlaceRestaurantOrderRequest:
     fields:
-      - number: 1
-        name: requestId
-        type: uuid
-      - number: 2
-        name: customerName
-        type: string
-      - number: 3
-        name: restaurantName
-        type: string
-      - number: 4
-        name: items
-        type: string
-      - number: 5
-        name: totalAmount
-        type: decimal
-      - number: 6
-        name: currency
-        type: string
+      - [1, requestId, uuid]
+      - [2, customerName, string]
+      - [3, restaurantName, string]
+      - [4, items, string]
+      - [5, totalAmount, decimal]
+      - [6, currency, string]
   ValidatedRestaurantOrderRequest:
     fields:
-      - number: 1
-        name: requestId
-        type: uuid
-      - number: 2
-        name: customerName
-        type: string
-      - number: 3
-        name: restaurantName
-        type: string
-      - number: 4
-        name: items
-        type: string
-      - number: 5
-        name: totalAmount
-        type: decimal
-      - number: 6
-        name: currency
-        type: string
-      - number: 7
-        name: validatedAt
-        type: timestamp
+      - [1, requestId, uuid]
+      - [2, customerName, string]
+      - [3, restaurantName, string]
+      - [4, items, string]
+      - [5, totalAmount, decimal]
+      - [6, currency, string]
+      - [7, validatedAt, timestamp]
   PendingRestaurantApproval:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: requestId
-        type: uuid
-      - number: 3
-        name: customerName
-        type: string
-      - number: 4
-        name: restaurantName
-        type: string
-      - number: 5
-        name: items
-        type: string
-      - number: 6
-        name: totalAmount
-        type: decimal
-      - number: 7
-        name: currency
-        type: string
-      - number: 8
-        name: createdAt
-        type: timestamp
+      - [1, orderId, uuid]
+      - [2, requestId, uuid]
+      - [3, customerName, string]
+      - [4, restaurantName, string]
+      - [5, items, string]
+      - [6, totalAmount, decimal]
+      - [7, currency, string]
+      - [8, createdAt, timestamp]
   RestaurantOrderAccepted:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: decidedAt
-        type: timestamp
-      - number: 3
-        name: note
-        type: string
+      - [1, orderId, uuid]
+      - [2, decidedAt, timestamp]
+      - [3, note, string]
   RestaurantOrderDeclined:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: decidedAt
-        type: timestamp
-      - number: 3
-        name: note
-        type: string
-      - number: 4
-        name: declineReason
-        type: string
+      - [1, orderId, uuid]
+      - [2, decidedAt, timestamp]
+      - [3, note, string]
+      - [4, declineReason, string]
   TerminalOrderState:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: outcome
-        type: string
-      - number: 3
-        name: resolvedAt
-        type: timestamp
-      - number: 4
-        name: restaurantStatus
-        type: string
-      - number: 5
-        name: summary
-        type: string
+      - [1, orderId, uuid]
+      - [2, outcome, string]
+      - [3, resolvedAt, timestamp]
+      - [4, restaurantStatus, string]
+      - [5, summary, string]
 unions:
   RestaurantDecision:
     variants:

@@ -3,59 +3,27 @@ appName: TPFGo Restaurant Acceptance Pipeline
 basePackage: org.pipelineframework.tpfgo.restaurant.acceptance
 transport: GRPC
 platform: COMPUTE
-messages:
+types:
   OrderApproved:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: requestId
-        type: uuid
-      - number: 3
-        name: customerId
-        type: uuid
-      - number: 4
-        name: restaurantId
-        type: uuid
-      - number: 5
-        name: totalAmount
-        type: decimal
-      - number: 6
-        name: currency
-        type: string
-      - number: 7
-        name: approvedAt
-        type: timestamp
-      - number: 8
-        name: riskBand
-        type: string
+      - [1, orderId, uuid]
+      - [2, requestId, uuid]
+      - [3, customerId, uuid]
+      - [4, restaurantId, uuid]
+      - [5, totalAmount, decimal]
+      - [6, currency, string]
+      - [7, approvedAt, timestamp]
+      - [8, riskBand, string]
   OrderAcceptedByRestaurant:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: requestId
-        type: uuid
-      - number: 3
-        name: customerId
-        type: uuid
-      - number: 4
-        name: restaurantId
-        type: uuid
-      - number: 5
-        name: totalAmount
-        type: decimal
-      - number: 6
-        name: currency
-        type: string
-      - number: 7
-        name: acceptedAt
-        type: timestamp
-      - number: 8
-        name: kitchenTicketId
-        type: uuid
+      - [1, orderId, uuid]
+      - [2, requestId, uuid]
+      - [3, customerId, uuid]
+      - [4, restaurantId, uuid]
+      - [5, totalAmount, decimal]
+      - [6, currency, string]
+      - [7, acceptedAt, timestamp]
+      - [8, kitchenTicketId, uuid]
 steps:
   - name: Restaurant Accept Order
     service: org.pipelineframework.tpfgo.restaurant.acceptance.restaurant_accept_order.service.ProcessRestaurantAcceptOrderService

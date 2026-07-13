@@ -43,125 +43,53 @@ aspects:
     order: 5
     config:
       pluginImplementationClass: org.pipelineframework.plugin.cache.CacheService
-messages:
+types:
   RawDocument:
     fields:
-      - number: 1
-        name: docId
-        type: uuid
-      - number: 2
-        name: sourceUrl
-        type: string
-      - number: 3
-        name: fetchOptions
-        type: string
-      - number: 4
-        name: rawContent
-        type: string
-      - number: 5
-        name: rawContentHash
-        type: string
-      - number: 6
-        name: fetchedAt
-        type: timestamp
+      - [1, docId, uuid]
+      - [2, sourceUrl, string]
+      - [3, fetchOptions, string]
+      - [4, rawContent, string]
+      - [5, rawContentHash, string]
+      - [6, fetchedAt, timestamp]
   ParsedDocument:
     fields:
-      - number: 1
-        name: docId
-        type: uuid
-      - number: 2
-        name: title
-        type: string
-      - number: 3
-        name: content
-        type: string
-      - number: 4
-        name: contentHash
-        type: string
-      - number: 5
-        name: rawContentHash
-        type: string
-      - number: 6
-        name: extractedAt
-        type: timestamp
+      - [1, docId, uuid]
+      - [2, title, string]
+      - [3, content, string]
+      - [4, contentHash, string]
+      - [5, rawContentHash, string]
+      - [6, extractedAt, timestamp]
   TokenBatch:
     fields:
-      - number: 1
-        name: docId
-        type: uuid
-      - number: 2
-        name: batchIndex
-        type: int32
-      - number: 3
-        name: tokenCount
-        type: int32
-      - number: 4
-        name: tokens
-        type: string
-      - number: 5
-        name: tokensHash
-        type: string
-      - number: 6
-        name: contentHash
-        type: string
-      - number: 7
-        name: tokenizedAt
-        type: timestamp
+      - [1, docId, uuid]
+      - [2, batchIndex, int32]
+      - [3, tokenCount, int32]
+      - [4, tokens, string]
+      - [5, tokensHash, string]
+      - [6, contentHash, string]
+      - [7, tokenizedAt, timestamp]
   EmbeddedChunk:
     fields:
-      - number: 1
-        name: docId
-        type: uuid
-      - number: 2
-        name: batchIndex
-        type: int32
-      - number: 3
-        name: tokenCount
-        type: int32
-      - number: 4
-        name: tokens
-        type: string
-      - number: 5
-        name: tokensHash
-        type: string
-      - number: 6
-        name: contentHash
-        type: string
-      - number: 7
-        name: vectorHash
-        type: string
-      - number: 8
-        name: vectorVersion
-        type: string
-      - number: 9
-        name: embeddedAt
-        type: timestamp
+      - [1, docId, uuid]
+      - [2, batchIndex, int32]
+      - [3, tokenCount, int32]
+      - [4, tokens, string]
+      - [5, tokensHash, string]
+      - [6, contentHash, string]
+      - [7, vectorHash, string]
+      - [8, vectorVersion, string]
+      - [9, embeddedAt, timestamp]
   IndexAck:
     fields:
-      - number: 1
-        name: docId
-        type: uuid
-      - number: 2
-        name: indexVersion
-        type: string
-      - number: 3
-        name: tokensHash
-        type: string
-      - number: 4
-        name: tokenBatchCount
-        type: int32
-      - number: 5
-        name: uniqueTokenCount
-        type: int32
-      - number: 6
-        name: topToken
-        type: string
-      - number: 7
-        name: indexedAt
-        type: timestamp
-      - number: 8
-        name: success
-        type: bool
+      - [1, docId, uuid]
+      - [2, indexVersion, string]
+      - [3, tokensHash, string]
+      - [4, tokenBatchCount, int32]
+      - [5, uniqueTokenCount, int32]
+      - [6, topToken, string]
+      - [7, indexedAt, timestamp]
+      - [8, success, bool]
 steps:
   - name: Parse Document
     service: org.pipelineframework.search.parse_document.service.ProcessParseDocumentService

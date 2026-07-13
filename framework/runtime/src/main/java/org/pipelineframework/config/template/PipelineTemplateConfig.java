@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+
 import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
 import org.pipelineframework.config.boundary.PipelineObjectPublishConfig;
 import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
@@ -42,6 +43,8 @@ import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
  * @param input reliable pipeline input boundary
  * @param output reliable pipeline output boundary
  * @param materialization field representation aspect policies
+ * @param inputContract optional scalar pipeline input contract used by linear templates
+ * @param outputContract optional scalar pipeline output assertion used by linear templates
  */
 public record PipelineTemplateConfig(
     int version,
@@ -57,7 +60,9 @@ public record PipelineTemplateConfig(
     Map<String, PipelineTemplateAspect> aspects,
     PipelineInputBoundaryConfig input,
     PipelineOutputBoundaryConfig output,
-    PipelineTemplateMaterialization materialization
+    PipelineTemplateMaterialization materialization,
+    String inputContract,
+    String outputContract
 ) {
     public PipelineTemplateConfig {
         if (version <= 0) {
@@ -82,6 +87,8 @@ public record PipelineTemplateConfig(
         steps = steps == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(steps));
         aspects = aspects == null ? Map.of() : Map.copyOf(aspects);
         materialization = materialization == null ? new PipelineTemplateMaterialization(List.of()) : materialization;
+        inputContract = normalize(inputContract);
+        outputContract = normalize(outputContract);
     }
 
     /**
@@ -95,6 +102,19 @@ public record PipelineTemplateConfig(
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(fieldName + " must not be blank");
         }
+    }
+
+    private static String normalize(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    /**
+     * Canonical Java accessor matching the preferred YAML {@code types} property.
+     *
+     * @return the same immutable named-type map exposed by {@link #messages()}
+     */
+    public Map<String, PipelineTemplateMessage> types() {
+        return messages;
     }
 
     /**
@@ -137,7 +157,7 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), Map.of(), Map.of(), Map.of(), steps, aspects, null, null, null);
+        this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), Map.of(), Map.of(), Map.of(), steps, aspects, null, null, null, null, null);
     }
 
     /**
@@ -158,7 +178,7 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(1, appName, basePackage, transport, platform, Map.of(), Map.of(), Map.of(), Map.of(), steps, aspects, null, null, null);
+        this(1, appName, basePackage, transport, platform, Map.of(), Map.of(), Map.of(), Map.of(), steps, aspects, null, null, null, null, null);
     }
 
     public PipelineTemplateConfig(
@@ -173,7 +193,7 @@ public record PipelineTemplateConfig(
         PipelineInputBoundaryConfig input,
         PipelineOutputBoundaryConfig output
     ) {
-        this(version, appName, basePackage, transport, platform, messages, Map.of(), Map.of(), Map.of(), steps, aspects, input, output, null);
+        this(version, appName, basePackage, transport, platform, messages, Map.of(), Map.of(), Map.of(), steps, aspects, input, output, null, null, null);
     }
 
     public PipelineTemplateConfig(
@@ -190,6 +210,29 @@ public record PipelineTemplateConfig(
         PipelineOutputBoundaryConfig output,
         PipelineTemplateMaterialization materialization
     ) {
-        this(version, appName, basePackage, transport, platform, messages, unions, Map.of(), Map.of(), steps, aspects, input, output, materialization);
+        this(version, appName, basePackage, transport, platform, messages, unions, Map.of(), Map.of(), steps, aspects, input, output, materialization, null, null);
+    }
+
+    /**
+     * Backward-compatible overload matching the record shape before scalar contracts were added.
+     */
+    public PipelineTemplateConfig(
+        int version,
+        String appName,
+        String basePackage,
+        String transport,
+        PipelinePlatform platform,
+        Map<String, PipelineTemplateMessage> messages,
+        Map<String, PipelineTemplateUnion> unions,
+        Map<String, PipelineObjectSourceConfig> sources,
+        Map<String, PipelineObjectPublishConfig> publish,
+        List<PipelineTemplateStep> steps,
+        Map<String, PipelineTemplateAspect> aspects,
+        PipelineInputBoundaryConfig input,
+        PipelineOutputBoundaryConfig output,
+        PipelineTemplateMaterialization materialization
+    ) {
+        this(version, appName, basePackage, transport, platform, messages, unions, sources, publish,
+            steps, aspects, input, output, materialization, null, null);
     }
 }

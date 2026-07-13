@@ -1,18 +1,19 @@
 package org.pipelineframework.processor;
 
-import static com.google.testing.compile.CompilationSubject.assertThat;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
-import com.google.testing.compile.Compilation;
-import com.google.testing.compile.Compiler;
-import com.google.testing.compile.JavaFileObjects;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardLocation;
+
+import com.google.testing.compile.Compilation;
+import com.google.testing.compile.Compiler;
+import com.google.testing.compile.JavaFileObjects;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import static com.google.testing.compile.CompilationSubject.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CheckpointPublicationGenerationTest {
 
@@ -152,13 +153,7 @@ class CheckpointPublicationGenerationTest {
                 import org.pipelineframework.service.ReactiveService;
                 import org.pipelineframework.step.StepOneToOne;
 
-                @PipelineStep(
-                    inputType = com.example.domain.OrderRequest.class,
-                    outputType = com.example.domain.ReadyOrder.class,
-                    stepType = StepOneToOne.class,
-                    inboundMapper = com.example.mapper.OrderRequestMapper.class,
-                    outboundMapper = com.example.mapper.ReadyOrderMapper.class
-                )
+                @PipelineStep
                 @ApplicationScoped
                 public class ProcessOrderReadyService
                     implements ReactiveService<com.example.domain.OrderRequest, com.example.domain.ReadyOrder> {

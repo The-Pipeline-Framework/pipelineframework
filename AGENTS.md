@@ -9,13 +9,14 @@ Core modules:
 - `framework/runtime-core`: framework-neutral TPF abstractions
 - `framework/runtime`: runtime APIs, execution engine, telemetry, config loading (Quarkus/canonical)
 - `framework/runtime-spring`: runtime APIs, execution engine, telemetry, config loading (Springboot))
+- `framework/runtime-api`: framework-neutral API contracts for generated pipeline applications
 
 Supporting repo surfaces:
 
 - `examples`: reference applications, topology smoke paths, and end-to-end compatibility surfaces
 - `ai-sdk`: standalone Java SDK used for delegation/operator stress testing and mapper/transport exercises
 - `docs`: VitePress documentation site
-- `web-ui`: SvelteKit Canvas/web UI (unmaintained)
+- `web-ui`: SvelteKit Canvas/web UI (un-maintained)
 
 tpf-mcp-bridge lives in a separate repo now. It holds the MCP bridge and the template generator.
 
@@ -53,10 +54,14 @@ Most common gates:
 
 ## Architecture Notes
 
-- Pipeline order is emitted to `META-INF/pipeline/order.json` at build time.
-- Telemetry metadata is emitted to `META-INF/pipeline/telemetry.json` at build time.
-- Branching metadata is emitted to `META-INF/pipeline/branching.json` at build time.
-- Runtime is reactive-first; blocking work must be explicitly offloaded.
+Generated metadata under `META-INF/pipeline/` at build time:
+- Pipeline order: `order.json`.
+- Telemetry metadata: `telemetry.json`.
+- Branching metadata: `branching.json`.
+- Platform, transport, module, and plugin-host metadata: `platform.json`
+- Deterministic semantic contract and ordered step descriptors (used by release validation and queue-async transition-worker validation): `pipeline-contract.json`
+
+Runtime is reactive-first; blocking work must be explicitly offloaded.
 
 ### Deployment Patterns And Wire Protocols
 

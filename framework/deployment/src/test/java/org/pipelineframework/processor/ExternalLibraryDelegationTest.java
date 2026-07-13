@@ -16,21 +16,17 @@
 
 package org.pipelineframework.processor;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
-
-import javax.tools.DiagnosticCollector;
-import javax.tools.JavaCompiler;
-import javax.tools.JavaFileObject;
-import javax.tools.StandardJavaFileManager;
-import javax.tools.ToolProvider;
+import javax.tools.*;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Basic tests for the operator step delegation functionality.
@@ -55,11 +51,7 @@ class ExternalLibraryDelegationTest {
             import org.pipelineframework.service.ReactiveService;
             import io.smallrye.mutiny.Uni;
 
-            @PipelineStep(
-                inputType = String.class,
-                outputType = String.class,
-                delegate = String.class
-            )
+            @PipelineStep
             public class DelegatedStepService {
             }
             """);

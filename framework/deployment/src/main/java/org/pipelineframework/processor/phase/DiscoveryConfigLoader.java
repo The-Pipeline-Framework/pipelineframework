@@ -100,7 +100,12 @@ class DiscoveryConfigLoader {
         if (configPath == null) {
             throw new IllegalArgumentException("configPath must not be null");
         }
-        PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader();
+        PipelineTemplateConfigLoader loader = messager == null
+            ? new PipelineTemplateConfigLoader()
+            : new PipelineTemplateConfigLoader(
+                System::getProperty,
+                System::getenv,
+                warning -> messager.printMessage(Diagnostic.Kind.WARNING, warning));
         try {
             return loader.load(configPath);
         } catch (Exception e) {

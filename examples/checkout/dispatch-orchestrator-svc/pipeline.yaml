@@ -3,68 +3,30 @@ appName: TPFGo Dispatch Pipeline
 basePackage: org.pipelineframework.tpfgo.dispatch
 transport: GRPC
 platform: COMPUTE
-messages:
+types:
   OrderReadyForDispatch:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: customerId
-        type: uuid
-      - number: 3
-        name: restaurantId
-        type: uuid
-      - number: 4
-        name: totalAmount
-        type: decimal
-      - number: 5
-        name: currency
-        type: string
-      - number: 6
-        name: readyAt
-        type: timestamp
-      - number: 7
-        name: kitchenTicketId
-        type: uuid
-      - number: 8
-        name: lineageDigest
-        type: string
+      - [1, orderId, uuid]
+      - [2, customerId, uuid]
+      - [3, restaurantId, uuid]
+      - [4, totalAmount, decimal]
+      - [5, currency, string]
+      - [6, readyAt, timestamp]
+      - [7, kitchenTicketId, uuid]
+      - [8, lineageDigest, string]
   DeliveryAssigned:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: customerId
-        type: uuid
-      - number: 3
-        name: restaurantId
-        type: uuid
-      - number: 4
-        name: totalAmount
-        type: decimal
-      - number: 5
-        name: currency
-        type: string
-      - number: 6
-        name: kitchenTicketId
-        type: uuid
-      - number: 7
-        name: dispatchId
-        type: uuid
-      - number: 8
-        name: courierId
-        type: uuid
-      - number: 9
-        name: etaMinutes
-        type: int32
-      - number: 10
-        name: assignedAt
-        type: timestamp
-      - number: 11
-        name: lineageDigest
-        type: string
+      - [1, orderId, uuid]
+      - [2, customerId, uuid]
+      - [3, restaurantId, uuid]
+      - [4, totalAmount, decimal]
+      - [5, currency, string]
+      - [6, kitchenTicketId, uuid]
+      - [7, dispatchId, uuid]
+      - [8, courierId, uuid]
+      - [9, etaMinutes, int32]
+      - [10, assignedAt, timestamp]
+      - [11, lineageDigest, string]
 steps:
   - name: Dispatch Assign Courier
     service: org.pipelineframework.tpfgo.dispatch.dispatch_assign_courier.service.ProcessDispatchAssignCourierService

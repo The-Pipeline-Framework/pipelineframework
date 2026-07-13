@@ -1,14 +1,6 @@
 package org.pipelineframework.processor.routing;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.TypeElement;
@@ -195,11 +187,13 @@ public final class PipelineBranchRoutingPlanner {
         Map<String, ClassName> contractRuntimeTypes
     ) {
         if (isBlank(templateStep.inputTypeName())) {
-            error(ctx, "Branch-aware step '" + templateStep.name() + "' must declare inputTypeName.");
+            error(ctx, "Branch-aware step '" + templateStep.name()
+                + "' must declare an input/inputTypeName contract.");
             return Optional.empty();
         }
         if (isBlank(templateStep.outputTypeName())) {
-            error(ctx, "Branch-aware step '" + templateStep.name() + "' must declare outputTypeName.");
+            error(ctx, "Branch-aware step '" + templateStep.name()
+                + "' must declare an output/outputTypeName contract.");
             return Optional.empty();
         }
 

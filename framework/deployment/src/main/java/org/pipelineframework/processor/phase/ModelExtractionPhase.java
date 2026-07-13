@@ -1,20 +1,9 @@
 package org.pipelineframework.processor.phase;
 
-import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.*;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
@@ -22,23 +11,14 @@ import javax.lang.model.util.Types;
 
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
-import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.annotation.PipelineStep;
+import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.extractor.PipelineStepIRExtractor;
-import org.pipelineframework.processor.ir.DeploymentRole;
-import org.pipelineframework.processor.ir.ExecutionMode;
-import org.pipelineframework.processor.ir.GenerationTarget;
-import org.pipelineframework.processor.ir.MapperFallbackMode;
-import org.pipelineframework.processor.ir.PipelineStepModel;
-import org.pipelineframework.processor.ir.ReactiveReturnKind;
-import org.pipelineframework.processor.ir.ServiceApiKind;
-import org.pipelineframework.processor.ir.StreamingShape;
-import org.pipelineframework.processor.ir.TypeMapping;
-import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
+import org.pipelineframework.processor.ir.*;
 
 /**
  * Extracts semantic models from YAML step definitions and legacy {@code @PipelineStep} annotations.
@@ -101,6 +81,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             if (stepModels.isEmpty()) {
                 stepModels = new ArrayList<>(extractStepModelsFromAnnotations(ctx));
             }
+            new PipelineStepContractValidator().validate(ctx, stepModels);
             List<PipelineStepModel> contextualModels = contextRoleEnricher.enrich(ctx, stepModels);
             if (contextualModels != null && !contextualModels.isEmpty()) {
                 stepModels = contextualModels;
@@ -231,7 +212,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (stepDef.inputType() == null || stepDef.outputType() == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
-                "Command step '" + stepDef.name() + "' must resolve both input and output domain types");
+                "Command step '" + stepDef.name() + "' must resolve both Java input and output bindings; "
+                    + "declare java.input and java.output.");
             return null;
         }
         StreamingShape streamingShape = stepDef.streamingShapeHint() != null
@@ -277,7 +259,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (stepDef.inputType() == null || stepDef.outputType() == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
-                "Query step '" + stepDef.name() + "' must resolve both input and output domain types");
+                "Query step '" + stepDef.name() + "' must resolve both Java input and output bindings; "
+                    + "declare java.input and java.output.");
             return null;
         }
         StreamingShape streamingShape = stepDef.streamingShapeHint() != null
@@ -323,7 +306,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (stepDef.inputType() == null || stepDef.outputType() == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
-                "Await step '" + stepDef.name() + "' must resolve both input and output domain types");
+                "Await step '" + stepDef.name() + "' must resolve both Java input and output bindings; "
+                    + "declare java.input and java.output.");
             return null;
         }
         StreamingShape streamingShape = stepDef.streamingShapeHint() != null
@@ -369,7 +353,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (stepDef.inputType() == null || stepDef.outputType() == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
-                "Remote step '" + stepDef.name() + "' must resolve both input and output domain types");
+                "Remote step '" + stepDef.name() + "' must resolve both Java input and output bindings; "
+                    + "declare java.input and java.output.");
             return null;
         }
         StreamingShape streamingShape = stepDef.streamingShapeHint() != null
@@ -750,8 +735,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (inputType == null || outputType == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
-                "Could not resolve input/output types for delegated step '" + stepDef.name()
-                    + "'. Provide 'input'/'output' in YAML or use a parameterized reactive delegate type.");
+                "Could not resolve Java input/output bindings for delegated step '" + stepDef.name()
+                    + "'. Provide java.input/java.output or use a parameterized reactive delegate type.");
             return null;
         }
 

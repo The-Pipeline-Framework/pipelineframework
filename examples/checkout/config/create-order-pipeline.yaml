@@ -2,71 +2,43 @@ version: 2
 appName: Checkout Create Order Pipeline
 basePackage: org.pipelineframework.checkout.createorder
 transport: GRPC
-messages:
+types:
   OrderRequest:
     fields:
-      - number: 1
-        name: requestId
-        type: uuid
-      - number: 2
-        name: customerId
-        type: uuid
+      - [1, requestId, uuid]
+      - [2, customerId, uuid]
       - number: 3
         name: items
         type: OrderLineItem
         repeated: true
   OrderLineItem:
     fields:
-      - number: 1
-        name: requestId
-        type: uuid
-      - number: 2
-        name: customerId
-        type: uuid
-      - number: 3
-        name: sku
-        type: string
-      - number: 4
-        name: quantity
-        type: int32
+      - [1, requestId, uuid]
+      - [2, customerId, uuid]
+      - [3, sku, string]
+      - [4, quantity, int32]
   InitialOrder:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: requestId
-        type: uuid
-      - number: 3
-        name: customerId
-        type: uuid
-      - number: 4
-        name: itemCount
-        type: int32
+      - [1, orderId, uuid]
+      - [2, requestId, uuid]
+      - [3, customerId, uuid]
+      - [4, itemCount, int32]
   ReadyOrder:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: requestId
-        type: uuid
-      - number: 3
-        name: customerId
-        type: uuid
-      - number: 4
-        name: readyAt
-        type: timestamp
+      - [1, orderId, uuid]
+      - [2, requestId, uuid]
+      - [3, customerId, uuid]
+      - [4, readyAt, timestamp]
+contract:
+  input: OrderRequest
+  output: ReadyOrder
 steps:
   - name: Order Request Process
     cardinality: ONE_TO_MANY
-    inputTypeName: OrderRequest
-    outputTypeName: OrderLineItem
+    output: OrderLineItem
   - name: Order Create
     cardinality: MANY_TO_ONE
-    inputTypeName: OrderLineItem
-    outputTypeName: InitialOrder
+    output: InitialOrder
   - name: Order Ready
     cardinality: ONE_TO_ONE
-    inputTypeName: InitialOrder
-    outputTypeName: ReadyOrder
+    output: ReadyOrder

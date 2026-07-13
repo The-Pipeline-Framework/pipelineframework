@@ -114,12 +114,8 @@ steps:
   - name: process-file-reactive
     service: com.app.file.ProcessFileReactiveService
     cardinality: MANY_TO_ONE
-    input: com.app.file.InputType
-    inputTypeName: InputType
-    inboundMapper: com.app.file.InputTypeMapper
-    output: com.app.file.OutputFileType
-    outputTypeName: OutputFileType
-    outboundMapper: com.app.file.OutputFileTypeMapper
+    input: InputType
+    output: OutputFileType
 ```
 
 ```java

@@ -61,11 +61,7 @@ class RestBindingSkipTest {
                         import org.pipelineframework.service.ReactiveService;
                         import org.pipelineframework.step.StepOneToOne;
 
-                        @PipelineStep(
-                            inputType = com.example.domain.FooInput.class,
-                            outputType = com.example.domain.FooOutput.class,
-                            stepType = StepOneToOne.class
-                        )
+                        @PipelineStep
                         public class ProcessFooService implements ReactiveService<com.example.domain.FooInput, com.example.domain.FooOutput> {
                             @Override
                             public Uni<com.example.domain.FooOutput> process(com.example.domain.FooInput input) {

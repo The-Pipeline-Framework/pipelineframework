@@ -44,8 +44,7 @@ steps:
   - name: Process Csv Payments Input
     service: org.pipelineframework.csv.service.ProcessCsvPaymentsInputService
     cardinality: EXPANSION
-    input: org.pipelineframework.csv.common.domain.CsvPaymentsInputFile
-    inputTypeName: CsvPaymentsInputFile
+    input: CsvPaymentsInputFile
 ```
 
 ## Projection Mapper
@@ -96,35 +95,36 @@ steps:
   - name: ProcessApprovedPaymentStatus
     service: org.pipelineframework.csv.service.ProcessApprovedPaymentStatusService
     cardinality: ONE_TO_ONE
-    input: org.pipelineframework.csv.common.domain.ApprovedPaymentStatus
-    inputTypeName: ApprovedPaymentStatus
+    input: ApprovedPaymentStatus
     # accepts omitted — implicitly accepts ApprovedPaymentStatus
-    output: org.pipelineframework.csv.common.domain.ApprovedPaymentOutput
-    outputTypeName: ApprovedPaymentOutput
+    output: ApprovedPaymentOutput
 
   - name: ProcessUnapprovedPaymentStatus
     service: org.pipelineframework.csv.service.ProcessUnapprovedPaymentStatusService
     cardinality: ONE_TO_ONE
-    input: org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus
-    inputTypeName: UnapprovedPaymentStatus
+    input: UnapprovedPaymentStatus
     # accepts omitted — implicitly accepts UnapprovedPaymentStatus
-    output: org.pipelineframework.csv.common.domain.UnapprovedPaymentOutput
-    outputTypeName: UnapprovedPaymentOutput
+    output: UnapprovedPaymentOutput
 
   - name: Finalize Payment Output
     service: org.pipelineframework.csv.service.ProcessFinalizePaymentOutputService
     cardinality: ONE_TO_ONE
-    input: org.pipelineframework.csv.common.domain.PaymentOutputBranch
-    inputTypeName: PaymentOutputBranch
+    input: PaymentOutputBranch
     accepts:
       - ApprovedPaymentOutput
       - UnapprovedPaymentOutput
-    output: org.pipelineframework.csv.common.domain.PaymentOutput
-    outputTypeName: PaymentOutput
+    output: PaymentOutput
+    # Required here: adapts the final local domain result to the object-output contract.
+    # This is separate from output.consumes.mapper, which renders published object payloads.
+    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputMapper
     terminal: true
 ```
 
-The output binding type must match the last step output type.
+The output contract must match the last step output type. For an object output, the terminal step also declares
+`outboundMapper` when its local domain result must be adapted to that contract. The top-level
+`output.consumes.mapper` has a different job: it renders the already-adapted terminal values into object payloads.
+Neither mapper is a `java` binding. Local service and operator Java input/output types are inferred from their
+signatures and mapper resolution; use `java` only for an explicit Java assertion or a framework-owned/remote binding.
 
 ## CSV Payments Shape
 

@@ -19,24 +19,19 @@ package org.pipelineframework.processor.parser;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.regex.Pattern;
 import javax.tools.Diagnostic;
 
-import org.pipelineframework.config.pipeline.BranchRoutingRules;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.squareup.javapoet.ClassName;
-import org.pipelineframework.config.template.PipelineTemplateRemoteTarget;
-import org.pipelineframework.config.template.PipelineTemplateStepExecution;
 import org.jboss.logging.Logger;
+import org.pipelineframework.config.pipeline.BranchRoutingRules;
+import org.pipelineframework.config.template.PipelineTemplateRemoteTarget;
+import org.pipelineframework.config.template.PipelineTemplateStepContractSyntax;
+import org.pipelineframework.config.template.PipelineTemplateStepExecution;
 import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StepKind;
@@ -73,6 +68,7 @@ public class StepDefinitionParser {
         "delegate",
         "input",
         "output",
+        "java",
         "inboundMapper",
         "outboundMapper",
         "operatorMapper",
@@ -183,7 +179,7 @@ public class StepDefinitionParser {
 
         return stepDefinitions;
     }
-    
+
     /**
      * Parse a single step definition from a YAML-derived configuration map.
      *
@@ -350,18 +346,14 @@ public class StepDefinitionParser {
             throw new StepSkippedException();
         }
 
-        // Parse input and output types
-        String inputTypeName = getStringValue(stepData, "input");
-        String outputTypeName = getStringValue(stepData, "output");
-
-        // If input/output types are not specified in the new format, 
-        // they might be in the legacy format (inputTypeName/outputTypeName)
-        if (isBlank(inputTypeName)) {
-            inputTypeName = getStringValue(stepData, "inputTypeName");
+        PipelineTemplateStepContractSyntax.StepContracts contracts =
+            PipelineTemplateStepContractSyntax.normalize(stepData, version, name);
+        if (contracts.usesLegacyFqcn()) {
+            report(Diagnostic.Kind.WARNING, "Step '" + name + "' uses deprecated fully qualified 'input/output'"
+                + " contracts; use logical input/output with java.input/java.output instead.");
         }
-        if (isBlank(outputTypeName)) {
-            outputTypeName = getStringValue(stepData, "outputTypeName");
-        }
+        String inputTypeName = contracts.javaInput().orElse(null);
+        String outputTypeName = contracts.javaOutput().orElse(null);
 
         // Keep delegated input/output optional so they can be derived from delegate generics.
         ClassName inputType = parseOptionalClassName(inputTypeName, name, "input", basePackage, inferredLegacyInternal);
@@ -448,11 +440,11 @@ public class StepDefinitionParser {
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
             }
-            boolean hasInput = !isBlank(inputTypeName);
-            boolean hasOutput = !isBlank(outputTypeName);
+            boolean hasInput = inputType != null;
+            boolean hasOutput = outputType != null;
             if (hasInput != hasOutput) {
                 String message = "Skipping step '" + name
-                    + "': delegated steps must provide both 'input' and 'output' together";
+                    + "': delegated steps must provide both java.input and java.output together";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
@@ -469,7 +461,8 @@ public class StepDefinitionParser {
             }
             if (inputType == null || outputType == null) {
                 String message = "Skipping step '" + name
-                    + "': remote steps must provide inputTypeName and outputTypeName";
+                    + "': remote steps must provide explicit Java 'input' and 'output' bindings via java.input and java.output"
+                    + " (legacy fully qualified input/output remains supported)";
                 LOG.warn(message);
                 report(Diagnostic.Kind.ERROR, message);
                 return null;

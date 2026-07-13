@@ -84,6 +84,8 @@ steps:
     outputTypeName: "ValidationOutput"
 ```
 
+The archived configuration intentionally retains the historical `inputTypeName` and `outputTypeName` syntax. Current v2 templates use logical `input` and `output`; see [pipeline template types and linear contracts](../develop/pipeline-template-dsl).
+
 ### 3. Generate Application
 
 Generate the complete application from your configuration:

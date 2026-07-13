@@ -3,88 +3,38 @@ appName: TPFGo Kitchen Preparation Pipeline
 basePackage: org.pipelineframework.tpfgo.kitchen.preparation
 transport: GRPC
 platform: COMPUTE
-messages:
+types:
   OrderAcceptedByRestaurant:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: requestId
-        type: uuid
-      - number: 3
-        name: customerId
-        type: uuid
-      - number: 4
-        name: restaurantId
-        type: uuid
-      - number: 5
-        name: totalAmount
-        type: decimal
-      - number: 6
-        name: currency
-        type: string
-      - number: 7
-        name: acceptedAt
-        type: timestamp
-      - number: 8
-        name: kitchenTicketId
-        type: uuid
+      - [1, orderId, uuid]
+      - [2, requestId, uuid]
+      - [3, customerId, uuid]
+      - [4, restaurantId, uuid]
+      - [5, totalAmount, decimal]
+      - [6, currency, string]
+      - [7, acceptedAt, timestamp]
+      - [8, kitchenTicketId, uuid]
   KitchenTask:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: customerId
-        type: uuid
-      - number: 3
-        name: restaurantId
-        type: uuid
-      - number: 4
-        name: totalAmount
-        type: decimal
-      - number: 5
-        name: currency
-        type: string
-      - number: 6
-        name: kitchenTicketId
-        type: uuid
-      - number: 7
-        name: taskId
-        type: uuid
-      - number: 8
-        name: taskName
-        type: string
-      - number: 9
-        name: taskStatus
-        type: string
+      - [1, orderId, uuid]
+      - [2, customerId, uuid]
+      - [3, restaurantId, uuid]
+      - [4, totalAmount, decimal]
+      - [5, currency, string]
+      - [6, kitchenTicketId, uuid]
+      - [7, taskId, uuid]
+      - [8, taskName, string]
+      - [9, taskStatus, string]
   OrderReadyForDispatch:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: customerId
-        type: uuid
-      - number: 3
-        name: restaurantId
-        type: uuid
-      - number: 4
-        name: totalAmount
-        type: decimal
-      - number: 5
-        name: currency
-        type: string
-      - number: 6
-        name: readyAt
-        type: timestamp
-      - number: 7
-        name: kitchenTicketId
-        type: uuid
-      - number: 8
-        name: lineageDigest
-        type: string
+      - [1, orderId, uuid]
+      - [2, customerId, uuid]
+      - [3, restaurantId, uuid]
+      - [4, totalAmount, decimal]
+      - [5, currency, string]
+      - [6, readyAt, timestamp]
+      - [7, kitchenTicketId, uuid]
+      - [8, lineageDigest, string]
 steps:
   - name: Kitchen Expand Tasks
     service: org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.ProcessKitchenExpandTasksService

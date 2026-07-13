@@ -3,93 +3,41 @@ appName: TPFGo Payment Capture Pipeline
 basePackage: org.pipelineframework.tpfgo.payment.capture
 transport: GRPC
 platform: COMPUTE
-messages:
+types:
   OrderDelivered:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: customerId
-        type: uuid
-      - number: 3
-        name: dispatchId
-        type: uuid
-      - number: 4
-        name: courierId
-        type: uuid
-      - number: 5
-        name: restaurantId
-        type: uuid
-      - number: 6
-        name: kitchenTicketId
-        type: uuid
-      - number: 7
-        name: deliveredAt
-        type: timestamp
-      - number: 8
-        name: amount
-        type: decimal
-      - number: 9
-        name: currency
-        type: string
-      - number: 10
-        name: lineageDigest
-        type: string
+      - [1, orderId, uuid]
+      - [2, customerId, uuid]
+      - [3, dispatchId, uuid]
+      - [4, courierId, uuid]
+      - [5, restaurantId, uuid]
+      - [6, kitchenTicketId, uuid]
+      - [7, deliveredAt, timestamp]
+      - [8, amount, decimal]
+      - [9, currency, string]
+      - [10, lineageDigest, string]
   PaymentCaptured:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: paymentId
-        type: uuid
-      - number: 3
-        name: processedAt
-        type: timestamp
-      - number: 4
-        name: amount
-        type: decimal
-      - number: 5
-        name: currency
-        type: string
+      - [1, orderId, uuid]
+      - [2, paymentId, uuid]
+      - [3, processedAt, timestamp]
+      - [4, amount, decimal]
+      - [5, currency, string]
   PaymentRejected:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: processedAt
-        type: timestamp
-      - number: 3
-        name: amount
-        type: decimal
-      - number: 4
-        name: currency
-        type: string
-      - number: 5
-        name: failureCode
-        type: string
-      - number: 6
-        name: failureReason
-        type: string
+      - [1, orderId, uuid]
+      - [2, processedAt, timestamp]
+      - [3, amount, decimal]
+      - [4, currency, string]
+      - [5, failureCode, string]
+      - [6, failureReason, string]
   PaymentRequiresReview:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: processedAt
-        type: timestamp
-      - number: 3
-        name: amount
-        type: decimal
-      - number: 4
-        name: currency
-        type: string
-      - number: 5
-        name: reviewReason
-        type: string
+      - [1, orderId, uuid]
+      - [2, processedAt, timestamp]
+      - [3, amount, decimal]
+      - [4, currency, string]
+      - [5, reviewReason, string]
 unions:
   PaymentOutcome:
     variants:
