@@ -16,14 +16,15 @@
 
 package org.pipelineframework.csv.common.domain;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.Currency;
 import java.util.UUID;
+
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 class CsvPaymentsStableIdSupportTest {
 
@@ -53,10 +54,10 @@ class CsvPaymentsStableIdSupportTest {
 
   @Test
   void csvFilesUseStablePathIdOnPersist() {
-    CsvPaymentsOutputFile first = new CsvPaymentsOutputFile();
-    CsvPaymentsOutputFile duplicate = new CsvPaymentsOutputFile();
-    first.setFilepath(Path.of("/tmp/payments.csv.out"));
-    duplicate.setFilepath(Path.of("/tmp/./payments.csv.out"));
+    CsvPaymentsInputFile first = new CsvPaymentsInputFile();
+    CsvPaymentsInputFile duplicate = new CsvPaymentsInputFile();
+    first.setFilepath(Path.of("/tmp/payments.csv"));
+    duplicate.setFilepath(Path.of("/tmp/./payments.csv"));
     assertNotEquals(first.getId(), duplicate.getId());
 
     first.useStableFileId();

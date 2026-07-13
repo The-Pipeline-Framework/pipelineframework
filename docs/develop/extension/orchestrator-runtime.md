@@ -11,7 +11,6 @@ The orchestrator runtime is produced during the build by the pipeline code gener
 ## Custom Orchestrator (REST)
 
 You can skip `OrchestratorApplication` entirely and build a custom orchestrator that drives the pipeline via REST.
-See `examples/csv-payments/ui-dashboard/src/services/optimizedRestOrchestrationService.js` for a real example.
 
 ### Recommended flow
 

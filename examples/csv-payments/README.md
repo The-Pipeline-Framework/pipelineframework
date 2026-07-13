@@ -630,7 +630,7 @@ The build generates a self-signed certificate under `examples/csv-payments/targe
    echo | openssl s_client -connect localhost:8444 2>/dev/null | openssl x509 > /tmp/quarkus-cert.pem
 
    # Add to user keychain
-   security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain-db ./kong/quarkus-cert.pem
+   security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain-db /tmp/quarkus-cert.pem
  ```
 
 2. **Restart your browser** to ensure it picks up the new trusted certificate.
