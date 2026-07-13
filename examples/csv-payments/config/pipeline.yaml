@@ -161,7 +161,12 @@ steps:
     service: org.pipelineframework.csv.service.ProcessCsvPaymentsInputService
     cardinality: EXPANSION
     input: CsvPaymentsInputFile
+    java:
+      input: org.pipelineframework.csv.common.domain.CsvPaymentsInputFile
+      output: org.pipelineframework.csv.common.domain.PaymentRecord
+    inboundMapper: org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileMapper
     output: PaymentRecord
+    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentRecordMapper
   - name: Await Payment Provider
     kind: await
     cardinality: ONE_TO_ONE
@@ -188,16 +193,30 @@ steps:
     service: org.pipelineframework.csv.service.ProcessApprovedPaymentStatusService
     cardinality: ONE_TO_ONE
     input: ApprovedPaymentStatus
+    java:
+      input: org.pipelineframework.csv.common.domain.ApprovedPaymentStatus
+      output: org.pipelineframework.csv.common.domain.ApprovedPaymentOutput
+    inboundMapper: org.pipelineframework.csv.common.mapper.ApprovedPaymentStatusMapper
     output: ApprovedPaymentOutput
+    outboundMapper: org.pipelineframework.csv.common.mapper.ApprovedPaymentOutputMapper
   - name: Process Unapproved Payment Status
     service: org.pipelineframework.csv.service.ProcessUnapprovedPaymentStatusService
     cardinality: ONE_TO_ONE
     input: UnapprovedPaymentStatus
+    java:
+      input: org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus
+      output: org.pipelineframework.csv.common.domain.UnapprovedPaymentOutput
+    inboundMapper: org.pipelineframework.csv.common.mapper.UnapprovedPaymentStatusMapper
     output: UnapprovedPaymentOutput
+    outboundMapper: org.pipelineframework.csv.common.mapper.UnapprovedPaymentOutputMapper
   - name: Finalize Payment Output
     service: org.pipelineframework.csv.service.ProcessFinalizePaymentOutputService
     cardinality: ONE_TO_ONE
     input: PaymentOutputBranch
+    java:
+      input: org.pipelineframework.csv.common.domain.PaymentOutputBranch
+      output: org.pipelineframework.csv.common.domain.PaymentOutput
+    inboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputBranchMapper
     accepts:
       - ApprovedPaymentOutput
       - UnapprovedPaymentOutput

@@ -79,7 +79,7 @@ contract:
   output: PaymentOutcome
 ```
 
-In v2 templates, step `input` and `output` always name logical pipeline contracts. Local Java service and operator signatures, including mapper resolution, continue to infer their Java execution types exactly as before. Use the optional closed `java` block only to assert an inferred binding or resolve an explicit Java ambiguity:
+In v2 templates, step `input` and `output` always name logical pipeline contracts. When the compiling module can inspect a local Java service or operator, its signature and mapper resolution infer the Java execution types. Use the optional closed `java` block to assert that inferred binding, resolve an ambiguity, or declare the binding for a service that is outside the compiling module's classpath:
 
 ```yaml
 - name: Process Payment
@@ -91,7 +91,19 @@ In v2 templates, step `input` and `output` always name logical pipeline contract
     output: com.example.domain.PaymentStatus
 ```
 
-For remote and other coordinator-owned steps that have no inspectable local Java signature, `java` supplies the required coordinator-side binding. A fully qualified v2 `input` or `output` remains accepted as deprecated compatibility syntax when paired with `inputTypeName` or `outputTypeName`; it emits a migration warning. Those `*TypeName` keys remain compatibility aliases for logical contracts.
+For remote and other coordinator-owned steps that have no inspectable local Java signature, `java` supplies the required coordinator-side binding. In a split-module pipeline, a local service hosted by another module is also non-inspectable from the current compilation, so its `java` bindings remain explicit. This is a build-topology constraint, not a different runtime execution model. A fully qualified v2 `input` or `output` remains accepted as deprecated compatibility syntax when paired with `inputTypeName` or `outputTypeName`; it emits a migration warning. Those `*TypeName` keys remain compatibility aliases for logical contracts.
+
+### Mappers are separate from `java`
+
+`java` identifies a Java domain type. A mapper performs an actual representation conversion, so it remains explicit at a conversion boundary:
+
+| Boundary | Explicit declaration |
+| --- | --- |
+| Object ingest into the first business step | `input.emits.mapper` for the object snapshot and the first step's `inboundMapper` for the pipeline message/domain conversion |
+| A service outside the current module | `inboundMapper` / `outboundMapper` when the generated cross-module client must translate the pipeline message and its domain type |
+| Object publish from the terminal business step | terminal `outboundMapper` for the pipeline message/domain conversion, plus `output.consumes.mapper` to render the published object payload |
+
+Do not add a mapper merely to restate an inspectable local service signature. Do add it when the boundary changes representation; signature inference does not replace an object adapter, a transport mapper, or a cross-module client mapper.
 
 ### Before and after
 
