@@ -60,16 +60,16 @@ public final class PipelineTemplateStepContractSyntax {
         if (canonical.filter(PipelineTemplateStepContractSyntax::isLogicalName).isPresent()) {
             if (legacy.isPresent() && !legacy.equals(canonical)) {
                 throw new IllegalStateException("Step '" + stepName + "' declares conflicting logical " + direction
-                    + " contracts in '" + direction + "' ('" + canonical + "') and '" + direction
-                    + "TypeName' ('" + legacy + "').");
+                    + " contracts in '" + direction + "' ('" + canonical.get() + "') and '" + direction
+                    + "TypeName' ('" + legacy.get() + "').");
             }
             return new Direction(canonical, explicitJava, false);
         }
         if (canonical.isPresent()) {
             if (explicitJava.isPresent() && !explicitJava.equals(canonical)) {
                 throw new IllegalStateException("Step '" + stepName + "' declares conflicting Java " + direction
-                    + " contracts in legacy '" + direction + "' ('" + canonical + "') and 'java."
-                    + direction + "' ('" + explicitJava + "').");
+                    + " contracts in legacy '" + direction + "' ('" + canonical.get() + "') and 'java."
+                    + direction + "' ('" + explicitJava.get() + "').");
             }
             return new Direction(legacy, canonical, true);
         }
