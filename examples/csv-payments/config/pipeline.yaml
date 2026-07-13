@@ -202,4 +202,5 @@ steps:
       - ApprovedPaymentOutput
       - UnapprovedPaymentOutput
     output: PaymentOutput
+    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputMapper
     terminal: true
