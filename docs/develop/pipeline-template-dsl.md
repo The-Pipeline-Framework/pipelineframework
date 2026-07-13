@@ -93,6 +93,12 @@ In v2 templates, step `input` and `output` always name logical pipeline contract
 
 For remote and other coordinator-owned steps that have no inspectable local Java signature, `java` supplies the required coordinator-side binding. In a split-module pipeline, a local service hosted by another module is also non-inspectable from the current compilation, so its `java` bindings remain explicit. This is a build-topology constraint, not a different runtime execution model. A fully qualified v2 `input` or `output` remains accepted as deprecated compatibility syntax when paired with `inputTypeName` or `outputTypeName`; it emits a migration warning. Those `*TypeName` keys remain compatibility aliases for logical contracts.
 
+::: tip Compilation visibility is topology-scoped
+Java-type and mapper discovery runs in the annotation-processing compilation unit that is currently building. It can inspect only service classes and mapper classes on that module's compile classpath; it does not discover a sibling module merely because both modules are part of the same pipeline repository.
+
+The effective runtime mapping selects the generated role and logical placement for a step, while the Maven build topology determines the classpath of the module compiling that role. When a pipeline uses more than one runtime mapping or deployable module, evaluate discovery separately for each compilation unit. If a referenced service is not visible there, provide `java.input` / `java.output`; if the generated client must cross a representation boundary, also provide the appropriate mapper. See [Runtime layouts and build topologies](/deploy/runtime-layouts/) for the distinction.
+:::
+
 ### Mappers are separate from `java`
 
 `java` identifies a Java domain type. A mapper performs an actual representation conversion, so it remains explicit at a conversion boundary:
@@ -100,7 +106,7 @@ For remote and other coordinator-owned steps that have no inspectable local Java
 | Boundary | Explicit declaration |
 | --- | --- |
 | Object ingest into the first business step | `input.emits.mapper` for the object snapshot and the first step's `inboundMapper` for the pipeline message/domain conversion |
-| A service outside the current module | `inboundMapper` / `outboundMapper` when the generated cross-module client must translate the pipeline message and its domain type |
+| A service or mapper outside the current compilation unit | `java.input` / `java.output`, plus `inboundMapper` / `outboundMapper` when the generated cross-module client must translate the pipeline message and its domain type |
 | Object publish from the terminal business step | terminal `outboundMapper` for the pipeline message/domain conversion, plus `output.consumes.mapper` to render the published object payload |
 
 Do not add a mapper merely to restate an inspectable local service signature. Do add it when the boundary changes representation; signature inference does not replace an object adapter, a transport mapper, or a cross-module client mapper.
