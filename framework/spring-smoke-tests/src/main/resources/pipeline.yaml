@@ -4,14 +4,14 @@ basePackage: "com.example.smoke"
 transport: "REST"
 platform: "COMPUTE"
 types:
-  - PaymentRecord:
-      fields:
-        - [1, paymentId, string]
-        - [2, cents, int]
-  - PaymentStatus:
-      fields:
-        - [1, paymentId, string]
-        - [2, status, string]
+  PaymentRecord:
+    fields:
+      - [1, paymentId, string]
+      - [2, cents, int32]
+  PaymentStatus:
+    fields:
+      - [1, paymentId, string]
+      - [2, status, string]
 steps:
   - name: "payment"
     service: "com.example.smoke.service.PaymentService"
