@@ -1,22 +1,19 @@
 package org.pipelineframework.config.template;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.materialization.MaterializationAction;
 import org.pipelineframework.materialization.MaterializationPosition;
 import org.pipelineframework.materialization.MaterializationScope;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class PipelineTemplateConfigLoaderTest {
 
@@ -843,5 +840,403 @@ class PipelineTemplateConfigLoaderTest {
 
         assertTrue(exception.getMessage().contains("fields"));
         assertTrue(exception.getMessage().contains("blank entries"));
+    }
+
+    @Test
+    void normalizesTypesTuplesAndDeprecatedMessagesObjectsToTheSameModel() throws Exception {
+        String prefix = """
+            version: 2
+            appName: "Compact Types"
+            basePackage: "com.example.types"
+            transport: "GRPC"
+            """;
+        Path compact = tempDir.resolve("compact-types.yaml");
+        Files.writeString(compact, prefix + """
+            types:
+              Payment:
+                fields:
+                  - [1, orderId, uuid]
+                  - [2, amount, decimal]
+            steps: []
+            """);
+        Path verbose = tempDir.resolve("verbose-messages.yaml");
+        Files.writeString(verbose, prefix + """
+            messages:
+              Payment:
+                fields:
+                  - number: 1
+                    name: orderId
+                    type: uuid
+                  - number: 2
+                    name: amount
+                    type: decimal
+            steps: []
+            """);
+        List<String> warnings = new java.util.ArrayList<>();
+
+        PipelineTemplateConfig compactConfig = new PipelineTemplateConfigLoader().load(compact);
+        PipelineTemplateConfig verboseConfig = new PipelineTemplateConfigLoader(key -> null, key -> null, warnings::add)
+            .load(verbose);
+
+        assertEquals(compactConfig.messages(), verboseConfig.messages());
+        assertEquals(compactConfig.types(), compactConfig.messages());
+        assertEquals(List.of("Top-level 'messages' is deprecated; use 'types'."), warnings);
+    }
+
+    @Test
+    void rejectsTypesAndMessagesTogether() throws Exception {
+        Path configPath = tempDir.resolve("duplicate-type-sections.yaml");
+        Files.writeString(configPath, """
+            version: 2
+            appName: "Duplicate Types"
+            basePackage: "com.example.types"
+            transport: "GRPC"
+            types: {}
+            messages: {}
+            steps: []
+            """);
+
+        IllegalStateException exception = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertEquals(
+            "Pipeline template cannot declare both 'types' and deprecated 'messages'; use 'types' only.",
+            exception.getMessage());
+    }
+
+    @Test
+    void rejectsMalformedFieldTupleWithTypeAndIndexDiagnostic() throws Exception {
+        Path configPath = tempDir.resolve("bad-field-tuple.yaml");
+        Files.writeString(configPath, """
+            version: 2
+            appName: "Bad Tuple"
+            basePackage: "com.example.types"
+            transport: "GRPC"
+            types:
+              Payment:
+                fields:
+                  - [0, orderId, uuid]
+            steps: []
+            """);
+
+        IllegalStateException exception = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("type 'Payment' field 0"));
+        assertTrue(exception.getMessage().contains("[positiveNumber, nonBlankName, type]"));
+    }
+
+    @Test
+    void propagatesLinearInputsAndValidatesFinalOutputAssertion() throws Exception {
+        Path configPath = tempDir.resolve("linear-contracts.yaml");
+        Files.writeString(configPath, """
+            version: 2
+            appName: "Linear Contracts"
+            basePackage: "com.example.linear"
+            transport: "GRPC"
+            types:
+              PaymentRequest:
+                fields: [[1, id, uuid]]
+              ValidatedPayment:
+                fields: [[1, id, uuid]]
+              PaymentOutcome:
+                fields: [[1, id, uuid]]
+            contract:
+              input: PaymentRequest
+              output: PaymentOutcome
+            steps:
+              - name: Validate Payment
+                cardinality: ONE_TO_ONE
+                output: ValidatedPayment
+              - name: Process Payment
+                cardinality: ONE_TO_ONE
+                output: PaymentOutcome
+            """);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        assertEquals("PaymentRequest", config.inputContract());
+        assertEquals("PaymentOutcome", config.outputContract());
+        assertNull(config.input());
+        assertNull(config.output());
+        assertEquals("PaymentRequest", config.steps().get(0).inputTypeName());
+        assertEquals("ValidatedPayment", config.steps().get(1).inputTypeName());
+        assertEquals(config.messages().get("ValidatedPayment").fields(), config.steps().get(1).inputFields());
+    }
+
+    @Test
+    void rejectsLinearInputMismatchAndMissingPreviousOutput() throws Exception {
+        String prefix = """
+            version: 2
+            appName: "Linear Failure"
+            basePackage: "com.example.linear"
+            transport: "GRPC"
+            types:
+              A:
+                fields: [[1, id, uuid]]
+              B:
+                fields: [[1, id, uuid]]
+              C:
+                fields: [[1, id, uuid]]
+            contract:
+              input: A
+            """;
+        Path mismatch = tempDir.resolve("linear-mismatch.yaml");
+        Files.writeString(mismatch, prefix + """
+            steps:
+              - name: First
+                cardinality: ONE_TO_ONE
+                input: B
+                output: C
+            """);
+        Path missing = tempDir.resolve("linear-missing-output.yaml");
+        Files.writeString(missing, prefix + """
+            steps:
+              - name: First
+                cardinality: ONE_TO_ONE
+              - name: Second
+                cardinality: ONE_TO_ONE
+                output: C
+            """);
+
+        IllegalStateException mismatchError = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(mismatch));
+        IllegalStateException missingError = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(missing));
+
+        assertTrue(mismatchError.getMessage().contains("pipeline input resolves to 'A'"));
+        assertTrue(missingError.getMessage().contains("previous output is missing or not singular"));
+    }
+
+    @Test
+    void rejectsLinearPropagationForBranchAwareTemplate() throws Exception {
+        Path configPath = tempDir.resolve("linear-branch.yaml");
+        Files.writeString(configPath, """
+            version: 2
+            appName: "Branch Failure"
+            basePackage: "com.example.branch"
+            transport: "GRPC"
+            types:
+              A:
+                fields: [[1, id, uuid]]
+              B:
+                fields: [[1, id, uuid]]
+            contract:
+              input: A
+            steps:
+              - name: Branch
+                cardinality: ONE_TO_ONE
+                output: B
+                accepts: [A]
+            """);
+
+        IllegalStateException exception = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("cannot be used with branch-aware templates"));
+    }
+
+    @Test
+    void keepsPhysicalBoundariesSeparateFromLogicalContracts() throws Exception {
+        Path configPath = tempDir.resolve("boundary-and-contract.yaml");
+        Files.writeString(configPath, """
+            version: 2
+            appName: "Boundary And Contract"
+            basePackage: "com.example.boundary"
+            transport: "GRPC"
+            types:
+              PaymentRequest:
+                fields: [[1, id, uuid]]
+              PaymentOutcome:
+                fields: [[1, id, uuid]]
+            input:
+              subscription:
+                publication: payment-requests
+            output:
+              checkpoint:
+                publication: payment-outcomes
+            contract:
+              input: PaymentRequest
+              output: PaymentOutcome
+            steps:
+              - name: Process Payment
+                cardinality: ONE_TO_ONE
+                output: PaymentOutcome
+            """);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        assertNotNull(config.input());
+        assertNotNull(config.output());
+        assertEquals("PaymentRequest", config.inputContract());
+        assertEquals("PaymentOutcome", config.outputContract());
+        assertEquals("PaymentRequest", config.steps().getFirst().inputTypeName());
+    }
+
+    @Test
+    void rejectsRootScalarContractsWithTheCollisionFreeNamespaceDiagnostic() throws Exception {
+        Path configPath = tempDir.resolve("root-scalar-contract.yaml");
+        Files.writeString(configPath, """
+            version: 2
+            appName: "Root Scalar Contract"
+            basePackage: "com.example.boundary"
+            transport: "GRPC"
+            types:
+              PaymentRequest:
+                fields: [[1, id, uuid]]
+            input: PaymentRequest
+            steps: []
+            """);
+
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("contract.input"));
+    }
+
+    @Test
+    void preservesFullyQualifiedJavaStepContractsWithoutTreatingThemAsLogicalTypes() throws Exception {
+        Path legacy = tempDir.resolve("qualified-java-v1.yaml");
+        Files.writeString(legacy, """
+            appName: "Qualified Java v1"
+            basePackage: "com.example"
+            transport: "REST"
+            steps:
+              - name: payment
+                input: com.example.domain.PaymentRecord
+                output: com.example.domain.PaymentStatus
+            """);
+        Path v2 = tempDir.resolve("qualified-java-v2.yaml");
+        Files.writeString(v2, """
+            version: 2
+            appName: "Qualified Java v2"
+            basePackage: "com.example"
+            transport: "REST"
+            types:
+              PaymentRecord:
+                fields: [[1, id, uuid]]
+              PaymentStatus:
+                fields: [[1, id, uuid]]
+            steps:
+              - name: payment
+                input: com.example.domain.PaymentRecord
+                inputTypeName: PaymentRecord
+                output: com.example.domain.PaymentStatus
+                outputTypeName: PaymentStatus
+            """);
+
+        PipelineTemplateConfig legacyConfig = new PipelineTemplateConfigLoader().load(legacy);
+        PipelineTemplateConfig v2Config = new PipelineTemplateConfigLoader().load(v2);
+
+        assertNull(legacyConfig.steps().getFirst().inputTypeName());
+        assertNull(legacyConfig.steps().getFirst().outputTypeName());
+        assertEquals("PaymentRecord", v2Config.steps().getFirst().inputTypeName());
+        assertEquals("PaymentStatus", v2Config.steps().getFirst().outputTypeName());
+    }
+
+    @Test
+    void acceptsLogicalContractsWithNestedJavaBindingsAndWarnsForLegacyFqcnSyntax() throws Exception {
+        Path canonical = tempDir.resolve("canonical-java-bindings.yaml");
+        Files.writeString(canonical, """
+            version: 2
+            appName: Canonical Java Bindings
+            basePackage: com.example
+            types:
+              PaymentRecord: { fields: [[1, id, uuid]] }
+              PaymentStatus: { fields: [[1, id, uuid]] }
+            steps:
+              - name: payment
+                cardinality: ONE_TO_ONE
+                input: PaymentRecord
+                output: PaymentStatus
+                java:
+                  input: com.example.domain.PaymentRecord
+                  output: com.example.domain.PaymentStatus
+            """);
+        Path legacy = tempDir.resolve("legacy-java-bindings.yaml");
+        Files.writeString(legacy, """
+            version: 2
+            appName: Legacy Java Bindings
+            basePackage: com.example
+            types:
+              PaymentRecord: { fields: [[1, id, uuid]] }
+              PaymentStatus: { fields: [[1, id, uuid]] }
+            steps:
+              - name: payment
+                cardinality: ONE_TO_ONE
+                input: com.example.domain.PaymentRecord
+                inputTypeName: PaymentRecord
+                output: com.example.domain.PaymentStatus
+                outputTypeName: PaymentStatus
+            """);
+
+        PipelineTemplateConfig canonicalConfig = new PipelineTemplateConfigLoader().load(canonical);
+        List<String> warnings = new java.util.ArrayList<>();
+        PipelineTemplateConfig legacyConfig = new PipelineTemplateConfigLoader(key -> null, key -> null, warnings::add).load(legacy);
+
+        assertEquals("PaymentRecord", canonicalConfig.steps().getFirst().inputTypeName());
+        assertEquals("PaymentStatus", canonicalConfig.steps().getFirst().outputTypeName());
+        assertEquals(canonicalConfig.steps(), legacyConfig.steps());
+        assertEquals(List.of("Step 'payment' uses deprecated fully qualified 'input/output' contracts; use logical "
+            + "input/output with java.input/java.output instead."), warnings);
+    }
+
+    @Test
+    void resolvesUnqualifiedCanonicalContractsAfterCollectingInlineMessages() throws Exception {
+        Path configPath = tempDir.resolve("inline-canonical-contracts.yaml");
+        Files.writeString(configPath, """
+            version: 2
+            appName: "Inline Contracts"
+            basePackage: "com.example.inline"
+            transport: "GRPC"
+            steps:
+              - name: Produce
+                cardinality: ONE_TO_ONE
+                input: SourceInput
+                inputFields: [[1, id, uuid]]
+                output: InlineResult
+                outputFields: [[1, id, uuid]]
+              - name: Consume
+                cardinality: ONE_TO_ONE
+                input: InlineResult
+                output: FinalResult
+                outputFields: [[1, id, uuid]]
+            """);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        assertTrue(config.messages().containsKey("InlineResult"));
+        assertTrue(config.messages().containsKey("FinalResult"));
+        assertEquals("InlineResult", config.steps().get(1).inputTypeName());
+        assertEquals(config.messages().get("InlineResult").fields(), config.steps().get(1).inputFields());
+    }
+
+    @Test
+    void rejectsUnknownUnqualifiedCanonicalContractInsteadOfDroppingIt() throws Exception {
+        Path configPath = tempDir.resolve("unknown-canonical-contract.yaml");
+        Files.writeString(configPath, """
+            version: 2
+            appName: "Unknown Contract"
+            basePackage: "com.example.unknown"
+            transport: "GRPC"
+            steps:
+              - name: Process
+                cardinality: ONE_TO_ONE
+                input: MisspelledInput
+                output: KnownOutput
+                outputFields: [[1, id, uuid]]
+            """);
+
+        IllegalStateException exception = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("unknown input message or union 'MisspelledInput'"), exception.getMessage());
     }
 }

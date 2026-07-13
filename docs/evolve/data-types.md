@@ -49,16 +49,28 @@ PascalCase type tokens are treated as references to top-level named messages.
 Example:
 
 ```yaml
+types:
+  Money:
+    fields:
+      - [1, amount, decimal]
+      - [2, currency, currency]
+```
+
+The compact three-item tuple is `[fieldNumber, fieldName, semanticType]`. Use the object form when a field needs
+additional metadata such as `optional`, `repeated`, `comment`, `overrides`, or `referenceable`.
+
+`messages` remains a deprecated compatibility alias for `types`, and object fields remain valid:
+
+```yaml
 messages:
   Money:
     fields:
       - number: 1
         name: amount
         type: decimal
-      - number: 2
-        name: currency
-        type: currency
 ```
+
+A template must not declare both `types` and `messages`.
 
 ## Closed Unions
 
@@ -66,17 +78,13 @@ Use top-level `unions:` when a step output is one closed set of typed outcomes.
 Each union variant references a top-level message and receives a stable protobuf field number:
 
 ```yaml
-messages:
+types:
   PaymentCaptured:
     fields:
-      - number: 1
-        name: paymentId
-        type: uuid
+      - [1, paymentId, uuid]
   PaymentRejected:
     fields:
-      - number: 1
-        name: failureCode
-        type: string
+      - [1, failureCode, string]
 
 unions:
   PaymentOutcome:
@@ -161,7 +169,7 @@ Use PascalCase message names for references:
 Named messages can declare reserved numbers and names:
 
 ```yaml
-messages:
+types:
   ChargeResult:
     fields:
       - number: 1

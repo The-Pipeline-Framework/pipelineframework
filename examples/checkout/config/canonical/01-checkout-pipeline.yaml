@@ -3,83 +3,43 @@ appName: TPFGo Checkout Pipeline
 basePackage: org.pipelineframework.tpfgo.checkout
 transport: GRPC
 platform: COMPUTE
-messages:
+types:
   OrderItem:
     fields:
-      - number: 1
-        name: sku
-        type: string
-      - number: 2
-        name: quantity
-        type: int32
+      - [1, sku, string]
+      - [2, quantity, int32]
   PlaceOrderRequest:
     fields:
-      - number: 1
-        name: requestId
-        type: uuid
-      - number: 2
-        name: customerId
-        type: uuid
-      - number: 3
-        name: restaurantId
-        type: uuid
+      - [1, requestId, uuid]
+      - [2, customerId, uuid]
+      - [3, restaurantId, uuid]
       - number: 4
         name: items
         type: OrderItem
         repeated: true
-      - number: 5
-        name: totalAmount
-        type: decimal
-      - number: 6
-        name: currency
-        type: string
+      - [5, totalAmount, decimal]
+      - [6, currency, string]
   ValidatedOrderRequest:
     fields:
-      - number: 1
-        name: requestId
-        type: uuid
-      - number: 2
-        name: customerId
-        type: uuid
-      - number: 3
-        name: restaurantId
-        type: uuid
+      - [1, requestId, uuid]
+      - [2, customerId, uuid]
+      - [3, restaurantId, uuid]
       - number: 4
         name: items
         type: OrderItem
         repeated: true
-      - number: 5
-        name: totalAmount
-        type: decimal
-      - number: 6
-        name: currency
-        type: string
-      - number: 7
-        name: validatedAt
-        type: timestamp
+      - [5, totalAmount, decimal]
+      - [6, currency, string]
+      - [7, validatedAt, timestamp]
   OrderPending:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: requestId
-        type: uuid
-      - number: 3
-        name: customerId
-        type: uuid
-      - number: 4
-        name: restaurantId
-        type: uuid
-      - number: 5
-        name: totalAmount
-        type: decimal
-      - number: 6
-        name: currency
-        type: string
-      - number: 7
-        name: createdAt
-        type: timestamp
+      - [1, orderId, uuid]
+      - [2, requestId, uuid]
+      - [3, customerId, uuid]
+      - [4, restaurantId, uuid]
+      - [5, totalAmount, decimal]
+      - [6, currency, string]
+      - [7, createdAt, timestamp]
 steps:
   - name: Checkout Validate Request
     service: org.pipelineframework.tpfgo.checkout.checkout_validate_request.service.ProcessCheckoutValidateRequestService

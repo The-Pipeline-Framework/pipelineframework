@@ -16,10 +16,6 @@
 
 package org.pipelineframework.processor.schema;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -31,6 +27,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class PipelineTemplateSchemaExporterTest {
 
@@ -70,7 +68,9 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(definitions.has("materializationAspect"));
 
         JsonObject properties = schema.getAsJsonObject("properties");
+        assertTrue(properties.has("types"));
         assertTrue(properties.has("messages"));
+        assertTrue(properties.getAsJsonObject("messages").get("deprecated").getAsBoolean());
         assertTrue(properties.has("unions"));
         assertTrue(properties.has("input"));
         assertTrue(properties.has("output"));
@@ -78,6 +78,34 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(properties.has("queries"));
         assertTrue(properties.has("publish"));
         assertTrue(properties.has("materialization"));
+    }
+
+    @Test
+    void compactTypesAndLogicalContractsAreRepresentedWithoutChangingPhysicalBoundaryShapes() {
+        JsonObject schema = parse(PipelineTemplateSchemaExporter.schemaJson());
+        JsonObject definitions = schema.getAsJsonObject("$defs");
+        JsonObject fieldDefinition = definitions.getAsJsonObject("v2FieldDefinition");
+        JsonObject tuple = definitions.getAsJsonObject("v2FieldTupleDefinition");
+
+        assertEquals(2, fieldDefinition.getAsJsonArray("oneOf").size());
+        assertEquals(3, tuple.getAsJsonArray("prefixItems").size());
+        assertEquals(3, tuple.get("minItems").getAsInt());
+        assertEquals(3, tuple.get("maxItems").getAsInt());
+        assertFalse(tuple.get("items").getAsBoolean());
+
+        JsonObject properties = schema.getAsJsonObject("properties");
+        assertEquals("#/$defs/pipelineInputBoundary", properties.getAsJsonObject("input").get("$ref").getAsString());
+        assertEquals("#/$defs/pipelineOutputBoundary", properties.getAsJsonObject("output").get("$ref").getAsString());
+        JsonObject contract = properties.getAsJsonObject("contract");
+        assertTrue(contract.has("properties"));
+        assertTrue(contract.getAsJsonObject("properties").has("input"));
+        assertTrue(contract.getAsJsonObject("properties").has("output"));
+        assertFalse(contract.get("additionalProperties").getAsBoolean());
+
+        JsonObject aliasExclusion = schema.getAsJsonArray("allOf").get(1).getAsJsonObject()
+            .getAsJsonObject("not");
+        assertContains(aliasExclusion.getAsJsonArray("required"), "types");
+        assertContains(aliasExclusion.getAsJsonArray("required"), "messages");
     }
 
     @Test
@@ -147,7 +175,7 @@ class PipelineTemplateSchemaExporterTest {
     void materializationSchemaIncludesReferenceablePayloadRefSurface() {
         JsonObject definitions = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonObject("$defs");
 
-        JsonObject fieldDefinition = definitions.getAsJsonObject("v2FieldDefinition");
+        JsonObject fieldDefinition = definitions.getAsJsonObject("v2FieldObjectDefinition");
         JsonObject fieldProperties = fieldDefinition.getAsJsonObject("properties");
         assertTrue(fieldProperties.has("referenceable"));
 

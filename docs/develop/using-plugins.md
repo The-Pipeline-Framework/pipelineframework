@@ -62,8 +62,8 @@ Without aspect:
     {
       "name": "ProcessOrder",
       "cardinality": "ONE_TO_ONE",
-      "inputTypeName": "Order",
-      "outputTypeName": "ProcessedOrder"
+      "input": "Order",
+      "output": "ProcessedOrder"
     }
   ]
 }
@@ -77,8 +77,8 @@ With persistence aspect:
     {
       "name": "ProcessOrder",
       "cardinality": "ONE_TO_ONE",
-      "inputTypeName": "Order",
-      "outputTypeName": "ProcessedOrder"
+      "input": "Order",
+      "output": "ProcessedOrder"
     }
   ],
   "aspects": {

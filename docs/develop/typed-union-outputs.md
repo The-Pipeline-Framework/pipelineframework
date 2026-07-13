@@ -46,10 +46,8 @@ steps:
   - name: Capture Payment
     service: com.example.payment.CapturePaymentService
     cardinality: ONE_TO_ONE
-    input: com.example.domain.PaymentRequest
-    inputTypeName: PaymentRequest
-    output: com.example.domain.PaymentOutcome
-    outputTypeName: PaymentOutcome
+    input: PaymentRequest
+    output: PaymentOutcome
 ```
 
 For protobuf-backed boundaries, provide normal mappers for each variant payload. TPF generates the union wrapper mapper and composes those variant mappers, so application code does not need to write or declare a `PaymentOutcome` mapper. The FUNCTION platform mode (over REST, gRPC, or LOCAL transport), checkpoint JSON, and REST boundaries use the sealed union type directly.
@@ -123,7 +121,7 @@ For gRPC, field-level mapping stays in ordinary variant mappers such as `Mapper<
 - Variant names and protobuf field numbers must be unique.
 - A union can be used as a step input or output type.
 - A union cannot be used as a field inside a normal message in this first version.
-- Union-routed branching is opt-in. TPF detects branch awareness from `accepts`, `terminal: true`, or a step's `inputTypeName` alone.
+- Union-routed branching is opt-in. TPF detects branch awareness from `accepts`, `terminal: true`, or a step's logical `input` alone.
 
 TPFGo uses this shape in the payment capture pipeline, where `PaymentOutcome` replaces a status-field result record while keeping the pipeline linear.
 
@@ -137,34 +135,34 @@ The decision stays in Java. YAML only declares which concrete contract types a s
 steps:
   - name: Classify Order
     cardinality: ONE_TO_ONE
-    inputTypeName: OrderRequest
-    outputTypeName: OrderDecision
+    input: OrderRequest
+    output: OrderDecision
 
   - name: Reserve Stock
     cardinality: ONE_TO_ONE
-    inputTypeName: OrderDecision
-    outputTypeName: StockReserved
+    input: OrderDecision
+    output: StockReserved
     accepts:
       - PhysicalOrder
 
   - name: Provision License
     cardinality: ONE_TO_ONE
-    inputTypeName: OrderDecision
-    outputTypeName: LicenseProvisioned
+    input: OrderDecision
+    output: LicenseProvisioned
     accepts:
       - DigitalOrder
 
   - name: Request Manual Review
     cardinality: ONE_TO_ONE
-    inputTypeName: OrderDecision
-    outputTypeName: ManualReviewRequested
+    input: OrderDecision
+    output: ManualReviewRequested
     accepts:
       - ManualReviewOrder
 
   - name: Finalize Order
     cardinality: ONE_TO_ONE
-    inputTypeName: OrderCompletion
-    outputTypeName: FinalizedOrder
+    input: OrderCompletion
+    output: FinalizedOrder
     terminal: true
 ```
 
@@ -172,7 +170,7 @@ Rules:
 
 - The pipeline stays a linear sequence of authored steps.
 - `accepts` entries must be concrete contract types, not predicates and not union names.
-- If `accepts` is omitted, TPF implicitly accepts every concrete leaf type resolved from `inputTypeName`.
+- If `accepts` is omitted, TPF implicitly accepts every concrete leaf type resolved from logical `input`.
 - A union input therefore accepts all of its variants by default. Use explicit `accepts` when the step handles only a subset.
 - Branch-aware routing currently supports `ONE_TO_ONE` steps only.
 - A branch-aware pipeline must declare exactly one `terminal: true` step, and it must be last.
@@ -184,30 +182,30 @@ Runtime behavior:
 - If it does not match, TPF skips the step as `not_applicable`, records a replay event, and passes the item through unchanged.
 - The terminal merge step must accept every reachable branch-end alternative. Otherwise the build fails.
 
-When a step's `inputTypeName` references a concrete message, omitting `accepts` implicitly accepts that message:
+When a step's logical `input` references a concrete message, omitting `accepts` implicitly accepts that message:
 
 ```yaml
 steps:
   - name: Reserve Stock
-    inputTypeName: PhysicalOrder
-    outputTypeName: StockReserved
+    input: PhysicalOrder
+    output: StockReserved
     # no accepts — implicitly accepts PhysicalOrder
 
   - name: Provision License
-    inputTypeName: DigitalOrder
-    outputTypeName: LicenseProvisioned
+    input: DigitalOrder
+    output: LicenseProvisioned
     # no accepts — implicitly accepts DigitalOrder
 ```
 
 This is equivalent to writing `accepts: [PhysicalOrder]` and `accepts: [DigitalOrder]`.
 
-When `inputTypeName` references a union, omitting `accepts` implicitly accepts every variant. That is normally the clearest declaration for a terminal merge:
+When logical `input` references a union, omitting `accepts` implicitly accepts every variant. That is normally the clearest declaration for a terminal merge:
 
 ```yaml
 - name: Finalize Order
   cardinality: ONE_TO_ONE
-  inputTypeName: OrderCompletion
-  outputTypeName: FinalizedOrder
+  input: OrderCompletion
+  output: FinalizedOrder
   terminal: true
 ```
 

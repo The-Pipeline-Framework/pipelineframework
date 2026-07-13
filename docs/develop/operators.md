@@ -23,6 +23,35 @@ public class PaymentOperators {
 }
 ```
 
+For a wholly linear v2 pipeline, a scalar pipeline `input` enables logical input propagation. Each step still
+declares its output, while Java operator signatures continue to supply and validate the runtime Java types:
+
+```yaml
+version: 2
+
+types:
+  PaymentRequest:
+    fields: [[1, orderId, uuid]]
+  EnrichedPayment:
+    fields: [[1, orderId, uuid]]
+  PaymentOutcome:
+    fields: [[1, orderId, uuid]]
+
+input: PaymentRequest
+output: PaymentOutcome
+
+steps:
+  - name: Enrich Payment
+    operator: com.acme.payment.PaymentOperators::enrich
+    output: EnrichedPayment
+  - name: Complete Payment
+    operator: com.acme.payment.PaymentOperators::complete
+    output: PaymentOutcome
+```
+
+An explicit step input is an assertion and must equal the inherited logical contract. Branch-aware templates keep
+explicit logical `input` declarations because their reachable predecessor contract may contain several types.
+
 ## Remote Operator Example
 
 Use the remote form when the executable code is outside the current Java build, but the step contract is still owned by the pipeline YAML.
@@ -30,23 +59,22 @@ Use the remote form when the executable code is outside the current Java build, 
 ```yaml
 version: 2
 
-messages:
+types:
   ChargeRequest:
     fields:
-      - number: 1
-        name: "orderId"
-        type: "uuid"
+      - [1, orderId, uuid]
   ChargeResult:
     fields:
-      - number: 1
-        name: "paymentId"
-        type: "uuid"
+      - [1, paymentId, uuid]
 
 steps:
   - name: "Charge Card"
     cardinality: "ONE_TO_ONE"
-    inputTypeName: "ChargeRequest"
-    outputTypeName: "ChargeResult"
+    input: "ChargeRequest"
+    output: "ChargeResult"
+    java:
+      input: com.example.domain.ChargeRequest
+      output: com.example.domain.ChargeResult
     execution:
       mode: "REMOTE"
       operatorId: "charge-card"

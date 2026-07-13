@@ -19,6 +19,8 @@ package org.pipelineframework;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import jakarta.inject.Inject;
 
@@ -26,7 +28,6 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineConfig;
@@ -102,33 +103,48 @@ class ParallelProcessingSmokeTest {
             implements StepOneToOneCompletableFuture<String, String> {
 
         private final AtomicInteger callCount = new AtomicInteger(0);
+        private final AtomicInteger activeExecutions = new AtomicInteger(0);
+        private final AtomicInteger maxActiveExecutions = new AtomicInteger(0);
+        private final CountDownLatch allExecutionsStarted;
         private final List<Long> executionTimestamps = new java.util.ArrayList<>();
         private final List<String> executionThreads = new java.util.ArrayList<>();
         private final List<String> results = new java.util.ArrayList<>();
 
         public TestStepOneToOneCompletableFuture() {
-            // Empty constructor required for test class
+            this(3);
+        }
+
+        public TestStepOneToOneCompletableFuture(int expectedExecutions) {
+            allExecutionsStarted = new CountDownLatch(expectedExecutions);
         }
 
         @Override
         public CompletableFuture<String> applyAsync(String input) {
             return CompletableFuture.supplyAsync(
                     () -> {
+                        int active = activeExecutions.incrementAndGet();
+                        maxActiveExecutions.accumulateAndGet(active, Math::max);
+                        allExecutionsStarted.countDown();
                         try {
-                            Thread.sleep(100);
+                            if (!allExecutionsStarted.await(2, TimeUnit.SECONDS)) {
+                                throw new AssertionError("Timed out waiting for parallel CompletableFuture execution");
+                            }
+
+                            synchronized (this) {
+                                long startTime = System.currentTimeMillis();
+                                String currentThread = Thread.currentThread().getName();
+                                executionTimestamps.add(startTime);
+                                executionThreads.add(currentThread);
+                                int count = callCount.incrementAndGet();
+                                String result = "processed:" + input + "_count" + count;
+                                results.add(result);
+                                return result;
+                            }
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
-                        }
-
-                        synchronized (this) {
-                            long startTime = System.currentTimeMillis();
-                            String currentThread = Thread.currentThread().getName();
-                            executionTimestamps.add(startTime);
-                            executionThreads.add(currentThread);
-                            int count = callCount.incrementAndGet();
-                            String result = "processed:" + input + "_count" + count;
-                            results.add(result);
-                            return result;
+                            throw new AssertionError("Interrupted waiting for parallel CompletableFuture execution", e);
+                        } finally {
+                            activeExecutions.decrementAndGet();
                         }
                     });
         }
@@ -143,6 +159,10 @@ class ParallelProcessingSmokeTest {
             synchronized (this) {
                 return new java.util.ArrayList<>(executionThreads);
             }
+        }
+
+        public int getMaxActiveExecutions() {
+            return maxActiveExecutions.get();
         }
     }
 
@@ -227,17 +247,15 @@ class ParallelProcessingSmokeTest {
     }
 
     @Test
-    @Disabled
     void testCompletableFutureParallelProcessingWorks() {
         // Given
         pipelineConfig.parallelism(ParallelismPolicy.PARALLEL);
-        TestStepOneToOneCompletableFuture step = new TestStepOneToOneCompletableFuture();
+        TestStepOneToOneCompletableFuture step = new TestStepOneToOneCompletableFuture(3);
         StepConfig stepConfig = new StepConfig();
         step.initialiseWithConfig(stepConfig);
 
         // When
         Multi<String> input = Multi.createFrom().items("item1", "item2", "item3");
-        long startTime = System.currentTimeMillis();
         Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
 
         // Then
@@ -245,13 +263,15 @@ class ParallelProcessingSmokeTest {
         subscriber.awaitItems(3, Duration.ofSeconds(5)).assertCompleted();
 
         List<Object> items = subscriber.getItems();
-        long endTime = System.currentTimeMillis();
 
         // (1) Assert output content equals expected processed items
         assertEquals(3, items.size());
-        assertTrue(items.contains("processed:item1_count1"));
-        assertTrue(items.contains("processed:item2_count2"));
-        assertTrue(items.contains("processed:item3_count3"));
+        assertTrue(items.stream().anyMatch(item -> item instanceof String value
+            && value.startsWith("processed:item1_count")));
+        assertTrue(items.stream().anyMatch(item -> item instanceof String value
+            && value.startsWith("processed:item2_count")));
+        assertTrue(items.stream().anyMatch(item -> item instanceof String value
+            && value.startsWith("processed:item3_count")));
 
         // Verify that all items were processed
         assertEquals(3, step.callCount.get());
@@ -262,14 +282,12 @@ class ParallelProcessingSmokeTest {
         // Verify we have the expected number of executions
         assertEquals(3, executionThreads.size());
 
-        // (3) Assert total duration < 500 to prove parallel speedup (3 items * 100ms each
-        // sequentially = ~300ms, but with overhead and test environment variability)
-        long totalDuration = endTime - startTime;
+        // (3) Assert the CompletableFuture work overlapped instead of relying on timing thresholds
         assertTrue(
-                totalDuration < 500,
+                step.getMaxActiveExecutions() >= 2,
                 String.format(
-                        "Expected parallel execution to be faster than sequential. Duration: %d ms",
-                        totalDuration));
+                        "Expected overlapping CompletableFuture execution, but max active executions was %d",
+                        step.getMaxActiveExecutions()));
 
         // (4) Assert at least two distinct thread names in executionThreads to prove work ran on
         // multiple threads

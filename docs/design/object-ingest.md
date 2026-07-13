@@ -44,8 +44,7 @@ steps:
   - name: Process Csv Payments Input
     service: org.pipelineframework.csv.service.ProcessCsvPaymentsInputService
     cardinality: EXPANSION
-    input: org.pipelineframework.csv.common.domain.CsvPaymentsInputFile
-    inputTypeName: CsvPaymentsInputFile
+    input: CsvPaymentsInputFile
 ```
 
 ## Projection Mapper
@@ -96,35 +95,29 @@ steps:
   - name: ProcessApprovedPaymentStatus
     service: org.pipelineframework.csv.service.ProcessApprovedPaymentStatusService
     cardinality: ONE_TO_ONE
-    input: org.pipelineframework.csv.common.domain.ApprovedPaymentStatus
-    inputTypeName: ApprovedPaymentStatus
+    input: ApprovedPaymentStatus
     # accepts omitted — implicitly accepts ApprovedPaymentStatus
-    output: org.pipelineframework.csv.common.domain.ApprovedPaymentOutput
-    outputTypeName: ApprovedPaymentOutput
+    output: ApprovedPaymentOutput
 
   - name: ProcessUnapprovedPaymentStatus
     service: org.pipelineframework.csv.service.ProcessUnapprovedPaymentStatusService
     cardinality: ONE_TO_ONE
-    input: org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus
-    inputTypeName: UnapprovedPaymentStatus
+    input: UnapprovedPaymentStatus
     # accepts omitted — implicitly accepts UnapprovedPaymentStatus
-    output: org.pipelineframework.csv.common.domain.UnapprovedPaymentOutput
-    outputTypeName: UnapprovedPaymentOutput
+    output: UnapprovedPaymentOutput
 
   - name: Finalize Payment Output
     service: org.pipelineframework.csv.service.ProcessFinalizePaymentOutputService
     cardinality: ONE_TO_ONE
-    input: org.pipelineframework.csv.common.domain.PaymentOutputBranch
-    inputTypeName: PaymentOutputBranch
+    input: PaymentOutputBranch
     accepts:
       - ApprovedPaymentOutput
       - UnapprovedPaymentOutput
-    output: org.pipelineframework.csv.common.domain.PaymentOutput
-    outputTypeName: PaymentOutput
+    output: PaymentOutput
     terminal: true
 ```
 
-The output binding type must match the last step output type.
+The output contract must match the last step output type.
 
 ## CSV Payments Shape
 

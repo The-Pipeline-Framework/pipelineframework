@@ -16,15 +16,12 @@
 
 package org.pipelineframework.processor.parser;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
-
 import javax.tools.Diagnostic;
 
 import com.squareup.javapoet.ClassName;
@@ -34,6 +31,8 @@ import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StepKind;
 import org.pipelineframework.processor.ir.StreamingShape;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class StepDefinitionParserTest {
 
@@ -1494,6 +1493,91 @@ class StepDefinitionParserTest {
         StepDefinition step = steps.getFirst();
         assertNotNull(step.externalMapper());
         assertEquals(MapperFallbackMode.JACKSON, step.mapperFallback());
+    }
+
+    @Test
+    void keepsShortDeclaredContractsLogicalWhilePreservingQualifiedJavaContracts() throws IOException {
+        List<StepDefinition> logical = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            types:
+              PaymentRequest:
+                fields: [[1, id, uuid]]
+              PaymentOutcome:
+                fields: [[1, id, uuid]]
+            steps:
+              - name: "logical-contracts"
+                service: "com.example.app.InternalService"
+                input: PaymentRequest
+                output: PaymentOutcome
+            """);
+        List<StepDefinition> qualified = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "java-contracts"
+                service: "com.example.app.InternalService"
+                input: "com.example.app.PaymentRequest"
+                output: "com.example.app.PaymentOutcome"
+            """);
+        List<StepDefinition> explicitJava = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            types:
+              PaymentRequest:
+                fields: [[1, id, uuid]]
+              PaymentOutcome:
+                fields: [[1, id, uuid]]
+            steps:
+              - name: "explicit-java-contracts"
+                service: "com.example.app.InternalService"
+                input: PaymentRequest
+                output: PaymentOutcome
+                java:
+                  input: "com.example.app.PaymentRequest"
+                  output: "com.example.app.PaymentOutcome"
+            """);
+
+        assertEquals(1, logical.size());
+        assertNull(logical.getFirst().inputType());
+        assertNull(logical.getFirst().outputType());
+        assertEquals(ClassName.get("com.example.app", "PaymentRequest"), qualified.getFirst().inputType());
+        assertEquals(ClassName.get("com.example.app", "PaymentOutcome"), qualified.getFirst().outputType());
+        assertEquals(ClassName.get("com.example.app", "PaymentRequest"), explicitJava.getFirst().inputType());
+        assertEquals(ClassName.get("com.example.app", "PaymentOutcome"), explicitJava.getFirst().outputType());
+    }
+
+    @Test
+    void remoteStepStillRequiresExplicitJavaContractsWhenLogicalContractsAreDeclared() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            types:
+              ChargeRequest:
+                fields: [[1, id, uuid]]
+              ChargeResult:
+                fields: [[1, id, uuid]]
+            steps:
+              - name: "charge-card"
+                cardinality: "ONE_TO_ONE"
+                input: ChargeRequest
+                output: ChargeResult
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "charge-card"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  target:
+                    urlConfigKey: "remote.charge.url"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("explicit Java 'input' and 'output'")),
+            diagnostics.toString());
     }
 
     @Test

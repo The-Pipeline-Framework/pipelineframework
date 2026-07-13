@@ -20,6 +20,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
@@ -33,6 +35,84 @@ class PipelineProtoGeneratorTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void conciseAndVerboseTemplatesGenerateIdenticalArtifacts() throws Exception {
+        String header = """
+            version: 2
+            appName: "Equivalent"
+            basePackage: "com.example.equivalent"
+            transport: "GRPC"
+            """;
+        Path verboseDir = Files.createDirectories(tempDir.resolve("verbose"));
+        Path conciseDir = Files.createDirectories(tempDir.resolve("concise"));
+        Path verboseConfig = verboseDir.resolve("pipeline.yaml");
+        Path conciseConfig = conciseDir.resolve("pipeline.yaml");
+        Files.writeString(verboseConfig, header + """
+            messages:
+              PaymentRequest:
+                fields:
+                  - number: 1
+                    name: orderId
+                    type: uuid
+              ValidatedPayment:
+                fields:
+                  - number: 1
+                    name: orderId
+                    type: uuid
+              PaymentOutcome:
+                fields:
+                  - number: 1
+                    name: orderId
+                    type: uuid
+            steps:
+              - name: Validate Payment
+                cardinality: ONE_TO_ONE
+                inputTypeName: PaymentRequest
+                outputTypeName: ValidatedPayment
+              - name: Process Payment
+                cardinality: ONE_TO_ONE
+                inputTypeName: ValidatedPayment
+                outputTypeName: PaymentOutcome
+            """);
+        Files.writeString(conciseConfig, header + """
+            types:
+              PaymentRequest:
+                fields: [[1, orderId, uuid]]
+              ValidatedPayment:
+                fields: [[1, orderId, uuid]]
+              PaymentOutcome:
+                fields: [[1, orderId, uuid]]
+            contract:
+              input: PaymentRequest
+              output: PaymentOutcome
+            steps:
+              - name: Validate Payment
+                cardinality: ONE_TO_ONE
+                output: ValidatedPayment
+              - name: Process Payment
+                cardinality: ONE_TO_ONE
+                output: PaymentOutcome
+            """);
+        Path verboseOutput = verboseDir.resolve("generated");
+        Path conciseOutput = conciseDir.resolve("generated");
+
+        PipelineProtoGenerator generator = new PipelineProtoGenerator();
+        generator.generate(verboseDir, verboseConfig, verboseOutput);
+        generator.generate(conciseDir, conciseConfig, conciseOutput);
+
+        assertEquals(readGeneratedFiles(verboseOutput), readGeneratedFiles(conciseOutput));
+    }
+
+    private Map<String, String> readGeneratedFiles(Path root) throws Exception {
+        Map<String, String> files = new TreeMap<>();
+        try (var paths = Files.walk(root)) {
+            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                files.put(root.relativize(path).toString(), Files.readString(path));
+            }
+        }
+        return files;
+    }
 
     @Test
     void generatesStepAndOrchestratorProtos() throws Exception {
@@ -824,6 +904,27 @@ class PipelineProtoGeneratorTest {
         assertTrue(snapshot.contains("\"messages\""));
         assertTrue(snapshot.contains("\"ChargeRequest\""));
         assertTrue(snapshot.contains("\"ChargeResult\""));
+    }
+
+    @Test
+    void rejectsLegacyJavaOnlyV2ContractsBeforeGeneratingANullProtoType() throws Exception {
+        Path configPath = tempDir.resolve("pipeline-config-v2-java-only.yaml");
+        Files.writeString(configPath, """
+            version: 2
+            appName: "Java Only"
+            basePackage: "com.example"
+            transport: "GRPC"
+            steps:
+              - name: "Payment"
+                cardinality: "ONE_TO_ONE"
+                input: "com.example.domain.PaymentRecord"
+                output: "com.example.domain.PaymentStatus"
+            """);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> new PipelineProtoGenerator().generate(tempDir, configPath, tempDir.resolve("proto-java-only-out")));
+
+        assertTrue(error.getMessage().contains("requires a declared logical input contract"));
     }
 
     @Test

@@ -19,121 +19,53 @@ aspects:
       enabledTargets:
         - GRPC_SERVICE
         - CLIENT_STEP
-messages:
+types:
   CsvFolder:
     fields:
-      - number: 1
-        name: path
-        type: path
+      - [1, path, path]
   CsvPaymentsInputFile:
     fields:
-      - number: 1
-        name: id
-        type: uuid
-      - number: 2
-        name: filepath
-        type: path
-      - number: 3
-        name: csvFolderPath
-        type: path
+      - [1, id, uuid]
+      - [2, filepath, path]
+      - [3, csvFolderPath, path]
   PaymentRecord:
     fields:
-      - number: 1
-        name: id
-        type: uuid
-      - number: 2
-        name: csvId
-        type: string
-      - number: 3
-        name: recipient
-        type: string
-      - number: 4
-        name: amount
-        type: decimal
-      - number: 5
-        name: currency
-        type: currency
-      - number: 6
-        name: csvPaymentsInputFilePath
-        type: path
+      - [1, id, uuid]
+      - [2, csvId, string]
+      - [3, recipient, string]
+      - [4, amount, decimal]
+      - [5, currency, currency]
+      - [6, csvPaymentsInputFilePath, path]
   PaymentStatus:
     fields:
-      - number: 1
-        name: id
-        type: uuid
-      - number: 2
-        name: reference
-        type: string
-      - number: 3
-        name: status
-        type: string
-      - number: 4
-        name: message
-        type: string
-      - number: 5
-        name: fee
-        type: decimal
-      - number: 6
-        name: conversationId
-        type: uuid
-      - number: 7
-        name: statusCode
-        type: int64
-      - number: 8
-        name: paymentRecordId
-        type: uuid
-      - number: 9
-        name: paymentRecord
-        type: PaymentRecord
+      - [1, id, uuid]
+      - [2, reference, string]
+      - [3, status, string]
+      - [4, message, string]
+      - [5, fee, decimal]
+      - [6, conversationId, uuid]
+      - [7, statusCode, int64]
+      - [8, paymentRecordId, uuid]
+      - [9, paymentRecord, PaymentRecord]
   PaymentOutput:
     fields:
-      - number: 1
-        name: id
-        type: uuid
-      - number: 2
-        name: csvPaymentsOutputFilename
-        type: string
-      - number: 3
-        name: csvPaymentsInputFilePath
-        type: path
-      - number: 4
-        name: csvId
-        type: string
-      - number: 5
-        name: recipient
-        type: string
-      - number: 6
-        name: amount
-        type: decimal
-      - number: 7
-        name: currency
-        type: currency
-      - number: 8
-        name: conversationId
-        type: uuid
-      - number: 9
-        name: status
-        type: int64
-      - number: 10
-        name: message
-        type: string
-      - number: 11
-        name: fee
-        type: decimal
-      - number: 12
-        name: paymentStatus
-        type: PaymentStatus
+      - [1, id, uuid]
+      - [2, csvPaymentsOutputFilename, string]
+      - [3, csvPaymentsInputFilePath, path]
+      - [4, csvId, string]
+      - [5, recipient, string]
+      - [6, amount, decimal]
+      - [7, currency, currency]
+      - [8, conversationId, uuid]
+      - [9, status, int64]
+      - [10, message, string]
+      - [11, fee, decimal]
+      - [12, paymentStatus, PaymentStatus]
   CsvPaymentsOutputFile:
     fields:
-      - number: 1
-        name: id
-        type: uuid
-      - number: 2
-        name: filepath
-        type: path
-      - number: 3
-        name: csvFolderPath
-        type: path
+      - [1, id, uuid]
+      - [2, filepath, path]
+      - [3, csvFolderPath, path]
 steps:
   - name: Process Folder
     service: org.pipelineframework.csv.service.ProcessFolderService

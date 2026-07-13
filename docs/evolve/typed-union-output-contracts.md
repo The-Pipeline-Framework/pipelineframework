@@ -75,34 +75,34 @@ Branch routing now uses step applicability, not graph edges:
 ```yaml
 steps:
   - name: Reserve Stock
-    inputTypeName: OrderDecision
-    outputTypeName: StockReserved
+    input: OrderDecision
+    output: StockReserved
     accepts:
       - PhysicalOrder
 
   - name: Provision License
-    inputTypeName: OrderDecision
-    outputTypeName: LicenseProvisioned
+    input: OrderDecision
+    output: LicenseProvisioned
     accepts:
       - DigitalOrder
 
   - name: Finalize
-    inputTypeName: OrderCompletion
-    outputTypeName: FinalizedOrder
+    input: OrderCompletion
+    output: FinalizedOrder
     terminal: true
 ```
 
-When `accepts` is omitted, TPF uses every concrete leaf type resolved from `inputTypeName`. For a concrete message, that is the message itself:
+When `accepts` is omitted, TPF uses every concrete leaf type resolved from logical `input`. For a concrete message, that is the message itself:
 
 ```yaml
 steps:
   - name: Reserve Stock
-    inputTypeName: PhysicalOrder
-    outputTypeName: StockReserved
+    input: PhysicalOrder
+    output: StockReserved
 
   - name: Provision License
-    inputTypeName: DigitalOrder
-    outputTypeName: LicenseProvisioned
+    input: DigitalOrder
+    output: LicenseProvisioned
 ```
 
 For a union input, omitting `accepts` means that the step accepts every variant. The `Finalize` step above therefore accepts both `StockReserved` and `LicenseProvisioned`. This is the concise form for a terminal merge that handles every branch-end alternative.
@@ -112,7 +112,7 @@ Declare explicit `accepts` only when a step handles a subset of the variants res
 Compiler rules:
 
 - `accepts` may reference concrete contract types only.
-- if `accepts` is omitted, every concrete leaf type resolved from `inputTypeName` becomes accepted implicitly.
+- if `accepts` is omitted, every concrete leaf type resolved from logical `input` becomes accepted implicitly.
 - a union input therefore accepts all of its variants by default; use explicit `accepts` to select a subset.
 - branch-aware pipelines are `ONE_TO_ONE` only in v1.
 - there must be exactly one `terminal: true` step, and it must be last.

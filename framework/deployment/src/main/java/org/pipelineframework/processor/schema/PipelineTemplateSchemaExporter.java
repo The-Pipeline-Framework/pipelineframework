@@ -43,6 +43,40 @@ public final class PipelineTemplateSchemaExporter {
       "type": "string",
       "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*::[a-zA-Z_$][a-zA-Z\\\\d_$]*$"
     },
+    "logicalContractReference": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Za-z0-9_]*$"
+    },
+    "legacyJavaContract": {
+      "type": "string",
+      "deprecated": true,
+      "description": "Deprecated compatibility form. Use a logical input/output contract and java.input/java.output instead.",
+      "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+    },
+    "contractOrJavaType": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/logicalContractReference"
+        },
+        {
+          "$ref": "#/$defs/legacyJavaContract"
+        }
+      ]
+    },
+    "javaExecutionContracts": {
+      "type": "object",
+      "properties": {
+        "input": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+        },
+        "output": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+        }
+      },
+      "additionalProperties": false
+    },
     "legacyFieldDefinition": {
       "type": "object",
       "properties": {
@@ -164,6 +198,16 @@ public final class PipelineTemplateSchemaExporter {
       "additionalProperties": false
     },
     "v2FieldDefinition": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/v2FieldObjectDefinition"
+        },
+        {
+          "$ref": "#/$defs/v2FieldTupleDefinition"
+        }
+      ]
+    },
+    "v2FieldObjectDefinition": {
       "type": "object",
       "properties": {
         "number": {
@@ -334,6 +378,37 @@ public final class PipelineTemplateSchemaExporter {
         }
       ],
       "additionalProperties": false
+    },
+    "v2FieldTupleDefinition": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "string",
+          "anyOf": [
+            {
+              "enum": [
+                "string", "bool", "int32", "int64", "float32", "float64", "decimal", "uuid",
+                "timestamp", "datetime", "date", "duration", "bytes", "currency", "uri", "path",
+                "payload_ref"
+              ]
+            },
+            {
+              "pattern": "^[A-Z][A-Za-z0-9_]*$"
+            }
+          ]
+        }
+      ],
+      "minItems": 3,
+      "maxItems": 3,
+      "items": false
     },
     "v2Reserved": {
       "type": "object",
@@ -1397,6 +1472,12 @@ public final class PipelineTemplateSchemaExporter {
           "type": "string",
           "pattern": "^[A-Z][A-Za-z0-9_]*$"
         },
+        "input": {
+          "$ref": "#/$defs/contractOrJavaType"
+        },
+        "java": {
+          "$ref": "#/$defs/javaExecutionContracts"
+        },
         "inputFields": {
           "type": "array",
           "items": {
@@ -1406,6 +1487,9 @@ public final class PipelineTemplateSchemaExporter {
         "outputTypeName": {
           "type": "string",
           "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "output": {
+          "$ref": "#/$defs/contractOrJavaType"
         },
         "outputFields": {
           "type": "array",
@@ -1500,9 +1584,19 @@ public final class PipelineTemplateSchemaExporter {
       ],
       "required": [
         "name",
-        "cardinality",
-        "inputTypeName",
-        "outputTypeName"
+        "cardinality"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "output"
+          ]
+        },
+        {
+          "required": [
+            "outputTypeName"
+          ]
+        }
       ]
     },
     "delegatedOrInternalStep": {
@@ -1526,14 +1620,15 @@ public final class PipelineTemplateSchemaExporter {
           "$ref": "#/$defs/operatorReference"
         },
         "input": {
-          "type": "string",
-          "description": "Fully qualified class name of the input type",
-          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+          "description": "Declared logical contract name",
+          "$ref": "#/$defs/contractOrJavaType"
         },
         "output": {
-          "type": "string",
-          "description": "Fully qualified class name of the output type",
-          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+          "description": "Declared logical contract name",
+          "$ref": "#/$defs/contractOrJavaType"
+        },
+        "java": {
+          "$ref": "#/$defs/javaExecutionContracts"
         },
         "operatorMapper": {
           "type": "string",
@@ -1813,12 +1908,13 @@ public final class PipelineTemplateSchemaExporter {
           }
         },
         "input": {
-          "type": "string",
-          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+          "$ref": "#/$defs/contractOrJavaType"
         },
         "output": {
-          "type": "string",
-          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+          "$ref": "#/$defs/contractOrJavaType"
+        },
+        "java": {
+          "$ref": "#/$defs/javaExecutionContracts"
         },
         "commandIdGenerator": {
           "type": "string",
@@ -1937,12 +2033,13 @@ public final class PipelineTemplateSchemaExporter {
           "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
         },
         "input": {
-          "type": "string",
-          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+          "$ref": "#/$defs/contractOrJavaType"
         },
         "output": {
-          "type": "string",
-          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+          "$ref": "#/$defs/contractOrJavaType"
+        },
+        "java": {
+          "$ref": "#/$defs/javaExecutionContracts"
         },
         "timeout": {
           "type": "string",
@@ -2048,14 +2145,13 @@ public final class PipelineTemplateSchemaExporter {
           "pattern": "^[A-Z][A-Za-z0-9_]*$"
         },
         "input": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+          "$ref": "#/$defs/contractOrJavaType"
         },
         "output": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "^[a-zA-Z_$][a-zA-Z\\\\d_$]*(\\\\.[a-zA-Z_$][a-zA-Z\\\\d_$]*)*\\\\.[A-Z][a-zA-Z\\\\d_$]*$"
+          "$ref": "#/$defs/contractOrJavaType"
+        },
+        "java": {
+          "$ref": "#/$defs/javaExecutionContracts"
         },
         "capture": {
           "$ref": "#/$defs/queryCapture"
@@ -2144,8 +2240,17 @@ public final class PipelineTemplateSchemaExporter {
       },
       "else": {
         "not": {
-          "required": [
-            "messages"
+          "anyOf": [
+            {
+              "required": [
+                "types"
+              ]
+            },
+            {
+              "required": [
+                "messages"
+              ]
+            }
           ]
         },
         "properties": {
@@ -2163,6 +2268,14 @@ public final class PipelineTemplateSchemaExporter {
             }
           }
         }
+      }
+    },
+    {
+      "not": {
+        "required": [
+          "types",
+          "messages"
+        ]
       }
     }
   ],
@@ -2222,8 +2335,20 @@ public final class PipelineTemplateSchemaExporter {
       ],
       "default": "MODULAR"
     },
+    "types": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Za-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/v2MessageDefinition"
+      }
+    },
     "messages": {
       "type": "object",
+      "deprecated": true,
+      "description": "Deprecated alias for types.",
       "propertyNames": {
         "type": "string",
         "pattern": "^[A-Z][A-Za-z0-9_]*$"
@@ -2311,6 +2436,21 @@ public final class PipelineTemplateSchemaExporter {
     },
     "output": {
       "$ref": "#/$defs/pipelineOutputBoundary"
+    },
+    "contract": {
+      "type": "object",
+      "description": "Optional logical contracts for a linear v2 pipeline. These coexist with physical input and output boundaries.",
+      "properties": {
+        "input": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "output": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        }
+      },
+      "additionalProperties": false
     },
     "unions": {
       "type": "object",

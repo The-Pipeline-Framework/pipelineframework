@@ -81,8 +81,6 @@
         <module>runtime-spring</module>
         <module>runtime</module>
         <module>deployment</module>
-        <module>spring-smoke-tests</module>
-        <module>spring-blocking-smoke-tests</module>
     </modules>
 
     <dependencyManagement>

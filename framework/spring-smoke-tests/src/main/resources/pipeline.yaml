@@ -1,19 +1,29 @@
+version: 2
 appName: "Spring REST Smoke"
 basePackage: "com.example.smoke"
 transport: "REST"
 platform: "COMPUTE"
+types:
+  - PaymentRecord:
+      fields:
+        - [1, paymentId, string]
+        - [2, cents, int]
+  - PaymentStatus:
+      fields:
+        - [1, paymentId, string]
+        - [2, status, string]
 steps:
   - name: "payment"
     service: "com.example.smoke.service.PaymentService"
-    input: "com.example.smoke.domain.PaymentRecord"
+    input: PaymentRecord
     inboundMapper: "com.example.smoke.mapper.PaymentRecordMapper"
-    output: "com.example.smoke.domain.PaymentStatus"
+    output: PaymentStatus
     outboundMapper: "com.example.smoke.mapper.PaymentStatusMapper"
   - name: "audit"
     operator: "com.example.smoke.service.PaymentAuditService::audit"
-    input: "com.example.smoke.domain.PaymentStatus"
-    output: "com.example.smoke.domain.PaymentStatus"
+    input: PaymentStatus
+    output: PaymentStatus
   - name: "receipt"
     service: "com.example.smoke.service.PaymentReceiptService"
-    input: "com.example.smoke.domain.PaymentStatus"
-    output: "com.example.smoke.domain.PaymentStatus"
+    input: PaymentStatus
+    output: PaymentStatus

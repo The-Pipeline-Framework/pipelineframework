@@ -3,56 +3,26 @@ appName: TPFGo Consumer Validation Pipeline
 basePackage: org.pipelineframework.tpfgo.consumer.validation
 transport: GRPC
 platform: COMPUTE
-messages:
+types:
   OrderPending:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: requestId
-        type: uuid
-      - number: 3
-        name: customerId
-        type: uuid
-      - number: 4
-        name: restaurantId
-        type: uuid
-      - number: 5
-        name: totalAmount
-        type: decimal
-      - number: 6
-        name: currency
-        type: string
-      - number: 7
-        name: createdAt
-        type: timestamp
+      - [1, orderId, uuid]
+      - [2, requestId, uuid]
+      - [3, customerId, uuid]
+      - [4, restaurantId, uuid]
+      - [5, totalAmount, decimal]
+      - [6, currency, string]
+      - [7, createdAt, timestamp]
   OrderApproved:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: requestId
-        type: uuid
-      - number: 3
-        name: customerId
-        type: uuid
-      - number: 4
-        name: restaurantId
-        type: uuid
-      - number: 5
-        name: totalAmount
-        type: decimal
-      - number: 6
-        name: currency
-        type: string
-      - number: 7
-        name: approvedAt
-        type: timestamp
-      - number: 8
-        name: riskBand
-        type: string
+      - [1, orderId, uuid]
+      - [2, requestId, uuid]
+      - [3, customerId, uuid]
+      - [4, restaurantId, uuid]
+      - [5, totalAmount, decimal]
+      - [6, currency, string]
+      - [7, approvedAt, timestamp]
+      - [8, riskBand, string]
 steps:
   - name: Consumer Validate Order
     service: org.pipelineframework.tpfgo.consumer.validation.consumer_validate_order.service.ProcessConsumerValidateOrderService

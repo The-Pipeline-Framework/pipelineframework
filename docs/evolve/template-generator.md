@@ -37,8 +37,8 @@ v2 keeps `platform` and `transport` as top-level concerns and makes field typing
 
 Key points:
 
-- top-level `messages:` are the preferred contract model
-- steps still use `inputTypeName` / `outputTypeName`
+- top-level `types:` are the preferred contract model
+- steps use logical `input` / `output`; `inputTypeName` / `outputTypeName` are compatibility aliases
 - fields declare semantic `type`, not `protoType`, in normal cases
 - stable field numbers are required in v2
 
@@ -78,8 +78,8 @@ messages:
 steps:
   - name: "Process Payment"
     cardinality: "ONE_TO_ONE"
-    inputTypeName: "PaymentInput"
-    outputTypeName: "PaymentOutput"
+    input: "PaymentInput"
+    output: "PaymentOutput"
 ```
 
 ## Generating a Sample Config

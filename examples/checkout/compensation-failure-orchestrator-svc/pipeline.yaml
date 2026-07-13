@@ -3,84 +3,38 @@ appName: TPFGo Compensation Pipeline
 basePackage: org.pipelineframework.tpfgo.compensation.failure
 transport: GRPC
 platform: COMPUTE
-messages:
+types:
   PaymentCaptured:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: paymentId
-        type: uuid
-      - number: 3
-        name: processedAt
-        type: timestamp
-      - number: 4
-        name: amount
-        type: decimal
-      - number: 5
-        name: currency
-        type: string
+      - [1, orderId, uuid]
+      - [2, paymentId, uuid]
+      - [3, processedAt, timestamp]
+      - [4, amount, decimal]
+      - [5, currency, string]
   PaymentRejected:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: processedAt
-        type: timestamp
-      - number: 3
-        name: amount
-        type: decimal
-      - number: 4
-        name: currency
-        type: string
-      - number: 5
-        name: failureCode
-        type: string
-      - number: 6
-        name: failureReason
-        type: string
+      - [1, orderId, uuid]
+      - [2, processedAt, timestamp]
+      - [3, amount, decimal]
+      - [4, currency, string]
+      - [5, failureCode, string]
+      - [6, failureReason, string]
   PaymentRequiresReview:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: processedAt
-        type: timestamp
-      - number: 3
-        name: amount
-        type: decimal
-      - number: 4
-        name: currency
-        type: string
-      - number: 5
-        name: reviewReason
-        type: string
+      - [1, orderId, uuid]
+      - [2, processedAt, timestamp]
+      - [3, amount, decimal]
+      - [4, currency, string]
+      - [5, reviewReason, string]
   TerminalOrderState:
     fields:
-      - number: 1
-        name: orderId
-        type: uuid
-      - number: 2
-        name: outcome
-        type: string
-      - number: 3
-        name: resolvedAt
-        type: timestamp
-      - number: 4
-        name: resolutionAction
-        type: string
-      - number: 5
-        name: paymentStatus
-        type: string
-      - number: 6
-        name: paymentId
-        type: uuid
-      - number: 7
-        name: failureCode
-        type: string
+      - [1, orderId, uuid]
+      - [2, outcome, string]
+      - [3, resolvedAt, timestamp]
+      - [4, resolutionAction, string]
+      - [5, paymentStatus, string]
+      - [6, paymentId, uuid]
+      - [7, failureCode, string]
 unions:
   PaymentOutcome:
     variants:

@@ -1,11 +1,11 @@
 package org.pipelineframework.processor;
 
 import java.io.IOException;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.net.URL;
-import java.net.URISyntaxException;
 import javax.tools.StandardLocation;
 
 import com.google.testing.compile.Compilation;
@@ -68,13 +68,7 @@ class PipelineGenerationPhaseIntegrationTest {
                         import org.pipelineframework.service.ReactiveService;
                         import org.pipelineframework.step.StepOneToOne;
 
-                        @PipelineStep(
-                            inputType = org.pipelineframework.search.domain.CrawlRequest.class,
-                            outputType = org.pipelineframework.search.domain.RawDocument.class,
-                            stepType = StepOneToOne.class,
-                            inboundMapper = org.pipelineframework.search.mapper.CrawlRequestMapper.class,
-                            outboundMapper = org.pipelineframework.search.mapper.RawDocumentMapper.class
-                        )
+                        @PipelineStep
                         public class ProcessCrawlSourceService implements ReactiveService<org.pipelineframework.search.domain.CrawlRequest, org.pipelineframework.search.domain.RawDocument> {
                             @Override
                             public Uni<org.pipelineframework.search.domain.RawDocument> process(org.pipelineframework.search.domain.CrawlRequest input) {
