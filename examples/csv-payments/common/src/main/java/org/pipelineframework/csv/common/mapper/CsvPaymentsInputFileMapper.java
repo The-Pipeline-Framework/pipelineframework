@@ -34,7 +34,6 @@ public interface CsvPaymentsInputFileMapper extends org.pipelineframework.mapper
   CsvPaymentsInputFileDto toDto(CsvPaymentsInputFile entity);
 
   @Mapping(target = "csvFile", ignore = true)
-  @Mapping(target = "csvFolder", ignore = true)
   CsvPaymentsInputFile fromDto(CsvPaymentsInputFileDto dto);
 
   @BeanMapping(unmappedTargetPolicy = ReportingPolicy.IGNORE)
