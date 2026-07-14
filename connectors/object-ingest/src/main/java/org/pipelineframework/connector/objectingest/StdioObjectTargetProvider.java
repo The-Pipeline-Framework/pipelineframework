@@ -69,10 +69,16 @@ public final class StdioObjectTargetProvider implements ObjectTargetProvider {
                 if (closed) {
                     return CompletableFuture.failedFuture(new IllegalStateException("stdout write session is closed"));
                 }
-                byte[] bytes = new byte[chunk.remaining()];
-                chunk.get(bytes);
+                int length = chunk.remaining();
                 try {
-                    streams.stdout().write(bytes);
+                    if (chunk.hasArray()) {
+                        streams.stdout().write(chunk.array(), chunk.arrayOffset() + chunk.position(), length);
+                        chunk.position(chunk.position() + length);
+                    } else {
+                        byte[] bytes = new byte[length];
+                        chunk.get(bytes);
+                        streams.stdout().write(bytes);
+                    }
                     return CompletableFuture.completedFuture(null);
                 } catch (IOException e) {
                     return CompletableFuture.failedFuture(e);

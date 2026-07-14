@@ -67,7 +67,7 @@ public final class StdioObjectSourceProvider implements ObjectSourceProvider {
             byte[] buffer = new byte[8192];
             int read;
             while ((read = streams.stdin().read(buffer)) != -1) {
-                if (maxBytes > 0 && output.size() + read > maxBytes) {
+                if (maxBytes > 0 && (long) output.size() + read > maxBytes) {
                     throw new IllegalStateException("stdin exceeds configured maxBytes");
                 }
                 output.write(buffer, 0, read);

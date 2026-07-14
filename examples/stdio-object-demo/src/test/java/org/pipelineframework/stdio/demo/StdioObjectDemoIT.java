@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -48,20 +50,33 @@ class StdioObjectDemoIT {
         "-jar", application.toString(), "--ingest-once", "--async-timeout-minutes", "1");
     builder.environment().put("PIPELINE_CONFIG", basedir.resolve("pipeline.yaml").toString());
     Process process = builder.start();
+    CompletableFuture<String> stdout = CompletableFuture.supplyAsync(() -> read(process.getInputStream()));
+    CompletableFuture<String> stderr = CompletableFuture.supplyAsync(() -> read(process.getErrorStream()));
     process.getOutputStream().write(input.getBytes(StandardCharsets.UTF_8));
     process.getOutputStream().close();
 
     boolean completed = process.waitFor(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
     if (!completed) {
       process.destroyForcibly();
+      stdout.join();
+      stderr.join();
       throw new IOException("stdio demo did not finish within " + TIMEOUT);
     }
     return new ProcessResult(
         process.exitValue(),
-        new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8),
-        new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8));
+        stdout.get(),
+        stderr.get());
+  }
+
+  private String read(InputStream stream) {
+    try (stream) {
+      return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
   }
 
   private record ProcessResult(int exitCode, String stdout, String stderr) {
   }
 }
+import java.util.concurrent.CompletableFuture;

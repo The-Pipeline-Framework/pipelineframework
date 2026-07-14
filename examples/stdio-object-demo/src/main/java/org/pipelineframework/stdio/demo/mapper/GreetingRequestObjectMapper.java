@@ -35,9 +35,6 @@ public final class GreetingRequestObjectMapper implements ObjectSnapshotMapper<G
         if (names.stream().anyMatch(String::isBlank)) {
             throw new IllegalArgumentException("stdin JSON names must not be blank");
         }
-        if (names.isEmpty()) {
-            throw new IllegalArgumentException("stdin JSON must contain at least one name field");
-        }
         return new GreetingRequests(names);
     }
 }

@@ -11,6 +11,8 @@ import org.pipelineframework.stdio.demo.common.domain.GreetingResponse;
 
 /** Renders terminal typed output as a single JSON object for stdout. */
 public final class GreetingResponseObjectMapper implements ObjectPublishMapper<GreetingResponse> {
+    private static final ObjectMapper JSON = new ObjectMapper();
+
     @Override
     public String groupKey(GreetingResponse item) {
         return "stdout";
@@ -20,7 +22,7 @@ public final class GreetingResponseObjectMapper implements ObjectPublishMapper<G
     public ObjectPayload render(String groupKey, List<GreetingResponse> items) {
         GreetingResponse response = items.getFirst();
         try {
-            return new ObjectPayload(new ObjectMapper().writeValueAsBytes(Map.of("greetings", response.greetings())), "application/json", Map.of("records", "1"));
+            return new ObjectPayload(JSON.writeValueAsBytes(Map.of("greetings", response.greetings())), "application/json", Map.of("records", "1"));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Unable to serialize greeting response", e);
         }
