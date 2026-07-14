@@ -19,8 +19,6 @@ Shared entity classes that represent the core business concepts:
 - `PaymentOutput`: Represents a payment entry for output CSV files
 - `PaymentOutputBranch`: Sealed base type for branch-local output rows before terminal merge
 - `CsvPaymentsInputFile`: Wrapper for input CSV files
-- `CsvPaymentsOutputFile`: Wrapper for output CSV files
-- `CsvFolder`: Represents a folder containing CSV files
 
 ### Data Transfer Objects (DTOs)
 
@@ -38,7 +36,6 @@ MapStruct-based mappers for converting between domain models, DTOs, and gRPC mes
 - `UnapprovedPaymentStatusMapper`
 - `PaymentOutputMapper`
 - `CsvPaymentsInputFileMapper`
-- `CsvPaymentsOutputFileMapper`
 
 ### Service Interfaces
 
@@ -86,10 +83,13 @@ graph TD
 
 The common module includes shared Protocol Buffer definitions for all services:
 
-- `input_csv_file_processing_svc.proto`: Input CSV file processing service contract
-- `payments_processing_svc.proto`: Payments processing service contract
-- `payment_status_svc.proto`: Payment status service contract
-- `output_csv_file_processing_svc.proto`: Output CSV file processing service contract
+- `process-csv-payments-input-svc.proto`: Input CSV file processing service contract
+- `await-payment-provider-svc.proto`: Payments processing service contract
+- `finalize-payment-output-svc.proto`: Output CSV file processing service contract
+- `orchestrator.proto`: Orchestrator types
+- `pipeline-types.proto`: Types
+- `process-approved-payment-status-svc.proto`: Payment status service contract (approved branch)
+- `process-unapproved-payment-status-svc.proto`: Payment status service contract (unapproved branch)
 
 ## Technology Stack
 
@@ -217,7 +217,6 @@ All microservices in the CSV Payments POC project depend on the common module:
 - [Input CSV File Processing Service](../input-csv-file-processing-svc/README.md)
 - [Payments Processing Service](../payments-processing-svc/README.md)
 - [Payment Status Service](../payment-status-svc/README.md)
-- [Output CSV File Processing Service](../output-csv-file-processing-svc/README.md)
 - [Orchestrator Service](../orchestrator-svc/README.md)
 
 Each service uses the common components to ensure consistency in data structures and communication patterns across the entire system.

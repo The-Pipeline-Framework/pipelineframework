@@ -318,7 +318,6 @@ This project consists of Maven submodules, each containing a microservice that r
 - [**Input CSV File Processing Service**](./input-csv-file-processing-svc/README.md): Reads and parses input CSV files
 - [**Payments Processing Service**](./payments-processing-svc/README.md): Interacts with the mock payment provider
 - [**Payment Status Service**](./payment-status-svc/README.md): Processes payment statuses
-- [**Output CSV File Processing Service**](./output-csv-file-processing-svc/README.md): Deprecated legacy file-step output service
 - [**Common Module**](./common/README.md): Shared domain models and utilities
 
 ## Motivation
@@ -761,7 +760,6 @@ Each service exposes a `/q/metrics` endpoint that provides Prometheus-formatted 
 - [Input CSV File Processing Service](./input-csv-file-processing-svc/README.md): Reads and parses input CSV files
 - [Payments Processing Service](./payments-processing-svc/README.md): Interacts with the mock payment provider
 - [Payment Status Service](./payment-status-svc/README.md): Processes payment statuses
-- [Output CSV File Processing Service](./output-csv-file-processing-svc/README.md): Deprecated legacy file-step output service
 - [Common Module](./common/README.md): Shared domain models and utilities
 
 ## Documentation

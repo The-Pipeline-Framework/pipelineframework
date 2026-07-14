@@ -132,7 +132,7 @@ This service is typically invoked by the Orchestrator Service as part of the pay
 1. Orchestrator receives processed payment statuses from the Payments Processing Service
 2. Orchestrator calls this service to transform the status data
 3. This service returns processed payment output records
-4. Orchestrator forwards records to the Output CSV File Processing Service
+4. Orchestrator forwards records to the Object Publish connector
 
 ## Configuration
 
@@ -142,5 +142,4 @@ The service inherits its configuration from the parent Quarkus application. See 
 
 - [Common Module](../common/README.md): Shared domain models and utilities
 - [Payments Processing Service](../payments-processing-svc/README.md): Processes individual payment records
-- [Output CSV File Processing Service](../output-csv-file-processing-svc/README.md): Generates output CSV files
 - [Orchestrator Service](../orchestrator-svc/README.md): Coordinates the overall workflow

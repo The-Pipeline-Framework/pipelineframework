@@ -84,7 +84,6 @@ verify_image_architecture() {
     input-csv-file-processing-svc \
     payments-processing-svc \
     payment-status-svc \
-    output-csv-file-processing-svc \
     orchestrator-svc
   do
     image="localhost/csv-payments/${service}:${IMAGE_TAG}"

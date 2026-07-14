@@ -14,16 +14,20 @@ fi
 
 mkdir -p "$(dirname "$ACTIVE_MAPPING")"
 
-backup_file=""
+active_mapping_existed=false
+
 if [[ -f "$ACTIVE_MAPPING" ]]; then
+  active_mapping_existed=true
   backup_file="$(mktemp "${TMPDIR:-/tmp}/pipeline-runtime.XXXXXX")"
   cp "$ACTIVE_MAPPING" "$backup_file"
 fi
 
 cleanup() {
-  if [[ -n "$backup_file" ]]; then
+  if [[ "$active_mapping_existed" == true ]]; then
     cp "$backup_file" "$ACTIVE_MAPPING"
     rm -f "$backup_file"
+  else
+    rm -f "$ACTIVE_MAPPING"
   fi
 }
 trap cleanup EXIT
@@ -71,6 +75,7 @@ expected_arch() {
 verify_image_architecture() {
   local expected
   expected="$(expected_arch)"
+
   if [[ -z "$expected" ]]; then
     echo "Skipping local image architecture check for multi/unknown platform set: $IMAGE_PLATFORMS"
     return
@@ -82,13 +87,25 @@ verify_image_architecture() {
     input-csv-file-processing-svc \
     payments-processing-svc \
     payment-status-svc \
-    output-csv-file-processing-svc \
     orchestrator-svc
   do
     image="localhost/csv-payments/${service}:${IMAGE_TAG}"
-    actual="$(docker image inspect "$image" --format '{{.Architecture}}' 2>/dev/null || true)"
+
+    if ! docker image inspect "$image" >/dev/null 2>&1; then
+      echo "Expected local image was not created: $image" >&2
+      echo "Available csv-payments images:" >&2
+      docker image ls \
+        --format '  {{.Repository}}:{{.Tag}}  {{.ID}}' |
+        grep 'csv-payments' >&2 || true
+      exit 1
+    fi
+
+    actual="$(docker image inspect "$image" --format '{{.Architecture}}')"
+
     if [[ "$actual" != "$expected" ]]; then
-      echo "Image architecture mismatch for $image: expected $expected from $IMAGE_PLATFORMS, got ${actual:-<missing>}" >&2
+      echo \
+        "Image architecture mismatch for $image: expected $expected from $IMAGE_PLATFORMS, got $actual" \
+        >&2
       exit 1
     fi
   done

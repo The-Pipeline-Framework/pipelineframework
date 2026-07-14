@@ -16,8 +16,8 @@
 
 package org.pipelineframework.csv.orchestrator.service;
 
-import java.io.IOException;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -31,22 +31,10 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -62,6 +50,8 @@ import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.telemetry.*;
 import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.GenericContainer;
@@ -75,18 +65,9 @@ import org.testcontainers.utility.DockerImageName;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.fail;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
-import org.pipelineframework.config.pipeline.PipelineJson;
-import org.pipelineframework.telemetry.PipelineExecutionEvent;
-import org.pipelineframework.telemetry.PipelineReplayDocument;
-import org.pipelineframework.telemetry.PipelineReplayRunParameters;
-import org.pipelineframework.telemetry.PipelineTelemetry;
-import org.pipelineframework.telemetry.PipelineReplayTopology;
 
 abstract class AbstractCsvPaymentsEndToEnd {
 
@@ -491,46 +472,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
             configureObservabilityContainerEnv(paymentStatusService);
         }
         return paymentStatusService;
-    }
-
-    /**
-     * Lazily creates and returns a Testcontainers GenericContainer configured for the output CSV file
-     * processing service.
-     *
-     * <p>The returned container mounts the test output directory into the container, binds the
-     * service keystore for TLS, exposes the service port (8447), sets the Quarkus test profile and
-     * server keystore environment variables, attaches a log consumer, and waits for the HTTPS
-     * health endpoint to become available.
-     *
-     * @return the initialized GenericContainer configured for the output CSV file processing service
-     */
-    private static GenericContainer<?> getOutputCsvService() {
-        if (outputCsvService == null) {
-            outputCsvService =
-                    new GenericContainer<>(modularImage("output-csv-file-processing-svc"))
-                            .withNetwork(network)
-                            .withNetworkAliases("output-csv-file-processing-svc")
-                            .withFileSystemBind(
-                                    Paths.get(TEST_E2E_DIR).toAbsolutePath().toString(),
-                                    TEST_E2E_TARGET_DIR,
-                                    BindMode.READ_WRITE)
-                            .withFileSystemBind(
-                                    DEV_CERTS_DIR.resolve("output-csv-file-processing-svc/server-keystore.jks")
-                                            .toString(),
-                                    CONTAINER_KEYSTORE_PATH,
-                                    BindMode.READ_ONLY)
-                            .withExposedPorts(8447)
-                            .withEnv("QUARKUS_PROFILE", "test")
-                            .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
-                            .withLogConsumer(containerLog("output-csv-file-processing-svc"))
-                            .waitingFor(
-                                    Wait.forHttps("/q/health/live")
-                                            .forPort(8447)
-                                            .allowInsecure()
-                                            .withStartupTimeout(Duration.ofSeconds(60)));
-            configureObservabilityContainerEnv(outputCsvService);
-        }
-        return outputCsvService;
     }
 
     /**
