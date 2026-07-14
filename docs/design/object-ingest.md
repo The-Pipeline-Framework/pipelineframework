@@ -39,6 +39,26 @@ input:
 
 The first pipeline step input must match `input.emits.type` or `input.emits.typeName`.
 
+### Standard input
+
+`stdio` is an endpoint variant of the object connector, not a separate console integration. It reads one
+EOF-delimited object from standard input and invokes the configured object mapper once. The mapper continues
+to own deserialization and the typed input contract.
+
+```yaml
+sources:
+  stdin-input:
+    kind: object
+    provider: stdio
+    location: { endpoint: stdin }
+    poll: { enabled: true, batchSize: 1 }
+    payload: { mode: text }
+```
+
+The stream is non-seekable and is consumed once. A JSON object is a typical input; a JSON collection is also
+valid when the declared input contract and existing mapper represent that collection. NDJSON, CSV record framing,
+and multiple admissions from one stream are not supported by this endpoint.
+
 ```yaml
 steps:
   - name: Process Csv Payments Input
@@ -89,6 +109,25 @@ output:
 ```
 
 `output.to` attaches Object Publish to terminal pipeline output. It is not a user-authored step, so the pipeline still ends at the last business transition.
+
+### Standard output
+
+Use the same object publish mapping with a `stdio` target to write mapper-rendered payload bytes to standard output:
+
+```yaml
+publish:
+  stdout-output:
+    kind: object
+    provider: stdio
+    location: { endpoint: stdout }
+```
+
+TPF flushes the output session at completion and never closes stdout. Standard output is non-atomic: emitted bytes
+cannot be rolled back after a failure. Keep diagnostics and framework logs on stderr so a command such as
+`echo '{"name":"Mariano"}' | ./run-demo | jq .` remains machine-readable.
+
+The `examples/stdio-object-demo` stdio object pipeline demo is the Unix endpoint reference. CSV
+Payments remains the filesystem object ingest/publish reference, while Search includes the S3 object-ingest mapping.
 
 ```yaml
 steps:

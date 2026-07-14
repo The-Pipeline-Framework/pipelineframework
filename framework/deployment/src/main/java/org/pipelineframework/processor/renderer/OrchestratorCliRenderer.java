@@ -320,7 +320,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                             return $T.ExitCode.SOFTWARE;
                         }
                     }
-                    System.out.println("Object Ingest submitted " + poll.submitted() + " execution(s)");
+                    System.err.println("Object Ingest submitted " + poll.submitted() + " execution(s)");
                     return $T.ExitCode.OK;
                 } catch (Exception e) {
                     System.err.println("Object Ingest failed: " + sanitizeErrorMessage(e.getMessage()));
