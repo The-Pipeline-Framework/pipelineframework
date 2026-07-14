@@ -1,0 +1,58 @@
+version: 2
+appName: stdio-object-demo
+basePackage: org.pipelineframework.stdio.demo
+transport: LOCAL
+platform: COMPUTE
+sources:
+  stdin-input:
+    kind: object
+    provider: stdio
+    location: { endpoint: stdin }
+    poll: { enabled: true, interval: PT1S, batchSize: 1 }
+    payload: { mode: text, maxBytes: 1048576, charset: UTF-8 }
+input:
+  from: stdin-input
+  emits:
+    type: org.pipelineframework.stdio.demo.common.domain.GreetingRequests
+    typeName: GreetingRequests
+    mapper: org.pipelineframework.stdio.demo.mapper.GreetingRequestObjectMapper
+publish:
+  stdout-output:
+    kind: object
+    provider: stdio
+    location: { endpoint: stdout }
+output:
+  to: stdout-output
+  consumes:
+    type: org.pipelineframework.stdio.demo.common.domain.GreetingResponse
+    typeName: GreetingResponse
+    mapper: org.pipelineframework.stdio.demo.mapper.GreetingResponseObjectMapper
+types:
+  GreetingRequests:
+    fields:
+      - [1, names, string]
+  NormalizedGreetings:
+    fields:
+      - [1, names, string]
+  GreetingResponse:
+    fields:
+      - [1, greetings, string]
+steps:
+  - name: Normalize Greetings
+    service: org.pipelineframework.stdio.demo.service.NormalizeGreetingsService
+    cardinality: ONE_TO_ONE
+    input: GreetingRequests
+    java:
+      input: org.pipelineframework.stdio.demo.common.domain.GreetingRequests
+      output: org.pipelineframework.stdio.demo.common.domain.NormalizedGreetings
+    output: NormalizedGreetings
+  - name: Compose Greetings
+    service: org.pipelineframework.stdio.demo.service.ComposeGreetingsService
+    cardinality: ONE_TO_ONE
+    input: NormalizedGreetings
+    java:
+      input: org.pipelineframework.stdio.demo.common.domain.NormalizedGreetings
+      output: org.pipelineframework.stdio.demo.common.domain.GreetingResponse
+    output: GreetingResponse
+    outboundMapper: org.pipelineframework.stdio.demo.mapper.GreetingResponseTerminalMapper
+    terminal: true

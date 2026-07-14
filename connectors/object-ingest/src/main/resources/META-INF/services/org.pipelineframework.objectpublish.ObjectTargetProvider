@@ -1,2 +1,3 @@
 org.pipelineframework.connector.objectingest.FilesystemObjectTargetProvider
 org.pipelineframework.connector.objectingest.S3ObjectTargetProvider
+org.pipelineframework.connector.objectingest.StdioObjectTargetProvider
