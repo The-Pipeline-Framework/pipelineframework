@@ -9,6 +9,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
@@ -79,4 +80,3 @@ class StdioObjectDemoIT {
   private record ProcessResult(int exitCode, String stdout, String stderr) {
   }
 }
-import java.util.concurrent.CompletableFuture;

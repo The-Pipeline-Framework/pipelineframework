@@ -41,16 +41,18 @@ steps:
   - name: Normalize Greetings
     service: org.pipelineframework.stdio.demo.service.NormalizeGreetingsService
     cardinality: ONE_TO_ONE
-    input: org.pipelineframework.stdio.demo.common.domain.GreetingRequests
-    inputTypeName: GreetingRequests
-    output: org.pipelineframework.stdio.demo.common.domain.NormalizedGreetings
-    outputTypeName: NormalizedGreetings
+    input: GreetingRequests
+    java:
+      input: org.pipelineframework.stdio.demo.common.domain.GreetingRequests
+      output: org.pipelineframework.stdio.demo.common.domain.NormalizedGreetings
+    output: NormalizedGreetings
   - name: Compose Greetings
     service: org.pipelineframework.stdio.demo.service.ComposeGreetingsService
     cardinality: ONE_TO_ONE
-    input: org.pipelineframework.stdio.demo.common.domain.NormalizedGreetings
-    inputTypeName: NormalizedGreetings
-    output: org.pipelineframework.stdio.demo.common.domain.GreetingResponse
-    outputTypeName: GreetingResponse
+    input: NormalizedGreetings
+    java:
+      input: org.pipelineframework.stdio.demo.common.domain.NormalizedGreetings
+      output: org.pipelineframework.stdio.demo.common.domain.GreetingResponse
+    output: GreetingResponse
     outboundMapper: org.pipelineframework.stdio.demo.mapper.GreetingResponseTerminalMapper
     terminal: true
