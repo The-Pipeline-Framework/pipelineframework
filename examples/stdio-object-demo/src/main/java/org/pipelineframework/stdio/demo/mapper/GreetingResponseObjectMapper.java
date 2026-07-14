@@ -1,6 +1,7 @@
 package org.pipelineframework.stdio.demo.mapper;
 
-import java.nio.charset.StandardCharsets;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 
@@ -18,10 +19,10 @@ public final class GreetingResponseObjectMapper implements ObjectPublishMapper<G
     @Override
     public ObjectPayload render(String groupKey, List<GreetingResponse> items) {
         GreetingResponse response = items.getFirst();
-        String greetings = response.greetings().stream()
-            .map(value -> "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
-            .collect(java.util.stream.Collectors.joining(","));
-        String json = "{\"greetings\":[" + greetings + "]}";
-        return new ObjectPayload(json.getBytes(StandardCharsets.UTF_8), "application/json", Map.of("records", "1"));
+        try {
+            return new ObjectPayload(new ObjectMapper().writeValueAsBytes(Map.of("greetings", response.greetings())), "application/json", Map.of("records", "1"));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Unable to serialize greeting response", e);
+        }
     }
 }

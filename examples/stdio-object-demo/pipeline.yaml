@@ -30,13 +30,13 @@ output:
 types:
   GreetingRequests:
     fields:
-      - [1, names, string]
+      - [1, names, string, repeated]
   NormalizedGreetings:
     fields:
-      - [1, names, string]
+      - [1, names, string, repeated]
   GreetingResponse:
     fields:
-      - [1, greetings, string]
+      - [1, greetings, string, repeated]
 steps:
   - name: Normalize Greetings
     service: org.pipelineframework.stdio.demo.service.NormalizeGreetingsService

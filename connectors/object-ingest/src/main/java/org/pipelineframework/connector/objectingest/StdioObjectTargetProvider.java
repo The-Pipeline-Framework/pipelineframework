@@ -64,35 +64,40 @@ public final class StdioObjectTargetProvider implements ObjectTargetProvider {
         }
 
         @Override
-        public synchronized CompletionStage<Void> write(ByteBuffer chunk) {
-            if (closed) {
-                return CompletableFuture.failedFuture(new IllegalStateException("stdout write session is closed"));
-            }
-            byte[] bytes = new byte[chunk.remaining()];
-            chunk.get(bytes);
-            try {
-                streams.stdout().write(bytes);
-                return CompletableFuture.completedFuture(null);
-            } catch (IOException e) {
-                return CompletableFuture.failedFuture(e);
+        public CompletionStage<Void> write(ByteBuffer chunk) {
+            synchronized (streams) {
+                if (closed) {
+                    return CompletableFuture.failedFuture(new IllegalStateException("stdout write session is closed"));
+                }
+                byte[] bytes = new byte[chunk.remaining()];
+                chunk.get(bytes);
+                try {
+                    streams.stdout().write(bytes);
+                    return CompletableFuture.completedFuture(null);
+                } catch (IOException e) {
+                    return CompletableFuture.failedFuture(e);
+                }
             }
         }
 
         @Override
-        public synchronized CompletionStage<ObjectWriteResult> close(ObjectWriteCloseRequest closeRequest) {
-            try {
-                if (!closed) {
-                    streams.stdout().flush();
-                    closed = true;
+        public CompletionStage<ObjectWriteResult> close(ObjectWriteCloseRequest closeRequest) {
+            synchronized (streams) {
+                try {
+                    if (!closed) {
+                        streams.stdout().flush();
+                        closed = true;
+                    }
                 }
                 Map<String, String> metadata = new LinkedHashMap<>(request.metadata());
                 metadata.putAll(closeRequest.metadata());
                 metadata.put("endpoint", ENDPOINT);
                 PayloadReference reference = new PayloadReference(
                     "stdio", ENDPOINT, request.objectKey(), request.contentType(), "raw", closeRequest.checksum(), closeRequest.bytes(), null, metadata);
-                return CompletableFuture.completedFuture(new ObjectWriteResult(reference, closeRequest.bytes(), closeRequest.checksum(), Instant.now()));
-            } catch (IOException e) {
-                return CompletableFuture.failedFuture(e);
+                    return CompletableFuture.completedFuture(new ObjectWriteResult(reference, closeRequest.bytes(), closeRequest.checksum(), Instant.now()));
+                } catch (IOException | RuntimeException e) {
+                    return CompletableFuture.failedFuture(e);
+                }
             }
         }
 
