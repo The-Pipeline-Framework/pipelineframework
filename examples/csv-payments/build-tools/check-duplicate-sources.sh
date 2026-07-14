@@ -20,8 +20,7 @@ trap 'rm -f "$tmp_file"' EXIT
         rel_path="${file#"${dir}/"}"
         # Monolith keeps a single ExecutorProducer copy from input-csv-file-processing-svc.
         if [ "$rel_path" = "org/pipelineframework/csv/service/ExecutorProducer.java" ] \
-          && { [[ "$dir" == *"/payments-processing-svc/src/main/java" ]] \
-            || [[ "$dir" == *"/output-csv-file-processing-svc/src/main/java" ]]; }; then
+          && [[ "$dir" == *"/payments-processing-svc/src/main/java" ]]; then
           continue
         fi
         printf '%s\n' "$rel_path"

@@ -318,7 +318,6 @@ This project consists of Maven submodules, each containing a microservice that r
 - [**Input CSV File Processing Service**](./input-csv-file-processing-svc/README.md): Reads and parses input CSV files
 - [**Payments Processing Service**](./payments-processing-svc/README.md): Interacts with the mock payment provider
 - [**Payment Status Service**](./payment-status-svc/README.md): Processes payment statuses
-- [**Output CSV File Processing Service**](./output-csv-file-processing-svc/README.md): Deprecated legacy file-step output service
 - [**Common Module**](./common/README.md): Shared domain models and utilities
 
 ## Motivation
@@ -630,7 +629,7 @@ The build generates a self-signed certificate under `examples/csv-payments/targe
    echo | openssl s_client -connect localhost:8444 2>/dev/null | openssl x509 > /tmp/quarkus-cert.pem
 
    # Add to user keychain
-   security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain-db ./kong/quarkus-cert.pem
+   security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain-db /tmp/quarkus-cert.pem
  ```
 
 2. **Restart your browser** to ensure it picks up the new trusted certificate.
@@ -761,7 +760,6 @@ Each service exposes a `/q/metrics` endpoint that provides Prometheus-formatted 
 - [Input CSV File Processing Service](./input-csv-file-processing-svc/README.md): Reads and parses input CSV files
 - [Payments Processing Service](./payments-processing-svc/README.md): Interacts with the mock payment provider
 - [Payment Status Service](./payment-status-svc/README.md): Processes payment statuses
-- [Output CSV File Processing Service](./output-csv-file-processing-svc/README.md): Deprecated legacy file-step output service
 - [Common Module](./common/README.md): Shared domain models and utilities
 
 ## Documentation

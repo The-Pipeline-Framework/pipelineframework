@@ -59,7 +59,6 @@ class CsvPaymentsInputFileMapperTest {
         CsvPaymentsInputFile domain = new CsvPaymentsInputFile();
         domain.setId(UUID.randomUUID());
         domain.setFilepath(Path.of("/test/input/file.csv"));
-        domain.setCsvFolderPath(Path.of("/test/input"));
 
         // When
         CsvPaymentsInputFileDto dto = mapper.toDto(domain);
@@ -68,7 +67,6 @@ class CsvPaymentsInputFileMapperTest {
         assertNotNull(dto);
         assertEquals(domain.getId(), dto.getId());
         assertEquals(domain.getFilepath(), dto.getFilepath());
-        assertEquals(domain.getCsvFolderPath(), dto.getCsvFolderPath());
     }
 
     @Test
@@ -78,7 +76,6 @@ class CsvPaymentsInputFileMapperTest {
                 CsvPaymentsInputFileDto.builder()
                         .id(UUID.randomUUID())
                         .filepath(Path.of("/test/input/file.csv"))
-                        .csvFolderPath(Path.of("/test/input"))
                         .build();
 
         // When
@@ -88,7 +85,6 @@ class CsvPaymentsInputFileMapperTest {
         assertNotNull(domain);
         assertEquals(dto.getId(), domain.getId());
         assertEquals(dto.getFilepath(), domain.getFilepath());
-        assertEquals(dto.getCsvFolderPath(), domain.getCsvFolderPath());
     }
 
     @Test
@@ -98,7 +94,6 @@ class CsvPaymentsInputFileMapperTest {
                 CsvPaymentsInputFileDto.builder()
                         .id(UUID.randomUUID())
                         .filepath(Path.of("/test/input/file.csv"))
-                        .csvFolderPath(Path.of("/test/input"))
                         .build();
 
         // When
@@ -108,7 +103,6 @@ class CsvPaymentsInputFileMapperTest {
         assertNotNull(grpc);
         assertEquals(dto.getId().toString(), grpc.getId());
         assertEquals(dto.getFilepath().toString(), grpc.getFilepath());
-        assertEquals(dto.getCsvFolderPath().toString(), grpc.getCsvFolderPath());
     }
 
     @Test
@@ -130,7 +124,6 @@ class CsvPaymentsInputFileMapperTest {
         assertNotNull(dto);
         assertEquals(id, dto.getId());
         assertEquals(Path.of("/test/input/file.csv"), dto.getFilepath());
-        assertEquals(Path.of("/test/input"), dto.getCsvFolderPath());
     }
 
     @Test
@@ -139,7 +132,6 @@ class CsvPaymentsInputFileMapperTest {
         CsvPaymentsInputFile domain = new CsvPaymentsInputFile();
         domain.setId(UUID.randomUUID());
         domain.setFilepath(Path.of("/test/input/file.csv"));
-        domain.setCsvFolderPath(Path.of("/test/input"));
 
         // When
         PipelineTypes.CsvPaymentsInputFile grpc = mapper.toExternal(domain);
@@ -148,7 +140,6 @@ class CsvPaymentsInputFileMapperTest {
         assertNotNull(grpc);
         assertEquals(domain.getId().toString(), grpc.getId());
         assertEquals(domain.getFilepath().toString(), grpc.getFilepath());
-        assertEquals(domain.getCsvFolderPath().toString(), grpc.getCsvFolderPath());
     }
 
     @Test
@@ -170,7 +161,6 @@ class CsvPaymentsInputFileMapperTest {
         assertNotNull(domain);
         assertEquals(id, domain.getId());
         assertEquals(Path.of("/test/input/file.csv"), domain.getFilepath());
-        assertEquals(Path.of("/test/input"), domain.getCsvFolderPath());
     }
 
     @Test
@@ -180,7 +170,6 @@ class CsvPaymentsInputFileMapperTest {
                 CsvPaymentsInputFileDto.builder()
                         .id(UUID.randomUUID())
                         .filepath(Path.of("/test/input/file.csv"))
-                        .csvFolderPath(Path.of("/test/input"))
                         .build();
 
         ObjectMapper mapper = new ObjectMapper();

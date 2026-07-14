@@ -12,13 +12,6 @@ data "newrelic_entity" "input" {
   account_id = var.newrelic_account_id
 }
 
-data "newrelic_entity" "output" {
-  name       = var.service_names.output
-  domain     = var.newrelic_entity_domain
-  type       = var.newrelic_entity_type
-  account_id = var.newrelic_account_id
-}
-
 data "newrelic_entity" "payments_processing" {
   name       = var.service_names.payments_processing
   domain     = var.newrelic_entity_domain
@@ -50,10 +43,6 @@ locals {
       guid = data.newrelic_entity.input.guid
       name = var.service_names.input
     }
-    output = {
-      guid = data.newrelic_entity.output.guid
-      name = var.service_names.output
-    }
     payments_processing = {
       guid = data.newrelic_entity.payments_processing.guid
       name = var.service_names.payments_processing
@@ -76,7 +65,6 @@ locals {
 
   reliability_services = {
     input               = local.services.input
-    output              = local.services.output
     payments_processing = local.services.payments_processing
     payment_status      = local.services.payment_status
     persistence         = local.services.persistence

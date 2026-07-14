@@ -26,7 +26,6 @@ variable "service_names" {
   default = {
     orchestrator        = "orchestrator-svc"
     input               = "input-csv-file-processing-svc"
-    output              = "output-csv-file-processing-svc"
     payments_processing = "payments-processing-svc"
     payment_status      = "payment-status-svc"
     persistence         = "persistence-svc"

@@ -20,6 +20,9 @@ public final class GreetingResponseObjectMapper implements ObjectPublishMapper<G
 
     @Override
     public ObjectPayload render(String groupKey, List<GreetingResponse> items) {
+        if (items.size() > 1) {
+            throw new IllegalArgumentException("Expected exactly one GreetingResponse, but got " + items.size());
+        }
         GreetingResponse response = items.getFirst();
         try {
             return new ObjectPayload(JSON.writeValueAsBytes(Map.of("greetings", response.greetings())), "application/json", Map.of("records", "1"));

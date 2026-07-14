@@ -16,10 +16,11 @@
 
 package org.pipelineframework.csv.common.dto;
 
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import java.nio.file.Path;
 import java.util.UUID;
+
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import lombok.Builder;
 import lombok.Value;
 
@@ -29,7 +30,6 @@ import lombok.Value;
 public class CsvPaymentsInputFileDto {
   UUID id;
   Path filepath;
-  Path csvFolderPath;
 
   // Lombok will generate the builder, but Jackson needs to know how to interpret it
   @JsonPOJOBuilder(withPrefix = "")

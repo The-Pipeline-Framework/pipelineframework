@@ -29,7 +29,6 @@ import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.util.DemandPacerConfig;
 import org.pipelineframework.service.blocking.BlockingIteratorService;
 
 @PipelineStep
@@ -47,16 +46,6 @@ public class ProcessCsvPaymentsInputService
         rowsPerPeriod = 0L;
         millisPeriod = 0L;
         LOG.info("ProcessCsvPaymentsInputService initialized without legacy demand pacing");
-    }
-
-    /**
-     * @deprecated CSV reader demand pacing is a legacy fallback and is no longer used by this step.
-     */
-    @Deprecated(since = "26.6.2", forRemoval = true)
-    public ProcessCsvPaymentsInputService(DemandPacerConfig config) {
-        rowsPerPeriod = config == null ? 0L : config.rowsPerPeriod();
-        millisPeriod = config == null ? 0L : config.millisPeriod();
-        LOG.warn("Legacy CSV reader demand pacing configuration is ignored by ProcessCsvPaymentsInputService");
     }
 
   /**

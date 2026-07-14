@@ -43,8 +43,6 @@ jobs:
             artifact: native-payment-status-svc
           - service: payments-processing-svc
             artifact: native-payments-processing-svc
-          - service: output-csv-file-processing-svc
-            artifact: native-output-csv-file-processing-svc
 
     steps:
       - name: Checkout
