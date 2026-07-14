@@ -88,12 +88,11 @@ public final class StdioObjectTargetProvider implements ObjectTargetProvider {
                         streams.stdout().flush();
                         closed = true;
                     }
-                }
-                Map<String, String> metadata = new LinkedHashMap<>(request.metadata());
-                metadata.putAll(closeRequest.metadata());
-                metadata.put("endpoint", ENDPOINT);
-                PayloadReference reference = new PayloadReference(
-                    "stdio", ENDPOINT, request.objectKey(), request.contentType(), "raw", closeRequest.checksum(), closeRequest.bytes(), null, metadata);
+                    Map<String, String> metadata = new LinkedHashMap<>(request.metadata());
+                    metadata.putAll(closeRequest.metadata());
+                    metadata.put("endpoint", ENDPOINT);
+                    PayloadReference reference = new PayloadReference(
+                        "stdio", ENDPOINT, request.objectKey(), request.contentType(), "raw", closeRequest.checksum(), closeRequest.bytes(), null, metadata);
                     return CompletableFuture.completedFuture(new ObjectWriteResult(reference, closeRequest.bytes(), closeRequest.checksum(), Instant.now()));
                 } catch (IOException | RuntimeException e) {
                     return CompletableFuture.failedFuture(e);
