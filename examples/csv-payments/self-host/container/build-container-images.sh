@@ -82,6 +82,7 @@ if [[ "${TPF_SKIP_FRAMEWORK_INSTALL}" != "true" ]]; then
   echo "Installing current framework SNAPSHOT for the CSV example build..."
   "${MVN_BIN}" "${EXTRA_MAVEN_ARGS[@]}" -f "${REPO_ROOT}/pom.xml" -N install
   "${MVN_BIN}" "${EXTRA_MAVEN_ARGS[@]}" -f "${REPO_ROOT}/framework/pom.xml" clean install
+  "${MVN_BIN}" "${EXTRA_MAVEN_ARGS[@]}" -f "${REPO_ROOT}/connectors/object-ingest/pom.xml" clean install -DskipTests
 fi
 
 COMMON_BUILD_PROPS=()
