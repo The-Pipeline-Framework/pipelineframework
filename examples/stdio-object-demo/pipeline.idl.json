@@ -1,0 +1,71 @@
+{
+  "version" : 2,
+  "appName" : "stdio-object-demo",
+  "basePackage" : "org.pipelineframework.stdio.demo",
+  "messages" : {
+    "GreetingRequests" : {
+      "name" : "GreetingRequests",
+      "fields" : [ {
+        "number" : 1,
+        "name" : "names",
+        "canonicalType" : "string",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ]
+    },
+    "GreetingResponse" : {
+      "name" : "GreetingResponse",
+      "fields" : [ {
+        "number" : 1,
+        "name" : "greetings",
+        "canonicalType" : "string",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ]
+    },
+    "NormalizedGreetings" : {
+      "name" : "NormalizedGreetings",
+      "fields" : [ {
+        "number" : 1,
+        "name" : "names",
+        "canonicalType" : "string",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ]
+    }
+  },
+  "unions" : { },
+  "steps" : [ {
+    "name" : "Normalize Greetings",
+    "inputTypeName" : "GreetingRequests",
+    "outputTypeName" : "NormalizedGreetings"
+  }, {
+    "name" : "Compose Greetings",
+    "inputTypeName" : "NormalizedGreetings",
+    "outputTypeName" : "GreetingResponse"
+  } ]
+}

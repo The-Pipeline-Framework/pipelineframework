@@ -22,7 +22,7 @@
         <groupId>org.pipelineframework</groupId>
         <artifactId>framework-parent</artifactId>
         <version>27.7.2-SNAPSHOT</version>
-        <relativePath>../pom.xml</relativePath>
+        <relativePath>../../framework/pom.xml</relativePath>
     </parent>
 
     <artifactId>pipelineframework-spring-smoke-tests</artifactId>

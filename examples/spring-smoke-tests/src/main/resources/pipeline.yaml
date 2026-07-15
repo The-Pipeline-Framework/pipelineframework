@@ -6,12 +6,12 @@ platform: "COMPUTE"
 types:
   PaymentRecord:
     fields:
-      - [1, paymentId, string]
-      - [2, cents, int32]
+      - [paymentId, string]
+      - [cents, int32]
   PaymentStatus:
     fields:
-      - [1, paymentId, string]
-      - [2, status, string]
+      - [paymentId, string]
+      - [status, string]
 steps:
   - name: "payment"
     service: "com.example.smoke.service.PaymentService"
