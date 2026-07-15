@@ -261,9 +261,6 @@ final class PipelineTemplateTypeMappings {
                     "Map field '" + field.name() + "' references unknown message valueType '" + field.valueType() + "'");
             }
         }
-        if (!field.hasStableNumber()) {
-            throw new IllegalStateException("Field '" + field.name() + "' must declare a positive number in version 2");
-        }
         if ("map".equals(canonicalType) && field.repeated()) {
             throw new IllegalStateException("Map field '" + field.name() + "' cannot also be repeated");
         }

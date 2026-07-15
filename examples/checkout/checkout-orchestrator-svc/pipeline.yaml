@@ -6,40 +6,38 @@ platform: COMPUTE
 types:
   OrderItem:
     fields:
-      - [1, sku, string]
-      - [2, quantity, int32]
+      - [sku, string]
+      - [quantity, int32]
   PlaceOrderRequest:
     fields:
-      - [1, requestId, uuid]
-      - [2, customerId, uuid]
-      - [3, restaurantId, uuid]
-      - number: 4
-        name: items
+      - [requestId, uuid]
+      - [customerId, uuid]
+      - [restaurantId, uuid]
+      - name: items
         type: OrderItem
         repeated: true
-      - [5, totalAmount, decimal]
-      - [6, currency, string]
+      - [totalAmount, decimal]
+      - [currency, string]
   ValidatedOrderRequest:
     fields:
-      - [1, requestId, uuid]
-      - [2, customerId, uuid]
-      - [3, restaurantId, uuid]
-      - number: 4
-        name: items
+      - [requestId, uuid]
+      - [customerId, uuid]
+      - [restaurantId, uuid]
+      - name: items
         type: OrderItem
         repeated: true
-      - [5, totalAmount, decimal]
-      - [6, currency, string]
-      - [7, validatedAt, timestamp]
+      - [totalAmount, decimal]
+      - [currency, string]
+      - [validatedAt, timestamp]
   OrderPending:
     fields:
-      - [1, orderId, uuid]
-      - [2, requestId, uuid]
-      - [3, customerId, uuid]
-      - [4, restaurantId, uuid]
-      - [5, totalAmount, decimal]
-      - [6, currency, string]
-      - [7, createdAt, timestamp]
+      - [orderId, uuid]
+      - [requestId, uuid]
+      - [customerId, uuid]
+      - [restaurantId, uuid]
+      - [totalAmount, decimal]
+      - [currency, string]
+      - [createdAt, timestamp]
 steps:
   - name: Checkout Validate Request
     service: org.pipelineframework.tpfgo.checkout.checkout_validate_request.service.ProcessCheckoutValidateRequestService

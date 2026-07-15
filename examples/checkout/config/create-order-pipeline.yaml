@@ -5,30 +5,29 @@ transport: GRPC
 types:
   OrderRequest:
     fields:
-      - [1, requestId, uuid]
-      - [2, customerId, uuid]
-      - number: 3
-        name: items
+      - [requestId, uuid]
+      - [customerId, uuid]
+      - name: items
         type: OrderLineItem
         repeated: true
   OrderLineItem:
     fields:
-      - [1, requestId, uuid]
-      - [2, customerId, uuid]
-      - [3, sku, string]
-      - [4, quantity, int32]
+      - [requestId, uuid]
+      - [customerId, uuid]
+      - [sku, string]
+      - [quantity, int32]
   InitialOrder:
     fields:
-      - [1, orderId, uuid]
-      - [2, requestId, uuid]
-      - [3, customerId, uuid]
-      - [4, itemCount, int32]
+      - [orderId, uuid]
+      - [requestId, uuid]
+      - [customerId, uuid]
+      - [itemCount, int32]
   ReadyOrder:
     fields:
-      - [1, orderId, uuid]
-      - [2, requestId, uuid]
-      - [3, customerId, uuid]
-      - [4, readyAt, timestamp]
+      - [orderId, uuid]
+      - [requestId, uuid]
+      - [customerId, uuid]
+      - [readyAt, timestamp]
 contract:
   input: OrderRequest
   output: ReadyOrder

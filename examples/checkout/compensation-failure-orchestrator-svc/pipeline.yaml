@@ -6,47 +6,44 @@ platform: COMPUTE
 types:
   PaymentCaptured:
     fields:
-      - [1, orderId, uuid]
-      - [2, paymentId, uuid]
-      - [3, processedAt, timestamp]
-      - [4, amount, decimal]
-      - [5, currency, string]
+      - [orderId, uuid]
+      - [paymentId, uuid]
+      - [processedAt, timestamp]
+      - [amount, decimal]
+      - [currency, string]
   PaymentRejected:
     fields:
-      - [1, orderId, uuid]
-      - [2, processedAt, timestamp]
-      - [3, amount, decimal]
-      - [4, currency, string]
-      - [5, failureCode, string]
-      - [6, failureReason, string]
+      - [orderId, uuid]
+      - [processedAt, timestamp]
+      - [amount, decimal]
+      - [currency, string]
+      - [failureCode, string]
+      - [failureReason, string]
   PaymentRequiresReview:
     fields:
-      - [1, orderId, uuid]
-      - [2, processedAt, timestamp]
-      - [3, amount, decimal]
-      - [4, currency, string]
-      - [5, reviewReason, string]
+      - [orderId, uuid]
+      - [processedAt, timestamp]
+      - [amount, decimal]
+      - [currency, string]
+      - [reviewReason, string]
   TerminalOrderState:
     fields:
-      - [1, orderId, uuid]
-      - [2, outcome, string]
-      - [3, resolvedAt, timestamp]
-      - [4, resolutionAction, string]
-      - [5, paymentStatus, string]
-      - [6, paymentId, uuid]
-      - [7, failureCode, string]
+      - [orderId, uuid]
+      - [outcome, string]
+      - [resolvedAt, timestamp]
+      - [resolutionAction, string]
+      - [paymentStatus, string]
+      - [paymentId, uuid]
+      - [failureCode, string]
 unions:
   PaymentOutcome:
     variants:
       captured:
         type: PaymentCaptured
-        number: 1
       rejected:
         type: PaymentRejected
-        number: 2
       requiresReview:
         type: PaymentRequiresReview
-        number: 3
 steps:
   - name: Compensation Finalize Order
     service: org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.ProcessCompensationFinalizeOrderService

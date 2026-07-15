@@ -57,7 +57,7 @@ types:
 ```
 
 The compact tuple is `[fieldName, semanticType]`. The compiler owns protobuf tags and stores their stable allocation in
-the committed `pipeline.idl.json`; use the object form when a field needs metadata such as `repeated`, `comment`,
+the committed sibling IDL lock file (`pipeline.idl.json` for `pipeline.yaml`); use the object form when a field needs metadata such as `repeated`, `comment`,
 `overrides`, or `referenceable`.
 
 `messages` remains a deprecated compatibility alias for `types`, and object fields remain valid:
@@ -164,7 +164,7 @@ Use PascalCase message names for references:
 
 ## Compiler-owned tags, presence, and compatibility
 
-`pipeline.idl.json` records allocated tags and reservations. Removing a field or union variant reserves its name and number, so a reintroduced name receives a new tag. Missing state is an error for concise tag-free YAML unless an explicit bootstrap is requested.
+The sibling IDL lock file records allocated tags and reservations. Removing a field or union variant reserves its name and number, so a reintroduced name receives a new tag. Missing state is an error for concise tag-free YAML unless an explicit bootstrap is requested.
 
 Eligible singular scalar fields always render as proto3 `optional`. Message references, maps, repeated fields, payload references, and oneof variants keep their existing protobuf semantics. This is binary wire-compatible for unchanged tags and types, but generated descriptors, presence APIs, and ProtoJSON default-value behavior can change.
 

@@ -6,24 +6,24 @@ platform: COMPUTE
 types:
   OrderApproved:
     fields:
-      - [1, orderId, uuid]
-      - [2, requestId, uuid]
-      - [3, customerId, uuid]
-      - [4, restaurantId, uuid]
-      - [5, totalAmount, decimal]
-      - [6, currency, string]
-      - [7, approvedAt, timestamp]
-      - [8, riskBand, string]
+      - [orderId, uuid]
+      - [requestId, uuid]
+      - [customerId, uuid]
+      - [restaurantId, uuid]
+      - [totalAmount, decimal]
+      - [currency, string]
+      - [approvedAt, timestamp]
+      - [riskBand, string]
   OrderAcceptedByRestaurant:
     fields:
-      - [1, orderId, uuid]
-      - [2, requestId, uuid]
-      - [3, customerId, uuid]
-      - [4, restaurantId, uuid]
-      - [5, totalAmount, decimal]
-      - [6, currency, string]
-      - [7, acceptedAt, timestamp]
-      - [8, kitchenTicketId, uuid]
+      - [orderId, uuid]
+      - [requestId, uuid]
+      - [customerId, uuid]
+      - [restaurantId, uuid]
+      - [totalAmount, decimal]
+      - [currency, string]
+      - [acceptedAt, timestamp]
+      - [kitchenTicketId, uuid]
 steps:
   - name: Restaurant Accept Order
     service: org.pipelineframework.tpfgo.restaurant.acceptance.restaurant_accept_order.service.ProcessRestaurantAcceptOrderService

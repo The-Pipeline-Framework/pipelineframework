@@ -16,7 +16,7 @@ types:
 
 `messages` remains a supported compatibility alias, but emits a deprecation warning. A template must declare one alias, not both.
 
-Field tuples are YAML arrays in the exact form `[name, type]`. Tags are compiler-owned and committed in `pipeline.idl.json`; object fields remain necessary for metadata such as `repeated`, `overrides`, or `referenceable`.
+Field tuples are YAML arrays in the exact form `[name, type]`. Tags are compiler-owned and committed in a sibling IDL lock file (`pipeline.idl.json` for `pipeline.yaml`); object fields remain necessary for metadata such as `repeated`, `overrides`, or `referenceable`.
 
 ```yaml
 types:
@@ -180,7 +180,7 @@ Propagation stops when a predecessor has no concrete singular logical output. It
 
 ## Migration
 
-For existing templates, run the explicit IDL bootstrap (`-Dpipeline.idl.bootstrap=true`) once. It writes `pipeline.idl.json` with the current tags. Then remove `number`, `reserved`, and `optional` from YAML. Legacy three-item tuples and object `number` values continue to load with warnings during the transition; `optional` no longer controls protobuf presence.
+For existing templates, run the explicit IDL bootstrap (`-Dpipeline.idl.bootstrap=true`) once. It writes a sibling IDL lock file with the current tags (`pipeline.idl.json` for `pipeline.yaml`). Then remove `number`, `reserved`, and `optional` from YAML. Legacy three-item tuples and object `number` values continue to load with warnings during the transition; `optional` no longer controls protobuf presence.
 
 1. In a v2 template, replace top-level `messages` with `types`.
 2. Convert only field objects that contain exactly `number`, `name`, and `type`; preserve field order and all advanced object fields.

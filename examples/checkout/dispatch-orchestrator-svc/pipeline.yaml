@@ -6,27 +6,27 @@ platform: COMPUTE
 types:
   OrderReadyForDispatch:
     fields:
-      - [1, orderId, uuid]
-      - [2, customerId, uuid]
-      - [3, restaurantId, uuid]
-      - [4, totalAmount, decimal]
-      - [5, currency, string]
-      - [6, readyAt, timestamp]
-      - [7, kitchenTicketId, uuid]
-      - [8, lineageDigest, string]
+      - [orderId, uuid]
+      - [customerId, uuid]
+      - [restaurantId, uuid]
+      - [totalAmount, decimal]
+      - [currency, string]
+      - [readyAt, timestamp]
+      - [kitchenTicketId, uuid]
+      - [lineageDigest, string]
   DeliveryAssigned:
     fields:
-      - [1, orderId, uuid]
-      - [2, customerId, uuid]
-      - [3, restaurantId, uuid]
-      - [4, totalAmount, decimal]
-      - [5, currency, string]
-      - [6, kitchenTicketId, uuid]
-      - [7, dispatchId, uuid]
-      - [8, courierId, uuid]
-      - [9, etaMinutes, int32]
-      - [10, assignedAt, timestamp]
-      - [11, lineageDigest, string]
+      - [orderId, uuid]
+      - [customerId, uuid]
+      - [restaurantId, uuid]
+      - [totalAmount, decimal]
+      - [currency, string]
+      - [kitchenTicketId, uuid]
+      - [dispatchId, uuid]
+      - [courierId, uuid]
+      - [etaMinutes, int32]
+      - [assignedAt, timestamp]
+      - [lineageDigest, string]
 steps:
   - name: Dispatch Assign Courier
     service: org.pipelineframework.tpfgo.dispatch.dispatch_assign_courier.service.ProcessDispatchAssignCourierService

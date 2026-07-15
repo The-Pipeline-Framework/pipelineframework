@@ -118,7 +118,7 @@ public class PipelineProtoGenerator {
 
         PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader();
         PipelineTemplateConfig config = loader.load(resolvedConfig);
-        Path idlStatePath = resolvedConfig.getParent().resolve("pipeline.idl.json");
+        Path idlStatePath = resolveIdlStatePath(resolvedConfig);
         PipelineIdlSnapshot committedState = Files.exists(idlStatePath) ? readBaselineSnapshot(idlStatePath.toString()) : null;
         boolean bootstrapIdl = Boolean.getBoolean("pipeline.idl.bootstrap");
         PipelineIdlStateResolver.Resolved idl = new PipelineIdlStateResolver().resolve(config, committedState, bootstrapIdl);
@@ -132,11 +132,11 @@ public class PipelineProtoGenerator {
             throw new IllegalStateException("Failed to create proto output directory: " + resolvedOutput, e);
         }
 
+        writeIdlSnapshot(resolvedModuleDir, config, idl.state(), committedState, idlStatePath, bootstrapIdl);
         List<PipelineTemplateStep> steps = config.steps();
         if (steps == null || steps.isEmpty()) {
             return;
         }
-        writeIdlSnapshot(resolvedModuleDir, config, idl.state(), committedState, idlStatePath, bootstrapIdl);
 
         boolean v2 = config.version() >= 2;
         List<ResolvedStep> resolvedSteps = normalizeSteps(steps, v2);
@@ -179,6 +179,14 @@ public class PipelineProtoGenerator {
             throw new IllegalArgumentException("--types-proto-name must be a file name, not a path");
         }
         return candidate;
+    }
+
+    private Path resolveIdlStatePath(Path configPath) {
+        String configFileName = configPath.getFileName().toString();
+        String stateFileName = configFileName.endsWith(".yaml")
+            ? configFileName.substring(0, configFileName.length() - ".yaml".length()) + ".idl.json"
+            : "pipeline.idl.json";
+        return configPath.getParent().resolve(stateFileName);
     }
 
     /**

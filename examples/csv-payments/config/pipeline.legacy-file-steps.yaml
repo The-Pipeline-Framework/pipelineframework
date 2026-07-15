@@ -22,50 +22,50 @@ aspects:
 types:
   CsvFolder:
     fields:
-      - [1, path, path]
+      - [path, path]
   CsvPaymentsInputFile:
     fields:
-      - [1, id, uuid]
-      - [2, filepath, path]
-      - [3, csvFolderPath, path]
+      - [id, uuid]
+      - [filepath, path]
+      - [csvFolderPath, path]
   PaymentRecord:
     fields:
-      - [1, id, uuid]
-      - [2, csvId, string]
-      - [3, recipient, string]
-      - [4, amount, decimal]
-      - [5, currency, currency]
-      - [6, csvPaymentsInputFilePath, path]
+      - [id, uuid]
+      - [csvId, string]
+      - [recipient, string]
+      - [amount, decimal]
+      - [currency, currency]
+      - [csvPaymentsInputFilePath, path]
   PaymentStatus:
     fields:
-      - [1, id, uuid]
-      - [2, reference, string]
-      - [3, status, string]
-      - [4, message, string]
-      - [5, fee, decimal]
-      - [6, conversationId, uuid]
-      - [7, statusCode, int64]
-      - [8, paymentRecordId, uuid]
-      - [9, paymentRecord, PaymentRecord]
+      - [id, uuid]
+      - [reference, string]
+      - [status, string]
+      - [message, string]
+      - [fee, decimal]
+      - [conversationId, uuid]
+      - [statusCode, int64]
+      - [paymentRecordId, uuid]
+      - [paymentRecord, PaymentRecord]
   PaymentOutput:
     fields:
-      - [1, id, uuid]
-      - [2, csvPaymentsOutputFilename, string]
-      - [3, csvPaymentsInputFilePath, path]
-      - [4, csvId, string]
-      - [5, recipient, string]
-      - [6, amount, decimal]
-      - [7, currency, currency]
-      - [8, conversationId, uuid]
-      - [9, status, int64]
-      - [10, message, string]
-      - [11, fee, decimal]
-      - [12, paymentStatus, PaymentStatus]
+      - [id, uuid]
+      - [csvPaymentsOutputFilename, string]
+      - [csvPaymentsInputFilePath, path]
+      - [csvId, string]
+      - [recipient, string]
+      - [amount, decimal]
+      - [currency, currency]
+      - [conversationId, uuid]
+      - [status, int64]
+      - [message, string]
+      - [fee, decimal]
+      - [paymentStatus, PaymentStatus]
   CsvPaymentsOutputFile:
     fields:
-      - [1, id, uuid]
-      - [2, filepath, path]
-      - [3, csvFolderPath, path]
+      - [id, uuid]
+      - [filepath, path]
+      - [csvFolderPath, path]
 steps:
   - name: Process Folder
     service: org.pipelineframework.csv.service.ProcessFolderService
