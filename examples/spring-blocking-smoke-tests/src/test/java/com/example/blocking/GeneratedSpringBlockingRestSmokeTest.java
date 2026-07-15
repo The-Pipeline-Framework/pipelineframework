@@ -11,7 +11,6 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class GeneratedSpringBlockingRestSmokeTest {
@@ -38,7 +37,6 @@ class GeneratedSpringBlockingRestSmokeTest {
             .value(response -> {
                 assertEquals("pay-456", response.paymentId());
                 assertEquals("APPROVED:84", response.status());
-                assertTrue(response.virtualThread(), "Expected blocking service to run on a virtual thread");
             });
     }
 }

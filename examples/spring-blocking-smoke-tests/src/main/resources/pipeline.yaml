@@ -12,7 +12,6 @@ types:
     fields:
       - [paymentId, string]
       - [status, string]
-      - [virtualThread, bool]
 steps:
   - name: "payment"
     service: "com.example.blocking.service.PaymentService"

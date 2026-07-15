@@ -3,36 +3,6 @@
   "appName" : "Spring Blocking REST Smoke",
   "basePackage" : "com.example.blocking",
   "messages" : {
-    "PaymentRecord" : {
-      "name" : "PaymentRecord",
-      "fields" : [ {
-        "number" : 1,
-        "name" : "cents",
-        "canonicalType" : "int32",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "int32",
-        "referenceField" : null
-      }, {
-        "number" : 2,
-        "name" : "paymentId",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      } ],
-      "reservedNumbers" : [ ],
-      "reservedNames" : [ ]
-    },
     "PaymentStatus" : {
       "name" : "PaymentStatus",
       "fields" : [ {
@@ -59,17 +29,35 @@
         "deprecated" : false,
         "protoType" : "string",
         "referenceField" : null
-      }, {
-        "number" : 3,
-        "name" : "virtualThread",
-        "canonicalType" : "bool",
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ]
+    },
+    "PaymentRecord" : {
+      "name" : "PaymentRecord",
+      "fields" : [ {
+        "number" : 1,
+        "name" : "cents",
+        "canonicalType" : "int32",
         "messageRef" : null,
         "keyType" : null,
         "valueType" : null,
         "optional" : false,
         "repeated" : false,
         "deprecated" : false,
-        "protoType" : "bool",
+        "protoType" : "int32",
+        "referenceField" : null
+      }, {
+        "number" : 2,
+        "name" : "paymentId",
+        "canonicalType" : "string",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
         "referenceField" : null
       } ],
       "reservedNumbers" : [ ],

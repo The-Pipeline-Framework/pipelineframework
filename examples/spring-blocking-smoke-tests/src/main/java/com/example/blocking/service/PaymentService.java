@@ -12,7 +12,6 @@ public class PaymentService {
         }
         return new PaymentStatus(
             input.paymentId(),
-            "APPROVED:" + input.cents(),
-            Thread.currentThread().isVirtual());
+            "APPROVED:" + input.cents());
     }
 }

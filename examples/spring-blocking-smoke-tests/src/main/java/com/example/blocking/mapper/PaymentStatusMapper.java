@@ -9,11 +9,11 @@ import org.springframework.stereotype.Component;
 public class PaymentStatusMapper implements Mapper<PaymentStatus, PaymentStatusDto> {
     @Override
     public PaymentStatus fromExternal(PaymentStatusDto external) {
-        return new PaymentStatus(external.paymentId(), external.status(), external.virtualThread());
+        return new PaymentStatus(external.paymentId(), external.status());
     }
 
     @Override
     public PaymentStatusDto toExternal(PaymentStatus domain) {
-        return new PaymentStatusDto(domain.paymentId(), domain.status(), domain.virtualThread());
+        return new PaymentStatusDto(domain.paymentId(), domain.status());
     }
 }
