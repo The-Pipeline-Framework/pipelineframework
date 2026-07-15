@@ -20,7 +20,7 @@ public final class GreetingResponseObjectMapper implements ObjectPublishMapper<G
 
     @Override
     public ObjectPayload render(String groupKey, List<GreetingResponse> items) {
-        if (items.size() > 1) {
+        if (items.size() != 1) {
             throw new IllegalArgumentException("Expected exactly one GreetingResponse, but got " + items.size());
         }
         GreetingResponse response = items.getFirst();

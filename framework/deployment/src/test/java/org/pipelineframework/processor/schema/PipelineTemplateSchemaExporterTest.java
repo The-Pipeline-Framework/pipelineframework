@@ -88,9 +88,9 @@ class PipelineTemplateSchemaExporterTest {
         JsonObject tuple = definitions.getAsJsonObject("v2FieldTupleDefinition");
 
         assertEquals(2, fieldDefinition.getAsJsonArray("oneOf").size());
-        assertEquals(3, tuple.getAsJsonArray("prefixItems").size());
-        assertEquals(3, tuple.get("minItems").getAsInt());
-        assertEquals(3, tuple.get("maxItems").getAsInt());
+        assertEquals(2, tuple.getAsJsonArray("prefixItems").size());
+        assertEquals(2, tuple.get("minItems").getAsInt());
+        assertEquals(2, tuple.get("maxItems").getAsInt());
         assertFalse(tuple.get("items").getAsBoolean());
 
         JsonObject properties = schema.getAsJsonObject("properties");

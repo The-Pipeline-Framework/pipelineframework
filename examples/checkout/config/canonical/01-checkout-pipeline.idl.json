@@ -1,0 +1,305 @@
+{
+  "version" : 2,
+  "appName" : "TPFGo Checkout Pipeline",
+  "basePackage" : "org.pipelineframework.tpfgo.checkout",
+  "messages" : {
+    "ValidatedOrderRequest" : {
+      "name" : "ValidatedOrderRequest",
+      "fields" : [ {
+        "number" : 6,
+        "name" : "currency",
+        "canonicalType" : "string",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 2,
+        "name" : "customerId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 4,
+        "name" : "items",
+        "canonicalType" : "message",
+        "messageRef" : "OrderItem",
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : true,
+        "deprecated" : false,
+        "protoType" : "OrderItem",
+        "referenceField" : null
+      }, {
+        "number" : 1,
+        "name" : "requestId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 3,
+        "name" : "restaurantId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 5,
+        "name" : "totalAmount",
+        "canonicalType" : "decimal",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 7,
+        "name" : "validatedAt",
+        "canonicalType" : "timestamp",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ]
+    },
+    "PlaceOrderRequest" : {
+      "name" : "PlaceOrderRequest",
+      "fields" : [ {
+        "number" : 6,
+        "name" : "currency",
+        "canonicalType" : "string",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 2,
+        "name" : "customerId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 4,
+        "name" : "items",
+        "canonicalType" : "message",
+        "messageRef" : "OrderItem",
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : true,
+        "deprecated" : false,
+        "protoType" : "OrderItem",
+        "referenceField" : null
+      }, {
+        "number" : 1,
+        "name" : "requestId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 3,
+        "name" : "restaurantId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 5,
+        "name" : "totalAmount",
+        "canonicalType" : "decimal",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ]
+    },
+    "OrderItem" : {
+      "name" : "OrderItem",
+      "fields" : [ {
+        "number" : 2,
+        "name" : "quantity",
+        "canonicalType" : "int32",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "int32",
+        "referenceField" : null
+      }, {
+        "number" : 1,
+        "name" : "sku",
+        "canonicalType" : "string",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ]
+    },
+    "OrderPending" : {
+      "name" : "OrderPending",
+      "fields" : [ {
+        "number" : 7,
+        "name" : "createdAt",
+        "canonicalType" : "timestamp",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 6,
+        "name" : "currency",
+        "canonicalType" : "string",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 3,
+        "name" : "customerId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 1,
+        "name" : "orderId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 2,
+        "name" : "requestId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 4,
+        "name" : "restaurantId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 5,
+        "name" : "totalAmount",
+        "canonicalType" : "decimal",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ]
+    }
+  },
+  "unions" : { },
+  "steps" : [ {
+    "name" : "Checkout Validate Request",
+    "inputTypeName" : "PlaceOrderRequest",
+    "outputTypeName" : "ValidatedOrderRequest"
+  }, {
+    "name" : "Checkout Create Pending",
+    "inputTypeName" : "ValidatedOrderRequest",
+    "outputTypeName" : "OrderPending"
+  } ]
+}

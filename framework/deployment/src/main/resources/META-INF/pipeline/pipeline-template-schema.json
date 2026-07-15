@@ -287,7 +287,6 @@
         }
       },
       "required": [
-        "number",
         "name",
         "type"
       ],
@@ -349,10 +348,6 @@
       "type": "array",
       "prefixItems": [
         {
-          "type": "integer",
-          "minimum": 1
-        },
-        {
           "type": "string",
           "minLength": 1
         },
@@ -372,8 +367,8 @@
           ]
         }
       ],
-      "minItems": 3,
-      "maxItems": 3,
+      "minItems": 2,
+      "maxItems": 2,
       "items": false
     },
     "v2Reserved": {
@@ -1729,7 +1724,6 @@
         }
       },
       "required": [
-        "number",
         "type"
       ],
       "additionalProperties": false

@@ -880,7 +880,8 @@ class PipelineTemplateConfigLoaderTest {
 
         assertEquals(compactConfig.messages(), verboseConfig.messages());
         assertEquals(compactConfig.types(), compactConfig.messages());
-        assertEquals(List.of("Top-level 'messages' is deprecated; use 'types'."), warnings);
+        assertTrue(warnings.contains("Top-level 'messages' is deprecated; use 'types'."));
+        assertTrue(warnings.stream().anyMatch(warning -> warning.contains("deprecated authored number")));
     }
 
     @Test
@@ -925,7 +926,7 @@ class PipelineTemplateConfigLoaderTest {
             () -> new PipelineTemplateConfigLoader().load(configPath));
 
         assertTrue(exception.getMessage().contains("type 'Payment' field 0"));
-        assertTrue(exception.getMessage().contains("[positiveNumber, nonBlankName, type]"));
+        assertTrue(exception.getMessage().contains("[nonBlankName, type]"));
     }
 
     @Test
@@ -1183,8 +1184,9 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals("PaymentRecord", canonicalConfig.steps().getFirst().inputTypeName());
         assertEquals("PaymentStatus", canonicalConfig.steps().getFirst().outputTypeName());
         assertEquals(canonicalConfig.steps(), legacyConfig.steps());
-        assertEquals(List.of("Step 'payment' uses deprecated fully qualified 'input/output' contracts; use logical "
-            + "input/output with java.input/java.output instead."), warnings);
+        assertTrue(warnings.contains("Step 'payment' uses deprecated fully qualified 'input/output' contracts; use logical "
+            + "input/output with java.input/java.output instead."));
+        assertTrue(warnings.stream().anyMatch(warning -> warning.contains("deprecated authored number")));
     }
 
     @Test

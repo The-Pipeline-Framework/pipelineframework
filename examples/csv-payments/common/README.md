@@ -85,7 +85,6 @@ The common module includes shared Protocol Buffer definitions for all services:
 
 - `process-csv-payments-input-svc.proto`: Input CSV file processing service contract
 - `await-payment-provider-svc.proto`: Payments processing service contract
-- `finalize-payment-output-svc.proto`: Output CSV file processing service contract
 - `orchestrator.proto`: Orchestrator types
 - `pipeline-types.proto`: Types
 - `process-approved-payment-status-svc.proto`: Payment status service contract (approved branch)

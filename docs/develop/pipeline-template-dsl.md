@@ -10,21 +10,20 @@ Use `types` for named pipeline types:
 types:
   PaymentRequest:
     fields:
-      - [1, orderId, uuid]
-      - [2, amount, decimal]
+      - [orderId, uuid]
+      - [amount, decimal]
 ```
 
 `messages` remains a supported compatibility alias, but emits a deprecation warning. A template must declare one alias, not both.
 
-Field tuples are YAML arrays in the exact form `[number, name, type]`. Use them only when those are the complete field declaration. Object fields remain necessary for metadata such as `repeated`, `optional`, `reserved`, `overrides`, or `referenceable`.
+Field tuples are YAML arrays in the exact form `[name, type]`. Tags are compiler-owned and committed in a sibling IDL lock file (`pipeline.idl.json` for `pipeline.yaml`); object fields remain necessary for metadata such as `repeated`, `overrides`, or `referenceable`.
 
 ```yaml
 types:
   PaymentRequest:
     fields:
-      - [1, orderId, uuid]
-      - number: 2
-        name: lineItems
+      - [orderId, uuid]
+      - name: lineItems
         type: PaymentLineItem
         repeated: true
 ```
@@ -35,8 +34,7 @@ Tuple and object fields may be mixed in one type. They produce the same field mo
 messages: # compatibility alias; prefer types
   PaymentRequest:
     fields:
-      - number: 1
-        name: orderId
+      - name: orderId
         type: uuid
 ```
 
@@ -181,6 +179,8 @@ steps:
 Propagation stops when a predecessor has no concrete singular logical output. It also does not guess across branches or unions. A missing predecessor output, an inherited/explicit mismatch, or a final-output assertion mismatch is a compile-time error.
 
 ## Migration
+
+For existing templates, run the explicit IDL bootstrap (`-Dpipeline.idl.bootstrap=true`) once. It writes a sibling IDL lock file with the current tags (`pipeline.idl.json` for `pipeline.yaml`). Then remove `number`, `reserved`, and `optional` from YAML. Legacy three-item tuples and object `number` values continue to load with warnings during the transition; `optional` no longer controls protobuf presence.
 
 1. In a v2 template, replace top-level `messages` with `types`.
 2. Convert only field objects that contain exactly `number`, `name`, and `type`; preserve field order and all advanced object fields.

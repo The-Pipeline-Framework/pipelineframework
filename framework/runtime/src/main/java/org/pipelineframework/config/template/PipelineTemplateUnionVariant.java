@@ -21,11 +21,11 @@ package org.pipelineframework.config.template;
  *
  * @param name variant discriminator name
  * @param type referenced top-level message type
- * @param number protobuf oneof field number
+ * @param number resolved protobuf oneof field number; authored templates may omit it
  */
 public record PipelineTemplateUnionVariant(
     String name,
     String type,
-    int number
+    Integer number
 ) {
 }

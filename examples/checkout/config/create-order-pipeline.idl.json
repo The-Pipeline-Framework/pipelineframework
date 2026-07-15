@@ -1,0 +1,225 @@
+{
+  "version" : 2,
+  "appName" : "Checkout Create Order Pipeline",
+  "basePackage" : "org.pipelineframework.checkout.createorder",
+  "messages" : {
+    "ReadyOrder" : {
+      "name" : "ReadyOrder",
+      "fields" : [ {
+        "number" : 3,
+        "name" : "customerId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 1,
+        "name" : "orderId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 4,
+        "name" : "readyAt",
+        "canonicalType" : "timestamp",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 2,
+        "name" : "requestId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ]
+    },
+    "InitialOrder" : {
+      "name" : "InitialOrder",
+      "fields" : [ {
+        "number" : 3,
+        "name" : "customerId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 4,
+        "name" : "itemCount",
+        "canonicalType" : "int32",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "int32",
+        "referenceField" : null
+      }, {
+        "number" : 1,
+        "name" : "orderId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 2,
+        "name" : "requestId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ]
+    },
+    "OrderRequest" : {
+      "name" : "OrderRequest",
+      "fields" : [ {
+        "number" : 2,
+        "name" : "customerId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 3,
+        "name" : "items",
+        "canonicalType" : "message",
+        "messageRef" : "OrderLineItem",
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : true,
+        "deprecated" : false,
+        "protoType" : "OrderLineItem",
+        "referenceField" : null
+      }, {
+        "number" : 1,
+        "name" : "requestId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ]
+    },
+    "OrderLineItem" : {
+      "name" : "OrderLineItem",
+      "fields" : [ {
+        "number" : 2,
+        "name" : "customerId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 4,
+        "name" : "quantity",
+        "canonicalType" : "int32",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "int32",
+        "referenceField" : null
+      }, {
+        "number" : 1,
+        "name" : "requestId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 3,
+        "name" : "sku",
+        "canonicalType" : "string",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ]
+    }
+  },
+  "unions" : { },
+  "steps" : [ {
+    "name" : "Order Request Process",
+    "inputTypeName" : "OrderRequest",
+    "outputTypeName" : "OrderLineItem"
+  }, {
+    "name" : "Order Create",
+    "inputTypeName" : "OrderLineItem",
+    "outputTypeName" : "InitialOrder"
+  }, {
+    "name" : "Order Ready",
+    "inputTypeName" : "InitialOrder",
+    "outputTypeName" : "ReadyOrder"
+  } ]
+}

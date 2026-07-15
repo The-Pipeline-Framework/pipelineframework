@@ -1,0 +1,221 @@
+{
+  "version" : 2,
+  "appName" : "TPFGo Restaurant Acceptance Pipeline",
+  "basePackage" : "org.pipelineframework.tpfgo.restaurant.acceptance",
+  "messages" : {
+    "OrderApproved" : {
+      "name" : "OrderApproved",
+      "fields" : [ {
+        "number" : 7,
+        "name" : "approvedAt",
+        "canonicalType" : "timestamp",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 6,
+        "name" : "currency",
+        "canonicalType" : "string",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 3,
+        "name" : "customerId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 1,
+        "name" : "orderId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 2,
+        "name" : "requestId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 4,
+        "name" : "restaurantId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 8,
+        "name" : "riskBand",
+        "canonicalType" : "string",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 5,
+        "name" : "totalAmount",
+        "canonicalType" : "decimal",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ]
+    },
+    "OrderAcceptedByRestaurant" : {
+      "name" : "OrderAcceptedByRestaurant",
+      "fields" : [ {
+        "number" : 7,
+        "name" : "acceptedAt",
+        "canonicalType" : "timestamp",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 6,
+        "name" : "currency",
+        "canonicalType" : "string",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 3,
+        "name" : "customerId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 8,
+        "name" : "kitchenTicketId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 1,
+        "name" : "orderId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 2,
+        "name" : "requestId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 4,
+        "name" : "restaurantId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 5,
+        "name" : "totalAmount",
+        "canonicalType" : "decimal",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ]
+    }
+  },
+  "unions" : { },
+  "steps" : [ {
+    "name" : "Restaurant Accept Order",
+    "inputTypeName" : "OrderApproved",
+    "outputTypeName" : "OrderAcceptedByRestaurant"
+  }, {
+    "name" : "Await Restaurant Acceptance",
+    "inputTypeName" : "OrderAcceptedByRestaurant",
+    "outputTypeName" : "OrderAcceptedByRestaurant"
+  } ]
+}

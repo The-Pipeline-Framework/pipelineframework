@@ -1,0 +1,253 @@
+{
+  "version" : 2,
+  "appName" : "TPFGo Dispatch Pipeline",
+  "basePackage" : "org.pipelineframework.tpfgo.dispatch",
+  "messages" : {
+    "OrderReadyForDispatch" : {
+      "name" : "OrderReadyForDispatch",
+      "fields" : [ {
+        "number" : 5,
+        "name" : "currency",
+        "canonicalType" : "string",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 2,
+        "name" : "customerId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 7,
+        "name" : "kitchenTicketId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 8,
+        "name" : "lineageDigest",
+        "canonicalType" : "string",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 1,
+        "name" : "orderId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 6,
+        "name" : "readyAt",
+        "canonicalType" : "timestamp",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 3,
+        "name" : "restaurantId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 4,
+        "name" : "totalAmount",
+        "canonicalType" : "decimal",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ]
+    },
+    "DeliveryAssigned" : {
+      "name" : "DeliveryAssigned",
+      "fields" : [ {
+        "number" : 10,
+        "name" : "assignedAt",
+        "canonicalType" : "timestamp",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 8,
+        "name" : "courierId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 5,
+        "name" : "currency",
+        "canonicalType" : "string",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 2,
+        "name" : "customerId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 7,
+        "name" : "dispatchId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 9,
+        "name" : "etaMinutes",
+        "canonicalType" : "int32",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "int32",
+        "referenceField" : null
+      }, {
+        "number" : 6,
+        "name" : "kitchenTicketId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 11,
+        "name" : "lineageDigest",
+        "canonicalType" : "string",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 1,
+        "name" : "orderId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 3,
+        "name" : "restaurantId",
+        "canonicalType" : "uuid",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      }, {
+        "number" : 4,
+        "name" : "totalAmount",
+        "canonicalType" : "decimal",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "string",
+        "referenceField" : null
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ]
+    }
+  },
+  "unions" : { },
+  "steps" : [ {
+    "name" : "Dispatch Assign Courier",
+    "inputTypeName" : "OrderReadyForDispatch",
+    "outputTypeName" : "DeliveryAssigned"
+  } ]
+}

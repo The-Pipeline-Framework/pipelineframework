@@ -52,6 +52,9 @@ public class PipelineTemplateConfigLoader {
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
     private final Consumer<String> warningReporter;
+    private boolean warnedAuthoredFieldNumber;
+    private boolean warnedOptional;
+    private boolean warnedAuthoredUnionNumber;
 
     /**
      * Creates a new PipelineTemplateConfigLoader.
@@ -97,6 +100,9 @@ public class PipelineTemplateConfigLoader {
      * @throws IllegalStateException if the YAML root is not a map or the file cannot be read or parsed
      */
     public PipelineTemplateConfig load(Path configPath) {
+        warnedAuthoredFieldNumber = false;
+        warnedOptional = false;
+        warnedAuthoredUnionNumber = false;
         Object root = loadYaml(configPath);
         if (!(root instanceof Map<?, ?> rootMap)) {
             throw new IllegalStateException("Pipeline template config root is not a map");
@@ -359,8 +365,10 @@ public class PipelineTemplateConfigLoader {
                 throw new IllegalStateException("Union '" + unionName + "' variant '" + name + "' must be a YAML map");
             }
             Integer number = readIntegerObject(variantMap, "number");
-            if (number == null) {
-                throw new IllegalStateException("Union '" + unionName + "' variant '" + name + "' must declare number");
+            if (number != null && !warnedAuthoredUnionNumber) {
+                warningReporter.accept("Union '" + unionName + "' variant '" + name
+                    + "' uses deprecated authored number; move it to pipeline.idl.json");
+                warnedAuthoredUnionNumber = true;
             }
             variants.put(name, new PipelineTemplateUnionVariant(
                 name,
@@ -498,11 +506,11 @@ public class PipelineTemplateConfigLoader {
                     throw new IllegalStateException(
                         "Duplicate variant name '" + variant.name() + "' in union '" + unionName + "'");
                 }
-                if (variant.number() <= 0) {
+                if (variant.number() != null && variant.number() <= 0) {
                     throw new IllegalStateException(
                         "Union '" + unionName + "' variant '" + variant.name() + "' number must be positive");
                 }
-                if (!variantNumbers.add(variant.number())) {
+                if (variant.number() != null && !variantNumbers.add(variant.number())) {
                     throw new IllegalStateException(
                         "Duplicate variant number " + variant.number() + " in union '" + unionName + "'");
                 }
@@ -812,7 +820,18 @@ public class PipelineTemplateConfigLoader {
 
     private PipelineTemplateField readV2FieldTuple(List<?> tuple, String owner, int index) {
         String expected = owner + " field " + index
-            + " must be exactly [positiveNumber, nonBlankName, type]";
+            + " must be exactly [nonBlankName, type]";
+        if (tuple.size() == 2) {
+            String fieldName = stringify(tuple.get(0));
+            String fieldType = stringify(tuple.get(1));
+            if (fieldName == null || fieldName.isBlank() || fieldType == null || fieldType.isBlank()) {
+                throw new IllegalStateException(expected);
+            }
+            Map<String, Object> fieldMap = new LinkedHashMap<>();
+            fieldMap.put("name", fieldName);
+            fieldMap.put("type", fieldType);
+            return readV2Field(fieldMap);
+        }
         if (tuple.size() != 3 || !(tuple.get(0) instanceof Number number)) {
             throw new IllegalStateException(expected);
         }
@@ -859,7 +878,14 @@ public class PipelineTemplateConfigLoader {
         String name = readString(fieldMap, "name");
         String type = readString(fieldMap, "type");
         Integer number = readIntegerObject(fieldMap, "number");
-        boolean optional = readBoolean(fieldMap, "optional", false);
+        if (fieldMap.containsKey("number") && !warnedAuthoredFieldNumber) {
+            warningReporter.accept("Field '" + name + "' uses deprecated authored number; move it to pipeline.idl.json");
+            warnedAuthoredFieldNumber = true;
+        }
+        if (fieldMap.containsKey("optional") && !warnedOptional) {
+            warningReporter.accept("Field '" + name + "' uses deprecated optional; eligible scalars always have explicit presence");
+            warnedOptional = true;
+        }
         boolean repeated = readBoolean(fieldMap, "repeated", false);
         boolean deprecated = readBoolean(fieldMap, "deprecated", false);
         String keyType = readString(fieldMap, "keyType");
@@ -879,7 +905,7 @@ public class PipelineTemplateConfigLoader {
             null,
             keyType,
             valueType,
-            optional,
+            false,
             repeated,
             deprecated,
             since,
@@ -1367,11 +1393,6 @@ public class PipelineTemplateConfigLoader {
             throw new IllegalStateException(
                 "Referenceable field '" + field.name() + "' on message '" + messageName
                     + "' must point to a payload_ref field, got '" + refField.type() + "'");
-        }
-        if (!refField.optional()) {
-            throw new IllegalStateException(
-                "Referenceable field '" + field.name() + "' on message '" + messageName
-                    + "' must point to an optional payload_ref field");
         }
     }
 

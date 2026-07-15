@@ -907,6 +907,45 @@ class PipelineProtoGeneratorTest {
     }
 
     @Test
+    void bootstrapsAConfigSpecificIdlLockForTagFreeVariantTemplates() throws Exception {
+        Path configPath = tempDir.resolve("pipeline.object-ingest.yaml");
+        Path outputDir = tempDir.resolve("proto-idl-lock-out");
+        Files.writeString(configPath, """
+            version: 2
+            appName: "Variant Lock"
+            basePackage: "com.example.lock"
+            transport: "GRPC"
+            types:
+              Input:
+                fields: [[1, requestId, uuid]]
+            steps: []
+            """);
+
+        System.setProperty("pipeline.idl.bootstrap", "true");
+        try {
+            new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+        } finally {
+            System.clearProperty("pipeline.idl.bootstrap");
+        }
+
+        Path lockPath = tempDir.resolve("pipeline.object-ingest.idl.json");
+        assertTrue(Files.exists(lockPath));
+        Files.writeString(configPath, """
+            version: 2
+            appName: "Variant Lock"
+            basePackage: "com.example.lock"
+            transport: "GRPC"
+            types:
+              Input:
+                fields: [[requestId, uuid]]
+            steps: []
+            """);
+
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+        assertTrue(Files.readString(lockPath).contains("\"requestId\""));
+    }
+
+    @Test
     void rejectsLegacyJavaOnlyV2ContractsBeforeGeneratingANullProtoType() throws Exception {
         Path configPath = tempDir.resolve("pipeline-config-v2-java-only.yaml");
         Files.writeString(configPath, """

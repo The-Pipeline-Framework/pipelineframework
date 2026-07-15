@@ -6,50 +6,47 @@ platform: COMPUTE
 types:
   OrderDelivered:
     fields:
-      - [1, orderId, uuid]
-      - [2, customerId, uuid]
-      - [3, dispatchId, uuid]
-      - [4, courierId, uuid]
-      - [5, restaurantId, uuid]
-      - [6, kitchenTicketId, uuid]
-      - [7, deliveredAt, timestamp]
-      - [8, amount, decimal]
-      - [9, currency, string]
-      - [10, lineageDigest, string]
+      - [orderId, uuid]
+      - [customerId, uuid]
+      - [dispatchId, uuid]
+      - [courierId, uuid]
+      - [restaurantId, uuid]
+      - [kitchenTicketId, uuid]
+      - [deliveredAt, timestamp]
+      - [amount, decimal]
+      - [currency, string]
+      - [lineageDigest, string]
   PaymentCaptured:
     fields:
-      - [1, orderId, uuid]
-      - [2, paymentId, uuid]
-      - [3, processedAt, timestamp]
-      - [4, amount, decimal]
-      - [5, currency, string]
+      - [orderId, uuid]
+      - [paymentId, uuid]
+      - [processedAt, timestamp]
+      - [amount, decimal]
+      - [currency, string]
   PaymentRejected:
     fields:
-      - [1, orderId, uuid]
-      - [2, processedAt, timestamp]
-      - [3, amount, decimal]
-      - [4, currency, string]
-      - [5, failureCode, string]
-      - [6, failureReason, string]
+      - [orderId, uuid]
+      - [processedAt, timestamp]
+      - [amount, decimal]
+      - [currency, string]
+      - [failureCode, string]
+      - [failureReason, string]
   PaymentRequiresReview:
     fields:
-      - [1, orderId, uuid]
-      - [2, processedAt, timestamp]
-      - [3, amount, decimal]
-      - [4, currency, string]
-      - [5, reviewReason, string]
+      - [orderId, uuid]
+      - [processedAt, timestamp]
+      - [amount, decimal]
+      - [currency, string]
+      - [reviewReason, string]
 unions:
   PaymentOutcome:
     variants:
       captured:
         type: PaymentCaptured
-        number: 1
       rejected:
         type: PaymentRejected
-        number: 2
       requiresReview:
         type: PaymentRequiresReview
-        number: 3
 steps:
   - name: Payment Capture Order
     service: org.pipelineframework.tpfgo.payment.capture.payment_capture_order.service.ProcessPaymentCaptureOrderService

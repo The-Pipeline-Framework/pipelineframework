@@ -6,57 +6,55 @@ runtimeLayout: monolith
 types:
   PlaceRestaurantOrderRequest:
     fields:
-      - [1, requestId, uuid]
-      - [2, customerName, string]
-      - [3, restaurantName, string]
-      - [4, items, string]
-      - [5, totalAmount, decimal]
-      - [6, currency, string]
+      - [requestId, uuid]
+      - [customerName, string]
+      - [restaurantName, string]
+      - [items, string]
+      - [totalAmount, decimal]
+      - [currency, string]
   ValidatedRestaurantOrderRequest:
     fields:
-      - [1, requestId, uuid]
-      - [2, customerName, string]
-      - [3, restaurantName, string]
-      - [4, items, string]
-      - [5, totalAmount, decimal]
-      - [6, currency, string]
-      - [7, validatedAt, timestamp]
+      - [requestId, uuid]
+      - [customerName, string]
+      - [restaurantName, string]
+      - [items, string]
+      - [totalAmount, decimal]
+      - [currency, string]
+      - [validatedAt, timestamp]
   PendingRestaurantApproval:
     fields:
-      - [1, orderId, uuid]
-      - [2, requestId, uuid]
-      - [3, customerName, string]
-      - [4, restaurantName, string]
-      - [5, items, string]
-      - [6, totalAmount, decimal]
-      - [7, currency, string]
-      - [8, createdAt, timestamp]
+      - [orderId, uuid]
+      - [requestId, uuid]
+      - [customerName, string]
+      - [restaurantName, string]
+      - [items, string]
+      - [totalAmount, decimal]
+      - [currency, string]
+      - [createdAt, timestamp]
   RestaurantOrderAccepted:
     fields:
-      - [1, orderId, uuid]
-      - [2, decidedAt, timestamp]
-      - [3, note, string]
+      - [orderId, uuid]
+      - [decidedAt, timestamp]
+      - [note, string]
   RestaurantOrderDeclined:
     fields:
-      - [1, orderId, uuid]
-      - [2, decidedAt, timestamp]
-      - [3, note, string]
-      - [4, declineReason, string]
+      - [orderId, uuid]
+      - [decidedAt, timestamp]
+      - [note, string]
+      - [declineReason, string]
   TerminalOrderState:
     fields:
-      - [1, orderId, uuid]
-      - [2, outcome, string]
-      - [3, resolvedAt, timestamp]
-      - [4, restaurantStatus, string]
-      - [5, summary, string]
+      - [orderId, uuid]
+      - [outcome, string]
+      - [resolvedAt, timestamp]
+      - [restaurantStatus, string]
+      - [summary, string]
 unions:
   RestaurantDecision:
     variants:
       accepted:
-        number: 1
         type: RestaurantOrderAccepted
       declined:
-        number: 2
         type: RestaurantOrderDeclined
 steps:
   - name: Validate Order Request
