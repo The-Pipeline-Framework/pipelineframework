@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -59,6 +60,8 @@ public class PipelineProtoGenerator {
     private static final String EXTERNAL_STEP_HOSTS_PROTOCOL_VERSION = "tpf.external-step-hosts.v1";
     private static final String IDL_SNAPSHOT_PROPERTY = "tpf.idl.compat.baseline";
     private static final String IDL_SNAPSHOT_ENV = "TPF_IDL_COMPAT_BASELINE";
+    private static final String IDL_BOOTSTRAP_PROPERTY = "pipeline.idl.bootstrap";
+    private static final String REQUIRE_COMMITTED_IDL_STATE_PROPERTY = "pipeline.idl.require-committed-state";
     private static final ObjectMapper IDL_MAPPER = PipelineJson.mapper().copy().findAndRegisterModules();
 
     /**
@@ -120,8 +123,14 @@ public class PipelineProtoGenerator {
         PipelineTemplateConfig config = loader.load(resolvedConfig);
         Path idlStatePath = resolveIdlStatePath(resolvedConfig);
         PipelineIdlSnapshot committedState = Files.exists(idlStatePath) ? readBaselineSnapshot(idlStatePath.toString()) : null;
-        boolean bootstrapIdl = Boolean.getBoolean("pipeline.idl.bootstrap");
-        PipelineIdlStateResolver.Resolved idl = new PipelineIdlStateResolver().resolve(config, committedState, bootstrapIdl);
+        boolean lockMissing = committedState == null;
+        boolean hasSemanticTypes = !config.messages().isEmpty() || !config.unions().isEmpty();
+        if (lockMissing && hasSemanticTypes && Boolean.getBoolean(REQUIRE_COMMITTED_IDL_STATE_PROPERTY)) {
+            throw new IllegalStateException("Pipeline template is missing committed IDL state: " + idlStatePath);
+        }
+        boolean bootstrapIdl = Boolean.getBoolean(IDL_BOOTSTRAP_PROPERTY);
+        boolean initializeIdl = bootstrapIdl || (lockMissing && hasSemanticTypes);
+        PipelineIdlStateResolver.Resolved idl = new PipelineIdlStateResolver().resolve(config, committedState, initializeIdl);
         config = idl.config();
         if (config.basePackage() == null || config.basePackage().isBlank()) {
             throw new IllegalStateException("pipeline-config.yaml is missing basePackage");
@@ -132,7 +141,11 @@ public class PipelineProtoGenerator {
             throw new IllegalStateException("Failed to create proto output directory: " + resolvedOutput, e);
         }
 
-        writeIdlSnapshot(resolvedModuleDir, config, idl.state(), committedState, idlStatePath, bootstrapIdl);
+        writeIdlSnapshot(resolvedModuleDir, config, idl.state(), committedState, idlStatePath, initializeIdl);
+        if (lockMissing && initializeIdl) {
+            System.getLogger(PipelineProtoGenerator.class.getName()).log(System.Logger.Level.WARNING,
+                "Created missing IDL lock file {0}; commit it to preserve compatibility", idlStatePath);
+        }
         List<PipelineTemplateStep> steps = config.steps();
         if (steps == null || steps.isEmpty()) {
             return;
@@ -215,7 +228,7 @@ public class PipelineProtoGenerator {
             Files.createDirectories(outputPath.getParent());
             IDL_MAPPER.writerWithDefaultPrettyPrinter().writeValue(outputPath.toFile(), snapshot);
             if (bootstrap) {
-                IDL_MAPPER.writerWithDefaultPrettyPrinter().writeValue(statePath.toFile(), snapshot);
+                writeIdlLock(statePath, snapshot);
             } else if (committedState != null && !committedState.equals(snapshot)) {
                 throw new IllegalStateException("IDL state changed; review target/generated-resources/META-INF/pipeline/idl.json and promote it to "
                     + statePath);
@@ -230,6 +243,17 @@ public class PipelineProtoGenerator {
             }
         } catch (IOException e) {
             throw new IllegalStateException("Failed to write IDL snapshot", e);
+        }
+    }
+
+    private void writeIdlLock(Path statePath, PipelineIdlSnapshot snapshot) throws IOException {
+        Files.createDirectories(statePath.getParent());
+        Path temporaryStatePath = Files.createTempFile(statePath.getParent(), statePath.getFileName().toString(), ".tmp");
+        try {
+            IDL_MAPPER.writerWithDefaultPrettyPrinter().writeValue(temporaryStatePath.toFile(), snapshot);
+            Files.move(temporaryStatePath, statePath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } finally {
+            Files.deleteIfExists(temporaryStatePath);
         }
     }
 

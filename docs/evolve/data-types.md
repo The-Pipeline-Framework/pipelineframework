@@ -164,7 +164,7 @@ Use PascalCase message names for references:
 
 ## Compiler-owned tags, presence, and compatibility
 
-The sibling IDL lock file records allocated tags and reservations. Removing a field or union variant reserves its name and number, so a reintroduced name receives a new tag. Missing state is an error for concise tag-free YAML unless an explicit bootstrap is requested.
+The sibling IDL lock file records allocated tags and reservations. Removing a field or union variant reserves its name and number, so a reintroduced name receives a new tag. Compilation creates a missing lock for concise tag-free YAML; commit the created file. Strict CI or release policy can instead require a pre-existing lock with `-Dpipeline.idl.require-committed-state=true`.
 
 Eligible singular scalar fields always render as proto3 `optional`. Message references, maps, repeated fields, payload references, and oneof variants keep their existing protobuf semantics. This is binary wire-compatible for unchanged tags and types, but generated descriptors, presence APIs, and ProtoJSON default-value behavior can change.
 

@@ -180,7 +180,7 @@ Propagation stops when a predecessor has no concrete singular logical output. It
 
 ## Migration
 
-For existing templates, run the explicit IDL bootstrap (`-Dpipeline.idl.bootstrap=true`) once. It writes a sibling IDL lock file with the current tags (`pipeline.idl.json` for `pipeline.yaml`). Then remove `number`, `reserved`, and `optional` from YAML. Legacy three-item tuples and object `number` values continue to load with warnings during the transition; `optional` no longer controls protobuf presence.
+For a tag-free template without a sibling lock, compilation creates the initial IDL lock file with the current tags (`pipeline.idl.json` for `pipeline.yaml`); commit that file. Set `-Dpipeline.idl.require-committed-state=true` to fail instead when a lock is missing, for example in a strict CI or release policy. The explicit bootstrap flag (`-Dpipeline.idl.bootstrap=true`) remains available to rewrite a lock intentionally. Then remove `number`, `reserved`, and `optional` from YAML. Legacy three-item tuples and object `number` values continue to load with warnings during the transition; `optional` no longer controls protobuf presence.
 
 1. In a v2 template, replace top-level `messages` with `types`.
 2. Convert only field objects that contain exactly `number`, `name`, and `type`; preserve field order and all advanced object fields.
