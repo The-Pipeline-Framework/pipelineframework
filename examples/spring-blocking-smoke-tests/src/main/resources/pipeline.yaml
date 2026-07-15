@@ -1,0 +1,22 @@
+version: 2
+appName: "Spring Blocking REST Smoke"
+basePackage: "com.example.blocking"
+transport: "REST"
+platform: "COMPUTE"
+types:
+  PaymentRecord:
+    fields:
+      - [cents, int32]
+      - [paymentId, string]
+  PaymentStatus:
+    fields:
+      - [paymentId, string]
+      - [status, string]
+steps:
+  - name: "payment"
+    service: "com.example.blocking.service.PaymentService"
+    input: PaymentRecord
+    inboundMapper: "com.example.blocking.mapper.PaymentRecordMapper"
+    output: PaymentStatus
+    outboundMapper: "com.example.blocking.mapper.PaymentStatusMapper"
+    runOnVirtualThreads: true
