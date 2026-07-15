@@ -110,7 +110,7 @@ public class PipelineProtoGenerator {
      */
     public void generate(Path moduleDir, Path configPath, Path outputDir, String typesProtoName) {
         Path resolvedModuleDir = moduleDir == null ? Path.of("") : moduleDir;
-        Path resolvedConfig = resolveConfigPath(resolvedModuleDir, configPath);
+        Path resolvedConfig = resolveConfigPath(resolvedModuleDir, configPath).toAbsolutePath().normalize();
         Path resolvedOutput = outputDir != null
             ? outputDir
             : resolvedModuleDir.resolve("target").resolve("generated-sources").resolve("proto");

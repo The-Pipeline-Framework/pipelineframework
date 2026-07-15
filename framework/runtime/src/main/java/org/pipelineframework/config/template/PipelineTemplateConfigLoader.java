@@ -52,6 +52,9 @@ public class PipelineTemplateConfigLoader {
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
     private final Consumer<String> warningReporter;
+    private boolean warnedAuthoredFieldNumber;
+    private boolean warnedOptional;
+    private boolean warnedAuthoredUnionNumber;
 
     /**
      * Creates a new PipelineTemplateConfigLoader.
@@ -97,6 +100,9 @@ public class PipelineTemplateConfigLoader {
      * @throws IllegalStateException if the YAML root is not a map or the file cannot be read or parsed
      */
     public PipelineTemplateConfig load(Path configPath) {
+        warnedAuthoredFieldNumber = false;
+        warnedOptional = false;
+        warnedAuthoredUnionNumber = false;
         Object root = loadYaml(configPath);
         if (!(root instanceof Map<?, ?> rootMap)) {
             throw new IllegalStateException("Pipeline template config root is not a map");
@@ -359,9 +365,10 @@ public class PipelineTemplateConfigLoader {
                 throw new IllegalStateException("Union '" + unionName + "' variant '" + name + "' must be a YAML map");
             }
             Integer number = readIntegerObject(variantMap, "number");
-            if (number != null) {
-                LOG.warning("Union '" + unionName + "' variant '" + name
+            if (number != null && !warnedAuthoredUnionNumber) {
+                warningReporter.accept("Union '" + unionName + "' variant '" + name
                     + "' uses deprecated authored number; move it to pipeline.idl.json");
+                warnedAuthoredUnionNumber = true;
             }
             variants.put(name, new PipelineTemplateUnionVariant(
                 name,
@@ -835,8 +842,6 @@ public class PipelineTemplateConfigLoader {
             || fieldType == null || fieldType.isBlank()) {
             throw new IllegalStateException(expected);
         }
-        LOG.warning(owner + " field " + index
-            + " uses deprecated authored number; move it to pipeline.idl.json");
         Map<String, Object> fieldMap = new LinkedHashMap<>();
         fieldMap.put("number", fieldNumber);
         fieldMap.put("name", fieldName);
@@ -873,11 +878,13 @@ public class PipelineTemplateConfigLoader {
         String name = readString(fieldMap, "name");
         String type = readString(fieldMap, "type");
         Integer number = readIntegerObject(fieldMap, "number");
-        if (fieldMap.containsKey("number")) {
-            LOG.warning("Field '" + name + "' uses deprecated authored number; move it to pipeline.idl.json");
+        if (fieldMap.containsKey("number") && !warnedAuthoredFieldNumber) {
+            warningReporter.accept("Field '" + name + "' uses deprecated authored number; move it to pipeline.idl.json");
+            warnedAuthoredFieldNumber = true;
         }
-        if (fieldMap.containsKey("optional")) {
-            LOG.warning("Field '" + name + "' uses deprecated optional; eligible scalars always have explicit presence");
+        if (fieldMap.containsKey("optional") && !warnedOptional) {
+            warningReporter.accept("Field '" + name + "' uses deprecated optional; eligible scalars always have explicit presence");
+            warnedOptional = true;
         }
         boolean repeated = readBoolean(fieldMap, "repeated", false);
         boolean deprecated = readBoolean(fieldMap, "deprecated", false);

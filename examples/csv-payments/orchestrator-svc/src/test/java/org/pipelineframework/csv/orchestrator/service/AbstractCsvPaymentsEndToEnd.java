@@ -148,7 +148,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
     static GenericContainer<?> inputCsvService;
     static GenericContainer<?> paymentsProcessingService;
     static GenericContainer<?> paymentStatusService;
-    static GenericContainer<?> outputCsvService;
     static GenericContainer<?> pipelineRuntimeService;
     static GenericContainer<?> lgtmStack;
     static KafkaContainer kafkaContainer;
@@ -2727,9 +2726,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
             pauseBeforeTempoTeardown();
         }
         // Stop all containers to prevent resource leaks
-        if (outputCsvService != null && outputCsvService.isRunning()) {
-            outputCsvService.stop();
-        }
         if (pipelineRuntimeService != null && pipelineRuntimeService.isRunning()) {
             pipelineRuntimeService.stop();
         }

@@ -321,7 +321,6 @@ public final class PipelineTemplateSchemaExporter {
         }
       },
       "required": [
-        "number",
         "name",
         "type"
       ],
@@ -383,10 +382,6 @@ public final class PipelineTemplateSchemaExporter {
       "type": "array",
       "prefixItems": [
         {
-          "type": "integer",
-          "minimum": 1
-        },
-        {
           "type": "string",
           "minLength": 1
         },
@@ -406,8 +401,8 @@ public final class PipelineTemplateSchemaExporter {
           ]
         }
       ],
-      "minItems": 3,
-      "maxItems": 3,
+      "minItems": 2,
+      "maxItems": 2,
       "items": false
     },
     "v2Reserved": {
@@ -1763,7 +1758,6 @@ public final class PipelineTemplateSchemaExporter {
         }
       },
       "required": [
-        "number",
         "type"
       ],
       "additionalProperties": false
