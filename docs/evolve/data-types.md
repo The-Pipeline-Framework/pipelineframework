@@ -56,8 +56,9 @@ types:
       - [2, currency, currency]
 ```
 
-The compact three-item tuple is `[fieldNumber, fieldName, semanticType]`. Use the object form when a field needs
-additional metadata such as `optional`, `repeated`, `comment`, `overrides`, or `referenceable`.
+The compact tuple is `[fieldName, semanticType]`. The compiler owns protobuf tags and stores their stable allocation in
+the committed `pipeline.idl.json`; use the object form when a field needs metadata such as `repeated`, `comment`,
+`overrides`, or `referenceable`.
 
 `messages` remains a deprecated compatibility alias for `types`, and object fields remain valid:
 
@@ -65,8 +66,7 @@ additional metadata such as `optional`, `repeated`, `comment`, `overrides`, or `
 messages:
   Money:
     fields:
-      - number: 1
-        name: amount
+      - name: amount
         type: decimal
 ```
 
@@ -75,7 +75,7 @@ A template must not declare both `types` and `messages`.
 ## Closed Unions
 
 Use top-level `unions:` when a step output is one closed set of typed outcomes.
-Each union variant references a top-level message and receives a stable protobuf field number:
+Each union variant references a top-level message and receives a stable compiler-owned protobuf field number:
 
 ```yaml
 types:
@@ -84,17 +84,15 @@ types:
       - [1, paymentId, uuid]
   PaymentRejected:
     fields:
-      - [1, failureCode, string]
+      - [failureCode, string]
 
 unions:
   PaymentOutcome:
     variants:
       captured:
         type: PaymentCaptured
-        number: 1
       rejected:
         type: PaymentRejected
-        number: 2
 ```
 
 Unions can be used as step input or output types. They cannot be nested as fields inside messages in this first version.
@@ -164,27 +162,25 @@ Use PascalCase message names for references:
   type: Money
 ```
 
-## Reserved Fields and Compatibility
+## Compiler-owned tags, presence, and compatibility
 
-Named messages can declare reserved numbers and names:
+`pipeline.idl.json` records allocated tags and reservations. Removing a field or union variant reserves its name and number, so a reintroduced name receives a new tag. Missing state is an error for concise tag-free YAML unless an explicit bootstrap is requested.
+
+Eligible singular scalar fields always render as proto3 `optional`. Message references, maps, repeated fields, payload references, and oneof variants keep their existing protobuf semantics. This is binary wire-compatible for unchanged tags and types, but generated descriptors, presence APIs, and ProtoJSON default-value behavior can change.
 
 ```yaml
 types:
   ChargeResult:
     fields:
-      - number: 1
-        name: paymentId
+      - name: paymentId
         type: uuid
-    reserved:
-      numbers: [4, 5]
-      names: ["legacyCode"]
 ```
 
 The compiler emits a normalized IDL snapshot and can compare it against a baseline using `-Dtpf.idl.compat.baseline=<path>`.
 
 Breaking changes fail compatibility checks when they:
 
-- renumber fields
+- reuse or change compiler-owned tags
 - change canonical field types
 - change structural shape, such as adding `repeated: true` to a singular field, changing a map key or value type, switching a field to a different message reference, or changing between optional and required semantics
 - remove fields without reserving the old number and name

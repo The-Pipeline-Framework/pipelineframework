@@ -34,6 +34,7 @@ import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.template.PipelineIdlCompatibilityChecker;
 import org.pipelineframework.config.template.PipelineIdlSnapshot;
+import org.pipelineframework.config.template.PipelineIdlStateResolver;
 import org.pipelineframework.config.template.PipelineTemplateAspect;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
@@ -117,6 +118,11 @@ public class PipelineProtoGenerator {
 
         PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader();
         PipelineTemplateConfig config = loader.load(resolvedConfig);
+        Path idlStatePath = resolvedConfig.getParent().resolve("pipeline.idl.json");
+        PipelineIdlSnapshot committedState = Files.exists(idlStatePath) ? readBaselineSnapshot(idlStatePath.toString()) : null;
+        boolean bootstrapIdl = Boolean.getBoolean("pipeline.idl.bootstrap");
+        PipelineIdlStateResolver.Resolved idl = new PipelineIdlStateResolver().resolve(config, committedState, bootstrapIdl);
+        config = idl.config();
         if (config.basePackage() == null || config.basePackage().isBlank()) {
             throw new IllegalStateException("pipeline-config.yaml is missing basePackage");
         }
@@ -130,7 +136,7 @@ public class PipelineProtoGenerator {
         if (steps == null || steps.isEmpty()) {
             return;
         }
-        writeIdlSnapshot(resolvedModuleDir, config);
+        writeIdlSnapshot(resolvedModuleDir, config, idl.state(), committedState, idlStatePath, bootstrapIdl);
 
         boolean v2 = config.version() >= 2;
         List<ResolvedStep> resolvedSteps = normalizeSteps(steps, v2);
@@ -184,8 +190,14 @@ public class PipelineProtoGenerator {
      * @param config pipeline template configuration used to produce the IDL snapshot
      * @throws IllegalStateException if writing the snapshot fails or if IDL compatibility validation detects breaking changes
      */
-    private void writeIdlSnapshot(Path moduleDir, PipelineTemplateConfig config) {
-        PipelineIdlSnapshot snapshot = PipelineIdlSnapshot.from(config);
+    private void writeIdlSnapshot(
+        Path moduleDir,
+        PipelineTemplateConfig config,
+        PipelineIdlSnapshot snapshot,
+        PipelineIdlSnapshot committedState,
+        Path statePath,
+        boolean bootstrap
+    ) {
         Path outputPath = moduleDir.resolve("target")
             .resolve("generated-resources")
             .resolve("META-INF")
@@ -194,6 +206,12 @@ public class PipelineProtoGenerator {
         try {
             Files.createDirectories(outputPath.getParent());
             IDL_MAPPER.writerWithDefaultPrettyPrinter().writeValue(outputPath.toFile(), snapshot);
+            if (bootstrap) {
+                IDL_MAPPER.writerWithDefaultPrettyPrinter().writeValue(statePath.toFile(), snapshot);
+            } else if (committedState != null && !committedState.equals(snapshot)) {
+                throw new IllegalStateException("IDL state changed; review target/generated-resources/META-INF/pipeline/idl.json and promote it to "
+                    + statePath);
+            }
             String baseline = resolveCompatibilityBaseline();
             if (baseline != null && !baseline.isBlank()) {
                 PipelineIdlSnapshot baselineSnapshot = readBaselineSnapshot(baseline);
@@ -746,7 +764,7 @@ public class PipelineProtoGenerator {
         builder.append("  ");
         if (field.repeated()) {
             builder.append("repeated ");
-        } else if (field.optional() && supportsOptionalLabel(field)) {
+        } else if (supportsOptionalLabel(field)) {
             builder.append("optional ");
         }
         builder.append(field.protoType())
@@ -767,7 +785,8 @@ public class PipelineProtoGenerator {
      * @return `true` if the field supports the `optional` label (it is neither a map nor a message reference), `false` otherwise
      */
     private boolean supportsOptionalLabel(PipelineTemplateField field) {
-        return !field.isMap() && !field.isMessageReference() && !"payload_ref".equals(field.canonicalType());
+        return !field.repeated() && !field.isMap() && !field.isMessageReference()
+            && !"payload_ref".equals(field.canonicalType());
     }
 
     /**

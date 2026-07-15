@@ -287,7 +287,6 @@
         }
       },
       "required": [
-        "number",
         "name",
         "type"
       ],
@@ -347,32 +346,7 @@
     },
     "v2FieldTupleDefinition": {
       "type": "array",
-      "prefixItems": [
-        {
-          "type": "integer",
-          "minimum": 1
-        },
-        {
-          "type": "string",
-          "minLength": 1
-        },
-        {
-          "type": "string",
-          "anyOf": [
-            {
-              "enum": [
-                "string", "bool", "int32", "int64", "float32", "float64", "decimal", "uuid",
-                "timestamp", "datetime", "date", "duration", "bytes", "currency", "uri", "path",
-                "payload_ref"
-              ]
-            },
-            {
-              "pattern": "^[A-Z][A-Za-z0-9_]*$"
-            }
-          ]
-        }
-      ],
-      "minItems": 3,
+      "minItems": 2,
       "maxItems": 3,
       "items": false
     },
@@ -1729,7 +1703,6 @@
         }
       },
       "required": [
-        "number",
         "type"
       ],
       "additionalProperties": false

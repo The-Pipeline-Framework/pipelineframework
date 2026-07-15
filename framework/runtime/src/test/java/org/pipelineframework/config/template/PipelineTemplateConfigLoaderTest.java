@@ -925,7 +925,7 @@ class PipelineTemplateConfigLoaderTest {
             () -> new PipelineTemplateConfigLoader().load(configPath));
 
         assertTrue(exception.getMessage().contains("type 'Payment' field 0"));
-        assertTrue(exception.getMessage().contains("[positiveNumber, nonBlankName, type]"));
+        assertTrue(exception.getMessage().contains("[nonBlankName, type]"));
     }
 
     @Test
