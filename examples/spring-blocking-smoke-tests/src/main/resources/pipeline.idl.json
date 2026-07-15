@@ -59,6 +59,18 @@
         "deprecated" : false,
         "protoType" : "string",
         "referenceField" : null
+      }, {
+        "number" : 3,
+        "name" : "virtualThread",
+        "canonicalType" : "bool",
+        "messageRef" : null,
+        "keyType" : null,
+        "valueType" : null,
+        "optional" : false,
+        "repeated" : false,
+        "deprecated" : false,
+        "protoType" : "bool",
+        "referenceField" : null
       } ],
       "reservedNumbers" : [ ],
       "reservedNames" : [ ]

@@ -39,4 +39,4 @@ jobs:
           ./mvnw -f framework/pom.xml install -DskipTests -Dgpg.skip
 
       - name: Run Spring smoke tests
-        run: ./mvnw -f examples/spring-smoke-tests/pom.xml clean verify -DskipNative=true -Dquarkus.container-image.build=false
+        run: ./mvnw -f examples/spring-smoke-tests/pom.xml clean verify

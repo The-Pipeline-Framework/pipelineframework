@@ -6,8 +6,8 @@ platform: "COMPUTE"
 types:
   PaymentRecord:
     fields:
-      - [paymentId, string]
       - [cents, int32]
+      - [paymentId, string]
   PaymentStatus:
     fields:
       - [paymentId, string]
