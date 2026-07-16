@@ -907,7 +907,7 @@ class PipelineProtoGeneratorTest {
     }
 
     @Test
-    void bootstrapsAConfigSpecificIdlLockForTagFreeVariantTemplates() throws Exception {
+    void createsAConfigSpecificIdlLockForTagFreeVariantTemplates() throws Exception {
         Path configPath = tempDir.resolve("pipeline.object-ingest.yaml");
         Path outputDir = tempDir.resolve("proto-idl-lock-out");
         Files.writeString(configPath, """
@@ -917,16 +917,11 @@ class PipelineProtoGeneratorTest {
             transport: "GRPC"
             types:
               Input:
-                fields: [[1, requestId, uuid]]
+                fields: [[requestId, uuid]]
             steps: []
             """);
 
-        System.setProperty("pipeline.idl.bootstrap", "true");
-        try {
-            new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
-        } finally {
-            System.clearProperty("pipeline.idl.bootstrap");
-        }
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
 
         Path lockPath = tempDir.resolve("pipeline.object-ingest.idl.json");
         assertTrue(Files.exists(lockPath));
@@ -943,6 +938,30 @@ class PipelineProtoGeneratorTest {
 
         new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
         assertTrue(Files.readString(lockPath).contains("\"requestId\""));
+    }
+
+    @Test
+    void requiresCommittedIdlStateWhenConfigured() throws Exception {
+        Path configPath = tempDir.resolve("pipeline.yaml");
+        Files.writeString(configPath, """
+            version: 2
+            appName: "Strict Lock"
+            basePackage: "com.example.strict"
+            transport: "GRPC"
+            types:
+              Input:
+                fields: [[requestId, uuid]]
+            steps: []
+            """);
+
+        System.setProperty("pipeline.idl.require-committed-state", "true");
+        try {
+            IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> new PipelineProtoGenerator().generate(tempDir, configPath, tempDir.resolve("strict-lock-out")));
+            assertTrue(exception.getMessage().contains("missing committed IDL state"));
+        } finally {
+            System.clearProperty("pipeline.idl.require-committed-state");
+        }
     }
 
     @Test
