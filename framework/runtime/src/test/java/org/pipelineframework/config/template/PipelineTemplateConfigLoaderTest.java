@@ -1282,10 +1282,16 @@ class PipelineTemplateConfigLoaderTest {
         assertTrue(config.typeModel().isAssignable("string", "Description"));
         assertFalse(config.typeModel().isAssignable("OrderId", "Description"));
         assertTrue(config.typeModel().isAssignable("PaymentApproved", "PaymentOutcome"));
+
+        PipelineIdlSnapshot snapshot = PipelineIdlSnapshot.from(config);
+        assertEquals(List.of("description", "order_id"), snapshot.types().get("PaymentApproved").fields().stream()
+            .map(PipelineIdlSnapshot.TypeFieldSnapshot::protoName).toList());
+        assertEquals(List.of(1, 2), snapshot.types().get("PaymentApproved").fields().stream()
+            .map(PipelineIdlSnapshot.TypeFieldSnapshot::number).toList());
     }
 
     @Test
-    void rejectsV3WireMetadataAndLegacyContractSyntax() throws Exception {
+    void rejectsV3WireMetadataAndLegacyContractSyntaxIndependently() throws Exception {
         Path configPath = tempDir.resolve("v3-wire-metadata.yaml");
         Files.writeString(configPath, """
             version: 3
@@ -1309,6 +1315,70 @@ class PipelineTemplateConfigLoaderTest {
             () -> new PipelineTemplateConfigLoader().load(configPath));
 
         assertTrue(exception.getMessage().contains("cannot declare protobuf wire metadata"));
+
+        Path legacyContracts = tempDir.resolve("v3-legacy-contracts.yaml");
+        Files.writeString(legacyContracts, """
+            version: 3
+            appName: V3 Types
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Payment:
+                fields: [[id, uuid]]
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                inputTypeName: Payment
+                output: Payment
+            """);
+
+        IllegalStateException legacyException = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(legacyContracts));
+
+        assertTrue(legacyException.getMessage().contains("inputTypeName/outputTypeName are not supported in version: 3"));
+
+        Path unknownContract = tempDir.resolve("v3-unknown-contract.yaml");
+        Files.writeString(unknownContract, """
+            version: 3
+            appName: V3 Types
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Payment:
+                fields: [[id, uuid]]
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                input: MissingPayment
+                output: Payment
+            """);
+
+        IllegalStateException unknownException = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(unknownContract));
+
+        assertTrue(unknownException.getMessage().contains("references unknown input type 'MissingPayment'"));
+    }
+
+    @Test
+    void rejectsNullReferencesAndMapReferenceCyclesInTheNormalizedTypeModel() {
+        IllegalStateException nullAlias = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateTypeModel(Map.of(
+                "Alias", new PipelineTemplateTypeDefinition.AliasType("Alias", null))));
+        assertTrue(nullAlias.getMessage().contains("invalid type reference"));
+
+        IllegalStateException nullVariant = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateTypeModel(Map.of(
+                "Outcome", new PipelineTemplateTypeDefinition.UnionType("Outcome", Map.of(
+                    "missing", new PipelineTemplateTypeDefinition.Variant("missing", null))))));
+        assertTrue(nullVariant.getMessage().contains("invalid type reference"));
+
+        IllegalStateException mapCycle = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateTypeModel(Map.of(
+                "A", new PipelineTemplateTypeDefinition.AliasType("A",
+                    new PipelineTemplateTypeReference.MapType(
+                        new PipelineTemplateTypeReference.Scalar("string"),
+                        new PipelineTemplateTypeReference.Named("A"))))));
+        assertTrue(mapCycle.getMessage().contains("Recursive v3 type reference"));
     }
 
     @Test

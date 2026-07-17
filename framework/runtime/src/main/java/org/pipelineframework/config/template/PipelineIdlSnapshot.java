@@ -230,26 +230,34 @@ public record PipelineIdlSnapshot(
 
     private static Map<String, TypeSnapshot> toTypeSnapshots(PipelineTemplateTypeModel typeModel) {
         Map<String, TypeSnapshot> result = new LinkedHashMap<>();
+        PipelineIdlTagAllocator allocator = new PipelineIdlTagAllocator();
         typeModel.definitions().forEach((name, definition) -> {
             if (definition instanceof PipelineTemplateTypeDefinition.RecordType record) {
                 List<TypeFieldSnapshot> fields = new ArrayList<>();
-                int number = 1;
-                for (PipelineTemplateTypeDefinition.Field field : record.fields()) {
-                    fields.add(new TypeFieldSnapshot(number++, field.name(), field.name(), field.type().name()));
+                Set<Integer> unavailable = new HashSet<>();
+                for (PipelineTemplateTypeDefinition.Field field : record.fields().stream()
+                    .sorted(Comparator.comparing(PipelineTemplateTypeDefinition.Field::name)).toList()) {
+                    int number = allocator.allocate(unavailable);
+                    unavailable.add(number);
+                    fields.add(new TypeFieldSnapshot(number, field.name(),
+                        PipelineIdlStateResolver.toProtoFieldName(field.name()), field.type().name()));
                 }
-                result.put(name, new TypeSnapshot(name, "record", fields, null, List.of()));
+                result.put(name, new TypeSnapshot(name, "record", fields, Optional.empty(), List.of()));
             } else if (definition instanceof PipelineTemplateTypeDefinition.WrapperType wrapper) {
-                result.put(name, new TypeSnapshot(name, "wrapper", List.of(), wrapper.wraps().name(), List.of()));
+                result.put(name, new TypeSnapshot(name, "wrapper", List.of(), Optional.of(wrapper.wraps().name()), List.of()));
             } else if (definition instanceof PipelineTemplateTypeDefinition.AliasType alias) {
-                result.put(name, new TypeSnapshot(name, "alias", List.of(), alias.target().name(), List.of()));
+                result.put(name, new TypeSnapshot(name, "alias", List.of(), Optional.of(alias.target().name()), List.of()));
             } else if (definition instanceof PipelineTemplateTypeDefinition.UnionType union) {
                 List<TypeVariantSnapshot> variants = new ArrayList<>();
-                int number = 1;
-                for (PipelineTemplateTypeDefinition.Variant variant : union.variants().values()) {
+                Set<Integer> unavailable = new HashSet<>();
+                for (PipelineTemplateTypeDefinition.Variant variant : union.variants().values().stream()
+                    .sorted(Comparator.comparing(PipelineTemplateTypeDefinition.Variant::discriminator)).toList()) {
+                    int number = allocator.allocate(unavailable);
+                    unavailable.add(number);
                     variants.add(new TypeVariantSnapshot(variant.discriminator(), variant.payload().name(),
-                        variant.discriminator(), number++));
+                        PipelineIdlStateResolver.toProtoFieldName(variant.discriminator()), number));
                 }
-                result.put(name, new TypeSnapshot(name, "union", List.of(), null, variants));
+                result.put(name, new TypeSnapshot(name, "union", List.of(), Optional.empty(), variants));
             }
         });
         return result;
@@ -304,19 +312,20 @@ public record PipelineIdlSnapshot(
         String name,
         String kind,
         List<TypeFieldSnapshot> fields,
-        String target,
+        Optional<String> target,
         List<TypeVariantSnapshot> variants,
         List<Integer> reservedNumbers,
         List<String> reservedNames
     ) {
         public TypeSnapshot {
             fields = fields == null ? List.of() : List.copyOf(fields);
+            target = target == null ? Optional.empty() : target;
             variants = variants == null ? List.of() : List.copyOf(variants);
             reservedNumbers = reservedNumbers == null ? List.of() : List.copyOf(reservedNumbers);
             reservedNames = reservedNames == null ? List.of() : List.copyOf(reservedNames);
         }
 
-        public TypeSnapshot(String name, String kind, List<TypeFieldSnapshot> fields, String target,
+        public TypeSnapshot(String name, String kind, List<TypeFieldSnapshot> fields, Optional<String> target,
                             List<TypeVariantSnapshot> variants) {
             this(name, kind, fields, target, variants, List.of(), List.of());
         }

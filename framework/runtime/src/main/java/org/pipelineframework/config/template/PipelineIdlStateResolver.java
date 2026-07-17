@@ -61,6 +61,9 @@ public final class PipelineIdlStateResolver {
                 Map<String, Integer> priorNumbers = previous == null ? Map.of() : previous.fields().stream()
                     .collect(java.util.stream.Collectors.toMap(PipelineIdlSnapshot.TypeFieldSnapshot::name,
                         PipelineIdlSnapshot.TypeFieldSnapshot::number));
+                Map<String, String> priorProtoNames = previous == null ? Map.of() : previous.fields().stream()
+                    .collect(java.util.stream.Collectors.toMap(PipelineIdlSnapshot.TypeFieldSnapshot::name,
+                        PipelineIdlSnapshot.TypeFieldSnapshot::protoName));
                 Set<Integer> unavailable = previous == null ? new HashSet<>() : previous.fields().stream()
                     .map(PipelineIdlSnapshot.TypeFieldSnapshot::number).collect(java.util.stream.Collectors.toSet());
                 List<Integer> reservedNumbers = previous == null ? new ArrayList<>() : new ArrayList<>(previous.reservedNumbers());
@@ -99,22 +102,25 @@ public final class PipelineIdlStateResolver {
                     Integer number = priorNumbers.get(field.name());
                     if (number == null) { number = allocator.allocate(unavailable); }
                     unavailable.add(number);
-                    String protoName = toProtoFieldName(field.name());
+                    String protoName = priorProtoNames.getOrDefault(field.name(), toProtoFieldName(field.name()));
                     if (protoName.isBlank() || !protoNames.add(protoName)) {
                         throw new IllegalStateException("Type '" + name + "' has colliding protobuf field name '" + protoName + "'.");
                     }
                     fields.add(new PipelineIdlSnapshot.TypeFieldSnapshot(number, field.name(), protoName, field.type().name()));
                 }
-                types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "record", fields, null, List.of(),
+                types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "record", fields, Optional.empty(), List.of(),
                     reservedNumbers.stream().distinct().sorted().toList(), reservedNames.stream().distinct().sorted().toList()));
             } else if (definition instanceof PipelineTemplateTypeDefinition.WrapperType wrapper) {
-                types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "wrapper", List.of(), wrapper.wraps().name(), List.of()));
+                types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "wrapper", List.of(), Optional.of(wrapper.wraps().name()), List.of()));
             } else if (definition instanceof PipelineTemplateTypeDefinition.AliasType alias) {
-                types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "alias", List.of(), alias.target().name(), List.of()));
+                types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "alias", List.of(), Optional.of(alias.target().name()), List.of()));
             } else if (definition instanceof PipelineTemplateTypeDefinition.UnionType union) {
                 Map<String, Integer> priorNumbers = previous == null ? Map.of() : previous.variants().stream()
                     .collect(java.util.stream.Collectors.toMap(PipelineIdlSnapshot.TypeVariantSnapshot::discriminator,
                         PipelineIdlSnapshot.TypeVariantSnapshot::number));
+                Map<String, String> priorProtoNames = previous == null ? Map.of() : previous.variants().stream()
+                    .collect(java.util.stream.Collectors.toMap(PipelineIdlSnapshot.TypeVariantSnapshot::discriminator,
+                        PipelineIdlSnapshot.TypeVariantSnapshot::protoName));
                 Set<Integer> unavailable = previous == null ? new HashSet<>() : previous.variants().stream()
                     .map(PipelineIdlSnapshot.TypeVariantSnapshot::number).collect(java.util.stream.Collectors.toSet());
                 List<Integer> reservedNumbers = previous == null ? new ArrayList<>() : new ArrayList<>(previous.reservedNumbers());
@@ -150,13 +156,14 @@ public final class PipelineIdlStateResolver {
                     Integer number = priorNumbers.get(variant.discriminator());
                     if (number == null) { number = allocator.allocate(unavailable); }
                     unavailable.add(number);
-                    String protoName = toProtoFieldName(variant.discriminator());
+                    String protoName = priorProtoNames.getOrDefault(variant.discriminator(),
+                        toProtoFieldName(variant.discriminator()));
                     if (protoName.isBlank() || !protoNames.add(protoName)) {
                         throw new IllegalStateException("Union '" + name + "' has colliding protobuf discriminator field '" + protoName + "'.");
                     }
                     variants.add(new PipelineIdlSnapshot.TypeVariantSnapshot(variant.discriminator(), variant.payload().name(), protoName, number));
                 }
-                types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "union", List.of(), null, variants,
+                types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "union", List.of(), Optional.empty(), variants,
                     reservedNumbers.stream().distinct().sorted().toList(), reservedNames.stream().distinct().sorted().toList()));
             }
         }
@@ -165,7 +172,7 @@ public final class PipelineIdlStateResolver {
         return new PipelineIdlSnapshot(config.version(), config.appName(), config.basePackage(), Map.of(), Map.of(), types, steps);
     }
 
-    private String toProtoFieldName(String input) {
+    static String toProtoFieldName(String input) {
         if (input == null || input.isBlank()) {
             return "";
         }

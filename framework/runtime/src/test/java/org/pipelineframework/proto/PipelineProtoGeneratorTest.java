@@ -171,6 +171,36 @@ class PipelineProtoGeneratorTest {
         assertTrue(state.contains("\"protoName\" : \"requires_review\""));
     }
 
+    @Test
+    void rejectsV3StepContractsThatResolveToScalars() throws Exception {
+        Path configPath = tempDir.resolve("scalar-contract.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "Payments"
+            basePackage: "com.example.payments"
+            transport: "GRPC"
+            types:
+              PaymentId:
+                alias: uuid
+              PaymentOutcome:
+                fields: [[id, uuid]]
+            steps:
+              - name: Process Payment
+                cardinality: ONE_TO_ONE
+                input: PaymentId
+                output: PaymentOutcome
+            """);
+
+        System.setProperty("pipeline.idl.bootstrap", "true");
+        try {
+            IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> new PipelineProtoGenerator().generate(tempDir, configPath, tempDir.resolve("generated-scalar")));
+            assertTrue(error.getMessage().contains("resolves to a scalar"));
+        } finally {
+            System.clearProperty("pipeline.idl.bootstrap");
+        }
+    }
+
     private Map<String, String> readGeneratedFiles(Path root) throws Exception {
         Map<String, String> files = new TreeMap<>();
         try (var paths = Files.walk(root)) {

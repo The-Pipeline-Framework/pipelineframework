@@ -70,6 +70,7 @@ public final class PipelineIdlCompatibilityChecker {
         PipelineIdlSnapshot.TypeSnapshot current,
         List<String> errors
     ) {
+        reportDroppedReservations(typeName, "Type", baseline, current, errors);
         Map<String, PipelineIdlSnapshot.TypeFieldSnapshot> currentByName = new LinkedHashMap<>();
         for (PipelineIdlSnapshot.TypeFieldSnapshot field : current.fields()) {
             currentByName.put(field.name(), field);
@@ -92,10 +93,10 @@ public final class PipelineIdlCompatibilityChecker {
             }
         }
         for (PipelineIdlSnapshot.TypeFieldSnapshot field : current.fields()) {
-            if (current.reservedNumbers().contains(field.number())) {
+            if (isReserved(field.number(), baseline.reservedNumbers(), current.reservedNumbers())) {
                 errors.add("Type '" + typeName + "' reused reserved protobuf tag " + field.number());
             }
-            if (current.reservedNames().contains(field.protoName())) {
+            if (isReserved(field.protoName(), baseline.reservedNames(), current.reservedNames())) {
                 errors.add("Type '" + typeName + "' reused reserved protobuf field name '" + field.protoName() + "'");
             }
         }
@@ -107,6 +108,7 @@ public final class PipelineIdlCompatibilityChecker {
         PipelineIdlSnapshot.TypeSnapshot current,
         List<String> errors
     ) {
+        reportDroppedReservations(typeName, "Union", baseline, current, errors);
         Map<String, PipelineIdlSnapshot.TypeVariantSnapshot> currentByDiscriminator = new LinkedHashMap<>();
         for (PipelineIdlSnapshot.TypeVariantSnapshot variant : current.variants()) {
             currentByDiscriminator.put(variant.discriminator(), variant);
@@ -129,14 +131,33 @@ public final class PipelineIdlCompatibilityChecker {
             }
         }
         for (PipelineIdlSnapshot.TypeVariantSnapshot variant : current.variants()) {
-            if (current.reservedNumbers().contains(variant.number())) {
+            if (isReserved(variant.number(), baseline.reservedNumbers(), current.reservedNumbers())) {
                 errors.add("Union '" + typeName + "' reused reserved protobuf tag " + variant.number());
             }
-            if (current.reservedNames().contains(variant.protoName())) {
+            if (isReserved(variant.protoName(), baseline.reservedNames(), current.reservedNames())) {
                 errors.add("Union '" + typeName + "' reused reserved protobuf discriminator field '"
                     + variant.protoName() + "'");
             }
         }
+    }
+
+    private void reportDroppedReservations(
+        String typeName,
+        String kind,
+        PipelineIdlSnapshot.TypeSnapshot baseline,
+        PipelineIdlSnapshot.TypeSnapshot current,
+        List<String> errors
+    ) {
+        if (!current.reservedNumbers().containsAll(baseline.reservedNumbers())) {
+            errors.add(kind + " '" + typeName + "' removed baseline reserved protobuf tags");
+        }
+        if (!current.reservedNames().containsAll(baseline.reservedNames())) {
+            errors.add(kind + " '" + typeName + "' removed baseline reserved protobuf names");
+        }
+    }
+
+    private boolean isReserved(Object value, List<?> baselineReservations, List<?> currentReservations) {
+        return baselineReservations.contains(value) || currentReservations.contains(value);
     }
 
     /**

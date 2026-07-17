@@ -4,6 +4,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -89,6 +90,40 @@ class PipelineIdlStateResolverTest {
             () -> new PipelineIdlStateResolver().resolve(new PipelineTemplateConfigLoader().load(yaml), null, true));
 
         assertEquals("Type 'Record' has colliding protobuf field name 'payment_id'.", error.getMessage());
+    }
+
+    @Test
+    void retainsBaselineGeneratedNamesForExistingV3Members() throws Exception {
+        Path yaml = tempDir.resolve("retain-proto-names.yaml");
+        Files.writeString(yaml, """
+            version: 3
+            appName: V3
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Record:
+                fields: [[paymentId, string]]
+              Outcome:
+                variants:
+                  requiresReview: Record
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                input: Record
+                output: Outcome
+            """);
+        PipelineIdlSnapshot baseline = new PipelineIdlSnapshot(3, "V3", "com.example.v3", Map.of(), Map.of(), Map.of(
+            "Record", new PipelineIdlSnapshot.TypeSnapshot("Record", "record",
+                List.of(new PipelineIdlSnapshot.TypeFieldSnapshot(17, "paymentId", "legacy_payment", "string")),
+                Optional.empty(), List.of()),
+            "Outcome", new PipelineIdlSnapshot.TypeSnapshot("Outcome", "union", List.of(), Optional.empty(),
+                List.of(new PipelineIdlSnapshot.TypeVariantSnapshot("requiresReview", "Record", "legacy_review", 19)))), List.of());
+
+        PipelineIdlSnapshot resolved = new PipelineIdlStateResolver().resolve(
+            new PipelineTemplateConfigLoader().load(yaml), baseline, false).state();
+
+        assertEquals("legacy_payment", resolved.types().get("Record").fields().getFirst().protoName());
+        assertEquals("legacy_review", resolved.types().get("Outcome").variants().getFirst().protoName());
     }
 
     private String template(String recordBody, String variants) {

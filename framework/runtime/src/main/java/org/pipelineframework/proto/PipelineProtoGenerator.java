@@ -21,13 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.pipelineframework.config.CardinalitySemantics;
@@ -365,6 +359,10 @@ public class PipelineProtoGenerator {
             throw new IllegalStateException("Version: 3 steps require a non-blank logical contract.");
         }
         PipelineTemplateTypeReference reference = typeModel.resolveAliases(new PipelineTemplateTypeReference.Named(contract));
+        if (reference instanceof PipelineTemplateTypeReference.Scalar) {
+            throw new IllegalStateException("Version: 3 step contract '" + contract
+                + "' resolves to a scalar; step contracts must resolve to a named message type.");
+        }
         return PipelineTypesProtoRenderer.protoType(reference, typeModel);
     }
 

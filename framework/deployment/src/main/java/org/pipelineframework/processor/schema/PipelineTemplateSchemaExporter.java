@@ -2242,6 +2242,7 @@ public final class PipelineTemplateSchemaExporter {
           "properties": {
             "variants": {
               "type": "object",
+              "minProperties": 1,
               "propertyNames": { "type": "string", "minLength": 1 },
               "additionalProperties": { "$ref": "#/$defs/logicalContractReference" }
             }
@@ -2249,6 +2250,30 @@ public final class PipelineTemplateSchemaExporter {
           "additionalProperties": false
         }
       ]
+    },
+    "v3TemplateStep": {
+      "type": "object",
+      "required": ["input", "output"],
+      "properties": {
+        "input": { "$ref": "#/$defs/logicalContractReference" },
+        "output": { "$ref": "#/$defs/logicalContractReference" }
+      },
+      "allOf": [
+        {
+          "not": {
+            "anyOf": [
+              { "required": ["inputTypeName"] },
+              { "required": ["outputTypeName"] },
+              { "required": ["inputFields"] },
+              { "required": ["outputFields"] },
+              { "required": ["number"] },
+              { "required": ["optional"] },
+              { "required": ["reserved"] }
+            ]
+          }
+        }
+      ],
+      "additionalProperties": true
     }
   },
   "allOf": [
@@ -2256,7 +2281,7 @@ public final class PipelineTemplateSchemaExporter {
       "if": {
         "properties": {
           "version": {
-            "enum": [2, 3]
+            "const": 2
           }
         },
         "required": [
@@ -2315,6 +2340,33 @@ public final class PipelineTemplateSchemaExporter {
                 {
                   "$ref": "#/$defs/delegatedOrInternalStep"
                 }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "version": { "const": 3 } },
+        "required": ["version"]
+      },
+      "then": {
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "oneOf": [
+                    { "$ref": "#/$defs/queryTemplateStep" },
+                    { "$ref": "#/$defs/awaitTemplateStep" },
+                    { "$ref": "#/$defs/commandTemplateStep" },
+                    { "$ref": "#/$defs/v2TemplateStep" },
+                    { "$ref": "#/$defs/delegatedOrInternalStep" }
+                  ]
+                },
+                { "$ref": "#/$defs/v3TemplateStep" }
               ]
             }
           }

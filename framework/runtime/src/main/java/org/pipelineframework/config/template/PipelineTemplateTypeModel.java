@@ -175,6 +175,9 @@ public final class PipelineTemplateTypeModel {
         PipelineTemplateTypeReference reference,
         Map<String, PipelineTemplateTypeDefinition> definitions
     ) {
+        if (reference == null) {
+            throw new IllegalStateException("Type '" + owner + "' has an invalid type reference");
+        }
         if (reference instanceof PipelineTemplateTypeReference.Named named && !definitions.containsKey(named.name())) {
             throw new IllegalStateException("Type '" + owner + "' references unknown type '" + named.name() + "'");
         }
@@ -205,21 +208,22 @@ public final class PipelineTemplateTypeModel {
     }
 
     private static List<String> dependencies(PipelineTemplateTypeDefinition definition) {
+        List<String> dependencies = new ArrayList<>();
         if (definition instanceof PipelineTemplateTypeDefinition.RecordType record) {
-            return record.fields().stream().map(PipelineTemplateTypeDefinition.Field::type)
-                .filter(PipelineTemplateTypeReference.Named.class::isInstance)
-                .map(PipelineTemplateTypeReference.Named.class::cast).map(PipelineTemplateTypeReference.Named::name).toList();
+            record.fields().forEach(field -> collectNamedReferences(field.type(), dependencies));
+        } else if (definition instanceof PipelineTemplateTypeDefinition.AliasType alias) {
+            collectNamedReferences(alias.target(), dependencies);
+        } else if (definition instanceof PipelineTemplateTypeDefinition.UnionType union) {
+            union.variants().values().forEach(variant -> collectNamedReferences(variant.payload(), dependencies));
         }
-        if (definition instanceof PipelineTemplateTypeDefinition.AliasType alias
-            && alias.target() instanceof PipelineTemplateTypeReference.Named named) {
-            return List.of(named.name());
+        return List.copyOf(dependencies);
+    }
+
+    private static void collectNamedReferences(PipelineTemplateTypeReference reference, List<String> dependencies) {
+        if (reference instanceof PipelineTemplateTypeReference.Named named) {
+            dependencies.add(named.name());
+        } else if (reference instanceof PipelineTemplateTypeReference.MapType map) {
+            collectNamedReferences(map.valueType(), dependencies);
         }
-        if (definition instanceof PipelineTemplateTypeDefinition.UnionType union) {
-            return union.variants().values().stream().map(PipelineTemplateTypeDefinition.Variant::payload)
-                .filter(PipelineTemplateTypeReference.Named.class::isInstance)
-                .map(PipelineTemplateTypeReference.Named.class::cast)
-                .map(PipelineTemplateTypeReference.Named::name).toList();
-        }
-        return List.of();
     }
 }

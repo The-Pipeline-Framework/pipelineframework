@@ -238,6 +238,9 @@ public class PipelineTemplateConfigLoader {
             if (name == null || name.isBlank()) {
                 throw new IllegalStateException("Version: 3 type names must not be blank.");
             }
+            if ("PayloadReference".equals(name)) {
+                throw new IllegalStateException("Type name 'PayloadReference' is reserved for payload_ref fields");
+            }
             if (!(entry.getValue() instanceof Map<?, ?> declaration)) {
                 throw new IllegalStateException("Type '" + name + "' must be declared as a YAML map.");
             }

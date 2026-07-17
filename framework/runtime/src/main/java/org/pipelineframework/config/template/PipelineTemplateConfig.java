@@ -146,7 +146,8 @@ public record PipelineTemplateConfig(
         String outputContract
     ) {
         this(version, appName, basePackage, transport, platform, messages, unions, sources, publish, steps, aspects,
-            input, output, materialization, inputContract, outputContract, null);
+            input, output, materialization, inputContract, outputContract,
+            PipelineTemplateTypeModel.fromLegacy(messages, unions));
     }
 
     /**
