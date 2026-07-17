@@ -15,9 +15,9 @@ The Pipeline Framework uses MapStruct-based mappers to convert between different
 There are two different concepts named "Mapper" used together:
 
 - **MapStruct Mapper**: the `@org.mapstruct.Mapper` annotation used to generate mapping code.
-- **TPF Mapper Interface**: `org.pipelineframework.mapper.Mapper<Grpc, Dto, Domain>`, which standardizes the method set TPF expects (`toDto`, `fromDto`, `toGrpc`, `fromGrpc`).
+- **TPF Mapper Interface**: `org.pipelineframework.mapper.Mapper<Domain, External>`, which standardizes `fromExternal` and `toExternal` at one generated boundary.
 
-Create unified mappers using MapStruct that handle all conversions:
+For an internal service step, configure an `inboundMapper` for the service input boundary and an `outboundMapper` for the output boundary. They can use different external DTO or generated protobuf types.
 
 ```java
 @Mapper(
@@ -25,35 +25,21 @@ Create unified mappers using MapStruct that handle all conversions:
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN
 )
-public interface PaymentRecordMapper extends Mapper<PaymentRecordGrpc, PaymentRecordDto, PaymentRecord> {
+public interface PaymentRecordMapper extends Mapper<PaymentRecord, PaymentRecordDto> {
 
     PaymentRecordMapper INSTANCE = Mappers.getMapper(PaymentRecordMapper.class);
 
-    // Domain ↔ DTO
     @Override
-    PaymentRecordDto toDto(PaymentRecord domain);
+    PaymentRecord fromExternal(PaymentRecordDto external);
 
     @Override
-    PaymentRecord fromDto(PaymentRecordDto dto);
-
-    // DTO ↔ gRPC
-    @Override
-    @Mapping(target = "id", qualifiedByName = "uuidToString")
-    @Mapping(target = "amount", qualifiedByName = "bigDecimalToString")
-    @Mapping(target = "currency", qualifiedByName = "currencyToString")
-    PaymentRecordGrpc toGrpc(PaymentRecordDto dto);
-
-    @Override
-    @Mapping(target = "id", qualifiedByName = "stringToUUID")
-    @Mapping(target = "amount", qualifiedByName = "stringToBigDecimal")
-    @Mapping(target = "currency", qualifiedByName = "stringToCurrency")
-    PaymentRecordDto fromGrpc(PaymentRecordGrpc grpc);
+    PaymentRecordDto toExternal(PaymentRecord domain);
 }
 ```
 
-The same unified mapper interface handles both inbound and outbound conversions, so no separate outbound mapper is needed when using the MapStruct approach.
+Use a second mapper with the same two-type interface when the step output has a different domain or external type. The two mapper declarations are explicit in YAML so TPF can validate both generated boundaries.
 
-The Java type names you choose in your pipeline YAML (or the web UI) determine DTO/domain field types and the default proto mappings. See [Data Types](/evolve/data-types) for the current type list and defaults.
+Logical type names in pipeline YAML determine the generated contract; Java bindings and application-owned mappers connect it to DTO and domain types. See the [Pipeline Template DSL](/develop/pipeline-template-dsl) for the type model and defaults.
 
 ## Working with DTOs (Optional)
 
@@ -104,7 +90,7 @@ The template generator includes a `CommonConverters` class as a convenience star
 
 ## Best Practices
 
-1. **Use Unified Interface**: Create mappers that implement the unified `Mapper<Grpc, Dto, Domain>` interface
+1. **Use Boundary Mappers**: Create `Mapper<Domain, External>` implementations for each configured inbound or outbound boundary
 2. **Leverage Common Converters**: If helpful, use (or adapt) a `CommonConverters` class for standard type mappings
 3. **Clear Error Handling**: Add appropriate error handling for mapping failures
 4. **Performance Considerations**: Be mindful of expensive mapping operations and cache where appropriate

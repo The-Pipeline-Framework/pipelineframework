@@ -104,6 +104,103 @@ class PipelineProtoGeneratorTest {
         assertEquals(readGeneratedFiles(verboseOutput), readGeneratedFiles(conciseOutput));
     }
 
+    @Test
+    void generatesV3AlgebraicTypesAndUsesThemFromStepContracts() throws Exception {
+        Path configPath = tempDir.resolve("pipeline.yaml");
+        Path outputDir = tempDir.resolve("generated-v3");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "Payments"
+            basePackage: "com.example.payments"
+            transport: "GRPC"
+            types:
+              OrderId:
+                wraps: uuid
+              CustomerId:
+                wraps: uuid
+              Description:
+                alias: string
+              PaymentInput:
+                alias: PaymentRecord
+              PaymentRecord:
+                fields:
+                  - [description, Description]
+                  - [orderId, OrderId]
+                  - [paymentId, uuid]
+                  - [reference, payload_ref]
+              PaymentOutcome:
+                variants:
+                  approved: PaymentRecord
+                  requiresReview: PaymentRecord
+            steps:
+              - name: Process Payment
+                cardinality: ONE_TO_ONE
+                input: PaymentInput
+                output: PaymentOutcome
+            """);
+
+        System.setProperty("pipeline.idl.bootstrap", "true");
+        try {
+            new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+        } finally {
+            System.clearProperty("pipeline.idl.bootstrap");
+        }
+
+        String types = Files.readString(outputDir.resolve("pipeline-types.proto"));
+        assertTrue(types.contains("message OrderId {\n  optional string value = 1;\n}"));
+        assertTrue(types.contains("message CustomerId {\n  optional string value = 1;\n}"));
+        assertFalse(types.contains("message Description"));
+        assertFalse(types.contains("message PaymentInput"));
+        assertTrue(types.contains("optional string description = 1;"));
+        assertTrue(types.contains("OrderId order_id = 2;"));
+        assertTrue(types.contains("optional string payment_id = 3;"));
+        assertTrue(types.contains("PayloadReference reference = 4;"));
+        assertTrue(types.contains("oneof value {"));
+        assertTrue(types.contains("PaymentRecord approved = 1;"));
+        assertTrue(types.contains("PaymentRecord requires_review = 2;"));
+        assertFalse(types.contains("optional PaymentRecord approved"));
+
+        String step = Files.readString(outputDir.resolve("process-payment-svc.proto"));
+        String orchestrator = Files.readString(outputDir.resolve("orchestrator.proto"));
+        assertTrue(step.contains("import \"pipeline-types.proto\";"));
+        assertTrue(step.contains("rpc remoteProcess(PaymentRecord) returns (PaymentOutcome);"));
+        assertTrue(orchestrator.contains("rpc Run (PaymentRecord) returns (PaymentOutcome);"));
+
+        String state = Files.readString(tempDir.resolve("pipeline.idl.json"));
+        assertTrue(state.contains("\"protoName\" : \"payment_id\""));
+        assertTrue(state.contains("\"protoName\" : \"requires_review\""));
+    }
+
+    @Test
+    void rejectsV3StepContractsThatResolveToScalars() throws Exception {
+        Path configPath = tempDir.resolve("scalar-contract.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "Payments"
+            basePackage: "com.example.payments"
+            transport: "GRPC"
+            types:
+              PaymentId:
+                alias: uuid
+              PaymentOutcome:
+                fields: [[id, uuid]]
+            steps:
+              - name: Process Payment
+                cardinality: ONE_TO_ONE
+                input: PaymentId
+                output: PaymentOutcome
+            """);
+
+        System.setProperty("pipeline.idl.bootstrap", "true");
+        try {
+            IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> new PipelineProtoGenerator().generate(tempDir, configPath, tempDir.resolve("generated-scalar")));
+            assertTrue(error.getMessage().contains("resolves to a scalar"));
+        } finally {
+            System.clearProperty("pipeline.idl.bootstrap");
+        }
+    }
+
     private Map<String, String> readGeneratedFiles(Path root) throws Exception {
         Map<String, String> files = new TreeMap<>();
         try (var paths = Files.walk(root)) {
@@ -1721,5 +1818,31 @@ class PipelineProtoGeneratorTest {
         assertTrue(typesContent.contains("map<string, string> metadata = 9;"));
         assertTrue(typesContent.contains("PayloadReference textRef = 3;"));
         assertFalse(typesContent.contains("optional PayloadReference textRef = 3;"));
+    }
+
+    @Test
+    void requiresCommittedIdlStateBeforeWritingV3ProtoArtifacts() throws Exception {
+        Path configPath = tempDir.resolve("v3-pipeline.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: V3
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Payment:
+                fields: [[id, uuid]]
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                input: Payment
+                output: Payment
+            """);
+        Path outputDir = tempDir.resolve("v3-proto");
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+            () -> new PipelineProtoGenerator().generate(tempDir, configPath, outputDir));
+
+        assertTrue(exception.getMessage().contains("require committed pipeline.idl.json"));
+        assertFalse(Files.exists(outputDir));
     }
 }

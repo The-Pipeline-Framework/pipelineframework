@@ -20,7 +20,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
-
 import javax.annotation.processing.Messager;
 import javax.tools.Diagnostic;
 
@@ -31,7 +30,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -179,6 +177,30 @@ class DiscoveryConfigLoaderTest {
         Path badYaml = tempDir.resolve("pipeline.yaml");
         Files.writeString(badYaml, ": invalid yaml without key");
         assertTemplateConfigLoadFails(badYaml, null);
+    }
+
+    @Test
+    void loadTemplateConfig_stopsV3BeforeDeploymentPhases() throws Exception {
+        Path yaml = tempDir.resolve("v3-pipeline.yaml");
+        Files.writeString(yaml, """
+            version: 3
+            appName: V3
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Payment:
+                fields: [[id, uuid]]
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                input: Payment
+                output: Payment
+            """);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+            () -> loader.loadTemplateConfig(yaml, null));
+
+        assertTrue(exception.getMessage().contains("protobuf contracts are available"));
     }
 
     private void assertTemplateConfigLoadFails(Path yamlPath, Messager msg) {

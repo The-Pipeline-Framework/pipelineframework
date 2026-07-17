@@ -62,7 +62,8 @@ public record PipelineTemplateConfig(
     PipelineOutputBoundaryConfig output,
     PipelineTemplateMaterialization materialization,
     String inputContract,
-    String outputContract
+    String outputContract,
+    PipelineTemplateTypeModel typeModel
 ) {
     public PipelineTemplateConfig {
         if (version <= 0) {
@@ -89,6 +90,7 @@ public record PipelineTemplateConfig(
         materialization = materialization == null ? new PipelineTemplateMaterialization(List.of()) : materialization;
         inputContract = normalize(inputContract);
         outputContract = normalize(outputContract);
+        typeModel = typeModel == null ? PipelineTemplateTypeModel.fromLegacy(messages, unions) : typeModel;
     }
 
     /**
@@ -115,6 +117,37 @@ public record PipelineTemplateConfig(
      */
     public Map<String, PipelineTemplateMessage> types() {
         return messages;
+    }
+
+    /** Explicit dialect selected by this configuration's version. */
+    public PipelineTemplateDialect dialect() {
+        return PipelineTemplateDialect.fromVersion(version);
+    }
+
+    /**
+     * Backward-compatible canonical constructor shape before the normalized type model was added.
+     */
+    public PipelineTemplateConfig(
+        int version,
+        String appName,
+        String basePackage,
+        String transport,
+        PipelinePlatform platform,
+        Map<String, PipelineTemplateMessage> messages,
+        Map<String, PipelineTemplateUnion> unions,
+        Map<String, PipelineObjectSourceConfig> sources,
+        Map<String, PipelineObjectPublishConfig> publish,
+        List<PipelineTemplateStep> steps,
+        Map<String, PipelineTemplateAspect> aspects,
+        PipelineInputBoundaryConfig input,
+        PipelineOutputBoundaryConfig output,
+        PipelineTemplateMaterialization materialization,
+        String inputContract,
+        String outputContract
+    ) {
+        this(version, appName, basePackage, transport, platform, messages, unions, sources, publish, steps, aspects,
+            input, output, materialization, inputContract, outputContract,
+            PipelineTemplateTypeModel.fromLegacy(messages, unions));
     }
 
     /**

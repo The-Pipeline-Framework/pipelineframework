@@ -7,7 +7,7 @@ head:
       content: noindex
   - - meta
     - http-equiv: refresh
-      content: 0;url=/evolve/typed-union-output-contracts
+      content: 0;url=../../../develop/pipeline-template-dsl
 ---
 
 <script setup>
@@ -16,11 +16,11 @@ import {withBase} from 'vitepress'
 
 onMounted(() => {
   if (typeof window !== 'undefined') {
-    window.location.replace(withBase('/evolve/typed-union-output-contracts'))
+    window.location.replace(withBase('/develop/pipeline-template-dsl'))
   }
 })
 </script>
 
 # Redirecting...
 
-This page moved to [/evolve/typed-union-output-contracts](/evolve/typed-union-output-contracts).
+This page moved to <a href="../../../develop/pipeline-template-dsl">/develop/pipeline-template-dsl</a>.

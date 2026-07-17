@@ -109,19 +109,24 @@ public class PipelineTemplateConfigLoader {
         }
 
         int version = readVersion(rootMap);
+        PipelineTemplateDialect dialect = PipelineTemplateDialect.fromVersion(version);
         String appName = readString(rootMap, "appName");
         String basePackage = readString(rootMap, "basePackage");
         String transport = normalizeTransport(readString(rootMap, "transport"));
         PipelinePlatform resolvedPlatform = normalizePlatform(readString(rootMap, "platform"));
 
-        if (version < 2 && (rootMap.containsKey("types") || rootMap.containsKey("messages"))) {
+        if (dialect == PipelineTemplateDialect.V1 && (rootMap.containsKey("types") || rootMap.containsKey("messages"))) {
             throw new IllegalStateException("Top-level types/messages require version: 2");
         }
 
-        Map<String, PipelineTemplateMessage> rawMessages = version >= 2
+        if (dialect == PipelineTemplateDialect.V3) {
+            return loadV3(rootMap, version, appName, basePackage, transport, resolvedPlatform);
+        }
+
+        Map<String, PipelineTemplateMessage> rawMessages = dialect == PipelineTemplateDialect.V2
             ? readNamedTypes(rootMap)
             : new LinkedHashMap<>();
-        Map<String, PipelineTemplateUnion> rawUnions = version >= 2
+        Map<String, PipelineTemplateUnion> rawUnions = dialect == PipelineTemplateDialect.V2
             ? readUnions(rootMap)
             : new LinkedHashMap<>();
         Map<String, PipelineObjectSourceConfig> sources = readSources(rootMap);
@@ -137,7 +142,7 @@ public class PipelineTemplateConfigLoader {
         PipelineOutputBoundaryConfig output = readOutputBoundary(rootMap).orElse(null);
         validateObjectOutputTarget(output, publish);
 
-        if (version >= 2) {
+        if (dialect == PipelineTemplateDialect.V2) {
             collectInlineMessages(rawMessages, steps);
             Map<String, PipelineTemplateMessage> normalizedMessages = normalizeMessages(rawMessages);
             Map<String, PipelineTemplateUnion> normalizedUnions = normalizeUnions(rawUnions, normalizedMessages);
@@ -185,6 +190,229 @@ public class PipelineTemplateConfigLoader {
             materialization,
             null,
             null);
+    }
+
+    private PipelineTemplateConfig loadV3(
+        Map<?, ?> rootMap,
+        int version,
+        String appName,
+        String basePackage,
+        String transport,
+        PipelinePlatform platform
+    ) {
+        if (rootMap.containsKey("messages")) {
+            throw new IllegalStateException("Top-level 'messages' is not supported in version: 3; use 'types'.");
+        }
+        if (rootMap.containsKey("unions")) {
+            throw new IllegalStateException("Top-level 'unions' is not supported in version: 3; declare variants under 'types'.");
+        }
+        PipelineTemplateTypeModel typeModel = readV3Types(rootMap);
+        Map<String, PipelineObjectSourceConfig> sources = readSources(rootMap);
+        Map<String, PipelineObjectPublishConfig> publish = readPublishTargets(rootMap);
+        List<PipelineTemplateStep> steps = readSteps(rootMap, version);
+        Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
+        PipelineTemplateMaterialization materialization = readMaterialization(rootMap);
+        if (!materialization.aspects().isEmpty()) {
+            throw new IllegalStateException("Version: 3 does not support materialization declarations.");
+        }
+        rejectLegacyConnectors(rootMap);
+        String inputContract = readLogicalContract(rootMap, "input", version);
+        String outputContract = readLogicalContract(rootMap, "output", version);
+        PipelineInputBoundaryConfig input = readInputBoundary(rootMap);
+        validateObjectInputSource(input, sources);
+        PipelineOutputBoundaryConfig output = readOutputBoundary(rootMap).orElse(null);
+        validateObjectOutputTarget(output, publish);
+        validateV3Contracts(typeModel, inputContract, outputContract, steps);
+        return new PipelineTemplateConfig(version, appName, basePackage, transport, platform, Map.of(), Map.of(), sources,
+            publish, steps, aspects, input, output, materialization, inputContract, outputContract, typeModel);
+    }
+
+    private PipelineTemplateTypeModel readV3Types(Map<?, ?> rootMap) {
+        Object typesObj = rootMap.get("types");
+        if (!(typesObj instanceof Map<?, ?> typesMap) || typesMap.isEmpty()) {
+            throw new IllegalStateException("Version: 3 requires a non-empty top-level 'types' map.");
+        }
+        Map<String, PipelineTemplateTypeDefinition> definitions = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : typesMap.entrySet()) {
+            String name = stringify(entry.getKey());
+            if (name == null || name.isBlank()) {
+                throw new IllegalStateException("Version: 3 type names must not be blank.");
+            }
+            if ("PayloadReference".equals(name)) {
+                throw new IllegalStateException("Type name 'PayloadReference' is reserved for payload_ref fields");
+            }
+            if (!(entry.getValue() instanceof Map<?, ?> declaration)) {
+                throw new IllegalStateException("Type '" + name + "' must be declared as a YAML map.");
+            }
+            definitions.put(name, readV3Type(name, declaration));
+        }
+        return new PipelineTemplateTypeModel(definitions);
+    }
+
+    private PipelineTemplateTypeDefinition readV3Type(String name, Map<?, ?> declaration) {
+        if (declaration.containsKey("number") || declaration.containsKey("optional") || declaration.containsKey("reserved")) {
+            throw new IllegalStateException("Type '" + name + "' cannot declare protobuf wire metadata in version: 3.");
+        }
+        if (declaration.containsKey("pattern")) {
+            throw new IllegalStateException("Type '" + name + "' pattern constraints arrive in #507 and are not supported yet.");
+        }
+        rejectUnexpectedV3Keys(declaration, name, "fields", "wraps", "alias", "variants");
+        boolean fields = declaration.containsKey("fields");
+        boolean wraps = declaration.containsKey("wraps");
+        boolean alias = declaration.containsKey("alias");
+        boolean variants = declaration.containsKey("variants");
+        int forms = (fields ? 1 : 0) + (wraps ? 1 : 0) + (alias ? 1 : 0) + (variants ? 1 : 0);
+        if (forms != 1) {
+            throw new IllegalStateException("Type '" + name + "' must declare exactly one of fields, wraps, alias, or variants.");
+        }
+        if (fields) {
+            return new PipelineTemplateTypeDefinition.RecordType(name, readV3RecordFields(name, declaration.get("fields")));
+        }
+        if (wraps) {
+            String scalar = requiredV3String(declaration, "wraps", name);
+            if (!PipelineTemplateTypeMappings.isV3ScalarType(scalar)) {
+                throw new IllegalStateException("Type '" + name + "' wraps must reference a supported scalar.");
+            }
+            return new PipelineTemplateTypeDefinition.WrapperType(name, new PipelineTemplateTypeReference.Scalar(scalar));
+        }
+        if (alias) {
+            return new PipelineTemplateTypeDefinition.AliasType(name,
+                readV3Reference(requiredV3String(declaration, "alias", name), name + ".alias"));
+        }
+        return new PipelineTemplateTypeDefinition.UnionType(name, readV3Variants(name, declaration.get("variants")));
+    }
+
+    private List<PipelineTemplateTypeDefinition.Field> readV3RecordFields(String owner, Object fieldsObj) {
+        if (!(fieldsObj instanceof Iterable<?> fields)) {
+            throw new IllegalStateException("Type '" + owner + "' fields must be a YAML list.");
+        }
+        List<PipelineTemplateTypeDefinition.Field> result = new ArrayList<>();
+        int index = 0;
+        for (Object fieldObj : fields) {
+            String fieldName;
+            String fieldType;
+            if (fieldObj instanceof List<?> tuple) {
+                if (tuple.size() != 2) {
+                    throw new IllegalStateException("Type '" + owner + "' field " + index + " must be exactly [nonBlankName, type].");
+                }
+                fieldName = stringify(tuple.get(0));
+                fieldType = stringify(tuple.get(1));
+            } else if (fieldObj instanceof Map<?, ?> fieldMap) {
+                if (fieldMap.containsKey("number") || fieldMap.containsKey("optional") || fieldMap.containsKey("reserved")) {
+                    throw new IllegalStateException("Type '" + owner + "' field " + index + " cannot declare protobuf wire metadata in version: 3.");
+                }
+                rejectUnexpectedV3Keys(fieldMap, owner + " field " + index, "name", "type");
+                fieldName = stringify(fieldMap.get("name"));
+                fieldType = stringify(fieldMap.get("type"));
+            } else {
+                throw new IllegalStateException("Type '" + owner + "' field " + index + " must be an object or [name, type] tuple.");
+            }
+            if (fieldName == null || fieldName.isBlank() || fieldType == null || fieldType.isBlank()) {
+                throw new IllegalStateException("Type '" + owner + "' field " + index + " must be exactly [nonBlankName, type].");
+            }
+            result.add(new PipelineTemplateTypeDefinition.Field(fieldName, readV3Reference(fieldType, owner + "." + fieldName)));
+            index++;
+        }
+        return List.copyOf(result);
+    }
+
+    private Map<String, PipelineTemplateTypeDefinition.Variant> readV3Variants(String unionName, Object variantsObj) {
+        if (!(variantsObj instanceof Map<?, ?> variants) || variants.isEmpty()) {
+            throw new IllegalStateException("Union '" + unionName + "' must declare variants as a non-empty YAML map.");
+        }
+        Map<String, PipelineTemplateTypeDefinition.Variant> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : variants.entrySet()) {
+            String discriminator = stringify(entry.getKey());
+            String payload = stringify(entry.getValue());
+            if (discriminator == null || discriminator.isBlank() || payload == null || payload.isBlank()) {
+                throw new IllegalStateException("Union '" + unionName + "' variants must map a non-blank discriminator to a named type.");
+            }
+            if (PipelineTemplateTypeMappings.isV3ScalarType(payload)) {
+                throw new IllegalStateException("Union '" + unionName + "' variant '" + discriminator + "' must reference a named type.");
+            }
+            if (payload.contains("<") || payload.contains(".")) {
+                throw new IllegalStateException("Union '" + unionName + "' variant '" + discriminator + "' must reference a named type.");
+            }
+            result.put(discriminator, new PipelineTemplateTypeDefinition.Variant(discriminator,
+                new PipelineTemplateTypeReference.Named(payload)));
+        }
+        return result;
+    }
+
+    private PipelineTemplateTypeReference readV3Reference(String value, String owner) {
+        if (value.contains("<") || value.contains(">") || value.contains("[") || value.contains("]")) {
+            throw new IllegalStateException("Type '" + owner + "' uses an unsupported v3 type expression '" + value + "'.");
+        }
+        if (PipelineTemplateTypeMappings.isV3ScalarType(value)) {
+            return new PipelineTemplateTypeReference.Scalar(value);
+        }
+        if (!PipelineTemplateTypeMappings.isMessageReferenceToken(value)) {
+            throw new IllegalStateException("Type '" + owner + "' must reference a supported scalar or named type, got '" + value + "'.");
+        }
+        return new PipelineTemplateTypeReference.Named(value);
+    }
+
+    private String requiredV3String(Map<?, ?> values, String key, String owner) {
+        String value = stringify(values.get(key));
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("Type '" + owner + "' " + key + " must be a non-blank YAML string.");
+        }
+        return value;
+    }
+
+    private void rejectUnexpectedV3Keys(Map<?, ?> values, String owner, String... allowed) {
+        Set<String> permitted = Set.of(allowed);
+        for (Object rawKey : values.keySet()) {
+            String key = stringify(rawKey);
+            if (key == null || !permitted.contains(key)) {
+                throw new IllegalStateException("Type '" + owner + "' contains unsupported version: 3 property '" + key + "'.");
+            }
+        }
+    }
+
+    private void validateV3Contracts(
+        PipelineTemplateTypeModel typeModel,
+        String inputContract,
+        String outputContract,
+        List<PipelineTemplateStep> steps
+    ) {
+        if (inputContract != null && !typeModel.contains(inputContract)) {
+            throw new IllegalStateException("Pipeline contract references unknown type '" + inputContract + "'.");
+        }
+        if (outputContract != null && !typeModel.contains(outputContract)) {
+            throw new IllegalStateException("Pipeline contract references unknown type '" + outputContract + "'.");
+        }
+        for (PipelineTemplateStep step : steps) {
+            requireLogicalContract(step.name(), "input", step.inputTypeName());
+            requireLogicalContract(step.name(), "output", step.outputTypeName());
+            if (!typeModel.contains(step.inputTypeName())) {
+                throw new IllegalStateException("Step '" + step.name() + "' references unknown input type '" + step.inputTypeName() + "'.");
+            }
+            if (!typeModel.contains(step.outputTypeName())) {
+                throw new IllegalStateException("Step '" + step.name() + "' references unknown output type '" + step.outputTypeName() + "'.");
+            }
+        }
+        if (steps.isEmpty()) {
+            return;
+        }
+        PipelineTemplateStep first = steps.getFirst();
+        if (inputContract != null && !typeModel.isAssignable(inputContract, first.inputTypeName())) {
+            throw new IllegalStateException("Pipeline input contract '" + inputContract + "' is not assignable to first step '"
+                + first.name() + "' input '" + first.inputTypeName() + "'.");
+        }
+        for (int index = 1; index < steps.size(); index++) {
+            PipelineTemplateStep previous = steps.get(index - 1);
+            PipelineTemplateStep current = steps.get(index);
+            if (!typeModel.isAssignable(previous.outputTypeName(), current.inputTypeName())) {
+                throw new IllegalStateException("Step '" + previous.name() + "' output '" + previous.outputTypeName()
+                    + "' is not assignable to step '" + current.name() + "' input '" + current.inputTypeName() + "'.");
+            }
+        }
+        PipelineTemplateStep last = steps.getLast();
+        if (outputContract != null && !typeModel.isAssignable(last.outputTypeName(), outputContract)) {
+            throw new IllegalStateException("Final step '" + last.name() + "' output '" + last.outputTypeName()
+                + "' is not assignable to pipeline output contract '" + outputContract + "'.");
+        }
     }
 
     /**
@@ -518,7 +746,7 @@ public class PipelineTemplateConfigLoader {
                     throw new IllegalStateException(
                         "Union '" + unionName + "' variant '" + variant.name() + "' must declare type");
                 }
-                if (!messages.containsKey(variant.type())) {
+                if (!messages.containsKey(variant.type()) && !PipelineTemplateTypeMappings.isV3ScalarType(variant.type())) {
                     throw new IllegalStateException(
                         "Union '" + unionName + "' variant '" + variant.name()
                             + "' references unknown message '" + variant.type() + "'");
@@ -678,6 +906,10 @@ public class PipelineTemplateConfigLoader {
             }
             String inputType = contracts.logicalInput().orElse(null);
             String outputType = contracts.logicalOutput().orElse(null);
+            if (version == 3 && (stepMap.containsKey("inputFields") || stepMap.containsKey("outputFields"))) {
+                throw new IllegalStateException("Step '" + name
+                    + "' inline inputFields/outputFields are not supported in version: 3; declare types at the top level.");
+            }
             List<PipelineTemplateField> inputFields = readFields(stepMap.get("inputFields"), version);
             List<PipelineTemplateField> outputFields = readFields(stepMap.get("outputFields"), version);
             String inboundMapper = readString(stepMap, "inboundMapper");

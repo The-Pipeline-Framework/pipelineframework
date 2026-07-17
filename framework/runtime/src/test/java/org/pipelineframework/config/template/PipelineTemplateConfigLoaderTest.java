@@ -1241,4 +1241,256 @@ class PipelineTemplateConfigLoaderTest {
 
         assertTrue(exception.getMessage().contains("unknown input message or union 'MisspelledInput'"), exception.getMessage());
     }
+
+    @Test
+    void loadsV3AlgebraicTypesWithoutLeakingWireMetadata() throws Exception {
+        Path configPath = tempDir.resolve("v3-types.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: V3 Types
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              OrderId:
+                wraps: uuid
+              Description:
+                alias: string
+              PaymentApproved:
+                fields:
+                  - [orderId, OrderId]
+                  - name: description
+                    type: Description
+              PaymentOutcome:
+                variants:
+                  approved: PaymentApproved
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                input: PaymentApproved
+                output: PaymentOutcome
+            """);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        assertEquals(PipelineTemplateDialect.V3, config.dialect());
+        assertTrue(config.messages().isEmpty());
+        assertTrue(config.unions().isEmpty());
+        assertEquals(4, config.typeModel().definitions().size());
+        assertEquals(List.of("OrderId", "Description", "PaymentApproved", "PaymentOutcome"),
+            config.typeModel().definitions().keySet().stream().toList());
+        assertTrue(config.typeModel().isAssignable("Description", "Description"));
+        assertTrue(config.typeModel().isAssignable("string", "Description"));
+        assertFalse(config.typeModel().isAssignable("OrderId", "Description"));
+        assertTrue(config.typeModel().isAssignable("PaymentApproved", "PaymentOutcome"));
+
+        PipelineIdlSnapshot snapshot = PipelineIdlSnapshot.from(config);
+        assertEquals(List.of("description", "order_id"), snapshot.types().get("PaymentApproved").fields().stream()
+            .map(PipelineIdlSnapshot.TypeFieldSnapshot::protoName).toList());
+        assertEquals(List.of(1, 2), snapshot.types().get("PaymentApproved").fields().stream()
+            .map(PipelineIdlSnapshot.TypeFieldSnapshot::number).toList());
+    }
+
+    @Test
+    void rejectsV3WireMetadataAndLegacyContractSyntaxIndependently() throws Exception {
+        Path configPath = tempDir.resolve("v3-wire-metadata.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: V3 Types
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Payment:
+                fields:
+                  - number: 1
+                    name: id
+                    type: uuid
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                inputTypeName: Payment
+                output: Payment
+            """);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("cannot declare protobuf wire metadata"));
+
+        Path legacyContracts = tempDir.resolve("v3-legacy-contracts.yaml");
+        Files.writeString(legacyContracts, """
+            version: 3
+            appName: V3 Types
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Payment:
+                fields: [[id, uuid]]
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                inputTypeName: Payment
+                output: Payment
+            """);
+
+        IllegalStateException legacyException = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(legacyContracts));
+
+        assertTrue(legacyException.getMessage().contains("inputTypeName/outputTypeName are not supported in version: 3"));
+
+        Path unknownContract = tempDir.resolve("v3-unknown-contract.yaml");
+        Files.writeString(unknownContract, """
+            version: 3
+            appName: V3 Types
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Payment:
+                fields: [[id, uuid]]
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                input: MissingPayment
+                output: Payment
+            """);
+
+        IllegalStateException unknownException = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(unknownContract));
+
+        assertTrue(unknownException.getMessage().contains("references unknown input type 'MissingPayment'"));
+    }
+
+    @Test
+    void rejectsNullReferencesAndMapReferenceCyclesInTheNormalizedTypeModel() {
+        IllegalStateException nullAlias = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateTypeModel(Map.of(
+                "Alias", new PipelineTemplateTypeDefinition.AliasType("Alias", null))));
+        assertTrue(nullAlias.getMessage().contains("invalid type reference"));
+
+        IllegalStateException nullVariant = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateTypeModel(Map.of(
+                "Outcome", new PipelineTemplateTypeDefinition.UnionType("Outcome", Map.of(
+                    "missing", new PipelineTemplateTypeDefinition.Variant("missing", null))))));
+        assertTrue(nullVariant.getMessage().contains("invalid type reference"));
+
+        IllegalStateException mapCycle = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateTypeModel(Map.of(
+                "A", new PipelineTemplateTypeDefinition.AliasType("A",
+                    new PipelineTemplateTypeReference.MapType(
+                        new PipelineTemplateTypeReference.Scalar("string"),
+                        new PipelineTemplateTypeReference.Named("A"))))));
+        assertTrue(mapCycle.getMessage().contains("Recursive v3 type reference"));
+    }
+
+    @Test
+    void rejectsV3RecursiveAndUnknownReferences() throws Exception {
+        Path configPath = tempDir.resolve("v3-recursive.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: V3 Types
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              A:
+                fields: [[next, B]]
+              B:
+                alias: A
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                input: A
+                output: A
+            """);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("Recursive v3 type reference"));
+    }
+
+    @Test
+    void validatesV3ContractLinksAndRejectsMaterialization() throws Exception {
+        Path incompatible = tempDir.resolve("v3-incompatible-links.yaml");
+        Files.writeString(incompatible, """
+            version: 3
+            appName: V3 Links
+            basePackage: com.example.v3
+            transport: GRPC
+            contract:
+              input: Request
+            types:
+              Request: { fields: [[id, uuid]] }
+              OtherRequest: { fields: [[id, uuid]] }
+              Result: { fields: [[id, uuid]] }
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                input: OtherRequest
+                output: Result
+            """);
+
+        IllegalStateException linkError = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(incompatible));
+        assertTrue(linkError.getMessage().contains("Pipeline input contract 'Request' is not assignable"));
+
+        Path materialized = tempDir.resolve("v3-materialization.yaml");
+        Files.writeString(materialized, """
+            version: 3
+            appName: V3 Materialization
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Payment: { fields: [[id, uuid]] }
+            materialization:
+              aspects:
+                - name: payload
+                  message: Payment
+                  action: REFERENCE
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                input: Payment
+                output: Payment
+            """);
+
+        IllegalStateException materializationError = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(materialized));
+        assertEquals("Version: 3 does not support materialization declarations.", materializationError.getMessage());
+    }
+
+    @Test
+    void preservesLegacyMapAndScalarUnionReferencesInTheCompatibilityTypeModel() throws Exception {
+        Path configPath = tempDir.resolve("v2-map-and-scalar-union.yaml");
+        Files.writeString(configPath, """
+            version: 2
+            appName: Legacy Types
+            basePackage: com.example.v2
+            transport: GRPC
+            types:
+              Input:
+                fields:
+                  - name: metadata
+                    type: map
+                    keyType: string
+                    valueType: string
+            unions:
+              Outcome:
+                variants:
+                  accepted:
+                    type: string
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                input: Input
+                output: Outcome
+            """);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+        PipelineTemplateTypeDefinition.RecordType input = (PipelineTemplateTypeDefinition.RecordType) config.typeModel()
+            .definitions().get("Input");
+        PipelineTemplateTypeDefinition.UnionType outcome = (PipelineTemplateTypeDefinition.UnionType) config.typeModel()
+            .definitions().get("Outcome");
+
+        assertInstanceOf(PipelineTemplateTypeReference.MapType.class, input.fields().getFirst().type());
+        assertInstanceOf(PipelineTemplateTypeReference.Scalar.class, outcome.variants().get("accepted").payload());
+    }
 }

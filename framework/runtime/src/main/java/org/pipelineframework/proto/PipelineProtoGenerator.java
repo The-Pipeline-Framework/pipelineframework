@@ -21,32 +21,13 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.pipelineframework.config.CardinalitySemantics;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
-import org.pipelineframework.config.template.PipelineIdlCompatibilityChecker;
-import org.pipelineframework.config.template.PipelineIdlSnapshot;
-import org.pipelineframework.config.template.PipelineIdlStateResolver;
-import org.pipelineframework.config.template.PipelineTemplateAspect;
-import org.pipelineframework.config.template.PipelineTemplateConfig;
-import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
-import org.pipelineframework.config.template.PipelineTemplateField;
-import org.pipelineframework.config.template.PipelineTemplateMessage;
-import org.pipelineframework.config.template.PipelineTemplateRemoteTarget;
-import org.pipelineframework.config.template.PipelineTemplateReserved;
-import org.pipelineframework.config.template.PipelineTemplateStep;
-import org.pipelineframework.config.template.PipelineTemplateStepExecution;
-import org.pipelineframework.config.template.PipelineTemplateUnion;
-import org.pipelineframework.config.template.PipelineTemplateUnionVariant;
+import org.pipelineframework.config.template.*;
 
 /**
  * Generates protobuf definitions from the pipeline template configuration.
@@ -63,6 +44,7 @@ public class PipelineProtoGenerator {
     private static final String IDL_BOOTSTRAP_PROPERTY = "pipeline.idl.bootstrap";
     private static final String REQUIRE_COMMITTED_IDL_STATE_PROPERTY = "pipeline.idl.require-committed-state";
     private static final ObjectMapper IDL_MAPPER = PipelineJson.mapper().copy().findAndRegisterModules();
+    private final PipelineTypesProtoRenderer typesRenderer = new PipelineTypesProtoRenderer();
 
     /**
      * Creates a new PipelineProtoGenerator.
@@ -148,16 +130,26 @@ public class PipelineProtoGenerator {
         }
         List<PipelineTemplateStep> steps = config.steps();
         if (steps == null || steps.isEmpty()) {
+            if (config.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3) {
+                writeProto(resolvedOutput.resolve(resolvedTypesProtoName),
+                    typesRenderer.renderV3(config.basePackage(), config.typeModel(), idl.state()));
+            }
             return;
         }
 
-        boolean v2 = config.version() >= 2;
-        List<ResolvedStep> resolvedSteps = normalizeSteps(steps, v2);
+        boolean sharedTypes = config.dialect() != org.pipelineframework.config.template.PipelineTemplateDialect.V1;
+        List<ResolvedStep> resolvedSteps = normalizeSteps(steps, sharedTypes);
+        if (config.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3) {
+            resolvedSteps = resolveV3AliasContracts(resolvedSteps, config.typeModel());
+        }
         List<AspectDefinition> aspectDefinitions = toAspectDefinitions(config.aspects());
 
-        if (v2) {
+        if (sharedTypes) {
             Path typesProtoPath = resolvedOutput.resolve(resolvedTypesProtoName);
-            writeProto(typesProtoPath, renderTypesProto(config.basePackage(), config.messages(), config.unions()));
+            String typesProto = config.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3
+                ? typesRenderer.renderV3(config.basePackage(), config.typeModel(), idl.state())
+                : typesRenderer.renderV2(config.basePackage(), config.messages(), config.unions());
+            writeProto(typesProtoPath, typesProto);
         }
 
         for (int i = 0; i < resolvedSteps.size(); i++) {
@@ -169,7 +161,7 @@ public class PipelineProtoGenerator {
                 previous,
                 i == 0,
                 aspectDefinitions,
-                v2,
+                sharedTypes,
                 resolvedTypesProtoName);
             Path protoPath = resolvedOutput.resolve(step.serviceName() + ".proto");
             writeProto(protoPath, content);
@@ -178,7 +170,7 @@ public class PipelineProtoGenerator {
 
         String transport = config.transport();
         if (transport == null || transport.isBlank() || "GRPC".equalsIgnoreCase(transport)) {
-            String content = renderOrchestratorProto(config.basePackage(), resolvedSteps, v2, resolvedTypesProtoName);
+            String content = renderOrchestratorProto(config.basePackage(), resolvedSteps, sharedTypes, resolvedTypesProtoName);
             Path protoPath = resolvedOutput.resolve(ORCHESTRATOR_PROTO);
             writeProto(protoPath, content);
         }
@@ -341,6 +333,37 @@ public class PipelineProtoGenerator {
             previous = resolvedStep;
         }
         return resolved;
+    }
+
+    private List<ResolvedStep> resolveV3AliasContracts(
+        List<ResolvedStep> steps,
+        PipelineTemplateTypeModel typeModel
+    ) {
+        return steps.stream().map(step -> new ResolvedStep(
+            step.name(),
+            step.serviceName(),
+            step.serviceNameFormatted(),
+            step.cardinality(),
+            resolveV3ProtoContract(step.inputTypeName(), typeModel),
+            step.inputFields(),
+            resolveV3ProtoContract(step.outputTypeName(), typeModel),
+            step.outputFields(),
+            step.execution())).toList();
+    }
+
+    private String resolveV3ProtoContract(
+        String contract,
+        PipelineTemplateTypeModel typeModel
+    ) {
+        if (contract == null || contract.isBlank()) {
+            throw new IllegalStateException("Version: 3 steps require a non-blank logical contract.");
+        }
+        PipelineTemplateTypeReference reference = typeModel.resolveAliases(new PipelineTemplateTypeReference.Named(contract));
+        if (reference instanceof PipelineTemplateTypeReference.Scalar) {
+            throw new IllegalStateException("Version: 3 step contract '" + contract
+                + "' resolves to a scalar; step contracts must resolve to a named message type.");
+        }
+        return PipelineTypesProtoRenderer.protoType(reference, typeModel);
     }
 
     /**

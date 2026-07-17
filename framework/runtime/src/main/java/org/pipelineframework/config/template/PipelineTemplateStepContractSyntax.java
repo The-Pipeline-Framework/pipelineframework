@@ -44,6 +44,19 @@ public final class PipelineTemplateStepContractSyntax {
         }
 
         JavaContracts java = readJava(step, stepName);
+        if (version == 3) {
+            if (legacyInput.isPresent() || legacyOutput.isPresent()) {
+                throw new IllegalStateException("Step '" + stepName
+                    + "' inputTypeName/outputTypeName are not supported in version: 3; use input/output.");
+            }
+            if (canonicalInput.filter(value -> !isLogicalName(value)).isPresent()
+                || canonicalOutput.filter(value -> !isLogicalName(value)).isPresent()) {
+                throw new IllegalStateException("Step '" + stepName
+                    + "' version: 3 input/output must be named logical contracts; put Java bindings under java.input/java.output.");
+            }
+            return new StepContracts(canonicalInput, canonicalOutput, java.input(), java.output(), false);
+        }
+
         Direction input = normalizeDirection("input", canonicalInput, legacyInput, java.input(), stepName);
         Direction output = normalizeDirection("output", canonicalOutput, legacyOutput, java.output(), stepName);
         return new StepContracts(input.logical(), output.logical(), input.javaType(), output.javaType(),

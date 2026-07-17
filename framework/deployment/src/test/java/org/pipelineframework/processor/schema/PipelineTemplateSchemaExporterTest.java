@@ -51,6 +51,8 @@ class PipelineTemplateSchemaExporterTest {
         JsonObject definitions = schema.getAsJsonObject("$defs");
         assertTrue(definitions.has("v2MessageDefinition"));
         assertTrue(definitions.has("v2UnionDefinition"));
+        assertTrue(definitions.has("v3TypeDefinition"));
+        assertTrue(definitions.has("v3RecordField"));
         assertTrue(definitions.has("pipelineInputBoundary"));
         assertTrue(definitions.has("pipelineOutputBoundary"));
         assertTrue(definitions.has("pipelineSources"));
@@ -78,6 +80,8 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(properties.has("queries"));
         assertTrue(properties.has("publish"));
         assertTrue(properties.has("materialization"));
+        assertTrue(properties.getAsJsonObject("version").getAsJsonArray("enum").asList().stream()
+            .anyMatch(value -> value.getAsInt() == 3));
     }
 
     @Test
@@ -102,10 +106,49 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(contract.getAsJsonObject("properties").has("output"));
         assertFalse(contract.get("additionalProperties").getAsBoolean());
 
-        JsonObject aliasExclusion = schema.getAsJsonArray("allOf").get(1).getAsJsonObject()
-            .getAsJsonObject("not");
+        JsonObject aliasExclusion = schema.getAsJsonArray("allOf").asList().stream().map(JsonElement::getAsJsonObject)
+            .filter(rule -> rule.has("not") && rule.getAsJsonObject("not").has("required"))
+            .findFirst().orElseThrow().getAsJsonObject("not");
         assertContains(aliasExclusion.getAsJsonArray("required"), "types");
         assertContains(aliasExclusion.getAsJsonArray("required"), "messages");
+    }
+
+    @Test
+    void versionTwoTypesCannotUseVersionThreeTypeDefinitions() {
+        JsonArray allOf = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonArray("allOf");
+        JsonObject versionTwoRule = allOf.asList().stream().map(JsonElement::getAsJsonObject)
+            .filter(rule -> rule.has("if") && rule.getAsJsonObject("if").toString().contains("\"const\":2")
+                && rule.getAsJsonObject("then").getAsJsonObject("properties").has("types"))
+            .findFirst().orElseThrow();
+
+        JsonObject types = versionTwoRule.getAsJsonObject("then").getAsJsonObject("properties").getAsJsonObject("types");
+        assertEquals("#/$defs/v2MessageDefinition", types.getAsJsonObject("additionalProperties").get("$ref").getAsString());
+    }
+
+    @Test
+    void versionThreeSchemaRequiresNonEmptyUnionsAndCanonicalStepContracts() {
+        JsonObject schema = parse(PipelineTemplateSchemaExporter.schemaJson());
+        JsonObject definitions = schema.getAsJsonObject("$defs");
+        JsonObject unionDefinition = definitions.getAsJsonObject("v3TypeDefinition").getAsJsonArray("oneOf")
+            .get(3).getAsJsonObject().getAsJsonObject("properties").getAsJsonObject("variants");
+        assertEquals(1, unionDefinition.get("minProperties").getAsInt());
+
+        JsonObject v3Step = definitions.getAsJsonObject("v3TemplateStep");
+        assertContains(v3Step.getAsJsonArray("required"), "input");
+        assertContains(v3Step.getAsJsonArray("required"), "output");
+        JsonArray excluded = v3Step.getAsJsonArray("allOf").get(0).getAsJsonObject().getAsJsonObject("not")
+            .getAsJsonArray("anyOf");
+        assertTrue(excluded.asList().stream().map(JsonElement::getAsJsonObject)
+            .anyMatch(entry -> entry.getAsJsonArray("required").get(0).getAsString().equals("inputTypeName")));
+        assertTrue(excluded.asList().stream().map(JsonElement::getAsJsonObject)
+            .anyMatch(entry -> entry.getAsJsonArray("required").get(0).getAsString().equals("inputFields")));
+
+        JsonObject versionThreeRule = schema.getAsJsonArray("allOf").asList().stream().map(JsonElement::getAsJsonObject)
+            .filter(rule -> rule.has("if") && rule.getAsJsonObject("if").toString().contains("\"const\":3"))
+            .findFirst().orElseThrow();
+        JsonArray stepRules = versionThreeRule.getAsJsonObject("then").getAsJsonObject("properties")
+            .getAsJsonObject("steps").getAsJsonObject("items").getAsJsonArray("allOf");
+        assertEquals("#/$defs/v3TemplateStep", stepRules.get(1).getAsJsonObject().get("$ref").getAsString());
     }
 
     @Test
