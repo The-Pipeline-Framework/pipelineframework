@@ -2158,6 +2158,63 @@
         "query",
         "cardinality"
       ]
+    },
+    "v3RecordField": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["name", "type"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "type": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "array",
+          "prefixItems": [
+            { "type": "string", "minLength": 1 },
+            { "type": "string", "minLength": 1 }
+          ],
+          "minItems": 2,
+          "maxItems": 2,
+          "items": false
+        }
+      ]
+    },
+    "v3TypeDefinition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["fields"],
+          "properties": { "fields": { "type": "array", "items": { "$ref": "#/$defs/v3RecordField" } } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["wraps"],
+          "properties": { "wraps": { "type": "string", "pattern": "^(string|bool|int32|int64|float32|float64|decimal|uuid|timestamp|datetime|date|duration|bytes|currency|uri|path|payload_ref)$" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["alias"],
+          "properties": { "alias": { "type": "string", "minLength": 1 } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["variants"],
+          "properties": {
+            "variants": {
+              "type": "object",
+              "propertyNames": { "type": "string", "minLength": 1 },
+              "additionalProperties": { "$ref": "#/$defs/logicalContractReference" }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
     }
   },
   "allOf": [
@@ -2165,7 +2222,7 @@
       "if": {
         "properties": {
           "version": {
-            "const": 2
+            "enum": [2, 3]
           }
         },
         "required": [
@@ -2237,6 +2294,37 @@
           "messages"
         ]
       }
+    },
+    {
+      "if": {
+        "properties": { "version": { "const": 3 } },
+        "required": ["version"]
+      },
+      "then": {
+        "required": ["types"],
+        "properties": {
+          "messages": false,
+          "unions": false,
+          "types": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/v3TypeDefinition" }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "version": { "const": 2 } },
+        "required": ["version"]
+      },
+      "then": {
+        "properties": {
+          "types": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/v2MessageDefinition" }
+          }
+        }
+      }
     }
   ],
   "properties": {
@@ -2244,7 +2332,8 @@
       "type": "integer",
       "enum": [
         1,
-        2
+        2,
+        3
       ],
       "default": 1
     },
@@ -2302,7 +2391,10 @@
         "pattern": "^[A-Z][A-Za-z0-9_]*$"
       },
       "additionalProperties": {
-        "$ref": "#/$defs/v2MessageDefinition"
+        "anyOf": [
+          { "$ref": "#/$defs/v2MessageDefinition" },
+          { "$ref": "#/$defs/v3TypeDefinition" }
+        ]
       }
     },
     "messages": {

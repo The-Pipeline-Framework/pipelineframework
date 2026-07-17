@@ -127,9 +127,9 @@ const mainSidebar = [
                     {text: 'Lambda-Focused Configuration', link: '/develop/configuration/lambda-focused'}
                 ]
             },
+            {text: 'Pipeline Template DSL', link: '/develop/pipeline-template-dsl'},
             {text: '@PipelineStep Annotation', link: '/develop/pipeline-step'},
             {text: 'Code a Step', link: '/develop/code-a-step'},
-            {text: 'Typed Union Outputs', link: '/develop/typed-union-outputs'},
             {text: 'Item Reject Sink', link: '/develop/item-reject-sink'},
             {text: 'Operators', link: '/develop/operators'},
             {text: 'Operator Build Troubleshooting', link: '/develop/operators-build-troubleshooting'},

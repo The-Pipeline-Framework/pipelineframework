@@ -51,6 +51,8 @@ class PipelineTemplateSchemaExporterTest {
         JsonObject definitions = schema.getAsJsonObject("$defs");
         assertTrue(definitions.has("v2MessageDefinition"));
         assertTrue(definitions.has("v2UnionDefinition"));
+        assertTrue(definitions.has("v3TypeDefinition"));
+        assertTrue(definitions.has("v3RecordField"));
         assertTrue(definitions.has("pipelineInputBoundary"));
         assertTrue(definitions.has("pipelineOutputBoundary"));
         assertTrue(definitions.has("pipelineSources"));
@@ -78,6 +80,8 @@ class PipelineTemplateSchemaExporterTest {
         assertTrue(properties.has("queries"));
         assertTrue(properties.has("publish"));
         assertTrue(properties.has("materialization"));
+        assertTrue(properties.getAsJsonObject("version").getAsJsonArray("enum").asList().stream()
+            .anyMatch(value -> value.getAsInt() == 3));
     }
 
     @Test
@@ -106,6 +110,17 @@ class PipelineTemplateSchemaExporterTest {
             .getAsJsonObject("not");
         assertContains(aliasExclusion.getAsJsonArray("required"), "types");
         assertContains(aliasExclusion.getAsJsonArray("required"), "messages");
+    }
+
+    @Test
+    void versionTwoTypesCannotUseVersionThreeTypeDefinitions() {
+        JsonArray allOf = parse(PipelineTemplateSchemaExporter.schemaJson()).getAsJsonArray("allOf");
+        JsonObject versionTwoRule = allOf.asList().stream().map(JsonElement::getAsJsonObject)
+            .filter(rule -> rule.has("if") && rule.getAsJsonObject("if").toString().contains("\"const\":2"))
+            .findFirst().orElseThrow();
+
+        JsonObject types = versionTwoRule.getAsJsonObject("then").getAsJsonObject("properties").getAsJsonObject("types");
+        assertEquals("#/$defs/v2MessageDefinition", types.getAsJsonObject("additionalProperties").get("$ref").getAsString());
     }
 
     @Test

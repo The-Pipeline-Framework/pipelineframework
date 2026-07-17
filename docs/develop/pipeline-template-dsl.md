@@ -1,46 +1,140 @@
-# Pipeline template types and linear contracts
+# Pipeline template DSL
 
-Version 2 pipeline templates support a compact type form and, for a strictly linear chain, optional logical contract propagation. These are authoring conveniences: they normalize into the same template model and do not change service, operator, mapper, or runtime execution behavior.
+Version 3 describes a pipeline in domain terms. A type says what business value is moving through the pipeline; a step says how that value changes. Protobuf tags, generated bindings, and transport representations are compiler-owned infrastructure.
 
-## Types
-
-Use `types` for named pipeline types:
+The protobuf generator realizes version 3 declarations as protobuf contracts. Generated workload-language APIs remain pending, so a full pipeline compile reports that capability boundary rather than flattening a wrapper or union.
 
 ```yaml
+version: 3
+
 types:
-  PaymentRequest:
+  OrderId:
+    wraps: uuid
+
+  Currency:
+    wraps: string
+
+  Description:
+    alias: string
+
+  Money:
     fields:
-      - [orderId, uuid]
       - [amount, decimal]
+      - [currency, Currency]
+
+  PaymentApproved:
+    fields:
+      - [orderId, OrderId]
+      - [authorizationId, string]
+
+  PaymentDeclined:
+    fields:
+      - [orderId, OrderId]
+      - [reason, string]
+
+  PaymentRequiresReview:
+    fields:
+      - [orderId, OrderId]
+      - [reason, string]
+
+  PaymentOutcome:
+    variants:
+      approved: PaymentApproved
+      declined: PaymentDeclined
+      requiresReview: PaymentRequiresReview
 ```
 
-`messages` remains a supported compatibility alias, but emits a deprecation warning. A template must declare one alias, not both.
+## Domain types
 
-Field tuples are YAML arrays in the exact form `[name, type]`. Tags are compiler-owned and committed in a sibling IDL lock file (`pipeline.idl.json` for `pipeline.yaml`); object fields remain necessary for metadata such as `repeated`, `overrides`, or `referenceable`.
+Every entry in `types` declares exactly one kind of type.
+
+| Declaration | Meaning |
+| --- | --- |
+| `fields` | A product type: this value contains all of these fields. |
+| `wraps` | A nominal domain value over one semantic scalar. |
+| `alias` | A transparent name for another type. |
+| `variants` | A closed sum type: this value is one declared alternative. |
+
+### Product types
+
+Use `fields` for a named business record. A compact field is a YAML tuple in the exact form `[name, type]`; the object form is `{ name, type }`.
 
 ```yaml
 types:
   PaymentRequest:
     fields:
-      - [orderId, uuid]
+      - [orderId, OrderId]
+      - [amount, decimal]
       - name: lineItems
         type: PaymentLineItem
-        repeated: true
 ```
 
-Tuple and object fields may be mixed in one type. They produce the same field model as the verbose form:
+Field names are unique within a product type. A field can reference a semantic scalar or another named type.
+
+### Nominal wrappers
+
+Use `wraps` when the underlying representation has a distinct business identity. `OrderId` and `CustomerId` can both wrap `uuid` without becoming interchangeable.
 
 ```yaml
-messages: # compatibility alias; prefer types
-  PaymentRequest:
-    fields:
-      - name: orderId
-        type: uuid
+types:
+  OrderId:
+    wraps: uuid
+  CustomerId:
+    wraps: uuid
 ```
 
-## Linear logical contracts
+A wrapper is assignable only to the same wrapper. Conversion to or from the wrapped scalar is explicit at a generated or application-owned boundary; it is never an implicit substitution in a step contract.
 
-Logical contracts name pipeline types. They are different from fully qualified Java implementation types on a step.
+Portable wrapper constraints, including `pattern`, are introduced after the normalized type model and are not accepted by this compiler slice.
+
+### Aliases
+
+Use `alias` for a better name without creating a new nominal identity.
+
+```yaml
+types:
+  Description:
+    alias: string
+  PaymentNarrative:
+    alias: Description
+```
+
+An alias is assignable as its resolved target. Alias chains are allowed when they are acyclic.
+
+### Discriminated unions
+
+Use `variants` for a closed set of business outcomes. The variant key is the discriminator and is part of the domain contract; it does not derive from a payload class name.
+
+```yaml
+types:
+  PaymentOutcome:
+    variants:
+      approved: PaymentApproved
+      declined: PaymentDeclined
+      requiresReview: PaymentRequiresReview
+```
+
+A union value is assignable to its union contract. A concrete variant can be introduced into that union, but the union itself is not assignable to a concrete variant. Variants reference named payload types; inline payload records and payload-less variants are intentionally outside this DSL.
+
+A union declares a contract, not a routing graph. Branch applicability remains type-based and linear. Use a union contract where a step consumes the complete outcome set; use `accepts` only when a branch deliberately narrows that set.
+
+## Wire identity and compatibility
+
+Names, field names, and variant discriminators are the DSL-facing identities. The compiler allocates protobuf tags and records them in the sibling IDL lock file (`pipeline.idl.json` for `pipeline.yaml`). YAML never contains field or variant numbers.
+
+The compiler preserves tags and reservations as types evolve. Changing a field representation, a wrapper representation, an alias target, or a variant discriminator changes the contract and is checked before generation. A generated target must preserve nominal identity and discriminator semantics; a target that cannot do so reports a clear diagnostic instead of silently flattening the type.
+
+### Generated protobuf contracts
+
+Version 3 emits a shared `pipeline-types.proto`. Records become protobuf messages, and authored camel-case field names are rendered as deterministic `snake_case` protobuf fields. Each eligible singular scalar has proto3 explicit presence; named messages and `payload_ref` already have message presence.
+
+A wrapper is a distinct message with `value = 1`, so two wrappers over the same scalar remain distinct on the wire. An alias emits no message and resolves transitively to its target protobuf type. A union becomes a message with `oneof value`; each discriminator becomes a `snake_case` oneof field, while the authored discriminator remains the semantic identity in `pipeline.idl.json`.
+
+The generator reserves removed protobuf names and tags from the committed IDL state. Source declaration order does not affect retained or newly allocated tags.
+
+## Pipeline contracts
+
+Logical contracts use the names declared in `types`. They are distinct from Java implementation types.
 
 ```yaml
 contract:
@@ -59,11 +153,9 @@ steps:
     output: PaymentOutcome
 ```
 
-`contract.input` enables propagation. The first step inherits it when its logical input is omitted. Each later step inherits the preceding resolved logical output when its input is omitted. An explicit logical step input remains valid and is checked as an assertion: it must equal the inherited contract.
+`contract.input` supplies the first omitted step input. In a linear chain, each later omitted input inherits the preceding concrete output. An explicit input is an assertion and must agree with the inherited contract. `contract.output`, when present, asserts the final concrete output.
 
-`contract.output` is optional. When present, it asserts that the final step has that concrete logical output.
-
-The `contract` block is intentionally separate from root `input` and `output`. Those root keys remain exclusively physical boundaries, so a subscription, object input, checkpoint, or object publication can coexist with logical propagation:
+Physical boundaries remain under root `input` and `output`, so they can coexist with logical contracts:
 
 ```yaml
 input:
@@ -77,116 +169,42 @@ contract:
   output: PaymentOutcome
 ```
 
-In v2 templates, step `input` and `output` always name logical pipeline contracts. When the compiling module can inspect a local Java service or operator, its signature and mapper resolution infer the Java execution types. Use the optional closed `java` block to assert that inferred binding, resolve an ambiguity, or declare the binding for a service that is outside the compiling module's classpath:
+Propagation never guesses across a union, a branch, or a predecessor without one concrete output. Those contracts stay explicit.
+
+## Java bindings and mappers
+
+Step `input` and `output` always name logical pipeline contracts. For an inspectable local service or operator, TPF infers Java execution types from the signature and resolved mappers. Use `java` to assert that inference, resolve an ambiguity, or supply the coordinator-side binding when the service is outside the compiling module.
 
 ```yaml
 - name: Process Payment
   service: com.example.payment.ProcessPaymentService
   input: PaymentRecord
-  output: PaymentStatus
+  output: PaymentOutcome
   java:
     input: com.example.domain.PaymentRecord
-    output: com.example.domain.PaymentStatus
+    output: com.example.domain.PaymentOutcome
 ```
 
-For remote and other coordinator-owned steps that have no inspectable local Java signature, `java` supplies the required coordinator-side binding. In a split-module pipeline, a local service hosted by another module is also non-inspectable from the current compilation, so its `java` bindings remain explicit. This is a build-topology constraint, not a different runtime execution model. A fully qualified v2 `input` or `output` remains accepted as deprecated compatibility syntax when paired with `inputTypeName` or `outputTypeName`; it emits a migration warning. Those `*TypeName` keys remain compatibility aliases for logical contracts.
+For a remote or framework-owned step without an inspectable local Java contract, `java` provides the required coordinator-side binding.
 
 ::: tip Compilation visibility is topology-scoped
-Java-type and mapper discovery runs in the annotation-processing compilation unit that is currently building. It can inspect only service classes and mapper classes on that module's compile classpath; it does not discover a sibling module merely because both modules are part of the same pipeline repository.
+Java-type and mapper discovery runs in the annotation-processing compilation unit currently being built. It sees only services and mappers on that module's compile classpath; sibling modules in the same repository are not automatically visible.
 
-The effective runtime mapping selects the generated role and logical placement for a step, while the Maven build topology determines the classpath of the module compiling that role. When a pipeline uses more than one runtime mapping or deployable module, evaluate discovery separately for each compilation unit. If a referenced service is not visible there, provide `java.input` / `java.output`; if the generated client must cross a representation boundary, also provide the appropriate mapper. See [Runtime layouts and build topologies](/deploy/runtime-layouts/) for the distinction.
+The runtime mapping chooses generated roles and logical placement. The Maven build topology chooses the classpath for each generated role. Evaluate discovery independently for every compiling module; provide `java.input` / `java.output` and the required mapper whenever that module cannot inspect the service or representation boundary. See [Runtime layouts and build topologies](/deploy/runtime-layouts/).
 :::
 
-### Mappers are separate from `java`
+A Java binding identifies a domain type. A mapper performs a representation conversion and remains explicit at a real conversion boundary.
 
-`java` identifies a Java domain type. A mapper performs an actual representation conversion, so it remains explicit at a conversion boundary:
-
-| Boundary | Explicit declaration |
+| Boundary | Required declaration |
 | --- | --- |
-| Object ingest into the first business step | `input.emits.mapper` for the object snapshot and the first step's `inboundMapper` for the pipeline message/domain conversion |
-| A service or mapper outside the current compilation unit | `java.input` / `java.output`, plus `inboundMapper` / `outboundMapper` when the generated cross-module client must translate the pipeline message and its domain type |
-| Object publish from the terminal business step | terminal `outboundMapper` for the pipeline message/domain conversion, plus `output.consumes.mapper` to render the published object payload |
+| Object ingest into the first business step | `input.emits.mapper` for the object snapshot and the first step's `inboundMapper` for the pipeline/domain conversion |
+| Service outside the compiling module | `java.input` / `java.output`, plus `inboundMapper` / `outboundMapper` when the generated client crosses representations |
+| Object publish from the terminal business step | terminal `outboundMapper` and `output.consumes.mapper` |
 
-Do not add a mapper merely to restate an inspectable local service signature. Do add it when the boundary changes representation; signature inference does not replace an object adapter, a transport mapper, or a cross-module client mapper.
+Do not add a mapper only to restate an inspectable local service signature. Add one whenever the boundary changes representation.
 
-### Before and after
+## Deliberately small language
 
-The following explicit v2 chain:
-
-```yaml
-messages:
-  PaymentRequest:
-    fields:
-      - number: 1
-        name: orderId
-        type: uuid
-  ValidatedPayment:
-    fields:
-      - number: 1
-        name: orderId
-        type: uuid
-  PaymentOutcome:
-    fields:
-      - number: 1
-        name: orderId
-        type: uuid
-steps:
-  - name: Validate Payment
-    cardinality: ONE_TO_ONE
-    input: PaymentRequest
-    output: ValidatedPayment
-  - name: Process Payment
-    cardinality: ONE_TO_ONE
-    input: ValidatedPayment
-    output: PaymentOutcome
-```
-
-The above chain can be authored as:
-
-```yaml
-types:
-  PaymentRequest:
-    fields: [[1, orderId, uuid]]
-  ValidatedPayment:
-    fields: [[1, orderId, uuid]]
-  PaymentOutcome:
-    fields: [[1, orderId, uuid]]
-contract:
-  input: PaymentRequest
-  output: PaymentOutcome
-steps:
-  - name: Validate Payment
-    cardinality: ONE_TO_ONE
-    output: ValidatedPayment
-  - name: Process Payment
-    cardinality: ONE_TO_ONE
-    output: PaymentOutcome
-```
-
-## Applicability
-
-| Template shape | Compact `types` / tuples | Contract propagation |
-| --- | --- | --- |
-| Linear local pipeline | Yes | Yes, with a concrete named output at every predecessor |
-| Delegated Java operator | Yes | Yes for logical contracts; Java signature inference is unchanged |
-| Remote step | Yes | No; retain explicit logical `input`/`output` and required `java` bindings |
-| Branch-aware pipeline (`accepts` or `terminal`) | Yes | No; keep explicit branch contracts |
-| Physical input/output boundary | Yes | Yes, using the separate `contract` block |
-| Union or non-singular predecessor output | Yes | No; declare the next input explicitly |
-| Await, command, or query flow | Yes when otherwise valid | Keep explicit contracts unless the flow is demonstrably a supported linear chain |
-| Version 1 template | No v2 alias migration | No |
-
-Propagation stops when a predecessor has no concrete singular logical output. It also does not guess across branches or unions. A missing predecessor output, an inherited/explicit mismatch, or a final-output assertion mismatch is a compile-time error.
-
-## Migration
-
-For a tag-free template without a sibling lock, compilation creates the initial IDL lock file with the current tags (`pipeline.idl.json` for `pipeline.yaml`); commit that file. Set `-Dpipeline.idl.require-committed-state=true` to fail instead when a lock is missing, for example in a strict CI or release policy. The explicit bootstrap flag (`-Dpipeline.idl.bootstrap=true`) remains available to rewrite a lock intentionally. Then remove `number`, `reserved`, and `optional` from YAML. Legacy three-item tuples and object `number` values continue to load with warnings during the transition; `optional` no longer controls protobuf presence.
-
-1. In a v2 template, replace top-level `messages` with `types`.
-2. Convert only field objects that contain exactly `number`, `name`, and `type`; preserve field order and all advanced object fields.
-3. Do not declare both aliases.
-4. For a demonstrably linear chain, add `contract.input` from the existing first logical input. Add `contract.output` only when the final logical output is concrete.
-5. Remove a repeated logical step input only when it exactly equals the preceding logical output. Keep every output needed by the chain.
-6. Move Java execution contracts into `java.input` and `java.output`; keep legacy fully qualified `input`/`output` plus `*TypeName` pairs only while migrating.
+The DSL does not provide inline union payloads, payload-less variants, optional shorthand, generic type expressions, recursive types, units of measure, arbitrary smart constructors, predicate routing, or workflow-graph semantics. Keep business-state modeling explicit through named product types, wrappers, aliases, and closed unions.
 
 See the [pipeline compilation guide](./pipeline-compilation/) for build-time validation and generated artifacts.

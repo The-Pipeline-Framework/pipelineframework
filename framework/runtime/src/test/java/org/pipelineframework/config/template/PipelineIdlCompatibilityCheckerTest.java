@@ -21,10 +21,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class PipelineIdlCompatibilityCheckerTest {
 
@@ -273,6 +270,49 @@ class PipelineIdlCompatibilityCheckerTest {
 
         assertTrue(errors.stream().anyMatch(msg -> msg.contains("removed variant 'rejected'")),
             "expected errors containing removed union variant, got: " + errors);
+    }
+
+    @Test
+    void v3AdditionsAreCompatibleButChangingGeneratedIdentityIsNot() {
+        PipelineIdlSnapshot.TypeSnapshot baselineRecord = new PipelineIdlSnapshot.TypeSnapshot(
+            "Payment", "record", List.of(new PipelineIdlSnapshot.TypeFieldSnapshot(1, "paymentId", "payment_id", "uuid")),
+            null, List.of());
+        PipelineIdlSnapshot.TypeSnapshot additiveRecord = new PipelineIdlSnapshot.TypeSnapshot(
+            "Payment", "record", List.of(
+                new PipelineIdlSnapshot.TypeFieldSnapshot(1, "paymentId", "payment_id", "uuid"),
+                new PipelineIdlSnapshot.TypeFieldSnapshot(2, "status", "status", "string")), null, List.of());
+
+        assertTrue(new PipelineIdlCompatibilityChecker().compare(v3Snapshot(baselineRecord), v3Snapshot(additiveRecord)).isEmpty());
+
+        PipelineIdlSnapshot.TypeSnapshot renamedProtoField = new PipelineIdlSnapshot.TypeSnapshot(
+            "Payment", "record", List.of(new PipelineIdlSnapshot.TypeFieldSnapshot(1, "paymentId", "payment_identifier", "uuid")),
+            null, List.of());
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(v3Snapshot(baselineRecord), v3Snapshot(renamedProtoField));
+
+        assertTrue(errors.stream().anyMatch(error -> error.contains("protobuf identity or type")));
+    }
+
+    @Test
+    void v3RejectsActiveFieldsAndVariantsThatReuseReservedWireIdentity() {
+        PipelineIdlSnapshot.TypeSnapshot record = new PipelineIdlSnapshot.TypeSnapshot(
+            "Payment", "record", List.of(new PipelineIdlSnapshot.TypeFieldSnapshot(1, "paymentId", "payment_id", "uuid")),
+            null, List.of(), List.of(1), List.of("payment_id"));
+        PipelineIdlSnapshot.TypeSnapshot union = new PipelineIdlSnapshot.TypeSnapshot(
+            "Outcome", "union", List.of(), null,
+            List.of(new PipelineIdlSnapshot.TypeVariantSnapshot("approved", "Payment", "approved", 1)),
+            List.of(1), List.of("approved"));
+        PipelineIdlSnapshot snapshot = new PipelineIdlSnapshot(3, "App", "com.example", Map.of(), Map.of(),
+            Map.of("Payment", record, "Outcome", union), List.of());
+
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(snapshot, snapshot);
+
+        assertTrue(errors.stream().anyMatch(error -> error.contains("reused reserved protobuf tag 1")));
+        assertTrue(errors.stream().anyMatch(error -> error.contains("reused reserved protobuf field name 'payment_id'")));
+        assertTrue(errors.stream().anyMatch(error -> error.contains("reused reserved protobuf discriminator field 'approved'")));
+    }
+
+    private PipelineIdlSnapshot v3Snapshot(PipelineIdlSnapshot.TypeSnapshot type) {
+        return new PipelineIdlSnapshot(3, "App", "com.example", Map.of(), Map.of(), Map.of(type.name(), type), List.of());
     }
 
     private PipelineIdlSnapshot snapshot(List<PipelineIdlSnapshot.FieldSnapshot> fields) {

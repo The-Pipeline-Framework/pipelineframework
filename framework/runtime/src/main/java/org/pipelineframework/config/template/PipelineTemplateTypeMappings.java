@@ -101,6 +101,11 @@ final class PipelineTemplateTypeMappings {
         return value != null && BUILTIN_TYPES.contains(value.trim().toLowerCase(Locale.ROOT));
     }
 
+    /** Returns whether the token is a scalar supported by the deliberately small v3 type language. */
+    static boolean isV3ScalarType(String value) {
+        return isBuiltinType(value) && !"map".equalsIgnoreCase(value.trim());
+    }
+
     /**
      * Determines whether a string is a message reference token.
      *

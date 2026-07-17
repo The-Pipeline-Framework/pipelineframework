@@ -33,17 +33,28 @@ Use the blocking family in two explicit modes:
 For internal `service:` steps, declare the contract in `pipeline.yaml`:
 
 ```yaml
+types:
+  PaymentRecord:
+    fields:
+      - [id, uuid]
+  PaymentStatus:
+    fields:
+      - [status, string]
+
 steps:
   - name: process-payment
     service: com.app.payment.ProcessPaymentService
     cardinality: ONE_TO_ONE
-    input: com.app.domain.PaymentRecord
-    output: com.app.domain.PaymentStatus
+    input: PaymentRecord
+    output: PaymentStatus
+    java:
+      input: com.app.domain.PaymentRecord
+      output: com.app.domain.PaymentStatus
     inboundMapper: com.app.payment.PaymentRecordMapper
     outboundMapper: com.app.payment.PaymentStatusMapper
 ```
 
-The `input` and `output` fields specify the service domain types and must match the generic parameters of the service interface you implement, whether reactive or blocking. The `inboundMapper` and `outboundMapper` fields reference mappers that translate between Domain ↔ External (e.g., `Mapper<Domain, External>`). Mappers should be provided as paired `Mapper<Domain, External>` implementations to validate boundaries and avoid build-time type mismatches.
+The `input` and `output` fields name logical pipeline contracts. For a locally inspectable service or operator, the optional `java` block asserts inferred types or resolves an ambiguity; for remote or cross-module steps it supplies the coordinator-side domain binding. An unexpected local inference failure remains a compile-time error. The `inboundMapper` and `outboundMapper` fields reference mappers that translate between Domain ↔ External (for example, `Mapper<Domain, External>`). Mappers are paired at a step boundary because the inbound and outbound external types can differ.
 
 When a step can produce several closed business outcomes, keep the single-output shape and declare the output as a typed union.
 
@@ -87,11 +98,22 @@ For Quarkus, YAML-declared internal blocking services that implement the existin
 For Spring, YAML-only `REST` or `LOCAL` + `COMPUTE` unary blocking internal steps can set the same YAML flag when authored as `processBlocking(In): Out`.
 
 ```yaml
+types:
+  CsvFile:
+    fields:
+      - [path, string]
+  PaymentRecord:
+    fields:
+      - [id, uuid]
+
 steps:
   - name: "process csv"
     service: "com.example.ProcessCsvService"
-    input: "com.example.CsvFile"
-    output: "com.example.PaymentRecord"
+    input: CsvFile
+    output: PaymentRecord
+    java:
+      input: "com.example.CsvFile"
+      output: "com.example.PaymentRecord"
     runOnVirtualThreads: true
 ```
 
@@ -105,7 +127,7 @@ Spring generated unary steps adapt `processBlocking(In): Out` through `RuntimeAd
 Create pair-based MapStruct mappers using TPF's `Mapper<Domain, External>` interface.
 Use one mapper per boundary.
 
-Note: The Java type names you choose in your pipeline YAML (or the web UI) drive the DTO/domain fields and the generated proto mappings. See [Data Types](/evolve/data-types) for the full list and defaults.
+The logical type names in pipeline YAML drive the generated contract. Java bindings and application-owned mappers connect that contract to DTO and domain types. See the [Pipeline Template DSL](/develop/pipeline-template-dsl) for the type model and defaults.
 
 ```java
 @Mapper(
