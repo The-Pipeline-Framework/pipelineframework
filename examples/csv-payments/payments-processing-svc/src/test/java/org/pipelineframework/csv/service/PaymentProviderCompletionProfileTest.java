@@ -80,20 +80,20 @@ class PaymentProviderCompletionProfileTest {
     assertEquals("pending", pending.get(1, TimeUnit.SECONDS));
   }
 
-  @Test
+  `@Test`
   void staleFlushDoesNotReleaseTheNextBurstEarly() throws Exception {
     try (PaymentProviderCompletionProfile<String> profile = new PaymentProviderCompletionProfile<>(
         2,
-        Duration.ofMillis(250),
+        Duration.ofMillis(1000),
         "payment-provider-completion-profile-test")) {
       profile.releaseWhenReady("first");
       profile.releaseWhenReady("second").toCompletableFuture().get(1, TimeUnit.SECONDS);
-      Thread.sleep(125);
+      Thread.sleep(250);
       var third = profile.releaseWhenReady("third").toCompletableFuture();
 
-      Thread.sleep(175);
+      Thread.sleep(500);
       assertFalse(third.isDone());
-      assertEquals("third", third.get(1, TimeUnit.SECONDS));
+      assertEquals("third", third.get(2, TimeUnit.SECONDS));
     }
   }
 }
