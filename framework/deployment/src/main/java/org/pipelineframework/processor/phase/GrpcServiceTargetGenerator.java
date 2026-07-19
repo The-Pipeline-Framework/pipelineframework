@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.util.Objects;
 import javax.tools.Diagnostic;
 
+import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateDialect;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.renderer.GenerationContext;
@@ -90,13 +92,20 @@ public class GrpcServiceTargetGenerator implements TargetGenerator {
         }
 
         DeploymentRole role = model.deploymentRole();
+        PipelineTemplateConfig template = request.ctx().getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            ? config
+            : null;
         renderer.render(request.grpcBinding(), new GenerationContext(
             ctx.getProcessingEnv(),
             pathResolver.resolveRoleOutputDir(ctx, role),
             role,
             request.enabledAspects(),
             request.cacheKeyGenerator(),
-            request.descriptorSet()));
+            request.descriptorSet(),
+            null,
+            template == null ? null : template.basePackage(),
+            null,
+            template != null && template.dialect() == PipelineTemplateDialect.V3));
 
         String className = servicePackage + PIPELINE_PACKAGE_SEGMENT + generatedName + "GrpcService";
         request.roleMetadataGenerator().recordClassWithRole(className, role.name());

@@ -106,12 +106,15 @@ public class PipelineProtoGenerator {
         Path idlStatePath = resolveIdlStatePath(resolvedConfig);
         PipelineIdlSnapshot committedState = Files.exists(idlStatePath) ? readBaselineSnapshot(idlStatePath.toString()) : null;
         boolean lockMissing = committedState == null;
-        boolean hasSemanticTypes = !config.messages().isEmpty() || !config.unions().isEmpty();
+        boolean hasSemanticTypes = config.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3
+            ? !config.typeModel().definitions().isEmpty()
+            : !config.messages().isEmpty() || !config.unions().isEmpty();
         if (lockMissing && hasSemanticTypes && Boolean.getBoolean(REQUIRE_COMMITTED_IDL_STATE_PROPERTY)) {
             throw new IllegalStateException("Pipeline template is missing committed IDL state: " + idlStatePath);
         }
         boolean bootstrapIdl = Boolean.getBoolean(IDL_BOOTSTRAP_PROPERTY);
-        boolean initializeIdl = bootstrapIdl || (lockMissing && hasSemanticTypes);
+        boolean initializeIdl = bootstrapIdl || (config.dialect() != org.pipelineframework.config.template.PipelineTemplateDialect.V3
+            && lockMissing && hasSemanticTypes);
         PipelineIdlStateResolver.Resolved idl = new PipelineIdlStateResolver().resolve(config, committedState, initializeIdl);
         config = idl.config();
         if (config.basePackage() == null || config.basePackage().isBlank()) {

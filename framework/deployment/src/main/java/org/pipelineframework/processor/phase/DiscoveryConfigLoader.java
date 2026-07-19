@@ -108,10 +108,7 @@ class DiscoveryConfigLoader {
                 warning -> messager.printMessage(Diagnostic.Kind.WARNING, warning));
         try {
             PipelineTemplateConfig config = loader.load(configPath);
-            if (config.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3) {
-                throw new IllegalStateException(
-                    "Version: 3 protobuf contracts are available, but workload target realization is not available yet.");
-            }
+            new V3JavaWorkloadCapabilityValidator().validate(config);
             return config;
         } catch (Exception e) {
             if (messager != null) {

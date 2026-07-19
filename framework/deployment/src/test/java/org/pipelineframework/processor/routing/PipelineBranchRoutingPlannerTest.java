@@ -8,6 +8,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.processing.Messager;
@@ -25,6 +26,9 @@ import org.pipelineframework.config.template.PipelinePlatform;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateMessage;
 import org.pipelineframework.config.template.PipelineTemplateStep;
+import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
+import org.pipelineframework.config.template.PipelineTemplateTypeModel;
+import org.pipelineframework.config.template.PipelineTemplateTypeReference;
 import org.pipelineframework.config.template.PipelineTemplateUnion;
 import org.pipelineframework.config.template.PipelineTemplateUnionVariant;
 import org.pipelineframework.processor.PipelineCompilationContext;
@@ -76,6 +80,69 @@ class PipelineBranchRoutingPlannerTest {
         assertEquals(
             List.of("StockReserved", "LicenseProvisioned", "ManualReviewRequested"),
             plan.orElseThrow().steps().get(4).acceptedContractTypes());
+        assertTrue(diagnostics.isEmpty(), diagnostics.toString());
+    }
+
+    @Test
+    void plansV3LinearUnionRoutingUsingGeneratedSealedVariantTypes() {
+        List<String> diagnostics = new ArrayList<>();
+        PipelineCompilationContext ctx = context(diagnostics);
+        Map<String, PipelineTemplateTypeDefinition> definitions = new LinkedHashMap<>();
+        definitions.put("OrderRequest", new PipelineTemplateTypeDefinition.RecordType("OrderRequest", List.of()));
+        definitions.put("PhysicalOrder", new PipelineTemplateTypeDefinition.RecordType("PhysicalOrder", List.of()));
+        definitions.put("DigitalOrder", new PipelineTemplateTypeDefinition.RecordType("DigitalOrder", List.of()));
+        definitions.put("StockReserved", new PipelineTemplateTypeDefinition.RecordType("StockReserved", List.of()));
+        definitions.put("LicenseProvisioned", new PipelineTemplateTypeDefinition.RecordType("LicenseProvisioned", List.of()));
+        definitions.put("FinalizedOrder", new PipelineTemplateTypeDefinition.RecordType("FinalizedOrder", List.of()));
+        definitions.put("OrderDecision", new PipelineTemplateTypeDefinition.UnionType("OrderDecision", Map.of(
+            "physical", new PipelineTemplateTypeDefinition.Variant("physical", new PipelineTemplateTypeReference.Named("PhysicalOrder")),
+            "digital", new PipelineTemplateTypeDefinition.Variant("digital", new PipelineTemplateTypeReference.Named("DigitalOrder")))));
+        definitions.put("OrderCompletion", new PipelineTemplateTypeDefinition.UnionType("OrderCompletion", Map.of(
+            "stock", new PipelineTemplateTypeDefinition.Variant("stock", new PipelineTemplateTypeReference.Named("StockReserved")),
+            "license", new PipelineTemplateTypeDefinition.Variant("license", new PipelineTemplateTypeReference.Named("LicenseProvisioned")))));
+        ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
+            3,
+            "Order Routing",
+            "com.example.order",
+            "GRPC",
+            PipelinePlatform.COMPUTE,
+            Map.of(),
+            Map.of(),
+            Map.of(),
+            Map.of(),
+            List.of(
+                step("classifyOrder", "OrderRequest", "OrderDecision", List.of(), false),
+                step("reserveStock", "OrderDecision", "StockReserved", List.of("PhysicalOrder"), false),
+                step("provisionLicense", "OrderDecision", "LicenseProvisioned", List.of("DigitalOrder"), false),
+                step("finalize", "OrderCompletion", "FinalizedOrder", List.of("StockReserved", "LicenseProvisioned"), true)),
+            Map.of(),
+            null,
+            null,
+            null,
+            null,
+            null,
+            new PipelineTemplateTypeModel(definitions)));
+        ctx.setStepDefinitions(List.of(
+            stepDefinition("classifyOrder", "com.example.order.domain", "OrderRequest", "OrderDecision"),
+            stepDefinition("reserveStock", "com.example.order.domain", "OrderDecision.Physical", "StockReserved"),
+            stepDefinition("provisionLicense", "com.example.order.domain", "OrderDecision.Digital", "LicenseProvisioned"),
+            stepDefinition("finalize", "com.example.order.domain", "OrderCompletion", "FinalizedOrder")));
+
+        var plan = planner.plan(ctx);
+
+        assertTrue(plan.isPresent(), diagnostics.toString());
+        assertTrue(plan.orElseThrow().branchAware());
+        assertEquals(3, plan.orElseThrow().terminalStepIndex());
+        assertEquals(List.of("PhysicalOrder"), plan.orElseThrow().steps().get(1).acceptedContractTypes());
+        assertEquals(List.of(ClassName.get("com.example.order.domain", "OrderDecision", "Physical")),
+            plan.orElseThrow().steps().get(1).acceptedDomainTypes());
+        assertEquals(List.of("DigitalOrder"), plan.orElseThrow().steps().get(2).acceptedContractTypes());
+        assertEquals(List.of(ClassName.get("com.example.order.domain", "OrderDecision", "Digital")),
+            plan.orElseThrow().steps().get(2).acceptedDomainTypes());
+        assertEquals(List.of("StockReserved", "LicenseProvisioned"), plan.orElseThrow().steps().get(3).acceptedContractTypes());
+        assertEquals(List.of("StockReserved", "LicenseProvisioned"), plan.orElseThrow().steps().get(3).acceptedDomainTypes().stream()
+            .map(ClassName::toString)
+            .toList());
         assertTrue(diagnostics.isEmpty(), diagnostics.toString());
     }
 

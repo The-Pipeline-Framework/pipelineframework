@@ -21,13 +21,15 @@ import org.pipelineframework.processor.ir.PipelineTransport;
  * @param transportMode Gets the resolved pipeline transport mode when available.
  * @param pipelineBasePackage Gets the resolved pipeline base package when available.
  * @param stepOrder Gets the zero-based resolved step order when rendering an ordered pipeline step.
+ * @param v3GeneratedDomainTypes Whether the current pipeline has generated v3 Java domain types available.
  */
 public record GenerationContext(ProcessingEnvironment processingEnv, Path outputDir, DeploymentRole role,
                                 Set<String> enabledAspects, ClassName cacheKeyGenerator,
                                 DescriptorProtos.FileDescriptorSet descriptorSet,
                                 PipelineTransport transportMode,
                                 String pipelineBasePackage,
-                                Integer stepOrder) {
+                                Integer stepOrder,
+                                boolean v3GeneratedDomainTypes) {
     /**
      * Creates a new GenerationContext instance.
      */
@@ -48,7 +50,26 @@ public record GenerationContext(ProcessingEnvironment processingEnv, Path output
             descriptorSet,
             transportMode,
             pipelineBasePackage,
-            null);
+            null,
+            false);
+    }
+
+    public GenerationContext(ProcessingEnvironment processingEnv, Path outputDir, DeploymentRole role,
+                             Set<String> enabledAspects, ClassName cacheKeyGenerator,
+                             DescriptorProtos.FileDescriptorSet descriptorSet,
+                             PipelineTransport transportMode,
+                             String pipelineBasePackage,
+                             Integer stepOrder) {
+        this(processingEnv,
+            outputDir,
+            role,
+            enabledAspects,
+            cacheKeyGenerator,
+            descriptorSet,
+            transportMode,
+            pipelineBasePackage,
+            stepOrder,
+            false);
     }
 
     public GenerationContext(
@@ -58,6 +79,6 @@ public record GenerationContext(ProcessingEnvironment processingEnv, Path output
             Set<String> enabledAspects,
             ClassName cacheKeyGenerator,
             DescriptorProtos.FileDescriptorSet descriptorSet) {
-        this(processingEnv, outputDir, role, enabledAspects, cacheKeyGenerator, descriptorSet, null, null, null);
+        this(processingEnv, outputDir, role, enabledAspects, cacheKeyGenerator, descriptorSet, null, null, null, false);
     }
 }
