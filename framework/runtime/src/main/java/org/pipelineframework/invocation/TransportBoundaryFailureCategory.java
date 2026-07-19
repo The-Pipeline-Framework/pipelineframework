@@ -8,6 +8,8 @@ enum TransportBoundaryFailureCategory {
     MALFORMED("malformed"),
     PROTOCOL("protocol"),
     CANCELLED("cancelled"),
+    REMOTE_SERVER("remote_server"),
+    CIRCUIT_OPEN("circuit_open"),
     UNEXPECTED("unexpected");
 
     private final String metricValue;
