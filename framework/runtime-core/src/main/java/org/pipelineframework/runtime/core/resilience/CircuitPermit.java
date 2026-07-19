@@ -1,5 +1,7 @@
 package org.pipelineframework.runtime.core.resilience;
 
+import java.util.concurrent.CompletionStage;
+
 /**
  * Admission token for exactly one dependency invocation.
  *
@@ -8,21 +10,21 @@ package org.pipelineframework.runtime.core.resilience;
  */
 public interface CircuitPermit {
 
-    void complete(CircuitOutcome outcome);
+    CompletionStage<Void> complete(CircuitOutcome outcome);
 
-    default void succeed() {
-        complete(CircuitOutcome.SUCCESS);
+    default CompletionStage<Void> succeed() {
+        return complete(CircuitOutcome.SUCCESS);
     }
 
-    default void healthFailure() {
-        complete(CircuitOutcome.HEALTH_FAILURE);
+    default CompletionStage<Void> healthFailure() {
+        return complete(CircuitOutcome.HEALTH_FAILURE);
     }
 
-    default void neutral() {
-        complete(CircuitOutcome.NEUTRAL);
+    default CompletionStage<Void> neutral() {
+        return complete(CircuitOutcome.NEUTRAL);
     }
 
-    default void cancel() {
-        complete(CircuitOutcome.NEUTRAL);
+    default CompletionStage<Void> cancel() {
+        return complete(CircuitOutcome.NEUTRAL);
     }
 }

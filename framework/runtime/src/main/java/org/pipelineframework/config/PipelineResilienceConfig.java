@@ -24,6 +24,32 @@ public interface PipelineResilienceConfig {
      */
     Map<String, CircuitConfig> circuit();
 
+    /** Shared-circuit authority configuration. Required only by SHARED_DEPENDENCY policies. */
+    SharedConfig shared();
+
+    interface SharedConfig {
+        /** DynamoDB table forming the single-region shared protection domain. */
+        @WithName("dynamo-table")
+        Optional<String> dynamoTable();
+
+        /** Maximum age of a locally cached shared state snapshot. */
+        @WithName("max-state-staleness")
+        @WithDefault("PT1S")
+        Duration maxStateStaleness();
+
+        /** Hint returned after a shared authority outage. */
+        @WithName("backend-retry-delay")
+        @WithDefault("PT1S")
+        Duration backendRetryDelay();
+
+        /** Optional AWS region; the default provider chain is used when omitted. */
+        Optional<String> region();
+
+        /** Optional Dynamo endpoint override, primarily for isolated environments. */
+        @WithName("endpoint-override")
+        Optional<String> endpointOverride();
+    }
+
     interface CircuitConfig {
         /**
          * Enables this circuit boundary.
@@ -85,6 +111,15 @@ public interface PipelineResilienceConfig {
         @WithName("half-open-retry-delay")
         @WithDefault("PT1S")
         Duration halfOpenRetryDelay();
+
+        /**
+         * Logical lease duration of a shared HALF_OPEN probe. It must cover the invocation timeout.
+         *
+         * @return probe lease duration
+         */
+        @WithName("half-open-probe-lease-duration")
+        @WithDefault("PT30S")
+        Duration halfOpenProbeLeaseDuration();
 
         /**
          * Optional stable logical identity used to group compatible boundaries.

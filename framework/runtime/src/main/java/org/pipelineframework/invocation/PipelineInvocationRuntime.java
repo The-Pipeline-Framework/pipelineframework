@@ -4,6 +4,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.LongConsumer;
 import java.util.function.Supplier;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -15,6 +17,7 @@ import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.runtime.core.resilience.CircuitBreaker;
 import org.pipelineframework.runtime.core.resilience.CircuitDecision;
 import org.pipelineframework.runtime.core.resilience.CircuitOpenException;
+import org.pipelineframework.runtime.core.resilience.CircuitProtectionUnavailableException;
 import org.pipelineframework.runtime.core.resilience.CircuitOutcome;
 import org.pipelineframework.runtime.core.resilience.CircuitPermit;
 import org.pipelineframework.runtime.core.resilience.InMemoryCircuitBreaker;
@@ -165,30 +168,27 @@ public class PipelineInvocationRuntime {
         Objects.requireNonNull(supplier, "supplier must not be null");
         return Uni.createFrom().deferred(() -> {
             long startNanos = System.nanoTime();
-            CircuitPermit permit;
-            try {
-                permit = acquirePermit(boundary);
-            } catch (CircuitOpenException rejection) {
-                return Uni.createFrom().failure(rejection);
-            }
-            try {
-                Uni<T> result = supplier.get();
-                if (result == null) {
-                    IllegalStateException failure = new IllegalStateException(strategy.nullUniMessage());
-                    recordPermitFailure(permit, failure, false);
-                    strategy.recordTermination(startNanos, failure, false);
-                    return Uni.createFrom().failure(failure);
-                }
-                CircuitPermit acquiredPermit = permit;
-                return result.onTermination().invoke((item, failure, cancelled) -> {
-                    recordPermitTermination(acquiredPermit, failure, cancelled);
-                    strategy.recordTermination(startNanos, failure, cancelled);
+            return Uni.createFrom().completionStage(acquirePermit(boundary))
+                .onItem().transformToUni(permit -> {
+                    try {
+                        Uni<T> result = supplier.get();
+                        if (result == null) {
+                            IllegalStateException failure = new IllegalStateException(strategy.nullUniMessage());
+                            recordPermitFailure(permit, failure, false);
+                            strategy.recordTermination(startNanos, failure, false);
+                            return Uni.createFrom().failure(failure);
+                        }
+                        CircuitPermit acquiredPermit = permit;
+                        return result.onTermination().invoke((item, failure, cancelled) -> {
+                            recordPermitTermination(acquiredPermit, failure, cancelled);
+                            strategy.recordTermination(startNanos, failure, cancelled);
+                        });
+                    } catch (Throwable failure) {
+                        recordPermitFailure(permit, failure, false);
+                        strategy.recordTermination(startNanos, failure, false);
+                        return Uni.createFrom().failure(failure);
+                    }
                 });
-            } catch (Throwable failure) {
-                recordPermitFailure(permit, failure, false);
-                strategy.recordTermination(startNanos, failure, false);
-                return Uni.createFrom().failure(failure);
-            }
         });
     }
 
@@ -202,42 +202,38 @@ public class PipelineInvocationRuntime {
         Objects.requireNonNull(supplier, "supplier must not be null");
         return Multi.createFrom().deferred(() -> {
             long startNanos = System.nanoTime();
-            CircuitPermit permit;
-            try {
-                permit = acquirePermit(boundary);
-            } catch (CircuitOpenException rejection) {
-                return Multi.createFrom().failure(rejection);
-            }
-            try {
-                Multi<T> result = supplier.get();
-                if (result == null) {
-                    IllegalStateException failure = new IllegalStateException(strategy.nullMultiMessage());
-                    recordPermitFailure(permit, failure, false);
-                    strategy.recordTermination(startNanos, failure, false);
-                    return Multi.createFrom().failure(failure);
-                }
-                CircuitPermit acquiredPermit = permit;
-                return result.onTermination().invoke((failure, cancelled) -> {
-                    recordPermitTermination(acquiredPermit, failure, cancelled);
-                    strategy.recordTermination(startNanos, failure, cancelled);
+            return Uni.createFrom().completionStage(acquirePermit(boundary))
+                .onItem().transformToMulti(permit -> {
+                    try {
+                        Multi<T> result = supplier.get();
+                        if (result == null) {
+                            IllegalStateException failure = new IllegalStateException(strategy.nullMultiMessage());
+                            recordPermitFailure(permit, failure, false);
+                            strategy.recordTermination(startNanos, failure, false);
+                            return Multi.createFrom().failure(failure);
+                        }
+                        CircuitPermit acquiredPermit = permit;
+                        return result.onTermination().invoke((failure, cancelled) -> {
+                            recordPermitTermination(acquiredPermit, failure, cancelled);
+                            strategy.recordTermination(startNanos, failure, cancelled);
+                        });
+                    } catch (Throwable failure) {
+                        recordPermitFailure(permit, failure, false);
+                        strategy.recordTermination(startNanos, failure, false);
+                        return Multi.createFrom().failure(failure);
+                    }
                 });
-            } catch (Throwable failure) {
-                recordPermitFailure(permit, failure, false);
-                strategy.recordTermination(startNanos, failure, false);
-                return Multi.createFrom().failure(failure);
-            }
         });
     }
 
-    private CircuitPermit acquirePermit(TransportBoundaryInvocation boundary) {
+    private CompletionStage<CircuitPermit> acquirePermit(TransportBoundaryInvocation boundary) {
         TransportBoundaryDescriptor descriptor = boundary.transportBoundary();
         Optional<ResolvedCircuitPolicy> resolved = circuitPolicyResolver.resolve(descriptor);
         if (resolved.isEmpty()) {
-            return NoopCircuitPermit.INSTANCE;
+            return CompletableFuture.completedFuture(NoopCircuitPermit.INSTANCE);
         }
         ResolvedCircuitPolicy policy = resolved.orElseThrow();
-        CircuitDecision decision = circuitBreaker.acquire(policy.identity(), policy.policy());
-        return switch (decision) {
+        return circuitBreaker.acquire(policy.identity(), policy.policy()).thenApply(decision -> switch (decision) {
             case CircuitDecision.Permitted permitted -> {
                 circuitTelemetry.permitted(descriptor, policy);
                 yield new TerminalCircuitPermit(permitted.permit());
@@ -247,7 +243,9 @@ public class PipelineInvocationRuntime {
                 transportBoundaryDiagnostics.recordCircuitRejected(descriptor);
                 throw new CircuitOpenException(rejected.open());
             }
-        };
+            case CircuitDecision.Unavailable unavailable ->
+                throw new CircuitProtectionUnavailableException(unavailable.protection());
+        });
     }
 
     private void recordPermitTermination(CircuitPermit permit, Throwable failure, boolean cancelled) {
@@ -271,7 +269,7 @@ public class PipelineInvocationRuntime {
 
     private static void safelyComplete(CircuitPermit permit, CircuitOutcome outcome) {
         try {
-            permit.complete(outcome);
+            permit.complete(outcome).exceptionally(ignored -> null);
         } catch (RuntimeException ignored) {
             // Circuit observation must not replace the transport result.
         }
@@ -281,7 +279,8 @@ public class PipelineInvocationRuntime {
         INSTANCE;
 
         @Override
-        public void complete(CircuitOutcome outcome) {
+        public CompletionStage<Void> complete(CircuitOutcome outcome) {
+            return CompletableFuture.completedFuture(null);
         }
     }
 
@@ -294,11 +293,12 @@ public class PipelineInvocationRuntime {
         }
 
         @Override
-        public void complete(CircuitOutcome outcome) {
+        public CompletionStage<Void> complete(CircuitOutcome outcome) {
             Objects.requireNonNull(outcome, "outcome must not be null");
             if (completed.compareAndSet(false, true)) {
-                delegate.complete(outcome);
+                return delegate.complete(outcome);
             }
+            return CompletableFuture.completedFuture(null);
         }
     }
 }
