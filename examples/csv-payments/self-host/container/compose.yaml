@@ -191,6 +191,8 @@ services:
         -Dpipeline.orchestrator.dynamo.await-unit-table=tpf_await_unit
         -Dpipeline.orchestrator.dynamo.await-interaction-table=tpf_await_interaction
         -Dpipeline.orchestrator.dynamo.await-interaction-key-table=tpf_await_interaction_key
+        -Dpipeline.await-admission.enabled=true
+        -Dpipeline.await-admission.store=dynamo
         -Dpipeline.orchestrator.dynamo.await-admission-table=tpf_await_admission
         -Dpipeline.health.enabled=false
         -Dquarkus.grpc.clients.process-csv-payments-input.host=runtime

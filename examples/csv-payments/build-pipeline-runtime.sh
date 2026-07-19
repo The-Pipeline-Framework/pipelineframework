@@ -42,7 +42,7 @@ if [[ -n "${PIPELINE_CONFIG:-}" ]]; then
     fi
     config_name="$(basename "$PIPELINE_CONFIG")"
     if [[ "$config_name" == "pipeline.yaml" ]]; then
-      selected_pipeline_idl="$ACTIVE_PIPELINE_IDL"
+      selected_pipeline_idl="$(dirname "$PIPELINE_CONFIG")/pipeline.idl.json"
     else
       selected_pipeline_idl="$(dirname "$PIPELINE_CONFIG")/${config_name%.yaml}.idl.json"
     fi
@@ -50,8 +50,12 @@ if [[ -n "${PIPELINE_CONFIG:-}" ]]; then
       echo "Pipeline IDL snapshot not found for config: $selected_pipeline_idl" >&2
       exit 1
     fi
-    pipeline_idl_backup_file="$(mktemp "${TMPDIR:-/tmp}/pipeline-idl.XXXXXX")"
-    cp "$ACTIVE_PIPELINE_IDL" "$pipeline_idl_backup_file"
+    pipeline_idl_backup_candidate="$(mktemp "${TMPDIR:-/tmp}/pipeline-idl.XXXXXX")"
+    if ! cp "$ACTIVE_PIPELINE_IDL" "$pipeline_idl_backup_candidate"; then
+      rm -f "$pipeline_idl_backup_candidate"
+      exit 1
+    fi
+    pipeline_idl_backup_file="$pipeline_idl_backup_candidate"
   fi
 fi
 
