@@ -48,7 +48,7 @@ public class KafkaAwaitTransportAdapter implements AwaitTransportAdapter<Object>
     }
 
     @Override
-    public boolean supportsLiveAwaitWindow() {
+    public boolean supportsLiveAwaitWindow(AwaitStepDescriptor descriptor) {
         return true;
     }
 

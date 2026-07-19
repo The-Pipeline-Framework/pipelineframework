@@ -20,7 +20,7 @@ class KafkaAwaitTransportAdapterTest {
 
     @Test
     void supportsLiveAwaitWindow() {
-        assertTrue(adapter(request -> Uni.createFrom().voidItem()).supportsLiveAwaitWindow());
+        assertTrue(adapter(request -> Uni.createFrom().voidItem()).supportsLiveAwaitWindow(descriptor(Map.of())));
     }
 
     @Test

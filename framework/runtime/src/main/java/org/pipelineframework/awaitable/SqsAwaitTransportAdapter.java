@@ -13,6 +13,7 @@ import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.pipelineframework.awaitable.spi.AwaitTransportAdapter;
 import org.pipelineframework.awaitable.sqs.SqsAwaitDispatchEnvelope;
 import org.pipelineframework.config.pipeline.PipelineJson;
@@ -36,15 +37,26 @@ public class SqsAwaitTransportAdapter implements AwaitTransportAdapter<Object> {
 
     private volatile SqsClient client;
     private final SqsClient explicitClient;
+    private final Supplier<SqsLiveAwaitWindowConfig> liveAwaitWindowConfig;
 
     public SqsAwaitTransportAdapter() {
         this.explicitClient = null;
+        this.liveAwaitWindowConfig = SqsLiveAwaitWindowConfig::fromRuntime;
     }
 
     SqsAwaitTransportAdapter(SqsClient explicitClient, PipelineOrchestratorConfig orchestratorConfig) {
+        this(explicitClient, orchestratorConfig, SqsLiveAwaitWindowConfig::fromRuntime);
+    }
+
+    SqsAwaitTransportAdapter(
+        SqsClient explicitClient,
+        PipelineOrchestratorConfig orchestratorConfig,
+        Supplier<SqsLiveAwaitWindowConfig> liveAwaitWindowConfig
+    ) {
         this.explicitClient = explicitClient;
         this.client = explicitClient;
         this.orchestratorConfig = orchestratorConfig;
+        this.liveAwaitWindowConfig = Objects.requireNonNull(liveAwaitWindowConfig, "liveAwaitWindowConfig must not be null");
     }
 
     @Override
@@ -53,8 +65,9 @@ public class SqsAwaitTransportAdapter implements AwaitTransportAdapter<Object> {
     }
 
     @Override
-    public boolean supportsLiveAwaitWindow() {
-        return true;
+    public boolean supportsLiveAwaitWindow(AwaitStepDescriptor descriptor) {
+        Objects.requireNonNull(descriptor, "descriptor must not be null");
+        return liveAwaitWindowConfig.get().matches(SqsConfig.from(descriptor.transportConfig()));
     }
 
     @Override
@@ -197,6 +210,22 @@ public class SqsAwaitTransportAdapter implements AwaitTransportAdapter<Object> {
                 normalized = normalized.substring(0, fragmentIndex);
             }
             return normalized;
+        }
+    }
+
+    record SqsLiveAwaitWindowConfig(boolean pollerEnabled, Optional<String> responseQueueUrl) {
+        static SqsLiveAwaitWindowConfig fromRuntime() {
+            var config = ConfigProvider.getConfig();
+            return new SqsLiveAwaitWindowConfig(
+                config.getOptionalValue("tpf.await.sqs.poller.enabled", Boolean.class).orElse(false),
+                config.getOptionalValue("tpf.await.sqs.response-queue-url", String.class)
+                    .filter(value -> !value.isBlank())
+                    .map(String::trim));
+        }
+
+        boolean matches(SqsConfig transportConfig) {
+            return pollerEnabled
+                && responseQueueUrl.map(transportConfig.responseQueueUrl()::equals).orElse(false);
         }
     }
 }

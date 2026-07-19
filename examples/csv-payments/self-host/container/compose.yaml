@@ -181,6 +181,10 @@ services:
         -Dtpf.await.kafka.reactive-messaging.enabled=${TPF_WORKER_AWAIT_KAFKA_ENABLED:-false}
         -Dmp.messaging.outgoing.tpf-await-kafka-requests.enabled=${TPF_WORKER_AWAIT_KAFKA_ENABLED:-false}
         -Dmp.messaging.incoming.tpf-await-kafka-responses.enabled=${TPF_WORKER_AWAIT_KAFKA_ENABLED:-false}
+        -Dtpf.await.sqs.poller.enabled=${TPF_WORKER_AWAIT_SQS_POLLER_ENABLED:-true}
+        -Dtpf.await.sqs.response-queue-url=http://localstack:4566/000000000000/csv-payment-await-results
+        -Dtpf.await.sqs.visibility-timeout=PT30S
+        -Dtpf.await.sqs.wait-time-seconds=1
         -Dpipeline.orchestrator.sqs.region=${AWS_REGION:-us-east-1}
         -Dpipeline.orchestrator.sqs.endpoint-override=http://localstack:4566
         -Dpipeline.orchestrator.state-provider=dynamo
@@ -304,6 +308,8 @@ services:
         -Dpipeline.orchestrator.dynamo.await-interaction-table=tpf_await_interaction
         -Dpipeline.orchestrator.dynamo.await-interaction-key-table=tpf_await_interaction_key
         -Dpipeline.orchestrator.dynamo.await-admission-table=tpf_await_admission
+        -Dpipeline.await-admission.enabled=true
+        -Dpipeline.await-admission.store=dynamo
         -Dpipeline.orchestrator.dynamo.release-table=tpf_release_registry
         -Dpipeline.orchestrator.dynamo.worker-table=tpf_worker_registry
         -Dpipeline.orchestrator.control-plane.enabled=true
@@ -323,7 +329,7 @@ services:
         -Dpipeline.orchestrator.worker.rest.base-url=http://worker:8182
         -Dpipeline.orchestrator.worker.rest.request-timeout=PT180S
         -Dpipeline.orchestrator.worker.rest.shared-secret-ref=env:TPF_WORKER_SECRET
-        -Dtpf.await.sqs.poller.enabled=${TPF_COORDINATOR_AWAIT_SQS_POLLER_ENABLED:-true}
+        -Dtpf.await.sqs.poller.enabled=${TPF_COORDINATOR_AWAIT_SQS_POLLER_ENABLED:-false}
         -Dtpf.await.sqs.response-queue-url=http://localstack:4566/000000000000/csv-payment-await-results
         -Dtpf.await.sqs.visibility-timeout=PT30S
         -Dtpf.await.sqs.wait-time-seconds=1

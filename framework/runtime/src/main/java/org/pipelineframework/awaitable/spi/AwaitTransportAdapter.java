@@ -23,9 +23,10 @@ public interface AwaitTransportAdapter<I> {
     /**
      * Whether this transport can feed durable completions into a live await stream.
      *
+     * @param descriptor authored await descriptor
      * @return true when live await windows are supported
      */
-    default boolean supportsLiveAwaitWindow() {
+    default boolean supportsLiveAwaitWindow(AwaitStepDescriptor descriptor) {
         return false;
     }
 

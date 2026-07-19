@@ -91,6 +91,7 @@ PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-GRPC}"
 if [[ " ${MAVEN_ARGS:-} " != *" -Dmaven.repo.local="* ]]; then
   export MAVEN_ARGS="${MAVEN_ARGS:-} -Dmaven.repo.local=$ROOT_DIR/.m2/repository"
 fi
+read -r -a maven_args <<< "${MAVEN_ARGS}"
 "$ROOT_DIR/scripts/ci/bootstrap-local-repo-prereqs.sh" csv
 
-"$MVN_BIN" -f "$CSV_DIR/pom.pipeline-runtime.xml" -Dcsv.runtime.layout=pipeline-runtime -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean install "$@"
+"$MVN_BIN" "${maven_args[@]}" -f "$CSV_DIR/pom.pipeline-runtime.xml" -Dcsv.runtime.layout=pipeline-runtime -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean install "$@"

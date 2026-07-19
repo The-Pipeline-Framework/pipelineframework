@@ -1,6 +1,7 @@
 package org.pipelineframework.awaitable;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -23,8 +24,20 @@ import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 class SqsAwaitTransportAdapterTest {
 
     @Test
-    void supportsLiveAwaitWindow() {
-        assertTrue(adapter(mock(SqsClient.class)).supportsLiveAwaitWindow());
+    void supportsLiveAwaitWindowOnlyWhenTheLocalPollerOwnsTheResponseQueue() {
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
+            "request", Map.of("queueUrl", "http://sqs.local/requests"),
+            "response", Map.of("queueUrl", "http://sqs.local/responses")));
+
+        assertTrue(adapter(mock(SqsClient.class), () -> new SqsAwaitTransportAdapter.SqsLiveAwaitWindowConfig(
+            true,
+            Optional.of("http://sqs.local/responses"))).supportsLiveAwaitWindow(descriptor));
+        assertFalse(adapter(mock(SqsClient.class), () -> new SqsAwaitTransportAdapter.SqsLiveAwaitWindowConfig(
+            false,
+            Optional.of("http://sqs.local/responses"))).supportsLiveAwaitWindow(descriptor));
+        assertFalse(adapter(mock(SqsClient.class), () -> new SqsAwaitTransportAdapter.SqsLiveAwaitWindowConfig(
+            true,
+            Optional.of("http://sqs.local/other-responses"))).supportsLiveAwaitWindow(descriptor));
     }
 
     @Test
@@ -136,6 +149,15 @@ class SqsAwaitTransportAdapterTest {
 
     private static SqsAwaitTransportAdapter adapter(SqsClient client) {
         SqsAwaitTransportAdapter adapter = new SqsAwaitTransportAdapter(client, config());
+        adapter.resumeTokenService = new AwaitResumeTokenService("secret-value-for-tests");
+        return adapter;
+    }
+
+    private static SqsAwaitTransportAdapter adapter(
+        SqsClient client,
+        java.util.function.Supplier<SqsAwaitTransportAdapter.SqsLiveAwaitWindowConfig> liveAwaitWindowConfig
+    ) {
+        SqsAwaitTransportAdapter adapter = new SqsAwaitTransportAdapter(client, config(), liveAwaitWindowConfig);
         adapter.resumeTokenService = new AwaitResumeTokenService("secret-value-for-tests");
         return adapter;
     }

@@ -5,7 +5,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXAMPLE_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 REPO_ROOT="$(cd "${EXAMPLE_DIR}/../.." && pwd)"
 MVN_BIN="${MVN_BIN:-${REPO_ROOT}/mvnw}"
-read -r -a EXTRA_MAVEN_ARGS <<< "${TPF_MAVEN_ARGS:-}"
+EXTRA_MAVEN_ARGS=(-Dmaven.repo.local="${REPO_ROOT}/.m2/repository")
+if [[ -n "${TPF_MAVEN_ARGS:-}" ]]; then
+  read -r -a configured_maven_args <<< "${TPF_MAVEN_ARGS}"
+  EXTRA_MAVEN_ARGS+=("${configured_maven_args[@]}")
+fi
 
 if [[ ! -x "${MVN_BIN}" ]]; then
   echo "ERROR: Maven wrapper not found or not executable at ${MVN_BIN}" >&2

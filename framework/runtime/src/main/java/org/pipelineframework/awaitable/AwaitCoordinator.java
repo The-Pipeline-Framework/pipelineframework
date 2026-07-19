@@ -168,7 +168,7 @@ public class AwaitCoordinator {
      */
     public boolean supportsLiveAwaitWindow(AwaitStepDescriptor descriptor) {
         Objects.requireNonNull(descriptor, "descriptor must not be null");
-        return adapter(descriptor.transportType()).supportsLiveAwaitWindow();
+        return adapter(descriptor.transportType()).supportsLiveAwaitWindow(descriptor);
     }
 
     private Uni<AwaitInteractionRecord> resolvedAfterDispatchMetadataRace(AwaitInteractionRecord claimedInteraction) {
@@ -534,7 +534,7 @@ public class AwaitCoordinator {
         }
         return interactionStore().findByCorrelation(tenantId, correlationId)
             .onItem().transformToUni(existing -> existing.isEmpty()
-                ? awaitAdmissionCoordinator.release(lease.orElseThrow().reservation())
+                ? awaitAdmissionCoordinator.release(lease.orElseThrow().reservation()).replaceWithVoid()
                 : Uni.createFrom().voidItem())
             // An unavailable or failed lookup is ambiguous, so TTL/reconciliation owns recovery.
             .onFailure().recoverWithUni(Uni.createFrom().voidItem());

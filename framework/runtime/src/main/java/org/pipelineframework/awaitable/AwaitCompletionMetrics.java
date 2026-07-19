@@ -138,11 +138,6 @@ public final class AwaitCompletionMetrics {
             if (droppedCompletionCounter != null) {
                 return;
             }
-            droppedCompletionCounter = GlobalOpenTelemetry.getMeter("org.pipelineframework")
-                .counterBuilder("tpf.await.completion.dropped.total")
-                .setDescription("Total deterministic await completions dropped by transport consumers")
-                .setUnit("events")
-                .build();
             var meter = GlobalOpenTelemetry.getMeter("org.pipelineframework");
             interactionDispatchedCounter = meter.counterBuilder("tpf.await.interaction.dispatched.total")
                 .setDescription("Total await interactions dispatched")
@@ -191,6 +186,10 @@ public final class AwaitCompletionMetrics {
             admissionWaitHistogram = meter.histogramBuilder("tpf.await.admission.wait")
                 .setDescription("Time spent waiting for a durable await admission reservation")
                 .setUnit("ms")
+                .build();
+            droppedCompletionCounter = meter.counterBuilder("tpf.await.completion.dropped.total")
+                .setDescription("Total deterministic await completions dropped by transport consumers")
+                .setUnit("events")
                 .build();
         }
     }
