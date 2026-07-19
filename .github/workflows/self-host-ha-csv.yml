@@ -126,6 +126,10 @@ jobs:
           docker compose "${compose_files[@]}" logs --no-color --tail=500 || true
           docker compose "${compose_files[@]}" down -v --remove-orphans || true
 
+      - name: Make CSV self-host failure artifacts readable
+        if: failure()
+        run: sudo chmod -R a+rX examples/csv-payments/self-host/container/target/tpf-container-ha || true
+
       - name: Upload CSV self-host failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
