@@ -127,9 +127,6 @@ public interface PipelineStepConfig {
     ClientConfig client();
 
     /**
-     * Configuration for individual pipeline steps, allowing per-step override of global defaults.
-     */
-    /**
      * Runtime-only durable await admission configuration.
      */
     interface AwaitAdmissionConfig {
@@ -154,6 +151,9 @@ public interface PipelineStepConfig {
         long retryWaitMs();
     }
 
+    /**
+     * Configuration for individual pipeline steps, allowing per-step override of global defaults.
+     */
     interface StepConfig {
         /**
         /**

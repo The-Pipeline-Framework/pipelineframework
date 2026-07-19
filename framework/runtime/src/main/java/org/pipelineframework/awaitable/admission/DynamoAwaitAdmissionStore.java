@@ -2,8 +2,10 @@ package org.pipelineframework.awaitable.admission;
 
 import java.net.URI;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.locks.ReentrantLock;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -41,6 +43,7 @@ public class DynamoAwaitAdmissionStore implements AwaitAdmissionStore {
     PipelineOrchestratorConfig orchestratorConfig;
 
     private volatile DynamoDbClient client;
+    private final Map<String, OwnerLock> ownerLocks = new HashMap<>();
 
     DynamoAwaitAdmissionStore() {
     }
@@ -63,7 +66,10 @@ public class DynamoAwaitAdmissionStore implements AwaitAdmissionStore {
         long expiresAtEpochMs,
         long nowEpochMs
     ) {
-        return blocking(() -> acquireBlocking(scope, owner, capacity, expiresAtEpochMs, nowEpochMs));
+        return blocking(() -> withOwnerLock(
+            scope,
+            owner,
+            () -> acquireBlocking(scope, owner, capacity, expiresAtEpochMs, nowEpochMs)));
     }
 
     @Override
@@ -90,6 +96,17 @@ public class DynamoAwaitAdmissionStore implements AwaitAdmissionStore {
         int capacity,
         long expiresAtEpochMs,
         long nowEpochMs
+    ) {
+        return acquireBlocking(scope, owner, capacity, expiresAtEpochMs, nowEpochMs, 0);
+    }
+
+    private AwaitAdmissionAcquireResult acquireBlocking(
+        AwaitAdmissionScope scope,
+        AwaitAdmissionOwner owner,
+        int capacity,
+        long expiresAtEpochMs,
+        long nowEpochMs,
+        int collisionRetries
     ) {
         if (capacity < 1) {
             throw new IllegalArgumentException("capacity must be positive");
@@ -128,10 +145,45 @@ public class DynamoAwaitAdmissionStore implements AwaitAdmissionStore {
                     ? AwaitAdmissionAcquireResult.acquiredAfterReconciliation(reservation)
                     : AwaitAdmissionAcquireResult.acquired(reservation);
             } catch (ConditionalCheckFailedException ignored) {
-                // A concurrent replica claimed this slot; probe the next deterministic slot.
+                // Re-probe from the deterministic first slot. A concurrent claim by this
+                // owner is then observed as a reuse instead of allowing it to claim a
+                // second slot; bounded retries preserve unavailable behavior under churn.
+                if (collisionRetries < capacity) {
+                    return acquireBlocking(scope, owner, capacity, expiresAtEpochMs, nowEpochMs, collisionRetries + 1);
+                }
+                return AwaitAdmissionAcquireResult.unavailable();
             }
         }
         return AwaitAdmissionAcquireResult.unavailable();
+    }
+
+    /**
+     * Serializes local requests for the same provider scope and owner. Conditional claims
+     * remain the cross-replica guard; this prevents one runtime from probing past its own
+     * just-created claim before it can be observed as a reuse.
+     */
+    private <T> T withOwnerLock(
+        AwaitAdmissionScope scope,
+        AwaitAdmissionOwner owner,
+        java.util.function.Supplier<T> operation
+    ) {
+        String lockKey = AwaitAdmissionScope.lengthPrefixedKey(scope.key(), owner.key());
+        OwnerLock ownerLock;
+        synchronized (ownerLocks) {
+            ownerLock = ownerLocks.computeIfAbsent(lockKey, ignored -> new OwnerLock());
+            ownerLock.retain();
+        }
+        ownerLock.lock();
+        try {
+            return operation.get();
+        } finally {
+            ownerLock.unlock();
+            synchronized (ownerLocks) {
+                if (ownerLock.release()) {
+                    ownerLocks.remove(lockKey, ownerLock);
+                }
+            }
+        }
     }
 
     private static <T> CompletionStage<T> blocking(java.util.function.Supplier<T> supplier) {
@@ -183,6 +235,28 @@ public class DynamoAwaitAdmissionStore implements AwaitAdmissionStore {
 
     private static boolean hasLeaseToken(Map<String, AttributeValue> item) {
         return item.containsKey(LEASE_TOKEN) && !text(item.get(LEASE_TOKEN)).isBlank();
+    }
+
+    private static final class OwnerLock {
+        private final ReentrantLock lock = new ReentrantLock();
+        private int references;
+
+        void retain() {
+            references++;
+        }
+
+        void lock() {
+            lock.lock();
+        }
+
+        void unlock() {
+            lock.unlock();
+        }
+
+        boolean release() {
+            references--;
+            return references == 0;
+        }
     }
 
     @PreDestroy

@@ -92,13 +92,21 @@ public final class AwaitCompletionMetrics {
         }
     }
 
-    public static void recordAdmissionAcquired(AwaitInteractionRecord record, boolean reused, boolean reconciled, long waitMillis) {
+    public static void recordAdmissionAcquired(
+        AwaitInteractionRecord record,
+        boolean reused,
+        boolean reconciled,
+        long waitMillis,
+        boolean locallyTracked
+    ) {
         ensureInitialized();
         Attributes attributes = interactionAttributes(record);
         if (reused) {
             admissionOutcomeCounter.add(1, admissionAttributes(attributes, "reused"));
         } else {
             admissionOutcomeCounter.add(1, admissionAttributes(attributes, "acquired"));
+        }
+        if (locallyTracked) {
             admissionPendingCounter.add(1, pendingAttributes(record));
         }
         if (reconciled) {
@@ -110,14 +118,16 @@ public final class AwaitCompletionMetrics {
         }
     }
 
-    public static void recordAdmissionReleased(AwaitInteractionRecord record, boolean released) {
+    public static void recordAdmissionReleased(AwaitInteractionRecord record, boolean released, boolean locallyTracked) {
         ensureInitialized();
         if (!released) {
             return;
         }
         Attributes attributes = interactionAttributes(record);
         admissionOutcomeCounter.add(1, admissionAttributes(attributes, "released"));
-        admissionPendingCounter.add(-1, pendingAttributes(record));
+        if (locallyTracked) {
+            admissionPendingCounter.add(-1, pendingAttributes(record));
+        }
     }
 
     private static void ensureInitialized() {

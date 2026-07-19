@@ -16,9 +16,20 @@ public record AwaitAdmissionScope(String pipelineId, String stepId, String endpo
     }
 
     public String key() {
-        return pipelineId.length() + ":" + pipelineId
-            + stepId.length() + ":" + stepId
-            + endpoint.length() + ":" + endpoint;
+        return lengthPrefixedKey(pipelineId, stepId, endpoint);
+    }
+
+    /**
+     * Encodes components without delimiter ambiguity.
+     */
+    public static String lengthPrefixedKey(String... components) {
+        Objects.requireNonNull(components, "components must not be null");
+        StringBuilder key = new StringBuilder();
+        for (String component : components) {
+            Objects.requireNonNull(component, "key component must not be null");
+            key.append(component.length()).append(':').append(component);
+        }
+        return key.toString();
     }
 
     private static String requireText(String value, String name) {

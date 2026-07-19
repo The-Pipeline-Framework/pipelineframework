@@ -100,8 +100,11 @@ public class AwaitAdmissionCoordinator {
             "Await transport '" + descriptor.transportType() + "' does not define a durable admission endpoint"));
         AwaitAdmissionScope scope = new AwaitAdmissionScope(
             releaseIdentityResolver.pipelineId(orchestratorConfig), descriptor.stepId(), endpoint);
-        AwaitAdmissionOwner owner = new AwaitAdmissionOwner(tenantId + ":" + unitId + ":" + (itemIndex == null ? "single" : itemIndex)
-            + ":" + executionId);
+        AwaitAdmissionOwner owner = new AwaitAdmissionOwner(AwaitAdmissionScope.lengthPrefixedKey(
+            tenantId,
+            unitId,
+            itemIndex == null ? "single" : itemIndex.toString(),
+            executionId));
         long startedAtEpochMs = System.currentTimeMillis();
         return acquireWhenAvailable(scope, owner, expiresAtEpochMs)
             .onItem().transform(result -> Optional.of(new AdmissionLease(
@@ -113,12 +116,13 @@ public class AwaitAdmissionCoordinator {
 
     public void bind(AwaitInteractionRecord interaction, AdmissionLease lease) {
         if (lease != null) {
-            reservationsByInteraction.put(interaction.interactionId(), lease.reservation());
+            boolean locallyTracked = reservationsByInteraction.putIfAbsent(interaction.interactionId(), lease.reservation()) == null;
             AwaitCompletionMetrics.recordAdmissionAcquired(
                 interaction,
                 lease.reused(),
                 lease.reconciledExpired(),
-                lease.waitMillis());
+                lease.waitMillis(),
+                locallyTracked);
         }
     }
 
@@ -150,7 +154,7 @@ public class AwaitAdmissionCoordinator {
             return releaseRecoveredReservation(interaction);
         }
         return Uni.createFrom().completionStage(store().release(reservation))
-            .invoke(released -> AwaitCompletionMetrics.recordAdmissionReleased(interaction, released));
+            .invoke(released -> AwaitCompletionMetrics.recordAdmissionReleased(interaction, released, true));
     }
 
     /**
@@ -164,7 +168,7 @@ public class AwaitAdmissionCoordinator {
         Optional<AwaitAdmissionReservation> persisted = persistedReservation(interaction);
         if (persisted.isPresent()) {
             return Uni.createFrom().completionStage(store().release(persisted.orElseThrow()))
-                .invoke(released -> AwaitCompletionMetrics.recordAdmissionReleased(interaction, released));
+                .invoke(released -> AwaitCompletionMetrics.recordAdmissionReleased(interaction, released, false));
         }
         // A pre-token interaction cannot safely prove ownership of a slot after a restart:
         // the same owner may have reclaimed it with a newer lease. Keep the slot until its

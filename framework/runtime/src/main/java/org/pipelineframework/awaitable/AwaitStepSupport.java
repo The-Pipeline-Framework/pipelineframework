@@ -337,16 +337,13 @@ public class AwaitStepSupport {
         AtomicInteger itemIndex,
         AwaitLiveCompletionRegistry.LiveAwaitSession<O> session
     ) {
-        Multi<AwaitInteractionRecord> dispatches = input.onItem().transformToUni(item -> {
+        java.util.function.Function<I, Uni<? extends AwaitInteractionRecord>> itemDispatch = item -> {
             int index = itemIndex.getAndIncrement();
             return dispatchLiveAwaitItem(descriptor, item, context, unitId, index, session);
-        }).merge(liveAwaitPendingWindow());
-        if (pipelineConfig != null && pipelineConfig.parallelism() == ParallelismPolicy.SEQUENTIAL) {
-            dispatches = input.onItem().transformToUni(item -> {
-                int index = itemIndex.getAndIncrement();
-                return dispatchLiveAwaitItem(descriptor, item, context, unitId, index, session);
-            }).concatenate();
-        }
+        };
+        Multi<AwaitInteractionRecord> dispatches = pipelineConfig != null && pipelineConfig.parallelism() == ParallelismPolicy.SEQUENTIAL
+            ? input.onItem().transformToUni(itemDispatch).concatenate()
+            : input.onItem().transformToUni(itemDispatch).merge(liveAwaitPendingWindow());
         return dispatches.collect().in(() -> Boolean.TRUE, (ignored, record) -> {
         }).replaceWithVoid();
     }
