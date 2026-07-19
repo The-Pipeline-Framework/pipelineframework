@@ -21,6 +21,8 @@ class CsvPaymentsAwaitPersistenceScopeTest {
     @Test
     void persistenceAspectTargetsConcreteServiceSteps() throws IOException {
         String pipelineYaml = Files.readString(resolveConfigPath("pipeline.yaml"));
+        assertFalse(pipelineYaml.contains("CsvFolder:"),
+                "Default object-ingest pipeline must not retain the removed folder-admission type");
 
         assertTrue(pipelineYaml.contains("aspects:\n  persistence:"), "Expected persistence aspect in pipeline.yaml");
         assertTrue(pipelineYaml.contains("scope: STEPS"), "Persistence should be scoped to selected steps");

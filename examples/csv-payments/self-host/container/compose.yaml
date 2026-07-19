@@ -100,6 +100,11 @@ services:
         -Dpipeline.orchestrator.mode=QUEUE_ASYNC
         -Dpipeline.orchestrator.resume-token-secret=csv-payments-container-resume-token-secret
         -Dpipeline.orchestrator.strict-startup=false
+        -Dpipeline.await-admission.enabled=true
+        -Dpipeline.await-admission.store=dynamo
+        -Dpipeline.orchestrator.dynamo.region=${AWS_REGION:-us-east-1}
+        -Dpipeline.orchestrator.dynamo.endpoint-override=http://localstack:4566
+        -Dpipeline.orchestrator.dynamo.await-admission-table=tpf_await_admission
         -Dkafka.bootstrap.servers=${TPF_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
         -Dtpf.await.kafka.reactive-messaging.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
         -Dmp.messaging.outgoing.tpf-await-kafka-requests.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
@@ -186,6 +191,7 @@ services:
         -Dpipeline.orchestrator.dynamo.await-unit-table=tpf_await_unit
         -Dpipeline.orchestrator.dynamo.await-interaction-table=tpf_await_interaction
         -Dpipeline.orchestrator.dynamo.await-interaction-key-table=tpf_await_interaction_key
+        -Dpipeline.orchestrator.dynamo.await-admission-table=tpf_await_admission
         -Dpipeline.health.enabled=false
         -Dquarkus.grpc.clients.process-csv-payments-input.host=runtime
         -Dquarkus.grpc.clients.process-csv-payments-input.port=8183
@@ -295,6 +301,7 @@ services:
         -Dpipeline.orchestrator.dynamo.await-unit-table=tpf_await_unit
         -Dpipeline.orchestrator.dynamo.await-interaction-table=tpf_await_interaction
         -Dpipeline.orchestrator.dynamo.await-interaction-key-table=tpf_await_interaction_key
+        -Dpipeline.orchestrator.dynamo.await-admission-table=tpf_await_admission
         -Dpipeline.orchestrator.dynamo.release-table=tpf_release_registry
         -Dpipeline.orchestrator.dynamo.worker-table=tpf_worker_registry
         -Dpipeline.orchestrator.control-plane.enabled=true
