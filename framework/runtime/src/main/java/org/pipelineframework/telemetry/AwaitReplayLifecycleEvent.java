@@ -37,6 +37,10 @@ public record AwaitReplayLifecycleEvent(
     Boolean dispatchComplete
 ) implements AwaitCompletionMetrics.AwaitReplayView {
     public static final String INTERACTION_DISPATCHED = "await_interaction_dispatched";
+    public static final String ADMISSION_ACQUIRED = "await_admission_acquired";
+    public static final String ADMISSION_REUSED = "await_admission_reused";
+    public static final String ADMISSION_RELEASED = "await_admission_released";
+    public static final String ADMISSION_RECONCILED = "await_admission_reconciled";
     public static final String UNIT_DISPATCH_COMPLETE = "await_unit_dispatch_complete";
     public static final String EXECUTION_WAITING = "await_execution_waiting";
     public static final String UNIT_ITEM_COMPLETED = "await_unit_item_completed";

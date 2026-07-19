@@ -181,6 +181,10 @@ const STEP_ROLE_LABELS = {
   "query-connector": "JPA Query"
 };
 const AWAIT_LIFECYCLE_EVENTS = new Set([
+  "await_admission_acquired",
+  "await_admission_reused",
+  "await_admission_released",
+  "await_admission_reconciled",
   "await_interaction_dispatched",
   "await_unit_dispatch_complete",
   "await_execution_waiting",
@@ -3894,6 +3898,20 @@ function processAwaitLifecycleEvent(rawEvent, event) {
   }
   const requestFlow = activeAnimationPolicy.awaitRequestByAwaitStep.get(awaitStepName);
   const completionFlow = activeAnimationPolicy.awaitCompletionByAwaitStep.get(awaitStepName);
+  if (rawEvent.event === "await_admission_acquired" || rawEvent.event === "await_admission_reused") {
+    highlightStep(awaitStepName, EFFECT_PRESETS.node.defaultHoldSeconds + 0.75, timeSeconds);
+    spawnPulse(awaitStepName, 0x8f7aea, EFFECT_PRESETS.pulse.start, timeSeconds);
+    return;
+  }
+  if (rawEvent.event === "await_admission_reconciled") {
+    highlightStep(awaitStepName, EFFECT_PRESETS.node.defaultHoldSeconds + 0.75, timeSeconds);
+    spawnPulse(awaitStepName, 0xffb454, EFFECT_PRESETS.pulse.start, timeSeconds);
+    return;
+  }
+  if (rawEvent.event === "await_admission_released") {
+    highlightStep(awaitStepName, EFFECT_PRESETS.node.defaultHoldSeconds, timeSeconds);
+    return;
+  }
   if (rawEvent.event === "await_interaction_dispatched") {
     if (requestFlow && shouldSampleSupportFlow(`await-request:${awaitStepName}`)) {
       animateAwaitRequest(requestFlow, timeSeconds);
