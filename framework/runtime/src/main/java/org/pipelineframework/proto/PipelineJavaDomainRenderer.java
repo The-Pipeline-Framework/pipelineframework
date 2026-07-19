@@ -442,7 +442,7 @@ final class PipelineJavaDomainRenderer {
 
     private String javaVariantTypeName(String discriminator) {
         if (discriminator == null || discriminator.isBlank()) {
-            return discriminator;
+            throw new IllegalStateException("Version 3 union variant discriminator must not be null or blank.");
         }
         return Character.toUpperCase(discriminator.charAt(0)) + discriminator.substring(1);
     }
