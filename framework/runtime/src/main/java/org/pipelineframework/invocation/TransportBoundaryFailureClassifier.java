@@ -22,6 +22,7 @@ import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
+import org.pipelineframework.runtime.core.resilience.CircuitOpenException;
 import org.pipelineframework.orchestrator.TransitionWorkerFailureException;
 
 final class TransportBoundaryFailureClassifier {
@@ -64,6 +65,9 @@ final class TransportBoundaryFailureClassifier {
     }
 
     private TransportBoundaryFailureCategory classifyDirect(Throwable failure, Set<Throwable> seen) {
+        if (failure instanceof CircuitOpenException) {
+            return TransportBoundaryFailureCategory.CIRCUIT_OPEN;
+        }
         if (failure instanceof CancellationException) {
             return TransportBoundaryFailureCategory.CANCELLED;
         }
@@ -103,6 +107,7 @@ final class TransportBoundaryFailureClassifier {
             case UNAUTHENTICATED, PERMISSION_DENIED -> TransportBoundaryFailureCategory.AUTH;
             case UNAVAILABLE -> TransportBoundaryFailureCategory.UNAVAILABLE;
             case INVALID_ARGUMENT, FAILED_PRECONDITION, OUT_OF_RANGE -> TransportBoundaryFailureCategory.PROTOCOL;
+            case INTERNAL, DATA_LOSS -> TransportBoundaryFailureCategory.REMOTE_SERVER;
             default -> TransportBoundaryFailureCategory.UNEXPECTED;
         };
     }
@@ -121,6 +126,9 @@ final class TransportBoundaryFailureClassifier {
         }
         if (status >= 400 && status < 500) {
             return TransportBoundaryFailureCategory.PROTOCOL;
+        }
+        if (status >= 500) {
+            return TransportBoundaryFailureCategory.REMOTE_SERVER;
         }
         return TransportBoundaryFailureCategory.UNEXPECTED;
     }

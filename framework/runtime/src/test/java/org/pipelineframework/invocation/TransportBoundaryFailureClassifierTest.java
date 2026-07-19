@@ -15,6 +15,10 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.orchestrator.TransitionWorkerFailureException;
+import org.pipelineframework.runtime.core.resilience.CircuitIdentity;
+import org.pipelineframework.runtime.core.resilience.CircuitOpen;
+import org.pipelineframework.runtime.core.resilience.CircuitOpenException;
+import org.pipelineframework.runtime.core.resilience.CircuitScope;
 
 class TransportBoundaryFailureClassifierTest {
     private final TransportBoundaryFailureClassifier classifier = new TransportBoundaryFailureClassifier();
@@ -33,7 +37,7 @@ class TransportBoundaryFailureClassifierTest {
         assertEquals(TransportBoundaryFailureCategory.TIMEOUT, classify(rest(408), false));
         assertEquals(TransportBoundaryFailureCategory.PROTOCOL, classify(rest(422), false));
         assertEquals(TransportBoundaryFailureCategory.UNAVAILABLE, classify(rest(503), false));
-        assertEquals(TransportBoundaryFailureCategory.UNEXPECTED, classify(rest(500), false));
+        assertEquals(TransportBoundaryFailureCategory.REMOTE_SERVER, classify(rest(500), false));
     }
 
     @Test
@@ -64,7 +68,7 @@ class TransportBoundaryFailureClassifierTest {
         assertEquals(TransportBoundaryFailureCategory.UNAVAILABLE, classify(grpc(Status.UNAVAILABLE), false));
         assertEquals(TransportBoundaryFailureCategory.PROTOCOL, classify(grpc(Status.INVALID_ARGUMENT), false));
         assertEquals(TransportBoundaryFailureCategory.CANCELLED, classify(grpc(Status.CANCELLED), false));
-        assertEquals(TransportBoundaryFailureCategory.UNEXPECTED, classify(grpc(Status.INTERNAL), false));
+        assertEquals(TransportBoundaryFailureCategory.REMOTE_SERVER, classify(grpc(Status.INTERNAL), false));
     }
 
     @Test
@@ -101,6 +105,16 @@ class TransportBoundaryFailureClassifierTest {
         RuntimeException wrapper = new RuntimeException("outer");
         wrapper.addSuppressed(new SocketTimeoutException("suppressed timeout"));
         assertEquals(TransportBoundaryFailureCategory.TIMEOUT, classify(wrapper, false));
+    }
+
+    @Test
+    void classifiesCircuitRejectionSeparatelyFromTransportFailure() {
+        CircuitOpenException rejection = new CircuitOpenException(new CircuitOpen(
+            new CircuitIdentity("pricing"),
+            CircuitScope.LOCAL_PROCESS,
+            java.time.Instant.parse("2026-07-19T10:00:00Z")));
+
+        assertEquals(TransportBoundaryFailureCategory.CIRCUIT_OPEN, classify(rejection, false));
     }
 
     private TransportBoundaryFailureCategory classify(Throwable failure, boolean cancelled) {
