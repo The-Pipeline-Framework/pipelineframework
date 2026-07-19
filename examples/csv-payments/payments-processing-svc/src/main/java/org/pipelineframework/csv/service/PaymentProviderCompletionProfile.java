@@ -42,6 +42,7 @@ final class PaymentProviderCompletionProfile<T> implements AutoCloseable {
   private final AtomicInteger inFlight = new AtomicInteger();
   private final AtomicInteger maxInFlight = new AtomicInteger();
   private boolean flushScheduled;
+  private boolean closed;
   private long flushGeneration;
 
   PaymentProviderCompletionProfile(int burstSize, Duration flushDelay, String threadName) {
@@ -58,6 +59,9 @@ final class PaymentProviderCompletionProfile<T> implements AutoCloseable {
     PendingCompletion<T> pendingCompletion = new PendingCompletion<>(completion);
     List<PendingCompletion<T>> toRelease = List.of();
     synchronized (this) {
+      if (closed) {
+        return CompletableFuture.completedFuture(completion);
+      }
       int active = inFlight.incrementAndGet();
       maxInFlight.accumulateAndGet(active, Math::max);
       pending.add(pendingCompletion);
@@ -83,6 +87,10 @@ final class PaymentProviderCompletionProfile<T> implements AutoCloseable {
   public void close() {
     List<PendingCompletion<T>> toRelease;
     synchronized (this) {
+      if (closed) {
+        return;
+      }
+      closed = true;
       toRelease = drainPending();
     }
     release(toRelease);

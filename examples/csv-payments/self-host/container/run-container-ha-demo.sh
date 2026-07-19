@@ -187,6 +187,7 @@ dynamo_count() {
   local table_name="$1"
   compose exec -T localstack awslocal dynamodb scan \
     --table-name "${table_name}" \
+    --consistent-read \
     --select COUNT \
     --output json | python3 -c 'import json, sys; print(json.load(sys.stdin)["Count"])'
 }

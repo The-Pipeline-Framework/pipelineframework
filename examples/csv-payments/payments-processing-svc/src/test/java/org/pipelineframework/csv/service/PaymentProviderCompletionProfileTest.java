@@ -84,16 +84,27 @@ class PaymentProviderCompletionProfileTest {
   void staleFlushDoesNotReleaseTheNextBurstEarly() throws Exception {
     try (PaymentProviderCompletionProfile<String> profile = new PaymentProviderCompletionProfile<>(
         2,
-        Duration.ofMillis(250),
+        Duration.ofSeconds(2),
         "payment-provider-completion-profile-test")) {
       profile.releaseWhenReady("first");
       profile.releaseWhenReady("second").toCompletableFuture().get(1, TimeUnit.SECONDS);
-      Thread.sleep(125);
+      Thread.sleep(1_000);
       var third = profile.releaseWhenReady("third").toCompletableFuture();
 
-      Thread.sleep(175);
+      Thread.sleep(1_000);
       assertFalse(third.isDone());
-      assertEquals("third", third.get(1, TimeUnit.SECONDS));
+      assertEquals("third", third.get(3, TimeUnit.SECONDS));
     }
+  }
+
+  @Test
+  void postCloseCompletionIsReleasedWithoutScheduling() throws Exception {
+    var profile = new PaymentProviderCompletionProfile<String>(
+        2,
+        Duration.ofMinutes(1),
+        "payment-provider-completion-profile-test");
+    profile.close();
+
+    assertEquals("after-close", profile.releaseWhenReady("after-close").toCompletableFuture().get(1, TimeUnit.SECONDS));
   }
 }

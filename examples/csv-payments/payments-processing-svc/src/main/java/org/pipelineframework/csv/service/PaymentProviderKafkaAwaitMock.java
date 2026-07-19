@@ -71,8 +71,7 @@ public class PaymentProviderKafkaAwaitMock {
         .runSubscriptionOn(Infrastructure.getDefaultExecutor())
         .onItem().transform(this::handle)
         .onItem().transformToUni(this::delayCompletion)
-        .onItem().transformToUni(completion -> results.send(serialize(completion))
-            .onTermination().invoke(completionProfile()::completionHandled))
+        .onItem().transformToUni(completion -> sendCompletion(completion))
         .replaceWithVoid()
         .subscribeAsCompletionStage()
         .thenCompose(ignored -> message.ack())
@@ -127,6 +126,21 @@ public class PaymentProviderKafkaAwaitMock {
             "csv-kafka-await-provider-completion-profile");
       }
       return completionProfile;
+    }
+  }
+
+  private Uni<Void> sendCompletion(KafkaAwaitCompletionEnvelope completion) {
+    PaymentProviderCompletionProfile<KafkaAwaitCompletionEnvelope> profile = completionProfile();
+    boolean handledOnTermination = false;
+    try {
+      Uni<Void> send = results.send(serialize(completion))
+          .onTermination().invoke(profile::completionHandled);
+      handledOnTermination = true;
+      return send;
+    } finally {
+      if (!handledOnTermination) {
+        profile.completionHandled();
+      }
     }
   }
 
