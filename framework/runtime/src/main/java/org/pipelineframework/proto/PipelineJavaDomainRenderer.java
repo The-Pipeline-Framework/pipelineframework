@@ -388,7 +388,7 @@ final class PipelineJavaDomainRenderer {
             case "datetime" -> "java.time.LocalDateTime";
             case "date" -> "java.time.LocalDate";
             case "duration" -> "java.time.Duration";
-            case "bytes" -> "byte[]";
+            case "bytes" -> "com.google.protobuf.ByteString";
             case "currency" -> "java.util.Currency";
             case "uri" -> "java.net.URI";
             case "path" -> "java.nio.file.Path";
@@ -404,7 +404,6 @@ final class PipelineJavaDomainRenderer {
         return switch (scalar) {
             case "decimal" -> expression + ".toPlainString()";
             case "uuid", "timestamp", "datetime", "date", "duration", "currency", "uri", "path" -> expression + ".toString()";
-            case "bytes" -> "com.google.protobuf.ByteString.copyFrom(" + expression + ")";
             case "payload_ref" -> "toProtoPayloadReference(" + expression + ")";
             default -> expression;
         };
@@ -424,7 +423,6 @@ final class PipelineJavaDomainRenderer {
             case "currency" -> "java.util.Currency.getInstance(" + expression + ")";
             case "uri" -> "java.net.URI.create(" + expression + ")";
             case "path" -> "java.nio.file.Path.of(" + expression + ")";
-            case "bytes" -> expression + ".toByteArray()";
             case "payload_ref" -> "fromProtoPayloadReference(" + expression + ")";
             default -> expression;
         };

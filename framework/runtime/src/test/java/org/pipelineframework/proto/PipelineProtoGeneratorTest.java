@@ -226,6 +226,52 @@ class PipelineProtoGeneratorTest {
     }
 
     @Test
+    void generatesV3BytesAsByteStringWithoutArrayConversions() throws Exception {
+        Path configPath = tempDir.resolve("pipeline-bytes.yaml");
+        Path outputDir = tempDir.resolve("generated-v3-bytes");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "Binary Values"
+            basePackage: "com.example.binary"
+            transport: "GRPC"
+            types:
+              BinaryValue:
+                wraps: bytes
+              BinaryRecord:
+                fields: [[rawContent, bytes], [value, BinaryValue]]
+              BinaryOutcome:
+                variants:
+                  accepted: BinaryValue
+            steps:
+              - name: Process Binary Value
+                cardinality: ONE_TO_ONE
+                input: BinaryRecord
+                output: BinaryOutcome
+            """);
+
+        System.setProperty("pipeline.idl.bootstrap", "true");
+        try {
+            new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+            new PipelineV3JavaDomainGenerator().generate(tempDir, configPath, outputDir);
+        } finally {
+            System.clearProperty("pipeline.idl.bootstrap");
+        }
+
+        Path domain = outputDir.resolve("com/example/binary/domain");
+        String record = Files.readString(domain.resolve("BinaryRecord.java"));
+        String wrapper = Files.readString(domain.resolve("BinaryValue.java"));
+        String union = Files.readString(domain.resolve("BinaryOutcome.java"));
+        String adapters = Files.readString(domain.resolve("PipelineDomainProtoAdapters.java"));
+        assertTrue(record.contains("com.google.protobuf.ByteString rawContent"));
+        assertTrue(wrapper.contains("com.google.protobuf.ByteString value"));
+        assertTrue(union.contains("record Accepted(BinaryValue value) implements BinaryOutcome"));
+        assertTrue(adapters.contains("builder.setRawContent(value.rawContent());"));
+        assertTrue(adapters.contains("value.hasRawContent() ? value.getRawContent() : null"));
+        assertFalse(adapters.contains("ByteString.copyFrom"));
+        assertFalse(adapters.contains(".toByteArray()"));
+    }
+
+    @Test
     void generatesV3JavaSealedUnionsAndProtobufAdapters() throws Exception {
         Path configPath = tempDir.resolve("pipeline.yaml");
         Path outputDir = tempDir.resolve("generated-v3-union");
