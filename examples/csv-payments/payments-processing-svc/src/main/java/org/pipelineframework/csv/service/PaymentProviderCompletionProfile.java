@@ -54,16 +54,10 @@ final class PaymentProviderCompletionProfile<T> implements AutoCloseable {
     });
   }
 
-  private volatile boolean closed;
-
   CompletionStage<T> releaseWhenReady(T completion) {
     PendingCompletion<T> pendingCompletion = new PendingCompletion<>(completion);
     List<PendingCompletion<T>> toRelease = List.of();
     synchronized (this) {
-      if (closed) {
-        pendingCompletion.release().complete(completion);
-        return pendingCompletion.release();
-      }
       int active = inFlight.incrementAndGet();
       maxInFlight.accumulateAndGet(active, Math::max);
       pending.add(pendingCompletion);
@@ -85,11 +79,10 @@ final class PaymentProviderCompletionProfile<T> implements AutoCloseable {
     return new CompletionObservation(inFlight.get(), maxInFlight.get());
   }
 
-  `@Override`
+  @Override
   public void close() {
     List<PendingCompletion<T>> toRelease;
     synchronized (this) {
-      closed = true;
       toRelease = drainPending();
     }
     release(toRelease);
