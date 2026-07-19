@@ -1,0 +1,94 @@
+name: Scheduled — CSV Self-Hosted HA Admission Scale
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "framework/**"
+      - "examples/csv-payments/**"
+      - "scripts/ci/**"
+      - "pom.xml"
+      - "mvnw"
+      - ".mvn/**"
+      - ".github/actions/setup-testcontainers/**"
+      - ".github/workflows/self-host-ha-csv-scale.yml"
+  schedule:
+    - cron: "0 3 * * 1-5"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  MAVEN_OPTS: -Xmx2g -Xms512m
+
+jobs:
+  csv-self-host-ha-scale:
+    name: CSV Self-Hosted HA Scale (${{ matrix.await-transport }}, ${{ matrix.admission-profile }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        await-transport:
+          - sqs
+          - kafka
+        admission-profile:
+          - slow
+          - burst
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Setup Docker environment
+        uses: ./.github/actions/setup-testcontainers
+
+      - name: Run CSV self-host HA admission scale profile
+        env:
+          TPF_CSV_AWAIT_TRANSPORT: ${{ matrix.await-transport }}
+          TPF_CSV_ADMISSION_PROFILE: ${{ matrix.admission-profile }}
+          TPF_CSV_RECORD_COUNT: "10000"
+          TPF_KEEP_STACK_ON_FAILURE: "true"
+        run: ./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
+
+      - name: Dump CSV self-host logs on failure
+        if: failure()
+        env:
+          TPF_REPO_ROOT: ${{ github.workspace }}
+          TPF_CSV_AWAIT_TRANSPORT: ${{ matrix.await-transport }}
+        run: |
+          compose_files=(-f examples/csv-payments/self-host/container/compose.yaml)
+          if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" ]]; then
+            compose_files+=(-f examples/csv-payments/self-host/container/compose.kafka.yaml)
+          fi
+          docker compose "${compose_files[@]}" ps || true
+          docker compose "${compose_files[@]}" logs --no-color --tail=500 || true
+          docker compose "${compose_files[@]}" down -v --remove-orphans || true
+
+      - name: Upload CSV self-host scale failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csv-self-host-ha-scale-${{ matrix.await-transport }}-${{ matrix.admission-profile }}
+          path: |
+            examples/csv-payments/self-host/container/target/tpf-container-ha/**
+            examples/csv-payments/**/target/replay/**
+            examples/csv-payments/self-host/container/compose*.yaml
+          retention-days: 14
+          if-no-files-found: warn

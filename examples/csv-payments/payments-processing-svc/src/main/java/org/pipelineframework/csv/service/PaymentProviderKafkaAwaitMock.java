@@ -19,6 +19,7 @@ package org.pipelineframework.csv.service;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.CompletionStage;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -61,6 +62,8 @@ public class PaymentProviderKafkaAwaitMock {
   @Channel(RESULT_CHANNEL)
   MutinyEmitter<String> results;
 
+  private volatile PaymentProviderCompletionProfile<KafkaAwaitCompletionEnvelope> completionProfile;
+
   @Incoming(REQUEST_CHANNEL)
   public CompletionStage<Void> consume(Message<String> message) {
     Objects.requireNonNull(message, "message must not be null");
@@ -68,7 +71,8 @@ public class PaymentProviderKafkaAwaitMock {
         .runSubscriptionOn(Infrastructure.getDefaultExecutor())
         .onItem().transform(this::handle)
         .onItem().transformToUni(this::delayCompletion)
-        .onItem().transformToUni(completion -> results.send(serialize(completion)))
+        .onItem().transformToUni(completion -> results.send(serialize(completion))
+            .onTermination().invoke(completionProfile()::completionHandled))
         .replaceWithVoid()
         .subscribeAsCompletionStage()
         .thenCompose(ignored -> message.ack())
@@ -76,6 +80,14 @@ public class PaymentProviderKafkaAwaitMock {
           LOG.error("Failed processing Kafka await payment request", failure);
           return message.nack(failure);
         });
+  }
+
+  @PreDestroy
+  void flushPendingCompletions() {
+    PaymentProviderCompletionProfile<KafkaAwaitCompletionEnvelope> active = completionProfile;
+    if (active != null) {
+      active.close();
+    }
   }
 
   private KafkaAwaitCompletionEnvelope handle(KafkaAwaitDispatchEnvelope dispatch) {
@@ -95,10 +107,27 @@ public class PaymentProviderKafkaAwaitMock {
   private Uni<KafkaAwaitCompletionEnvelope> delayCompletion(KafkaAwaitCompletionEnvelope completion) {
     long delayMillis = paymentProviderConfig.responseDelayMillis();
     Uni<KafkaAwaitCompletionEnvelope> completionUni = Uni.createFrom().item(completion);
-    if (delayMillis <= 0) {
-      return completionUni;
+    if (delayMillis > 0) {
+      completionUni = completionUni.onItem().delayIt().by(Duration.ofMillis(delayMillis));
     }
-    return completionUni.onItem().delayIt().by(Duration.ofMillis(delayMillis));
+    return completionUni
+        .onItem().transformToUni(value -> Uni.createFrom().completionStage(completionProfile().releaseWhenReady(value)));
+  }
+
+  private PaymentProviderCompletionProfile<KafkaAwaitCompletionEnvelope> completionProfile() {
+    PaymentProviderCompletionProfile<KafkaAwaitCompletionEnvelope> active = completionProfile;
+    if (active != null) {
+      return active;
+    }
+    synchronized (this) {
+      if (completionProfile == null) {
+        completionProfile = new PaymentProviderCompletionProfile<>(
+            paymentProviderConfig.completionBurstSize(),
+            paymentProviderConfig.completionBurstFlushDelay(),
+            "csv-kafka-await-provider-completion-profile");
+      }
+      return completionProfile;
+    }
   }
 
   private static void validatePaymentRecord(PaymentRecord paymentRecord) {

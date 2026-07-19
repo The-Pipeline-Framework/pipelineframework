@@ -58,6 +58,16 @@ class PaymentProviderConfigTest {
                     }
 
                     @Override
+                    public int completionBurstSize() {
+                        return 1;
+                    }
+
+                    @Override
+                    public Duration completionBurstFlushDelay() {
+                        return Duration.ofSeconds(1);
+                    }
+
+                    @Override
                     public Sqs sqs() {
                         return disabledSqs();
                     }
@@ -87,6 +97,16 @@ class PaymentProviderConfigTest {
     @Test
     void testDefaultResponseDelayMillis() {
         assertThat(config.responseDelayMillis()).isZero();
+    }
+
+    @Test
+    void testDefaultCompletionBurstSize() {
+        assertThat(config.completionBurstSize()).isEqualTo(1);
+    }
+
+    @Test
+    void testDefaultCompletionBurstFlushDelay() {
+        assertThat(config.completionBurstFlushDelay()).isEqualTo(Duration.ofSeconds(1));
     }
 
     private static PaymentProviderConfig.Sqs disabledSqs() {

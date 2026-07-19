@@ -98,6 +98,7 @@ services:
         -Dquarkus.micrometer.binder.http-server.enabled=false
         -Dquarkus.micrometer.binder.http-client.enabled=false
         -Dpipeline.orchestrator.mode=QUEUE_ASYNC
+        -Dpipeline.max-concurrency=${TPF_PIPELINE_MAX_CONCURRENCY:-250}
         -Dpipeline.orchestrator.resume-token-secret=csv-payments-container-resume-token-secret
         -Dpipeline.orchestrator.strict-startup=false
         -Dpipeline.await-admission.enabled=true
@@ -118,7 +119,9 @@ services:
         -Dcsv-payments.payment-provider.sqs.endpoint-override=http://localstack:4566
         -Dcsv-payments.payment-provider.permits-per-second=250.0
         -Dcsv-payments.payment-provider.timeout-millis=5000
-        -Dcsv-payments.payment-provider.response-delay-millis=3000
+        -Dcsv-payments.payment-provider.response-delay-millis=${TPF_CSV_PROVIDER_RESPONSE_DELAY_MILLIS:-3000}
+        -Dcsv-payments.payment-provider.completion-burst-size=${TPF_CSV_PROVIDER_COMPLETION_BURST_SIZE:-1}
+        -Dcsv-payments.payment-provider.completion-burst-flush-delay=${TPF_CSV_PROVIDER_COMPLETION_BURST_FLUSH_DELAY:-PT1S}
         -Dquarkus.grpc.clients.process-csv-payments-input.host=localhost
         -Dquarkus.grpc.clients.process-csv-payments-input.port=8183
         -Dquarkus.grpc.clients.process-csv-payments-input.plain-text=true
@@ -173,6 +176,7 @@ services:
         -Dquarkus.micrometer.binder.http-server.enabled=false
         -Dquarkus.micrometer.binder.http-client.enabled=false
         -Dpipeline.orchestrator.mode=QUEUE_ASYNC
+        -Dpipeline.max-concurrency=${TPF_PIPELINE_MAX_CONCURRENCY:-250}
         -Dpipeline.orchestrator.resume-token-secret=csv-payments-container-resume-token-secret
         -Dpipeline.orchestrator.worker.rest.server-enabled=true
         -Dpipeline.orchestrator.worker.rest.shared-secret-ref=env:TPF_WORKER_SECRET
@@ -283,6 +287,7 @@ services:
         -Dquarkus.micrometer.binder.http-server.enabled=false
         -Dquarkus.micrometer.binder.http-client.enabled=false
         -Dpipeline.orchestrator.mode=QUEUE_ASYNC
+        -Dpipeline.max-concurrency=${TPF_PIPELINE_MAX_CONCURRENCY:-250}
         -Dpipeline.orchestrator.resume-token-secret=csv-payments-container-resume-token-secret
         -Dpipeline.orchestrator.strict-startup=true
         -Dkafka.bootstrap.servers=${TPF_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}

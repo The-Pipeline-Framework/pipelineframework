@@ -89,7 +89,9 @@ if [[ "${TPF_SKIP_FRAMEWORK_INSTALL}" != "true" ]]; then
   "${MVN_BIN}" "${EXTRA_MAVEN_ARGS[@]}" -f "${REPO_ROOT}/connectors/object-ingest/pom.xml" clean install -DskipTests
 fi
 
-COMMON_BUILD_PROPS=()
+COMMON_BUILD_PROPS=(
+  -Dquarkus.devservices.enabled=false
+)
 
 if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "sqs" ]]; then
   COMMON_BUILD_PROPS+=(

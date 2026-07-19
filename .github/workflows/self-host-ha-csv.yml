@@ -27,7 +27,7 @@ env:
 
 jobs:
   csv-self-host-ha:
-    name: CSV Self-Hosted HA (${{ matrix.await-transport }})
+    name: CSV Self-Hosted HA (${{ matrix.await-transport }}, ${{ matrix.admission-profile }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -37,6 +37,9 @@ jobs:
         await-transport:
           - sqs
           - kafka
+        admission-profile:
+          - slow
+          - burst
 
     steps:
       - name: Checkout
@@ -104,6 +107,7 @@ jobs:
       - name: Run CSV self-host HA demo
         env:
           TPF_CSV_AWAIT_TRANSPORT: ${{ matrix.await-transport }}
+          TPF_CSV_ADMISSION_PROFILE: ${{ matrix.admission-profile }}
           TPF_SKIP_CONTAINER_BUILD: "true"
           TPF_KEEP_STACK_ON_FAILURE: "true"
         run: ./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
@@ -121,3 +125,15 @@ jobs:
           docker compose "${compose_files[@]}" ps || true
           docker compose "${compose_files[@]}" logs --no-color --tail=500 || true
           docker compose "${compose_files[@]}" down -v --remove-orphans || true
+
+      - name: Upload CSV self-host failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csv-self-host-ha-${{ matrix.await-transport }}-${{ matrix.admission-profile }}
+          path: |
+            examples/csv-payments/self-host/container/target/tpf-container-ha/**
+            examples/csv-payments/**/target/replay/**
+            examples/csv-payments/self-host/container/compose*.yaml
+          retention-days: 7
+          if-no-files-found: warn

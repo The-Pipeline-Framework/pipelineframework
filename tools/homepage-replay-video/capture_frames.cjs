@@ -90,15 +90,10 @@ async function main() {
       throw new Error("Missing cinematic timing metadata for frame capture.");
     }
     const totalFrames = Math.ceil(clipDurationSeconds * fps);
+    const posterFrame = Math.round((totalFrames - 1) * 0.58);
     const captureRoot = page.locator("#captureRoot");
     fs.mkdirSync(args.framesDir, { recursive: true });
     fs.mkdirSync(path.dirname(args.poster), { recursive: true });
-
-    await page.evaluate(async () => {
-      window.homepageReplayCinematic.renderFrame(0.58);
-      await new Promise((resolve) => requestAnimationFrame(() => resolve()));
-    });
-    await captureRoot.screenshot({ path: args.poster, type: "jpeg", quality: 90 });
 
     for (let frame = 0; frame < totalFrames; frame += 1) {
       const progress = totalFrames <= 1 ? 0 : frame / (totalFrames - 1);
@@ -108,6 +103,9 @@ async function main() {
       }, progress);
       const framePath = path.join(args.framesDir, `frame_${String(frame + 1).padStart(4, "0")}.png`);
       await captureRoot.screenshot({ path: framePath, type: "png" });
+      if (frame === posterFrame) {
+        await captureRoot.screenshot({ path: args.poster, type: "jpeg", quality: 90 });
+      }
     }
   } finally {
     if (browser) {
