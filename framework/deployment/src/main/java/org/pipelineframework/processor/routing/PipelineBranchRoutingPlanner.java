@@ -11,6 +11,9 @@ import javax.tools.Diagnostic;
 import com.squareup.javapoet.ClassName;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateStep;
+import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
+import org.pipelineframework.config.template.PipelineTemplateTypeModel;
+import org.pipelineframework.config.template.PipelineTemplateTypeReference;
 import org.pipelineframework.config.template.PipelineTemplateUnion;
 import org.pipelineframework.config.template.PipelineTemplateUnionVariant;
 import org.pipelineframework.processor.PipelineCompilationContext;
@@ -39,11 +42,10 @@ public final class PipelineBranchRoutingPlanner {
             return Optional.of(PipelineBranchingPlan.disabled());
         }
 
-        Map<String, PipelineTemplateUnion> unions = templateConfig.unions();
         boolean branchAware = templateSteps.stream()
             .filter(Objects::nonNull)
             .anyMatch(step -> !step.accepts().isEmpty() || step.terminal()
-                || (step.inputTypeName() != null && unions.containsKey(step.inputTypeName())));
+                || isUnionContract(templateConfig, step.inputTypeName()));
         if (!branchAware) {
             return Optional.of(PipelineBranchingPlan.disabled());
         }
@@ -226,7 +228,7 @@ public final class PipelineBranchRoutingPlanner {
                     error(ctx, "Step '" + templateStep.name() + "' declares a blank accepts entry.");
                     return Optional.empty();
                 }
-                if (templateConfig.unions().containsKey(accepted)) {
+                if (isUnionContract(templateConfig, accepted)) {
                     error(ctx, "Step '" + templateStep.name() + "' accepts '" + accepted
                         + "', but accepts may reference only concrete contract types, not unions.");
                     return Optional.empty();
@@ -309,6 +311,10 @@ public final class PipelineBranchRoutingPlanner {
         if (isBlank(contractTypeName) || runtimeType == null || templateConfig == null) {
             return;
         }
+        if (templateConfig.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3) {
+            registerV3ContractRuntimeType(templateConfig, contractTypeName, runtimeType, contractRuntimeTypes);
+            return;
+        }
         if (templateConfig.messages().containsKey(contractTypeName)) {
             contractRuntimeTypes.putIfAbsent(contractTypeName, runtimeType);
             return;
@@ -332,6 +338,34 @@ public final class PipelineBranchRoutingPlanner {
                     + "' variant '" + variantName + "' maps to unresolved runtime type '"
                     + variantRuntimeType.canonicalName() + "'; skipping runtime type indexing.");
             }
+        }
+    }
+
+    private void registerV3ContractRuntimeType(
+        PipelineTemplateConfig templateConfig,
+        String contractTypeName,
+        ClassName runtimeType,
+        Map<String, ClassName> contractRuntimeTypes
+    ) {
+        Optional<PipelineTemplateTypeDefinition> definition = v3Definition(templateConfig, contractTypeName);
+        if (definition.isEmpty()) {
+            return;
+        }
+        PipelineTemplateTypeDefinition resolved = definition.orElseThrow();
+        if (!(resolved instanceof PipelineTemplateTypeDefinition.UnionType union)) {
+            contractRuntimeTypes.putIfAbsent(resolved.name(), runtimeType);
+            return;
+        }
+        contractRuntimeTypes.putIfAbsent(union.name(), runtimeType);
+        for (PipelineTemplateTypeDefinition.Variant variant : union.variants().values()) {
+            Optional<String> payload = v3NamedContract(templateConfig, variant.payload());
+            if (payload.isEmpty()) {
+                continue;
+            }
+            contractRuntimeTypes.putIfAbsent(payload.orElseThrow(), ClassName.get(
+                templateConfig.basePackage() + ".domain",
+                union.name(),
+                javaVariantTypeName(variant.discriminator())));
         }
     }
 
@@ -376,6 +410,34 @@ public final class PipelineBranchRoutingPlanner {
             error(ctx, "Step '" + stepName + "' must declare " + fieldName + ".");
             return null;
         }
+        if (templateConfig.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3) {
+            Optional<PipelineTemplateTypeDefinition> definition = v3Definition(templateConfig, contractTypeName);
+            if (definition.isEmpty()) {
+                error(ctx, "Step '" + stepName + "' references unknown contract type '" + contractTypeName
+                    + "' in " + fieldName + ".");
+                return null;
+            }
+            PipelineTemplateTypeDefinition resolved = definition.orElseThrow();
+            if (!(resolved instanceof PipelineTemplateTypeDefinition.UnionType union)) {
+                return Set.of(resolved.name());
+            }
+            if (concreteOnly) {
+                error(ctx, "Step '" + stepName + "' " + fieldName + " entry '" + contractTypeName
+                    + "' must be a concrete contract type, not a union.");
+                return null;
+            }
+            LinkedHashSet<String> leafTypes = new LinkedHashSet<>();
+            for (PipelineTemplateTypeDefinition.Variant variant : union.variants().values()) {
+                Optional<String> payload = v3NamedContract(templateConfig, variant.payload());
+                if (payload.isEmpty()) {
+                    error(ctx, "Union '" + union.name() + "' variant '" + variant.discriminator()
+                        + "' does not resolve to a named v3 contract type.");
+                    return null;
+                }
+                leafTypes.add(payload.orElseThrow());
+            }
+            return leafTypes;
+        }
         if (templateConfig.messages().containsKey(contractTypeName)) {
             return Set.of(contractTypeName);
         }
@@ -395,6 +457,53 @@ public final class PipelineBranchRoutingPlanner {
         error(ctx, "Step '" + stepName + "' references unknown contract type '" + contractTypeName
             + "' in " + fieldName + ".");
         return null;
+    }
+
+    private boolean isUnionContract(PipelineTemplateConfig templateConfig, String contractTypeName) {
+        if (templateConfig == null || isBlank(contractTypeName)) {
+            return false;
+        }
+        return templateConfig.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3
+            ? v3Definition(templateConfig, contractTypeName)
+                .filter(PipelineTemplateTypeDefinition.UnionType.class::isInstance)
+                .isPresent()
+            : templateConfig.unions().containsKey(contractTypeName);
+    }
+
+    private Optional<PipelineTemplateTypeDefinition> v3Definition(
+        PipelineTemplateConfig templateConfig,
+        String contractTypeName
+    ) {
+        PipelineTemplateTypeModel typeModel = templateConfig.typeModel();
+        if (typeModel == null) {
+            return Optional.empty();
+        }
+        PipelineTemplateTypeDefinition definition = typeModel.definitions().get(contractTypeName);
+        if (definition == null) {
+            return Optional.empty();
+        }
+        if (definition instanceof PipelineTemplateTypeDefinition.AliasType alias) {
+            PipelineTemplateTypeReference resolved = typeModel.resolveAliases(alias.target());
+            if (resolved instanceof PipelineTemplateTypeReference.Named named) {
+                return Optional.ofNullable(typeModel.definitions().get(named.name()));
+            }
+            return Optional.empty();
+        }
+        return Optional.of(definition);
+    }
+
+    private Optional<String> v3NamedContract(
+        PipelineTemplateConfig templateConfig,
+        PipelineTemplateTypeReference reference
+    ) {
+        PipelineTemplateTypeReference resolved = templateConfig.typeModel().resolveAliases(reference);
+        return resolved instanceof PipelineTemplateTypeReference.Named named
+            ? Optional.of(named.name())
+            : Optional.empty();
+    }
+
+    private String javaVariantTypeName(String discriminator) {
+        return Character.toUpperCase(discriminator.charAt(0)) + discriminator.substring(1);
     }
 
     private boolean validateAssignableAcceptedTypes(

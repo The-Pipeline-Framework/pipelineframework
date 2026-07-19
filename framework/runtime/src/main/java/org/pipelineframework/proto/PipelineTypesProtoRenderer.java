@@ -45,7 +45,13 @@ final class PipelineTypesProtoRenderer {
     }
 
     String renderV3(String basePackage, PipelineTemplateTypeModel model, PipelineIdlSnapshot state) {
-        StringBuilder builder = header(basePackage);
+        return renderV3(new PipelineV3GenerationPlan(basePackage, model, state));
+    }
+
+    String renderV3(PipelineV3GenerationPlan plan) {
+        StringBuilder builder = header(plan.basePackage());
+        PipelineTemplateTypeModel model = plan.typeModel();
+        PipelineIdlSnapshot state = plan.idlState();
         boolean first = true;
         if (usesV3PayloadReference(model)) {
             renderPayloadReferenceMessage(builder);

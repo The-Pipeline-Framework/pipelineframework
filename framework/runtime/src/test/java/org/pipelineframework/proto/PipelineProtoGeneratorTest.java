@@ -16,12 +16,15 @@
 
 package org.pipelineframework.proto;
 
+import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.UUID;
+import javax.tools.ToolProvider;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
@@ -169,6 +172,312 @@ class PipelineProtoGeneratorTest {
         String state = Files.readString(tempDir.resolve("pipeline.idl.json"));
         assertTrue(state.contains("\"protoName\" : \"payment_id\""));
         assertTrue(state.contains("\"protoName\" : \"requires_review\""));
+    }
+
+    @Test
+    void generatesV3JavaNominalRecordsAndAdaptersInDeclaredFieldOrder() throws Exception {
+        Path configPath = tempDir.resolve("pipeline.yaml");
+        Path outputDir = tempDir.resolve("generated-v3-java");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "Payments"
+            basePackage: "com.example.payments"
+            transport: "GRPC"
+            types:
+              OrderId:
+                wraps: uuid
+              CustomerId:
+                wraps: uuid
+              DisplayName:
+                alias: string
+              PaymentRecord:
+                fields:
+                  - [customerId, CustomerId]
+                  - [orderId, OrderId]
+                  - [displayName, DisplayName]
+                  - [reference, payload_ref]
+            steps:
+              - name: Process Payment
+                cardinality: ONE_TO_ONE
+                input: PaymentRecord
+                output: PaymentRecord
+            """);
+
+        System.setProperty("pipeline.idl.bootstrap", "true");
+        try {
+            new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+            new PipelineV3JavaDomainGenerator().generate(tempDir, configPath, outputDir);
+        } finally {
+            System.clearProperty("pipeline.idl.bootstrap");
+        }
+
+        Path domain = outputDir.resolve("com/example/payments/domain");
+        String record = Files.readString(domain.resolve("PaymentRecord.java"));
+        String adapters = Files.readString(domain.resolve("PipelineDomainProtoAdapters.java"));
+        assertTrue(record.indexOf("CustomerId customerId") < record.indexOf("OrderId orderId"));
+        assertTrue(record.indexOf("OrderId orderId") < record.indexOf("String displayName"));
+        assertTrue(record.contains("org.pipelineframework.repository.PayloadReference reference"));
+        assertTrue(Files.exists(domain.resolve("OrderId.java")));
+        assertTrue(Files.exists(domain.resolve("CustomerId.java")));
+        assertFalse(Files.exists(domain.resolve("DisplayName.java")));
+        assertTrue(adapters.contains("public static com.example.payments.grpc.PipelineTypes.PaymentRecord toProto"));
+        assertTrue(adapters.contains("toProtoPayloadReference"));
+        assertTrue(adapters.contains("This surface is intentionally provisional"));
+    }
+
+    @Test
+    void generatesV3BytesAsByteStringWithoutArrayConversions() throws Exception {
+        Path configPath = tempDir.resolve("pipeline-bytes.yaml");
+        Path outputDir = tempDir.resolve("generated-v3-bytes");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "Binary Values"
+            basePackage: "com.example.binary"
+            transport: "GRPC"
+            types:
+              BinaryValue:
+                wraps: bytes
+              BinaryRecord:
+                fields: [[rawContent, bytes], [value, BinaryValue]]
+              BinaryOutcome:
+                variants:
+                  accepted: BinaryValue
+            steps:
+              - name: Process Binary Value
+                cardinality: ONE_TO_ONE
+                input: BinaryRecord
+                output: BinaryOutcome
+            """);
+
+        System.setProperty("pipeline.idl.bootstrap", "true");
+        try {
+            new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+            new PipelineV3JavaDomainGenerator().generate(tempDir, configPath, outputDir);
+        } finally {
+            System.clearProperty("pipeline.idl.bootstrap");
+        }
+
+        Path domain = outputDir.resolve("com/example/binary/domain");
+        String record = Files.readString(domain.resolve("BinaryRecord.java"));
+        String wrapper = Files.readString(domain.resolve("BinaryValue.java"));
+        String union = Files.readString(domain.resolve("BinaryOutcome.java"));
+        String adapters = Files.readString(domain.resolve("PipelineDomainProtoAdapters.java"));
+        assertTrue(record.contains("com.google.protobuf.ByteString rawContent"));
+        assertTrue(wrapper.contains("com.google.protobuf.ByteString value"));
+        assertTrue(union.contains("record Accepted(BinaryValue value) implements BinaryOutcome"));
+        assertTrue(adapters.contains("builder.setRawContent(value.rawContent());"));
+        assertTrue(adapters.contains("value.hasRawContent() ? value.getRawContent() : null"));
+        assertFalse(adapters.contains("ByteString.copyFrom"));
+        assertFalse(adapters.contains(".toByteArray()"));
+    }
+
+    @Test
+    void generatesV3JavaSealedUnionsAndProtobufAdapters() throws Exception {
+        Path configPath = tempDir.resolve("pipeline.yaml");
+        Path outputDir = tempDir.resolve("generated-v3-union");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "Payments"
+            basePackage: "com.example.payments"
+            transport: "GRPC"
+            types:
+              Approved:
+                fields: [[id, uuid]]
+              Outcome:
+                variants:
+                  approved: Approved
+            steps:
+              - name: Process Payment
+                cardinality: ONE_TO_ONE
+                input: Approved
+                output: Outcome
+            """);
+
+        System.setProperty("pipeline.idl.bootstrap", "true");
+        try {
+            new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+            new PipelineV3JavaDomainGenerator().generate(tempDir, configPath, outputDir);
+        } finally {
+            System.clearProperty("pipeline.idl.bootstrap");
+        }
+
+        assertTrue(Files.exists(outputDir.resolve("pipeline-types.proto")));
+        String union = Files.readString(outputDir.resolve("com/example/payments/domain/Outcome.java"));
+        String adapters = Files.readString(outputDir.resolve("com/example/payments/domain/PipelineDomainProtoAdapters.java"));
+        assertTrue(union.contains("public sealed interface Outcome permits Outcome.Approved"));
+        assertTrue(union.contains("record Approved(Approved value) implements Outcome"));
+        assertTrue(union.contains("return \"approved\""));
+        assertTrue(adapters.contains("setApproved(toProto(variant.value()))"));
+        assertTrue(adapters.contains("case APPROVED -> { return new Outcome.Approved(fromProto(value.getApproved())); }"));
+    }
+
+    @Test
+    void rejectsV3JavaIdentifiersThatCannotBeRepresentedWithoutChangingTheDslName() throws Exception {
+        Path configPath = tempDir.resolve("pipeline.yaml");
+        Path outputDir = tempDir.resolve("generated-v3-invalid-java");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "Payments"
+            basePackage: "com.example.payments"
+            transport: "GRPC"
+            types:
+              PaymentRecord:
+                fields: [[class, string]]
+            steps:
+              - name: Process Payment
+                cardinality: ONE_TO_ONE
+                input: PaymentRecord
+                output: PaymentRecord
+            """);
+
+        System.setProperty("pipeline.idl.bootstrap", "true");
+        try {
+            new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+            IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> new PipelineV3JavaDomainGenerator().generate(tempDir, configPath, outputDir));
+            assertTrue(error.getMessage().contains("cannot represent field 'PaymentRecord.class'"));
+        } finally {
+            System.clearProperty("pipeline.idl.bootstrap");
+        }
+    }
+
+    @Test
+    void rejectsV3JavaContextualTypeIdentifiers() throws Exception {
+        Path configPath = tempDir.resolve("pipeline-contextual-name.yaml");
+        Path outputDir = tempDir.resolve("generated-v3-contextual-name");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "Payments"
+            basePackage: "com.example.payments"
+            transport: "GRPC"
+            types:
+              record:
+                fields: [[id, string]]
+            steps:
+              - name: Process Payment
+                cardinality: ONE_TO_ONE
+                input: record
+                output: record
+            """);
+
+        System.setProperty("pipeline.idl.bootstrap", "true");
+        try {
+            new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+            IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> new PipelineV3JavaDomainGenerator().generate(tempDir, configPath, outputDir));
+            assertTrue(error.getMessage().contains("cannot represent type 'record'"));
+        } finally {
+            System.clearProperty("pipeline.idl.bootstrap");
+        }
+    }
+
+    @Test
+    void generatedV3JavaAdaptersCompileAndRoundTripNominalRecords() throws Exception {
+        Path configPath = tempDir.resolve("pipeline.yaml");
+        Path outputDir = tempDir.resolve("generated-v3-roundtrip");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "Payments"
+            basePackage: "com.example.payments"
+            transport: "GRPC"
+            types:
+              OrderId:
+                wraps: uuid
+              PaymentRecord:
+                fields:
+                  - [id, OrderId]
+                  - [note, string]
+              PaymentOutcome:
+                variants:
+                  approved: PaymentRecord
+            steps:
+              - name: Process Payment
+                cardinality: ONE_TO_ONE
+                input: PaymentRecord
+                output: PaymentOutcome
+            """);
+        System.setProperty("pipeline.idl.bootstrap", "true");
+        try {
+            new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+            new PipelineV3JavaDomainGenerator().generate(tempDir, configPath, outputDir);
+        } finally {
+            System.clearProperty("pipeline.idl.bootstrap");
+        }
+        Path stub = outputDir.resolve("com/example/payments/grpc/PipelineTypes.java");
+        Files.createDirectories(stub.getParent());
+        Files.writeString(stub, """
+            package com.example.payments.grpc;
+            public final class PipelineTypes {
+              public static final class OrderId {
+                private final String value;
+                private OrderId(String value) { this.value = value; }
+                public static Builder newBuilder() { return new Builder(); }
+                public boolean hasValue() { return value != null; }
+                public String getValue() { return value; }
+                public static final class Builder {
+                  private String value;
+                  public Builder setValue(String value) { this.value = value; return this; }
+                  public OrderId build() { return new OrderId(value); }
+                }
+              }
+              public static final class PaymentRecord {
+                private final OrderId id; private final String note;
+                private PaymentRecord(OrderId id, String note) { this.id = id; this.note = note; }
+                public static Builder newBuilder() { return new Builder(); }
+                public boolean hasId() { return id != null; }
+                public OrderId getId() { return id; }
+                public boolean hasNote() { return note != null; }
+                public String getNote() { return note; }
+                public static final class Builder {
+                  private OrderId id; private String note;
+                  public Builder setId(OrderId id) { this.id = id; return this; }
+                  public Builder setNote(String note) { this.note = note; return this; }
+                  public PaymentRecord build() { return new PaymentRecord(id, note); }
+                }
+              }
+              public static final class PaymentOutcome {
+                public enum ValueCase { APPROVED, VALUE_NOT_SET }
+                private final PaymentRecord approved;
+                private PaymentOutcome(PaymentRecord approved) { this.approved = approved; }
+                public static Builder newBuilder() { return new Builder(); }
+                public ValueCase getValueCase() { return approved == null ? ValueCase.VALUE_NOT_SET : ValueCase.APPROVED; }
+                public PaymentRecord getApproved() { return approved; }
+                public static final class Builder {
+                  private PaymentRecord approved;
+                  public Builder setApproved(PaymentRecord approved) { this.approved = approved; return this; }
+                  public PaymentOutcome build() { return new PaymentOutcome(approved); }
+                }
+              }
+            }
+            """);
+        Path classes = tempDir.resolve("compiled-domain");
+        List<String> sources;
+        try (var files = Files.walk(outputDir)) {
+            sources = files.filter(path -> path.toString().endsWith(".java")).map(Path::toString).toList();
+        }
+        List<String> compilerArguments = new ArrayList<>();
+        compilerArguments.add("-d");
+        compilerArguments.add(classes.toString());
+        compilerArguments.addAll(sources);
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null,
+            compilerArguments.toArray(String[]::new)));
+        try (URLClassLoader loader = URLClassLoader.newInstance(new java.net.URL[] { classes.toUri().toURL() })) {
+            Class<?> orderId = loader.loadClass("com.example.payments.domain.OrderId");
+            Class<?> record = loader.loadClass("com.example.payments.domain.PaymentRecord");
+            Class<?> outcome = loader.loadClass("com.example.payments.domain.PaymentOutcome");
+            Class<?> approved = loader.loadClass("com.example.payments.domain.PaymentOutcome$Approved");
+            Class<?> adapters = loader.loadClass("com.example.payments.domain.PipelineDomainProtoAdapters");
+            Object id = orderId.getConstructor(UUID.class).newInstance(UUID.fromString("d7f7c765-38b3-4ca8-b33b-f4b3af6983aa"));
+            Object input = record.getConstructor(orderId, String.class).newInstance(id, "memo");
+            Object proto = adapters.getMethod("toProto", record).invoke(null, input);
+            Object roundTripped = adapters.getMethod("fromProto", proto.getClass()).invoke(null, proto);
+            assertEquals(input, roundTripped);
+            Object unionValue = approved.getConstructor(record).newInstance(input);
+            Object unionProto = adapters.getMethod("toProto", outcome).invoke(null, unionValue);
+            Object unionRoundTripped = adapters.getMethod("fromProto", unionProto.getClass()).invoke(null, unionProto);
+            assertEquals(unionValue, unionRoundTripped);
+            assertEquals("approved", outcome.getMethod("discriminator").invoke(unionRoundTripped));
+        }
     }
 
     @Test
@@ -1844,5 +2153,53 @@ class PipelineProtoGeneratorTest {
 
         assertTrue(exception.getMessage().contains("require committed pipeline.idl.json"));
         assertFalse(Files.exists(outputDir));
+    }
+
+    @Test
+    @ClearSystemProperty(key = "pipeline.idl.bootstrap")
+    @ClearSystemProperty(key = "pipeline.idl.require-committed-state")
+    void bootstrapsV3IdlStateOnlyWhenExplicitlyEnabled() throws Exception {
+        Path configPath = tempDir.resolve("v3-bootstrap-pipeline.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: V3 Bootstrap
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Payment:
+                fields: [[id, uuid]]
+            steps: []
+            """);
+        Path outputDir = tempDir.resolve("v3-bootstrap-proto");
+        Path lockPath = tempDir.resolve("v3-bootstrap-pipeline.idl.json");
+
+        System.setProperty("pipeline.idl.bootstrap", "true");
+        try {
+            new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+        } finally {
+            System.clearProperty("pipeline.idl.bootstrap");
+        }
+
+        assertTrue(Files.exists(lockPath));
+        assertTrue(Files.exists(outputDir.resolve("pipeline-types.proto")));
+    }
+
+    @Test
+    void parsesV3ContractGeneratorArgumentsStrictly() {
+        PipelineV3ContractGenerator.Arguments arguments = PipelineV3ContractGenerator.Arguments.parse(new String[] {
+            "--module-dir", "module", "--config=config/pipeline.yaml", "--output-dir", "generated"
+        });
+
+        assertEquals(Path.of("module"), arguments.moduleDir());
+        assertEquals(Path.of("config/pipeline.yaml"), arguments.configPath());
+        assertEquals(Path.of("generated"), arguments.outputDir());
+        assertFalse(arguments.help());
+        assertTrue(PipelineV3ContractGenerator.Arguments.parse(new String[] { "--help" }).help());
+        assertThrows(IllegalArgumentException.class,
+            () -> PipelineV3ContractGenerator.Arguments.parse(new String[] { "--config", "--output-dir" }));
+        assertThrows(IllegalArgumentException.class,
+            () -> PipelineV3ContractGenerator.Arguments.parse(new String[] { "--output-dir=" }));
+        assertThrows(IllegalArgumentException.class,
+            () -> PipelineV3ContractGenerator.Arguments.parse(new String[] { "--unknown" }));
     }
 }

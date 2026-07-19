@@ -18,9 +18,12 @@ This eliminates the need for manual configuration and ensures consistency across
 
 ### Proto Generation (Pre-Processing)
 
-Before annotation processing, pipeline protobuf descriptors are generated from the pipeline template. The authoritative source is:
+Before annotation processing, pipeline protobuf contracts are generated from the pipeline template. For version 3 Java applications, the Java domain target is generated in the same lifecycle. The authoritative generators are:
 
 - `framework/runtime/src/main/java/org/pipelineframework/proto/PipelineProtoGenerator.java`
+- `framework/runtime/src/main/java/org/pipelineframework/proto/PipelineV3JavaDomainGenerator.java`
+
+`PipelineV3ContractGenerator` is the convenience lifecycle command that invokes both independent target generators. It does not make the project scaffolder responsible for DSL-derived domain code.
 
 ### Build Timeline (gRPC)
 
@@ -28,10 +31,12 @@ Before annotation processing, pipeline protobuf descriptors are generated from t
 Pipeline template
       |
       v
-PipelineProtoGenerator
-      |
-      v
-protoc -> descriptor set (.desc)
+PipelineV3ContractGenerator
+      |                    \
+      v                     v
+protobuf contracts -> protoc -> descriptor set (.desc)    Java domain records + adapters
+      |                     |
+      +---------------------+
       |
       v
 Annotation processor -> adapters/clients/resources/CLI

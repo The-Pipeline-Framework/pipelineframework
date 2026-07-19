@@ -37,7 +37,11 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
      */
     @Override
     public void render(GrpcBinding binding, GenerationContext ctx) throws IOException {
-        TypeSpec grpcServiceClass = buildGrpcServiceClass(binding, ctx.processingEnv().getMessager(), ctx.role());
+        GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = GRPC_TYPE_RESOLVER.resolve(
+            binding, ctx.processingEnv().getMessager());
+        boolean generatedV3DomainBinding = V3GeneratedDomainBinding.applies(binding.model(), grpcTypes, ctx);
+        TypeSpec grpcServiceClass = buildGrpcServiceClass(
+            binding, ctx.processingEnv().getMessager(), ctx.role(), generatedV3DomainBinding);
 
         // Write the generated class
         JavaFile javaFile = JavaFile.builder(
@@ -56,7 +60,11 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
      * @param role the deployment role applied to the generated class's GeneratedRole annotation
      * @return a TypeSpec representing the gRPC service adapter class to be written to a Java file
      */
-    private TypeSpec buildGrpcServiceClass(GrpcBinding binding, Messager messager, org.pipelineframework.processor.ir.DeploymentRole role) {
+    private TypeSpec buildGrpcServiceClass(
+            GrpcBinding binding,
+            Messager messager,
+            org.pipelineframework.processor.ir.DeploymentRole role,
+            boolean generatedV3DomainBinding) {
         PipelineStepModel model = binding.model();
         String simpleClassName;
         // For gRPC services: ${ServiceName}GrpcService
@@ -81,7 +89,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
 
         // Use generic Mapper interfaces so AP generation does not require concrete mapper resolution.
         boolean cacheSideEffect = isCacheSideEffect(model);
-        if (!cacheSideEffect) {
+        if (!cacheSideEffect && !generatedV3DomainBinding) {
             TypeName inputGrpcType = grpcTypes.grpcParameterType() != null
                 ? grpcTypes.grpcParameterType()
                 : ClassName.OBJECT;
@@ -122,16 +130,16 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         // Add the required gRPC service method implementation based on streaming shape
         switch (model.streamingShape()) {
             case UNARY_UNARY:
-                addUnaryUnaryMethod(grpcServiceBuilder, binding, messager);
+                addUnaryUnaryMethod(grpcServiceBuilder, binding, messager, generatedV3DomainBinding);
                 break;
             case UNARY_STREAMING:
-                addUnaryStreamingMethod(grpcServiceBuilder, binding, messager);
+                addUnaryStreamingMethod(grpcServiceBuilder, binding, messager, generatedV3DomainBinding);
                 break;
             case STREAMING_UNARY:
-                addStreamingUnaryMethod(grpcServiceBuilder, binding, messager);
+                addStreamingUnaryMethod(grpcServiceBuilder, binding, messager, generatedV3DomainBinding);
                 break;
             case STREAMING_STREAMING:
-                addStreamingStreamingMethod(grpcServiceBuilder, binding, messager);
+                addStreamingStreamingMethod(grpcServiceBuilder, binding, messager, generatedV3DomainBinding);
                 break;
         }
 
@@ -149,7 +157,11 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
      * @param messager used to report messages during gRPC type resolution
      * @throws IllegalStateException if required gRPC parameter/return types or required domain input/output types are missing for the service
      */
-    private void addUnaryUnaryMethod(TypeSpec.Builder builder, GrpcBinding binding, Messager messager) {
+    private void addUnaryUnaryMethod(
+            TypeSpec.Builder builder,
+            GrpcBinding binding,
+            Messager messager,
+            boolean generatedV3DomainBinding) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
                 ClassName.get("org.pipelineframework.grpc", "GrpcReactiveServiceAdapter");
@@ -163,7 +175,8 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         }
 
         // Create the inline adapter
-        TypeSpec inlineAdapter = inlineAdapterBuilder(binding, grpcAdapterClassName, messager);
+        TypeSpec inlineAdapter = inlineAdapterBuilder(
+            binding, grpcAdapterClassName, messager, generatedV3DomainBinding);
 
         boolean cacheSideEffect = isCacheSideEffect(model);
         TypeName inputDomainTypeUnary = cacheSideEffect
@@ -232,7 +245,11 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
      * @param messager the annotation processing messager used during type resolution
      * @throws IllegalStateException if required gRPC parameter/return types or domain input/output types are missing for the service
      */
-    private void addUnaryStreamingMethod(TypeSpec.Builder builder, GrpcBinding binding, Messager messager) {
+    private void addUnaryStreamingMethod(
+            TypeSpec.Builder builder,
+            GrpcBinding binding,
+            Messager messager,
+            boolean generatedV3DomainBinding) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
                 ClassName.get("org.pipelineframework.grpc", "GrpcServiceStreamingAdapter");
@@ -246,7 +263,8 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         }
 
         // Create the inline adapter
-        TypeSpec inlineAdapter = inlineAdapterBuilder(binding, grpcAdapterClassName, messager);
+        TypeSpec inlineAdapter = inlineAdapterBuilder(
+            binding, grpcAdapterClassName, messager, generatedV3DomainBinding);
 
         boolean cacheSideEffect = isCacheSideEffect(model);
         TypeName inputDomainTypeUnaryStreaming = cacheSideEffect
@@ -311,7 +329,11 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
      * @param binding source metadata containing the pipeline step model and service name used to resolve gRPC and domain types
      * @throws IllegalStateException if required gRPC parameter/return types or (when not a cache-side-effect) inbound/outbound domain types are missing for the binding's service
      */
-    private void addStreamingUnaryMethod(TypeSpec.Builder builder, GrpcBinding binding, Messager messager) {
+    private void addStreamingUnaryMethod(
+            TypeSpec.Builder builder,
+            GrpcBinding binding,
+            Messager messager,
+            boolean generatedV3DomainBinding) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
                 ClassName.get("org.pipelineframework.grpc", "GrpcServiceClientStreamingAdapter");
@@ -325,7 +347,8 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         }
 
         // Create the inline adapter
-        TypeSpec inlineAdapter = inlineAdapterBuilder(binding, grpcAdapterClassName, messager);
+        TypeSpec inlineAdapter = inlineAdapterBuilder(
+            binding, grpcAdapterClassName, messager, generatedV3DomainBinding);
 
         boolean cacheSideEffect = isCacheSideEffect(model);
         TypeName inputDomainTypeStreamingUnary = cacheSideEffect
@@ -394,7 +417,11 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
      * @param messager a processing messager used for type-resolution diagnostics
      * @throws IllegalStateException if required gRPC parameter/return types or domain types are missing for the service
      */
-    private void addStreamingStreamingMethod(TypeSpec.Builder builder, GrpcBinding binding, Messager messager) {
+    private void addStreamingStreamingMethod(
+            TypeSpec.Builder builder,
+            GrpcBinding binding,
+            Messager messager,
+            boolean generatedV3DomainBinding) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
                 ClassName.get("org.pipelineframework.grpc", "GrpcServiceBidirectionalStreamingAdapter");
@@ -408,7 +435,8 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         }
 
         // Create the inline adapter
-        TypeSpec inlineAdapterStreaming = inlineAdapterBuilder(binding, grpcAdapterClassName, messager);
+        TypeSpec inlineAdapterStreaming = inlineAdapterBuilder(
+            binding, grpcAdapterClassName, messager, generatedV3DomainBinding);
 
         boolean cacheSideEffect = isCacheSideEffect(model);
         TypeName inputDomainTypeStreamingStreaming = cacheSideEffect
@@ -477,7 +505,8 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
     private TypeSpec inlineAdapterBuilder(
             GrpcBinding binding,
             ClassName grpcAdapterClassName,
-            Messager messager
+            Messager messager,
+            boolean generatedV3DomainBinding
     ) {
         PipelineStepModel model = binding.model();
 
@@ -505,7 +534,12 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .addModifiers(Modifier.PROTECTED)
                 .returns(inputDomainType)
                 .addParameter(inputGrpcType, "grpcIn");
-        if (!cacheSideEffect) {
+        if (generatedV3DomainBinding) {
+            fromGrpcMethodBuilder.addStatement("return $T.fromProto(grpcIn)",
+                ClassName.get(inputDomainType instanceof ClassName inputDomain
+                    ? inputDomain.packageName()
+                    : "", "PipelineDomainProtoAdapters"));
+        } else if (!cacheSideEffect) {
             fromGrpcMethodBuilder.addStatement("return inboundMapper.fromExternal(grpcIn)");
         } else {
             fromGrpcMethodBuilder.addStatement("return ($T) grpcIn", inputDomainType);
@@ -516,7 +550,12 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .addModifiers(Modifier.PROTECTED)
                 .returns(outputGrpcType)
                 .addParameter(outputDomainType, "output");
-        if (!cacheSideEffect) {
+        if (generatedV3DomainBinding) {
+            toGrpcMethodBuilder.addStatement("return $T.toProto(output)",
+                ClassName.get(outputDomainType instanceof ClassName outputDomain
+                    ? outputDomain.packageName()
+                    : "", "PipelineDomainProtoAdapters"));
+        } else if (!cacheSideEffect) {
             toGrpcMethodBuilder.addStatement("return outboundMapper.toExternal(output)");
         } else {
             toGrpcMethodBuilder.addStatement("return ($T) output", outputGrpcType);

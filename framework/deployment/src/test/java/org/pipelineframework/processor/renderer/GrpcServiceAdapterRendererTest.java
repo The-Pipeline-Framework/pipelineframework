@@ -238,6 +238,30 @@ class GrpcServiceAdapterRendererTest {
         }
     }
 
+    private Descriptors.FileDescriptor buildV3GeneratedDomainDescriptor() {
+        DescriptorProtos.FileDescriptorProto proto = DescriptorProtos.FileDescriptorProto.newBuilder()
+            .setName("pipeline-types.proto")
+            .setPackage("com.example.grpc")
+            .setOptions(DescriptorProtos.FileOptions.newBuilder()
+                .setJavaPackage("com.example.grpc")
+                .setJavaOuterClassname("PipelineTypes")
+                .build())
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("PaymentRecord"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("PaymentReceipt"))
+            .addService(DescriptorProtos.ServiceDescriptorProto.newBuilder()
+                .setName("TestService")
+                .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
+                    .setName("remoteProcess")
+                    .setInputType(".com.example.grpc.PaymentRecord")
+                    .setOutputType(".com.example.grpc.PaymentReceipt")))
+            .build();
+        try {
+            return Descriptors.FileDescriptor.buildFrom(proto, new Descriptors.FileDescriptor[] {});
+        } catch (Descriptors.DescriptorValidationException e) {
+            throw new IllegalStateException("Failed to build v3 generated-domain test descriptor", e);
+        }
+    }
+
     private Descriptors.FileDescriptor buildSideEffectDescriptor() {
         DescriptorProtos.FileDescriptorProto proto = DescriptorProtos.FileDescriptorProto.newBuilder()
             .setName("observe_output_type.proto")
@@ -355,6 +379,43 @@ class GrpcServiceAdapterRendererTest {
 
         assertFalse(source.contains("inboundMapper"));
         assertFalse(source.contains("outboundMapper"));
+    }
+
+    @Test
+    void testRenderV3GeneratedDomainBindingUsesGeneratedAdapters() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("TestService")
+            .servicePackage("com.example")
+            .serviceClassName(ClassName.get("com.example", "TestService"))
+            .inputMapping(new TypeMapping(ClassName.get("com.example.domain", "PaymentRecord"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("com.example.domain", "PaymentReceipt"), null, false))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .enabledTargets(java.util.Set.of(GenerationTarget.GRPC_SERVICE))
+            .build();
+        Descriptors.FileDescriptor descriptor = buildV3GeneratedDomainDescriptor();
+        Descriptors.ServiceDescriptor service = descriptor.findServiceByName("TestService");
+        GrpcBinding binding = new GrpcBinding(model, service, service.findMethodByName("remoteProcess"));
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        renderer.render(binding, new GenerationContext(
+            processingEnv,
+            tempDir,
+            DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(),
+            null,
+            null,
+            null,
+            "com.example",
+            null,
+            true));
+
+        String source = readGeneratedService("TestService");
+        assertFalse(source.contains("inboundMapper"));
+        assertFalse(source.contains("outboundMapper"));
+        assertTrue(source.contains("PipelineDomainProtoAdapters.fromProto(grpcIn)"));
+        assertTrue(source.contains("PipelineDomainProtoAdapters.toProto(output)"));
     }
 
     @Test

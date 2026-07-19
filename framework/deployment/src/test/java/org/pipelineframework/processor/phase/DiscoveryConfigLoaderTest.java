@@ -180,7 +180,7 @@ class DiscoveryConfigLoaderTest {
     }
 
     @Test
-    void loadTemplateConfig_stopsV3BeforeDeploymentPhases() throws Exception {
+    void loadTemplateConfig_allowsSupportedV3JavaNominalContracts() throws Exception {
         Path yaml = tempDir.resolve("v3-pipeline.yaml");
         Files.writeString(yaml, """
             version: 3
@@ -190,17 +190,20 @@ class DiscoveryConfigLoaderTest {
             types:
               Payment:
                 fields: [[id, uuid]]
+              PaymentOutcome:
+                variants:
+                  approved: Payment
             steps:
               - name: process
                 cardinality: ONE_TO_ONE
                 input: Payment
-                output: Payment
+                output: PaymentOutcome
             """);
 
-        IllegalStateException exception = assertThrows(IllegalStateException.class,
-            () -> loader.loadTemplateConfig(yaml, null));
+        var config = loader.loadTemplateConfig(yaml, null);
 
-        assertTrue(exception.getMessage().contains("protobuf contracts are available"));
+        assertNotNull(config);
+        assertEquals(3, config.version());
     }
 
     private void assertTemplateConfigLoadFails(Path yamlPath, Messager msg) {

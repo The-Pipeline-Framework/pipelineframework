@@ -2,7 +2,7 @@
 
 Version 3 describes a pipeline in domain terms. A type says what business value is moving through the pipeline; a step says how that value changes. Protobuf tags, generated bindings, and transport representations are compiler-owned infrastructure.
 
-The protobuf generator realizes version 3 declarations as protobuf contracts. Generated workload-language APIs remain pending, so a full pipeline compile reports that capability boundary rather than flattening a wrapper or union.
+Version 3 generates protobuf contracts and Java domain records from the same normalized type model. Java records and wrappers preserve nominal identity; aliases remain transparent. Generated sealed union APIs and their protobuf adapters preserve declared discriminator semantics.
 
 ```yaml
 version: 3
@@ -131,6 +131,20 @@ Version 3 emits a shared `pipeline-types.proto`. Records become protobuf message
 A wrapper is a distinct message with `value = 1`, so two wrappers over the same scalar remain distinct on the wire. An alias emits no message and resolves transitively to its target protobuf type. A union becomes a message with `oneof value`; each discriminator becomes a `snake_case` oneof field, while the authored discriminator remains the semantic identity in `pipeline.idl.json`.
 
 The generator reserves removed protobuf names and tags from the committed IDL state. Source declaration order does not affect retained or newly allocated tags.
+
+### Generated Java domain types
+
+Run `PipelineV3ContractGenerator` in the same `generate-sources` lifecycle as protobuf generation. It invokes the independent protobuf and Java target generators from the same resolved v3 type model and committed IDL state.
+
+Generated Java sources live under `<basePackage>.domain`. A record field keeps its YAML declaration order in the generated Java record constructor. A wrapper is a distinct one-component record, so two wrappers over the same scalar cannot be exchanged accidentally. Aliases generate no class and use their resolved target type.
+
+The generated `PipelineDomainProtoAdapters` class converts generated records, wrappers, and unions to and from the generated protobuf types. It is public application-facing generated code, but its exact class and method shape remains provisional while the Java target continues to evolve.
+
+Generated scalar components are nullable boxed/reference types. `null` means that an eligible proto3 scalar was absent; a present scalar default remains its Java default value. This preserves transport presence only. It does not define required fields, business validity, or refinement rules. `payload_ref` is handled separately as the framework `PayloadReference` contract type.
+
+Each v3 union generates a sealed Java interface. Its nested variant records carry the declared payload and expose the exact YAML discriminator through `discriminator()`. The adapter maps those variants directly to the generated protobuf `oneof` cases; it does not flatten them into their payloads.
+
+For unary local services whose Java signature uses those exact generated domain records, wrappers, or unions, TPF uses the generated adapters directly. Application-owned Java types remain representation boundaries and continue to need the normal explicit mapper path. Branch-aware v3 templates keep the existing `accepts` and `terminal` model; a union remains a closed contract rather than a predicate or graph language. Remote/framework-owned steps and non-unary v3 execution remain pending.
 
 ## Pipeline contracts
 
