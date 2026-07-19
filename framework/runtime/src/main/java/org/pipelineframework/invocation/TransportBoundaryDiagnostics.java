@@ -17,6 +17,7 @@ final class TransportBoundaryDiagnostics {
         AttributeKey.stringKey("tpf.boundary.failure.category");
     private final TransportBoundaryFailureClassifier failureClassifier;
     private final LongCounter invocations;
+    private final LongCounter circuitRejections;
     private final DoubleHistogram duration;
 
     TransportBoundaryDiagnostics() {
@@ -27,6 +28,7 @@ final class TransportBoundaryDiagnostics {
         this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier must not be null");
         Meter localMeter = Objects.requireNonNull(meter, "meter must not be null");
         this.invocations = localMeter.counterBuilder("tpf.transport.boundary.invocations").build();
+        this.circuitRejections = localMeter.counterBuilder("tpf.transport.boundary.circuit.rejections").build();
         this.duration = localMeter.histogramBuilder("tpf.transport.boundary.duration").setUnit("ms").build();
     }
 
@@ -47,9 +49,22 @@ final class TransportBoundaryDiagnostics {
         duration.record(durationNanos / 1_000_000.0, attributes);
     }
 
+    void recordCircuitRejected(TransportBoundaryDescriptor descriptor) {
+        Attributes attributes = Attributes.builder()
+            .put(PROTOCOL, descriptor.protocol())
+            .put(TARGET, descriptor.target())
+            .put(OUTCOME, outcome(TransportBoundaryFailureCategory.CIRCUIT_OPEN))
+            .put(FAILURE_CATEGORY, TransportBoundaryFailureCategory.CIRCUIT_OPEN.metricValue())
+            .build();
+        circuitRejections.add(1, attributes);
+    }
+
     private String outcome(TransportBoundaryFailureCategory category) {
         if (category == TransportBoundaryFailureCategory.CANCELLED) {
             return "cancelled";
+        }
+        if (category == TransportBoundaryFailureCategory.CIRCUIT_OPEN) {
+            return "rejected";
         }
         return category == TransportBoundaryFailureCategory.NONE ? "completed" : "failed";
     }

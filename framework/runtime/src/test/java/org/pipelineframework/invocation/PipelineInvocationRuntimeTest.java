@@ -9,18 +9,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
+import jakarta.ws.rs.ProcessingException;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.runtime.core.resilience.CircuitOpenException;
+import org.pipelineframework.runtime.core.resilience.CircuitScope;
+import org.pipelineframework.runtime.core.resilience.InMemoryCircuitBreaker;
 
 class PipelineInvocationRuntimeTest {
     private final PipelineInvocationRuntime runtime = new PipelineInvocationRuntime();
@@ -43,6 +49,52 @@ class PipelineInvocationRuntimeTest {
             () -> runtime.invokeTransportUni(boundary, () -> Uni.createFrom().failure(failure)).await().indefinitely());
 
         assertSame(failure, thrown);
+    }
+
+    @Test
+    void circuitRejectionPreventsSupplierFromStarting() {
+        PipelineInvocationRuntime resilientRuntime = new PipelineInvocationRuntime(
+            new InMemoryCircuitBreaker(),
+            new CircuitPolicyResolver(Map.of("test:resilient-target", circuitSettings())),
+            new TransportBoundaryDiagnostics(),
+            new CircuitTelemetry(io.opentelemetry.api.OpenTelemetry.noop()));
+        TransportBoundaryInvocation resilientBoundary = new TransportBoundaryInvocation() {
+            @Override
+            public TransportBoundaryDescriptor transportBoundary() {
+                return new TransportBoundaryDescriptor("test", "resilient-target");
+            }
+
+        };
+        AtomicInteger invocations = new AtomicInteger();
+
+        assertThrows(ProcessingException.class, () -> resilientRuntime.invokeTransportUni(
+            resilientBoundary,
+            () -> {
+                invocations.incrementAndGet();
+                return Uni.createFrom().failure(new ProcessingException("dependency failed"));
+            }).await().indefinitely());
+
+        CircuitOpenException rejected = assertThrows(CircuitOpenException.class, () -> resilientRuntime.invokeTransportUni(
+            resilientBoundary,
+            () -> {
+                invocations.incrementAndGet();
+                return Uni.createFrom().item("must not run");
+            }).await().indefinitely());
+
+        assertEquals(1, invocations.get());
+        assertTrue(rejected.circuitOpen().notBefore().isAfter(java.time.Instant.now().plusSeconds(30)));
+    }
+
+    private static CircuitSettings circuitSettings() {
+        return new CircuitSettings(
+            true,
+            CircuitScope.LOCAL_PROCESS,
+            1,
+            Duration.ofMinutes(1),
+            Duration.ofMinutes(1),
+            1,
+            Duration.ofSeconds(1),
+            java.util.Optional.empty());
     }
 
     @Test
