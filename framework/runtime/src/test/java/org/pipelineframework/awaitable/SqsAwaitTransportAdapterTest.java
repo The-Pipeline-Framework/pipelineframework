@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
@@ -38,6 +39,25 @@ class SqsAwaitTransportAdapterTest {
         assertFalse(adapter(mock(SqsClient.class), () -> new SqsAwaitTransportAdapter.SqsLiveAwaitWindowConfig(
             true,
             Optional.of("http://sqs.local/other-responses"))).supportsLiveAwaitWindow(descriptor));
+    }
+
+    @Test
+    void memoizesTheLiveAwaitWindowConfigurationAfterTheFirstLookup() {
+        AtomicInteger configurationLookups = new AtomicInteger();
+        SqsAwaitTransportAdapter adapter = adapter(mock(SqsClient.class), () -> {
+            configurationLookups.incrementAndGet();
+            return new SqsAwaitTransportAdapter.SqsLiveAwaitWindowConfig(
+                true,
+                Optional.of("http://sqs.local/responses"));
+        });
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
+            "request", Map.of("queueUrl", "http://sqs.local/requests"),
+            "response", Map.of("queueUrl", "http://sqs.local/responses")));
+
+        assertTrue(adapter.supportsLiveAwaitWindow(descriptor));
+        assertTrue(adapter.supportsLiveAwaitWindow(descriptor));
+
+        assertEquals(1, configurationLookups.get());
     }
 
     @Test

@@ -38,6 +38,7 @@ public class SqsAwaitTransportAdapter implements AwaitTransportAdapter<Object> {
     private volatile SqsClient client;
     private final SqsClient explicitClient;
     private final Supplier<SqsLiveAwaitWindowConfig> liveAwaitWindowConfig;
+    private volatile SqsLiveAwaitWindowConfig resolvedLiveAwaitWindowConfig;
 
     public SqsAwaitTransportAdapter() {
         this.explicitClient = null;
@@ -67,7 +68,7 @@ public class SqsAwaitTransportAdapter implements AwaitTransportAdapter<Object> {
     @Override
     public boolean supportsLiveAwaitWindow(AwaitStepDescriptor descriptor) {
         Objects.requireNonNull(descriptor, "descriptor must not be null");
-        return liveAwaitWindowConfig.get().matches(SqsConfig.from(descriptor.transportConfig()));
+        return resolvedLiveAwaitWindowConfig().matches(SqsConfig.from(descriptor.transportConfig()));
     }
 
     @Override
@@ -142,6 +143,23 @@ public class SqsAwaitTransportAdapter implements AwaitTransportAdapter<Object> {
                 client = builder.build();
             }
             return client;
+        }
+    }
+
+    private SqsLiveAwaitWindowConfig resolvedLiveAwaitWindowConfig() {
+        SqsLiveAwaitWindowConfig resolved = resolvedLiveAwaitWindowConfig;
+        if (resolved != null) {
+            return resolved;
+        }
+        synchronized (this) {
+            resolved = resolvedLiveAwaitWindowConfig;
+            if (resolved == null) {
+                resolved = Objects.requireNonNull(
+                    liveAwaitWindowConfig.get(),
+                    "liveAwaitWindowConfig supplier must not return null");
+                resolvedLiveAwaitWindowConfig = resolved;
+            }
+            return resolved;
         }
     }
 
