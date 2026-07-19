@@ -347,6 +347,15 @@ public interface PipelineOrchestratorConfig {
         String awaitUnitTable();
 
         /**
+         * Await admission fixed-slot table name.
+         *
+         * @return await admission table name
+         */
+        @WithName("await-admission-table")
+        @WithDefault("tpf_await_admission")
+        String awaitAdmissionTable();
+
+        /**
          * Release registry metadata table name.
          *
          * @return release registry table name

@@ -1,6 +1,7 @@
 package org.pipelineframework.awaitable;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -11,6 +12,7 @@ import static org.mockito.Mockito.when;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,52 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 
 class SqsAwaitTransportAdapterTest {
+
+    @Test
+    void supportsLiveAwaitWindowOnlyWhenTheLocalPollerOwnsTheResponseQueue() {
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
+            "request", Map.of("queueUrl", "http://sqs.local/requests"),
+            "response", Map.of("queueUrl", "http://sqs.local/responses")));
+
+        assertTrue(adapter(mock(SqsClient.class), () -> new SqsAwaitTransportAdapter.SqsLiveAwaitWindowConfig(
+            true,
+            Optional.of("http://sqs.local/responses"))).supportsLiveAwaitWindow(descriptor));
+        assertFalse(adapter(mock(SqsClient.class), () -> new SqsAwaitTransportAdapter.SqsLiveAwaitWindowConfig(
+            false,
+            Optional.of("http://sqs.local/responses"))).supportsLiveAwaitWindow(descriptor));
+        assertFalse(adapter(mock(SqsClient.class), () -> new SqsAwaitTransportAdapter.SqsLiveAwaitWindowConfig(
+            true,
+            Optional.of("http://sqs.local/other-responses"))).supportsLiveAwaitWindow(descriptor));
+    }
+
+    @Test
+    void memoizesTheLiveAwaitWindowConfigurationAfterTheFirstLookup() {
+        AtomicInteger configurationLookups = new AtomicInteger();
+        SqsAwaitTransportAdapter adapter = adapter(mock(SqsClient.class), () -> {
+            configurationLookups.incrementAndGet();
+            return new SqsAwaitTransportAdapter.SqsLiveAwaitWindowConfig(
+                true,
+                Optional.of("http://sqs.local/responses"));
+        });
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
+            "request", Map.of("queueUrl", "http://sqs.local/requests"),
+            "response", Map.of("queueUrl", "http://sqs.local/responses")));
+
+        assertTrue(adapter.supportsLiveAwaitWindow(descriptor));
+        assertTrue(adapter.supportsLiveAwaitWindow(descriptor));
+
+        assertEquals(1, configurationLookups.get());
+    }
+
+    @Test
+    void normalizesRequestQueueForAdmissionScope() {
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
+            "request", Map.of("queueUrl", "http://sqs.local/requests"),
+            "response", Map.of("queueUrl", "http://sqs.local/responses")));
+
+        assertEquals("sqs://http://sqs.local/requests", adapter(mock(SqsClient.class))
+            .admissionEndpoint(descriptor).orElseThrow());
+    }
 
     @Test
     void dispatchPublishesFrameworkEnvelope() throws Exception {
@@ -121,6 +169,15 @@ class SqsAwaitTransportAdapterTest {
 
     private static SqsAwaitTransportAdapter adapter(SqsClient client) {
         SqsAwaitTransportAdapter adapter = new SqsAwaitTransportAdapter(client, config());
+        adapter.resumeTokenService = new AwaitResumeTokenService("secret-value-for-tests");
+        return adapter;
+    }
+
+    private static SqsAwaitTransportAdapter adapter(
+        SqsClient client,
+        java.util.function.Supplier<SqsAwaitTransportAdapter.SqsLiveAwaitWindowConfig> liveAwaitWindowConfig
+    ) {
+        SqsAwaitTransportAdapter adapter = new SqsAwaitTransportAdapter(client, config(), liveAwaitWindowConfig);
         adapter.resumeTokenService = new AwaitResumeTokenService("secret-value-for-tests");
         return adapter;
     }

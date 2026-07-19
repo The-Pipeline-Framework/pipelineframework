@@ -5,7 +5,17 @@ work while waiting for I/O.
 
 ### How to size `pipeline.max-concurrency`
 
-`pipeline.max-concurrency` limits live work admitted by a step or live connector segment. For brokered `ONE_TO_ONE` await over a stream, it also acts as the pending-interaction window: the parser can dispatch up to that many await interactions, then advances as completions are durably recorded and accepted by downstream demand.
+`pipeline.max-concurrency` limits live work admitted by a step or live connector segment. For a Kafka or SQS `ONE_TO_ONE` await over a stream, it also acts as the pending-interaction window: the parser can dispatch up to that many unresolved interactions, then advances only after a completion is durably admitted and accepted by the live await session. This window is local to one live await unit in one runtime instance; it is not a distributed provider quota across replicas.
+
+With `parallelism=AUTO` or parallel execution, TPF uses bounded merge at that same limit so completed items may continue out of source order. Set `parallelism=SEQUENTIAL` when source order matters: TPF concatenates work and uses an effective window of one. Webhook and interaction-API awaits remain durable-only unless their transport adapter explicitly opts into the live-window capability.
+
+### Durable provider admission
+
+Set `pipeline.await-admission.enabled=true` to apply the existing `pipeline.max-concurrency` value as a durable pending-interaction budget for `ONE_TO_ONE` awaits in `QUEUE_ASYNC` mode. The budget is scoped to the logical pipeline, await step, and normalized provider endpoint, so it is shared across tenants and runtime replicas rather than multiplied by each worker. A full budget pauses source admission; it is not a dispatch-rate limiter or a provider-side quota.
+
+Use `pipeline.await-admission.store=dynamo` for multi-replica deployment and provision `tpf_await_admission` with `scope_key` (string) and `slot` (number) as its composite key. The in-memory store is intended for tests and single-process development. Reservations survive dispatch retries and are released only after durable completion handoff, terminal failure, timeout, cancellation, or expiry.
+
+Observe `tpf.await.admission.pending` for reservations made by the current runtime, `tpf.await.admission.outcomes.total` for `acquired`, `reused`, `waited`, `released`, and `reconciled` outcomes, and `tpf.await.admission.wait` for admission delay. These are operational signals, not a distributed provider quota; do not add tenant, execution, interaction, or endpoint labels.
 
 1. **Start from CPU cores and I/O profile**:
    - CPU-bound steps: set concurrency near the number of vCPUs (for example 4 cores → 4–8).

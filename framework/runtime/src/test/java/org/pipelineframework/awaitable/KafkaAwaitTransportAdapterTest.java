@@ -19,6 +19,21 @@ import org.pipelineframework.config.pipeline.PipelineJson;
 class KafkaAwaitTransportAdapterTest {
 
     @Test
+    void supportsLiveAwaitWindow() {
+        assertTrue(adapter(request -> Uni.createFrom().voidItem()).supportsLiveAwaitWindow(descriptor(Map.of())));
+    }
+
+    @Test
+    void normalizesRequestTopicForAdmissionScope() {
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
+            "request", Map.of("topic", "fraud-check.requests"),
+            "response", Map.of("topic", "fraud-check.decisions")));
+
+        assertEquals("kafka://fraud-check.requests", adapter(request -> Uni.createFrom().voidItem())
+            .admissionEndpoint(descriptor).orElseThrow());
+    }
+
+    @Test
     void dispatchPublishesFrameworkEnvelope() throws Exception {
         AtomicReference<KafkaAwaitPublishRequest> publishRef = new AtomicReference<>();
         KafkaAwaitTransportAdapter adapter = adapter(request -> {

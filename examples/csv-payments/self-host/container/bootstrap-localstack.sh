@@ -89,6 +89,15 @@ create_table_if_missing tpf_await_unit \
     AttributeName=unit_id,KeyType=RANGE \
   --billing-mode PAY_PER_REQUEST
 
+create_table_if_missing tpf_await_admission \
+  --attribute-definitions \
+    AttributeName=scope_key,AttributeType=S \
+    AttributeName=slot,AttributeType=N \
+  --key-schema \
+    AttributeName=scope_key,KeyType=HASH \
+    AttributeName=slot,KeyType=RANGE \
+  --billing-mode PAY_PER_REQUEST
+
 create_table_if_missing tpf_await_interaction \
   --attribute-definitions \
     AttributeName=tenant_id,AttributeType=S \
