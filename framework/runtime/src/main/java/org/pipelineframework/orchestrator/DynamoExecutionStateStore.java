@@ -80,6 +80,9 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private static final String CREATED_AT_EPOCH_MS = "created_at_epoch_ms";
     private static final String UPDATED_AT_EPOCH_MS = "updated_at_epoch_ms";
     private static final String TTL_EPOCH_S = "ttl_epoch_s";
+    private static final String FIRST_CIRCUIT_DEFERRED_AT_EPOCH_MS = "first_circuit_deferred_at_epoch_ms";
+    private static final String CIRCUIT_DEFERRAL_COUNT = "circuit_deferral_count";
+    private static final String CIRCUIT_IDENTITY = "circuit_identity";
     private static final String ENCODED_TYPE = "_tpf_type";
     private static final String ENCODED_MESSAGE_CLASS = "protobuf";
     private static final String ENCODED_MESSAGE_NAME = "_tpf_message";
@@ -221,6 +224,25 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             errorCode,
             errorMessage,
             nowEpochMs));
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> deferCircuit(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        long nextDueEpochMs,
+        String transitionKey,
+        String circuitIdentity,
+        String reason,
+        String errorMessage,
+        long firstCircuitDeferredAtEpochMs,
+        int circuitDeferralCount,
+        long nowEpochMs
+    ) {
+        return blocking(() -> deferCircuitBlocking(tenantId, executionId, expectedVersion, nextDueEpochMs,
+            transitionKey, circuitIdentity, reason, errorMessage, firstCircuitDeferredAtEpochMs,
+            circuitDeferralCount, nowEpochMs));
     }
 
     @Override
@@ -816,6 +838,53 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
+    private Optional<ExecutionRecord<Object, Object>> deferCircuitBlocking(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        long nextDueEpochMs,
+        String transitionKey,
+        String circuitIdentity,
+        String reason,
+        String errorMessage,
+        long firstCircuitDeferredAtEpochMs,
+        int circuitDeferralCount,
+        long nowEpochMs
+    ) {
+        Map<String, String> names = Map.ofEntries(
+            Map.entry("#status", STATUS), Map.entry("#version", VERSION), Map.entry("#nextDue", NEXT_DUE_EPOCH_MS),
+            Map.entry("#transition", LAST_TRANSITION_KEY), Map.entry("#errorCode", ERROR_CODE),
+            Map.entry("#errorMessage", ERROR_MESSAGE), Map.entry("#firstDeferred", FIRST_CIRCUIT_DEFERRED_AT_EPOCH_MS),
+            Map.entry("#deferrals", CIRCUIT_DEFERRAL_COUNT), Map.entry("#identity", CIRCUIT_IDENTITY),
+            Map.entry("#leaseOwner", LEASE_OWNER), Map.entry("#leaseExpires", LEASE_EXPIRES_EPOCH_MS),
+            Map.entry("#result", RESULT_PAYLOAD_JSON), Map.entry("#updated", UPDATED_AT_EPOCH_MS),
+            Map.entry("#ttl", TTL_EPOCH_S));
+        Map<String, AttributeValue> values = Map.ofEntries(
+            Map.entry(":expected", avN(expectedVersion)), Map.entry(":retry", avS(ExecutionStatus.WAIT_RETRY.name())),
+            Map.entry(":nextDue", avN(nextDueEpochMs)), Map.entry(":transition", avS(transitionKey == null ? "" : transitionKey)),
+            Map.entry(":errorCode", avS(reason == null ? "circuit_open" : reason)),
+            Map.entry(":errorMessage", avS(truncate(errorMessage))),
+            Map.entry(":firstDeferred", avN(firstCircuitDeferredAtEpochMs)),
+            Map.entry(":deferrals", avN(circuitDeferralCount)),
+            Map.entry(":identity", avS(circuitIdentity == null ? "" : circuitIdentity)),
+            Map.entry(":zero", avN(0)), Map.entry(":now", avN(nowEpochMs)), Map.entry(":one", avN(1)),
+            Map.entry(":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond())));
+        UpdateItemRequest request = UpdateItemRequest.builder().tableName(executionTable())
+            .key(executionPrimaryKey(tenantId, executionId))
+            .conditionExpression("#version = :expected AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
+            .updateExpression("SET #status = :retry, #version = #version + :one, #nextDue = :nextDue, "
+                + "#transition = :transition, #errorCode = :errorCode, #errorMessage = :errorMessage, "
+                + "#firstDeferred = :firstDeferred, #deferrals = :deferrals, #identity = :identity, "
+                + "#leaseExpires = :zero, #updated = :now REMOVE #result, #leaseOwner")
+            .expressionAttributeNames(names).expressionAttributeValues(values).returnValues(ReturnValue.ALL_NEW).build();
+        try {
+            Map<String, AttributeValue> attributes = dynamoClient().updateItem(request).attributes();
+            return attributes == null || attributes.isEmpty() ? Optional.empty() : Optional.of(toRecord(attributes));
+        } catch (ConditionalCheckFailedException ignored) {
+            return Optional.empty();
+        }
+    }
+
     private Optional<ExecutionRecord<Object, Object>> markTerminalFailureBlocking(
         String tenantId,
         String executionId,
@@ -1101,6 +1170,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         item.put(CREATED_AT_EPOCH_MS, avN(record.createdAtEpochMs()));
         item.put(UPDATED_AT_EPOCH_MS, avN(record.updatedAtEpochMs()));
         item.put(TTL_EPOCH_S, avN(record.ttlEpochS()));
+        item.put(FIRST_CIRCUIT_DEFERRED_AT_EPOCH_MS, avN(record.firstCircuitDeferredAtEpochMs()));
+        item.put(CIRCUIT_DEFERRAL_COUNT, avN(record.circuitDeferralCount()));
         putIfPresent(item, LEASE_OWNER, record.leaseOwner());
         putIfPresent(item, LAST_TRANSITION_KEY, record.lastTransitionKey());
         putInputPayload(item, record);
@@ -1118,6 +1189,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
         putIfPresent(item, ERROR_CODE, record.errorCode());
         putIfPresent(item, ERROR_MESSAGE, record.errorMessage());
+        putIfPresent(item, CIRCUIT_IDENTITY, record.circuitIdentity());
         return item;
     }
 
@@ -1352,6 +1424,9 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         long createdAt = readLong(item, CREATED_AT_EPOCH_MS);
         long updatedAt = readLong(item, UPDATED_AT_EPOCH_MS);
         long ttlEpochS = readLong(item, TTL_EPOCH_S);
+        long firstCircuitDeferredAt = readLong(item, FIRST_CIRCUIT_DEFERRED_AT_EPOCH_MS);
+        int circuitDeferralCount = (int) readLong(item, CIRCUIT_DEFERRAL_COUNT);
+        String circuitIdentity = readString(item, CIRCUIT_IDENTITY);
         return new ExecutionRecord<>(
             tenantId,
             executionId,
@@ -1381,7 +1456,10 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             errorMessage,
             createdAt,
             updatedAt,
-            ttlEpochS);
+            ttlEpochS,
+            firstCircuitDeferredAt,
+            circuitDeferralCount,
+            circuitIdentity == null ? "" : circuitIdentity);
     }
 
     private Object readInputPayload(Map<String, AttributeValue> item) {

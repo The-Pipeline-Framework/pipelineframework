@@ -11,6 +11,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import org.pipelineframework.config.PipelineResilienceConfig;
+import org.pipelineframework.orchestrator.OrchestratorMode;
+import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.runtime.core.resilience.CircuitIdentity;
 import org.pipelineframework.runtime.core.resilience.CircuitPolicy;
 import org.pipelineframework.runtime.core.resilience.CircuitScope;
@@ -26,11 +28,19 @@ final class CircuitPolicyResolver {
     private final Map<String, ResolvedCircuitPolicy> policies;
 
     @Inject
-    CircuitPolicyResolver(PipelineResilienceConfig resilienceConfig) {
-        this(toSettings(resilienceConfig));
+    CircuitPolicyResolver(PipelineResilienceConfig resilienceConfig, PipelineOrchestratorConfig orchestratorConfig) {
+        this(toSettings(resilienceConfig), sharedConfigured(resilienceConfig), orchestratorConfig);
     }
 
     CircuitPolicyResolver(Map<String, CircuitSettings> settings) {
+        this(settings, false, null);
+    }
+
+    private CircuitPolicyResolver(
+        Map<String, CircuitSettings> settings,
+        boolean sharedConfigured,
+        PipelineOrchestratorConfig orchestratorConfig
+    ) {
         Objects.requireNonNull(settings, "settings must not be null");
         Map<String, ResolvedCircuitPolicy> resolved = new LinkedHashMap<>();
         Map<CircuitIdentity, CircuitPolicy> policiesByIdentity = new LinkedHashMap<>();
@@ -41,15 +51,21 @@ final class CircuitPolicyResolver {
                 return;
             }
             CircuitPolicy policy = configured.policy();
-            if (policy.requiredScope() != CircuitScope.LOCAL_PROCESS) {
+            if (policy.requiredScope() == CircuitScope.SHARED_DEPENDENCY && !sharedConfigured) {
                 throw new IllegalArgumentException(
-                    "Circuit '" + key + "' requires " + policy.requiredScope()
-                        + " but only " + CircuitScope.LOCAL_PROCESS + " is available");
+                    "Circuit '" + key + "' requires pipeline.resilience.shared.dynamo-table");
             }
             Optional<String> configuredIdentity = configured.identity();
-            if (isTransitionWorkerKey(key)) {
+            if (policy.requiredScope() == CircuitScope.LOCAL_PROCESS && isTransitionWorkerKey(key)) {
                 throw new IllegalArgumentException(
                     "Local-process circuits are not supported for durable transition-worker dispatch");
+            }
+            if (policy.requiredScope() == CircuitScope.SHARED_DEPENDENCY && configuredIdentity.isEmpty()) {
+                throw new IllegalArgumentException(
+                    "Shared circuit '" + key + "' requires an explicit identity");
+            }
+            if (policy.requiredScope() == CircuitScope.SHARED_DEPENDENCY && isTransitionWorkerKey(key)) {
+                requireFiniteCircuitDeferral(orchestratorConfig);
             }
             CircuitIdentity identity = new CircuitIdentity(configuredIdentity.orElse(key));
             CircuitPolicy previous = policiesByIdentity.putIfAbsent(identity, policy);
@@ -91,8 +107,27 @@ final class CircuitPolicyResolver {
             value.openDuration(),
             value.halfOpenMaxPermits(),
             value.halfOpenRetryDelay(),
+            value.halfOpenProbeLeaseDuration(),
             value.identity())));
         return settings;
+    }
+
+    private static boolean sharedConfigured(PipelineResilienceConfig resilienceConfig) {
+        Objects.requireNonNull(resilienceConfig, "resilienceConfig must not be null");
+        boolean sharedRequested = resilienceConfig.circuit().values().stream()
+            .anyMatch(value -> value.enabled() && value.scope() == CircuitScope.SHARED_DEPENDENCY);
+        if (!sharedRequested) {
+            return true;
+        }
+        return resilienceConfig.shared().dynamoTable().map(String::trim).filter(value -> !value.isEmpty()).isPresent();
+    }
+
+    private static void requireFiniteCircuitDeferral(PipelineOrchestratorConfig config) {
+        if (config == null || config.mode() != OrchestratorMode.QUEUE_ASYNC
+            || config.maxCircuitDeferral().filter(value -> !value.isZero() && !value.isNegative()).isEmpty()) {
+            throw new IllegalArgumentException(
+                "Shared transition-worker circuits require finite pipeline.orchestrator.max-circuit-deferral in QUEUE_ASYNC mode");
+        }
     }
 
     private static String requireText(String value, String name) {
@@ -120,13 +155,28 @@ record CircuitSettings(
     Duration openDuration,
     int halfOpenMaxPermits,
     Duration halfOpenRetryDelay,
+    Duration halfOpenProbeLeaseDuration,
     Optional<String> identity
 ) {
+    CircuitSettings(
+        boolean enabled,
+        CircuitScope scope,
+        int failureThreshold,
+        Duration failureWindow,
+        Duration openDuration,
+        int halfOpenMaxPermits,
+        Duration halfOpenRetryDelay,
+        Optional<String> identity
+    ) {
+        this(enabled, scope, failureThreshold, failureWindow, openDuration, halfOpenMaxPermits,
+            halfOpenRetryDelay, openDuration, identity);
+    }
     CircuitSettings {
         Objects.requireNonNull(scope, "scope must not be null");
         Objects.requireNonNull(failureWindow, "failureWindow must not be null");
         Objects.requireNonNull(openDuration, "openDuration must not be null");
         Objects.requireNonNull(halfOpenRetryDelay, "halfOpenRetryDelay must not be null");
+        Objects.requireNonNull(halfOpenProbeLeaseDuration, "halfOpenProbeLeaseDuration must not be null");
         identity = Objects.requireNonNull(identity, "identity must not be null")
             .map(String::trim)
             .filter(value -> !value.isEmpty());
@@ -139,6 +189,7 @@ record CircuitSettings(
             failureWindow,
             openDuration,
             halfOpenMaxPermits,
-            halfOpenRetryDelay);
+            halfOpenRetryDelay,
+            halfOpenProbeLeaseDuration);
     }
 }

@@ -12,8 +12,22 @@ public record CircuitPolicy(
     Duration failureWindow,
     Duration openDuration,
     int halfOpenMaxPermits,
-    Duration halfOpenRetryDelay
+    Duration halfOpenRetryDelay,
+    Duration halfOpenProbeLeaseDuration
 ) {
+
+    /** Backwards-compatible policy form; a shared probe lease defaults to the open duration. */
+    public CircuitPolicy(
+        CircuitScope requiredScope,
+        int failureThreshold,
+        Duration failureWindow,
+        Duration openDuration,
+        int halfOpenMaxPermits,
+        Duration halfOpenRetryDelay
+    ) {
+        this(requiredScope, failureThreshold, failureWindow, openDuration, halfOpenMaxPermits,
+            halfOpenRetryDelay, openDuration);
+    }
 
     public CircuitPolicy {
         Objects.requireNonNull(requiredScope, "requiredScope must not be null");
@@ -26,6 +40,7 @@ public record CircuitPolicy(
             throw new IllegalArgumentException("halfOpenMaxPermits must be greater than zero");
         }
         halfOpenRetryDelay = positive(halfOpenRetryDelay, "halfOpenRetryDelay");
+        halfOpenProbeLeaseDuration = positive(halfOpenProbeLeaseDuration, "halfOpenProbeLeaseDuration");
     }
 
     private static Duration positive(Duration value, String name) {
