@@ -10,7 +10,6 @@ import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
-import io.opentelemetry.api.OpenTelemetry;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.runtime.core.resilience.CircuitBreaker;
@@ -32,7 +31,7 @@ public class PipelineInvocationRuntime {
     private final TransportBoundaryDiagnostics transportBoundaryDiagnostics;
 
     public PipelineInvocationRuntime() {
-        this(new CircuitTelemetry(OpenTelemetry.noop()));
+        this(new CircuitTelemetry());
     }
 
     private PipelineInvocationRuntime(CircuitTelemetry circuitTelemetry) {

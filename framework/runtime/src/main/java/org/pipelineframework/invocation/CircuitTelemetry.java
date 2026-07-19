@@ -3,9 +3,8 @@ package org.pipelineframework.invocation;
 import java.util.Objects;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 
-import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
@@ -30,10 +29,8 @@ final class CircuitTelemetry implements CircuitBreakerListener {
     private final LongCounter admissions;
     private final LongCounter transitions;
 
-    @Inject
-    CircuitTelemetry(OpenTelemetry openTelemetry) {
-        this(Objects.requireNonNull(openTelemetry, "openTelemetry must not be null")
-            .getMeter("org.pipelineframework.resilience"));
+    CircuitTelemetry() {
+        this(GlobalOpenTelemetry.getMeter("org.pipelineframework.resilience"));
     }
 
     CircuitTelemetry(Meter meter) {

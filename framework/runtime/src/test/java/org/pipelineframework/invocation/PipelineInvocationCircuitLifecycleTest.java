@@ -132,7 +132,8 @@ class PipelineInvocationCircuitLifecycleTest {
             breaker,
             resolver,
             new TransportBoundaryDiagnostics(),
-            new CircuitTelemetry(io.opentelemetry.api.OpenTelemetry.noop()));
+            new CircuitTelemetry(io.opentelemetry.api.OpenTelemetry.noop()
+                .getMeter("org.pipelineframework.resilience")));
     }
 
     private static final class RecordingCircuitBreaker implements CircuitBreaker {

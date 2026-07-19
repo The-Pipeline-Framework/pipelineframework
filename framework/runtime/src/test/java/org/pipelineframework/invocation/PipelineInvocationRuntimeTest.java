@@ -57,7 +57,8 @@ class PipelineInvocationRuntimeTest {
             new InMemoryCircuitBreaker(),
             new CircuitPolicyResolver(Map.of("test:resilient-target", circuitSettings())),
             new TransportBoundaryDiagnostics(),
-            new CircuitTelemetry(io.opentelemetry.api.OpenTelemetry.noop()));
+            new CircuitTelemetry(io.opentelemetry.api.OpenTelemetry.noop()
+                .getMeter("org.pipelineframework.resilience")));
         TransportBoundaryInvocation resilientBoundary = new TransportBoundaryInvocation() {
             @Override
             public TransportBoundaryDescriptor transportBoundary() {
