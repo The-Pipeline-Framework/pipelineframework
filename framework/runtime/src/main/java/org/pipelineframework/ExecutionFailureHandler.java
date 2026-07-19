@@ -2,6 +2,7 @@ package org.pipelineframework;
 
 import java.time.Duration;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -19,6 +20,8 @@ import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
+import org.pipelineframework.runtime.core.resilience.CircuitOpenException;
+import org.pipelineframework.runtime.core.resilience.CircuitProtectionUnavailableException;
 import org.pipelineframework.step.NonRetryableException;
 import org.pipelineframework.step.PipelineControlFlowException;
 
@@ -46,6 +49,11 @@ class ExecutionFailureHandler {
       WorkDispatcher workDispatcher,
       DeadLetterPublisher deadLetterPublisher) {
     long now = System.currentTimeMillis();
+    Optional<CircuitDeferral> circuitDeferral = circuitDeferral(failure);
+    if (circuitDeferral.isPresent()) {
+      return deferCircuit(record, transitionKey, circuitDeferral.orElseThrow(), executionStateStore, workDispatcher,
+          deadLetterPublisher, now);
+    }
     int nextAttempt = record.attempt() + 1;
     FailureClassification classification = classifyFailure(failure);
     Throwable classifiedFailure = classification.classifiedThrowable();
@@ -128,6 +136,75 @@ class ExecutionFailureHandler {
         });
   }
 
+  private Uni<Void> deferCircuit(
+      ExecutionRecord<Object, Object> record,
+      String transitionKey,
+      CircuitDeferral circuitDeferral,
+      ExecutionStateStore executionStateStore,
+      WorkDispatcher workDispatcher,
+      DeadLetterPublisher deadLetterPublisher,
+      long now) {
+    Duration maximum = orchestratorConfig.maxCircuitDeferral().orElse(Duration.ZERO);
+    long firstDeferredAt = record.firstCircuitDeferredAtEpochMs() > 0
+        ? record.firstCircuitDeferredAtEpochMs()
+        : now;
+    if (maximum.isZero() || maximum.isNegative() || now - firstDeferredAt >= maximum.toMillis()) {
+      return terminalCircuitDeferral(record, transitionKey, circuitDeferral, executionStateStore, deadLetterPublisher, now);
+    }
+    long retryDecision = now + retryDelayMillis(Math.max(1, record.attempt() + 1));
+    long nextDue = Math.max(retryDecision, circuitDeferral.notBeforeEpochMs());
+    return executionStateStore.deferCircuit(
+            record.tenantId(), record.executionId(), record.version(), nextDue, transitionKey,
+            circuitDeferral.identity(), circuitDeferral.reason(), circuitDeferral.message(), firstDeferredAt,
+            record.circuitDeferralCount() + 1, now)
+        .onItem().transformToUni(updated -> {
+          if (updated.isEmpty()) {
+            return Uni.createFrom().voidItem();
+          }
+          return workDispatcher.enqueueDelayed(new ExecutionWorkItem(record.tenantId(), record.executionId()),
+              Duration.ofMillis(Math.max(0L, nextDue - System.currentTimeMillis())));
+        });
+  }
+
+  private Uni<Void> terminalCircuitDeferral(
+      ExecutionRecord<Object, Object> record,
+      String transitionKey,
+      CircuitDeferral circuitDeferral,
+      ExecutionStateStore executionStateStore,
+      DeadLetterPublisher deadLetterPublisher,
+      long now) {
+    return executionStateStore.markTerminalFailure(
+            record.tenantId(), record.executionId(), record.version(), ExecutionStatus.FAILED, transitionKey,
+            "circuit_deferral_exhausted", circuitDeferral.message(), now)
+        .onItem().transformToUni(updated -> {
+          if (updated.isEmpty()) {
+            return Uni.createFrom().voidItem();
+          }
+          PipelinePlatformResourceLoader.PlatformMetadata metadata = PipelinePlatformResourceLoader.loadPlatform().orElse(null);
+          DeadLetterEnvelope envelope = DeadLetterEnvelope.builder()
+              .tenantId(record.tenantId())
+              .executionId(record.executionId())
+              .executionKey(record.executionKey())
+              .correlationId(record.executionKey())
+              .transitionKey(transitionKey)
+              .resourceType("tpf.orchestrator.execution")
+              .resourceName(ORCHESTRATOR_SERVICE + "/" + ORCHESTRATOR_METHOD)
+              .transport(resolveTransport(metadata))
+              .platform(resolvePlatform(metadata))
+              .terminalStatus(ExecutionStatus.FAILED.name())
+              .terminalReason("circuit_deferral_exhausted")
+              .errorCode("circuit_deferral_exhausted")
+              .errorMessage(circuitDeferral.message())
+              .retryable(false)
+              .retriesObserved(record.attempt())
+              .createdAtEpochMs(now)
+              .build();
+          return segmentBoundaryLedger()
+              .recordRunFailed(updated.orElseThrow(), "circuit_deferral_exhausted", circuitDeferral.message(), now)
+              .chain(() -> deadLetterPublisher.publish(envelope));
+        });
+  }
+
   private SegmentBoundaryLedger segmentBoundaryLedger() {
     return segmentBoundaryLedger == null ? new SegmentBoundaryLedger() : segmentBoundaryLedger;
   }
@@ -171,6 +248,30 @@ class ExecutionFailureHandler {
     return new FailureClassification(true, failure);
   }
 
+  private static Optional<CircuitDeferral> circuitDeferral(Throwable failure) {
+    if (failure == null) {
+      return Optional.empty();
+    }
+    CircuitOpenException open = (CircuitOpenException) findThrowable(failure, CircuitOpenException.class);
+    if (open != null) {
+      return Optional.of(new CircuitDeferral(
+          open.circuitOpen().identity().value(),
+          "circuit_open",
+          open.getMessage(),
+          open.circuitOpen().notBefore().toEpochMilli()));
+    }
+    CircuitProtectionUnavailableException unavailable = (CircuitProtectionUnavailableException) findThrowable(
+        failure, CircuitProtectionUnavailableException.class);
+    if (unavailable != null) {
+      return Optional.of(new CircuitDeferral(
+          unavailable.protection().identity().value(),
+          "circuit_protection_unavailable",
+          unavailable.getMessage(),
+          unavailable.protection().notBefore().toEpochMilli()));
+    }
+    return Optional.empty();
+  }
+
   private static Throwable findThrowable(Throwable failure, Class<? extends Throwable> targetType) {
     java.util.ArrayDeque<Throwable> queue = new java.util.ArrayDeque<>();
     java.util.Set<Throwable> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
@@ -204,5 +305,8 @@ class ExecutionFailureHandler {
   }
 
   record FailureClassification(boolean retryable, Throwable classifiedThrowable) {
+  }
+
+  private record CircuitDeferral(String identity, String reason, String message, long notBeforeEpochMs) {
   }
 }

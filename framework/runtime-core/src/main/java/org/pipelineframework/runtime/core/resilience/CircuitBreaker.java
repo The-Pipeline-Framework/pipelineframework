@@ -1,5 +1,7 @@
 package org.pipelineframework.runtime.core.resilience;
 
+import java.util.concurrent.CompletionStage;
+
 /**
  * Admits dependency calls and records their result. Implementations must reject policies whose
  * required scope they cannot guarantee.
@@ -12,5 +14,5 @@ public interface CircuitBreaker {
      * @throws IllegalArgumentException when the implementation cannot guarantee the policy's
      *         requested scope
      */
-    CircuitDecision acquire(CircuitIdentity identity, CircuitPolicy policy);
+    CompletionStage<CircuitDecision> acquire(CircuitIdentity identity, CircuitPolicy policy);
 }

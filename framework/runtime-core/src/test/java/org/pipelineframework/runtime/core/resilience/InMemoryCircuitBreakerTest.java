@@ -31,22 +31,22 @@ class InMemoryCircuitBreakerTest {
         MutableClock clock = new MutableClock(Instant.parse("2026-07-19T10:00:00Z"));
         InMemoryCircuitBreaker breaker = new InMemoryCircuitBreaker(clock);
 
-        permit(breaker.acquire(IDENTITY, LOCAL_POLICY)).healthFailure();
+        permit(decision(breaker.acquire(IDENTITY, LOCAL_POLICY))).healthFailure();
 
-        CircuitOpen closedWindow = rejection(breaker.acquire(IDENTITY, LOCAL_POLICY));
+        CircuitOpen closedWindow = rejection(decision(breaker.acquire(IDENTITY, LOCAL_POLICY)));
         assertEquals(clock.instant().plusSeconds(10), closedWindow.notBefore());
 
         clock.advance(Duration.ofSeconds(10));
-        CircuitPermit halfOpenPermit = permit(breaker.acquire(IDENTITY, LOCAL_POLICY));
-        CircuitOpen firstSaturated = rejection(breaker.acquire(IDENTITY, LOCAL_POLICY));
-        CircuitOpen secondSaturated = rejection(breaker.acquire(IDENTITY, LOCAL_POLICY));
+        CircuitPermit halfOpenPermit = permit(decision(breaker.acquire(IDENTITY, LOCAL_POLICY)));
+        CircuitOpen firstSaturated = rejection(decision(breaker.acquire(IDENTITY, LOCAL_POLICY)));
+        CircuitOpen secondSaturated = rejection(decision(breaker.acquire(IDENTITY, LOCAL_POLICY)));
 
         assertEquals(clock.instant().plusSeconds(2), firstSaturated.notBefore());
         assertEquals(clock.instant().plusSeconds(4), secondSaturated.notBefore());
 
         halfOpenPermit.cancel();
-        permit(breaker.acquire(IDENTITY, LOCAL_POLICY)).succeed();
-        assertInstanceOf(CircuitDecision.Permitted.class, breaker.acquire(IDENTITY, LOCAL_POLICY));
+        permit(decision(breaker.acquire(IDENTITY, LOCAL_POLICY))).succeed();
+        assertInstanceOf(CircuitDecision.Permitted.class, decision(breaker.acquire(IDENTITY, LOCAL_POLICY)));
     }
 
     @Test
@@ -69,15 +69,15 @@ class InMemoryCircuitBreakerTest {
         InMemoryCircuitBreaker breaker = new InMemoryCircuitBreaker(clock);
         CircuitPolicy twoPermits = policyWithHalfOpenPermits(2);
 
-        permit(breaker.acquire(IDENTITY, twoPermits)).healthFailure();
+        permit(decision(breaker.acquire(IDENTITY, twoPermits))).healthFailure();
         clock.advance(Duration.ofSeconds(10));
-        CircuitPermit first = permit(breaker.acquire(IDENTITY, twoPermits));
-        CircuitPermit second = permit(breaker.acquire(IDENTITY, twoPermits));
+        CircuitPermit first = permit(decision(breaker.acquire(IDENTITY, twoPermits)));
+        CircuitPermit second = permit(decision(breaker.acquire(IDENTITY, twoPermits)));
 
         first.healthFailure();
         second.succeed();
 
-        CircuitOpen reopened = rejection(breaker.acquire(IDENTITY, twoPermits));
+        CircuitOpen reopened = rejection(decision(breaker.acquire(IDENTITY, twoPermits)));
         assertEquals(clock.instant().plusSeconds(10), reopened.notBefore());
     }
 
@@ -87,16 +87,16 @@ class InMemoryCircuitBreakerTest {
         InMemoryCircuitBreaker breaker = new InMemoryCircuitBreaker(clock);
         CircuitPolicy twoPermits = policyWithHalfOpenPermits(2);
 
-        permit(breaker.acquire(IDENTITY, twoPermits)).healthFailure();
+        permit(decision(breaker.acquire(IDENTITY, twoPermits))).healthFailure();
         clock.advance(Duration.ofSeconds(10));
-        CircuitPermit first = permit(breaker.acquire(IDENTITY, twoPermits));
-        CircuitPermit second = permit(breaker.acquire(IDENTITY, twoPermits));
+        CircuitPermit first = permit(decision(breaker.acquire(IDENTITY, twoPermits)));
+        CircuitPermit second = permit(decision(breaker.acquire(IDENTITY, twoPermits)));
 
         first.healthFailure();
         second.cancel();
         second.cancel();
 
-        CircuitOpen reopened = rejection(breaker.acquire(IDENTITY, twoPermits));
+        CircuitOpen reopened = rejection(decision(breaker.acquire(IDENTITY, twoPermits)));
         assertEquals(clock.instant().plusSeconds(10), reopened.notBefore());
     }
 
@@ -106,10 +106,10 @@ class InMemoryCircuitBreakerTest {
         InMemoryCircuitBreaker first = new InMemoryCircuitBreaker(clock);
         InMemoryCircuitBreaker second = new InMemoryCircuitBreaker(clock);
 
-        permit(first.acquire(IDENTITY, LOCAL_POLICY)).healthFailure();
+        permit(decision(first.acquire(IDENTITY, LOCAL_POLICY))).healthFailure();
 
-        assertInstanceOf(CircuitDecision.Rejected.class, first.acquire(IDENTITY, LOCAL_POLICY));
-        assertInstanceOf(CircuitDecision.Permitted.class, second.acquire(IDENTITY, LOCAL_POLICY));
+        assertInstanceOf(CircuitDecision.Rejected.class, decision(first.acquire(IDENTITY, LOCAL_POLICY)));
+        assertInstanceOf(CircuitDecision.Permitted.class, decision(second.acquire(IDENTITY, LOCAL_POLICY)));
     }
 
     @Test
@@ -119,9 +119,9 @@ class InMemoryCircuitBreakerTest {
         InMemoryCircuitBreaker breaker = new InMemoryCircuitBreaker(clock, (identity, scope, transition) ->
             transitions.add(transition));
 
-        permit(breaker.acquire(IDENTITY, LOCAL_POLICY)).healthFailure();
+        permit(decision(breaker.acquire(IDENTITY, LOCAL_POLICY))).healthFailure();
         clock.advance(Duration.ofSeconds(10));
-        permit(breaker.acquire(IDENTITY, LOCAL_POLICY)).succeed();
+        permit(decision(breaker.acquire(IDENTITY, LOCAL_POLICY))).succeed();
 
         assertEquals(List.of(
             CircuitStateTransition.CLOSED_TO_OPEN,
@@ -144,14 +144,14 @@ class InMemoryCircuitBreakerTest {
                 }
             }
         });
-        CircuitPermit failingPermit = permit(breaker.acquire(IDENTITY, LOCAL_POLICY));
+        CircuitPermit failingPermit = permit(decision(breaker.acquire(IDENTITY, LOCAL_POLICY)));
         CompletableFuture<Void> completion = CompletableFuture.runAsync(failingPermit::healthFailure);
 
         try {
             assertTrue(notificationEntered.await(2, TimeUnit.SECONDS));
             assertInstanceOf(
                 CircuitDecision.Permitted.class,
-                breaker.acquire(new CircuitIdentity("inventory-api"), LOCAL_POLICY));
+                decision(breaker.acquire(new CircuitIdentity("inventory-api"), LOCAL_POLICY)));
         } finally {
             releaseNotification.countDown();
         }
@@ -170,6 +170,10 @@ class InMemoryCircuitBreakerTest {
 
     private static CircuitPermit permit(CircuitDecision decision) {
         return ((CircuitDecision.Permitted) decision).permit();
+    }
+
+    private static CircuitDecision decision(java.util.concurrent.CompletionStage<CircuitDecision> decision) {
+        return decision.toCompletableFuture().join();
     }
 
     private static CircuitOpen rejection(CircuitDecision decision) {
