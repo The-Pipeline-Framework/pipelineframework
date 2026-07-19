@@ -16,6 +16,12 @@ public record AwaitAdmissionAcquireResult(
         if (reused && reservation.isEmpty()) {
             throw new IllegalArgumentException("reused results must include a reservation");
         }
+        if (reconciledExpired && reservation.isEmpty()) {
+            throw new IllegalArgumentException("reconciled results must include a reservation");
+        }
+        if (reused && reconciledExpired) {
+            throw new IllegalArgumentException("reused and reconciled results are mutually exclusive");
+        }
     }
 
     public static AwaitAdmissionAcquireResult acquired(AwaitAdmissionReservation reservation) {

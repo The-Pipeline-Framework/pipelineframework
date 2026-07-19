@@ -69,6 +69,15 @@ class InMemoryAwaitAdmissionStoreTest {
     }
 
     @Test
+    void rejectsInconsistentReconciliationResults() {
+        assertThrows(IllegalArgumentException.class, () -> new AwaitAdmissionAcquireResult(Optional.empty(), false, true));
+        AwaitAdmissionReservation reservation = new AwaitAdmissionReservation(
+            new AwaitAdmissionScope("payments", "provider-await", "kafka://requests"),
+            new AwaitAdmissionOwner("tenant-a:unit:item"), 0, 1_000);
+        assertThrows(IllegalArgumentException.class, () -> new AwaitAdmissionAcquireResult(Optional.of(reservation), true, true));
+    }
+
+    @Test
     void scopeKeyUsesUnambiguousComponentBoundaries() {
         AwaitAdmissionScope first = new AwaitAdmissionScope("payments:priority", "await", "kafka://requests");
         AwaitAdmissionScope second = new AwaitAdmissionScope("payments", "priority:await", "kafka://requests");

@@ -3,7 +3,6 @@ package org.pipelineframework.awaitable.admission;
 import java.net.URI;
 import java.time.Instant;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -83,14 +82,6 @@ public class DynamoAwaitAdmissionStore implements AwaitAdmissionStore {
                 return false;
             }
         });
-    }
-
-    @Override
-    public CompletionStage<Boolean> release(AwaitAdmissionScope scope, AwaitAdmissionOwner owner, int capacity) {
-        // Owner-only deletion is intentionally disabled. Recovery must carry the
-        // persisted token and use release(AwaitAdmissionReservation); otherwise a stale
-        // interaction can delete a newer claim from the same deterministic owner.
-        return CompletableFuture.completedFuture(false);
     }
 
     private AwaitAdmissionAcquireResult acquireBlocking(

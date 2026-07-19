@@ -11,7 +11,6 @@ import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
@@ -42,6 +41,5 @@ class DynamoAwaitAdmissionStoreTest {
         verify(client).deleteItem(argThat((DeleteItemRequest request) -> request.conditionExpression().contains("#owner")));
         verify(client).deleteItem(argThat((DeleteItemRequest request) -> request.conditionExpression().contains("#lease")
             && request.expressionAttributeValues().get(":lease").s().equals(reservation.leaseToken())));
-        assertFalse(store.release(scope, owner, 2).toCompletableFuture().join());
     }
 }

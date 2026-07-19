@@ -17,8 +17,4 @@ public interface AwaitAdmissionStore {
 
     CompletionStage<Boolean> release(AwaitAdmissionReservation reservation);
 
-    /**
-     * Releases a reservation reconstructed from durable interaction state after restart.
-     */
-    CompletionStage<Boolean> release(AwaitAdmissionScope scope, AwaitAdmissionOwner owner, int capacity);
 }

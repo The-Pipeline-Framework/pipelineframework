@@ -66,14 +66,6 @@ public class InMemoryAwaitAdmissionStore implements AwaitAdmissionStore {
         }
     }
 
-    @Override
-    public CompletionStage<Boolean> release(AwaitAdmissionScope scope, AwaitAdmissionOwner owner, int capacity) {
-        synchronized (reservations) {
-            return CompletableFuture.completedFuture(reservations.entrySet().removeIf(entry ->
-                entry.getValue().scope().equals(scope) && entry.getValue().owner().equals(owner)));
-        }
-    }
-
     private static String slotKey(AwaitAdmissionScope scope, int slot) {
         return scope.key() + "|" + slot;
     }
