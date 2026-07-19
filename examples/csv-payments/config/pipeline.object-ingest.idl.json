@@ -489,24 +489,6 @@
       "reservedNumbers" : [ ],
       "reservedNames" : [ ]
     },
-    "CsvFolder" : {
-      "name" : "CsvFolder",
-      "fields" : [ {
-        "number" : 1,
-        "name" : "path",
-        "canonicalType" : "path",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      } ],
-      "reservedNumbers" : [ ],
-      "reservedNames" : [ ]
-    },
     "PaymentOutput" : {
       "name" : "PaymentOutput",
       "fields" : [ {

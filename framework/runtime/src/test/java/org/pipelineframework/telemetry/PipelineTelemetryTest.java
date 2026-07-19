@@ -326,6 +326,26 @@ class PipelineTelemetryTest {
         }
 
         @Override
+        public AwaitAdmissionConfig awaitAdmission() {
+            return new AwaitAdmissionConfig() {
+                @Override
+                public boolean enabled() {
+                    return false;
+                }
+
+                @Override
+                public String store() {
+                    return "in-memory";
+                }
+
+                @Override
+                public long retryWaitMs() {
+                    return 100;
+                }
+            };
+        }
+
+        @Override
         public HealthConfig health() {
             return new HealthConfig() {
                 @Override

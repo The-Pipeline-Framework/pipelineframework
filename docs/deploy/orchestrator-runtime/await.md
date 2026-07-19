@@ -9,7 +9,7 @@ For modeling guidance, start with [Await Boundaries](/design/await-boundaries). 
 | Cardinality | Interaction unit | Replay shape | App guidance |
 | --- | --- | --- | --- |
 | `ONE_TO_ONE` | one input unit, one external interaction | one output unit | Use for human approval, webhook callback, or brokered request/reply that returns one result. |
-| `ONE_TO_ONE` over a stream | one owning unit with one item interaction per input item | completed item outputs replayed in input order | Use when each stream item has its own external decision. |
+| `ONE_TO_ONE` over a stream | one owning unit with one item interaction per input item | completion order is unspecified unless `parallelism=SEQUENTIAL` | Use when each stream item has its own external decision; choose sequential execution when source order matters. |
 | `ONE_TO_MANY` | one input unit, one external interaction | one materialized multi-item output unit replayed as a stream | Keep completion payloads bounded. |
 | `MANY_TO_ONE` | one materialized input unit, one external interaction | one output unit | Use when the external system decides on the whole batch. |
 | `MANY_TO_MANY` | one materialized input unit, one external interaction | one materialized multi-item output unit replayed as a stream | Keep input and completion payloads bounded. |
@@ -82,6 +82,23 @@ The runtime also enforces aggregate materialization guardrails:
 | `pipeline.orchestrator.await-aggregate-max-output-items` | `10000` | materialized output units for `ONE_TO_MANY` and `MANY_TO_MANY` await steps |
 
 Set either value to `0` only when the application has its own upstream size control and storage budget. Prefer stable business limits at the API/file/broker boundary rather than relying on these guards as the first line of defense.
+
+### Durable admission budget
+
+Durable provider admission is disabled by default. Enable it only for `QUEUE_ASYNC` deployments:
+
+```properties
+pipeline.await-admission.enabled=true
+pipeline.await-admission.store=dynamo
+pipeline.orchestrator.dynamo.await-admission-table=tpf_await_admission
+# Configure pipeline.orchestrator.dynamo.region and endpoint-override for the deployment.
+# This existing value is the pending-interaction budget.
+pipeline.max-concurrency=250
+```
+
+TPF derives one shared budget scope from the logical pipeline, await step, and request endpoint. It acquires a conditional Dynamo slot before creating the interaction and holds it until durable completion handoff or a terminal transition. Use the in-memory store only for local development and tests; it cannot coordinate replicas.
+
+Replay records `await_admission_acquired`, `await_admission_reused`, `await_admission_reconciled`, and `await_admission_released` before the normal provider-completion lifecycle. This separates admission pressure from an await unit that is already waiting for an external completion.
 
 Transport choice changes operational responsibility. `interaction-api` requires an API consumer to query and complete pending work. `webhook` requires stable resume-token signing and callback reachability. `kafka` requires broker channel configuration, consumer health, and response-envelope monitoring. `sqs` requires request/response queue configuration, poller health, visibility-timeout sizing, and queue DLQ policy. The operational checklist is covered in [Await Boundary Operations](/operate/await-boundaries).
 

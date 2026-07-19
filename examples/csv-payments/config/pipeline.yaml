@@ -57,9 +57,6 @@ aspects:
         - GRPC_SERVICE
         - CLIENT_STEP
 types:
-  CsvFolder:
-    fields:
-      - [path, path]
   CsvPaymentsInputFile:
     fields:
       - [id, uuid]

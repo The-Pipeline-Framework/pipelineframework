@@ -90,13 +90,20 @@ class AwaitBoundaryAdmission {
         .onItem().transformToUni(unit -> segmentBoundaryLedger.get()
             .recordBoundaryCompletionAdmitted(validated.record(), unit, normalized.nowEpochMs())
             .chain(() -> completionPlan(validated, unit))
-            .onItem().transformToUni(plan -> plan.liveSession()
-                ? Uni.createFrom().item(plan.result())
-                : continuations.afterRecordedCompletion(
-                    plan.result(),
-                    plan.unit(),
-                    itemContinuationHandler,
-                    normalized.nowEpochMs())));
+            .onItem().transformToUni(plan -> {
+              Uni<AwaitCompletionResult> handoff = plan.liveSession()
+                  ? Uni.createFrom().item(plan.result())
+                  : continuations.afterRecordedCompletion(
+                      plan.result(),
+                      plan.unit(),
+                      itemContinuationHandler,
+                      normalized.nowEpochMs());
+        if (!awaitCoordinator.admissionEnabled()) {
+            return handoff;
+        }
+        return awaitCoordinator.releaseAdmission(validated.record())
+            .chain(() -> handoff);
+            }));
   }
 
   private AwaitCompletionCommand normalize(AwaitCompletionCommand command) {

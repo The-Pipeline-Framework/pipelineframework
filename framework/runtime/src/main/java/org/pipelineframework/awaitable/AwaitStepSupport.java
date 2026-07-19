@@ -271,14 +271,14 @@ public class AwaitStepSupport {
         Multi<I> input,
         AwaitExecutionContext context
     ) {
-        if (isKafkaItemStream(descriptor)) {
-            return awaitOneToOneKafkaLiveStream(descriptor, input, context);
+        if (awaitCoordinator.supportsLiveAwaitWindow(descriptor)) {
+            return awaitOneToOneLiveStream(descriptor, input, context);
         }
         return awaitOneToOneStreamSuspending(descriptor, input, context);
     }
 
     @SuppressWarnings("unchecked")
-    private <I, O> Multi<O> awaitOneToOneKafkaLiveStream(
+    private <I, O> Multi<O> awaitOneToOneLiveStream(
         AwaitStepDescriptor descriptor,
         Multi<I> input,
         AwaitExecutionContext context
@@ -294,7 +294,7 @@ public class AwaitStepSupport {
             }
             AtomicInteger itemIndex = new AtomicInteger();
             AtomicReference<Cancellable> dispatchSubscription = new AtomicReference<>();
-            Uni<Void> dispatch = dispatchLiveKafkaAwaitItems(descriptor, input, context, unitId, itemIndex, session)
+            Uni<Void> dispatch = dispatchLiveAwaitItems(descriptor, input, context, unitId, itemIndex, session)
                 .onItem().transformToUni(ignored -> {
                     int dispatchedItems = itemIndex.get();
                     if (dispatchedItems == 0) {
@@ -329,7 +329,7 @@ public class AwaitStepSupport {
         });
     }
 
-    private <I, O> Uni<Void> dispatchLiveKafkaAwaitItems(
+    private <I, O> Uni<Void> dispatchLiveAwaitItems(
         AwaitStepDescriptor descriptor,
         Multi<I> input,
         AwaitExecutionContext context,
@@ -337,21 +337,18 @@ public class AwaitStepSupport {
         AtomicInteger itemIndex,
         AwaitLiveCompletionRegistry.LiveAwaitSession<O> session
     ) {
-        Multi<AwaitInteractionRecord> dispatches = input.onItem().transformToUni(item -> {
+        java.util.function.Function<I, Uni<? extends AwaitInteractionRecord>> itemDispatch = item -> {
             int index = itemIndex.getAndIncrement();
-            return dispatchLiveKafkaAwaitItem(descriptor, item, context, unitId, index, session);
-        }).merge(awaitMaxConcurrency());
-        if (pipelineConfig != null && pipelineConfig.parallelism() == ParallelismPolicy.SEQUENTIAL) {
-            dispatches = input.onItem().transformToUni(item -> {
-                int index = itemIndex.getAndIncrement();
-                return dispatchLiveKafkaAwaitItem(descriptor, item, context, unitId, index, session);
-            }).concatenate();
-        }
+            return dispatchLiveAwaitItem(descriptor, item, context, unitId, index, session);
+        };
+        Multi<AwaitInteractionRecord> dispatches = pipelineConfig != null && pipelineConfig.parallelism() == ParallelismPolicy.SEQUENTIAL
+            ? input.onItem().transformToUni(itemDispatch).concatenate()
+            : input.onItem().transformToUni(itemDispatch).merge(liveAwaitPendingWindow());
         return dispatches.collect().in(() -> Boolean.TRUE, (ignored, record) -> {
         }).replaceWithVoid();
     }
 
-    private <I, O> Uni<AwaitInteractionRecord> dispatchLiveKafkaAwaitItem(
+    private <I, O> Uni<AwaitInteractionRecord> dispatchLiveAwaitItem(
         AwaitStepDescriptor descriptor,
         I item,
         AwaitExecutionContext context,
@@ -359,7 +356,9 @@ public class AwaitStepSupport {
         int index,
         AwaitLiveCompletionRegistry.LiveAwaitSession<O> session
     ) {
-        return withAwaitExecutionContext(context, () -> awaitCoordinator.createOrGetItem(
+        String completionKey = "item:" + index;
+        return session.acquirePermit(completionKey, liveAwaitPendingWindow())
+            .chain(() -> withAwaitExecutionContext(context, () -> awaitCoordinator.createOrGetItem(
             descriptor,
             context.tenantId(),
             context.executionId(),
@@ -385,7 +384,7 @@ public class AwaitStepSupport {
                     return awaitCoordinator.dispatch(descriptor, record);
                 }
                 return Uni.createFrom().item(record);
-            }));
+            })));
     }
 
     @SuppressWarnings("unchecked")
@@ -454,12 +453,6 @@ public class AwaitStepSupport {
             });
     }
 
-    private static boolean isKafkaItemStream(AwaitStepDescriptor descriptor) {
-        return descriptor != null
-            && "ONE_TO_ONE".equalsIgnoreCase(descriptor.cardinality())
-            && "kafka".equalsIgnoreCase(descriptor.transportType());
-    }
-
     private static String streamUnitId(AwaitStepDescriptor descriptor, AwaitExecutionContext context, int stepIndex) {
         return UUID.nameUUIDFromBytes((context.tenantId() + ":" + context.executionId() + ":"
             + descriptor.stepId() + ":" + stepIndex).getBytes(StandardCharsets.UTF_8)).toString();
@@ -471,6 +464,12 @@ public class AwaitStepSupport {
             return 1;
         }
         return Math.min(configured, 1024);
+    }
+
+    private int liveAwaitPendingWindow() {
+        return pipelineConfig != null && pipelineConfig.parallelism() == ParallelismPolicy.SEQUENTIAL
+            ? 1
+            : awaitMaxConcurrency();
     }
 
     private <T> Uni<T> withAwaitExecutionContext(AwaitExecutionContext context, java.util.function.Supplier<Uni<T>> supplier) {
