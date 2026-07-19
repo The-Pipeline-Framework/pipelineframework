@@ -49,6 +49,22 @@ class InMemoryAwaitAdmissionStoreTest {
     }
 
     @Test
+    void doesNotAttributeAnotherScopeExpiryToTheNewClaim() {
+        InMemoryAwaitAdmissionStore store = new InMemoryAwaitAdmissionStore();
+        AwaitAdmissionScope expiredScope = new AwaitAdmissionScope("payments-a", "provider-await", "kafka://requests");
+        AwaitAdmissionScope newScope = new AwaitAdmissionScope("payments-b", "provider-await", "kafka://requests");
+
+        store.acquire(expiredScope, new AwaitAdmissionOwner("orphan"), 1, 1_500, 1_000).toCompletableFuture().join();
+
+        AwaitAdmissionAcquireResult acquired = store.acquire(
+            newScope, new AwaitAdmissionOwner("replacement"), 1, 3_000, 1_501)
+            .toCompletableFuture().join();
+
+        assertTrue(acquired.acquired());
+        assertFalse(acquired.reconciledExpired());
+    }
+
+    @Test
     void staleLeaseCannotReleaseAReacquiredSlot() {
         InMemoryAwaitAdmissionStore store = new InMemoryAwaitAdmissionStore();
         AwaitAdmissionScope scope = new AwaitAdmissionScope("payments", "provider-await", "kafka://requests");

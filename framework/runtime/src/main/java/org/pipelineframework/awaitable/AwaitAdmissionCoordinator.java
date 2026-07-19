@@ -163,7 +163,8 @@ public class AwaitAdmissionCoordinator {
     private Uni<Boolean> releaseRecoveredReservation(AwaitInteractionRecord interaction) {
         Optional<AwaitAdmissionReservation> persisted = persistedReservation(interaction);
         if (persisted.isPresent()) {
-            return Uni.createFrom().completionStage(store().release(persisted.orElseThrow()));
+            return Uni.createFrom().completionStage(store().release(persisted.orElseThrow()))
+                .invoke(released -> AwaitCompletionMetrics.recordAdmissionReleased(interaction, released));
         }
         // A pre-token interaction cannot safely prove ownership of a slot after a restart:
         // the same owner may have reclaimed it with a newer lease. Keep the slot until its

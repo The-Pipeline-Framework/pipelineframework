@@ -15,6 +15,7 @@ import jakarta.inject.Inject;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
+import org.jboss.logging.Logger;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 import org.pipelineframework.awaitable.spi.AwaitTransportAdapter;
 import org.pipelineframework.awaitable.spi.AwaitUnitStore;
@@ -30,6 +31,7 @@ import org.pipelineframework.telemetry.PipelineTelemetry;
  */
 @ApplicationScoped
 public class AwaitCoordinator {
+    private static final Logger LOG = Logger.getLogger(AwaitCoordinator.class);
 
     @Inject
     Instance<AwaitInteractionStore> interactionStores;
@@ -581,6 +583,9 @@ public class AwaitCoordinator {
                         recordAdmissionLifecycle(AwaitReplayLifecycleEvent.ADMISSION_RELEASED, interaction);
                     }
                 })
+                .onFailure().invoke(failure -> LOG.warnf(failure,
+                    "Await admission release bookkeeping failed interactionId=%s", interaction.interactionId()))
+                .onFailure().recoverWithItem(false)
                 .replaceWithVoid();
     }
 

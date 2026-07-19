@@ -99,7 +99,7 @@ public final class AwaitCompletionMetrics {
             admissionOutcomeCounter.add(1, admissionAttributes(attributes, "reused"));
         } else {
             admissionOutcomeCounter.add(1, admissionAttributes(attributes, "acquired"));
-            admissionPendingCounter.add(1, attributes);
+            admissionPendingCounter.add(1, pendingAttributes(record));
         }
         if (reconciled) {
             admissionOutcomeCounter.add(1, admissionAttributes(attributes, "reconciled"));
@@ -117,7 +117,7 @@ public final class AwaitCompletionMetrics {
         }
         Attributes attributes = interactionAttributes(record);
         admissionOutcomeCounter.add(1, admissionAttributes(attributes, "released"));
-        admissionPendingCounter.add(-1, attributes);
+        admissionPendingCounter.add(-1, pendingAttributes(record));
     }
 
     private static void ensureInitialized() {
@@ -190,6 +190,13 @@ public final class AwaitCompletionMetrics {
         put(builder, STEP_ID, record == null ? null : record.stepId());
         put(builder, TRANSPORT, record == null ? null : record.transportType());
         put(builder, STATUS, record == null || record.status() == null ? null : record.status().name());
+        return builder.build();
+    }
+
+    private static Attributes pendingAttributes(AwaitInteractionRecord record) {
+        AttributesBuilder builder = Attributes.builder();
+        put(builder, STEP_ID, record == null ? null : record.stepId());
+        put(builder, TRANSPORT, record == null ? null : record.transportType());
         return builder.build();
     }
 

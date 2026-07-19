@@ -1,7 +1,9 @@
 package org.pipelineframework.awaitable.admission;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -36,8 +38,14 @@ public class InMemoryAwaitAdmissionStore implements AwaitAdmissionStore {
             return CompletableFuture.failedFuture(new IllegalArgumentException("capacity must be positive"));
         }
         synchronized (reservations) {
-            boolean reconciledExpired = reservations.entrySet()
-                .removeIf(entry -> entry.getValue().expiresAtEpochMs() <= nowEpochMs);
+            Set<String> expiredKeys = new HashSet<>();
+            reservations.entrySet().removeIf(entry -> {
+                boolean expired = entry.getValue().expiresAtEpochMs() <= nowEpochMs;
+                if (expired) {
+                    expiredKeys.add(entry.getKey());
+                }
+                return expired;
+            });
             for (AwaitAdmissionReservation reservation : reservations.values()) {
                 if (reservation.scope().equals(scope) && reservation.owner().equals(owner)) {
                     return CompletableFuture.completedFuture(AwaitAdmissionAcquireResult.reused(reservation));
@@ -48,7 +56,7 @@ public class InMemoryAwaitAdmissionStore implements AwaitAdmissionStore {
                 if (!reservations.containsKey(key)) {
                     AwaitAdmissionReservation reservation = new AwaitAdmissionReservation(scope, owner, slot, expiresAtEpochMs);
                     reservations.put(key, reservation);
-                    return CompletableFuture.completedFuture(reconciledExpired
+                    return CompletableFuture.completedFuture(expiredKeys.contains(key)
                         ? AwaitAdmissionAcquireResult.acquiredAfterReconciliation(reservation)
                         : AwaitAdmissionAcquireResult.acquired(reservation));
                 }
