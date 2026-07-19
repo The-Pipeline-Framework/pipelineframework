@@ -1,5 +1,7 @@
 package org.pipelineframework.awaitable.spi;
 
+import java.util.Optional;
+
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitStepDescriptor;
@@ -17,6 +19,28 @@ public interface AwaitTransportAdapter<I> {
      * @return adapter type
      */
     String type();
+
+    /**
+     * Whether this transport can feed durable completions into a live await stream.
+     *
+     * @return true when live await windows are supported
+     */
+    default boolean supportsLiveAwaitWindow() {
+        return false;
+    }
+
+    /**
+     * Returns the normalized provider endpoint used to scope durable admission.
+     *
+     * <p>An empty value means this adapter has not opted into durable admission.
+     * Runtime startup validation rejects that combination when admission is enabled.</p>
+     *
+     * @param descriptor authored await descriptor
+     * @return normalized provider endpoint when available
+     */
+    default Optional<String> admissionEndpoint(AwaitStepDescriptor descriptor) {
+        return Optional.empty();
+    }
 
     /**
      * Dispatches an await request to the external system.

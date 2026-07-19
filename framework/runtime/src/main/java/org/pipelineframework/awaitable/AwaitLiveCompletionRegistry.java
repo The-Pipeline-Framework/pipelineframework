@@ -20,6 +20,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -102,6 +103,8 @@ public class AwaitLiveCompletionRegistry {
         private final Set<String> seenCompletions = new HashSet<>();
         private final Set<String> acceptedCompletions = new HashSet<>();
         private final Map<String, CompletableFuture<Void>> acceptedWaiters = new HashMap<>();
+        private final Set<String> activePermits = new HashSet<>();
+        private final Map<String, CompletableFuture<Void>> permitWaiters = new LinkedHashMap<>();
         private final AtomicBoolean closed = new AtomicBoolean(false);
         private Flow.Subscriber<? super O> subscriber;
         private long requested;
@@ -197,6 +200,41 @@ public class AwaitLiveCompletionRegistry {
             }
         }
 
+        /**
+         * Acquires one unresolved-interaction slot before dispatching an item.
+         * The slot remains held until the completion is accepted by the live
+         * subscriber or the session terminates.
+         */
+        public Uni<Void> acquirePermit(String completionKey, int maxPendingInteractions) {
+            if (completionKey == null || completionKey.isBlank()) {
+                return Uni.createFrom().failure(new IllegalArgumentException("completionKey must not be blank"));
+            }
+            if (maxPendingInteractions < 1) {
+                return Uni.createFrom().failure(new IllegalArgumentException(
+                    "maxPendingInteractions must be positive"));
+            }
+            synchronized (lock) {
+                if (cancelled || terminated) {
+                    return Uni.createFrom().failure(new IllegalStateException(
+                        "Live await stream is no longer accepting dispatches for unit " + key.unitId()));
+                }
+                if (activePermits.contains(completionKey)) {
+                    return Uni.createFrom().voidItem();
+                }
+                CompletableFuture<Void> waiting = permitWaiters.get(completionKey);
+                if (waiting != null) {
+                    return Uni.createFrom().completionStage(waiting);
+                }
+                if (activePermits.size() < maxPendingInteractions) {
+                    activePermits.add(completionKey);
+                    return Uni.createFrom().voidItem();
+                }
+                CompletableFuture<Void> waiter = new CompletableFuture<>();
+                permitWaiters.put(completionKey, waiter);
+                return Uni.createFrom().completionStage(waiter);
+            }
+        }
+
         public void markDispatchComplete(int expectedItemCount) {
             synchronized (lock) {
                 this.dispatchComplete = true;
@@ -228,6 +266,7 @@ public class AwaitLiveCompletionRegistry {
                 item.accepted().completeExceptionally(failure);
             }
             failAcceptedWaiters(failure);
+            failPermitWaiters(failure);
             if (current != null) {
                 current.onError(failure);
             }
@@ -262,6 +301,7 @@ public class AwaitLiveCompletionRegistry {
                 item.accepted().completeExceptionally(failure);
             }
             failAcceptedWaiters(failure);
+            failPermitWaiters(failure);
             close();
         }
 
@@ -362,6 +402,7 @@ public class AwaitLiveCompletionRegistry {
             if (waiter != null) {
                 waiter.complete(null);
             }
+            releasePermit(completionKey);
         }
 
         private void failAcceptedWaiter(String completionKey, Throwable failure) {
@@ -379,6 +420,37 @@ public class AwaitLiveCompletionRegistry {
             synchronized (lock) {
                 waiters = new ArrayList<>(acceptedWaiters.values());
                 acceptedWaiters.clear();
+            }
+            for (CompletableFuture<Void> waiter : waiters) {
+                waiter.completeExceptionally(failure);
+            }
+        }
+
+        private void releasePermit(String completionKey) {
+            CompletableFuture<Void> next = null;
+            synchronized (lock) {
+                if (!activePermits.remove(completionKey)) {
+                    return;
+                }
+                var iterator = permitWaiters.entrySet().iterator();
+                if (iterator.hasNext()) {
+                    Map.Entry<String, CompletableFuture<Void>> entry = iterator.next();
+                    iterator.remove();
+                    activePermits.add(entry.getKey());
+                    next = entry.getValue();
+                }
+            }
+            if (next != null) {
+                next.complete(null);
+            }
+        }
+
+        private void failPermitWaiters(Throwable failure) {
+            List<CompletableFuture<Void>> waiters;
+            synchronized (lock) {
+                waiters = new ArrayList<>(permitWaiters.values());
+                permitWaiters.clear();
+                activePermits.clear();
             }
             for (CompletableFuture<Void> waiter : waiters) {
                 waiter.completeExceptionally(failure);

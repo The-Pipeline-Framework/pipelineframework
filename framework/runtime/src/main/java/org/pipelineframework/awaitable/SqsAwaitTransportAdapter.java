@@ -3,6 +3,7 @@ package org.pipelineframework.awaitable;
 import java.net.URI;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Objects;
 import java.util.function.Supplier;
 
@@ -49,6 +50,16 @@ public class SqsAwaitTransportAdapter implements AwaitTransportAdapter<Object> {
     @Override
     public String type() {
         return "sqs";
+    }
+
+    @Override
+    public boolean supportsLiveAwaitWindow() {
+        return true;
+    }
+
+    @Override
+    public Optional<String> admissionEndpoint(AwaitStepDescriptor descriptor) {
+        return Optional.of("sqs://" + SqsConfig.from(descriptor.transportConfig()).requestQueueUrl());
     }
 
     @Override

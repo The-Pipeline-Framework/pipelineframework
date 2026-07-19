@@ -23,6 +23,21 @@ import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 class SqsAwaitTransportAdapterTest {
 
     @Test
+    void supportsLiveAwaitWindow() {
+        assertTrue(adapter(mock(SqsClient.class)).supportsLiveAwaitWindow());
+    }
+
+    @Test
+    void normalizesRequestQueueForAdmissionScope() {
+        AwaitStepDescriptor descriptor = descriptor(Map.of(
+            "request", Map.of("queueUrl", "http://sqs.local/requests"),
+            "response", Map.of("queueUrl", "http://sqs.local/responses")));
+
+        assertEquals("sqs://http://sqs.local/requests", adapter(mock(SqsClient.class))
+            .admissionEndpoint(descriptor).orElseThrow());
+    }
+
+    @Test
     void dispatchPublishesFrameworkEnvelope() throws Exception {
         SqsClient client = mock(SqsClient.class);
         SqsAwaitTransportAdapter adapter = adapter(client);

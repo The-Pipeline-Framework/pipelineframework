@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
@@ -361,13 +362,14 @@ class AwaitStepSupportTest {
     }
 
     @Test
-    void kafkaOneToOneStreamDispatchesFiniteSourceBeforeCompletionsAreAccepted() {
+    void kafkaOneToOneStreamUsesAcceptedCompletionsToAdvanceItsPendingWindow() {
         AwaitStepSupport support = support();
-        support.pipelineConfig.maxConcurrency(1);
+        support.pipelineConfig.maxConcurrency(2);
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
 
         AwaitStepDescriptor testDescriptor = kafkaDescriptor();
+        when(awaitCoordinator.supportsLiveAwaitWindow(testDescriptor)).thenReturn(true);
         List<AwaitInteractionRecord> dispatched = new CopyOnWriteArrayList<>();
         DemandSource source = new DemandSource("first", "second", "third");
         AtomicInteger dispatchCompleteCalls = new AtomicInteger();
@@ -429,9 +431,8 @@ class AwaitStepSupportTest {
                 Multi.createFrom().publisher(source))
             .subscribe().withSubscriber(AssertSubscriber.create(1));
 
-        waitUntil(() -> dispatched.size() == 3);
-        waitUntil(() -> dispatchCompleteCalls.get() == 1);
-        assertEquals(3, source.emitted());
+        waitUntil(() -> dispatched.size() == 2);
+        assertEquals(0, dispatchCompleteCalls.get());
 
         support.liveCompletionRegistry.signal(
             itemRecord(0, AwaitInteractionStatus.COMPLETED, "first", "approved-first"),
@@ -441,11 +442,14 @@ class AwaitStepSupportTest {
         subscriber.awaitItems(1, Duration.ofSeconds(5));
         subscriber.assertItems("approved-first");
 
+        waitUntil(() -> dispatched.size() == 3);
+
         subscriber.request(2);
         support.liveCompletionRegistry.signal(
             itemRecord(1, AwaitInteractionStatus.COMPLETED, "second", "approved-second"),
             awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 3, 2, false))
             .await().indefinitely();
+
         support.liveCompletionRegistry.signal(
             itemRecord(2, AwaitInteractionStatus.COMPLETED, "third", "approved-third"),
             awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 3, 3, false))
@@ -454,6 +458,7 @@ class AwaitStepSupportTest {
         subscriber.awaitItems(3, Duration.ofSeconds(5));
         subscriber.awaitCompletion(Duration.ofSeconds(5));
         subscriber.assertItems("approved-first", "approved-second", "approved-third");
+        waitUntil(() -> dispatchCompleteCalls.get() == 1);
         org.mockito.Mockito.verify(awaitCoordinator).markDispatchComplete(
             org.mockito.ArgumentMatchers.eq("tenant1"),
             org.mockito.ArgumentMatchers.anyString(),
@@ -462,13 +467,131 @@ class AwaitStepSupportTest {
     }
 
     @Test
+    void sequentialOneToOneStreamUsesAnEffectiveWindowOfOne() {
+        AwaitStepSupport support = support();
+        support.pipelineConfig.maxConcurrency(2);
+        support.pipelineConfig.parallelism(ParallelismPolicy.SEQUENTIAL);
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
+
+        AwaitStepDescriptor testDescriptor = kafkaDescriptor();
+        when(awaitCoordinator.supportsLiveAwaitWindow(testDescriptor)).thenReturn(true);
+        List<AwaitInteractionRecord> dispatched = new CopyOnWriteArrayList<>();
+        DemandSource source = new DemandSource("first", "second");
+        when(awaitCoordinator.createOrGetItem(
+            org.mockito.ArgumentMatchers.eq(testDescriptor),
+            org.mockito.ArgumentMatchers.eq("tenant1"),
+            org.mockito.ArgumentMatchers.eq("exec123"),
+            org.mockito.ArgumentMatchers.eq(2),
+            any(), any(), any(), anyInt(),
+            org.mockito.ArgumentMatchers.isNull(),
+            org.mockito.ArgumentMatchers.isNull()))
+            .thenAnswer(invocation -> {
+                int index = invocation.getArgument(7, Integer.class);
+                return Uni.createFrom().item(new AwaitCreateResult(itemRecord(
+                    index, AwaitInteractionStatus.WAITING, invocation.getArgument(5), null), false));
+            });
+        when(awaitCoordinator.dispatch(org.mockito.ArgumentMatchers.eq(testDescriptor), any()))
+            .thenAnswer(invocation -> {
+                AwaitInteractionRecord record = invocation.getArgument(1, AwaitInteractionRecord.class);
+                dispatched.add(record);
+                return Uni.createFrom().item(record);
+            });
+        when(awaitCoordinator.markDispatchComplete(any(), any(), anyInt(), anyLong()))
+            .thenAnswer(invocation -> Uni.createFrom().item(awaitUnit(
+                invocation.getArgument(1, String.class), AwaitUnitStatus.WAITING_EXTERNAL, 2, 0, false)));
+
+        AssertSubscriber<String> subscriber = support.<String, String>awaitOneToOneStream(
+                testDescriptor,
+                Multi.createFrom().publisher(source))
+            .subscribe().withSubscriber(AssertSubscriber.create(1));
+
+        waitUntil(() -> source.emitted() == 2);
+        assertEquals(1, dispatched.size());
+
+        support.liveCompletionRegistry.signal(
+            itemRecord(0, AwaitInteractionStatus.COMPLETED, "first", "approved-first"),
+            awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 2, 1, false))
+            .await().indefinitely();
+        subscriber.awaitItems(1, Duration.ofSeconds(5));
+        waitUntil(() -> dispatched.size() == 2);
+
+        subscriber.request(1);
+        support.liveCompletionRegistry.signal(
+            itemRecord(1, AwaitInteractionStatus.COMPLETED, "second", "approved-second"),
+            awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 2, 2, false))
+            .await().indefinitely();
+        subscriber.awaitCompletion(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void sqsOneToOneStreamUsesTheSameLivePendingWindow() {
+        AwaitStepSupport support = support();
+        support.pipelineConfig.maxConcurrency(1);
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
+
+        AwaitStepDescriptor testDescriptor = sqsDescriptor();
+        when(awaitCoordinator.supportsLiveAwaitWindow(testDescriptor)).thenReturn(true);
+        List<AwaitInteractionRecord> dispatched = new CopyOnWriteArrayList<>();
+        when(awaitCoordinator.createOrGetItem(
+            org.mockito.ArgumentMatchers.eq(testDescriptor),
+            org.mockito.ArgumentMatchers.eq("tenant1"),
+            org.mockito.ArgumentMatchers.eq("exec123"),
+            org.mockito.ArgumentMatchers.eq(2),
+            any(), any(), any(), anyInt(),
+            org.mockito.ArgumentMatchers.isNull(),
+            org.mockito.ArgumentMatchers.isNull()))
+            .thenAnswer(invocation -> {
+                int index = invocation.getArgument(7, Integer.class);
+                return Uni.createFrom().item(new AwaitCreateResult(itemRecord(
+                    index, AwaitInteractionStatus.WAITING, invocation.getArgument(5), null), false));
+            });
+        when(awaitCoordinator.dispatch(org.mockito.ArgumentMatchers.eq(testDescriptor), any()))
+            .thenAnswer(invocation -> {
+                AwaitInteractionRecord record = invocation.getArgument(1, AwaitInteractionRecord.class);
+                dispatched.add(record);
+                return Uni.createFrom().item(record);
+            });
+        when(awaitCoordinator.markDispatchComplete(any(), any(), anyInt(), anyLong()))
+            .thenAnswer(invocation -> Uni.createFrom().item(awaitUnit(
+                invocation.getArgument(1, String.class), AwaitUnitStatus.WAITING_EXTERNAL, 2, 0, false)));
+
+        AssertSubscriber<String> subscriber = support.<String, String>awaitOneToOneStream(
+                testDescriptor,
+                Multi.createFrom().items("first", "second"))
+            .subscribe().withSubscriber(AssertSubscriber.create(1));
+
+        waitUntil(() -> dispatched.size() == 1);
+        support.liveCompletionRegistry.signal(
+            itemRecord(0, AwaitInteractionStatus.COMPLETED, "first", "approved-first"),
+            awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 2, 1, false))
+            .await().indefinitely();
+        subscriber.awaitItems(1, Duration.ofSeconds(5));
+
+        waitUntil(() -> dispatched.size() == 2);
+        subscriber.request(1);
+        support.liveCompletionRegistry.signal(
+            itemRecord(1, AwaitInteractionStatus.COMPLETED, "second", "approved-second"),
+            awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 2, 2, false))
+            .await().indefinitely();
+
+        subscriber.awaitItems(2, Duration.ofSeconds(5));
+        subscriber.awaitCompletion(Duration.ofSeconds(5));
+        subscriber.assertItems("approved-first", "approved-second");
+        org.mockito.Mockito.verify(awaitCoordinator).supportsLiveAwaitWindow(testDescriptor);
+    }
+
+    @Test
     void kafkaOneToOneStreamCompletesWithoutDurableDispatchWhenSourceIsEmpty() {
         AwaitStepSupport support = support();
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
+        AwaitStepDescriptor testDescriptor = kafkaDescriptor();
+        when(awaitCoordinator.supportsLiveAwaitWindow(testDescriptor)).thenReturn(true);
 
         List<String> output = support.<String, String>awaitOneToOneStream(
-                kafkaDescriptor(),
+                testDescriptor,
                 Multi.createFrom().empty())
             .collect().asList()
             .await().indefinitely();
@@ -486,6 +609,7 @@ class AwaitStepSupportTest {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2));
         AwaitStepDescriptor testDescriptor = kafkaDescriptor();
+        when(awaitCoordinator.supportsLiveAwaitWindow(testDescriptor)).thenReturn(true);
         AwaitInteractionRecord failed = itemRecord(0, AwaitInteractionStatus.FAILED, "first", null);
         when(awaitCoordinator.createOrGetItem(
             org.mockito.ArgumentMatchers.eq(testDescriptor),
@@ -620,6 +744,14 @@ class AwaitStepSupportTest {
     }
 
     private AwaitStepDescriptor kafkaDescriptor() {
+        return brokerDescriptor("kafka");
+    }
+
+    private AwaitStepDescriptor sqsDescriptor() {
+        return brokerDescriptor("sqs");
+    }
+
+    private AwaitStepDescriptor brokerDescriptor(String transportType) {
         return new AwaitStepDescriptor(
             "review",
             String.class.getName(),
@@ -627,7 +759,7 @@ class AwaitStepSupportTest {
             "ONE_TO_ONE",
             Duration.ofMinutes(5),
             "interactionId",
-            "kafka",
+            transportType,
             Map.of(),
             List.of());
     }

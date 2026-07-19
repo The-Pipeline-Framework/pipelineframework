@@ -5,6 +5,7 @@ import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.LongUpDownCounter;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 
 /**
@@ -28,6 +29,9 @@ public final class AwaitCompletionMetrics {
     private static volatile LongCounter unitTerminalCounter;
     private static volatile DoubleHistogram completionLatencyHistogram;
     private static volatile DoubleHistogram unitDurationHistogram;
+    private static volatile LongCounter admissionOutcomeCounter;
+    private static volatile LongUpDownCounter admissionPendingCounter;
+    private static volatile DoubleHistogram admissionWaitHistogram;
 
     private AwaitCompletionMetrics() {
     }
@@ -88,6 +92,34 @@ public final class AwaitCompletionMetrics {
         }
     }
 
+    public static void recordAdmissionAcquired(AwaitInteractionRecord record, boolean reused, boolean reconciled, long waitMillis) {
+        ensureInitialized();
+        Attributes attributes = interactionAttributes(record);
+        if (reused) {
+            admissionOutcomeCounter.add(1, admissionAttributes(attributes, "reused"));
+        } else {
+            admissionOutcomeCounter.add(1, admissionAttributes(attributes, "acquired"));
+            admissionPendingCounter.add(1, attributes);
+        }
+        if (reconciled) {
+            admissionOutcomeCounter.add(1, admissionAttributes(attributes, "reconciled"));
+        }
+        if (waitMillis > 0) {
+            admissionOutcomeCounter.add(1, admissionAttributes(attributes, "waited"));
+            admissionWaitHistogram.record(waitMillis, attributes);
+        }
+    }
+
+    public static void recordAdmissionReleased(AwaitInteractionRecord record, boolean released) {
+        ensureInitialized();
+        if (!released) {
+            return;
+        }
+        Attributes attributes = interactionAttributes(record);
+        admissionOutcomeCounter.add(1, admissionAttributes(attributes, "released"));
+        admissionPendingCounter.add(-1, attributes);
+    }
+
     private static void ensureInitialized() {
         if (droppedCompletionCounter != null) {
             return;
@@ -138,6 +170,18 @@ public final class AwaitCompletionMetrics {
                 .setDescription("Time from await unit creation to terminal state")
                 .setUnit("ms")
                 .build();
+            admissionOutcomeCounter = meter.counterBuilder("tpf.await.admission.outcomes.total")
+                .setDescription("Total durable await admission lifecycle outcomes")
+                .setUnit("events")
+                .build();
+            admissionPendingCounter = meter.upDownCounterBuilder("tpf.await.admission.pending")
+                .setDescription("Locally observed durable await admission reservations")
+                .setUnit("reservations")
+                .build();
+            admissionWaitHistogram = meter.histogramBuilder("tpf.await.admission.wait")
+                .setDescription("Time spent waiting for a durable await admission reservation")
+                .setUnit("ms")
+                .build();
         }
     }
 
@@ -147,6 +191,10 @@ public final class AwaitCompletionMetrics {
         put(builder, TRANSPORT, record == null ? null : record.transportType());
         put(builder, STATUS, record == null || record.status() == null ? null : record.status().name());
         return builder.build();
+    }
+
+    private static Attributes admissionAttributes(Attributes attributes, String outcome) {
+        return attributes.toBuilder().put(AttributeKey.stringKey("tpf.await.admission.outcome"), outcome).build();
     }
 
     private static Attributes unitAttributes(AwaitUnitRecord unit) {
@@ -185,6 +233,9 @@ public final class AwaitCompletionMetrics {
         unitTerminalCounter = null;
         completionLatencyHistogram = null;
         unitDurationHistogram = null;
+        admissionOutcomeCounter = null;
+        admissionPendingCounter = null;
+        admissionWaitHistogram = null;
     }
 
     private static String normalize(String value) {

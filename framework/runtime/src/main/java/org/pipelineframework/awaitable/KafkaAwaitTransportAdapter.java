@@ -3,6 +3,7 @@ package org.pipelineframework.awaitable;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Objects;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -44,6 +45,16 @@ public class KafkaAwaitTransportAdapter implements AwaitTransportAdapter<Object>
     @Override
     public String type() {
         return "kafka";
+    }
+
+    @Override
+    public boolean supportsLiveAwaitWindow() {
+        return true;
+    }
+
+    @Override
+    public Optional<String> admissionEndpoint(AwaitStepDescriptor descriptor) {
+        return Optional.of("kafka://" + KafkaConfig.from(descriptor.transportConfig()).requestTopic());
     }
 
     @Override

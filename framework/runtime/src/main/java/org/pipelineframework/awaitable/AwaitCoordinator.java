@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,6 +18,7 @@ import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 import org.pipelineframework.awaitable.spi.AwaitTransportAdapter;
 import org.pipelineframework.awaitable.spi.AwaitUnitStore;
+import org.pipelineframework.awaitable.admission.AwaitAdmissionReservation;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
@@ -43,6 +45,9 @@ public class AwaitCoordinator {
 
     @Inject
     AwaitResumeTokenService resumeTokenService;
+
+    @Inject
+    AwaitAdmissionCoordinator awaitAdmissionCoordinator;
 
     @Inject
     PipelineTelemetry telemetry;
@@ -133,17 +138,35 @@ public class AwaitCoordinator {
                     claimedInteraction.version(),
                     failure.getMessage(),
                     System.currentTimeMillis())
-                    .replaceWith(failure))
+                    .onItem().transformToUni(updated -> updated
+                        .map(this::releaseAdmission)
+                        .orElseGet(() -> Uni.createFrom().voidItem()))
+                    .replaceWithVoid())
                 .onItem().transformToUni(result -> interactionStore().markDispatched(
                     claimedInteraction.tenantId(),
                     claimedInteraction.interactionId(),
                     claimedInteraction.version(),
-                    result.metadata(),
+                    dispatchMetadata(claimedInteraction, result.metadata()),
                     System.currentTimeMillis()))
                 .onItem().transformToUni(optional -> optional
                     .map(Uni.createFrom()::item)
                     .orElseGet(() -> resolvedAfterDispatchMetadataRace(claimedInteraction)))
                 .onItem().invoke(this::recordInteractionDispatched));
+    }
+
+    private Map<String, Object> dispatchMetadata(AwaitInteractionRecord interaction, Map<String, Object> metadata) {
+        return awaitAdmissionCoordinator == null ? metadata : awaitAdmissionCoordinator.dispatchMetadata(interaction, metadata);
+    }
+
+    /**
+     * Resolves whether an await transport can participate in a live pending window.
+     *
+     * @param descriptor await descriptor
+     * @return true when the transport feeds the live completion registry
+     */
+    public boolean supportsLiveAwaitWindow(AwaitStepDescriptor descriptor) {
+        Objects.requireNonNull(descriptor, "descriptor must not be null");
+        return adapter(descriptor.transportType()).supportsLiveAwaitWindow();
     }
 
     private Uni<AwaitInteractionRecord> resolvedAfterDispatchMetadataRace(AwaitInteractionRecord claimedInteraction) {
@@ -335,7 +358,7 @@ public class AwaitCoordinator {
                         AwaitUnitStatus.TIMED_OUT,
                         nowEpochMs)
                     .onItem().invoke(unit -> unit.ifPresent(value -> recordUnitTerminal(updated.get(), value)))
-                    .replaceWith(updated);
+                    .chain(() -> releaseAdmission(updated.get()).replaceWith(updated));
             });
     }
 
@@ -343,6 +366,23 @@ public class AwaitCoordinator {
         AwaitCompletionMetrics.recordInteractionDispatched(record);
         recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
             AwaitReplayLifecycleEvent.INTERACTION_DISPATCHED,
+            record.executionId(),
+            record.unitId(),
+            record.stepId(),
+            record.stepIndex(),
+            record.status().name(),
+            record.interactionId(),
+            record.correlationId(),
+            record.transportType(),
+            record.itemIndex(),
+            null,
+            null,
+            null));
+    }
+
+    private void recordAdmissionLifecycle(String eventName, AwaitInteractionRecord record) {
+        recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
+            eventName,
             record.executionId(),
             record.unitId(),
             record.stepId(),
@@ -455,24 +495,97 @@ public class AwaitCoordinator {
         String idempotencyKey = deriveIdempotencyKey(descriptor, executionId, normalizedRequestPayload)
             + (itemIndex == null ? "" : ":item=" + itemIndex);
         String correlationId = deriveCorrelationId(descriptor, tenantId, executionId, idempotencyKey);
-        return interactionStore().createOrGet(new AwaitCreateCommand(
-            tenantId,
-            executionId,
-            descriptor.stepId(),
-            stepIndex,
-            descriptor.outputType(),
-            causationId,
-            idempotencyKey,
-            correlationId,
-            normalizedRequestPayload,
-            assignee,
-            group,
-            descriptor.transportType(),
-            unitId,
-            itemIndex,
-            now,
-            deadline,
-            ttl));
+        return acquireAdmission(descriptor, tenantId, unitId, itemIndex, executionId, deadline)
+            .onItem().transformToUni(lease -> interactionStore().createOrGet(new AwaitCreateCommand(
+                tenantId,
+                executionId,
+                descriptor.stepId(),
+                stepIndex,
+                descriptor.outputType(),
+                causationId,
+                idempotencyKey,
+                correlationId,
+                normalizedRequestPayload,
+                assignee,
+                group,
+                descriptor.transportType(),
+                unitId,
+                itemIndex,
+                now,
+                deadline,
+                ttl))
+                .onItem().invoke(created -> bindAdmission(created.record(), lease))
+                .onFailure().call(ignored -> releaseAdmissionAfterDefiniteCreateFailure(lease, tenantId, correlationId)));
+    }
+
+    /**
+     * A failed create may have committed before the client observed the error. Retain the
+     * lease unless a durable correlation lookup proves that no interaction exists.
+     */
+    private Uni<Void> releaseAdmissionAfterDefiniteCreateFailure(
+        Optional<AwaitAdmissionCoordinator.AdmissionLease> lease,
+        String tenantId,
+        String correlationId
+    ) {
+        if (awaitAdmissionCoordinator == null || lease.isEmpty()) {
+            return Uni.createFrom().voidItem();
+        }
+        return interactionStore().findByCorrelation(tenantId, correlationId)
+            .onItem().transformToUni(existing -> existing.isEmpty()
+                ? awaitAdmissionCoordinator.release(lease.orElseThrow().reservation())
+                : Uni.createFrom().voidItem())
+            // An unavailable or failed lookup is ambiguous, so TTL/reconciliation owns recovery.
+            .onFailure().recoverWithUni(Uni.createFrom().voidItem());
+    }
+
+    private Uni<Optional<AwaitAdmissionCoordinator.AdmissionLease>> acquireAdmission(
+        AwaitStepDescriptor descriptor,
+        String tenantId,
+        String unitId,
+        Integer itemIndex,
+        String executionId,
+        long deadlineEpochMs
+    ) {
+        return awaitAdmissionCoordinator == null
+            ? Uni.createFrom().item(Optional.empty())
+            : awaitAdmissionCoordinator.acquire(descriptor, tenantId, unitId, itemIndex, executionId, deadlineEpochMs);
+    }
+
+    private void bindAdmission(AwaitInteractionRecord interaction, Optional<AwaitAdmissionCoordinator.AdmissionLease> lease) {
+        if (awaitAdmissionCoordinator != null) {
+            lease.ifPresent(activeLease -> awaitAdmissionCoordinator.bind(interaction, activeLease));
+            if (lease.isPresent()) {
+                AwaitAdmissionCoordinator.AdmissionLease activeLease = lease.orElseThrow();
+                recordAdmissionLifecycle(
+                    activeLease.reused() ? AwaitReplayLifecycleEvent.ADMISSION_REUSED : AwaitReplayLifecycleEvent.ADMISSION_ACQUIRED,
+                    interaction);
+                if (activeLease.reconciledExpired()) {
+                    recordAdmissionLifecycle(AwaitReplayLifecycleEvent.ADMISSION_RECONCILED, interaction);
+                }
+            }
+        }
+    }
+
+    /**
+     * Releases the provider-facing reservation after a durable completion handoff.
+     */
+    public Uni<Void> releaseAdmission(AwaitInteractionRecord interaction) {
+        if (!admissionEnabled()) {
+            return Uni.createFrom().voidItem();
+        }
+        return awaitAdmissionCoordinator == null
+            ? Uni.createFrom().voidItem()
+            : awaitAdmissionCoordinator.release(interaction)
+                .invoke(released -> {
+                    if (released) {
+                        recordAdmissionLifecycle(AwaitReplayLifecycleEvent.ADMISSION_RELEASED, interaction);
+                    }
+                })
+                .replaceWithVoid();
+    }
+
+    public boolean admissionEnabled() {
+        return awaitAdmissionCoordinator != null && awaitAdmissionCoordinator.enabled();
     }
 
     private Uni<AwaitUnitRecord> createOrGetUnit(

@@ -65,6 +65,14 @@ public interface PipelineStepConfig {
     Integer maxConcurrency();
 
     /**
+     * Durable provider-facing admission settings for await interactions.
+     *
+     * @return await admission configuration
+     */
+    @WithName("await-admission")
+    AwaitAdmissionConfig awaitAdmission();
+
+    /**
      * Health check configuration for pipeline startup.
      *
      * @return health check configuration
@@ -121,6 +129,31 @@ public interface PipelineStepConfig {
     /**
      * Configuration for individual pipeline steps, allowing per-step override of global defaults.
      */
+    /**
+     * Runtime-only durable await admission configuration.
+     */
+    interface AwaitAdmissionConfig {
+
+        /**
+         * Whether durable provider-facing admission is active.
+         */
+        @WithDefault("false")
+        boolean enabled();
+
+        /**
+         * Store implementation used for admission reservations.
+         */
+        @WithDefault("in-memory")
+        String store();
+
+        /**
+         * Poll interval used while a provider budget is exhausted.
+         */
+        @WithName("retry-wait-ms")
+        @WithDefault("100")
+        long retryWaitMs();
+    }
+
     interface StepConfig {
         /**
         /**
