@@ -40,7 +40,7 @@ For step invocation, the runtime owns context installation and restoration. It s
 
 For transition-worker invocation, the runtime owns invocation lifecycle and duration timing. Admission, leases, retry/DLQ, await parking, and result commits remain in `QueueAsyncCoordinator`.
 
-For transport-boundary invocation, the runtime records boundary-level duration and failure-category diagnostics around the remote call. The marker descriptor is diagnostic metadata only: protocol plus target. Failure categories are deliberately low-cardinality: `timeout`, `auth`, `unavailable`, `malformed`, `protocol`, `cancelled`, `unexpected`, or `none` for success. They are operational labels only. They do not select behavior, own auth, own retries, or replace protocol-specific telemetry.
+For transport-boundary invocation, the runtime records boundary-level duration and failure-category diagnostics around the remote call. The marker descriptor is diagnostic metadata only: protocol plus target. Failure categories are deliberately low-cardinality: `timeout`, `auth`, `unavailable`, `remote_server`, `malformed`, `protocol`, `cancelled`, `unexpected`, or `none` for success. HTTP 5xx responses and gRPC `INTERNAL` or `DATA_LOSS` failures use `remote_server`; operators whose queries group those failures under `unexpected` should include `remote_server`. These labels are operational only. They do not select behavior, own auth, own retries, or replace protocol-specific telemetry.
 
 ## Why This Slice Exists
 

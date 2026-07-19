@@ -127,7 +127,9 @@ record CircuitSettings(
         Objects.requireNonNull(failureWindow, "failureWindow must not be null");
         Objects.requireNonNull(openDuration, "openDuration must not be null");
         Objects.requireNonNull(halfOpenRetryDelay, "halfOpenRetryDelay must not be null");
-        identity = Objects.requireNonNull(identity, "identity must not be null").map(String::trim);
+        identity = Objects.requireNonNull(identity, "identity must not be null")
+            .map(String::trim)
+            .filter(value -> !value.isEmpty());
     }
 
     CircuitPolicy policy() {

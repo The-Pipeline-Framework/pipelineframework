@@ -23,6 +23,17 @@ class CircuitPolicyResolverTest {
     }
 
     @Test
+    void treatsBlankExplicitIdentityAsTheDefaultBoundaryIdentity() {
+        CircuitPolicyResolver resolver = new CircuitPolicyResolver(Map.of(
+            "grpc:pricing.remoteProcess", enabled(Optional.of("   "))));
+
+        ResolvedCircuitPolicy resolved = resolver.resolve(
+            new TransportBoundaryDescriptor("grpc", "pricing.remoteProcess")).orElseThrow();
+
+        assertEquals("grpc:pricing.remoteProcess", resolved.identity().value());
+    }
+
+    @Test
     void allowsCompatibleBoundariesToShareAnExplicitIdentity() {
         CircuitPolicyResolver resolver = new CircuitPolicyResolver(Map.of(
             "grpc:pricing.remoteProcess", enabled(Optional.of("pricing-service")),
