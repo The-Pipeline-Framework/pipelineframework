@@ -227,11 +227,24 @@ def prepare_input(args):
     for candidate in input_dir.glob("*.out"):
         candidate.unlink()
     if args.record_count > 0:
-        target = input_dir / f"payments_{args.record_count}.csv"
-        with target.open("w", encoding="utf-8", newline="") as generated:
-            generated.write("ID,Recipient,Amount,Currency\n")
-            for record_id in range(1, args.record_count + 1):
-                generated.write(f"{record_id},Admission Profile {record_id},12.34,EUR\n")
+        records_per_execution = args.records_per_execution or args.record_count
+        if records_per_execution <= 0:
+            raise RuntimeError("--records-per-execution must be positive when supplied")
+        targets = []
+        for start_record_id in range(1, args.record_count + 1, records_per_execution):
+            end_record_id = min(args.record_count, start_record_id + records_per_execution - 1)
+            if args.record_count <= records_per_execution:
+                target = input_dir / f"payments_{args.record_count}.csv"
+            else:
+                target = input_dir / f"payments_{args.record_count}_{start_record_id:05d}.csv"
+            with target.open("w", encoding="utf-8", newline="") as generated:
+                generated.write("ID,Recipient,Amount,Currency\n")
+                for record_id in range(start_record_id, end_record_id + 1):
+                    generated.write(f"{record_id},Admission Profile {record_id},12.34,EUR\n")
+            target.chmod(0o666)
+            targets.append((target, end_record_id - start_record_id + 1))
+            print(f"Prepared CSV input {target}")
+        return targets
     else:
         if not args.source_csv:
             raise RuntimeError("--source-csv is required when --record-count is not positive")
@@ -240,9 +253,9 @@ def prepare_input(args):
             raise RuntimeError(f"Source CSV not found: {source}")
         target = input_dir / source.name
         shutil.copyfile(source, target)
-    target.chmod(0o666)
-    print(f"Prepared CSV input {target}")
-    return target
+        target.chmod(0o666)
+        print(f"Prepared CSV input {target}")
+        return [(target, 0)]
 
 
 def wait_output(output_dir, output_name, timeout_seconds):
@@ -279,18 +292,22 @@ def inspect_result(args, execution_id):
 
 
 def run_flow(args):
-    input_file = prepare_input(args)
+    input_files = prepare_input(args)
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_file_name = f"{input_file.name}.out"
-    output_file = output_dir / output_file_name
-    if output_file.exists():
-        output_file.unlink()
-    execution_id = submit_csv_input_file(args, input_file)
-    wait_status(args, execution_id, args.timeout_seconds)
-    inspect_result(args, execution_id)
-    output = wait_output(output_dir, output_file_name, args.timeout_seconds)
-    assert_output_record_count(output, args.record_count)
+    for input_file, _ in input_files:
+        output_file = output_dir / f"{input_file.name}.out"
+        if output_file.exists():
+            output_file.unlink()
+    executions = [(submit_csv_input_file(args, input_file), input_file, record_count)
+                  for input_file, record_count in input_files]
+    for execution_id, _, _ in executions:
+        wait_status(args, execution_id, args.timeout_seconds)
+    for execution_id, _, _ in executions:
+        inspect_result(args, execution_id)
+    for _, input_file, record_count in executions:
+        output = wait_output(output_dir, f"{input_file.name}.out", args.timeout_seconds)
+        assert_output_record_count(output, record_count)
 
 
 def main():
@@ -335,6 +352,7 @@ def main():
     run.add_argument("--output-dir", required=True)
     run.add_argument("--source-csv")
     run.add_argument("--record-count", type=int, default=0)
+    run.add_argument("--records-per-execution", type=int, default=0)
     run.add_argument("--idempotency-key")
     run.add_argument("--timeout-seconds", type=int, default=240)
     run.set_defaults(func=run_flow)
