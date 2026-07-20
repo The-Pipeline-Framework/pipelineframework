@@ -27,6 +27,7 @@ public record StepBranchingDescriptor(
 ) {
 
     private static final ConcurrentHashMap<MethodCacheKey, List<VariantExtractor>> extractionCache = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<MethodCacheKey, List<VariantExtractor>> inputVariantExtractionCache = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<Class<?>, Method[]> sortedMethodsCache = new ConcurrentHashMap<>();
 
     public StepBranchingDescriptor {
@@ -103,16 +104,28 @@ public record StepBranchingDescriptor(
     }
 
     private Optional<VariantExtractor> findInputVariantExtractor(Object item) {
-        return Arrays.stream(getSortedMethods(item.getClass()))
-            .filter(method -> method.getParameterCount() == 0 && method.getName().startsWith("get"))
-            .filter(method -> inputVariants.stream().anyMatch(variant ->
-                variant.discriminator().equals(decapitalize(method.getName().substring("get".length())))))
-            .map(method -> inputVariantExtractor(item.getClass(), method))
+        Class<?> itemClass = item.getClass();
+        MethodCacheKey cacheKey = new MethodCacheKey(itemClass, this);
+        List<VariantExtractor> extractors = inputVariantExtractionCache.computeIfAbsent(
+            cacheKey,
+            ignored -> findInputVariantExtractors(itemClass));
+        return extractors.stream()
             .filter(extractor -> extractor.extract(item).isPresent())
             .findFirst();
     }
 
-    private VariantExtractor inputVariantExtractor(Class<?> itemClass, Method getter) {
+    private List<VariantExtractor> findInputVariantExtractors(Class<?> itemClass) {
+        return Arrays.stream(getSortedMethods(itemClass))
+            .filter(method -> method.getParameterCount() == 0 && method.getName().startsWith("get"))
+            .filter(method -> !method.getName().substring("get".length()).isBlank())
+            .filter(method -> method.getReturnType() != Void.TYPE)
+            .filter(method -> inputVariants.stream().anyMatch(variant ->
+                variant.discriminator().equals(decapitalize(method.getName().substring("get".length())))))
+            .map(method -> variantExtractor(itemClass, method))
+            .toList();
+    }
+
+    private VariantExtractor variantExtractor(Class<?> itemClass, Method getter) {
         String suffix = getter.getName().substring("get".length());
         getter.trySetAccessible();
         Optional<Method> hasMethod = findHasMethod(itemClass, suffix);
@@ -139,10 +152,7 @@ public record StepBranchingDescriptor(
             if (!returnTypeAccepted) {
                 continue;
             }
-            Optional<Method> hasMethod = findHasMethod(itemClass, suffix);
-            method.trySetAccessible();
-            hasMethod.ifPresent(Method::trySetAccessible);
-            extractors.add(new VariantExtractor(method, hasMethod, decapitalize(suffix)));
+            extractors.add(variantExtractor(itemClass, method));
         }
         return List.copyOf(extractors);
     }
@@ -198,19 +208,24 @@ public record StepBranchingDescriptor(
     }
 
     private static Optional<Method> findHasMethod(Class<?> itemClass, String suffix) {
-        try {
-            return Optional.of(itemClass.getMethod("has" + suffix));
-        } catch (NoSuchMethodException e) {
-            return Optional.empty();
-        }
+        return Arrays.stream(getSortedMethods(itemClass))
+            .filter(method -> method.getName().equals("has" + suffix))
+            .filter(method -> method.getParameterCount() == 0)
+            .filter(method -> method.getReturnType() == Boolean.TYPE || method.getReturnType() == Boolean.class)
+            .findFirst();
     }
 
     private static Optional<String> discriminator(Object item) {
         try {
-            Method method = item.getClass().getMethod("discriminator");
-            if (method.getReturnType() != String.class || method.getParameterCount() != 0) {
+            Optional<Method> candidate = Arrays.stream(getSortedMethods(item.getClass()))
+                .filter(method -> method.getName().equals("discriminator"))
+                .filter(method -> method.getParameterCount() == 0)
+                .filter(method -> method.getReturnType() == String.class)
+                .findFirst();
+            if (candidate.isEmpty()) {
                 return Optional.empty();
             }
+            Method method = candidate.orElseThrow();
             method.trySetAccessible();
             Object value = method.invoke(item);
             return value instanceof String text && !text.isBlank() ? Optional.of(text) : Optional.empty();

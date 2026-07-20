@@ -2251,7 +2251,7 @@ public final class PipelineTemplateSchemaExporter {
         {
           "type": "object",
           "required": ["wraps"],
-          "properties": { "wraps": { "type": "string", "pattern": "^(bool|uuid|timestamp|datetime|date|duration|bytes|currency|uri|path|payload_ref)$" } },
+          "properties": { "wraps": { "type": "string", "enum": ["bool", "uuid", "timestamp", "datetime", "date", "duration", "bytes", "currency", "uri", "path", "payload_ref"] } },
           "additionalProperties": false
         },
         {
