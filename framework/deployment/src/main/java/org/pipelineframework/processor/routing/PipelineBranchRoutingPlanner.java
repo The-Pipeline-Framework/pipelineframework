@@ -16,6 +16,7 @@ import org.pipelineframework.config.template.PipelineTemplateTypeModel;
 import org.pipelineframework.config.template.PipelineTemplateTypeReference;
 import org.pipelineframework.config.template.PipelineTemplateUnion;
 import org.pipelineframework.config.template.PipelineTemplateUnionVariant;
+import org.pipelineframework.branching.BranchVariantIdentity;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.StepDefinition;
 
@@ -128,6 +129,9 @@ public final class PipelineBranchRoutingPlanner {
                 List.copyOf(step.acceptedLeafTypes()),
                 List.copyOf(step.producedLeafTypes()),
                 List.copyOf(step.acceptedDomainTypes()),
+                step.inputVariants(),
+                step.acceptedVariants(),
+                step.producedVariants(),
                 step.terminal()))
             .toList();
         return Optional.of(new PipelineBranchingPlan(true, terminalIndex, steps));
@@ -209,6 +213,8 @@ public final class PipelineBranchRoutingPlanner {
         if (outputLeafTypes == null) {
             return Optional.empty();
         }
+        List<BranchVariantIdentity> inputVariants = expandVariantIdentities(templateConfig, templateStep.inputTypeName());
+        List<BranchVariantIdentity> producedVariants = expandVariantIdentities(templateConfig, templateStep.outputTypeName());
 
         boolean oneToOneCardinality = "ONE_TO_ONE".equalsIgnoreCase(templateStep.cardinality());
         if (!oneToOneCardinality
@@ -247,6 +253,9 @@ public final class PipelineBranchRoutingPlanner {
         } else {
             acceptedLeafTypes.addAll(inputLeafTypes);
         }
+        List<BranchVariantIdentity> acceptedVariants = inputVariants.stream()
+            .filter(variant -> acceptedLeafTypes.contains(variant.payloadContract()))
+            .toList();
 
         if (templateStep.terminal() && outputLeafTypes.size() != 1) {
             error(ctx, "Terminal step '" + templateStep.name()
@@ -277,7 +286,10 @@ public final class PipelineBranchRoutingPlanner {
             List.copyOf(inputLeafTypes),
             List.copyOf(acceptedLeafTypes),
             List.copyOf(outputLeafTypes),
-            acceptedDomainTypes));
+            acceptedDomainTypes,
+            inputVariants,
+            acceptedVariants,
+            producedVariants));
     }
 
     private Map<String, ClassName> indexContractRuntimeTypes(
@@ -357,7 +369,9 @@ public final class PipelineBranchRoutingPlanner {
             return;
         }
         contractRuntimeTypes.putIfAbsent(union.name(), runtimeType);
-        for (PipelineTemplateTypeDefinition.Variant variant : union.variants().values()) {
+        for (PipelineTemplateTypeDefinition.Variant variant : union.variants().values().stream()
+            .sorted(Comparator.comparing(PipelineTemplateTypeDefinition.Variant::discriminator))
+            .toList()) {
             Optional<String> payload = v3NamedContract(templateConfig, variant.payload());
             if (payload.isEmpty()) {
                 continue;
@@ -502,6 +516,36 @@ public final class PipelineBranchRoutingPlanner {
             : Optional.empty();
     }
 
+    private List<BranchVariantIdentity> expandVariantIdentities(
+        PipelineTemplateConfig templateConfig,
+        String contractTypeName
+    ) {
+        if (templateConfig == null || isBlank(contractTypeName)) {
+            return List.of();
+        }
+        if (templateConfig.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3) {
+            Optional<PipelineTemplateTypeDefinition> definition = v3Definition(templateConfig, contractTypeName);
+            if (definition.isEmpty() || !(definition.orElseThrow() instanceof PipelineTemplateTypeDefinition.UnionType union)) {
+                return List.of();
+            }
+            return union.variants().values().stream()
+                .map(variant -> v3NamedContract(templateConfig, variant.payload())
+                    .map(payload -> new BranchVariantIdentity(union.name(), variant.discriminator(), payload)))
+                .flatMap(Optional::stream)
+                .sorted(Comparator.comparing(BranchVariantIdentity::discriminator))
+                .toList();
+        }
+        PipelineTemplateUnion union = templateConfig.unions().get(contractTypeName);
+        if (union == null) {
+            return List.of();
+        }
+        return union.variants().entrySet().stream()
+            .filter(entry -> entry.getValue() != null && !isBlank(entry.getValue().type()))
+            .map(entry -> new BranchVariantIdentity(union.name(), entry.getKey(), entry.getValue().type()))
+            .sorted(Comparator.comparing(BranchVariantIdentity::discriminator))
+            .toList();
+    }
+
     private String javaVariantTypeName(String discriminator) {
         return Character.toUpperCase(discriminator.charAt(0)) + discriminator.substring(1);
     }
@@ -587,7 +631,10 @@ public final class PipelineBranchRoutingPlanner {
         List<String> inputLeafTypes,
         List<String> acceptedLeafTypes,
         List<String> producedLeafTypes,
-        List<ClassName> acceptedDomainTypes
+        List<ClassName> acceptedDomainTypes,
+        List<BranchVariantIdentity> inputVariants,
+        List<BranchVariantIdentity> acceptedVariants,
+        List<BranchVariantIdentity> producedVariants
     ) {
         boolean terminal() {
             return templateStep.terminal();

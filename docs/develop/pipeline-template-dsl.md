@@ -85,7 +85,28 @@ types:
 
 A wrapper is assignable only to the same wrapper. Conversion to or from the wrapped scalar is explicit at a generated or application-owned boundary; it is never an implicit substitution in a step contract.
 
-Portable wrapper constraints, including `pattern`, are introduced after the normalized type model and are not accepted by this compiler slice.
+Wrappers may declare target-neutral constraints beside `wraps`. Constraints are part of the semantic type model and are enforced by the generated Java wrapper constructor; they are not protobuf options, JSON Schema rules, or application validation annotations.
+
+```yaml
+types:
+  CurrencyCode:
+    wraps: string
+    minLength: 3
+    maxLength: 3
+    pattern: "[A-Z]{3}"
+  ContactEmail:
+    wraps: string
+    format: email
+  PositiveAmount:
+    wraps: decimal
+    minimumExclusive: 0
+```
+
+String wrappers support `minLength`, `maxLength`, `pattern`, and `format: email`. Length is measured in Unicode code points. A `pattern` requires the entire string value to match and must be paired with `maxLength`; generated Java validates that bound before attempting the match, limiting pattern processing for boundary data. The DSL does not define Java regular expressions as its permanent pattern language: the Java target currently compiles the declared pattern with Java regex support, and another target must either support the pattern or report a clear limitation until TPF defines a portable profile. `format: email` checks a practical mailbox shape—one non-edge `@`, no whitespace, a non-empty local part, and non-empty dot-separated domain labels. It does not establish ownership, DNS validity, or deliverability.
+
+Numeric wrappers (`int32`, `int64`, `float32`, `float64`, and `decimal`) support `minimum`, `minimumExclusive`, `maximum`, and `maximumExclusive`. Bounds are semantic decimal values.
+
+Changing wrapper constraints is a semantic compatibility change. TPF classifies it as unchanged, narrowing, widening, or incomparable; this release rejects every change other than unchanged even though protobuf wire tags and shapes stay the same.
 
 ### Aliases
 
@@ -118,6 +139,27 @@ A union value is assignable to its union contract. A concrete variant can be int
 
 A union declares a contract, not a routing graph. Branch applicability remains type-based and linear. Use a union contract where a step consumes the complete outcome set; use `accepts` only when a branch deliberately narrows that set.
 
+When a branch-aware step declares a union as its `input`, omitting `accepts` means it accepts every declared variant. An explicit list narrows the accepted payload contracts and must be a subset of that union. The final `terminal: true` step must cover every alternative still reachable after earlier branches; the compiler reports uncovered alternatives before generation.
+
+```yaml
+steps:
+  - name: Classify payment
+    input: PaymentRequest
+    output: PaymentOutcome
+
+  - name: Handle approval
+    input: PaymentOutcome
+    accepts: [PaymentApproved]
+    output: PaymentResult
+
+  - name: Complete payment
+    input: PaymentOutcome
+    terminal: true
+    output: PaymentResult
+```
+
+TPF records the union name, declared discriminator, and payload contract in generated branching, replay, and checkpoint-handoff metadata. This makes an observed alternative identifiable without exposing protobuf field numbers. Routing remains payload-type based: if two declared variants intentionally share a payload type, they route together under `accepts`; discriminators are not accepted as routing predicates.
+
 ## Wire identity and compatibility
 
 Names, field names, and variant discriminators are the DSL-facing identities. The compiler allocates protobuf tags and records them in the sibling IDL lock file (`pipeline.idl.json` for `pipeline.yaml`). YAML never contains field or variant numbers.
@@ -140,7 +182,7 @@ Generated Java sources live under `<basePackage>.domain`. A record field keeps i
 
 The generated `PipelineDomainProtoAdapters` class converts generated records, wrappers, and unions to and from the generated protobuf types. It is public application-facing generated code, but its exact class and method shape remains provisional while the Java target continues to evolve.
 
-Generated scalar components are nullable boxed/reference types. `null` means that an eligible proto3 scalar was absent; a present scalar default remains its Java default value. This preserves transport presence only. It does not define required fields, business validity, or refinement rules. `payload_ref` is handled separately as the framework `PayloadReference` contract type.
+Generated record scalar components are nullable boxed/reference types. `null` means that an eligible proto3 scalar was absent; a present scalar default remains its Java default value. This preserves transport presence only. It does not define required fields, business validity, or refinement rules. A wrapper is different: `Currency(null)` is invalid, while a `null` wrapper field in a containing record represents absence. For constrained wrappers, the generated compact constructor is the Java invariant boundary. `payload_ref` is handled separately as the framework `PayloadReference` contract type.
 
 Each v3 union generates a sealed Java interface. Its nested variant records carry the declared payload and expose the exact YAML discriminator through `discriminator()`. The adapter maps those variants directly to the generated protobuf `oneof` cases; it does not flatten them into their payloads.
 

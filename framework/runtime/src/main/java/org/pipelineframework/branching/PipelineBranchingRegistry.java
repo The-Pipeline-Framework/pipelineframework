@@ -66,6 +66,9 @@ public class PipelineBranchingRegistry {
                 step.acceptedContracts(),
                 step.acceptedRuntimeClasses(),
                 acceptedRuntimeTypes,
+                step.inputVariants(),
+                step.acceptedVariants(),
+                step.producedVariants(),
                 step.terminal());
             StepBranchingDescriptor existing = descriptors.put(runtimeStepClass, descriptor);
             if (existing != null) {

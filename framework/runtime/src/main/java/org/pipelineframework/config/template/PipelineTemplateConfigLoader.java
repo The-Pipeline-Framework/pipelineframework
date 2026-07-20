@@ -29,6 +29,8 @@ import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
@@ -253,10 +255,8 @@ public class PipelineTemplateConfigLoader {
         if (declaration.containsKey("number") || declaration.containsKey("optional") || declaration.containsKey("reserved")) {
             throw new IllegalStateException("Type '" + name + "' cannot declare protobuf wire metadata in version: 3.");
         }
-        if (declaration.containsKey("pattern")) {
-            throw new IllegalStateException("Type '" + name + "' pattern constraints arrive in #507 and are not supported yet.");
-        }
-        rejectUnexpectedV3Keys(declaration, name, "fields", "wraps", "alias", "variants");
+        rejectUnexpectedV3Keys(declaration, name, "fields", "wraps", "alias", "variants",
+            "minLength", "maxLength", "pattern", "format", "minimum", "minimumExclusive", "maximum", "maximumExclusive");
         boolean fields = declaration.containsKey("fields");
         boolean wraps = declaration.containsKey("wraps");
         boolean alias = declaration.containsKey("alias");
@@ -266,6 +266,7 @@ public class PipelineTemplateConfigLoader {
             throw new IllegalStateException("Type '" + name + "' must declare exactly one of fields, wraps, alias, or variants.");
         }
         if (fields) {
+            rejectV3WrapperConstraints(name, declaration);
             return new PipelineTemplateTypeDefinition.RecordType(name, readV3RecordFields(name, declaration.get("fields")));
         }
         if (wraps) {
@@ -273,13 +274,129 @@ public class PipelineTemplateConfigLoader {
             if (!PipelineTemplateTypeMappings.isV3ScalarType(scalar)) {
                 throw new IllegalStateException("Type '" + name + "' wraps must reference a supported scalar.");
             }
-            return new PipelineTemplateTypeDefinition.WrapperType(name, new PipelineTemplateTypeReference.Scalar(scalar));
+            return new PipelineTemplateTypeDefinition.WrapperType(name, new PipelineTemplateTypeReference.Scalar(scalar),
+                readV3WrapperConstraints(name, scalar, declaration));
         }
         if (alias) {
+            rejectV3WrapperConstraints(name, declaration);
             return new PipelineTemplateTypeDefinition.AliasType(name,
                 readV3Reference(requiredV3String(declaration, "alias", name), name + ".alias"));
         }
+        rejectV3WrapperConstraints(name, declaration);
         return new PipelineTemplateTypeDefinition.UnionType(name, readV3Variants(name, declaration.get("variants")));
+    }
+
+    private PipelineTemplateWrapperConstraints readV3WrapperConstraints(String name, String scalar, Map<?, ?> declaration) {
+        Optional<Integer> minLength = readV3NonNegativeIntegerConstraint(name, declaration, "minLength");
+        Optional<Integer> maxLength = readV3NonNegativeIntegerConstraint(name, declaration, "maxLength");
+        Optional<String> pattern = readV3StringConstraint(name, declaration, "pattern");
+        Optional<PipelineTemplateWrapperConstraints.Format> format = readV3FormatConstraint(name, declaration);
+        Optional<BigDecimal> minimum = readV3DecimalConstraint(name, declaration, "minimum");
+        Optional<BigDecimal> minimumExclusive = readV3DecimalConstraint(name, declaration, "minimumExclusive");
+        Optional<BigDecimal> maximum = readV3DecimalConstraint(name, declaration, "maximum");
+        Optional<BigDecimal> maximumExclusive = readV3DecimalConstraint(name, declaration, "maximumExclusive");
+        boolean stringConstraints = minLength.isPresent() || maxLength.isPresent() || pattern.isPresent() || format.isPresent();
+        boolean numericConstraints = minimum.isPresent() || minimumExclusive.isPresent() || maximum.isPresent() || maximumExclusive.isPresent();
+        if (stringConstraints && !"string".equals(scalar)) {
+            throw new IllegalStateException("Type '" + name + "' can use string constraints only when wraps: string.");
+        }
+        if (numericConstraints && !Set.of("int32", "int64", "float32", "float64", "decimal").contains(scalar)) {
+            throw new IllegalStateException("Type '" + name + "' can use numeric constraints only with an int32, int64, float32, float64, or decimal wrapper.");
+        }
+        if (pattern.isPresent() && maxLength.isEmpty()) {
+            throw new IllegalStateException("Type '" + name + "' pattern requires maxLength to bound runtime matching.");
+        }
+        if (minLength.isPresent() && maxLength.isPresent() && minLength.get() > maxLength.get()) {
+            throw new IllegalStateException("Type '" + name + "' minLength must not exceed maxLength.");
+        }
+        if (minimum.isPresent() && minimumExclusive.isPresent()) {
+            throw new IllegalStateException("Type '" + name + "' cannot declare both minimum and minimumExclusive.");
+        }
+        if (maximum.isPresent() && maximumExclusive.isPresent()) {
+            throw new IllegalStateException("Type '" + name + "' cannot declare both maximum and maximumExclusive.");
+        }
+        Optional<BigDecimal> lower = minimum.isPresent() ? minimum : minimumExclusive;
+        Optional<BigDecimal> upper = maximum.isPresent() ? maximum : maximumExclusive;
+        if (lower.isPresent() && upper.isPresent()) {
+            int interval = lower.get().compareTo(upper.get());
+            if (interval > 0 || interval == 0 && (minimumExclusive.isPresent() || maximumExclusive.isPresent())) {
+                throw new IllegalStateException("Type '" + name + "' declares an empty numeric constraint interval.");
+            }
+        }
+        return new PipelineTemplateWrapperConstraints(minLength, maxLength, pattern, format, minimum, minimumExclusive,
+            maximum, maximumExclusive);
+    }
+
+    private void rejectV3WrapperConstraints(String name, Map<?, ?> declaration) {
+        for (String key : List.of("minLength", "maxLength", "pattern", "format", "minimum", "minimumExclusive", "maximum", "maximumExclusive")) {
+            if (declaration.containsKey(key)) {
+                throw new IllegalStateException("Type '" + name + "' can declare '" + key + "' only beside wraps.");
+            }
+        }
+    }
+
+    private Optional<Integer> readV3NonNegativeIntegerConstraint(String name, Map<?, ?> declaration, String key) {
+        if (!declaration.containsKey(key)) {
+            return Optional.empty();
+        }
+        Object raw = declaration.get(key);
+        if (!(raw instanceof Number number) || number instanceof Float || number instanceof Double) {
+            throw new IllegalStateException("Type '" + name + "' " + key + " must be a non-negative integer.");
+        }
+        try {
+            int value = new BigDecimal(number.toString()).intValueExact();
+            if (value < 0) {
+                throw new IllegalStateException("Type '" + name + "' " + key + " must be a non-negative integer.");
+            }
+            return Optional.of(value);
+        } catch (ArithmeticException ex) {
+            throw new IllegalStateException("Type '" + name + "' " + key + " must be a non-negative integer.");
+        }
+    }
+
+    private Optional<String> readV3StringConstraint(String name, Map<?, ?> declaration, String key) {
+        if (!declaration.containsKey(key)) {
+            return Optional.empty();
+        }
+        Object raw = declaration.get(key);
+        if (!(raw instanceof String value) || value.isBlank()) {
+            throw new IllegalStateException("Type '" + name + "' " + key + " must be a non-blank string.");
+        }
+        if ("pattern".equals(key)) {
+            try {
+                Pattern.compile(value);
+            } catch (PatternSyntaxException ex) {
+                throw new IllegalStateException("Type '" + name + "' pattern is not supported by the current Java target: " + ex.getDescription());
+            }
+        }
+        return Optional.of(value);
+    }
+
+    private Optional<PipelineTemplateWrapperConstraints.Format> readV3FormatConstraint(String name, Map<?, ?> declaration) {
+        Optional<String> format = readV3StringConstraint(name, declaration, "format");
+        if (format.isEmpty()) {
+            return Optional.empty();
+        }
+        if (!"email".equals(format.get())) {
+            throw new IllegalStateException("Type '" + name + "' format must be 'email'.");
+        }
+        return Optional.of(PipelineTemplateWrapperConstraints.Format.EMAIL);
+    }
+
+    private Optional<BigDecimal> readV3DecimalConstraint(String name, Map<?, ?> declaration, String key) {
+        if (!declaration.containsKey(key)) {
+            return Optional.empty();
+        }
+        Object raw = declaration.get(key);
+        if (!(raw instanceof Number || raw instanceof String)) {
+            throw new IllegalStateException("Type '" + name + "' " + key + " must be a finite decimal number.");
+        }
+        try {
+            BigDecimal value = new BigDecimal(raw.toString());
+            return Optional.of(value.stripTrailingZeros());
+        } catch (NumberFormatException ex) {
+            throw new IllegalStateException("Type '" + name + "' " + key + " must be a finite decimal number.");
+        }
     }
 
     private List<PipelineTemplateTypeDefinition.Field> readV3RecordFields(String owner, Object fieldsObj) {

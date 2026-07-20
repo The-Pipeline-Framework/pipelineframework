@@ -26,6 +26,7 @@ import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.routing.PipelineBranchingPlan;
+import org.pipelineframework.branching.BranchVariantIdentity;
 
 /**
  * Generates META-INF/pipeline/branching.json for branch-aware linear routing.
@@ -73,6 +74,9 @@ public final class PipelineBranchingMetadataGenerator {
                 inputRuntimeClass,
                 step.acceptedContractTypes(),
                 acceptedRuntimeClasses,
+                variants(step.inputVariants()),
+                variants(step.acceptedVariants()),
+                variants(step.producedVariants()),
                 step.terminal()));
         }
         if (steps.isEmpty()) {
@@ -286,6 +290,13 @@ public final class PipelineBranchingMetadataGenerator {
         }
     }
 
+    private List<VariantMetadata> variants(List<BranchVariantIdentity> variants) {
+        return variants.stream()
+            .map(variant -> new VariantMetadata(
+                variant.unionName(), variant.discriminator(), variant.payloadContract()))
+            .toList();
+    }
+
     private record BranchingMetadata(
         int terminalStepIndex,
         List<StepMetadata> steps
@@ -299,7 +310,17 @@ public final class PipelineBranchingMetadataGenerator {
         String inputRuntimeClass,
         List<String> acceptedContracts,
         List<String> acceptedRuntimeClasses,
+        List<VariantMetadata> inputVariants,
+        List<VariantMetadata> acceptedVariants,
+        List<VariantMetadata> producedVariants,
         boolean terminal
+    ) {
+    }
+
+    private record VariantMetadata(
+        String unionName,
+        String discriminator,
+        String payloadContract
     ) {
     }
 }

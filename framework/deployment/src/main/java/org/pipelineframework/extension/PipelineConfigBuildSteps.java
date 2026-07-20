@@ -144,8 +144,10 @@ public final class PipelineConfigBuildSteps {
             if (stepMap.containsKey("accepts")) {
                 return true;
             }
-            String inputTypeName = stringValue(stepMap, "inputTypeName");
-            if (!isBlank(inputTypeName) && unionNames.contains(inputTypeName.trim())) {
+            String inputContract = firstNonBlank(
+                stringValue(stepMap, "input"),
+                stringValue(stepMap, "inputTypeName"));
+            if (!isBlank(inputContract) && unionNames.contains(inputContract.trim())) {
                 return true;
             }
             Object terminal = stepMap.get("terminal");
@@ -157,17 +159,35 @@ public final class PipelineConfigBuildSteps {
     }
 
     private Set<String> declaredUnionNames(Map<?, ?> rootMap) {
-        Object unionsObj = rootMap.get("unions");
-        if (!(unionsObj instanceof Map<?, ?> unions)) {
-            return Set.of();
-        }
         Set<String> unionNames = new LinkedHashSet<>();
-        for (Object key : unions.keySet()) {
-            if (key != null) {
-                unionNames.add(String.valueOf(key).trim());
+        Object unionsObj = rootMap.get("unions");
+        if (unionsObj instanceof Map<?, ?> unions) {
+            for (Object key : unions.keySet()) {
+                if (key != null) {
+                    unionNames.add(String.valueOf(key).trim());
+                }
+            }
+        }
+        if (isVersionThree(rootMap)) {
+            Object typesObj = rootMap.get("types");
+            if (typesObj instanceof Map<?, ?> types) {
+                for (Map.Entry<?, ?> entry : types.entrySet()) {
+                    if (entry.getKey() != null && entry.getValue() instanceof Map<?, ?> definition
+                        && definition.containsKey("variants")) {
+                        unionNames.add(String.valueOf(entry.getKey()).trim());
+                    }
+                }
             }
         }
         return unionNames;
+    }
+
+    private boolean isVersionThree(Map<?, ?> rootMap) {
+        Object version = rootMap.get("version");
+        if (version instanceof Number number) {
+            return number.doubleValue() == 3.0d;
+        }
+        return "3".equals(String.valueOf(version).trim());
     }
 
     /**

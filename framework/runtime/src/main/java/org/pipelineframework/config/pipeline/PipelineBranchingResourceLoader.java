@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.jboss.logging.Logger;
+import org.pipelineframework.branching.BranchVariantIdentity;
 
 /**
  * Loads branch-routing metadata from META-INF resources.
@@ -81,6 +82,9 @@ public final class PipelineBranchingResourceLoader {
             stringValue(raw.get("inputRuntimeClass")),
             stringList(raw.get("acceptedContracts")),
             stringList(raw.get("acceptedRuntimeClasses")),
+            variantList(raw.get("inputVariants")),
+            variantList(raw.get("acceptedVariants")),
+            variantList(raw.get("producedVariants")),
             booleanValue(raw.get("terminal")));
     }
 
@@ -204,6 +208,29 @@ public final class PipelineBranchingResourceLoader {
             .toList();
     }
 
+    private static List<BranchVariantIdentity> variantList(Object value) {
+        if (!(value instanceof List<?> variants)) {
+            return List.of();
+        }
+        return variants.stream()
+            .map(PipelineBranchingResourceLoader::parseVariant)
+            .toList();
+    }
+
+    private static BranchVariantIdentity parseVariant(Object value) {
+        if (!(value instanceof Map<?, ?> raw)) {
+            throw new IllegalStateException("Branch variant metadata entry must be an object: " + value);
+        }
+        String unionName = stringValue(raw.get("unionName"));
+        String discriminator = stringValue(raw.get("discriminator"));
+        String payloadContract = stringValue(raw.get("payloadContract"));
+        if (unionName == null || unionName.isBlank() || discriminator == null || discriminator.isBlank()
+            || payloadContract == null || payloadContract.isBlank()) {
+            throw new IllegalStateException("Branch variant metadata is missing required identity fields: " + raw);
+        }
+        return new BranchVariantIdentity(unionName, discriminator, payloadContract);
+    }
+
     public record BranchingResource(
         int terminalStepIndex,
         List<BranchingStep> steps
@@ -217,7 +244,22 @@ public final class PipelineBranchingResourceLoader {
         String inputRuntimeClass,
         List<String> acceptedContracts,
         List<String> acceptedRuntimeClasses,
+        List<BranchVariantIdentity> inputVariants,
+        List<BranchVariantIdentity> acceptedVariants,
+        List<BranchVariantIdentity> producedVariants,
         boolean terminal
     ) {
+        public BranchingStep(
+            int index,
+            String step,
+            String runtimeStepClass,
+            String inputRuntimeClass,
+            List<String> acceptedContracts,
+            List<String> acceptedRuntimeClasses,
+            boolean terminal
+        ) {
+            this(index, step, runtimeStepClass, inputRuntimeClass, acceptedContracts, acceptedRuntimeClasses,
+                List.of(), List.of(), List.of(), terminal);
+        }
     }
 }

@@ -10,6 +10,10 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateStep;
+import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
+import org.pipelineframework.config.template.PipelineTemplateTypeReference;
+import org.pipelineframework.config.template.PipelineTemplateUnion;
+import org.pipelineframework.branching.BranchVariantIdentity;
 import org.pipelineframework.processor.PipelineCompilationContext;
 
 /**
@@ -47,6 +51,7 @@ public class CheckpointHandoffMetadataGenerator {
             hasInput ? templateConfig.input().subscription().mapper() : null,
             hasOutput ? templateConfig.output().checkpoint().idempotencyKeyFields() : List.of(),
             hasInput ? List.of("HTTP_JSON", "HTTP_PROTO", "GRPC") : List.of(),
+            checkpointVariants(templateConfig, checkpointOutputType),
             true);
 
         javax.tools.FileObject resourceFile = processingEnv.getFiler()
@@ -54,6 +59,48 @@ public class CheckpointHandoffMetadataGenerator {
         try (var writer = resourceFile.openWriter()) {
             writer.write(GSON.toJson(metadata));
         }
+    }
+
+    private List<BranchVariantIdentity> checkpointVariants(PipelineTemplateConfig templateConfig, String contract) {
+        if (contract == null || contract.isBlank()) {
+            return List.of();
+        }
+        if (templateConfig.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3) {
+            PipelineTemplateTypeDefinition definition = templateConfig.typeModel().definitions().get(contract);
+            if (definition instanceof PipelineTemplateTypeDefinition.AliasType alias
+                && templateConfig.typeModel().resolveAliases(alias.target()) instanceof PipelineTemplateTypeReference.Named named) {
+                definition = templateConfig.typeModel().definitions().get(named.name());
+            }
+            if (!(definition instanceof PipelineTemplateTypeDefinition.UnionType union)) {
+                return List.of();
+            }
+            return union.variants().values().stream()
+                .sorted(java.util.Comparator.comparing(PipelineTemplateTypeDefinition.Variant::discriminator))
+                .map(variant -> checkpointVariant(templateConfig, union.name(), variant))
+                .toList();
+        }
+        PipelineTemplateUnion union = templateConfig.unions().get(contract);
+        if (union == null) {
+            return List.of();
+        }
+        return union.variants().entrySet().stream()
+            .filter(entry -> entry.getValue() != null && entry.getValue().type() != null)
+            .sorted(java.util.Map.Entry.comparingByKey())
+            .map(entry -> new BranchVariantIdentity(union.name(), entry.getKey(), entry.getValue().type()))
+            .toList();
+    }
+
+    private BranchVariantIdentity checkpointVariant(
+        PipelineTemplateConfig templateConfig,
+        String unionName,
+        PipelineTemplateTypeDefinition.Variant variant
+    ) {
+        PipelineTemplateTypeReference payload = templateConfig.typeModel().resolveAliases(variant.payload());
+        if (!(payload instanceof PipelineTemplateTypeReference.Named named)) {
+            throw new IllegalStateException("Checkpoint union '" + unionName + "' variant '"
+                + variant.discriminator() + "' does not resolve to a named payload contract.");
+        }
+        return new BranchVariantIdentity(unionName, variant.discriminator(), named.name());
     }
 
     private record HandoffMetadata(
@@ -64,6 +111,7 @@ public class CheckpointHandoffMetadataGenerator {
         String mapper,
         List<String> idempotencyKeyFields,
         List<String> runtimeIngressCapabilities,
+        List<BranchVariantIdentity> checkpointVariants,
         boolean queueAsyncRequired
     ) {
     }

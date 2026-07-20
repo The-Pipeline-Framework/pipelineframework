@@ -32,7 +32,18 @@ public sealed interface PipelineTemplateTypeDefinition
         }
     }
 
-    record WrapperType(String name, PipelineTemplateTypeReference.Scalar wraps) implements PipelineTemplateTypeDefinition {
+    record WrapperType(
+        String name,
+        PipelineTemplateTypeReference.Scalar wraps,
+        PipelineTemplateWrapperConstraints constraints
+    ) implements PipelineTemplateTypeDefinition {
+        public WrapperType {
+            constraints = constraints == null ? PipelineTemplateWrapperConstraints.empty() : constraints;
+        }
+
+        public WrapperType(String name, PipelineTemplateTypeReference.Scalar wraps) {
+            this(name, wraps, PipelineTemplateWrapperConstraints.empty());
+        }
     }
 
     record AliasType(String name, PipelineTemplateTypeReference target) implements PipelineTemplateTypeDefinition {

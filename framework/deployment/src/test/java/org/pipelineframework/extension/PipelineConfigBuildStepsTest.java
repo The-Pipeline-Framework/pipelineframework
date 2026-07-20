@@ -105,6 +105,53 @@ class PipelineConfigBuildStepsTest {
     }
 
     @Test
+    void detectsV3DeclaredUnionInputThroughCanonicalInputSyntax() throws Exception {
+        Path config = tempDir.resolve("pipeline-v3.yaml");
+        Files.writeString(config, """
+            version: 3
+            types:
+              PaymentApproved:
+                fields: [[id, string]]
+              PaymentDeclined:
+                fields: [[id, string]]
+              PaymentOutcome:
+                variants:
+                  approved: PaymentApproved
+                  declined: PaymentDeclined
+            steps:
+              - name: Handle Outcome
+                input: PaymentOutcome
+                output: PaymentApproved
+            """);
+
+        System.setProperty("pipeline.config", config.toString());
+
+        assertTrue(new PipelineConfigBuildSteps().loadPipelineConfig().branchAware());
+    }
+
+    @Test
+    void doesNotTreatNonIntegralVersionAsV3ForRawBranchPreflight() throws Exception {
+        Path config = tempDir.resolve("pipeline-non-integral.yaml");
+        Files.writeString(config, """
+            version: 3.5
+            types:
+              Approved:
+                fields: [[id, string]]
+              Outcome:
+                variants:
+                  approved: Approved
+            steps:
+              - name: Handle Outcome
+                input: Outcome
+                output: Approved
+            """);
+
+        System.setProperty("pipeline.config", config.toString());
+
+        assertFalse(new PipelineConfigBuildSteps().loadPipelineConfig().branchAware());
+    }
+
+    @Test
     void doesNotTreatEveryInputTypeNameAsBranchAware() throws Exception {
         Path config = tempDir.resolve("pipeline.yaml");
         Files.writeString(config, """

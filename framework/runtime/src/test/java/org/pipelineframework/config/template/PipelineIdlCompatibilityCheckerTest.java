@@ -294,6 +294,39 @@ class PipelineIdlCompatibilityCheckerTest {
     }
 
     @Test
+    void classifiesWrapperConstraintChangesBeforeApplyingCurrentStrictPolicy() {
+        PipelineTemplateWrapperConstraints baseline = new PipelineTemplateWrapperConstraints(
+            Optional.of(2), Optional.empty(), Optional.of("[A-Z]+"), Optional.empty(), Optional.empty(), Optional.empty(),
+            Optional.empty(), Optional.empty());
+        PipelineTemplateWrapperConstraints narrower = new PipelineTemplateWrapperConstraints(
+            Optional.of(3), Optional.empty(), Optional.of("[A-Z]+"), Optional.empty(), Optional.empty(), Optional.empty(),
+            Optional.empty(), Optional.empty());
+        PipelineTemplateWrapperConstraints wider = new PipelineTemplateWrapperConstraints(
+            Optional.of(1), Optional.empty(), Optional.of("[A-Z]+"), Optional.empty(), Optional.empty(), Optional.empty(),
+            Optional.empty(), Optional.empty());
+        PipelineTemplateWrapperConstraints incomparable = new PipelineTemplateWrapperConstraints(
+            Optional.of(2), Optional.empty(), Optional.of("[0-9]+"), Optional.empty(), Optional.empty(), Optional.empty(),
+            Optional.empty(), Optional.empty());
+
+        assertEquals(PipelineTemplateWrapperConstraints.Compatibility.UNCHANGED, baseline.classifyChangeFrom(baseline));
+        assertEquals(PipelineTemplateWrapperConstraints.Compatibility.NARROWING, narrower.classifyChangeFrom(baseline));
+        assertEquals(PipelineTemplateWrapperConstraints.Compatibility.WIDENING, wider.classifyChangeFrom(baseline));
+        assertEquals(PipelineTemplateWrapperConstraints.Compatibility.INCOMPARABLE, incomparable.classifyChangeFrom(baseline));
+
+        PipelineIdlSnapshot.TypeSnapshot prior = wrapperSnapshot(baseline);
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(v3Snapshot(prior), v3Snapshot(wrapperSnapshot(narrower)));
+        assertTrue(errors.stream().anyMatch(error -> error.contains("NARROWING") && error.contains("semantic compatibility")));
+        List<String> wideningErrors = new PipelineIdlCompatibilityChecker().compare(
+            v3Snapshot(prior), v3Snapshot(wrapperSnapshot(wider)));
+        assertTrue(wideningErrors.stream().anyMatch(error ->
+            error.contains("WIDENING") && error.contains("semantic compatibility")));
+        List<String> incomparableErrors = new PipelineIdlCompatibilityChecker().compare(
+            v3Snapshot(prior), v3Snapshot(wrapperSnapshot(incomparable)));
+        assertTrue(incomparableErrors.stream().anyMatch(error ->
+            error.contains("INCOMPARABLE") && error.contains("semantic compatibility")));
+    }
+
+    @Test
     void v3RejectsActiveFieldsAndVariantsThatReuseReservedWireIdentity() {
         PipelineIdlSnapshot.TypeSnapshot record = new PipelineIdlSnapshot.TypeSnapshot(
             "Payment", "record", List.of(new PipelineIdlSnapshot.TypeFieldSnapshot(1, "paymentId", "payment_id", "uuid")),
@@ -399,6 +432,11 @@ class PipelineIdlCompatibilityCheckerTest {
 
     private PipelineIdlSnapshot.FieldSnapshot simpleField(int number, String name, String canonicalType) {
         return field(number, name, canonicalType, null, null, null, false, false);
+    }
+
+    private PipelineIdlSnapshot.TypeSnapshot wrapperSnapshot(PipelineTemplateWrapperConstraints constraints) {
+        return new PipelineIdlSnapshot.TypeSnapshot("CurrencyCode", "wrapper", List.of(), Optional.of("string"), List.of(),
+            List.of(), List.of(), constraints);
     }
 
     private PipelineIdlSnapshot.FieldSnapshot field(

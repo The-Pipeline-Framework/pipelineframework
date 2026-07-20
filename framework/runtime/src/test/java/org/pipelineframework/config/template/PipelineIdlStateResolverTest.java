@@ -8,6 +8,7 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.pipelineframework.config.pipeline.PipelineJson;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -124,6 +125,44 @@ class PipelineIdlStateResolverTest {
 
         assertEquals("legacy_payment", resolved.types().get("Record").fields().getFirst().protoName());
         assertEquals("legacy_review", resolved.types().get("Outcome").variants().getFirst().protoName());
+    }
+
+    @Test
+    void persistsWrapperConstraintsAndTreatsMissingPriorStateAsEmpty() throws Exception {
+        Path yaml = tempDir.resolve("constrained-wrapper.yaml");
+        Files.writeString(yaml, """
+            version: 3
+            appName: V3
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              CurrencyCode:
+                wraps: string
+                minLength: 3
+                maxLength: 3
+                pattern: "[A-Z]{3}"
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                input: CurrencyCode
+                output: CurrencyCode
+            """);
+
+        PipelineIdlSnapshot state = new PipelineIdlStateResolver().resolve(
+            new PipelineTemplateConfigLoader().load(yaml), null, true).state();
+        PipelineTemplateWrapperConstraints constraints = state.types().get("CurrencyCode").constraints();
+
+        assertEquals(3, constraints.minLength().orElseThrow());
+        assertEquals("[A-Z]{3}", constraints.pattern().orElseThrow());
+        assertEquals(PipelineTemplateWrapperConstraints.empty(), new PipelineIdlSnapshot.TypeSnapshot(
+            "CurrencyCode", "wrapper", List.of(), Optional.of("string"), List.of()).constraints());
+
+        PipelineIdlSnapshot olderState = PipelineJson.mapper().copy().findAndRegisterModules().readValue("""
+            {"version":3,"appName":"V3","basePackage":"com.example.v3","messages":{},"unions":{},
+             "types":{"CurrencyCode":{"name":"CurrencyCode","kind":"wrapper","fields":[],"target":"string",
+             "variants":[],"reservedNumbers":[],"reservedNames":[]}},"steps":[]}
+            """, PipelineIdlSnapshot.class);
+        assertEquals(PipelineTemplateWrapperConstraints.empty(), olderState.types().get("CurrencyCode").constraints());
     }
 
     private String template(String recordBody, String variants) {

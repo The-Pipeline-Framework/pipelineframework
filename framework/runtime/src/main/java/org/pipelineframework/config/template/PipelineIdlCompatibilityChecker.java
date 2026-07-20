@@ -59,6 +59,14 @@ public final class PipelineIdlCompatibilityChecker {
                 errors.add("Type '" + entry.getKey() + "' changed semantic representation");
                 continue;
             }
+            if ("wrapper".equals(baseline.kind())) {
+                PipelineTemplateWrapperConstraints.Compatibility compatibility = current.constraints()
+                    .classifyChangeFrom(baseline.constraints());
+                if (compatibility != PipelineTemplateWrapperConstraints.Compatibility.UNCHANGED) {
+                    errors.add("Wrapper '" + entry.getKey() + "' constraints changed with classification " + compatibility
+                        + "; this is a semantic compatibility change and is rejected by the current compiler policy");
+                }
+            }
             compareTypeFields(entry.getKey(), baseline, current, errors);
             compareTypeVariants(entry.getKey(), baseline, current, errors);
         }

@@ -18,6 +18,8 @@ package org.pipelineframework.telemetry;
 
 import java.util.List;
 import java.util.Optional;
+import org.pipelineframework.branching.BranchVariantIdentity;
+import java.util.Optional;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
@@ -114,8 +116,17 @@ public final class PipelineStepTelemetry {
     }
 
     public void recordSkip(Class<?> stepClass, Object inputItem, List<String> acceptedTypes) {
+        recordSkip(stepClass, inputItem, acceptedTypes, Optional.empty());
+    }
+
+    public void recordSkip(
+        Class<?> stepClass,
+        Object inputItem,
+        List<String> acceptedTypes,
+        Optional<BranchVariantIdentity> variantIdentity
+    ) {
         telemetry.ifPresent(current -> runContext.ifPresent(context ->
-            current.recordReplaySkip(stepClass, context, inputItem, acceptedTypes)));
+            current.recordReplaySkip(stepClass, context, inputItem, acceptedTypes, variantIdentity)));
     }
 
     public <T> Uni<T> instrument(Class<?> stepClass, Uni<T> result, boolean perItemOperation, ReplayScope scope) {
