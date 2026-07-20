@@ -79,15 +79,17 @@ public class AwaitAdmissionCoordinator {
         if (!enabled()) {
             return Uni.createFrom().item(Optional.empty());
         }
+        AwaitTransportAdapter<?> adapter = adapter(descriptor.transportType());
+        Optional<String> endpoint = adapter.admissionEndpoint(descriptor);
+        if (endpoint.isEmpty()) {
+            return Uni.createFrom().item(Optional.empty());
+        }
         if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
             return Uni.createFrom().failure(new IllegalStateException(
                 "pipeline.await-admission.enabled requires pipeline.orchestrator.mode=QUEUE_ASYNC"));
         }
-        AwaitTransportAdapter<?> adapter = adapter(descriptor.transportType());
-        String endpoint = adapter.admissionEndpoint(descriptor).orElseThrow(() -> new IllegalStateException(
-            "Await transport '" + descriptor.transportType() + "' does not define a durable admission endpoint"));
         AwaitAdmissionScope scope = new AwaitAdmissionScope(
-            releaseIdentityResolver.pipelineId(orchestratorConfig), descriptor.stepId(), endpoint);
+            releaseIdentityResolver.pipelineId(orchestratorConfig), descriptor.stepId(), endpoint.orElseThrow());
         AwaitAdmissionOwner owner = new AwaitAdmissionOwner(AwaitAdmissionScope.lengthPrefixedKey(
             tenantId,
             unitId,

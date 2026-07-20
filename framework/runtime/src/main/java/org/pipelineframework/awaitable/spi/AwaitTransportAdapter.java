@@ -34,7 +34,7 @@ public interface AwaitTransportAdapter<I> {
      * Returns the normalized provider endpoint used to scope durable admission.
      *
      * <p>An empty value means this adapter has not opted into durable admission.
-     * Runtime startup validation rejects that combination when admission is enabled.</p>
+     * Such durable-only adapters continue without a provider-facing admission reservation.</p>
      *
      * @param descriptor authored await descriptor
      * @return normalized provider endpoint when available

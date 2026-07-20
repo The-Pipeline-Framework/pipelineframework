@@ -205,7 +205,7 @@ Prefix: `pipeline`
 |----------------------------|---------|---------|-------------------------------------------------------------|
 | `pipeline.parallelism`     | string  | `AUTO`  | Parallelism policy: `SEQUENTIAL`, `AUTO`, or `PARALLEL`.    |
 | `pipeline.max-concurrency` | integer | `128`   | Per-step maximum in-flight work when parallel execution is enabled. For durable `ONE_TO_ONE` awaits with admission enabled, it is also the shared maximum unresolved third-party interactions for that await scope. |
-| `pipeline.await-admission.enabled` | boolean | `true` | Enables durable admission for `ONE_TO_ONE` awaits in `QUEUE_ASYNC` mode. Set to `false` only for a deliberate compatibility or recovery override. |
+| `pipeline.await-admission.enabled` | boolean | `true` | Enables durable admission for endpoint-capable `ONE_TO_ONE` awaits in `QUEUE_ASYNC` mode. Durable-only adapters without a provider endpoint do not acquire a reservation. Set to `false` only for a deliberate compatibility or recovery override. |
 
 ### Orchestrator Background Execution
 
