@@ -12,7 +12,6 @@ import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
-import io.quarkus.runtime.StartupEvent;
 import org.pipelineframework.awaitable.admission.AwaitAdmissionAcquireResult;
 import org.pipelineframework.awaitable.admission.AwaitAdmissionOwner;
 import org.pipelineframework.awaitable.admission.AwaitAdmissionReservation;
@@ -67,17 +66,6 @@ public class AwaitAdmissionCoordinator {
 
     public boolean enabled() {
         return stepConfig != null && stepConfig.awaitAdmission().enabled();
-    }
-
-    void validateStartup(@Observes StartupEvent event) {
-        if (!enabled()) {
-            return;
-        }
-        if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
-            throw new IllegalStateException(
-                "pipeline.await-admission.enabled requires pipeline.orchestrator.mode=QUEUE_ASYNC");
-        }
-        store();
     }
 
     public Uni<Optional<AdmissionLease>> acquire(

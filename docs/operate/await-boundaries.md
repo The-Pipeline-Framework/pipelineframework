@@ -115,7 +115,7 @@ In a healthy connector-first stream, the parser can be ahead of the provider, bu
 4. last parser event,
 5. last await completion.
 
-If downstream status processing starts while parser and await dispatch are still active, the live path is working. If every parser event happens before the first downstream event, check `pipeline.max-concurrency`, step buffer metrics, and whether the await step is running through the live brokered path or durable fallback only.
+If downstream status processing starts while parser and await dispatch are still active, the live path is working. If every parser event happens before the first downstream event, check `pipeline.max-concurrency`, admission wait and pending signals, step buffer metrics, and whether the await step is running through the live brokered path or durable fallback only. For an enabled durable `ONE_TO_ONE` await, interpret `pipeline.max-concurrency` as the shared unresolved-work budget for the external provider, not as a target for local CPU utilization.
 
 ### Await Stays Hot Or Red In Replay
 
