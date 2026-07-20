@@ -226,6 +226,90 @@ class PipelineProtoGeneratorTest {
     }
 
     @Test
+    void rendersV3WrapperConstraintsAsConstructorInvariants() throws Exception {
+        Path configPath = tempDir.resolve("pipeline-constraints.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: "Constraints"
+            basePackage: "com.example.constraints"
+            transport: "GRPC"
+            types:
+              CurrencyCode:
+                wraps: string
+                minLength: 3
+                maxLength: 3
+                pattern: "[A-Z]{3}"
+              ContactEmail:
+                wraps: string
+                format: email
+              PositiveRatio:
+                wraps: float64
+                minimumExclusive: 0
+                maximum: 1
+            steps:
+              - name: Process Constraints
+                cardinality: ONE_TO_ONE
+                input: CurrencyCode
+                output: CurrencyCode
+            """);
+        var config = new org.pipelineframework.config.template.PipelineTemplateConfigLoader().load(configPath);
+        var plan = new PipelineV3GenerationPlan(config.basePackage(), config.typeModel(),
+            org.pipelineframework.config.template.PipelineIdlSnapshot.from(config));
+        List<PipelineJavaDomainRenderer.RenderedSource> sources = new PipelineJavaDomainRenderer().render(plan);
+        String currency = sources.stream().filter(source -> source.relativePath().getFileName().toString().equals("CurrencyCode.java"))
+            .findFirst().orElseThrow().content();
+        String ratio = sources.stream().filter(source -> source.relativePath().getFileName().toString().equals("PositiveRatio.java"))
+            .findFirst().orElseThrow().content();
+        String validation = sources.stream().filter(source -> source.relativePath().getFileName().toString().equals("PipelineDomainValidation.java"))
+            .findFirst().orElseThrow().content();
+        String adapters = sources.stream().filter(source -> source.relativePath().getFileName().toString().equals("PipelineDomainProtoAdapters.java"))
+            .findFirst().orElseThrow().content();
+
+        assertTrue(currency.contains("if (value == null) { throw new IllegalArgumentException"));
+        assertTrue(currency.contains("validateString(\"CurrencyCode\", value"));
+        assertTrue(ratio.contains("validateFloat64(\"PositiveRatio\", value"));
+        assertTrue(validation.contains("codePointCount"));
+        assertTrue(validation.contains("matcher(value).matches()"));
+        assertTrue(validation.contains("Float.toString(value)"));
+        assertTrue(validation.contains("Double.toString(value)"));
+        assertTrue(validation.contains("isPracticalEmail"));
+        assertFalse(validation.contains("new java.math.BigDecimal(value)"));
+        assertTrue(adapters.contains("builder.setValue(value.value());"));
+        assertFalse(adapters.contains("if (value.value() != null)"));
+        assertTrue(adapters.contains("return new CurrencyCode(value.hasValue() ? value.getValue() : null);"));
+
+        Path sourceRoot = tempDir.resolve("constrained-domain-sources");
+        for (PipelineJavaDomainRenderer.RenderedSource source : sources) {
+            if (source.relativePath().getFileName().toString().equals("PipelineDomainProtoAdapters.java")) {
+                continue;
+            }
+            Path target = sourceRoot.resolve(source.relativePath());
+            Files.createDirectories(target.getParent());
+            Files.writeString(target, source.content());
+        }
+        Path classes = tempDir.resolve("constrained-domain-classes");
+        try (var files = Files.walk(sourceRoot)) {
+            List<String> generatedSources = files.filter(path -> path.toString().endsWith(".java")).map(Path::toString).toList();
+            List<String> compilerArguments = new ArrayList<>(List.of("-d", classes.toString()));
+            compilerArguments.addAll(generatedSources);
+            assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null,
+                compilerArguments.toArray(String[]::new)));
+        }
+        try (URLClassLoader loader = URLClassLoader.newInstance(new java.net.URL[] { classes.toUri().toURL() })) {
+            Class<?> currencyClass = loader.loadClass("com.example.constraints.domain.CurrencyCode");
+            Class<?> email = loader.loadClass("com.example.constraints.domain.ContactEmail");
+            Class<?> ratioClass = loader.loadClass("com.example.constraints.domain.PositiveRatio");
+            assertNotNull(currencyClass.getConstructor(String.class).newInstance("USD"));
+            assertNotNull(email.getConstructor(String.class).newInstance("person@example.com"));
+            assertNotNull(ratioClass.getConstructor(Double.class).newInstance(0.5d));
+            assertWrapperConstructionFails(currencyClass, "usd");
+            assertWrapperConstructionFails(currencyClass, (Object) null);
+            assertWrapperConstructionFails(email, "person@.example");
+            assertWrapperConstructionFails(ratioClass, Double.NaN);
+        }
+    }
+
+    @Test
     void generatesV3BytesAsByteStringWithoutArrayConversions() throws Exception {
         Path configPath = tempDir.resolve("pipeline-bytes.yaml");
         Path outputDir = tempDir.resolve("generated-v3-bytes");
@@ -2201,5 +2285,14 @@ class PipelineProtoGeneratorTest {
             () -> PipelineV3ContractGenerator.Arguments.parse(new String[] { "--output-dir=" }));
         assertThrows(IllegalArgumentException.class,
             () -> PipelineV3ContractGenerator.Arguments.parse(new String[] { "--unknown" }));
+    }
+
+    private void assertWrapperConstructionFails(Class<?> wrapper, Object... arguments) throws Exception {
+        java.lang.reflect.Constructor<?> constructor = java.util.Arrays.stream(wrapper.getConstructors())
+            .filter(candidate -> candidate.getParameterCount() == arguments.length)
+            .findFirst().orElseThrow();
+        java.lang.reflect.InvocationTargetException exception = assertThrows(java.lang.reflect.InvocationTargetException.class,
+            () -> constructor.newInstance(arguments));
+        assertInstanceOf(IllegalArgumentException.class, exception.getCause());
     }
 }

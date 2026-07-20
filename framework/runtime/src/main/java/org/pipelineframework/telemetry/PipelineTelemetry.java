@@ -24,6 +24,8 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Optional;
+import org.pipelineframework.branching.BranchVariantIdentity;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -723,11 +725,22 @@ public class PipelineTelemetry {
         Object inputItem,
         List<String> acceptedTypes
     ) {
+        recordReplaySkip(stepClass, runContext, inputItem, acceptedTypes, Optional.empty());
+    }
+
+    public void recordReplaySkip(
+        Class<?> stepClass,
+        RunContext runContext,
+        Object inputItem,
+        List<String> acceptedTypes,
+        Optional<BranchVariantIdentity> variantIdentity
+    ) {
         if (!replayEnabled || replayTracker == null || stepClass == null || runContext == null || !runContext.enabled()) {
             return;
         }
         String currentType = inputItem == null ? "null" : inputItem.getClass().getName();
-        replayTracker.recordSkip(resolveStepClassName(stepClass), runContext, inputItem, currentType, acceptedTypes);
+        replayTracker.recordSkip(resolveStepClassName(stepClass), runContext, inputItem, currentType, acceptedTypes,
+            variantIdentity == null ? Optional.empty() : variantIdentity);
     }
 
     public void recordReplayCacheHit(Object scope) {

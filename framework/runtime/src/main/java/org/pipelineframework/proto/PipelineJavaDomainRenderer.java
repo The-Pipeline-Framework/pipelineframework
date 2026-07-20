@@ -30,6 +30,7 @@ import org.pipelineframework.config.template.*;
  */
 final class PipelineJavaDomainRenderer {
     private static final String ADAPTER_NAME = "PipelineDomainProtoAdapters";
+    private static final String VALIDATION_NAME = "PipelineDomainValidation";
     private static final String PAYLOAD_REFERENCE = "org.pipelineframework.repository.PayloadReference";
 
     List<RenderedSource> render(PipelineV3GenerationPlan plan) {
@@ -48,6 +49,9 @@ final class PipelineJavaDomainRenderer {
                 sources.add(source(domainPackage, union.name(), renderUnion(domainPackage, union, plan)));
             }
         }
+        if (hasConstrainedWrappers(plan)) {
+            sources.add(source(domainPackage, VALIDATION_NAME, renderValidationHelper(domainPackage)));
+        }
         sources.add(source(domainPackage, ADAPTER_NAME, renderAdapters(domainPackage, plan)));
         return List.copyOf(sources);
     }
@@ -59,6 +63,9 @@ final class PipelineJavaDomainRenderer {
     private void validate(PipelineV3GenerationPlan plan) {
         if (plan.typeModel().definitions().containsKey(ADAPTER_NAME)) {
             throw new IllegalStateException("Version 3 type '" + ADAPTER_NAME + "' conflicts with generated Java adapter code.");
+        }
+        if (hasConstrainedWrappers(plan) && plan.typeModel().definitions().containsKey(VALIDATION_NAME)) {
+            throw new IllegalStateException("Version 3 type '" + VALIDATION_NAME + "' conflicts with generated Java validation code.");
         }
         for (PipelineTemplateTypeDefinition definition : plan.typeModel().definitions().values()) {
             validateTypeIdentifier("type", definition.name());
@@ -129,8 +136,14 @@ final class PipelineJavaDomainRenderer {
         StringBuilder builder = header(domainPackage);
         builder.append("/** Nominal wrapper generated from the version 3 pipeline type '").append(wrapper.name()).append("'. */\n");
         builder.append("public record ").append(wrapper.name()).append("(")
-            .append(resolveJavaType(wrapper.wraps(), plan.typeModel())).append(" value) {\n}\n");
-        return builder.toString();
+            .append(resolveJavaType(wrapper.wraps(), plan.typeModel())).append(" value) {\n")
+            .append("    public ").append(wrapper.name()).append(" {\n")
+            .append("        if (value == null) { throw new IllegalArgumentException(\"")
+            .append(javaStringLiteral(wrapper.name())).append(" value must not be null.\"); }\n");
+        if (!wrapper.constraints().isEmpty()) {
+            renderWrapperConstraints(builder, wrapper);
+        }
+        return builder.append("    }\n}\n").toString();
     }
 
     private String renderUnion(
@@ -234,14 +247,103 @@ final class PipelineJavaDomainRenderer {
             .append(wrapper.name()).append(" value) {\n")
             .append("        if (value == null) { return null; }\n")
             .append("        var builder = ").append(protoTypes).append('.').append(wrapper.name()).append(".newBuilder();\n")
-            .append("        if (value.value() != null) { builder.setValue(")
-            .append(toProtoExpression(wrapper.wraps(), "value.value()", plan.typeModel())).append("); }\n")
+            .append("        builder.setValue(")
+            .append(toProtoExpression(wrapper.wraps(), "value.value()", plan.typeModel())).append(");\n")
             .append("        return builder.build();\n    }\n\n")
             .append("    public static ").append(wrapper.name()).append(" fromProto(").append(protoTypes).append('.')
             .append(wrapper.name()).append(" value) {\n")
             .append("        if (value == null) { return null; }\n")
             .append("        return new ").append(wrapper.name()).append("(value.hasValue() ? ")
             .append(fromProtoExpression(wrapper.wraps(), "value.getValue()", plan.typeModel())).append(" : null);\n    }\n\n");
+    }
+
+    private boolean hasConstrainedWrappers(PipelineV3GenerationPlan plan) {
+        return plan.typeModel().definitions().values().stream()
+            .anyMatch(definition -> definition instanceof PipelineTemplateTypeDefinition.WrapperType wrapper
+                && !wrapper.constraints().isEmpty());
+    }
+
+    private void renderWrapperConstraints(StringBuilder builder, PipelineTemplateTypeDefinition.WrapperType wrapper) {
+        PipelineTemplateWrapperConstraints constraints = wrapper.constraints();
+        String scalar = wrapper.wraps().name();
+        if ("string".equals(scalar)) {
+            builder.append("        ").append(VALIDATION_NAME).append(".validateString(\"")
+                .append(javaStringLiteral(wrapper.name())).append("\", value, ")
+                .append(optionalIntExpression(constraints.minLength())).append(", ")
+                .append(optionalIntExpression(constraints.maxLength())).append(", ")
+                .append(optionalPatternExpression(constraints.pattern())).append(", ")
+                .append(constraints.format().isPresent()).append(");\n");
+            return;
+        }
+        String bounds = numericBoundsExpression(constraints);
+        String method = switch (scalar) {
+            case "int32" -> "validateInt32";
+            case "int64" -> "validateInt64";
+            case "float32" -> "validateFloat32";
+            case "float64" -> "validateFloat64";
+            case "decimal" -> "validateDecimal";
+            default -> throw new IllegalStateException("Unsupported constrained wrapper scalar '" + scalar + "'.");
+        };
+        builder.append("        ").append(VALIDATION_NAME).append('.').append(method).append("(\"")
+            .append(javaStringLiteral(wrapper.name())).append("\", value, ").append(bounds).append(");\n");
+    }
+
+    private String optionalIntExpression(Optional<Integer> value) {
+        return value.map(integer -> "java.util.OptionalInt.of(" + integer + ")").orElse("java.util.OptionalInt.empty()");
+    }
+
+    private String optionalPatternExpression(Optional<String> value) {
+        return value.map(pattern -> "java.util.Optional.of(java.util.regex.Pattern.compile(\"" + javaStringLiteral(pattern) + "\"))")
+            .orElse("java.util.Optional.empty()");
+    }
+
+    private String numericBoundsExpression(PipelineTemplateWrapperConstraints constraints) {
+        return "new " + VALIDATION_NAME + ".NumericBounds(" + optionalDecimalExpression(constraints.minimum()) + ", "
+            + optionalDecimalExpression(constraints.minimumExclusive()) + ", " + optionalDecimalExpression(constraints.maximum()) + ", "
+            + optionalDecimalExpression(constraints.maximumExclusive()) + ")";
+    }
+
+    private String optionalDecimalExpression(Optional<java.math.BigDecimal> value) {
+        return value.map(decimal -> "java.util.Optional.of(new java.math.BigDecimal(\"" + decimal.toPlainString() + "\"))")
+            .orElse("java.util.Optional.empty()");
+    }
+
+    private String renderValidationHelper(String domainPackage) {
+        StringBuilder builder = header(domainPackage);
+        builder.append("/** Internal Java realization of v3 wrapper constraints. */\n")
+            .append("final class ").append(VALIDATION_NAME).append(" {\n")
+            .append("    private ").append(VALIDATION_NAME).append("() { }\n\n")
+            .append("    static void validateString(String wrapper, String value, java.util.OptionalInt minLength, java.util.OptionalInt maxLength, java.util.Optional<java.util.regex.Pattern> pattern, boolean email) {\n")
+            .append("        int length = value.codePointCount(0, value.length());\n")
+            .append("        if (minLength.isPresent() && length < minLength.getAsInt()) { throw new IllegalArgumentException(wrapper + \" must contain at least \" + minLength.getAsInt() + \" Unicode code points.\"); }\n")
+            .append("        if (maxLength.isPresent() && length > maxLength.getAsInt()) { throw new IllegalArgumentException(wrapper + \" must contain at most \" + maxLength.getAsInt() + \" Unicode code points.\"); }\n")
+            .append("        if (pattern.isPresent() && !pattern.get().matcher(value).matches()) { throw new IllegalArgumentException(wrapper + \" does not match its declared pattern.\"); }\n")
+            .append("        if (email && !isPracticalEmail(value)) { throw new IllegalArgumentException(wrapper + \" must be a practical mailbox address.\"); }\n")
+            .append("    }\n\n")
+            .append("    static void validateInt32(String wrapper, Integer value, NumericBounds bounds) { validateNumeric(wrapper, java.math.BigDecimal.valueOf(value.longValue()), bounds); }\n")
+            .append("    static void validateInt64(String wrapper, Long value, NumericBounds bounds) { validateNumeric(wrapper, java.math.BigDecimal.valueOf(value), bounds); }\n")
+            .append("    static void validateFloat32(String wrapper, Float value, NumericBounds bounds) {\n")
+            .append("        if (!Float.isFinite(value)) { throw new IllegalArgumentException(wrapper + \" must be finite.\"); }\n")
+            .append("        validateNumeric(wrapper, new java.math.BigDecimal(Float.toString(value)), bounds);\n    }\n")
+            .append("    static void validateFloat64(String wrapper, Double value, NumericBounds bounds) {\n")
+            .append("        if (!Double.isFinite(value)) { throw new IllegalArgumentException(wrapper + \" must be finite.\"); }\n")
+            .append("        validateNumeric(wrapper, new java.math.BigDecimal(Double.toString(value)), bounds);\n    }\n")
+            .append("    static void validateDecimal(String wrapper, java.math.BigDecimal value, NumericBounds bounds) { validateNumeric(wrapper, value, bounds); }\n\n")
+            .append("    private static void validateNumeric(String wrapper, java.math.BigDecimal value, NumericBounds bounds) {\n")
+            .append("        if (bounds.minimum().isPresent() && value.compareTo(bounds.minimum().get()) < 0) { throw new IllegalArgumentException(wrapper + \" is below its minimum.\"); }\n")
+            .append("        if (bounds.minimumExclusive().isPresent() && value.compareTo(bounds.minimumExclusive().get()) <= 0) { throw new IllegalArgumentException(wrapper + \" must exceed its exclusive minimum.\"); }\n")
+            .append("        if (bounds.maximum().isPresent() && value.compareTo(bounds.maximum().get()) > 0) { throw new IllegalArgumentException(wrapper + \" exceeds its maximum.\"); }\n")
+            .append("        if (bounds.maximumExclusive().isPresent() && value.compareTo(bounds.maximumExclusive().get()) >= 0) { throw new IllegalArgumentException(wrapper + \" must be below its exclusive maximum.\"); }\n")
+            .append("    }\n\n")
+            .append("    private static boolean isPracticalEmail(String value) {\n")
+            .append("        if (value.chars().anyMatch(Character::isWhitespace)) { return false; }\n")
+            .append("        int at = value.indexOf('@');\n")
+            .append("        if (at <= 0 || at != value.lastIndexOf('@') || at == value.length() - 1) { return false; }\n")
+            .append("        for (String label : value.substring(at + 1).split(\"\\\\.\", -1)) { if (label.isEmpty()) { return false; } }\n")
+            .append("        return true;\n    }\n\n")
+            .append("    record NumericBounds(java.util.Optional<java.math.BigDecimal> minimum, java.util.Optional<java.math.BigDecimal> minimumExclusive, java.util.Optional<java.math.BigDecimal> maximum, java.util.Optional<java.math.BigDecimal> maximumExclusive) { }\n")
+            .append("}\n");
+        return builder.toString();
     }
 
     private void renderUnionAdapters(
@@ -446,7 +548,8 @@ final class PipelineJavaDomainRenderer {
     }
 
     private String javaStringLiteral(String value) {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+        return value.replace("\\", "\\\\").replace("\"", "\\\"")
+            .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
     }
 
     private StringBuilder header(String domainPackage) {

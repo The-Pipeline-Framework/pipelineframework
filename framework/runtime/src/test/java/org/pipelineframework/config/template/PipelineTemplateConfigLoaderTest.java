@@ -1291,6 +1291,107 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void loadsTargetNeutralV3WrapperConstraints() throws Exception {
+        Path configPath = tempDir.resolve("v3-wrapper-constraints.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: V3 Constraints
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              CurrencyCode:
+                wraps: string
+                minLength: 3
+                maxLength: 3
+                pattern: "[A-Z]{3}"
+              CurrencyAlias:
+                alias: CurrencyCode
+              ContactEmail:
+                wraps: string
+                format: email
+              PositiveAmount:
+                wraps: decimal
+                minimumExclusive: 0
+              Payment:
+                fields: [[currency, CurrencyAlias], [amount, PositiveAmount]]
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                input: Payment
+                output: Payment
+            """);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+        PipelineTemplateTypeDefinition.WrapperType currency = (PipelineTemplateTypeDefinition.WrapperType)
+            config.typeModel().definitions().get("CurrencyCode");
+        PipelineTemplateTypeDefinition.WrapperType amount = (PipelineTemplateTypeDefinition.WrapperType)
+            config.typeModel().definitions().get("PositiveAmount");
+
+        assertEquals(3, currency.constraints().minLength().orElseThrow());
+        assertEquals("[A-Z]{3}", currency.constraints().pattern().orElseThrow());
+        assertEquals(PipelineTemplateWrapperConstraints.Format.EMAIL,
+            ((PipelineTemplateTypeDefinition.WrapperType) config.typeModel().definitions().get("ContactEmail"))
+                .constraints().format().orElseThrow());
+        assertEquals(0, amount.constraints().minimumExclusive().orElseThrow().compareTo(java.math.BigDecimal.ZERO));
+        assertEquals(amount.constraints(), ((PipelineTemplateTypeDefinition.WrapperType) config.typeModel().definitions()
+            .get("PositiveAmount")).constraints());
+        assertEquals(new PipelineTemplateTypeReference.Named("CurrencyCode"),
+            config.typeModel().resolveAliases(new PipelineTemplateTypeReference.Named("CurrencyAlias")));
+    }
+
+    @Test
+    void rejectsInvalidV3WrapperConstraintPlacementApplicabilityAndIntervals() throws Exception {
+        Path fieldConstraint = tempDir.resolve("v3-field-constraint.yaml");
+        Files.writeString(fieldConstraint, """
+            version: 3
+            appName: V3 Constraints
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Payment:
+                fields: [[id, string]]
+                pattern: ".*"
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Payment, output: Payment }]
+            """);
+        IllegalStateException placement = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(fieldConstraint));
+        assertTrue(placement.getMessage().contains("only beside wraps"));
+
+        Path invalid = tempDir.resolve("v3-invalid-wrapper-constraints.yaml");
+        Files.writeString(invalid, """
+            version: 3
+            appName: V3 Constraints
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Identifier:
+                wraps: uuid
+                minLength: 1
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Identifier, output: Identifier }]
+            """);
+        IllegalStateException applicability = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(invalid));
+        assertTrue(applicability.getMessage().contains("only when wraps: string"));
+
+        Path emptyInterval = tempDir.resolve("v3-empty-wrapper-interval.yaml");
+        Files.writeString(emptyInterval, """
+            version: 3
+            appName: V3 Constraints
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Amount:
+                wraps: decimal
+                minimumExclusive: 1
+                maximum: 1
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Amount, output: Amount }]
+            """);
+        IllegalStateException interval = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(emptyInterval));
+        assertTrue(interval.getMessage().contains("empty numeric constraint interval"));
+    }
+
+    @Test
     void rejectsV3WireMetadataAndLegacyContractSyntaxIndependently() throws Exception {
         Path configPath = tempDir.resolve("v3-wire-metadata.yaml");
         Files.writeString(configPath, """

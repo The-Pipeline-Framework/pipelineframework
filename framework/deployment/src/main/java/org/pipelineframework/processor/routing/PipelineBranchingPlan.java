@@ -3,6 +3,7 @@ package org.pipelineframework.processor.routing;
 import java.util.List;
 import java.util.Objects;
 import com.squareup.javapoet.ClassName;
+import org.pipelineframework.branching.BranchVariantIdentity;
 
 /**
  * Build-time branch-routing plan derived from the authored linear pipeline sequence.
@@ -51,6 +52,9 @@ public record PipelineBranchingPlan(
         List<String> acceptedContractTypes,
         List<String> producedLeafContractTypes,
         List<ClassName> acceptedDomainTypes,
+        List<BranchVariantIdentity> inputVariants,
+        List<BranchVariantIdentity> acceptedVariants,
+        List<BranchVariantIdentity> producedVariants,
         boolean terminal
     ) {
         public BranchStep {
@@ -60,6 +64,9 @@ public record PipelineBranchingPlan(
             acceptedContractTypes = acceptedContractTypes == null ? List.of() : List.copyOf(acceptedContractTypes);
             producedLeafContractTypes = producedLeafContractTypes == null ? List.of() : List.copyOf(producedLeafContractTypes);
             acceptedDomainTypes = acceptedDomainTypes == null ? List.of() : List.copyOf(acceptedDomainTypes);
+            inputVariants = inputVariants == null ? List.of() : List.copyOf(inputVariants);
+            acceptedVariants = acceptedVariants == null ? List.of() : List.copyOf(acceptedVariants);
+            producedVariants = producedVariants == null ? List.of() : List.copyOf(producedVariants);
             if (stepName.isBlank() || inputContractName.isBlank() || outputContractName.isBlank()) {
                 throw new IllegalArgumentException("BranchStep names and contract names must be non-blank.");
             }
@@ -72,6 +79,20 @@ public record PipelineBranchingPlan(
             if (acceptedDomainTypes.isEmpty()) {
                 throw new IllegalArgumentException("BranchStep must declare accepted domain types.");
             }
+        }
+
+        public BranchStep(
+            int index,
+            String stepName,
+            String inputContractName,
+            String outputContractName,
+            List<String> acceptedContractTypes,
+            List<String> producedLeafContractTypes,
+            List<ClassName> acceptedDomainTypes,
+            boolean terminal
+        ) {
+            this(index, stepName, inputContractName, outputContractName, acceptedContractTypes,
+                producedLeafContractTypes, acceptedDomainTypes, List.of(), List.of(), List.of(), terminal);
         }
     }
 }

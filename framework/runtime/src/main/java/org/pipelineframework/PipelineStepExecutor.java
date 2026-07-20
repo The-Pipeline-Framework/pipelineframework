@@ -684,7 +684,8 @@ class PipelineStepExecutor {
                 branchingDescriptor.stepName(),
                 item);
         }
-        telemetry.recordSkip(stepClass, item, branchingDescriptor.acceptedContracts());
+        telemetry.recordSkip(stepClass, item, branchingDescriptor.acceptedContracts(),
+            branchingDescriptor.variantIdentity(item));
         return (Uni<O>) (Uni<?>) Uni.createFrom().item(item);
     }
 
@@ -706,7 +707,8 @@ class PipelineStepExecutor {
                 branchingDescriptor.stepName(),
                 item);
         }
-        telemetry.recordSkip(stepClass, item, branchingDescriptor.acceptedContracts());
+        telemetry.recordSkip(stepClass, item, branchingDescriptor.acceptedContracts(),
+            branchingDescriptor.variantIdentity(item));
         return (Multi<O>) (Multi<?>) Multi.createFrom().item(item);
     }
 

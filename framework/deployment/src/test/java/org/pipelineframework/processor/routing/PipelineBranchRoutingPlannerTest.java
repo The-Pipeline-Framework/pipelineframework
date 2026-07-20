@@ -36,6 +36,7 @@ import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StepKind;
 import org.pipelineframework.processor.ir.StreamingShape;
+import org.pipelineframework.branching.BranchVariantIdentity;
 
 class PipelineBranchRoutingPlannerTest {
 
@@ -96,6 +97,7 @@ class PipelineBranchRoutingPlannerTest {
         definitions.put("FinalizedOrder", new PipelineTemplateTypeDefinition.RecordType("FinalizedOrder", List.of()));
         definitions.put("OrderDecision", new PipelineTemplateTypeDefinition.UnionType("OrderDecision", Map.of(
             "physical", new PipelineTemplateTypeDefinition.Variant("physical", new PipelineTemplateTypeReference.Named("PhysicalOrder")),
+            "physicalRetry", new PipelineTemplateTypeDefinition.Variant("physicalRetry", new PipelineTemplateTypeReference.Named("PhysicalOrder")),
             "digital", new PipelineTemplateTypeDefinition.Variant("digital", new PipelineTemplateTypeReference.Named("DigitalOrder")))));
         definitions.put("OrderCompletion", new PipelineTemplateTypeDefinition.UnionType("OrderCompletion", Map.of(
             "stock", new PipelineTemplateTypeDefinition.Variant("stock", new PipelineTemplateTypeReference.Named("StockReserved")),
@@ -134,6 +136,15 @@ class PipelineBranchRoutingPlannerTest {
         assertTrue(plan.orElseThrow().branchAware());
         assertEquals(3, plan.orElseThrow().terminalStepIndex());
         assertEquals(List.of("PhysicalOrder"), plan.orElseThrow().steps().get(1).acceptedContractTypes());
+        assertEquals(List.of(
+            new BranchVariantIdentity("OrderDecision", "digital", "DigitalOrder"),
+            new BranchVariantIdentity("OrderDecision", "physical", "PhysicalOrder"),
+            new BranchVariantIdentity("OrderDecision", "physicalRetry", "PhysicalOrder")),
+            plan.orElseThrow().steps().get(1).inputVariants());
+        assertEquals(List.of(
+            new BranchVariantIdentity("OrderDecision", "physical", "PhysicalOrder"),
+            new BranchVariantIdentity("OrderDecision", "physicalRetry", "PhysicalOrder")),
+            plan.orElseThrow().steps().get(1).acceptedVariants());
         assertEquals(List.of(ClassName.get("com.example.order.domain", "OrderDecision", "Physical")),
             plan.orElseThrow().steps().get(1).acceptedDomainTypes());
         assertEquals(List.of("DigitalOrder"), plan.orElseThrow().steps().get(2).acceptedContractTypes());

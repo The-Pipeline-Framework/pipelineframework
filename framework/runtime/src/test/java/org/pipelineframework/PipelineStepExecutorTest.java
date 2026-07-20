@@ -36,6 +36,7 @@ import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.AwaitStreamOneToOneStep;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.branching.PipelineBranchRoutingException;
+import org.pipelineframework.branching.BranchVariantIdentity;
 import org.pipelineframework.branching.StepBranchingDescriptor;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.blocking.BlockingExecutionSupport;
@@ -275,6 +276,26 @@ class PipelineStepExecutorTest {
         Object output = ((Uni<?>) result).await().atMost(Duration.ofSeconds(5));
         assertEquals("approved:p-1", output);
         assertEquals(1, step.invocations());
+    }
+
+    @Test
+    void branchDescriptorRetainsTheSelectedOneofDiscriminatorAsMetadata() {
+        StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
+            2,
+            "Approve Payment",
+            ApprovePaymentStep.class.getName(),
+            ApprovedPaymentStatusMessage.class.getName(),
+            ApprovedPaymentStatusMessage.class,
+            List.of("ApprovedPaymentStatus"),
+            List.of(ApprovedPaymentStatusMessage.class.getName()),
+            List.of(ApprovedPaymentStatusMessage.class),
+            List.of(new BranchVariantIdentity("PaymentStatus", "approved", "ApprovedPaymentStatus")),
+            List.of(new BranchVariantIdentity("PaymentStatus", "approved", "ApprovedPaymentStatus")),
+            List.of(),
+            false);
+
+        assertEquals(new BranchVariantIdentity("PaymentStatus", "approved", "ApprovedPaymentStatus"),
+            descriptor.variantIdentity(PaymentStatusEnvelope.approved("p-1")).orElseThrow());
     }
 
     @Test

@@ -111,7 +111,8 @@ public final class PipelineIdlStateResolver {
                 types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "record", fields, Optional.empty(), List.of(),
                     reservedNumbers.stream().distinct().sorted().toList(), reservedNames.stream().distinct().sorted().toList()));
             } else if (definition instanceof PipelineTemplateTypeDefinition.WrapperType wrapper) {
-                types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "wrapper", List.of(), Optional.of(wrapper.wraps().name()), List.of()));
+                types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "wrapper", List.of(), Optional.of(wrapper.wraps().name()), List.of(),
+                    List.of(), List.of(), wrapper.constraints()));
             } else if (definition instanceof PipelineTemplateTypeDefinition.AliasType alias) {
                 types.put(name, new PipelineIdlSnapshot.TypeSnapshot(name, "alias", List.of(), Optional.of(alias.target().name()), List.of()));
             } else if (definition instanceof PipelineTemplateTypeDefinition.UnionType union) {

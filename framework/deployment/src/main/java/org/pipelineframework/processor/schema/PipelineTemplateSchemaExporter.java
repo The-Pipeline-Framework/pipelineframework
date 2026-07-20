@@ -2227,7 +2227,31 @@ public final class PipelineTemplateSchemaExporter {
         {
           "type": "object",
           "required": ["wraps"],
-          "properties": { "wraps": { "type": "string", "pattern": "^(string|bool|int32|int64|float32|float64|decimal|uuid|timestamp|datetime|date|duration|bytes|currency|uri|path|payload_ref)$" } },
+          "properties": {
+            "wraps": { "const": "string" },
+            "minLength": { "type": "integer", "minimum": 0 },
+            "maxLength": { "type": "integer", "minimum": 0 },
+            "pattern": { "type": "string", "minLength": 1 },
+            "format": { "const": "email" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["wraps"],
+          "properties": {
+            "wraps": { "enum": ["int32", "int64", "float32", "float64", "decimal"] },
+            "minimum": { "type": "number" },
+            "minimumExclusive": { "type": "number" },
+            "maximum": { "type": "number" },
+            "maximumExclusive": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["wraps"],
+          "properties": { "wraps": { "type": "string", "pattern": "^(bool|uuid|timestamp|datetime|date|duration|bytes|currency|uri|path|payload_ref)$" } },
           "additionalProperties": false
         },
         {

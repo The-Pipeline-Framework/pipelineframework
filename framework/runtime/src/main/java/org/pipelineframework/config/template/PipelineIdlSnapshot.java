@@ -244,7 +244,8 @@ public record PipelineIdlSnapshot(
                 }
                 result.put(name, new TypeSnapshot(name, "record", fields, Optional.empty(), List.of()));
             } else if (definition instanceof PipelineTemplateTypeDefinition.WrapperType wrapper) {
-                result.put(name, new TypeSnapshot(name, "wrapper", List.of(), Optional.of(wrapper.wraps().name()), List.of()));
+                result.put(name, new TypeSnapshot(name, "wrapper", List.of(), Optional.of(wrapper.wraps().name()), List.of(),
+                    List.of(), List.of(), wrapper.constraints()));
             } else if (definition instanceof PipelineTemplateTypeDefinition.AliasType alias) {
                 result.put(name, new TypeSnapshot(name, "alias", List.of(), Optional.of(alias.target().name()), List.of()));
             } else if (definition instanceof PipelineTemplateTypeDefinition.UnionType union) {
@@ -315,7 +316,8 @@ public record PipelineIdlSnapshot(
         Optional<String> target,
         List<TypeVariantSnapshot> variants,
         List<Integer> reservedNumbers,
-        List<String> reservedNames
+        List<String> reservedNames,
+        PipelineTemplateWrapperConstraints constraints
     ) {
         public TypeSnapshot {
             fields = fields == null ? List.of() : List.copyOf(fields);
@@ -323,11 +325,17 @@ public record PipelineIdlSnapshot(
             variants = variants == null ? List.of() : List.copyOf(variants);
             reservedNumbers = reservedNumbers == null ? List.of() : List.copyOf(reservedNumbers);
             reservedNames = reservedNames == null ? List.of() : List.copyOf(reservedNames);
+            constraints = constraints == null ? PipelineTemplateWrapperConstraints.empty() : constraints;
         }
 
         public TypeSnapshot(String name, String kind, List<TypeFieldSnapshot> fields, Optional<String> target,
                             List<TypeVariantSnapshot> variants) {
-            this(name, kind, fields, target, variants, List.of(), List.of());
+            this(name, kind, fields, target, variants, List.of(), List.of(), PipelineTemplateWrapperConstraints.empty());
+        }
+
+        public TypeSnapshot(String name, String kind, List<TypeFieldSnapshot> fields, Optional<String> target,
+                            List<TypeVariantSnapshot> variants, List<Integer> reservedNumbers, List<String> reservedNames) {
+            this(name, kind, fields, target, variants, reservedNumbers, reservedNames, PipelineTemplateWrapperConstraints.empty());
         }
     }
 

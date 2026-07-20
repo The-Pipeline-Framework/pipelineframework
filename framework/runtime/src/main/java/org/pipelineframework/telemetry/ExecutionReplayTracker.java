@@ -26,6 +26,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import org.pipelineframework.branching.BranchVariantIdentity;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -207,7 +209,8 @@ final class ExecutionReplayTracker {
         PipelineTelemetry.RunContext runContext,
         Object inputItem,
         String currentType,
-        List<String> acceptedTypes
+        List<String> acceptedTypes,
+        Optional<BranchVariantIdentity> variantIdentity
     ) {
         if (!enabled() || runtimeStepClass == null || runContext == null || runContext.replayState() == null) {
             return;
@@ -227,6 +230,11 @@ final class ExecutionReplayTracker {
         if (acceptedTypes != null && !acceptedTypes.isEmpty()) {
             attributes.put("acceptedTypes", String.join(",", acceptedTypes));
         }
+        variantIdentity.ifPresent(variant -> {
+            attributes.put("unionName", variant.unionName());
+            attributes.put("discriminator", variant.discriminator());
+            attributes.put("payloadContract", variant.payloadContract());
+        });
         PipelineExecutionEvent event = new PipelineExecutionEvent(
             lineage == null ? null : lineage.traceId(),
             null,

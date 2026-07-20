@@ -129,9 +129,26 @@ class PipelineTemplateSchemaExporterTest {
     void versionThreeSchemaRequiresNonEmptyUnionsAndCanonicalStepContracts() {
         JsonObject schema = parse(PipelineTemplateSchemaExporter.schemaJson());
         JsonObject definitions = schema.getAsJsonObject("$defs");
-        JsonObject unionDefinition = definitions.getAsJsonObject("v3TypeDefinition").getAsJsonArray("oneOf")
-            .get(3).getAsJsonObject().getAsJsonObject("properties").getAsJsonObject("variants");
+        JsonObject unionDefinition = definitions.getAsJsonObject("v3TypeDefinition").getAsJsonArray("oneOf").asList().stream()
+            .map(JsonElement::getAsJsonObject)
+            .filter(definition -> definition.getAsJsonObject("properties").has("variants"))
+            .findFirst().orElseThrow().getAsJsonObject("properties").getAsJsonObject("variants");
         assertEquals(1, unionDefinition.get("minProperties").getAsInt());
+
+        JsonObject stringWrapper = definitions.getAsJsonObject("v3TypeDefinition").getAsJsonArray("oneOf").asList().stream()
+            .map(JsonElement::getAsJsonObject)
+            .filter(definition -> definition.getAsJsonObject("properties").has("minLength"))
+            .findFirst().orElseThrow();
+        assertEquals("string", stringWrapper.getAsJsonObject("properties").getAsJsonObject("wraps").get("const").getAsString());
+        assertEquals("email", stringWrapper.getAsJsonObject("properties").getAsJsonObject("format").get("const").getAsString());
+        assertFalse(stringWrapper.get("additionalProperties").getAsBoolean());
+
+        JsonObject numericWrapper = definitions.getAsJsonObject("v3TypeDefinition").getAsJsonArray("oneOf").asList().stream()
+            .map(JsonElement::getAsJsonObject)
+            .filter(definition -> definition.getAsJsonObject("properties").has("minimumExclusive"))
+            .findFirst().orElseThrow();
+        assertContains(numericWrapper.getAsJsonObject("properties").getAsJsonObject("wraps").getAsJsonArray("enum"), "decimal");
+        assertFalse(numericWrapper.get("additionalProperties").getAsBoolean());
 
         JsonObject v3Step = definitions.getAsJsonObject("v3TemplateStep");
         assertContains(v3Step.getAsJsonArray("required"), "input");

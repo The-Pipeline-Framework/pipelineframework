@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -36,6 +37,7 @@ import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
 import org.pipelineframework.processor.routing.PipelineBranchingPlan;
+import org.pipelineframework.branching.BranchVariantIdentity;
 
 class PipelineBranchingMetadataGeneratorTest {
 
@@ -69,6 +71,9 @@ class PipelineBranchingMetadataGeneratorTest {
                     List.of("PhysicalOrder"),
                     List.of("StockReserved"),
                     List.of(ClassName.get("com.example.common.domain", "PhysicalOrder")),
+                    List.of(new BranchVariantIdentity("OrderDecision", "physical", "PhysicalOrder")),
+                    List.of(new BranchVariantIdentity("OrderDecision", "physical", "PhysicalOrder")),
+                    List.of(),
                     false),
                 new PipelineBranchingPlan.BranchStep(
                     1,
@@ -102,6 +107,11 @@ class PipelineBranchingMetadataGeneratorTest {
         assertEquals(
             "com.example.common.dto.PhysicalOrderDto",
             reserveStock.getAsJsonArray("acceptedRuntimeClasses").get(0).getAsString());
+        JsonObject variant = reserveStock.getAsJsonArray("inputVariants").get(0).getAsJsonObject();
+        assertEquals("OrderDecision", variant.get("unionName").getAsString());
+        assertEquals("physical", variant.get("discriminator").getAsString());
+        assertEquals("PhysicalOrder", variant.get("payloadContract").getAsString());
+        assertFalse(variant.has("number"));
 
         JsonObject finalize = metadata.getAsJsonArray("steps").get(1).getAsJsonObject();
         assertTrue(finalize.get("terminal").getAsBoolean());
