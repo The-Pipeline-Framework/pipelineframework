@@ -280,13 +280,35 @@ class PipelineProtoGeneratorTest {
 
         Path sourceRoot = tempDir.resolve("constrained-domain-sources");
         for (PipelineJavaDomainRenderer.RenderedSource source : sources) {
-            if (source.relativePath().getFileName().toString().equals("PipelineDomainProtoAdapters.java")) {
-                continue;
-            }
             Path target = sourceRoot.resolve(source.relativePath());
             Files.createDirectories(target.getParent());
             Files.writeString(target, source.content());
         }
+        Path protoStub = sourceRoot.resolve("com/example/constraints/grpc/PipelineTypes.java");
+        Files.createDirectories(protoStub.getParent());
+        Files.writeString(protoStub, """
+            package com.example.constraints.grpc;
+            public final class PipelineTypes {
+              public static final class CurrencyCode {
+                private final String value; private CurrencyCode(String value) { this.value = value; }
+                public static Builder newBuilder() { return new Builder(); }
+                public boolean hasValue() { return value != null; } public String getValue() { return value; }
+                public static final class Builder { private String value; public Builder setValue(String value) { this.value = value; return this; } public CurrencyCode build() { return new CurrencyCode(value); } }
+              }
+              public static final class ContactEmail {
+                private final String value; private ContactEmail(String value) { this.value = value; }
+                public static Builder newBuilder() { return new Builder(); }
+                public boolean hasValue() { return value != null; } public String getValue() { return value; }
+                public static final class Builder { private String value; public Builder setValue(String value) { this.value = value; return this; } public ContactEmail build() { return new ContactEmail(value); } }
+              }
+              public static final class PositiveRatio {
+                private final double value; private final boolean present; private PositiveRatio(double value, boolean present) { this.value = value; this.present = present; }
+                public static Builder newBuilder() { return new Builder(); }
+                public boolean hasValue() { return present; } public double getValue() { return value; }
+                public static final class Builder { private double value; private boolean present; public Builder setValue(double value) { this.value = value; this.present = true; return this; } public PositiveRatio build() { return new PositiveRatio(value, present); } }
+              }
+            }
+            """);
         Path classes = tempDir.resolve("constrained-domain-classes");
         try (var files = Files.walk(sourceRoot)) {
             List<String> generatedSources = files.filter(path -> path.toString().endsWith(".java")).map(Path::toString).toList();
@@ -299,6 +321,8 @@ class PipelineProtoGeneratorTest {
             Class<?> currencyClass = loader.loadClass("com.example.constraints.domain.CurrencyCode");
             Class<?> email = loader.loadClass("com.example.constraints.domain.ContactEmail");
             Class<?> ratioClass = loader.loadClass("com.example.constraints.domain.PositiveRatio");
+            Class<?> adaptersClass = loader.loadClass("com.example.constraints.domain.PipelineDomainProtoAdapters");
+            Class<?> currencyProto = loader.loadClass("com.example.constraints.grpc.PipelineTypes$CurrencyCode");
             assertNotNull(currencyClass.getConstructor(String.class).newInstance("USD"));
             assertNotNull(email.getConstructor(String.class).newInstance("person@example.com"));
             assertNotNull(ratioClass.getConstructor(Double.class).newInstance(0.5d));
@@ -306,6 +330,15 @@ class PipelineProtoGeneratorTest {
             assertWrapperConstructionFails(currencyClass, (Object) null);
             assertWrapperConstructionFails(email, "person@.example");
             assertWrapperConstructionFails(ratioClass, Double.NaN);
+
+            Object domainCurrency = currencyClass.getConstructor(String.class).newInstance("USD");
+            Object protoCurrency = adaptersClass.getMethod("toProto", currencyClass).invoke(null, domainCurrency);
+            assertEquals(domainCurrency, adaptersClass.getMethod("fromProto", currencyProto).invoke(null, protoCurrency));
+            Object unsetProtoCurrency = currencyProto.getMethod("newBuilder").invoke(null)
+                .getClass().getMethod("build").invoke(currencyProto.getMethod("newBuilder").invoke(null));
+            java.lang.reflect.InvocationTargetException invalid = assertThrows(java.lang.reflect.InvocationTargetException.class,
+                () -> adaptersClass.getMethod("fromProto", currencyProto).invoke(null, unsetProtoCurrency));
+            assertTrue(invalid.getCause() instanceof IllegalArgumentException);
         }
     }
 

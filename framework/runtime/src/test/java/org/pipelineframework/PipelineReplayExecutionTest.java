@@ -41,6 +41,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.branching.StepBranchingDescriptor;
+import org.pipelineframework.branching.BranchVariantIdentity;
 import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineStepConfig;
 import org.pipelineframework.config.pipeline.PipelineJson;
@@ -495,6 +496,65 @@ class PipelineReplayExecutionTest {
             "success".equals(event.event()) && "PhysicalOnly".equals(event.step())));
     }
 
+    @Test
+    void recordsDeclaredOneofIdentityOnBranchSkipReplayEvents() {
+        CollectingExporter exporter = new CollectingExporter();
+        PipelineTelemetry telemetry = new PipelineTelemetry(new ReplayEnabledPipelineStepConfig(), exporter, branchSkipTopology());
+        Uni<PaymentStatusEnvelope> input = Uni.createFrom().item(PaymentStatusEnvelope.digital("digital-1"));
+        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
+            0,
+            "PhysicalOnly",
+            PhysicalOnlyStep.class.getName(),
+            PhysicalPayload.class.getName(),
+            PhysicalPayload.class,
+            List.of("PhysicalPayload"),
+            List.of(PhysicalPayload.class.getName()),
+            List.of(PhysicalPayload.class),
+            List.of(new BranchVariantIdentity("PaymentStatus", "digital", "DigitalPayload")),
+            List.of(),
+            List.of(),
+            false);
+
+        Object current = PipelineStepExecutor.applyOneToOneUnchecked(
+            new PhysicalOnlyStep(), input, false, 4, telemetry, runContext, null, null, null, descriptor);
+        ((Uni<?>) telemetry.instrumentRunCompletion(current, runContext)).await().indefinitely();
+
+        PipelineExecutionEvent skip = exporter.events.stream()
+            .filter(event -> "skip".equals(event.event()))
+            .findFirst()
+            .orElseThrow();
+        assertEquals("PaymentStatus", skip.attributes().get("unionName"));
+        assertEquals("digital", skip.attributes().get("discriminator"));
+        assertEquals("DigitalPayload", skip.attributes().get("payloadContract"));
+    }
+
+    @Test
+    void recordsDeclaredOneofIdentityForMultiBranchSkips() {
+        CollectingExporter exporter = new CollectingExporter();
+        PipelineTelemetry telemetry = new PipelineTelemetry(new ReplayEnabledPipelineStepConfig(), exporter, branchSkipTopology());
+        Multi<PaymentStatusEnvelope> input = Multi.createFrom().items(
+            PaymentStatusEnvelope.digital("digital-1"), PaymentStatusEnvelope.digital("digital-2"));
+        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
+            0, "PhysicalOnly", PhysicalOnlyStep.class.getName(), PhysicalPayload.class.getName(), PhysicalPayload.class,
+            List.of("PhysicalPayload"), List.of(PhysicalPayload.class.getName()), List.of(PhysicalPayload.class),
+            List.of(new BranchVariantIdentity("PaymentStatus", "digital", "DigitalPayload")), List.of(), List.of(), false);
+
+        Object current = PipelineStepExecutor.applyOneToOneUnchecked(
+            new PhysicalOnlyStep(), input, false, 4, telemetry, runContext, null, null, null, descriptor);
+        ((Multi<?>) telemetry.instrumentRunCompletion(current, runContext)).collect().asList().await().indefinitely();
+
+        List<PipelineExecutionEvent> skips = exporter.events.stream()
+            .filter(event -> "skip".equals(event.event()))
+            .toList();
+        assertEquals(2, skips.size());
+        assertTrue(skips.stream().allMatch(skip ->
+            "PaymentStatus".equals(skip.attributes().get("unionName"))
+                && "digital".equals(skip.attributes().get("discriminator"))
+                && "DigitalPayload".equals(skip.attributes().get("payloadContract"))));
+    }
+
     private PipelineReplayTopology topology() {
         String step1 = PrefixStep.class.getName();
         String step2 = SplitStep.class.getName();
@@ -604,6 +664,26 @@ class PipelineReplayExecutionTest {
     }
 
     record DigitalPayload(String id) {
+    }
+
+    static final class PaymentStatusEnvelope {
+        private final DigitalPayload digital;
+
+        private PaymentStatusEnvelope(DigitalPayload digital) {
+            this.digital = digital;
+        }
+
+        static PaymentStatusEnvelope digital(String id) {
+            return new PaymentStatusEnvelope(new DigitalPayload(id));
+        }
+
+        public boolean hasDigital() {
+            return digital != null;
+        }
+
+        public DigitalPayload getDigital() {
+            return digital;
+        }
     }
 
     abstract static class BaseStep implements Configurable {

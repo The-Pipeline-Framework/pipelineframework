@@ -136,8 +136,11 @@ final class PipelineJavaDomainRenderer {
         StringBuilder builder = header(domainPackage);
         builder.append("/** Nominal wrapper generated from the version 3 pipeline type '").append(wrapper.name()).append("'. */\n");
         builder.append("public record ").append(wrapper.name()).append("(")
-            .append(resolveJavaType(wrapper.wraps(), plan.typeModel())).append(" value) {\n")
-            .append("    public ").append(wrapper.name()).append(" {\n")
+            .append(resolveJavaType(wrapper.wraps(), plan.typeModel())).append(" value) {\n");
+        wrapper.constraints().pattern().ifPresent(pattern -> builder
+            .append("    private static final java.util.regex.Pattern PATTERN = java.util.regex.Pattern.compile(\"")
+            .append(javaStringLiteral(pattern)).append("\");\n"));
+        builder.append("    public ").append(wrapper.name()).append(" {\n")
             .append("        if (value == null) { throw new IllegalArgumentException(\"")
             .append(javaStringLiteral(wrapper.name())).append(" value must not be null.\"); }\n");
         if (!wrapper.constraints().isEmpty()) {
@@ -271,7 +274,7 @@ final class PipelineJavaDomainRenderer {
                 .append(javaStringLiteral(wrapper.name())).append("\", value, ")
                 .append(optionalIntExpression(constraints.minLength())).append(", ")
                 .append(optionalIntExpression(constraints.maxLength())).append(", ")
-                .append(optionalPatternExpression(constraints.pattern())).append(", ")
+                .append(patternExpression(constraints)).append(", ")
                 .append(constraints.format().isPresent()).append(");\n");
             return;
         }
@@ -292,9 +295,10 @@ final class PipelineJavaDomainRenderer {
         return value.map(integer -> "java.util.OptionalInt.of(" + integer + ")").orElse("java.util.OptionalInt.empty()");
     }
 
-    private String optionalPatternExpression(Optional<String> value) {
-        return value.map(pattern -> "java.util.Optional.of(java.util.regex.Pattern.compile(\"" + javaStringLiteral(pattern) + "\"))")
-            .orElse("java.util.Optional.empty()");
+    private String patternExpression(PipelineTemplateWrapperConstraints constraints) {
+        return constraints.pattern().isPresent()
+            ? "java.util.Optional.of(PATTERN)"
+            : "java.util.Optional.empty()";
     }
 
     private String numericBoundsExpression(PipelineTemplateWrapperConstraints constraints) {

@@ -290,12 +290,14 @@ class PipelineStepExecutorTest {
             List.of(ApprovedPaymentStatusMessage.class.getName()),
             List.of(ApprovedPaymentStatusMessage.class),
             List.of(new BranchVariantIdentity("PaymentStatus", "approved", "ApprovedPaymentStatus")),
-            List.of(new BranchVariantIdentity("PaymentStatus", "approved", "ApprovedPaymentStatus")),
+            List.of(),
             List.of(),
             false);
 
         assertEquals(new BranchVariantIdentity("PaymentStatus", "approved", "ApprovedPaymentStatus"),
             descriptor.variantIdentity(PaymentStatusEnvelope.approved("p-1")).orElseThrow());
+        assertEquals(new BranchVariantIdentity("PaymentStatus", "approved", "ApprovedPaymentStatus"),
+            descriptor.variantIdentity(new GeneratedPaymentStatus("approved")).orElseThrow());
     }
 
     @Test
@@ -1105,6 +1107,9 @@ class PipelineStepExecutorTest {
         public ApprovedPaymentStatusMessage getApproved() {
             return approved;
         }
+    }
+
+    record GeneratedPaymentStatus(String discriminator) {
     }
 
     static final class PaymentOutputBranchEnvelope {

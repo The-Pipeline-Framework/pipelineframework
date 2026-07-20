@@ -211,6 +211,7 @@ public record StepBranchingDescriptor(
             if (method.getReturnType() != String.class || method.getParameterCount() != 0) {
                 return Optional.empty();
             }
+            method.trySetAccessible();
             Object value = method.invoke(item);
             return value instanceof String text && !text.isBlank() ? Optional.of(text) : Optional.empty();
         } catch (ReflectiveOperationException ignored) {

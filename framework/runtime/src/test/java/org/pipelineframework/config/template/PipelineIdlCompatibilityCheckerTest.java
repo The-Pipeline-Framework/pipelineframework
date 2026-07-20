@@ -316,6 +316,14 @@ class PipelineIdlCompatibilityCheckerTest {
         PipelineIdlSnapshot.TypeSnapshot prior = wrapperSnapshot(baseline);
         List<String> errors = new PipelineIdlCompatibilityChecker().compare(v3Snapshot(prior), v3Snapshot(wrapperSnapshot(narrower)));
         assertTrue(errors.stream().anyMatch(error -> error.contains("NARROWING") && error.contains("semantic compatibility")));
+        List<String> wideningErrors = new PipelineIdlCompatibilityChecker().compare(
+            v3Snapshot(prior), v3Snapshot(wrapperSnapshot(wider)));
+        assertTrue(wideningErrors.stream().anyMatch(error ->
+            error.contains("WIDENING") && error.contains("semantic compatibility")));
+        List<String> incomparableErrors = new PipelineIdlCompatibilityChecker().compare(
+            v3Snapshot(prior), v3Snapshot(wrapperSnapshot(incomparable)));
+        assertTrue(incomparableErrors.stream().anyMatch(error ->
+            error.contains("INCOMPARABLE") && error.contains("semantic compatibility")));
     }
 
     @Test

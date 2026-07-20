@@ -130,6 +130,28 @@ class PipelineConfigBuildStepsTest {
     }
 
     @Test
+    void doesNotTreatNonIntegralVersionAsV3ForRawBranchPreflight() throws Exception {
+        Path config = tempDir.resolve("pipeline-non-integral.yaml");
+        Files.writeString(config, """
+            version: 3.5
+            types:
+              Approved:
+                fields: [[id, string]]
+              Outcome:
+                variants:
+                  approved: Approved
+            steps:
+              - name: Handle Outcome
+                input: Outcome
+                output: Approved
+            """);
+
+        System.setProperty("pipeline.config", config.toString());
+
+        assertFalse(new PipelineConfigBuildSteps().loadPipelineConfig().branchAware());
+    }
+
+    @Test
     void doesNotTreatEveryInputTypeNameAsBranchAware() throws Exception {
         Path config = tempDir.resolve("pipeline.yaml");
         Files.writeString(config, """

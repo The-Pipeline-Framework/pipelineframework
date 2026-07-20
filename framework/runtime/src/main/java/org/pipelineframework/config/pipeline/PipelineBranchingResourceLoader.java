@@ -213,13 +213,22 @@ public final class PipelineBranchingResourceLoader {
             return List.of();
         }
         return variants.stream()
-            .filter(Map.class::isInstance)
-            .map(Map.class::cast)
-            .map(raw -> new BranchVariantIdentity(
-                stringValue(raw.get("unionName")),
-                stringValue(raw.get("discriminator")),
-                stringValue(raw.get("payloadContract"))))
+            .map(PipelineBranchingResourceLoader::parseVariant)
             .toList();
+    }
+
+    private static BranchVariantIdentity parseVariant(Object value) {
+        if (!(value instanceof Map<?, ?> raw)) {
+            throw new IllegalStateException("Branch variant metadata entry must be an object: " + value);
+        }
+        String unionName = stringValue(raw.get("unionName"));
+        String discriminator = stringValue(raw.get("discriminator"));
+        String payloadContract = stringValue(raw.get("payloadContract"));
+        if (unionName == null || unionName.isBlank() || discriminator == null || discriminator.isBlank()
+            || payloadContract == null || payloadContract.isBlank()) {
+            throw new IllegalStateException("Branch variant metadata is missing required identity fields: " + raw);
+        }
+        return new BranchVariantIdentity(unionName, discriminator, payloadContract);
     }
 
     public record BranchingResource(

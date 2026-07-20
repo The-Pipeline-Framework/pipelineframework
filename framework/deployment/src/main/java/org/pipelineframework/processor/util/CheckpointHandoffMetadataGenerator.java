@@ -67,10 +67,15 @@ public class CheckpointHandoffMetadataGenerator {
         }
         if (templateConfig.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3) {
             PipelineTemplateTypeDefinition definition = templateConfig.typeModel().definitions().get(contract);
+            if (definition instanceof PipelineTemplateTypeDefinition.AliasType alias
+                && templateConfig.typeModel().resolveAliases(alias.target()) instanceof PipelineTemplateTypeReference.Named named) {
+                definition = templateConfig.typeModel().definitions().get(named.name());
+            }
             if (!(definition instanceof PipelineTemplateTypeDefinition.UnionType union)) {
                 return List.of();
             }
             return union.variants().values().stream()
+                .sorted(java.util.Comparator.comparing(PipelineTemplateTypeDefinition.Variant::discriminator))
                 .map(variant -> checkpointVariant(templateConfig, union.name(), variant))
                 .toList();
         }
@@ -80,6 +85,7 @@ public class CheckpointHandoffMetadataGenerator {
         }
         return union.variants().entrySet().stream()
             .filter(entry -> entry.getValue() != null && entry.getValue().type() != null)
+            .sorted(java.util.Map.Entry.comparingByKey())
             .map(entry -> new BranchVariantIdentity(union.name(), entry.getKey(), entry.getValue().type()))
             .toList();
     }

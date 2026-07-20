@@ -185,7 +185,7 @@ public final class PipelineConfigBuildSteps {
     private boolean isVersionThree(Map<?, ?> rootMap) {
         Object version = rootMap.get("version");
         if (version instanceof Number number) {
-            return number.intValue() == 3;
+            return number.doubleValue() == 3.0d;
         }
         return "3".equals(String.valueOf(version).trim());
     }
