@@ -142,6 +142,9 @@ class PipelineTemplateSchemaExporterTest {
         assertEquals("string", stringWrapper.getAsJsonObject("properties").getAsJsonObject("wraps").get("const").getAsString());
         assertEquals("email", stringWrapper.getAsJsonObject("properties").getAsJsonObject("format").get("const").getAsString());
         assertFalse(stringWrapper.get("additionalProperties").getAsBoolean());
+        JsonObject patternRequiresBound = stringWrapper.getAsJsonArray("allOf").get(0).getAsJsonObject();
+        assertContains(patternRequiresBound.getAsJsonObject("if").getAsJsonArray("required"), "pattern");
+        assertContains(patternRequiresBound.getAsJsonObject("then").getAsJsonArray("required"), "maxLength");
 
         JsonObject numericWrapper = definitions.getAsJsonObject("v3TypeDefinition").getAsJsonArray("oneOf").asList().stream()
             .map(JsonElement::getAsJsonObject)

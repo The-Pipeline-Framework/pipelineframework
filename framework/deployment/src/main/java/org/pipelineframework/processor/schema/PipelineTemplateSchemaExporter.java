@@ -2234,6 +2234,12 @@ public final class PipelineTemplateSchemaExporter {
             "pattern": { "type": "string", "minLength": 1 },
             "format": { "const": "email" }
           },
+          "allOf": [
+            {
+              "if": { "required": ["pattern"] },
+              "then": { "required": ["maxLength"] }
+            }
+          ],
           "additionalProperties": false
         },
         {

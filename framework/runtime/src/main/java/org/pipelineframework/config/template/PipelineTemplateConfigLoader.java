@@ -303,6 +303,9 @@ public class PipelineTemplateConfigLoader {
         if (numericConstraints && !Set.of("int32", "int64", "float32", "float64", "decimal").contains(scalar)) {
             throw new IllegalStateException("Type '" + name + "' can use numeric constraints only with an int32, int64, float32, float64, or decimal wrapper.");
         }
+        if (pattern.isPresent() && maxLength.isEmpty()) {
+            throw new IllegalStateException("Type '" + name + "' pattern requires maxLength to bound runtime matching.");
+        }
         if (minLength.isPresent() && maxLength.isPresent() && minLength.get() > maxLength.get()) {
             throw new IllegalStateException("Type '" + name + "' minLength must not exceed maxLength.");
         }

@@ -1389,6 +1389,22 @@ class PipelineTemplateConfigLoaderTest {
         IllegalStateException interval = assertThrows(IllegalStateException.class,
             () -> new PipelineTemplateConfigLoader().load(emptyInterval));
         assertTrue(interval.getMessage().contains("empty numeric constraint interval"));
+
+        Path unboundedPattern = tempDir.resolve("v3-unbounded-wrapper-pattern.yaml");
+        Files.writeString(unboundedPattern, """
+            version: 3
+            appName: V3 Constraints
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              AccountCode:
+                wraps: string
+                pattern: "[A-Z]+"
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: AccountCode, output: AccountCode }]
+            """);
+        IllegalStateException pattern = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(unboundedPattern));
+        assertTrue(pattern.getMessage().contains("pattern requires maxLength"));
     }
 
     @Test

@@ -102,7 +102,7 @@ types:
     minimumExclusive: 0
 ```
 
-String wrappers support `minLength`, `maxLength`, `pattern`, and `format: email`. Length is measured in Unicode code points. A `pattern` requires the entire string value to match. The DSL does not define Java regular expressions as its permanent pattern language: the Java target currently compiles the declared pattern with Java regex support, and another target must either support the pattern or report a clear limitation until TPF defines a portable profile. `format: email` checks a practical mailbox shape—one non-edge `@`, no whitespace, a non-empty local part, and non-empty dot-separated domain labels. It does not establish ownership, DNS validity, or deliverability.
+String wrappers support `minLength`, `maxLength`, `pattern`, and `format: email`. Length is measured in Unicode code points. A `pattern` requires the entire string value to match and must be paired with `maxLength`; generated Java validates that bound before attempting the match, limiting pattern processing for boundary data. The DSL does not define Java regular expressions as its permanent pattern language: the Java target currently compiles the declared pattern with Java regex support, and another target must either support the pattern or report a clear limitation until TPF defines a portable profile. `format: email` checks a practical mailbox shape—one non-edge `@`, no whitespace, a non-empty local part, and non-empty dot-separated domain labels. It does not establish ownership, DNS validity, or deliverability.
 
 Numeric wrappers (`int32`, `int64`, `float32`, `float64`, and `decimal`) support `minimum`, `minimumExclusive`, `maximum`, and `maximumExclusive`. Bounds are semantic decimal values.
 
