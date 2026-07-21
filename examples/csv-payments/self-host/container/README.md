@@ -35,9 +35,7 @@ TPF_CSV_ADMISSION_PROFILE=burst TPF_CSV_AWAIT_TRANSPORT=kafka ./examples/csv-pay
 ```
 
 The `slow` profile delays every completion. The `burst` profile holds completions until its configured
-batch size and flushes the final partial batch. Admission-profile input is split into bounded independent
-executions (250 records by default), so the overall 1k or scheduled 10k workload does not exceed DynamoDB's
-per-item limit for a materialized expansion. Both profiles verify the LocalStack admission-table peak
+batch size and flushes the final partial batch. Both profiles verify the LocalStack admission-table peak
 never exceeds `pipeline.max-concurrency`, that reservations are empty after handoff, and that one durable
 await interaction and one output row exist for every generated input row.
 
@@ -65,7 +63,6 @@ Set `TPF_SKIP_FRAMEWORK_INSTALL=true` or `TPF_SKIP_CONTAINER_BUILD=true` for fas
 | `TPF_CSV_AWAIT_TRANSPORT` | `sqs` |
 | `TPF_CSV_ADMISSION_PROFILE` | empty; `slow` and `burst` run deterministic admission checks |
 | `TPF_CSV_RECORD_COUNT` | `1000` for an admission profile, otherwise the supplied CSV file |
-| `TPF_CSV_RECORDS_PER_EXECUTION` | `250` for an admission profile; keeps each durable materialized expansion within DynamoDB's item limit |
 | `TPF_PIPELINE_MAX_CONCURRENCY` | `25` for an admission profile, otherwise `250` |
 | `TPF_CSV_PROVIDER_RESPONSE_DELAY_MILLIS` | `25` for `slow`, `0` for `burst` |
 | `TPF_CSV_PROVIDER_COMPLETION_BURST_SIZE` | `1` for `slow`, `25` for `burst` |
