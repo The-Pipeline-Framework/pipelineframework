@@ -57,8 +57,10 @@ jobs:
         id: restaurant-application-image
         uses: actions/cache/restore@v4
         with:
-          path: ${{ runner.temp }}/restaurant-ha-image.tar
-          key: tpf-restaurant-ha-image-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pom.xml', 'framework/**', 'connectors/object-ingest/**', 'examples/restaurant-approval/**') }}
+          path: |
+            ${{ runner.temp }}/restaurant-ha-image.tar
+            examples/restaurant-approval/monolith-svc/target
+          key: tpf-restaurant-ha-image-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pom.xml', 'framework/**', 'connectors/object-ingest/**', 'examples/restaurant-approval/**') }}
 
       - name: Load restaurant application image
         if: ${{ steps.restaurant-application-image.outputs.cache-hit == 'true' }}
@@ -79,7 +81,9 @@ jobs:
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
-          path: ${{ runner.temp }}/restaurant-ha-image.tar
+          path: |
+            ${{ runner.temp }}/restaurant-ha-image.tar
+            examples/restaurant-approval/monolith-svc/target
           key: ${{ steps.restaurant-application-image.outputs['cache-primary-key'] }}
 
       - name: Run restaurant self-host HA demo

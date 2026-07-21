@@ -66,8 +66,10 @@ jobs:
         id: csv-application-images
         uses: actions/cache/restore@v4
         with:
-          path: ${{ runner.temp }}/csv-ha-${{ matrix.await-transport }}-images.tar
-          key: tpf-csv-ha-images-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.await-transport }}-${{ hashFiles('pom.xml', 'framework/**', 'connectors/object-ingest/**', 'examples/csv-payments/**') }}
+          path: |
+            ${{ runner.temp }}/csv-ha-${{ matrix.await-transport }}-images.tar
+            examples/csv-payments/orchestrator-svc/target
+          key: tpf-csv-ha-images-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.await-transport }}-${{ hashFiles('pom.xml', 'framework/**', 'connectors/object-ingest/**', 'examples/csv-payments/**') }}
 
       - name: Load CSV application images
         if: ${{ steps.csv-application-images.outputs.cache-hit == 'true' }}
@@ -94,7 +96,9 @@ jobs:
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
-          path: ${{ runner.temp }}/csv-ha-${{ matrix.await-transport }}-images.tar
+          path: |
+            ${{ runner.temp }}/csv-ha-${{ matrix.await-transport }}-images.tar
+            examples/csv-payments/orchestrator-svc/target
           key: ${{ steps.csv-application-images.outputs['cache-primary-key'] }}
 
       - name: Run CSV self-host HA demo
