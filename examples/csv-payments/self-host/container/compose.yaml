@@ -192,6 +192,7 @@ services:
         -Dpipeline.orchestrator.dynamo.endpoint-override=http://localstack:4566
         -Dpipeline.orchestrator.dynamo.execution-table=tpf_execution
         -Dpipeline.orchestrator.dynamo.execution-key-table=tpf_execution_key
+        -Dpipeline.orchestrator.dynamo.execution-payload-table=tpf_execution_payload
         -Dpipeline.orchestrator.dynamo.await-unit-table=tpf_await_unit
         -Dpipeline.orchestrator.dynamo.await-interaction-table=tpf_await_interaction
         -Dpipeline.orchestrator.dynamo.await-interaction-key-table=tpf_await_interaction_key
@@ -304,6 +305,7 @@ services:
         -Dpipeline.orchestrator.dynamo.endpoint-override=http://localstack:4566
         -Dpipeline.orchestrator.dynamo.execution-table=tpf_execution
         -Dpipeline.orchestrator.dynamo.execution-key-table=tpf_execution_key
+        -Dpipeline.orchestrator.dynamo.execution-payload-table=tpf_execution_payload
         -Dpipeline.orchestrator.dynamo.await-unit-table=tpf_await_unit
         -Dpipeline.orchestrator.dynamo.await-interaction-table=tpf_await_interaction
         -Dpipeline.orchestrator.dynamo.await-interaction-key-table=tpf_await_interaction_key

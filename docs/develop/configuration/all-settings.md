@@ -235,6 +235,7 @@ Prefix: `pipeline.orchestrator`
 | `pipeline.orchestrator.control-plane.admin-token-ref` | string | none | Local secret reference for the hosted-control-plane bearer token. Supports `env:NAME`, `sys:property.name`, and `config:some.config.key`. |
 | `pipeline.orchestrator.dynamo.execution-table` | string | `tpf_execution` | DynamoDB table used for execution state rows. |
 | `pipeline.orchestrator.dynamo.execution-key-table` | string | `tpf_execution_key` | DynamoDB table used for submit dedupe keys. |
+| `pipeline.orchestrator.dynamo.execution-payload-table` | string | `tpf_execution_payload` | DynamoDB table used for immutable manifests and byte chunks when an execution payload is not stored inline. |
 | `pipeline.orchestrator.dynamo.await-interaction-table` | string | `tpf_await_interaction` | DynamoDB table used for durable await interaction rows. |
 | `pipeline.orchestrator.dynamo.await-interaction-key-table` | string | `tpf_await_interaction_key` | DynamoDB table used for await idempotency and correlation lookup keys. |
 | `pipeline.orchestrator.dynamo.region` | string | none | Optional DynamoDB region override. |

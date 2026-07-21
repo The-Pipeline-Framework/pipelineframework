@@ -22,6 +22,7 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
+import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.TransactWriteItemsRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
@@ -58,6 +59,18 @@ class DynamoExecutionStateStoreTest {
 
         assertTrue(validationError.isPresent());
         assertTrue(validationError.get().contains("execution-table"));
+    }
+
+    @Test
+    void startupValidationReportsMissingExecutionPayloadTable() {
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        when(config.dynamo().executionPayloadTable()).thenReturn("");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(null, config);
+
+        var validationError = store.startupValidationError(config);
+
+        assertTrue(validationError.isPresent());
+        assertTrue(validationError.get().contains("execution-payload-table"));
     }
 
     @Test
@@ -165,6 +178,35 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
+    void materializedResultWritesAnImmutablePayloadBeforeReferencingIt() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        long now = System.currentTimeMillis();
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().item(Map.of(
+            "result_shape", AttributeValue.builder().s(ExecutionResultShape.MATERIALIZED_MULTI.name()).build(),
+            "ttl_epoch_s", AttributeValue.builder().n(Long.toString(now / 1000 + 3600)).build())).build());
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(Map.of()).build());
+
+        Optional<ExecutionRecord<Object, Object>> updated = store.markSucceeded(
+                "tenant-a",
+                "exec-1",
+                1L,
+                "exec-1:0:0",
+                List.of("ok"),
+                now)
+            .await().indefinitely();
+
+        assertTrue(updated.isEmpty());
+        verify(client, times(2)).putItem(any(PutItemRequest.class));
+        verify(client).updateItem(argThat((UpdateItemRequest request) ->
+            request.updateExpression().contains("#resultReference = :resultReference")
+                && request.updateExpression().contains("REMOVE #result")
+                && request.expressionAttributeValues().containsKey(":resultReference")));
+    }
+
+    @Test
     void markTerminalFailureRejectsUnsupportedStatus() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
@@ -192,6 +234,7 @@ class DynamoExecutionStateStoreTest {
         when(config.dynamo()).thenReturn(dynamo);
         when(dynamo.executionTable()).thenReturn(executionTable);
         when(dynamo.executionKeyTable()).thenReturn(keyTable);
+        when(dynamo.executionPayloadTable()).thenReturn("tpf_execution_payload");
         when(dynamo.region()).thenReturn(Optional.empty());
         when(dynamo.endpointOverride()).thenReturn(Optional.empty());
         return config;
@@ -377,7 +420,7 @@ class DynamoExecutionStateStoreTest {
             request.conditionExpression().contains("#version = :expected")
                 && request.conditionExpression().contains("#status = :dlq OR #status = :failed")
                 && request.updateExpression().contains("#attempt = #attempt + :one")
-                && request.updateExpression().contains("REMOVE #result, #errorCode, #errorMessage, #leaseOwner")));
+                && request.updateExpression().contains("REMOVE #result, #resultReference, #errorCode, #errorMessage, #leaseOwner")));
     }
 
     @Test
@@ -487,6 +530,24 @@ class DynamoExecutionStateStoreTest {
             .await().indefinitely();
 
         assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void markSucceededRejectsNullResultPayload() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
+
+        NullPointerException failure = assertThrows(NullPointerException.class, () -> store.markSucceeded(
+                "tenant-a",
+                "exec-1",
+                1L,
+                "exec-1:0:0",
+                null,
+                System.currentTimeMillis())
+            .await().indefinitely());
+
+        assertEquals("resultPayload must not be null", failure.getMessage());
+        verifyNoInteractions(client);
     }
 
     @Test
