@@ -12,6 +12,14 @@ compose() {
   docker compose -f "${COMPOSE_FILE}" "$@"
 }
 
+compose_up() {
+  if [[ "${TPF_CI_QUIET:-false}" == "true" ]]; then
+    compose up --quiet-pull "$@"
+    return
+  fi
+  compose up "$@"
+}
+
 awslocal() {
   compose exec -T localstack awslocal "$@"
 }
@@ -61,7 +69,7 @@ create_bucket_if_missing() {
   awslocal s3api create-bucket --bucket "${bucket}" >/dev/null
 }
 
-compose up -d localstack
+compose_up -d localstack
 wait_for_localstack
 
 create_table_if_missing tpf_execution \

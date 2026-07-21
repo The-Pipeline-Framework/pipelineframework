@@ -46,9 +46,45 @@ jobs:
 
       - name: Setup Docker environment
         uses: ./.github/actions/setup-testcontainers
+        with:
+          images: |
+            localstack/localstack:3.8
+            localstack/localstack:4.13
+            testcontainers/ryuk:0.13.0
+            alpine:3.17
+
+      - name: Restore restaurant application image
+        id: restaurant-application-image
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/restaurant-ha-image.tar
+          key: tpf-restaurant-ha-image-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pom.xml', 'framework/**', 'connectors/object-ingest/**', 'examples/restaurant-approval/**') }}
+
+      - name: Load restaurant application image
+        if: ${{ steps.restaurant-application-image.outputs.cache-hit == 'true' }}
+        run: |
+          docker load --input "${{ runner.temp }}/restaurant-ha-image.tar" >/dev/null
+          echo "Restaurant application image cache hit."
+
+      - name: Prepare restaurant application image
+        if: ${{ steps.restaurant-application-image.outputs.cache-hit != 'true' }}
+        run: ./examples/restaurant-approval/self-host/container/run-container-ha-demo.sh --prepare-images
+
+      - name: Archive restaurant application image
+        if: ${{ steps.restaurant-application-image.outputs.cache-hit != 'true' }}
+        run: docker save --output "${{ runner.temp }}/restaurant-ha-image.tar" localhost/restaurant-approval/monolith-svc:latest
+
+      - name: Save restaurant application image
+        if: ${{ steps.restaurant-application-image.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/restaurant-ha-image.tar
+          key: ${{ steps.restaurant-application-image.outputs['cache-primary-key'] }}
 
       - name: Run restaurant self-host HA demo
         env:
+          TPF_SKIP_CONTAINER_BUILD: "true"
           TPF_KEEP_STACK_ON_FAILURE: "true"
         run: ./examples/restaurant-approval/self-host/container/run-container-ha-demo.sh --ci
 

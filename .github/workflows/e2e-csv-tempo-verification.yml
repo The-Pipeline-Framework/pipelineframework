@@ -75,6 +75,12 @@ jobs:
 
       - name: Setup Testcontainers Docker environment
         uses: ./.github/actions/setup-testcontainers
+        with:
+          images: |
+            postgres:17
+            apache/kafka-native:3.8.0
+            testcontainers/ryuk:0.13.0
+            alpine:3.17
 
       - name: Build csv-payments modular observability images
         run: bash ./examples/csv-payments/build-modular-observability-images.sh
