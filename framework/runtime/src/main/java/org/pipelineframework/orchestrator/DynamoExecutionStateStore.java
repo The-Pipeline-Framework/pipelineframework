@@ -857,7 +857,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             Map.entry("#errorMessage", ERROR_MESSAGE), Map.entry("#firstDeferred", FIRST_CIRCUIT_DEFERRED_AT_EPOCH_MS),
             Map.entry("#deferrals", CIRCUIT_DEFERRAL_COUNT), Map.entry("#identity", CIRCUIT_IDENTITY),
             Map.entry("#leaseOwner", LEASE_OWNER), Map.entry("#leaseExpires", LEASE_EXPIRES_EPOCH_MS),
-            Map.entry("#result", RESULT_PAYLOAD_JSON), Map.entry("#updated", UPDATED_AT_EPOCH_MS),
+            Map.entry("#result", RESULT_PAYLOAD_JSON), Map.entry("#resultReference", RESULT_PAYLOAD_REFERENCE),
+            Map.entry("#updated", UPDATED_AT_EPOCH_MS),
             Map.entry("#ttl", TTL_EPOCH_S));
         Map<String, AttributeValue> values = Map.ofEntries(
             Map.entry(":expected", avN(expectedVersion)), Map.entry(":retry", avS(ExecutionStatus.WAIT_RETRY.name())),
@@ -875,7 +876,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             .updateExpression("SET #status = :retry, #version = #version + :one, #nextDue = :nextDue, "
                 + "#transition = :transition, #errorCode = :errorCode, #errorMessage = :errorMessage, "
                 + "#firstDeferred = :firstDeferred, #deferrals = :deferrals, #identity = :identity, "
-                + "#leaseExpires = :zero, #updated = :now REMOVE #result, #leaseOwner")
+                + "#leaseExpires = :zero, #updated = :now REMOVE #result, #resultReference, #leaseOwner")
             .expressionAttributeNames(names).expressionAttributeValues(values).returnValues(ReturnValue.ALL_NEW).build();
         try {
             Map<String, AttributeValue> attributes = dynamoClient().updateItem(request).attributes();

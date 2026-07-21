@@ -12,6 +12,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
@@ -60,7 +61,11 @@ class InMemoryCircuitBreakerTest {
             1,
             Duration.ofSeconds(1));
 
-        assertThrows(IllegalArgumentException.class, () -> breaker.acquire(IDENTITY, sharedPolicy));
+        CompletableFuture<CircuitDecision> result = breaker.acquire(IDENTITY, sharedPolicy).toCompletableFuture();
+
+        assertTrue(result.isCompletedExceptionally());
+        CompletionException failure = assertThrows(CompletionException.class, result::join);
+        assertInstanceOf(IllegalArgumentException.class, failure.getCause());
     }
 
     @Test

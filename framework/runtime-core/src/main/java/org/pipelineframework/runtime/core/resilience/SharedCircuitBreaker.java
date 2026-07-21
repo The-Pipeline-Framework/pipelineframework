@@ -10,7 +10,6 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Bounded-staleness shared dependency circuit admission.
@@ -28,6 +27,7 @@ public final class SharedCircuitBreaker implements CircuitBreaker {
     private final CircuitBreakerListener listener;
     private final ConcurrentMap<CircuitIdentity, CachedSnapshot> cache = new ConcurrentHashMap<>();
     private final ConcurrentMap<CircuitIdentity, FailureFlush> failureFlushes = new ConcurrentHashMap<>();
+    private final Object failureFlushLock = new Object();
 
     public SharedCircuitBreaker(
         SharedCircuitStateStore store,
@@ -114,8 +114,14 @@ public final class SharedCircuitBreaker implements CircuitBreaker {
     }
 
     private CompletionStage<Void> recordHealthFailure(CircuitIdentity identity, CircuitPolicy policy) {
-        FailureFlush flush = failureFlushes.computeIfAbsent(identity, ignored -> new FailureFlush(identity, policy));
-        return flush.record();
+        synchronized (failureFlushLock) {
+            FailureFlush flush = failureFlushes.get(identity);
+            if (flush == null) {
+                flush = new FailureFlush(identity, policy);
+                failureFlushes.put(identity, flush);
+            }
+            return flush.record();
+        }
     }
 
     private void cache(CircuitIdentity identity, SharedCircuitSnapshot snapshot, Instant observedAt) {
@@ -201,7 +207,7 @@ public final class SharedCircuitBreaker implements CircuitBreaker {
     private final class FailureFlush {
         private final CircuitIdentity identity;
         private final CircuitPolicy policy;
-        private final AtomicInteger pending = new AtomicInteger();
+        private int pending;
         private boolean flushing;
         private CompletableFuture<Void> active = new CompletableFuture<>();
 
@@ -211,47 +217,65 @@ public final class SharedCircuitBreaker implements CircuitBreaker {
         }
 
         private CompletionStage<Void> record() {
-            pending.incrementAndGet();
+            FailureBatch batch = null;
             CompletableFuture<Void> result;
-            boolean start;
             synchronized (this) {
+                pending++;
                 result = active;
-                start = !flushing;
-                if (start) {
+                if (!flushing) {
                     flushing = true;
+                    batch = claimPending();
                 }
             }
-            if (start) {
-                flush(result);
+            if (batch != null) {
+                flush(batch);
             }
             return result;
         }
 
-        private void flush(CompletableFuture<Void> completion) {
-            int failures = pending.getAndSet(0);
-            store.recordHealthFailures(identity, policy, failures, clock.instant())
+        private FailureBatch claimPending() {
+            FailureBatch batch = new FailureBatch(pending, active);
+            pending = 0;
+            active = new CompletableFuture<>();
+            return batch;
+        }
+
+        private void flush(FailureBatch batch) {
+            store.recordHealthFailures(identity, policy, batch.failures(), clock.instant())
                 .whenComplete((snapshot, error) -> {
                     if (error == null) {
                         cache(identity, snapshot, clock.instant());
-                        completion.complete(null);
+                        batch.completion().complete(null);
                     } else {
-                        completion.completeExceptionally(error);
+                        batch.completion().completeExceptionally(error);
                     }
-                    CompletableFuture<Void> next = null;
+                    FailureBatch next = null;
                     synchronized (this) {
-                        flushing = false;
-                        if (pending.get() > 0) {
-                            active = new CompletableFuture<>();
-                            flushing = true;
-                            next = active;
+                        if (pending > 0) {
+                            next = claimPending();
+                        } else {
+                            flushing = false;
                         }
                     }
                     if (next != null) {
                         flush(next);
                     } else {
-                        failureFlushes.remove(identity, this);
+                        removeWhenIdle();
                     }
                 });
+        }
+
+        private void removeWhenIdle() {
+            synchronized (failureFlushLock) {
+                synchronized (this) {
+                    if (!flushing && pending == 0) {
+                        failureFlushes.remove(identity, this);
+                    }
+                }
+            }
+        }
+
+        private record FailureBatch(int failures, CompletableFuture<Void> completion) {
         }
     }
 

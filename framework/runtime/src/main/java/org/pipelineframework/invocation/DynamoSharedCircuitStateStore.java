@@ -331,10 +331,11 @@ final class DynamoSharedCircuitStateStore implements SharedCircuitStateStore {
     }
 
     private boolean putState(CircuitIdentity identity, StateRecord expected, StateRecord updated) {
-        String condition = expected.snapshot.version() == 0 && expected.snapshot.status() == SharedCircuitStatus.CLOSED
-            && expected.buckets.isEmpty() ? "attribute_not_exists(#pk)" : "#version = :expected";
-        Map<String, String> names = Map.of("#pk", PK, "#version", VERSION);
-        Map<String, AttributeValue> values = Map.of(":expected", number(expected.snapshot.version()));
+        boolean initial = expected.snapshot.version() == 0 && expected.snapshot.status() == SharedCircuitStatus.CLOSED
+            && expected.buckets.isEmpty();
+        String condition = initial ? "attribute_not_exists(#pk)" : "#version = :expected";
+        Map<String, String> names = initial ? Map.of("#pk", PK) : Map.of("#version", VERSION);
+        Map<String, AttributeValue> values = initial ? Map.of() : Map.of(":expected", number(expected.snapshot.version()));
         try {
             dynamoClient().putItem(PutItemRequest.builder().tableName(table()).item(stateItem(identity, updated))
                 .conditionExpression(condition).expressionAttributeNames(names).expressionAttributeValues(values).build());

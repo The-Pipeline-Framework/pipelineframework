@@ -169,6 +169,7 @@ public class PipelineInvocationRuntime {
         return Uni.createFrom().deferred(() -> {
             long startNanos = System.nanoTime();
             return Uni.createFrom().completionStage(acquirePermit(boundary))
+                .onFailure().invoke(failure -> strategy.recordTermination(startNanos, failure, false))
                 .onItem().transformToUni(permit -> {
                     try {
                         Uni<T> result = supplier.get();
@@ -203,6 +204,7 @@ public class PipelineInvocationRuntime {
         return Multi.createFrom().deferred(() -> {
             long startNanos = System.nanoTime();
             return Uni.createFrom().completionStage(acquirePermit(boundary))
+                .onFailure().invoke(failure -> strategy.recordTermination(startNanos, failure, false))
                 .onItem().transformToMulti(permit -> {
                     try {
                         Multi<T> result = supplier.get();
