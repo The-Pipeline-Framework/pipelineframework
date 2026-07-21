@@ -6,9 +6,9 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
-import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
-import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
+import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -30,7 +31,7 @@ class DynamoAwaitAdmissionStoreTest {
         PipelineOrchestratorConfig.DynamoConfig dynamo = mock(PipelineOrchestratorConfig.DynamoConfig.class);
         when(config.dynamo()).thenReturn(dynamo);
         when(dynamo.awaitAdmissionTable()).thenReturn("tpf_await_admission");
-        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().item(Map.of()).build());
+        when(client.query(any(QueryRequest.class))).thenReturn(QueryResponse.builder().items(Map.of()).build());
 
         DynamoAwaitAdmissionStore store = new DynamoAwaitAdmissionStore(client, config);
         AwaitAdmissionScope scope = new AwaitAdmissionScope("payments", "await-provider", "kafka://requests");
@@ -53,10 +54,11 @@ class DynamoAwaitAdmissionStoreTest {
         PipelineOrchestratorConfig config = admissionConfig();
         AwaitAdmissionScope scope = new AwaitAdmissionScope("payments", "await-provider", "kafka://requests");
         AwaitAdmissionOwner owner = new AwaitAdmissionOwner("tenant:unit:item");
-        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().item(Map.of(
+        when(client.query(any(QueryRequest.class))).thenReturn(QueryResponse.builder().items(Map.of(
             "owner_key", text(owner.key()),
             "lease_token", text("lease-1"),
-            "expires_at", number(10))).build());
+            "expires_at", number(10),
+            "slot", number(Math.floorMod(owner.key().hashCode(), 2)))).build());
 
         AwaitAdmissionAcquireResult result = new DynamoAwaitAdmissionStore(client, config)
             .acquire(scope, owner, 2, 9_000, 1_000).toCompletableFuture().join();
@@ -69,10 +71,18 @@ class DynamoAwaitAdmissionStoreTest {
     @Test
     void reportsUnavailableWhenEverySlotBelongsToAnotherOwner() {
         DynamoDbClient client = mock(DynamoDbClient.class);
-        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().item(Map.of(
-            "owner_key", text("other-owner"),
-            "lease_token", text("other-lease"),
-            "expires_at", number(10))).build());
+        when(client.query(any(QueryRequest.class))).thenReturn(QueryResponse.builder().items(
+            Map.of(
+                "owner_key", text("other-owner"),
+                "lease_token", text("other-lease"),
+                "expires_at", number(10),
+                "slot", number(0)),
+            Map.of(
+                "owner_key", text("another-owner"),
+                "lease_token", text("another-lease"),
+                "expires_at", number(10),
+                "slot", number(1)))
+            .build());
         AwaitAdmissionScope scope = new AwaitAdmissionScope("payments", "await-provider", "kafka://requests");
 
         AwaitAdmissionAcquireResult result = new DynamoAwaitAdmissionStore(client, admissionConfig())
@@ -80,19 +90,22 @@ class DynamoAwaitAdmissionStoreTest {
             .toCompletableFuture().join();
 
         assertFalse(result.acquired());
+        verify(client, times(1)).query(any(QueryRequest.class));
     }
 
     @Test
     void retriesFromTheFirstSlotAfterAConcurrentClaimAndUsesTheNextFreeSlot() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         AwaitAdmissionOwner owner = new AwaitAdmissionOwner("tenant:unit:item");
-        when(client.getItem(any(GetItemRequest.class))).thenReturn(
-            GetItemResponse.builder().item(Map.of()).build(),
-            GetItemResponse.builder().item(Map.of(
+        int firstSlot = Math.floorMod(owner.key().hashCode(), 2);
+        int nextSlot = Math.floorMod(firstSlot + 1, 2);
+        when(client.query(any(QueryRequest.class))).thenReturn(
+            QueryResponse.builder().items().build(),
+            QueryResponse.builder().items(Map.of(
                 "owner_key", text("other-owner"),
                 "lease_token", text("other-lease"),
-                "expires_at", number(10))).build(),
-            GetItemResponse.builder().item(Map.of()).build());
+                "expires_at", number(10),
+                "slot", number(firstSlot))).build());
         when(client.putItem(any(PutItemRequest.class)))
             .thenThrow(ConditionalCheckFailedException.builder().message("raced").build())
             .thenReturn(null);
@@ -101,8 +114,7 @@ class DynamoAwaitAdmissionStoreTest {
         AwaitAdmissionReservation reservation = new DynamoAwaitAdmissionStore(client, admissionConfig())
             .acquire(scope, owner, 2, 9_000, 1_000).toCompletableFuture().join().reservation().orElseThrow();
 
-        int firstSlot = Math.floorMod(owner.key().hashCode(), 2);
-        assertEquals(Math.floorMod(firstSlot + 1, 2), reservation.slot());
+        assertEquals(nextSlot, reservation.slot());
     }
 
     private static PipelineOrchestratorConfig admissionConfig() {

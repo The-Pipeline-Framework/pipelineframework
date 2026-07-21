@@ -3,6 +3,7 @@ package org.pipelineframework.awaitable.admission;
 import java.net.URI;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.locks.ReentrantLock;
@@ -24,8 +25,8 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
-import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 
 /**
  * DynamoDB fixed-slot admission store. Claims and releases are conditional writes;
@@ -112,12 +113,11 @@ public class DynamoAwaitAdmissionStore implements AwaitAdmissionStore {
             throw new IllegalArgumentException("capacity must be positive");
         }
         long nowSeconds = Math.max(1, nowEpochMs / 1000);
+        Map<Integer, Map<String, AttributeValue>> reservationsBySlot = reservationsBySlot(scope);
         boolean reconciledExpired = false;
         for (int offset = 0; offset < capacity; offset++) {
             int slot = Math.floorMod(owner.key().hashCode() + offset, capacity);
-            Map<String, AttributeValue> key = key(scope, slot);
-            Map<String, AttributeValue> existing = dynamoClient().getItem(GetItemRequest.builder()
-                .tableName(table()).key(key).consistentRead(true).build()).item();
+            Map<String, AttributeValue> existing = reservationsBySlot.getOrDefault(slot, Map.of());
             if (!existing.isEmpty() && owner.key().equals(text(existing.get(OWNER_KEY)))
                 && hasLeaseToken(existing) && number(existing.get(EXPIRES_AT)) > nowSeconds) {
                 return AwaitAdmissionAcquireResult.reused(new AwaitAdmissionReservation(
@@ -155,6 +155,29 @@ public class DynamoAwaitAdmissionStore implements AwaitAdmissionStore {
             }
         }
         return AwaitAdmissionAcquireResult.unavailable();
+    }
+
+    /**
+     * Reads the fixed slot set for a scope in one strongly-consistent request.  A full budget is
+     * a normal waiting state, so issuing one request per slot here would otherwise make every
+     * waiting live unit repeatedly saturate the shared blocking executor.
+     */
+    private Map<Integer, Map<String, AttributeValue>> reservationsBySlot(AwaitAdmissionScope scope) {
+        List<Map<String, AttributeValue>> items = dynamoClient().query(QueryRequest.builder()
+            .tableName(table())
+            .keyConditionExpression("#scope = :scope")
+            .expressionAttributeNames(Map.of("#scope", SCOPE_KEY))
+            .expressionAttributeValues(Map.of(":scope", string(scope.key())))
+            .consistentRead(true)
+            .build()).items();
+        Map<Integer, Map<String, AttributeValue>> result = new HashMap<>();
+        for (Map<String, AttributeValue> item : items) {
+            AttributeValue slot = item.get(SLOT);
+            if (slot != null) {
+                result.put((int) number(slot), item);
+            }
+        }
+        return result;
     }
 
     /**
