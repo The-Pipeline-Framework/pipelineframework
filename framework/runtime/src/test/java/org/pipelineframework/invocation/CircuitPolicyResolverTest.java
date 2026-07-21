@@ -103,6 +103,24 @@ class CircuitPolicyResolverTest {
             new TransportBoundaryDescriptor("grpc", "pricing.remoteProcess")));
     }
 
+    @Test
+    void legacySettingsKeepTheProbeLeaseIndependentFromOpenDuration() {
+        CircuitPolicyResolver resolver = new CircuitPolicyResolver(Map.of(
+            "grpc:pricing.remoteProcess", new CircuitSettings(
+                true,
+                CircuitScope.LOCAL_PROCESS,
+                1,
+                Duration.ofMinutes(1),
+                Duration.ofSeconds(7),
+                1,
+                Duration.ofSeconds(1),
+                Optional.empty())));
+
+        assertEquals(Duration.ofSeconds(30), resolver.resolve(
+            new TransportBoundaryDescriptor("grpc", "pricing.remoteProcess"))
+            .orElseThrow().policy().halfOpenProbeLeaseDuration());
+    }
+
     private static CircuitSettings enabled(Optional<String> identity) {
         return new CircuitSettings(
             true,

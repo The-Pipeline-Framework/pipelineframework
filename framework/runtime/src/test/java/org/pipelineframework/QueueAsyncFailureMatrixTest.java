@@ -128,6 +128,35 @@ class QueueAsyncFailureMatrixTest {
     }
 
     @Test
+    void circuitOpenDeferralNeverSchedulesPastItsConfiguredDeadline() {
+        when(orchestratorConfig.retryDelay()).thenReturn(Duration.ofSeconds(5));
+        when(orchestratorConfig.retryMultiplier()).thenReturn(2.0d);
+        Duration maximum = Duration.ofSeconds(5);
+        when(orchestratorConfig.maxCircuitDeferral()).thenReturn(Optional.of(maximum));
+        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-circuit-deadline", 3L, 0);
+        when(executionStateStore.deferCircuit(
+            anyString(), anyString(), anyLong(), anyLong(), anyString(), anyString(), anyString(), anyString(),
+            anyLong(), anyInt(), anyLong())).thenReturn(Uni.createFrom().item(Optional.of(record)));
+        when(workDispatcher.enqueueDelayed(any(), any())).thenReturn(Uni.createFrom().voidItem());
+        Instant notBefore = Instant.now().plusSeconds(30);
+
+        failureHandler.handleExecutionFailure(
+            record,
+            "exec-circuit-deadline:0:0",
+            new CircuitOpenException(new CircuitOpen(new CircuitIdentity("pricing"), CircuitScope.SHARED_DEPENDENCY, notBefore)),
+            executionStateStore,
+            workDispatcher,
+            deadLetterPublisher).await().atMost(Duration.ofSeconds(3));
+
+        ArgumentCaptor<Long> nextDue = ArgumentCaptor.forClass(Long.class);
+        ArgumentCaptor<Long> deferredAt = ArgumentCaptor.forClass(Long.class);
+        verify(executionStateStore).deferCircuit(
+            eq("tenant-a"), eq("exec-circuit-deadline"), eq(3L), nextDue.capture(), eq("exec-circuit-deadline:0:0"),
+            eq("pricing"), eq("circuit_open"), anyString(), anyLong(), eq(1), deferredAt.capture());
+        assertEquals(deferredAt.getValue() + maximum.toMillis(), nextDue.getValue());
+    }
+
+    @Test
     void terminalPathClassifiesNonRetryableFailure() {
         when(orchestratorConfig.maxRetries()).thenReturn(0);
         InMemoryControlPlaneJournal journal = new InMemoryControlPlaneJournal();

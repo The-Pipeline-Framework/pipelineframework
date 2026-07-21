@@ -1,6 +1,7 @@
 package org.pipelineframework.runtime.core.resilience;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 import java.time.Clock;
@@ -8,11 +9,17 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 class SharedCircuitBreakerTest {
@@ -56,6 +63,44 @@ class SharedCircuitBreakerTest {
         assertEquals(clock.instant().plusSeconds(30), saturated.notBefore());
     }
 
+    @Test
+    void healthFailureCompletionWaitsForTheFlushContainingItsOwnFailure() throws Exception {
+        MutableClock clock = new MutableClock(Instant.parse("2026-07-19T10:00:00Z"));
+        FakeStore store = new FakeStore(clock);
+        store.holdFailureWrites = true;
+        SharedCircuitBreaker breaker = breaker(store, clock);
+        CircuitPermit first = permit(breaker.acquire(IDENTITY, POLICY));
+        CircuitPermit second = permit(breaker.acquire(IDENTITY, POLICY));
+
+        CompletableFuture<Void> firstCompletion = first.healthFailure().toCompletableFuture();
+        assertEquals(1, store.failureWrites);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<CompletionStage<Void>> secondRecorded = executor.submit(second::healthFailure);
+            CompletableFuture<Void> secondCompletion = secondRecorded.get(2, TimeUnit.SECONDS).toCompletableFuture();
+            assertFalse(secondCompletion.isDone());
+
+            store.completeFailureWrite(0);
+            firstCompletion.get(2, TimeUnit.SECONDS);
+            assertEquals(2, store.failureWrites);
+            assertFalse(secondCompletion.isDone());
+
+            store.completeFailureWrite(1);
+            secondCompletion.get(2, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void storeReadFailureProducesProtectionUnavailable() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-07-19T10:00:00Z"));
+        FakeStore store = new FakeStore(clock);
+        store.failReads = true;
+
+        assertInstanceOf(CircuitDecision.Unavailable.class, decision(breaker(store, clock).acquire(IDENTITY, POLICY)));
+    }
+
     private static SharedCircuitBreaker breaker(FakeStore store, Clock clock) {
         return new SharedCircuitBreaker(store, clock, Duration.ofSeconds(1), Duration.ofSeconds(2),
             CircuitBreakerListener.NOOP);
@@ -73,7 +118,11 @@ class SharedCircuitBreakerTest {
         private final MutableClock clock;
         private SharedCircuitSnapshot state = SharedCircuitSnapshot.closed();
         private final Map<Integer, SharedCircuitProbe> probes = new HashMap<>();
+        private final List<CompletableFuture<SharedCircuitSnapshot>> pendingFailureWrites = new ArrayList<>();
         private int reads;
+        private int failureWrites;
+        private boolean failReads;
+        private boolean holdFailureWrites;
 
         private FakeStore(MutableClock clock) {
             this.clock = clock;
@@ -82,15 +131,28 @@ class SharedCircuitBreakerTest {
         @Override
         public synchronized CompletionStage<SharedCircuitSnapshot> read(CircuitIdentity identity, CircuitPolicy policy) {
             reads++;
+            if (failReads) {
+                return CompletableFuture.failedFuture(new IllegalStateException("shared store unavailable"));
+            }
             return CompletableFuture.completedFuture(state);
         }
 
         @Override
         public synchronized CompletionStage<SharedCircuitSnapshot> recordHealthFailures(
             CircuitIdentity identity, CircuitPolicy policy, int failures, Instant observedAt) {
+            failureWrites++;
             state = new SharedCircuitSnapshot(SharedCircuitStatus.OPEN, state.epoch() + 1, state.version() + 1,
                 observedAt.plus(policy.openDuration()));
+            if (holdFailureWrites) {
+                CompletableFuture<SharedCircuitSnapshot> pending = new CompletableFuture<>();
+                pendingFailureWrites.add(pending);
+                return pending;
+            }
             return CompletableFuture.completedFuture(state);
+        }
+
+        private synchronized void completeFailureWrite(int index) {
+            pendingFailureWrites.get(index).complete(state);
         }
 
         @Override

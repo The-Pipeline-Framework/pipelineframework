@@ -28,18 +28,21 @@ final class CircuitPolicyResolver {
     private final Map<String, ResolvedCircuitPolicy> policies;
 
     @Inject
-    CircuitPolicyResolver(PipelineResilienceConfig resilienceConfig, PipelineOrchestratorConfig orchestratorConfig) {
-        this(toSettings(resilienceConfig), sharedConfigured(resilienceConfig), orchestratorConfig);
+    CircuitPolicyResolver(
+        PipelineResilienceConfig resilienceConfig,
+        PipelineOrchestratorConfig orchestratorConfig
+    ) {
+        this(toSettings(resilienceConfig), sharedConfigured(resilienceConfig), Optional.of(orchestratorConfig));
     }
 
     CircuitPolicyResolver(Map<String, CircuitSettings> settings) {
-        this(settings, false, null);
+        this(settings, false, Optional.empty());
     }
 
     private CircuitPolicyResolver(
         Map<String, CircuitSettings> settings,
         boolean sharedConfigured,
-        PipelineOrchestratorConfig orchestratorConfig
+        Optional<PipelineOrchestratorConfig> orchestratorConfig
     ) {
         Objects.requireNonNull(settings, "settings must not be null");
         Map<String, ResolvedCircuitPolicy> resolved = new LinkedHashMap<>();
@@ -122,9 +125,11 @@ final class CircuitPolicyResolver {
         return resilienceConfig.shared().dynamoTable().map(String::trim).filter(value -> !value.isEmpty()).isPresent();
     }
 
-    private static void requireFiniteCircuitDeferral(PipelineOrchestratorConfig config) {
-        if (config == null || config.mode() != OrchestratorMode.QUEUE_ASYNC
-            || config.maxCircuitDeferral().filter(value -> !value.isZero() && !value.isNegative()).isEmpty()) {
+    private static void requireFiniteCircuitDeferral(Optional<PipelineOrchestratorConfig> config) {
+        if (config.filter(value -> value.mode() == OrchestratorMode.QUEUE_ASYNC)
+            .flatMap(PipelineOrchestratorConfig::maxCircuitDeferral)
+            .filter(value -> !value.isZero() && !value.isNegative())
+            .isEmpty()) {
             throw new IllegalArgumentException(
                 "Shared transition-worker circuits require finite pipeline.orchestrator.max-circuit-deferral in QUEUE_ASYNC mode");
         }
@@ -158,6 +163,8 @@ record CircuitSettings(
     Duration halfOpenProbeLeaseDuration,
     Optional<String> identity
 ) {
+    private static final Duration DEFAULT_HALF_OPEN_PROBE_LEASE_DURATION = Duration.ofSeconds(30);
+
     CircuitSettings(
         boolean enabled,
         CircuitScope scope,
@@ -169,7 +176,7 @@ record CircuitSettings(
         Optional<String> identity
     ) {
         this(enabled, scope, failureThreshold, failureWindow, openDuration, halfOpenMaxPermits,
-            halfOpenRetryDelay, openDuration, identity);
+            halfOpenRetryDelay, DEFAULT_HALF_OPEN_PROBE_LEASE_DURATION, identity);
     }
     CircuitSettings {
         Objects.requireNonNull(scope, "scope must not be null");

@@ -41,8 +41,8 @@ public final class InMemoryCircuitBreaker implements CircuitBreaker {
         Objects.requireNonNull(identity, "identity must not be null");
         Objects.requireNonNull(policy, "policy must not be null");
         if (policy.requiredScope() != CircuitScope.LOCAL_PROCESS) {
-            throw new IllegalArgumentException(
-                "InMemoryCircuitBreaker only guarantees " + CircuitScope.LOCAL_PROCESS);
+            return CompletableFuture.failedFuture(new IllegalArgumentException(
+                "InMemoryCircuitBreaker only guarantees " + CircuitScope.LOCAL_PROCESS));
         }
 
         CircuitStateTransition transition = null;

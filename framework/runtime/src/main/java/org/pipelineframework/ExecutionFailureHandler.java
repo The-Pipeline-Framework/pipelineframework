@@ -152,7 +152,8 @@ class ExecutionFailureHandler {
       return terminalCircuitDeferral(record, transitionKey, circuitDeferral, executionStateStore, deadLetterPublisher, now);
     }
     long retryDecision = now + retryDelayMillis(Math.max(1, record.attempt() + 1));
-    long nextDue = Math.max(retryDecision, circuitDeferral.notBeforeEpochMs());
+    long deadline = firstDeferredAt + maximum.toMillis();
+    long nextDue = Math.min(deadline, Math.max(retryDecision, circuitDeferral.notBeforeEpochMs()));
     return executionStateStore.deferCircuit(
             record.tenantId(), record.executionId(), record.version(), nextDue, transitionKey,
             circuitDeferral.identity(), circuitDeferral.reason(), circuitDeferral.message(), firstDeferredAt,
