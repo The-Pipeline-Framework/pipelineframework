@@ -88,6 +88,7 @@ class PipelineOrchestratorConfigTest {
         assertNotNull(dynamoConfig);
         assertEquals("tpf_execution", dynamoConfig.executionTable());
         assertEquals("tpf_execution_key", dynamoConfig.executionKeyTable());
+        assertEquals("tpf_execution_payload", dynamoConfig.executionPayloadTable());
         assertEquals("tpf_release_registry", dynamoConfig.releaseTable());
         assertFalse(dynamoConfig.region().isPresent());
         assertFalse(dynamoConfig.endpointOverride().isPresent());
@@ -342,6 +343,11 @@ class PipelineOrchestratorConfigTest {
                 (Consumer<PipelineOrchestratorConfig>) config ->
                     assertEquals("custom_execution_key", config.dynamo().executionKeyTable())),
             Arguments.of(
+                "pipeline.orchestrator.dynamo.execution-payload-table",
+                "custom_execution_payload",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("custom_execution_payload", config.dynamo().executionPayloadTable())),
+            Arguments.of(
                 "pipeline.orchestrator.dynamo.release-table",
                 "custom_release_registry",
                 (Consumer<PipelineOrchestratorConfig>) config ->
@@ -396,6 +402,7 @@ class PipelineOrchestratorConfigTest {
         props.put("pipeline.orchestrator.idempotency-policy", "CLIENT_KEY_REQUIRED");
         props.put("pipeline.orchestrator.dynamo.execution-table", "prod_execution");
         props.put("pipeline.orchestrator.dynamo.execution-key-table", "prod_execution_key");
+        props.put("pipeline.orchestrator.dynamo.execution-payload-table", "prod_execution_payload");
         props.put("pipeline.orchestrator.dynamo.region", "eu-west-1");
         props.put("pipeline.orchestrator.sqs.region", "eu-west-1");
         props.put("pipeline.orchestrator.sqs.local-loopback", "false");
@@ -410,6 +417,7 @@ class PipelineOrchestratorConfigTest {
         assertEquals(OrchestratorIdempotencyPolicy.CLIENT_KEY_REQUIRED, config.idempotencyPolicy());
         assertEquals("prod_execution", config.dynamo().executionTable());
         assertEquals("prod_execution_key", config.dynamo().executionKeyTable());
+        assertEquals("prod_execution_payload", config.dynamo().executionPayloadTable());
         assertEquals("eu-west-1", config.dynamo().region().get());
         assertEquals("eu-west-1", config.sqs().region().get());
         assertFalse(config.sqs().localLoopback());

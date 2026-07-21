@@ -320,6 +320,15 @@ public interface PipelineOrchestratorConfig {
         String executionKeyTable();
 
         /**
+         * Immutable manifests and chunks for execution payloads that must not be stored inline.
+         *
+         * @return execution payload table name
+         */
+        @WithName("execution-payload-table")
+        @WithDefault("tpf_execution_payload")
+        String executionPayloadTable();
+
+        /**
          * Await interaction table name.
          *
          * @return await interaction table name

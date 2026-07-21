@@ -24,6 +24,8 @@ In `QUEUE_ASYNC` mode:
 4. generic async result payloads are still persisted as bounded terminal payloads,
 5. persisted protobuf payload descriptors store `_tpf_message` as the protobuf schema full name.
 
+For the DynamoDB state provider, `pipeline.orchestrator.dynamo.execution-payload-table` is a separate table with `payload_id` as its partition key and `payload_part` as its sort key. Materialized multi payloads, and inline candidates larger than the safe inline budget, are serialized once into an immutable manifest and byte chunks before the execution row is updated to reference the manifest. Chunks are limited to 256 KiB, well below DynamoDB's 400 KiB item limit; this is a byte-storage invariant, not an item-count batching setting. TPF reconstructs the original serialized payload before decoding it, so this does not change the execution result API. The payload table belongs to the DynamoDB coordinator configuration; no object-store plugin is involved.
+
 Terminal Object Publish is the connector-owned exception to the older "materialize then write a final file" pattern. When `output.to` is configured, queue-async terminal output is published through the Object Publish connector before the execution is marked successful. The persisted execution result may still keep a compatibility payload, but the external object write is not a user-authored final business step.
 
 ## Crash Behaviour

@@ -88,6 +88,15 @@ create_table_if_missing tpf_execution_key \
   --key-schema AttributeName=tenant_execution_key,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST
 
+create_table_if_missing tpf_execution_payload \
+  --attribute-definitions \
+    AttributeName=payload_id,AttributeType=S \
+    AttributeName=payload_part,AttributeType=S \
+  --key-schema \
+    AttributeName=payload_id,KeyType=HASH \
+    AttributeName=payload_part,KeyType=RANGE \
+  --billing-mode PAY_PER_REQUEST
+
 create_table_if_missing tpf_await_unit \
   --attribute-definitions \
     AttributeName=tenant_id,AttributeType=S \
