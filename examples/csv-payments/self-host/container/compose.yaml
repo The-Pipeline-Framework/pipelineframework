@@ -117,6 +117,7 @@ services:
         -Dcsv-payments.payment-provider.sqs.response-queue-url=http://localstack:4566/000000000000/csv-payment-await-results
         -Dcsv-payments.payment-provider.sqs.region=${AWS_REGION:-us-east-1}
         -Dcsv-payments.payment-provider.sqs.endpoint-override=http://localstack:4566
+        -Dcsv-payments.payment-provider.sqs.max-messages=10
         -Dcsv-payments.payment-provider.permits-per-second=250.0
         -Dcsv-payments.payment-provider.timeout-millis=5000
         -Dcsv-payments.payment-provider.response-delay-millis=${TPF_CSV_PROVIDER_RESPONSE_DELAY_MILLIS:-3000}
@@ -189,6 +190,7 @@ services:
         -Dtpf.await.sqs.response-queue-url=http://localstack:4566/000000000000/csv-payment-await-results
         -Dtpf.await.sqs.visibility-timeout=PT30S
         -Dtpf.await.sqs.wait-time-seconds=1
+        -Dtpf.await.sqs.max-messages=10
         -Dpipeline.orchestrator.sqs.region=${AWS_REGION:-us-east-1}
         -Dpipeline.orchestrator.sqs.endpoint-override=http://localstack:4566
         -Dpipeline.orchestrator.state-provider=dynamo

@@ -4,6 +4,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -16,6 +17,7 @@ import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
 import io.quarkus.runtime.StartupEvent;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 import org.pipelineframework.PipelineExecutionService;
@@ -131,9 +133,12 @@ public class SqsAwaitCompletionPoller {
             sleepFailureBackoff();
             return false;
         }
-        for (Message message : messages) {
-            handleMessage(responseQueueUrl, message, config);
-        }
+        CompletableFuture.allOf(messages.stream()
+                .map(message -> CompletableFuture.runAsync(
+                    () -> handleMessage(responseQueueUrl, message, config),
+                    Infrastructure.getDefaultExecutor()))
+                .toArray(CompletableFuture[]::new))
+            .join();
         return true;
     }
 

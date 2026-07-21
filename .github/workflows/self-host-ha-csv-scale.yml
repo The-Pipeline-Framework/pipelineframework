@@ -58,12 +58,60 @@ jobs:
 
       - name: Setup Docker environment
         uses: ./.github/actions/setup-testcontainers
+        with:
+          images: |
+            localstack/localstack:3.8
+            localstack/localstack:4.13
+            postgres:17
+            apache/kafka:3.8.0
+            testcontainers/ryuk:0.13.0
+            alpine:3.17
+
+      - name: Restore CSV application images
+        id: csv-application-images
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ runner.temp }}/csv-ha-${{ matrix.await-transport }}-images.tar
+            examples/csv-payments/orchestrator-svc/target
+          key: tpf-csv-ha-images-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.await-transport }}-${{ hashFiles('pom.xml', 'framework/**', 'connectors/object-ingest/**', 'examples/csv-payments/**') }}
+
+      - name: Load CSV application images
+        if: ${{ steps.csv-application-images.outputs.cache-hit == 'true' }}
+        run: |
+          docker load --input "${{ runner.temp }}/csv-ha-${{ matrix.await-transport }}-images.tar" >/dev/null
+          echo "CSV application image cache hit."
+
+      - name: Prepare CSV application images
+        if: ${{ steps.csv-application-images.outputs.cache-hit != 'true' }}
+        env:
+          TPF_CSV_AWAIT_TRANSPORT: ${{ matrix.await-transport }}
+        run: ./examples/csv-payments/self-host/container/run-container-ha-demo.sh --prepare-images
+
+      - name: Archive CSV application images
+        if: ${{ steps.csv-application-images.outputs.cache-hit != 'true' }}
+        run: |
+          docker save --output "${{ runner.temp }}/csv-ha-${{ matrix.await-transport }}-images.tar" \
+            localhost/csv-payments/orchestrator-svc:latest \
+            localhost/csv-payments/pipeline-runtime-svc:latest \
+            localhost/csv-payments/persistence-svc:latest
+
+      - name: Save CSV application images
+        if: ${{ steps.csv-application-images.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ runner.temp }}/csv-ha-${{ matrix.await-transport }}-images.tar
+            examples/csv-payments/orchestrator-svc/target
+          key: ${{ steps.csv-application-images.outputs['cache-primary-key'] }}
 
       - name: Run CSV self-host HA admission scale profile
         env:
           TPF_CSV_AWAIT_TRANSPORT: ${{ matrix.await-transport }}
           TPF_CSV_ADMISSION_PROFILE: ${{ matrix.admission-profile }}
           TPF_CSV_RECORD_COUNT: "10000"
+          TPF_SKIP_CONTAINER_BUILD: "true"
           TPF_KEEP_STACK_ON_FAILURE: "true"
         run: ./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
 
