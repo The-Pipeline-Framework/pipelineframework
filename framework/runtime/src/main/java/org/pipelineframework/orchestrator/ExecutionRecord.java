@@ -27,8 +27,42 @@ public record ExecutionRecord<I, R>(
     String errorMessage,
     long createdAtEpochMs,
     long updatedAtEpochMs,
-    long ttlEpochS
+    long ttlEpochS,
+    long firstCircuitDeferredAtEpochMs,
+    int circuitDeferralCount,
+    String circuitIdentity
 ) {
+    /** Compatibility constructor for records persisted before circuit deferral metadata existed. */
+    public ExecutionRecord(
+        String tenantId,
+        String executionId,
+        String executionKey,
+        String pipelineId,
+        String contractVersion,
+        String releaseVersion,
+        ExecutionResultShape resultShape,
+        ExecutionStatus status,
+        long version,
+        int currentStepIndex,
+        int attempt,
+        String leaseOwner,
+        long leaseExpiresEpochMs,
+        long nextDueEpochMs,
+        String lastTransitionKey,
+        I inputPayload,
+        String awaitUnitId,
+        R resultPayload,
+        String errorCode,
+        String errorMessage,
+        long createdAtEpochMs,
+        long updatedAtEpochMs,
+        long ttlEpochS
+    ) {
+        this(tenantId, executionId, executionKey, pipelineId, contractVersion, releaseVersion, resultShape,
+            status, version, currentStepIndex, attempt, leaseOwner, leaseExpiresEpochMs, nextDueEpochMs,
+            lastTransitionKey, inputPayload, awaitUnitId, resultPayload, errorCode, errorMessage,
+            createdAtEpochMs, updatedAtEpochMs, ttlEpochS, 0L, 0, "");
+    }
     public ExecutionRecord(
         String tenantId,
         String executionId,
@@ -158,6 +192,9 @@ public record ExecutionRecord<I, R>(
             errorMessage,
             createdAtEpochMs,
             nowEpochMs,
-            ttlEpochS);
+            ttlEpochS,
+            firstCircuitDeferredAtEpochMs,
+            circuitDeferralCount,
+            circuitIdentity);
     }
 }

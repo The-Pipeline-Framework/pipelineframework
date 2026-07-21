@@ -151,7 +151,10 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.errorMessage(),
                     current.createdAtEpochMs(),
                     nowEpochMs,
-                    current.ttlEpochS());
+                    current.ttlEpochS(),
+                    current.firstCircuitDeferredAtEpochMs(),
+                    current.circuitDeferralCount(),
+                    current.circuitIdentity());
                 executionsByScopedId.put(scopedId, claimed);
                 return Optional.of(claimed);
             }
@@ -196,7 +199,10 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     null,
                     current.createdAtEpochMs(),
                     nowEpochMs,
-                    current.ttlEpochS());
+                    current.ttlEpochS(),
+                    current.firstCircuitDeferredAtEpochMs(),
+                    current.circuitDeferralCount(),
+                    current.circuitIdentity());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -242,7 +248,10 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     null,
                     current.createdAtEpochMs(),
                     nowEpochMs,
-                    current.ttlEpochS());
+                    current.ttlEpochS(),
+                    current.firstCircuitDeferredAtEpochMs(),
+                    current.circuitDeferralCount(),
+                    current.circuitIdentity());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -289,7 +298,10 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     null,
                     current.createdAtEpochMs(),
                     nowEpochMs,
-                    current.ttlEpochS());
+                    current.ttlEpochS(),
+                    current.firstCircuitDeferredAtEpochMs(),
+                    current.circuitDeferralCount(),
+                    current.circuitIdentity());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -342,7 +354,10 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     null,
                     current.createdAtEpochMs(),
                     nowEpochMs,
-                    current.ttlEpochS());
+                    current.ttlEpochS(),
+                    current.firstCircuitDeferredAtEpochMs(),
+                    current.circuitDeferralCount(),
+                    current.circuitIdentity());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -404,7 +419,44 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     truncate(errorMessage),
                     current.createdAtEpochMs(),
                     nowEpochMs,
-                    current.ttlEpochS());
+                    current.ttlEpochS(),
+                    current.firstCircuitDeferredAtEpochMs(),
+                    current.circuitDeferralCount(),
+                    current.circuitIdentity());
+                executionsByScopedId.put(scopedId, updated);
+                return Optional.of(updated);
+            }
+        });
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> deferCircuit(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        long nextDueEpochMs,
+        String transitionKey,
+        String circuitIdentity,
+        String reason,
+        String errorMessage,
+        long firstCircuitDeferredAtEpochMs,
+        int circuitDeferralCount,
+        long nowEpochMs
+    ) {
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                String scopedId = scopedExecutionId(tenantId, executionId);
+                ExecutionRecord<Object, Object> current = getActiveRecord(scopedId, nowEpochMs);
+                if (current == null || current.version() != expectedVersion) {
+                    return Optional.empty();
+                }
+                ExecutionRecord<Object, Object> updated = new ExecutionRecord<>(
+                    current.tenantId(), current.executionId(), current.executionKey(), current.pipelineId(),
+                    current.contractVersion(), current.releaseVersion(), current.resultShape(), ExecutionStatus.WAIT_RETRY,
+                    current.version() + 1, current.currentStepIndex(), current.attempt(), null, 0L, nextDueEpochMs,
+                    transitionKey, current.inputPayload(), current.awaitUnitId(), null, reason, truncate(errorMessage),
+                    current.createdAtEpochMs(), nowEpochMs, current.ttlEpochS(), firstCircuitDeferredAtEpochMs,
+                    circuitDeferralCount, circuitIdentity == null ? "" : circuitIdentity);
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -454,7 +506,10 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     truncate(errorMessage),
                     current.createdAtEpochMs(),
                     nowEpochMs,
-                    current.ttlEpochS());
+                    current.ttlEpochS(),
+                    current.firstCircuitDeferredAtEpochMs(),
+                    current.circuitDeferralCount(),
+                    current.circuitIdentity());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -501,7 +556,10 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     null,
                     current.createdAtEpochMs(),
                     nowEpochMs,
-                    current.ttlEpochS());
+                    current.ttlEpochS(),
+                    current.firstCircuitDeferredAtEpochMs(),
+                    current.circuitDeferralCount(),
+                    current.circuitIdentity());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }

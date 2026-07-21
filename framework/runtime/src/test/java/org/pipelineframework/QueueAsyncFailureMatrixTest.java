@@ -1,6 +1,7 @@
 package org.pipelineframework;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 
 import io.smallrye.mutiny.CompositeException;
@@ -26,6 +27,10 @@ import org.pipelineframework.orchestrator.controlplane.ControlPlaneProjection;
 import org.pipelineframework.orchestrator.controlplane.InMemoryControlPlaneJournal;
 import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
 import org.pipelineframework.step.NonRetryableException;
+import org.pipelineframework.runtime.core.resilience.CircuitIdentity;
+import org.pipelineframework.runtime.core.resilience.CircuitOpen;
+import org.pipelineframework.runtime.core.resilience.CircuitOpenException;
+import org.pipelineframework.runtime.core.resilience.CircuitScope;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -93,6 +98,62 @@ class QueueAsyncFailureMatrixTest {
             anyLong());
         verify(workDispatcher).enqueueDelayed(eq(new ExecutionWorkItem("tenant-a", "exec-1")), any(Duration.class));
         verify(executionStateStore, never()).markTerminalFailure(anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(), anyLong());
+    }
+
+    @Test
+    void circuitOpenDefersWithoutConsumingTheRemoteAttemptBudget() {
+        when(orchestratorConfig.retryDelay()).thenReturn(Duration.ofSeconds(5));
+        when(orchestratorConfig.retryMultiplier()).thenReturn(2.0d);
+        when(orchestratorConfig.maxCircuitDeferral()).thenReturn(Optional.of(Duration.ofMinutes(5)));
+        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-circuit", 3L, 0);
+        when(executionStateStore.deferCircuit(
+            anyString(), anyString(), anyLong(), anyLong(), anyString(), anyString(), anyString(), anyString(),
+            anyLong(), anyInt(), anyLong())).thenReturn(Uni.createFrom().item(Optional.of(record)));
+        when(workDispatcher.enqueueDelayed(any(), any())).thenReturn(Uni.createFrom().voidItem());
+        Instant notBefore = Instant.now().plusSeconds(30);
+
+        assertDoesNotThrow(() -> failureHandler.handleExecutionFailure(
+            record,
+            "exec-circuit:0:0",
+            new CircuitOpenException(new CircuitOpen(new CircuitIdentity("pricing"), CircuitScope.SHARED_DEPENDENCY, notBefore)),
+            executionStateStore,
+            workDispatcher,
+            deadLetterPublisher).await().atMost(Duration.ofSeconds(3)));
+
+        verify(executionStateStore).deferCircuit(
+            eq("tenant-a"), eq("exec-circuit"), eq(3L), anyLong(), eq("exec-circuit:0:0"),
+            eq("pricing"), eq("circuit_open"), anyString(), anyLong(), eq(1), anyLong());
+        verify(executionStateStore, never()).scheduleRetry(
+            anyString(), anyString(), anyLong(), anyInt(), anyLong(), anyString(), anyString(), anyString(), anyLong());
+    }
+
+    @Test
+    void circuitOpenDeferralNeverSchedulesPastItsConfiguredDeadline() {
+        when(orchestratorConfig.retryDelay()).thenReturn(Duration.ofSeconds(5));
+        when(orchestratorConfig.retryMultiplier()).thenReturn(2.0d);
+        Duration maximum = Duration.ofSeconds(5);
+        when(orchestratorConfig.maxCircuitDeferral()).thenReturn(Optional.of(maximum));
+        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-circuit-deadline", 3L, 0);
+        when(executionStateStore.deferCircuit(
+            anyString(), anyString(), anyLong(), anyLong(), anyString(), anyString(), anyString(), anyString(),
+            anyLong(), anyInt(), anyLong())).thenReturn(Uni.createFrom().item(Optional.of(record)));
+        when(workDispatcher.enqueueDelayed(any(), any())).thenReturn(Uni.createFrom().voidItem());
+        Instant notBefore = Instant.now().plusSeconds(30);
+
+        failureHandler.handleExecutionFailure(
+            record,
+            "exec-circuit-deadline:0:0",
+            new CircuitOpenException(new CircuitOpen(new CircuitIdentity("pricing"), CircuitScope.SHARED_DEPENDENCY, notBefore)),
+            executionStateStore,
+            workDispatcher,
+            deadLetterPublisher).await().atMost(Duration.ofSeconds(3));
+
+        ArgumentCaptor<Long> nextDue = ArgumentCaptor.forClass(Long.class);
+        ArgumentCaptor<Long> deferredAt = ArgumentCaptor.forClass(Long.class);
+        verify(executionStateStore).deferCircuit(
+            eq("tenant-a"), eq("exec-circuit-deadline"), eq(3L), nextDue.capture(), eq("exec-circuit-deadline:0:0"),
+            eq("pricing"), eq("circuit_open"), anyString(), anyLong(), eq(1), deferredAt.capture());
+        assertEquals(deferredAt.getValue() + maximum.toMillis(), nextDue.getValue());
     }
 
     @Test

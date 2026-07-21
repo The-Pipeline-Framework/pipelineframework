@@ -2,6 +2,7 @@ package org.pipelineframework.orchestrator;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 import io.smallrye.mutiny.Uni;
 
@@ -200,6 +201,28 @@ public interface ExecutionStateStore {
         String errorCode,
         String errorMessage,
         long nowEpochMs);
+
+    /**
+     * Defers an execution whose dependency invocation was denied before it started.
+     *
+     * <p>This transition deliberately preserves {@code attempt}; circuit deferrals are bounded by
+     * their own durable lifetime policy rather than being presented as failed remote attempts.</p>
+     */
+    default Uni<Optional<ExecutionRecord<Object, Object>>> deferCircuit(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        long nextDueEpochMs,
+        String transitionKey,
+        String circuitIdentity,
+        String reason,
+        String errorMessage,
+        long firstCircuitDeferredAtEpochMs,
+        int circuitDeferralCount,
+        long nowEpochMs) {
+        return Uni.createFrom().completionStage(CompletableFuture.failedFuture(
+            new UnsupportedOperationException("Execution state store does not support circuit deferral")));
+    }
 
     /**
      * Marks an execution as failed or dead-lettered if expected version matches.
