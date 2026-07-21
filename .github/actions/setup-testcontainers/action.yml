@@ -50,11 +50,6 @@ runs:
         echo "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock" >> "$GITHUB_ENV"
         echo "TPF_CI_QUIET=true" >> "$GITHUB_ENV"
         
-        # Configure Java logging manager for Quarkus tests
-        # Use JAVA_TOOL_OPTIONS so forked test JVMs (Surefire/Failsafe) inherit the setting
-        echo "JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
-        echo "MAVEN_OPTS=${MAVEN_OPTS} -Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
-        
         # Write Testcontainers properties file for explicit configuration
         # This ensures Testcontainers uses the Unix socket strategy consistently
         echo "docker.client.strategy=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" > "$HOME/.testcontainers.properties"
