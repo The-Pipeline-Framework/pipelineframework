@@ -68,9 +68,21 @@ export TPF_SOURCE_CSV="${TPF_SOURCE_CSV:-${EXAMPLE_DIR}/input-csv-file-processin
 export TPF_SKIP_CONTAINER_BUILD="${TPF_SKIP_CONTAINER_BUILD:-false}"
 
 CI_MODE=false
-if [[ "${1:-}" == "--ci" ]]; then
-  CI_MODE=true
-fi
+PREPARE_IMAGES_ONLY=false
+for argument in "$@"; do
+  case "${argument}" in
+    --ci)
+      CI_MODE=true
+      ;;
+    --prepare-images)
+      PREPARE_IMAGES_ONLY=true
+      ;;
+    *)
+      echo "ERROR: unsupported argument '${argument}'." >&2
+      exit 1
+      ;;
+  esac
+done
 
 compose() {
   if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" ]]; then
@@ -78,6 +90,14 @@ compose() {
     return
   fi
   docker compose -f "${COMPOSE_FILE}" "$@"
+}
+
+compose_up() {
+  if [[ "${TPF_CI_QUIET:-false}" == "true" ]]; then
+    compose up --quiet-pull "$@"
+    return
+  fi
+  compose up "$@"
 }
 
 require_free_port() {
@@ -159,6 +179,11 @@ if [[ "${TPF_SKIP_CONTAINER_BUILD}" != "true" ]]; then
 fi
 generate_container_pipeline_config
 
+if [[ "${PREPARE_IMAGES_ONLY}" == "true" ]]; then
+  echo "CSV container images prepared for ${TPF_CSV_AWAIT_TRANSPORT} await."
+  exit 0
+fi
+
 bash "${EXAMPLE_DIR}/generate-dev-certs.sh" >/dev/null
 
 "${SCRIPT_DIR}/bootstrap-localstack.sh"
@@ -167,7 +192,7 @@ if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" ]]; then
 fi
 
 echo "Starting CSV persistence, runtime, worker, and coordinator containers with ${TPF_CSV_AWAIT_TRANSPORT} await..."
-compose up -d persistence runtime worker coordinator
+compose_up -d persistence runtime worker coordinator
 
 python3 "${CLIENT}" wait-health \
   --base-url "http://localhost:${TPF_PERSISTENCE_PORT}" \
