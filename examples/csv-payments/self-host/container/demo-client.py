@@ -226,9 +226,6 @@ def prepare_input(args):
         candidate.unlink()
     for candidate in input_dir.glob("*.out"):
         candidate.unlink()
-    for candidate in input_dir.glob("execution-*"):
-        if candidate.is_dir():
-            shutil.rmtree(candidate)
     if args.record_count > 0:
         records_per_execution = args.records_per_execution or args.record_count
         if records_per_execution <= 0:
@@ -239,10 +236,7 @@ def prepare_input(args):
             if args.record_count <= records_per_execution:
                 target = input_dir / f"payments_{args.record_count}.csv"
             else:
-                execution_dir = input_dir / f"execution-{start_record_id:05d}"
-                execution_dir.mkdir()
-                execution_dir.chmod(0o777)
-                target = execution_dir / f"payments_{args.record_count}_{start_record_id:05d}.csv"
+                target = input_dir / f"payments_{args.record_count}_{start_record_id:05d}.csv"
             with target.open("w", encoding="utf-8", newline="") as generated:
                 generated.write("ID,Recipient,Amount,Currency\n")
                 for record_id in range(start_record_id, end_record_id + 1):
@@ -312,7 +306,7 @@ def run_flow(args):
     for execution_id, _, _ in executions:
         inspect_result(args, execution_id)
     for _, input_file, record_count in executions:
-        output = wait_output(input_file.parent, f"{input_file.name}.out", args.timeout_seconds)
+        output = wait_output(output_dir, f"{input_file.name}.out", args.timeout_seconds)
         assert_output_record_count(output, record_count)
 
 
