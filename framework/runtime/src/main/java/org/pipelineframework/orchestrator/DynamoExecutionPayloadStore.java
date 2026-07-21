@@ -92,15 +92,24 @@ final class DynamoExecutionPayloadStore {
         int expectedChunks = intValue(manifest, CHUNK_COUNT);
         int expectedLength = intValue(manifest, PAYLOAD_LENGTH_BYTES);
         String expectedHash = string(manifest, SHA256);
-        List<Map<String, AttributeValue>> chunks = new ArrayList<>(client.get().query(QueryRequest.builder()
-            .tableName(tableName.get())
-            .keyConditionExpression("#payloadId = :payloadId AND begins_with(#payloadPart, :chunkPrefix)")
-            .expressionAttributeNames(Map.of("#payloadId", PAYLOAD_ID, "#payloadPart", PAYLOAD_PART))
-            .expressionAttributeValues(Map.of(
-                ":payloadId", stringValue(payloadId),
-                ":chunkPrefix", stringValue(CHUNK_PREFIX)))
-            .consistentRead(true)
-            .build()).items());
+        List<Map<String, AttributeValue>> chunks = new ArrayList<>();
+        Map<String, AttributeValue> lastEvaluatedKey = Map.of();
+        do {
+            QueryRequest.Builder query = QueryRequest.builder()
+                .tableName(tableName.get())
+                .keyConditionExpression("#payloadId = :payloadId AND begins_with(#payloadPart, :chunkPrefix)")
+                .expressionAttributeNames(Map.of("#payloadId", PAYLOAD_ID, "#payloadPart", PAYLOAD_PART))
+                .expressionAttributeValues(Map.of(
+                    ":payloadId", stringValue(payloadId),
+                    ":chunkPrefix", stringValue(CHUNK_PREFIX)))
+                .consistentRead(true);
+            if (!lastEvaluatedKey.isEmpty()) {
+                query.exclusiveStartKey(lastEvaluatedKey);
+            }
+            var response = client.get().query(query.build());
+            chunks.addAll(response.items());
+            lastEvaluatedKey = response.lastEvaluatedKey();
+        } while (lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty());
         chunks.sort(Comparator.comparing(item -> string(item, PAYLOAD_PART)));
         if (chunks.size() != expectedChunks) {
             throw new IllegalStateException("Execution payload chunk count is incomplete for " + payloadId);
@@ -139,10 +148,24 @@ final class DynamoExecutionPayloadStore {
                 .key(payloadKey(payloadId, part))
                 .consistentRead(true)
                 .build()).item();
-            if (!item.equals(existing)) {
+            if (!payloadAttributesMatch(item, existing)) {
                 throw new IllegalStateException("Execution payload collision contains different data: " + payloadId, collision);
             }
         }
+    }
+
+    private static boolean payloadAttributesMatch(
+        Map<String, AttributeValue> expected,
+        Map<String, AttributeValue> existing
+    ) {
+        if (existing == null) {
+            return false;
+        }
+        Map<String, AttributeValue> expectedWithoutTtl = new java.util.HashMap<>(expected);
+        expectedWithoutTtl.remove(TTL_EPOCH_S);
+        Map<String, AttributeValue> existingWithoutTtl = new java.util.HashMap<>(existing);
+        existingWithoutTtl.remove(TTL_EPOCH_S);
+        return expectedWithoutTtl.equals(existingWithoutTtl);
     }
 
     private static Map<String, AttributeValue> payloadKey(String payloadId, String part) {

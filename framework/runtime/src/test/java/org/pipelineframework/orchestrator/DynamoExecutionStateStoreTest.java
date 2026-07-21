@@ -533,6 +533,24 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
+    void markSucceededRejectsNullResultPayload() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
+
+        NullPointerException failure = assertThrows(NullPointerException.class, () -> store.markSucceeded(
+                "tenant-a",
+                "exec-1",
+                1L,
+                "exec-1:0:0",
+                null,
+                System.currentTimeMillis())
+            .await().indefinitely());
+
+        assertEquals("resultPayload must not be null", failure.getMessage());
+        verifyNoInteractions(client);
+    }
+
+    @Test
     void startupValidationReportsMissingKeyTable() {
         PipelineOrchestratorConfig config = mockConfig("tpf_execution", "");
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(null, config);

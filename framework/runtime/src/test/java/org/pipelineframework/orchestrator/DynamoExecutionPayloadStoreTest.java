@@ -21,7 +21,9 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
+import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.PutItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
 
@@ -60,11 +62,37 @@ class DynamoExecutionPayloadStoreTest {
             "sha256", string(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes))),
             "ttl_epoch_s", number(1234));
         when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().item(manifest).build());
-        when(client.query(any(QueryRequest.class))).thenReturn(QueryResponse.builder().items(List.of(
-            chunk("p-1", "CHUNK#00000000", first),
-            chunk("p-1", "CHUNK#00000001", second))).build());
+        when(client.query(any(QueryRequest.class))).thenReturn(
+            QueryResponse.builder()
+                .items(List.of(chunk("p-1", "CHUNK#00000000", first)))
+                .lastEvaluatedKey(Map.of("payload_id", string("p-1"), "payload_part", string("CHUNK#00000000")))
+                .build(),
+            QueryResponse.builder()
+                .items(List.of(chunk("p-1", "CHUNK#00000001", second)))
+                .build());
 
         assertEquals(payload, store.read("p-1"));
+    }
+
+    @Test
+    void acceptsAnExistingImmutablePayloadWhenOnlyItsTtlDiffers() throws Exception {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionPayloadStore store = new DynamoExecutionPayloadStore(() -> client, () -> "tpf_execution_payload");
+        String payload = "payload";
+        String contentHash = sha256(payload.getBytes(StandardCharsets.UTF_8));
+        String payloadId = "p-" + sha256(("tenant-a\u0000exec-1\u0000result:step-1\u0000" + contentHash)
+            .getBytes(StandardCharsets.UTF_8));
+        Map<String, AttributeValue> existing = Map.of(
+            "payload_id", string(payloadId),
+            "payload_part", string("CHUNK#00000000"),
+            "payload_bytes", AttributeValue.builder().b(SdkBytes.fromUtf8String(payload)).build(),
+            "ttl_epoch_s", number(99));
+        when(client.putItem(any(PutItemRequest.class))).thenThrow(ConditionalCheckFailedException.builder().build())
+            .thenReturn(PutItemResponse.builder().build());
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().item(existing).build());
+
+        assertEquals(payloadId, store.write("tenant-a", "exec-1", "result:step-1", payload, 1234));
+        verify(client, times(2)).putItem(any(PutItemRequest.class));
     }
 
     private static Map<String, AttributeValue> chunk(String payloadId, String part, byte[] bytes) {
@@ -81,5 +109,9 @@ class DynamoExecutionPayloadStoreTest {
 
     private static AttributeValue number(long value) {
         return AttributeValue.builder().n(Long.toString(value)).build();
+    }
+
+    private static String sha256(byte[] bytes) throws Exception {
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
     }
 }

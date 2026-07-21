@@ -430,6 +430,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         Object resultPayload,
         long nowEpochMs
     ) {
+        Objects.requireNonNull(resultPayload, "resultPayload must not be null");
         Map<String, String> names = new HashMap<>();
         names.put("#status", STATUS);
         names.put("#version", VERSION);
