@@ -83,6 +83,7 @@ class PaymentProviderKafkaAwaitMockTest {
   void consumesDispatchEnvelopeAndPublishesCompletionEnvelope() throws Exception {
     PaymentRecord paymentRecord = validPaymentRecord();
     PaymentStatus status = validPaymentStatus(paymentRecord);
+    paymentRecord.setId(null);
     when(paymentProvider.processPayment(any(PaymentRecord.class))).thenReturn(status);
     when(results.send(anyString())).thenReturn(Uni.createFrom().voidItem());
 

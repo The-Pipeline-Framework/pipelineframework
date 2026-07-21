@@ -339,8 +339,8 @@ public class PaymentProviderSqsAwaitMock {
       throw new IllegalArgumentException("SQS await payment request payload must contain a PaymentRecord");
     }
     if (paymentRecord.getAmount() == null || paymentRecord.getRecipient() == null || paymentRecord.getRecipient().isBlank()
-        || paymentRecord.getCurrency() == null || paymentRecord.getId() == null) {
-      throw new IllegalArgumentException("PaymentRecord must include id, amount, recipient, and currency");
+        || paymentRecord.getCurrency() == null) {
+      throw new IllegalArgumentException("PaymentRecord must include amount, recipient, and currency");
     }
   }
 

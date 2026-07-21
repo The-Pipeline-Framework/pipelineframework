@@ -79,6 +79,7 @@ class PaymentProviderSqsAwaitMockTest {
   void pollOnceProcessesRequestSendsCompletionAndDeletesRequest() throws Exception {
     PaymentRecord paymentRecord = validPaymentRecord();
     PaymentStatus status = validPaymentStatus(paymentRecord);
+    paymentRecord.setId(null);
     when(paymentProvider.processPayment(any(PaymentRecord.class))).thenReturn(status);
     when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
         .messages(message("receipt-1", dispatchJson(paymentRecord)))
