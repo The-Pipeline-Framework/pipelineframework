@@ -74,6 +74,7 @@ public class PaymentProviderSqsAwaitMock {
   private volatile ExecutorService pollExecutor;
   private volatile Future<?> pollFuture;
   private volatile boolean running;
+  private volatile PaymentProviderCompletionProfile<SqsAwaitCompletionEnvelope> completionProfile;
   private final AtomicInteger consecutivePollFailures = new AtomicInteger();
 
   public PaymentProviderSqsAwaitMock() {
@@ -119,6 +120,10 @@ public class PaymentProviderSqsAwaitMock {
     }
     shutdownExecutor(pollExecutor);
     pollExecutor = null;
+    PaymentProviderCompletionProfile<SqsAwaitCompletionEnvelope> activeCompletionProfile = completionProfile;
+    if (activeCompletionProfile != null) {
+      activeCompletionProfile.close();
+    }
     SqsClient activeClient = client;
     if (activeClient == null) {
       return;
@@ -205,14 +210,26 @@ public class PaymentProviderSqsAwaitMock {
     }
     try {
       delayCompletion();
-      sqsClient(config).sendMessage(SendMessageRequest.builder()
-          .queueUrl(config.responseQueueUrl()
-              .filter(url -> !url.isBlank())
-              .orElseThrow(() -> new IllegalStateException(
-                  "csv-payments.payment-provider.sqs.response-queue-url must be configured when SQS provider is enabled.")))
-          .messageBody(serialize(completion))
-          .build());
-      deleteMessage(requestQueueUrl, message.receiptHandle(), config);
+      completionProfile().releaseWhenReady(completion).whenComplete((released, failure) -> {
+        try {
+          if (failure != null) {
+            LOG.errorf(failure, "Failed releasing CSV SQS await completion id=%s", message.messageId());
+            return;
+          }
+          sqsClient(config).sendMessage(SendMessageRequest.builder()
+              .queueUrl(config.responseQueueUrl()
+                  .filter(url -> !url.isBlank())
+                  .orElseThrow(() -> new IllegalStateException(
+                      "csv-payments.payment-provider.sqs.response-queue-url must be configured when SQS provider is enabled.")))
+              .messageBody(serialize(released))
+              .build());
+          deleteMessage(requestQueueUrl, message.receiptHandle(), config);
+        } catch (RuntimeException e) {
+          LOG.errorf(e, "Failed sending CSV SQS await completion id=%s", message.messageId());
+        } finally {
+          completionProfile().completionHandled();
+        }
+      });
     } catch (RuntimeException e) {
       LOG.errorf(e, "Failed sending CSV SQS await completion id=%s", message.messageId());
     }
@@ -238,6 +255,22 @@ public class PaymentProviderSqsAwaitMock {
       return;
     }
     sleep(Duration.ofMillis(delayMillis));
+  }
+
+  private PaymentProviderCompletionProfile<SqsAwaitCompletionEnvelope> completionProfile() {
+    PaymentProviderCompletionProfile<SqsAwaitCompletionEnvelope> active = completionProfile;
+    if (active != null) {
+      return active;
+    }
+    synchronized (this) {
+      if (completionProfile == null) {
+        completionProfile = new PaymentProviderCompletionProfile<>(
+            paymentProviderConfig.completionBurstSize(),
+            paymentProviderConfig.completionBurstFlushDelay(),
+            "csv-sqs-await-provider-completion-profile");
+      }
+      return completionProfile;
+    }
   }
 
   private void deleteMessage(String queueUrl, String receiptHandle, SqsProviderConfig config) {
@@ -306,8 +339,8 @@ public class PaymentProviderSqsAwaitMock {
       throw new IllegalArgumentException("SQS await payment request payload must contain a PaymentRecord");
     }
     if (paymentRecord.getAmount() == null || paymentRecord.getRecipient() == null || paymentRecord.getRecipient().isBlank()
-        || paymentRecord.getCurrency() == null || paymentRecord.getId() == null) {
-      throw new IllegalArgumentException("PaymentRecord must include id, amount, recipient, and currency");
+        || paymentRecord.getCurrency() == null) {
+      throw new IllegalArgumentException("PaymentRecord must include amount, recipient, and currency");
     }
   }
 

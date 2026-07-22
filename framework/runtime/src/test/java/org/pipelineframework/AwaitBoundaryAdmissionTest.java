@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.InOrder;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
@@ -32,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -76,7 +78,7 @@ class AwaitBoundaryAdmissionTest {
   }
 
   @Test
-  void recordsBoundaryCompletionBeforeLiveSignalAndSkipsDurableContinuationWhenAccepted() {
+    void recordsBoundaryCompletionBeforeLiveSignalAndSkipsDurableContinuationWhenAccepted() {
     AwaitInteractionRecord interaction = awaitRecord(null);
     AwaitUnitRecord unit = awaitUnit(AwaitUnitStatus.COMPLETED, null, 0, false, "interaction-1");
     AwaitCompletionCommand command = command(interaction.interactionId());
@@ -96,8 +98,30 @@ class AwaitBoundaryAdmissionTest {
 
     assertEquals(interaction, result.record());
     verify(liveCompletionRegistry).signal(interaction, unit);
-    verify(continuations, never()).afterRecordedCompletion(any(), any(), any(), any(Long.class));
-  }
+        verify(continuations, never()).afterRecordedCompletion(any(), any(), any(), any(Long.class));
+    }
+
+    @Test
+    void releasesAdmissionAfterLiveSessionEnqueuesWithoutWaitingForDownstreamDelivery() {
+      AwaitInteractionRecord interaction = awaitRecord(null);
+      AwaitUnitRecord unit = awaitUnit(AwaitUnitStatus.COMPLETED, null, 0, false, "interaction-1");
+      AwaitCompletionCommand command = command(interaction.interactionId());
+      when(awaitCoordinator.complete(any()))
+          .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(interaction, false)));
+      when(awaitCoordinator.recordCompletion(interaction, command.nowEpochMs()))
+          .thenReturn(Uni.createFrom().item(unit));
+      when(liveCompletionRegistry.signal(interaction, unit)).thenReturn(Uni.createFrom().item(true));
+      when(awaitCoordinator.admissionEnabled()).thenReturn(true);
+      when(awaitCoordinator.releaseAdmission(interaction)).thenReturn(Uni.createFrom().voidItem());
+
+      admission.complete(command, AwaitContinuations.NOOP_ITEM_CONTINUATION_HANDLER)
+          .await().indefinitely();
+
+      InOrder order = inOrder(liveCompletionRegistry, awaitCoordinator);
+      order.verify(liveCompletionRegistry).signal(interaction, unit);
+      order.verify(awaitCoordinator).releaseAdmission(interaction);
+      verify(continuations, never()).afterRecordedCompletion(any(), any(), any(), any(Long.class));
+    }
 
   @Test
   void fallsBackToDurableContinuationWhenNoLiveSessionAccepts() {

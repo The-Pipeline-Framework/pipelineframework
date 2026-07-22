@@ -98,6 +98,7 @@ services:
         -Dquarkus.micrometer.binder.http-server.enabled=false
         -Dquarkus.micrometer.binder.http-client.enabled=false
         -Dpipeline.orchestrator.mode=QUEUE_ASYNC
+        -Dpipeline.max-concurrency=${TPF_PIPELINE_MAX_CONCURRENCY:-250}
         -Dpipeline.orchestrator.resume-token-secret=csv-payments-container-resume-token-secret
         -Dpipeline.orchestrator.strict-startup=false
         -Dpipeline.await-admission.enabled=true
@@ -108,6 +109,8 @@ services:
         -Dkafka.bootstrap.servers=${TPF_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
         -Dtpf.await.kafka.reactive-messaging.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
         -Dmp.messaging.outgoing.tpf-await-kafka-requests.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
+        -Dmp.messaging.incoming.tpf-await-kafka-responses.connector=smallrye-kafka
+        -Dmp.messaging.incoming.tpf-await-kafka-responses.enabled=false
         ${TPF_RUNTIME_AWAIT_KAFKA_RESPONSE_OPTS:-}
         -Dmp.messaging.incoming.csv-payment-provider-requests.enabled=${TPF_RUNTIME_KAFKA_PROVIDER_ENABLED:-false}
         -Dmp.messaging.outgoing.csv-payment-provider-results.enabled=${TPF_RUNTIME_KAFKA_PROVIDER_ENABLED:-false}
@@ -116,9 +119,12 @@ services:
         -Dcsv-payments.payment-provider.sqs.response-queue-url=http://localstack:4566/000000000000/csv-payment-await-results
         -Dcsv-payments.payment-provider.sqs.region=${AWS_REGION:-us-east-1}
         -Dcsv-payments.payment-provider.sqs.endpoint-override=http://localstack:4566
+        -Dcsv-payments.payment-provider.sqs.max-messages=10
         -Dcsv-payments.payment-provider.permits-per-second=250.0
         -Dcsv-payments.payment-provider.timeout-millis=5000
-        -Dcsv-payments.payment-provider.response-delay-millis=3000
+        -Dcsv-payments.payment-provider.response-delay-millis=${TPF_CSV_PROVIDER_RESPONSE_DELAY_MILLIS:-3000}
+        -Dcsv-payments.payment-provider.completion-burst-size=${TPF_CSV_PROVIDER_COMPLETION_BURST_SIZE:-1}
+        -Dcsv-payments.payment-provider.completion-burst-flush-delay=${TPF_CSV_PROVIDER_COMPLETION_BURST_FLUSH_DELAY:-PT1S}
         -Dquarkus.grpc.clients.process-csv-payments-input.host=localhost
         -Dquarkus.grpc.clients.process-csv-payments-input.port=8183
         -Dquarkus.grpc.clients.process-csv-payments-input.plain-text=true
@@ -173,6 +179,7 @@ services:
         -Dquarkus.micrometer.binder.http-server.enabled=false
         -Dquarkus.micrometer.binder.http-client.enabled=false
         -Dpipeline.orchestrator.mode=QUEUE_ASYNC
+        -Dpipeline.max-concurrency=${TPF_PIPELINE_MAX_CONCURRENCY:-250}
         -Dpipeline.orchestrator.resume-token-secret=csv-payments-container-resume-token-secret
         -Dpipeline.orchestrator.worker.rest.server-enabled=true
         -Dpipeline.orchestrator.worker.rest.shared-secret-ref=env:TPF_WORKER_SECRET
@@ -185,6 +192,7 @@ services:
         -Dtpf.await.sqs.response-queue-url=http://localstack:4566/000000000000/csv-payment-await-results
         -Dtpf.await.sqs.visibility-timeout=PT30S
         -Dtpf.await.sqs.wait-time-seconds=1
+        -Dtpf.await.sqs.max-messages=10
         -Dpipeline.orchestrator.sqs.region=${AWS_REGION:-us-east-1}
         -Dpipeline.orchestrator.sqs.endpoint-override=http://localstack:4566
         -Dpipeline.orchestrator.state-provider=dynamo
@@ -283,6 +291,7 @@ services:
         -Dquarkus.micrometer.binder.http-server.enabled=false
         -Dquarkus.micrometer.binder.http-client.enabled=false
         -Dpipeline.orchestrator.mode=QUEUE_ASYNC
+        -Dpipeline.max-concurrency=${TPF_PIPELINE_MAX_CONCURRENCY:-250}
         -Dpipeline.orchestrator.resume-token-secret=csv-payments-container-resume-token-secret
         -Dpipeline.orchestrator.strict-startup=true
         -Dkafka.bootstrap.servers=${TPF_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}

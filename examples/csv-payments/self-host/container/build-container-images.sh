@@ -82,14 +82,16 @@ require_matching_image "TPF_CSV_PERSISTENCE_IMAGE" "${TPF_CSV_PERSISTENCE_IMAGE}
 
 if [[ "${TPF_SKIP_FRAMEWORK_INSTALL}" != "true" ]]; then
   echo "Installing root project POM for local SNAPSHOT parent resolution..."
-  "${MVN_BIN}" "${EXTRA_MAVEN_ARGS[@]}" -N install
+  "${MVN_BIN}" "${EXTRA_MAVEN_ARGS[@]}" -f "${REPO_ROOT}/pom.xml" -N install
   echo "Installing current framework SNAPSHOT for the CSV example build..."
   "${MVN_BIN}" "${EXTRA_MAVEN_ARGS[@]}" -f "${REPO_ROOT}/pom.xml" -N install
   "${MVN_BIN}" "${EXTRA_MAVEN_ARGS[@]}" -f "${REPO_ROOT}/framework/pom.xml" clean install
   "${MVN_BIN}" "${EXTRA_MAVEN_ARGS[@]}" -f "${REPO_ROOT}/connectors/object-ingest/pom.xml" clean install -DskipTests
 fi
 
-COMMON_BUILD_PROPS=()
+COMMON_BUILD_PROPS=(
+  -Dquarkus.devservices.enabled=false
+)
 
 if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "sqs" ]]; then
   COMMON_BUILD_PROPS+=(
@@ -124,6 +126,10 @@ run_with_retries "CSV pipeline-runtime topology image build" \
   -Dquarkus.container-image.push=false
 
 echo "Rebuilding CSV coordinator image with the long-running service entrypoint..."
+KAFKA_AWAIT_BUILD_PROPS=()
+if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" ]]; then
+  KAFKA_AWAIT_BUILD_PROPS+=("-Dtpf.await.kafka.reactive-messaging.enabled=true")
+fi
 run_with_retries "CSV coordinator service image build" \
   env \
   IMAGE_REGISTRY="${IMAGE_REGISTRY}" \
@@ -135,6 +141,7 @@ run_with_retries "CSV coordinator service image build" \
   "${EXTRA_MAVEN_ARGS[@]}" \
   -pl orchestrator-svc \
   "${COMMON_BUILD_PROPS[@]}" \
+  "${KAFKA_AWAIT_BUILD_PROPS[@]}" \
   -DskipTests \
   -Dquarkus.container-image.build=true \
   -Dquarkus.container-image.push=false \

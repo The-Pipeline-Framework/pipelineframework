@@ -66,6 +66,34 @@ export TPF_OUTPUT_DIR="${TPF_OUTPUT_DIR:-${TPF_INPUT_DIR}}"
 export TPF_RELEASE_DESCRIPTOR="${TPF_RELEASE_DESCRIPTOR:-${TPF_RUN_DIR}/pipeline-release.json}"
 export TPF_SOURCE_CSV="${TPF_SOURCE_CSV:-${EXAMPLE_DIR}/input-csv-file-processing-svc/csv/payments_12.csv}"
 export TPF_SKIP_CONTAINER_BUILD="${TPF_SKIP_CONTAINER_BUILD:-false}"
+export TPF_CSV_ADMISSION_PROFILE="${TPF_CSV_ADMISSION_PROFILE:-}"
+TPF_CSV_RECORD_COUNT="${TPF_CSV_RECORD_COUNT:-}"
+export TPF_CSV_VERIFY_ADMISSION="${TPF_CSV_VERIFY_ADMISSION:-false}"
+
+case "${TPF_CSV_ADMISSION_PROFILE}" in
+  "")
+    export TPF_CSV_RECORD_COUNT="${TPF_CSV_RECORD_COUNT:-0}"
+    ;;
+  slow)
+    export TPF_CSV_VERIFY_ADMISSION=true
+    export TPF_CSV_RECORD_COUNT="${TPF_CSV_RECORD_COUNT:-1000}"
+    export TPF_PIPELINE_MAX_CONCURRENCY="${TPF_PIPELINE_MAX_CONCURRENCY:-25}"
+    export TPF_CSV_PROVIDER_RESPONSE_DELAY_MILLIS="${TPF_CSV_PROVIDER_RESPONSE_DELAY_MILLIS:-25}"
+    export TPF_CSV_PROVIDER_COMPLETION_BURST_SIZE="${TPF_CSV_PROVIDER_COMPLETION_BURST_SIZE:-1}"
+    ;;
+  burst)
+    export TPF_CSV_VERIFY_ADMISSION=true
+    export TPF_CSV_RECORD_COUNT="${TPF_CSV_RECORD_COUNT:-1000}"
+    export TPF_PIPELINE_MAX_CONCURRENCY="${TPF_PIPELINE_MAX_CONCURRENCY:-25}"
+    export TPF_CSV_PROVIDER_RESPONSE_DELAY_MILLIS="${TPF_CSV_PROVIDER_RESPONSE_DELAY_MILLIS:-0}"
+    export TPF_CSV_PROVIDER_COMPLETION_BURST_SIZE="${TPF_CSV_PROVIDER_COMPLETION_BURST_SIZE:-25}"
+    export TPF_CSV_PROVIDER_COMPLETION_BURST_FLUSH_DELAY="${TPF_CSV_PROVIDER_COMPLETION_BURST_FLUSH_DELAY:-PT0.25S}"
+    ;;
+  *)
+    echo "ERROR: TPF_CSV_ADMISSION_PROFILE must be empty, 'slow', or 'burst'." >&2
+    exit 1
+    ;;
+esac
 
 CI_MODE=false
 PREPARE_IMAGES_ONLY=false
@@ -155,6 +183,67 @@ generate_container_pipeline_config() {
     "${TPF_CSV_PIPELINE_CONFIG}"
 }
 
+dynamo_count() {
+  local table_name="$1"
+  compose exec -T localstack awslocal dynamodb scan \
+    --table-name "${table_name}" \
+    --consistent-read \
+    --select COUNT \
+    --output json | python3 -c 'import json, sys; print(json.load(sys.stdin)["Count"])'
+}
+
+observe_admission_budget() {
+  local capacity="$1"
+  local flow_pid="$2"
+  local observation_file="$3"
+  local maximum=0
+  local violations=0
+  # This best-effort external sample complements the durable-store tests; polling latency can
+  # exceed the interval, so it is evidence of the observed bound rather than a formal proof.
+  local observation_interval="${TPF_CSV_ADMISSION_OBSERVATION_INTERVAL_SECONDS:-0.25}"
+
+  while kill -0 "${flow_pid}" >/dev/null 2>&1; do
+    local pending
+    pending="$(dynamo_count tpf_await_admission)" || {
+      echo "Failed reading await admission reservations from LocalStack." >&2
+      return 1
+    }
+    if (( pending > maximum )); then
+      maximum="${pending}"
+    fi
+    if (( pending > capacity )); then
+      violations=$((violations + 1))
+    fi
+    sleep "${observation_interval}"
+  done
+
+  local final_pending
+  final_pending="$(dynamo_count tpf_await_admission)" || return 1
+  if (( final_pending > maximum )); then
+    maximum="${final_pending}"
+  fi
+  if (( final_pending > capacity )); then
+    violations=$((violations + 1))
+  fi
+  python3 - "${observation_file}" "${capacity}" "${maximum}" "${final_pending}" "${violations}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+payload = {
+    "capacity": int(sys.argv[2]),
+    "maxObserved": int(sys.argv[3]),
+    "finalPending": int(sys.argv[4]),
+    "violations": int(sys.argv[5]),
+}
+path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+print(f"Await admission observation: {json.dumps(payload, sort_keys=True)}")
+if payload["maxObserved"] > payload["capacity"] or payload["finalPending"] != 0:
+    raise SystemExit(1)
+PY
+}
+
 if [[ "${CI_MODE}" == "true" ]]; then
   compose down -v --remove-orphans >/dev/null 2>&1 || true
   rm -rf "${TPF_RUN_DIR}"
@@ -239,15 +328,63 @@ python3 "${CLIENT}" register-activate \
   --worker-protocol "${TPF_WORKER_PROTOCOL}" \
   --worker-endpoint "${TPF_WORKER_ENDPOINT}"
 
-python3 "${CLIENT}" run-flow \
-  --base-url "http://localhost:${TPF_COORDINATOR_PORT}" \
-  --tenant-id "${TPF_TENANT_ID}" \
-  --pipeline-id "${TPF_PIPELINE_ID}" \
-  --control-plane-token "${TPF_CONTROL_PLANE_TOKEN}" \
-  --input-dir "${TPF_INPUT_DIR}" \
-  --output-dir "${TPF_OUTPUT_DIR}" \
-  --source-csv "${TPF_SOURCE_CSV}" \
-  --timeout-seconds 300
+run_flow() {
+  local input_name
+  if (( TPF_CSV_RECORD_COUNT > 0 )); then
+    input_name="payments_${TPF_CSV_RECORD_COUNT}.csv"
+  else
+    input_name="$(basename "${TPF_SOURCE_CSV}")"
+  fi
+  local output_path="${TPF_OUTPUT_DIR}/${input_name}.out"
+  python3 "${CLIENT}" run-flow \
+    --base-url "http://localhost:${TPF_COORDINATOR_PORT}" \
+    --tenant-id "${TPF_TENANT_ID}" \
+    --pipeline-id "${TPF_PIPELINE_ID}" \
+    --control-plane-token "${TPF_CONTROL_PLANE_TOKEN}" \
+    --input-dir "${TPF_INPUT_DIR}" \
+    --output-dir "${TPF_OUTPUT_DIR}" \
+    --source-csv "${TPF_SOURCE_CSV}" \
+    --record-count "${TPF_CSV_RECORD_COUNT}" \
+    --defer-output-validation \
+    --timeout-seconds 300
+  # Filesystem publish preserves the secure temporary-file mode. The runtime
+  # container owns that file on a bind mount, so grant the host CI client read
+  # access before it performs the example's output assertion.
+  compose exec -T --user 0 runtime chmod a+r "${output_path}"
+  python3 "${CLIENT}" validate-output \
+    --output-dir "${TPF_OUTPUT_DIR}" \
+    --output-file-name "${input_name}.out" \
+    --record-count "${TPF_CSV_RECORD_COUNT}" \
+    --timeout-seconds 300
+}
+
+if [[ "${TPF_CSV_VERIFY_ADMISSION}" == "true" ]]; then
+  run_flow &
+  flow_pid=$!
+  observe_admission_budget "${TPF_PIPELINE_MAX_CONCURRENCY}" "${flow_pid}" \
+    "${TPF_RUN_DIR}/await-admission-observation.json" &
+  observer_pid=$!
+  flow_result=0
+  observer_result=0
+  wait "${flow_pid}" || flow_result=$?
+  wait "${observer_pid}" || observer_result=$?
+  if (( flow_result != 0 || observer_result != 0 )); then
+    exit 1
+  fi
+  if (( TPF_CSV_RECORD_COUNT > 0 )); then
+    interaction_count="$(dynamo_count tpf_await_interaction)" || {
+      echo "Failed reading durable await interaction count from LocalStack." >&2
+      exit 1
+    }
+    if (( interaction_count != TPF_CSV_RECORD_COUNT )); then
+      echo "Expected ${TPF_CSV_RECORD_COUNT} durable await interactions, found ${interaction_count}." >&2
+      exit 1
+    fi
+    echo "Durable await interaction count matches expected ${TPF_CSV_RECORD_COUNT}."
+  fi
+else
+  run_flow
+fi
 
 if [[ "${CI_MODE}" == "true" ]]; then
   echo "CSV containerized self-host HA demo (${TPF_CSV_AWAIT_TRANSPORT}) completed in CI mode."

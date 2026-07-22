@@ -19,8 +19,13 @@ package org.pipelineframework.csv.service;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
+import io.smallrye.config.SmallRyeConfig;
+import io.smallrye.config.SmallRyeConfigBuilder;
+import org.eclipse.microprofile.config.spi.ConfigSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -58,6 +63,16 @@ class PaymentProviderConfigTest {
                     }
 
                     @Override
+                    public int completionBurstSize() {
+                        return 1;
+                    }
+
+                    @Override
+                    public Duration completionBurstFlushDelay() {
+                        return Duration.ofSeconds(1);
+                    }
+
+                    @Override
                     public Sqs sqs() {
                         return disabledSqs();
                     }
@@ -87,6 +102,44 @@ class PaymentProviderConfigTest {
     @Test
     void testDefaultResponseDelayMillis() {
         assertThat(config.responseDelayMillis()).isZero();
+    }
+
+    @Test
+    void testDefaultCompletionBurstSize() {
+        assertThat(defaultConfig().completionBurstSize()).isEqualTo(1);
+    }
+
+    @Test
+    void testDefaultCompletionBurstFlushDelay() {
+        assertThat(defaultConfig().completionBurstFlushDelay()).isEqualTo(Duration.ofSeconds(1));
+    }
+
+    private static PaymentProviderConfig defaultConfig() {
+        Map<String, String> properties = Map.of();
+        SmallRyeConfigBuilder builder = new SmallRyeConfigBuilder().withMapping(PaymentProviderConfig.class);
+        builder.withSources(new ConfigSource() {
+            @Override
+            public Map<String, String> getProperties() {
+                return properties;
+            }
+
+            @Override
+            public Set<String> getPropertyNames() {
+                return properties.keySet();
+            }
+
+            @Override
+            public String getValue(String propertyName) {
+                return properties.get(propertyName);
+            }
+
+            @Override
+            public String getName() {
+                return "test-config";
+            }
+        });
+        SmallRyeConfig configured = builder.build();
+        return configured.getConfigMapping(PaymentProviderConfig.class);
     }
 
     private static PaymentProviderConfig.Sqs disabledSqs() {

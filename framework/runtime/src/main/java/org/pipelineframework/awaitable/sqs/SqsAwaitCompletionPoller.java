@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -16,6 +17,8 @@ import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
 import io.quarkus.runtime.StartupEvent;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 import org.pipelineframework.PipelineExecutionService;
@@ -79,10 +82,7 @@ public class SqsAwaitCompletionPoller {
         }
         ensureExecutor();
         running = true;
-        pollFuture = pollExecutor.submit(() -> {
-            sleep(config.pollStartDelay());
-            pollLoop();
-        });
+        schedulePoll(config.pollStartDelay());
         LOG.infof("SQS await completion poller enabled for responseQueueUrl=%s", config.responseQueueUrl().orElse("<missing>"));
     }
 
@@ -108,10 +108,11 @@ public class SqsAwaitCompletionPoller {
         }
     }
 
-    boolean pollOnce(SqsAwaitPollerConfig config) {
+    Uni<Boolean> pollOnce(SqsAwaitPollerConfig config) {
         if (!config.enabled()) {
-            return true;
+            return Uni.createFrom().item(true);
         }
+        ensureExecutor();
         String responseQueueUrl = config.responseQueueUrl()
             .filter(url -> !url.isBlank())
             .orElseThrow(() -> new IllegalStateException(
@@ -123,51 +124,46 @@ public class SqsAwaitCompletionPoller {
             .waitTimeSeconds(config.waitTimeSeconds())
             .visibilityTimeout(visibilityTimeoutSeconds(config.visibilityTimeout(), "tpf.await.sqs.visibility-timeout"))
             .build();
-        List<Message> messages;
-        try {
-            messages = sqsClient().receiveMessage(request).messages();
-        } catch (RuntimeException e) {
-            LOG.errorf(e, "Failed receiving SQS await completions from queueUrl=%s", responseQueueUrl);
-            sleepFailureBackoff();
-            return false;
-        }
-        for (Message message : messages) {
-            handleMessage(responseQueueUrl, message, config);
-        }
-        return true;
+        return Uni.createFrom().item(() -> sqsClient().receiveMessage(request).messages())
+            .runSubscriptionOn(pollExecutor)
+            .onFailure().invoke(e -> LOG.errorf(e,
+                "Failed receiving SQS await completions from queueUrl=%s", responseQueueUrl))
+            .onItem().transformToMulti(messages -> Multi.createFrom().iterable(messages)
+                .onItem().transformToUni(message -> handleMessage(responseQueueUrl, message, config))
+                .merge(config.maxMessages()))
+            .collect().asList()
+            .replaceWith(true);
     }
 
     private void pollLoop() {
-        while (running && !Thread.currentThread().isInterrupted()) {
-            try {
-                if (pollOnce(SqsAwaitPollerConfig.fromRuntime())) {
-                    consecutivePollFailures.set(0);
-                }
-            } catch (Exception e) {
-                LOG.error("SQS await completion poll failed.", e);
-                sleepFailureBackoff();
-            }
+        if (!running || Thread.currentThread().isInterrupted()) {
+            return;
         }
+        pollOnce(SqsAwaitPollerConfig.fromRuntime()).subscribe().with(
+            ignored -> {
+                consecutivePollFailures.set(0);
+                schedulePoll(Duration.ZERO);
+            },
+            failure -> schedulePoll(failureBackoff()));
     }
 
-    private void handleMessage(String queueUrl, Message message, SqsAwaitPollerConfig config) {
+    private Uni<Void> handleMessage(String queueUrl, Message message, SqsAwaitPollerConfig config) {
         if (message == null || message.receiptHandle() == null) {
-            return;
+            return Uni.createFrom().voidItem();
         }
         if (message.body() == null) {
             LOG.warnf("Leaving SQS await completion message with null body for queue redrive id=%s", message.messageId());
-            return;
+            return Uni.createFrom().voidItem();
         }
         SqsAwaitCompletionEnvelope envelope;
         try {
             envelope = PipelineJson.mapper().readValue(message.body(), SqsAwaitCompletionEnvelope.class);
         } catch (Exception e) {
             LOG.warnf(e, "Leaving malformed SQS await completion message for queue redrive id=%s", message.messageId());
-            return;
+            return Uni.createFrom().voidItem();
         }
 
-        try {
-            executionService.completeAwaitInteraction(new AwaitCompletionCommand(
+        return executionService.completeAwaitInteraction(new AwaitCompletionCommand(
                 envelope.tenantId(),
                 envelope.interactionId(),
                 envelope.correlationId(),
@@ -176,31 +172,47 @@ public class SqsAwaitCompletionPoller {
                 envelope.responsePayload(),
                 envelope.actor(),
                 System.currentTimeMillis()))
-                .await().atMost(config.completionTimeout());
-            deleteMessageSafely(queueUrl, message.receiptHandle(), "processed");
-        } catch (RuntimeException e) {
-            if (AwaitCompletionAdmissionFailures.isDeterministic(e)) {
-                String reason = AwaitCompletionAdmissionFailures.reason(e);
-                AwaitCompletionMetrics.recordDroppedCompletion("sqs", reason);
-                LOG.warnf(e, "Dropping deterministic SQS await completion message: reason=%s", reason);
-                deleteMessageSafely(queueUrl, message.receiptHandle(), "deterministic-" + reason);
-                return;
-            }
-            LOG.errorf(e, "Failed admitting SQS await completion interactionId=%s correlationId=%s",
-                envelope.interactionId(),
-                envelope.correlationId());
-        }
+            .ifNoItem().after(config.completionTimeout()).fail()
+            .onItem().transformToUni(ignored -> deleteMessageSafely(queueUrl, message.receiptHandle(), "processed"))
+            .onFailure().recoverWithUni(failure -> handleAdmissionFailure(
+                queueUrl,
+                message.receiptHandle(),
+                envelope,
+                failure))
+            .replaceWithVoid();
     }
 
-    private void deleteMessageSafely(String queueUrl, String receiptHandle, String disposition) {
-        try {
+    private Uni<Void> handleAdmissionFailure(
+        String queueUrl,
+        String receiptHandle,
+        SqsAwaitCompletionEnvelope envelope,
+        Throwable failure
+    ) {
+        if (AwaitCompletionAdmissionFailures.isDeterministic(failure)) {
+            String reason = AwaitCompletionAdmissionFailures.reason(failure);
+            AwaitCompletionMetrics.recordDroppedCompletion("sqs", reason);
+            LOG.warnf(failure, "Dropping deterministic SQS await completion message: reason=%s", reason);
+            return deleteMessageSafely(queueUrl, receiptHandle, "deterministic-" + reason);
+        }
+        LOG.errorf(failure, "Failed admitting SQS await completion interactionId=%s correlationId=%s",
+            envelope.interactionId(),
+            envelope.correlationId());
+        return Uni.createFrom().voidItem();
+    }
+
+    private Uni<Void> deleteMessageSafely(String queueUrl, String receiptHandle, String disposition) {
+        return Uni.createFrom().item(() -> {
             sqsClient().deleteMessage(DeleteMessageRequest.builder()
                 .queueUrl(queueUrl)
                 .receiptHandle(receiptHandle)
                 .build());
-        } catch (RuntimeException e) {
-            LOG.warnf(e, "Failed deleting SQS await completion message after %s disposition", disposition);
-        }
+            return true;
+        })
+            .runSubscriptionOn(pollExecutor)
+            .onFailure().invoke(e -> LOG.warnf(e,
+                "Failed deleting SQS await completion message after %s disposition", disposition))
+            .onFailure().recoverWithItem(false)
+            .replaceWithVoid();
     }
 
     private SqsClient sqsClient() {
@@ -226,7 +238,7 @@ public class SqsAwaitCompletionPoller {
         }
     }
 
-    private void ensureExecutor() {
+    private synchronized void ensureExecutor() {
         if (pollExecutor == null) {
             pollExecutor = Executors.newSingleThreadExecutor(runnable -> {
                 Thread thread = new Thread(runnable, "tpf-sqs-await-completion-poller");
@@ -236,12 +248,30 @@ public class SqsAwaitCompletionPoller {
         }
     }
 
-    private void sleepFailureBackoff() {
+    private void schedulePoll(Duration delay) {
+        if (!running) {
+            return;
+        }
+        ExecutorService executor = pollExecutor;
+        if (executor == null) {
+            return;
+        }
+        try {
+            pollFuture = executor.submit(() -> {
+                sleep(delay);
+                pollLoop();
+            });
+        } catch (RejectedExecutionException rejected) {
+            LOG.debug("SQS await completion poll scheduling rejected during shutdown", rejected);
+        }
+    }
+
+    private Duration failureBackoff() {
         int failures = consecutivePollFailures.incrementAndGet();
         long delayMillis = Math.min(
             INITIAL_FAILURE_BACKOFF.toMillis() * (1L << Math.min(10, Math.max(0, failures - 1))),
             MAX_FAILURE_BACKOFF.toMillis());
-        sleep(Duration.ofMillis(delayMillis));
+        return Duration.ofMillis(delayMillis);
     }
 
     private static void shutdownExecutor(ExecutorService executor) {

@@ -226,11 +226,20 @@ def prepare_input(args):
         candidate.unlink()
     for candidate in input_dir.glob("*.out"):
         candidate.unlink()
-    source = Path(args.source_csv).resolve()
-    if not source.is_file():
-        raise RuntimeError(f"Source CSV not found: {source}")
-    target = input_dir / source.name
-    shutil.copyfile(source, target)
+    if args.record_count > 0:
+        target = input_dir / f"payments_{args.record_count}.csv"
+        with target.open("w", encoding="utf-8", newline="") as generated:
+            generated.write("ID,Recipient,Amount,Currency\n")
+            for record_id in range(1, args.record_count + 1):
+                generated.write(f"{record_id},Admission Profile {record_id},12.34,EUR\n")
+    else:
+        if not args.source_csv:
+            raise RuntimeError("--source-csv is required when --record-count is not positive")
+        source = Path(args.source_csv).resolve()
+        if not source.is_file():
+            raise RuntimeError(f"Source CSV not found: {source}")
+        target = input_dir / source.name
+        shutil.copyfile(source, target)
     target.chmod(0o666)
     print(f"Prepared CSV input {target}")
     return target
@@ -245,6 +254,26 @@ def wait_output(output_dir, output_name, timeout_seconds):
             return output
         time.sleep(1)
     raise RuntimeError(f"No non-empty CSV output appeared at {output}")
+
+
+def assert_output_record_count(output, expected_record_count):
+    if expected_record_count <= 0:
+        return
+    with output.open("r", encoding="utf-8") as generated:
+        actual_record_count = max(0, sum(1 for _ in generated) - 1)
+    if actual_record_count != expected_record_count:
+        raise RuntimeError(
+            f"CSV output {output} has {actual_record_count} records; expected {expected_record_count}")
+    print(f"CSV output record count matches expected {expected_record_count}")
+
+
+def validate_output_path(output_dir, output_file_name, record_count, timeout_seconds):
+    output = wait_output(output_dir, output_file_name, timeout_seconds)
+    assert_output_record_count(output, record_count)
+
+
+def validate_output(args):
+    validate_output_path(args.output_dir, args.output_file_name, args.record_count, args.timeout_seconds)
 
 
 def inspect_result(args, execution_id):
@@ -269,7 +298,8 @@ def run_flow(args):
     execution_id = submit_csv_input_file(args, input_file)
     wait_status(args, execution_id, args.timeout_seconds)
     inspect_result(args, execution_id)
-    wait_output(output_dir, output_file_name, args.timeout_seconds)
+    if not args.defer_output_validation:
+        validate_output_path(output_dir, output_file_name, args.record_count, args.timeout_seconds)
 
 
 def main():
@@ -312,10 +342,19 @@ def main():
     run.add_argument("--control-plane-token", required=True)
     run.add_argument("--input-dir", required=True)
     run.add_argument("--output-dir", required=True)
-    run.add_argument("--source-csv", required=True)
+    run.add_argument("--source-csv")
+    run.add_argument("--record-count", type=int, default=0)
     run.add_argument("--idempotency-key")
     run.add_argument("--timeout-seconds", type=int, default=240)
+    run.add_argument("--defer-output-validation", action="store_true")
     run.set_defaults(func=run_flow)
+
+    validate = sub.add_parser("validate-output")
+    validate.add_argument("--output-dir", required=True)
+    validate.add_argument("--output-file-name", required=True)
+    validate.add_argument("--record-count", type=int, default=0)
+    validate.add_argument("--timeout-seconds", type=int, default=240)
+    validate.set_defaults(func=validate_output)
 
     args = parser.parse_args()
     try:
