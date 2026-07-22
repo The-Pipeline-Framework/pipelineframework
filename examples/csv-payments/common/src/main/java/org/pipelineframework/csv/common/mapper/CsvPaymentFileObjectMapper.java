@@ -1,8 +1,8 @@
 package org.pipelineframework.csv.common.mapper;
 
-import java.io.File;
+import java.nio.file.Path;
 
-import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
+import org.pipelineframework.csv.domain.CsvPaymentsInputFile;
 import org.pipelineframework.objectingest.ObjectSnapshot;
 import org.pipelineframework.objectingest.ObjectSnapshotMapper;
 
@@ -17,6 +17,7 @@ public final class CsvPaymentFileObjectMapper implements ObjectSnapshotMapper<Cs
         if (localPath == null || localPath.isBlank()) {
             throw new IllegalArgumentException("CSV filesystem object snapshot must expose localPath");
         }
-        return new CsvPaymentsInputFile(new File(localPath));
+        Path file = Path.of(localPath);
+        return new CsvPaymentsInputFile(file, file.getParent());
     }
 }

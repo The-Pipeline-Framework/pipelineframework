@@ -37,9 +37,11 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.awaitable.sqs.SqsAwaitCompletionEnvelope;
 import org.pipelineframework.awaitable.sqs.SqsAwaitDispatchEnvelope;
 import org.pipelineframework.config.pipeline.PipelineJson;
-import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.common.domain.PaymentStatus;
-import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
+import org.pipelineframework.csv.domain.PaymentRecord;
+import org.pipelineframework.csv.domain.PaymentStatus;
+import org.pipelineframework.csv.domain.PipelineDomainProtoAdapters;
+import org.pipelineframework.csv.grpc.PipelineTypes;
+import com.google.protobuf.util.JsonFormat;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sqs.SqsClient;
@@ -67,9 +69,6 @@ public class PaymentProviderSqsAwaitMock {
   @Inject
   PaymentProviderConfig paymentProviderConfig;
 
-  @Inject
-  PaymentStatusMapper paymentStatusMapper;
-
   private volatile SqsClient client;
   private volatile ExecutorService pollExecutor;
   private volatile Future<?> pollFuture;
@@ -82,12 +81,10 @@ public class PaymentProviderSqsAwaitMock {
   PaymentProviderSqsAwaitMock(
       PaymentProviderServiceMock paymentProvider,
       PaymentProviderConfig paymentProviderConfig,
-      SqsClient client,
-      PaymentStatusMapper paymentStatusMapper) {
+      SqsClient client) {
     this.paymentProvider = paymentProvider;
     this.paymentProviderConfig = paymentProviderConfig;
     this.client = client;
-    this.paymentStatusMapper = paymentStatusMapper;
   }
 
   void onStartup(@Observes StartupEvent event) {
@@ -219,7 +216,7 @@ public class PaymentProviderSqsAwaitMock {
   }
 
   private SqsAwaitCompletionEnvelope handle(SqsAwaitDispatchEnvelope dispatch) {
-    PaymentRecord paymentRecord = PipelineJson.mapper().convertValue(dispatch.requestPayload(), PaymentRecord.class);
+    PaymentRecord paymentRecord = PipelineDomainProtoAdapters.fromProto(paymentRecord(dispatch.requestPayload()));
     validatePaymentRecord(paymentRecord);
     PaymentStatus status = paymentProvider.processPayment(paymentRecord);
     return new SqsAwaitCompletionEnvelope(
@@ -228,7 +225,7 @@ public class PaymentProviderSqsAwaitMock {
         dispatch.correlationId(),
         dispatch.resumeToken(),
         dispatch.interactionId(),
-        paymentStatusMapper.toExternal(status),
+        PipelineDomainProtoAdapters.toProto(status),
         "csv-payments-sqs-mock-provider");
   }
 
@@ -305,9 +302,19 @@ public class PaymentProviderSqsAwaitMock {
     if (paymentRecord == null) {
       throw new IllegalArgumentException("SQS await payment request payload must contain a PaymentRecord");
     }
-    if (paymentRecord.getAmount() == null || paymentRecord.getRecipient() == null || paymentRecord.getRecipient().isBlank()
-        || paymentRecord.getCurrency() == null || paymentRecord.getId() == null) {
+    if (paymentRecord.amount() == null || paymentRecord.recipient() == null || paymentRecord.recipient().isBlank()
+        || paymentRecord.currency() == null || paymentRecord.id() == null) {
       throw new IllegalArgumentException("PaymentRecord must include id, amount, recipient, and currency");
+    }
+  }
+
+  private static PipelineTypes.PaymentRecord paymentRecord(Object payload) {
+    try {
+      var builder = PipelineTypes.PaymentRecord.newBuilder();
+      JsonFormat.parser().ignoringUnknownFields().merge(PipelineJson.mapper().writeValueAsString(payload), builder);
+      return builder.build();
+    } catch (Exception e) {
+      throw new IllegalArgumentException("SQS await payment request payload must contain a v3 PaymentRecord", e);
     }
   }
 

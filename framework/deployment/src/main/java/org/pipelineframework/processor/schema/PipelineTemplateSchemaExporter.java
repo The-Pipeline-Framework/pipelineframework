@@ -2216,12 +2216,28 @@ public final class PipelineTemplateSchemaExporter {
         }
       ]
     },
+    "v3RepresentationMapping": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "mapper": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "v3RepresentationMappings": {
+      "type": "object",
+      "propertyNames": { "type": "string", "minLength": 1 },
+      "additionalProperties": { "$ref": "#/$defs/v3RepresentationMapping" }
+    },
     "v3TypeDefinition": {
       "oneOf": [
         {
           "type": "object",
           "required": ["fields"],
-          "properties": { "fields": { "type": "array", "items": { "$ref": "#/$defs/v3RecordField" } } },
+          "properties": {
+            "fields": { "type": "array", "items": { "$ref": "#/$defs/v3RecordField" } },
+            "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
+          },
           "additionalProperties": false
         },
         {
@@ -2232,7 +2248,8 @@ public final class PipelineTemplateSchemaExporter {
             "minLength": { "type": "integer", "minimum": 0 },
             "maxLength": { "type": "integer", "minimum": 0 },
             "pattern": { "type": "string", "minLength": 1 },
-            "format": { "const": "email" }
+            "format": { "const": "email" },
+            "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
           },
           "allOf": [
             {
@@ -2250,20 +2267,27 @@ public final class PipelineTemplateSchemaExporter {
             "minimum": { "type": "number" },
             "minimumExclusive": { "type": "number" },
             "maximum": { "type": "number" },
-            "maximumExclusive": { "type": "number" }
+            "maximumExclusive": { "type": "number" },
+            "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
           },
           "additionalProperties": false
         },
         {
           "type": "object",
           "required": ["wraps"],
-          "properties": { "wraps": { "type": "string", "enum": ["bool", "uuid", "timestamp", "datetime", "date", "duration", "bytes", "currency", "uri", "path", "payload_ref"] } },
+          "properties": {
+            "wraps": { "type": "string", "enum": ["bool", "uuid", "timestamp", "datetime", "date", "duration", "bytes", "currency", "uri", "path", "payload_ref"] },
+            "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
+          },
           "additionalProperties": false
         },
         {
           "type": "object",
           "required": ["alias"],
-          "properties": { "alias": { "type": "string", "minLength": 1 } },
+          "properties": {
+            "alias": { "type": "string", "minLength": 1 },
+            "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
+          },
           "additionalProperties": false
         },
         {
@@ -2275,7 +2299,8 @@ public final class PipelineTemplateSchemaExporter {
               "minProperties": 1,
               "propertyNames": { "type": "string", "minLength": 1 },
               "additionalProperties": { "$ref": "#/$defs/logicalContractReference" }
-            }
+            },
+            "mappings": { "$ref": "#/$defs/v3RepresentationMappings" }
           },
           "additionalProperties": false
         }

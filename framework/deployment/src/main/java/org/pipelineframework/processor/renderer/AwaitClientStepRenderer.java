@@ -227,7 +227,8 @@ public class AwaitClientStepRenderer {
                 ? packageName
                 : pipelineBasePackage;
         }
-        if ((packageName.endsWith(".common.domain") || packageName.endsWith(".common.dto")) &&
+        if ((packageName.endsWith(".common.domain") || packageName.endsWith(".common.dto")
+            || packageName.endsWith(".domain")) &&
             pipelineBasePackage != null && !pipelineBasePackage.isBlank()) {
             return pipelineBasePackage;
         }
@@ -236,6 +237,9 @@ public class AwaitClientStepRenderer {
         }
         if (packageName.endsWith(".common.dto")) {
             return packageName.substring(0, packageName.length() - ".common.dto".length());
+        }
+        if (packageName.endsWith(".domain")) {
+            return packageName.substring(0, packageName.length() - ".domain".length());
         }
         if (packageName.endsWith(".service")) {
             return packageName.substring(0, packageName.length() - ".service".length());

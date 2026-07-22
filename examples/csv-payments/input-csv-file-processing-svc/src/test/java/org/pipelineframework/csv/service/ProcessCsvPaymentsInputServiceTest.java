@@ -31,8 +31,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.MockitoAnnotations;
 import org.pipelineframework.blocking.CloseableIterator;
-import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
-import org.pipelineframework.csv.common.domain.PaymentRecord;
+import org.pipelineframework.csv.domain.CsvPaymentsInputFile;
+import org.pipelineframework.csv.domain.PaymentRecord;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -69,7 +69,7 @@ class ProcessCsvPaymentsInputServiceTest {
     @Test
     void iterateBlocking() throws Exception {
         // Given
-        CsvPaymentsInputFile csvFile = new CsvPaymentsInputFile(tempCsvFile.toFile());
+        CsvPaymentsInputFile csvFile = inputFile(tempCsvFile);
 
         // When
         List<PaymentRecord> records;
@@ -84,23 +84,37 @@ class ProcessCsvPaymentsInputServiceTest {
         assertEquals(2, records.size());
 
         PaymentRecord record1 = records.getFirst();
-        assertNotNull(record1.getCsvId());
-        assertEquals("John Doe", record1.getRecipient());
-        assertEquals(new BigDecimal("100.00"), record1.getAmount());
-        assertEquals(Currency.getInstance("USD"), record1.getCurrency());
-        assertEquals(csvFile.getFilepath(), record1.getCsvPaymentsInputFilePath());
+        assertNotNull(record1.id());
+        assertNotNull(record1.csvId());
+        assertEquals("John Doe", record1.recipient());
+        assertEquals(new BigDecimal("100.00"), record1.amount());
+        assertEquals(Currency.getInstance("USD"), record1.currency());
+        assertEquals(csvFile.filepath(), record1.csvPaymentsInputFilePath());
 
         PaymentRecord record2 = records.get(1);
-        assertNotNull(record2.getCsvId());
-        assertEquals("Jane Smith", record2.getRecipient());
-        assertEquals(new BigDecimal("200.50"), record2.getAmount());
-        assertEquals(Currency.getInstance("EUR"), record2.getCurrency());
-        assertEquals(csvFile.getFilepath(), record2.getCsvPaymentsInputFilePath());
+        assertNotNull(record2.id());
+        assertNotNull(record2.csvId());
+        assertEquals("Jane Smith", record2.recipient());
+        assertEquals(new BigDecimal("200.50"), record2.amount());
+        assertEquals(Currency.getInstance("EUR"), record2.currency());
+        assertEquals(csvFile.filepath(), record2.csvPaymentsInputFilePath());
+
+        List<PaymentRecord> rereadRecords;
+        try (CloseableIterator<PaymentRecord> iterator = service.iterateBlocking(csvFile)) {
+            rereadRecords = new java.util.ArrayList<>();
+            while (iterator.hasNext()) {
+                rereadRecords.add(iterator.next());
+            }
+        }
+        assertEquals(records.stream().map(PaymentRecord::id).toList(),
+            rereadRecords.stream().map(PaymentRecord::id).toList());
+        assertEquals(records.stream().map(PaymentRecord::csvId).toList(),
+            rereadRecords.stream().map(PaymentRecord::csvId).toList());
     }
 
     @Test
     void iterateBlockingReturnsNonEmptyIterator() throws Exception {
-        CsvPaymentsInputFile csvFile = new CsvPaymentsInputFile(tempCsvFile.toFile());
+        CsvPaymentsInputFile csvFile = inputFile(tempCsvFile);
 
         try (CloseableIterator<PaymentRecord> iterator = service.iterateBlocking(csvFile)) {
             assertNotNull(iterator);
@@ -112,7 +126,7 @@ class ProcessCsvPaymentsInputServiceTest {
     @SneakyThrows
     void process_fileNotFound() {
         CsvPaymentsInputFile csvFile =
-                new CsvPaymentsInputFile(tempDir.resolve("nonexistent.csv").toFile());
+                inputFile(tempDir.resolve("nonexistent.csv"));
         assertThrows(RuntimeException.class, () -> service.iterateBlocking(csvFile));
     }
 
@@ -124,7 +138,7 @@ class ProcessCsvPaymentsInputServiceTest {
                         + UUID.randomUUID()
                         + ",John Doe,invalid_amount,USD\n";
         Files.writeString(tempCsvFile, invalidCsvContent);
-        CsvPaymentsInputFile csvFile = new CsvPaymentsInputFile(tempCsvFile.toFile());
+        CsvPaymentsInputFile csvFile = inputFile(tempCsvFile);
 
         // When
         assertThrows(RuntimeException.class, () -> {
@@ -138,7 +152,7 @@ class ProcessCsvPaymentsInputServiceTest {
 
     @Test
     void processReactiveAdapterStreamsRecords() {
-        CsvPaymentsInputFile csvFile = new CsvPaymentsInputFile(tempCsvFile.toFile());
+        CsvPaymentsInputFile csvFile = inputFile(tempCsvFile);
 
         List<PaymentRecord> records = service.process(csvFile)
             .collect()
@@ -147,5 +161,9 @@ class ProcessCsvPaymentsInputServiceTest {
             .indefinitely();
 
         assertEquals(2, records.size());
+    }
+
+    private CsvPaymentsInputFile inputFile(Path path) {
+        return new CsvPaymentsInputFile(path, path.getParent());
     }
 }

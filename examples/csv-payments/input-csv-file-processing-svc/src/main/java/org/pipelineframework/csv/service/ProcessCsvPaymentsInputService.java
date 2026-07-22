@@ -27,8 +27,10 @@ import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.blocking.CloseableIterator;
-import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
-import org.pipelineframework.csv.common.domain.PaymentRecord;
+import org.pipelineframework.csv.common.domain.CsvPaymentsStableIdSupport;
+import org.pipelineframework.csv.common.domain.FilePathAwareMappingStrategy;
+import org.pipelineframework.csv.domain.CsvPaymentsInputFile;
+import org.pipelineframework.csv.domain.PaymentRecord;
 import org.pipelineframework.service.blocking.BlockingIteratorService;
 
 @PipelineStep
@@ -54,12 +56,12 @@ public class ProcessCsvPaymentsInputService
   @Override
   public CloseableIterator<PaymentRecord> iterateBlocking(CsvPaymentsInputFile input) {
     try {
-        Reader reader = input.openReader();
+        Reader reader = java.nio.file.Files.newBufferedReader(input.filepath(), java.nio.charset.StandardCharsets.UTF_8);
         try {
-            Iterator<PaymentRecord> delegate =
-                new CsvToBeanBuilder<PaymentRecord>(reader)
-                    .withType(PaymentRecord.class)
-                    .withMappingStrategy(input.veryOwnStrategy())
+            Iterator<org.pipelineframework.csv.common.domain.PaymentRecord> delegate =
+                new CsvToBeanBuilder<org.pipelineframework.csv.common.domain.PaymentRecord>(reader)
+                    .withType(org.pipelineframework.csv.common.domain.PaymentRecord.class)
+                    .withMappingStrategy(mappingStrategy(input.filepath()))
                     .withSeparator(',')
                     .withIgnoreLeadingWhiteSpace(true)
                     .withIgnoreEmptyLine(true)
@@ -71,14 +73,21 @@ public class ProcessCsvPaymentsInputService
             throw e;
         }
     } catch (Exception e) {
-        LOG.errorf(e, "CSV processing failed for file: %s", input.getSourceName());
+        LOG.errorf(e, "CSV processing failed for file: %s", input.filepath());
         throw new RuntimeException("CSV processing error: " + e.getMessage(), e);
     }
   }
 
+  private static FilePathAwareMappingStrategy<org.pipelineframework.csv.common.domain.PaymentRecord> mappingStrategy(
+      java.nio.file.Path inputFile) {
+    var strategy = new FilePathAwareMappingStrategy<org.pipelineframework.csv.common.domain.PaymentRecord>(inputFile);
+    strategy.setType(org.pipelineframework.csv.common.domain.PaymentRecord.class);
+    return strategy;
+  }
+
   private static final class OpenCsvPaymentRecordIterator implements CloseableIterator<PaymentRecord> {
     private final Reader reader;
-    private final Iterator<PaymentRecord> delegate;
+    private final Iterator<org.pipelineframework.csv.common.domain.PaymentRecord> delegate;
     private final CsvPaymentsInputFile input;
     private final long rowsPerPeriod;
     private final long millisPeriod;
@@ -87,7 +96,7 @@ public class ProcessCsvPaymentsInputService
 
     private OpenCsvPaymentRecordIterator(
         Reader reader,
-        Iterator<PaymentRecord> delegate,
+        Iterator<org.pipelineframework.csv.common.domain.PaymentRecord> delegate,
         CsvPaymentsInputFile input,
         long rowsPerPeriod,
         long millisPeriod
@@ -106,15 +115,23 @@ public class ProcessCsvPaymentsInputService
 
     @Override
     public PaymentRecord next() {
-        PaymentRecord record = delegate.next();
+        org.pipelineframework.csv.common.domain.PaymentRecord row = delegate.next();
+        PaymentRecord record = new PaymentRecord(
+            CsvPaymentsStableIdSupport.paymentRecordId(
+                row.getCsvPaymentsInputFilePath(), row.getCsvId(), row.getRecipient(), row.getAmount(), row.getCurrency()),
+            row.getCsvId(),
+            row.getRecipient(),
+            row.getAmount(),
+            row.getCurrency(),
+            row.getCsvPaymentsInputFilePath());
         emitted++;
         String serviceId = ProcessCsvPaymentsInputService.class.toString();
         MDC.put("serviceId", serviceId);
         try {
             LOG.debugf(
                 "Executed blocking CSV iteration on %s (csvId=%s)",
-                input.getSourceName(),
-                record.getCsvId());
+                input.filepath(),
+                record.csvId());
         } finally {
             MDC.remove("serviceId");
         }
@@ -130,7 +147,7 @@ public class ProcessCsvPaymentsInputService
         reader.close();
         LOG.infof(
             "Closed CSV reader for: %s (iterated %d records, rowsPerPeriod=%d, periodMillis=%d)",
-            input.getSourceName(),
+            input.filepath(),
             emitted,
             rowsPerPeriod,
             millisPeriod);

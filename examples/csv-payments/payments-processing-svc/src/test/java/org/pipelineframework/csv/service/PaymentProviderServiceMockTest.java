@@ -28,10 +28,9 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.csv.common.domain.ApprovedPaymentStatus;
-import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.common.domain.PaymentStatus;
-import org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus;
+import java.nio.file.Path;
+import org.pipelineframework.csv.domain.PaymentRecord;
+import org.pipelineframework.csv.domain.PaymentStatus;
 
 class PaymentProviderServiceMockTest {
 
@@ -44,15 +43,16 @@ class PaymentProviderServiceMockTest {
     PaymentStatus paymentStatus = paymentProvider.processPayment(paymentRecord);
 
     assertThat(paymentStatus).isNotNull();
-    assertThat(paymentStatus).isInstanceOf(ApprovedPaymentStatus.class);
-    assertThat(paymentStatus.getReference()).isEqualTo("101");
-    assertThat(paymentStatus.getStatus()).isEqualTo("Complete");
-    assertThat(paymentStatus.getFee()).isEqualTo(new BigDecimal("1.01"));
-    assertThat(paymentStatus.getMessage()).isEqualTo("Mock response");
-    assertThat(paymentStatus.getConversationId()).isNotNull();
-    assertThat(paymentStatus.getStatusCode()).isEqualTo(1000L);
-    assertThat(paymentStatus.getPaymentRecord()).isEqualTo(paymentRecord);
-    assertThat(paymentStatus.getPaymentRecordId()).isEqualTo(paymentRecord.getId());
+    assertThat(paymentStatus).isInstanceOf(PaymentStatus.Approved.class);
+    var approved = ((PaymentStatus.Approved) paymentStatus).value();
+    assertThat(approved.reference()).isEqualTo("101");
+    assertThat(approved.status()).isEqualTo("Complete");
+    assertThat(approved.fee()).isEqualTo(new BigDecimal("1.01"));
+    assertThat(approved.message()).isEqualTo("Mock response");
+    assertThat(approved.conversationId()).isNotNull();
+    assertThat(approved.statusCode()).isEqualTo(1000L);
+    assertThat(approved.paymentRecord()).isEqualTo(paymentRecord);
+    assertThat(approved.paymentRecordId()).isEqualTo(paymentRecord.id());
   }
 
   @Test
@@ -88,20 +88,17 @@ class PaymentProviderServiceMockTest {
 
     PaymentStatus paymentStatus = paymentProvider.processPayment(testPaymentRecord());
 
-    assertThat(paymentStatus).isInstanceOf(UnapprovedPaymentStatus.class);
-    assertThat(paymentStatus.getStatus()).isEqualTo("Rejected");
-    assertThat(paymentStatus.getMessage()).isEqualTo("Mock payment provider rejected the payment.");
-    assertThat(paymentStatus.getPaymentRecordId()).isNotNull();
+    assertThat(paymentStatus).isInstanceOf(PaymentStatus.Unapproved.class);
+    var unapproved = ((PaymentStatus.Unapproved) paymentStatus).value();
+    assertThat(unapproved.status()).isEqualTo("Rejected");
+    assertThat(unapproved.message()).isEqualTo("Mock payment provider rejected the payment.");
+    assertThat(unapproved.paymentRecordId()).isNotNull();
   }
 
   private static PaymentRecord testPaymentRecord() {
-    PaymentRecord paymentRecord = new PaymentRecord()
-        .setCsvId(UUID.randomUUID().toString())
-        .setRecipient("John Doe")
-        .setAmount(BigDecimal.valueOf(100.00))
-        .setCurrency(Currency.getInstance("USD"));
-    paymentRecord.setId(UUID.randomUUID());
-    return paymentRecord;
+    return new PaymentRecord(
+        UUID.randomUUID(), UUID.randomUUID().toString(), "John Doe", BigDecimal.valueOf(100.00),
+        Currency.getInstance("USD"), Path.of("/tmp/payments.csv"));
   }
 
   static class FakePaymentProviderConfig implements PaymentProviderConfig {

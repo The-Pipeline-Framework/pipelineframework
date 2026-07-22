@@ -235,6 +235,7 @@ public class PipelineTemplateConfigLoader {
             throw new IllegalStateException("Version: 3 requires a non-empty top-level 'types' map.");
         }
         Map<String, PipelineTemplateTypeDefinition> definitions = new LinkedHashMap<>();
+        Map<String, Map<String, RepresentationMapping>> representationMappings = new LinkedHashMap<>();
         for (Map.Entry<?, ?> entry : typesMap.entrySet()) {
             String name = stringify(entry.getKey());
             if (name == null || name.isBlank()) {
@@ -247,15 +248,19 @@ public class PipelineTemplateConfigLoader {
                 throw new IllegalStateException("Type '" + name + "' must be declared as a YAML map.");
             }
             definitions.put(name, readV3Type(name, declaration));
+            Map<String, RepresentationMapping> mappings = readV3RepresentationMappings(name, declaration.get("mappings"));
+            if (!mappings.isEmpty()) {
+                representationMappings.put(name, mappings);
+            }
         }
-        return new PipelineTemplateTypeModel(definitions);
+        return new PipelineTemplateTypeModel(definitions, representationMappings);
     }
 
     private PipelineTemplateTypeDefinition readV3Type(String name, Map<?, ?> declaration) {
         if (declaration.containsKey("number") || declaration.containsKey("optional") || declaration.containsKey("reserved")) {
             throw new IllegalStateException("Type '" + name + "' cannot declare protobuf wire metadata in version: 3.");
         }
-        rejectUnexpectedV3Keys(declaration, name, "fields", "wraps", "alias", "variants",
+        rejectUnexpectedV3Keys(declaration, name, "fields", "wraps", "alias", "variants", "mappings",
             "minLength", "maxLength", "pattern", "format", "minimum", "minimumExclusive", "maximum", "maximumExclusive");
         boolean fields = declaration.containsKey("fields");
         boolean wraps = declaration.containsKey("wraps");
@@ -284,6 +289,51 @@ public class PipelineTemplateConfigLoader {
         }
         rejectV3WrapperConstraints(name, declaration);
         return new PipelineTemplateTypeDefinition.UnionType(name, readV3Variants(name, declaration.get("variants")));
+    }
+
+    private Map<String, RepresentationMapping> readV3RepresentationMappings(String domainType, Object rawMappings) {
+        if (rawMappings == null) {
+            return Map.of();
+        }
+        if (!(rawMappings instanceof Map<?, ?> mappings)) {
+            throw new IllegalStateException("Type '" + domainType + "' mappings must be a YAML map.");
+        }
+        Map<String, RepresentationMapping> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : mappings.entrySet()) {
+            String key = stringify(entry.getKey());
+            if (key == null || key.isBlank()) {
+                throw new IllegalStateException("Type '" + domainType + "' mapping keys must not be blank.");
+            }
+            if (!(entry.getValue() instanceof Map<?, ?> declaration)) {
+                throw new IllegalStateException("Type '" + domainType + "' mapping '" + key + "' must be a YAML map.");
+            }
+            rejectUnexpectedV3Keys(declaration, domainType + "' mapping '" + key, "type", "mapper");
+            RepresentationMapping mapping = new RepresentationMapping(
+                key,
+                domainType,
+                readV3OptionalClassName(domainType, key, declaration, "type"),
+                readV3OptionalClassName(domainType, key, declaration, "mapper"));
+            if (result.putIfAbsent(key, mapping) != null) {
+                throw new IllegalStateException("Type '" + domainType + "' declares duplicate mapping '" + key + "'.");
+            }
+        }
+        return Map.copyOf(result);
+    }
+
+    private Optional<String> readV3OptionalClassName(
+        String domainType,
+        String key,
+        Map<?, ?> declaration,
+        String property
+    ) {
+        if (!declaration.containsKey(property)) {
+            return Optional.empty();
+        }
+        Object value = declaration.get(property);
+        if (!(value instanceof String text) || text.isBlank()) {
+            throw new IllegalStateException("Type '" + domainType + "' mapping '" + key + "' " + property + " must be a non-blank class name.");
+        }
+        return Optional.of(text.trim());
     }
 
     private PipelineTemplateWrapperConstraints readV3WrapperConstraints(String name, String scalar, Map<?, ?> declaration) {
@@ -518,11 +568,12 @@ public class PipelineTemplateConfigLoader {
                 + first.name() + "' input '" + first.inputTypeName() + "'.");
         }
         for (int index = 1; index < steps.size(); index++) {
-            PipelineTemplateStep previous = steps.get(index - 1);
             PipelineTemplateStep current = steps.get(index);
-            if (!typeModel.isAssignable(previous.outputTypeName(), current.inputTypeName())) {
-                throw new IllegalStateException("Step '" + previous.name() + "' output '" + previous.outputTypeName()
-                    + "' is not assignable to step '" + current.name() + "' input '" + current.inputTypeName() + "'.");
+            boolean suppliedByAnEarlierStep = steps.subList(0, index).stream()
+                .anyMatch(previous -> v3FlowCompatible(typeModel, previous.outputTypeName(), current.inputTypeName()));
+            if (!suppliedByAnEarlierStep) {
+                throw new IllegalStateException("No preceding step output is assignable to step '" + current.name()
+                    + "' input '" + current.inputTypeName() + "'.");
             }
         }
         PipelineTemplateStep last = steps.getLast();
@@ -530,6 +581,29 @@ public class PipelineTemplateConfigLoader {
             throw new IllegalStateException("Final step '" + last.name() + "' output '" + last.outputTypeName()
                 + "' is not assignable to pipeline output contract '" + outputContract + "'.");
         }
+    }
+
+    /**
+     * A v3 union can route one of its payload variants to a branch step.  The union itself is not
+     * assignable to that payload in ordinary Java terms, so keep that rule local to pipeline flow
+     * validation rather than weakening the type model's general assignability contract.
+     */
+    private boolean v3FlowCompatible(PipelineTemplateTypeModel typeModel, String source, String target) {
+        if (typeModel.isAssignable(source, target)) {
+            return true;
+        }
+        if (typeModel.definition(target)
+            .filter(PipelineTemplateTypeDefinition.UnionType.class::isInstance)
+            .isPresent()) {
+            return false;
+        }
+        return typeModel.definition(source)
+            .filter(PipelineTemplateTypeDefinition.UnionType.class::isInstance)
+            .map(PipelineTemplateTypeDefinition.UnionType.class::cast)
+            .map(union -> union.variants().values().stream()
+                .map(PipelineTemplateTypeDefinition.Variant::payload)
+                .anyMatch(payload -> typeModel.isAssignable(payload.name(), target)))
+            .orElse(false);
     }
 
     /**

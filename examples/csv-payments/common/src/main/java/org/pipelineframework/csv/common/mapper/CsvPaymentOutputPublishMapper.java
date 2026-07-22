@@ -8,7 +8,6 @@ import java.util.Map;
 import com.opencsv.CSVWriter;
 import com.opencsv.bean.StatefulBeanToCsv;
 import com.opencsv.bean.StatefulBeanToCsvBuilder;
-import org.pipelineframework.csv.common.domain.PaymentOutput;
 import org.pipelineframework.objectpublish.ObjectPayloadChunk;
 import org.pipelineframework.objectpublish.ObjectPublishGroupRenderer;
 import org.pipelineframework.objectpublish.StreamingObjectPublishMapper;
@@ -16,17 +15,18 @@ import org.pipelineframework.objectpublish.StreamingObjectPublishMapper;
 /**
  * Renders terminal CSV payment outputs as grouped CSV object payloads.
  */
-public final class CsvPaymentOutputPublishMapper implements StreamingObjectPublishMapper<PaymentOutput> {
+public final class CsvPaymentOutputPublishMapper
+    implements StreamingObjectPublishMapper<org.pipelineframework.csv.domain.PaymentOutput> {
 
     @Override
-    public String groupKey(PaymentOutput item) {
+    public String groupKey(org.pipelineframework.csv.domain.PaymentOutput item) {
         if (item == null) {
             throw new IllegalArgumentException("Payment output must not be null");
         }
-        if (item.getCsvPaymentsOutputFilename() != null && !item.getCsvPaymentsOutputFilename().isBlank()) {
-            return item.getCsvPaymentsOutputFilename();
+        if (item.csvPaymentsOutputFilename() != null && !item.csvPaymentsOutputFilename().isBlank()) {
+            return item.csvPaymentsOutputFilename();
         }
-        Path inputFile = item.getCsvPaymentsInputFilePath();
+        Path inputFile = item.csvPaymentsInputFilePath();
         if (inputFile == null || inputFile.getFileName() == null) {
             throw new IllegalArgumentException(
                 "Payment output must include csvPaymentsOutputFilename or csvPaymentsInputFilePath");
@@ -35,19 +35,21 @@ public final class CsvPaymentOutputPublishMapper implements StreamingObjectPubli
     }
 
     @Override
-    public ObjectPublishGroupRenderer<PaymentOutput> openGroup(String groupKey, PaymentOutput firstItem) {
+    public ObjectPublishGroupRenderer<org.pipelineframework.csv.domain.PaymentOutput> openGroup(
+        String groupKey, org.pipelineframework.csv.domain.PaymentOutput firstItem) {
         return new CsvPaymentOutputGroupRenderer(groupKey);
     }
 
-    private static final class CsvPaymentOutputGroupRenderer implements ObjectPublishGroupRenderer<PaymentOutput> {
+    private static final class CsvPaymentOutputGroupRenderer
+        implements ObjectPublishGroupRenderer<org.pipelineframework.csv.domain.PaymentOutput> {
         private final String groupKey;
         private final StringWriter writer = new StringWriter();
-        private final StatefulBeanToCsv<PaymentOutput> csv;
+        private final StatefulBeanToCsv<org.pipelineframework.csv.common.domain.PaymentOutput> csv;
         private long recordCount;
 
         private CsvPaymentOutputGroupRenderer(String groupKey) {
             this.groupKey = groupKey;
-            this.csv = new StatefulBeanToCsvBuilder<PaymentOutput>(writer)
+            this.csv = new StatefulBeanToCsvBuilder<org.pipelineframework.csv.common.domain.PaymentOutput>(writer)
                 .withQuotechar('\'')
                 .withSeparator(CSVWriter.DEFAULT_SEPARATOR)
                 .build();
@@ -59,9 +61,9 @@ public final class CsvPaymentOutputPublishMapper implements StreamingObjectPubli
         }
 
         @Override
-        public ObjectPayloadChunk onItem(PaymentOutput item) {
+        public ObjectPayloadChunk onItem(org.pipelineframework.csv.domain.PaymentOutput item) {
             try {
-                csv.write(item);
+                csv.write(new PaymentOutputPersistenceMapper().toExternal(item));
                 recordCount++;
                 return drain();
             } catch (Exception e) {

@@ -33,9 +33,11 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitCompletionEnvelope;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitDispatchEnvelope;
 import org.pipelineframework.config.pipeline.PipelineJson;
-import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.common.domain.PaymentStatus;
-import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
+import org.pipelineframework.csv.domain.PaymentRecord;
+import org.pipelineframework.csv.domain.PaymentStatus;
+import org.pipelineframework.csv.domain.PipelineDomainProtoAdapters;
+import org.pipelineframework.csv.grpc.PipelineTypes;
+import com.google.protobuf.util.JsonFormat;
 
 /**
  * External mock provider for the CSV await/Kafka example.
@@ -53,9 +55,6 @@ public class PaymentProviderKafkaAwaitMock {
 
   @Inject
   PaymentProviderConfig paymentProviderConfig;
-
-  @Inject
-  PaymentStatusMapper paymentStatusMapper;
 
   @Inject
   @Channel(RESULT_CHANNEL)
@@ -79,7 +78,7 @@ public class PaymentProviderKafkaAwaitMock {
   }
 
   private KafkaAwaitCompletionEnvelope handle(KafkaAwaitDispatchEnvelope dispatch) {
-    PaymentRecord paymentRecord = PipelineJson.mapper().convertValue(dispatch.requestPayload(), PaymentRecord.class);
+    PaymentRecord paymentRecord = PipelineDomainProtoAdapters.fromProto(paymentRecord(dispatch.requestPayload()));
     validatePaymentRecord(paymentRecord);
     PaymentStatus status = paymentProvider.processPayment(paymentRecord);
     return new KafkaAwaitCompletionEnvelope(
@@ -88,7 +87,7 @@ public class PaymentProviderKafkaAwaitMock {
         dispatch.correlationId(),
         dispatch.resumeToken(),
         dispatch.interactionId(),
-        paymentStatusMapper.toExternal(status),
+        PipelineDomainProtoAdapters.toProto(status),
         "csv-payments-mock-provider");
   }
 
@@ -105,9 +104,19 @@ public class PaymentProviderKafkaAwaitMock {
     if (paymentRecord == null) {
       throw new IllegalArgumentException("Kafka await payment request payload must contain a PaymentRecord");
     }
-    if (paymentRecord.getAmount() == null || paymentRecord.getRecipient() == null || paymentRecord.getRecipient().isBlank()
-        || paymentRecord.getCurrency() == null || paymentRecord.getId() == null) {
+    if (paymentRecord.amount() == null || paymentRecord.recipient() == null || paymentRecord.recipient().isBlank()
+        || paymentRecord.currency() == null || paymentRecord.id() == null) {
       throw new IllegalArgumentException("PaymentRecord must include id, amount, recipient, and currency");
+    }
+  }
+
+  private static PipelineTypes.PaymentRecord paymentRecord(Object payload) {
+    try {
+      var builder = PipelineTypes.PaymentRecord.newBuilder();
+      JsonFormat.parser().ignoringUnknownFields().merge(PipelineJson.mapper().writeValueAsString(payload), builder);
+      return builder.build();
+    } catch (Exception e) {
+      throw new IllegalArgumentException("Kafka await payment request payload must contain a v3 PaymentRecord", e);
     }
   }
 

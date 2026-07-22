@@ -24,12 +24,13 @@ import java.nio.file.Path;
 import java.util.Currency;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.csv.common.domain.ApprovedPaymentOutput;
-import org.pipelineframework.csv.common.domain.ApprovedPaymentStatus;
-import org.pipelineframework.csv.common.domain.PaymentOutput;
-import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.common.domain.UnapprovedPaymentOutput;
-import org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus;
+import org.pipelineframework.csv.domain.ApprovedPaymentOutput;
+import org.pipelineframework.csv.domain.ApprovedPaymentStatus;
+import org.pipelineframework.csv.domain.PaymentOutput;
+import org.pipelineframework.csv.domain.PaymentOutputBranch;
+import org.pipelineframework.csv.domain.PaymentRecord;
+import org.pipelineframework.csv.domain.UnapprovedPaymentOutput;
+import org.pipelineframework.csv.domain.UnapprovedPaymentStatus;
 import org.pipelineframework.step.NonRetryableException;
 
 class PaymentStatusBranchingServicesTest {
@@ -47,12 +48,12 @@ class PaymentStatusBranchingServicesTest {
 
     ApprovedPaymentOutput output = approvedService.process(status).await().indefinitely();
 
-    assertEquals("payments.csv", output.getCsvPaymentsOutputFilename());
-    assertEquals(Path.of("/tmp/payments.csv"), output.getCsvPaymentsInputFilePath());
-    assertEquals("csv-1", output.getCsvId());
-    assertEquals("alice", output.getRecipient());
-    assertEquals(202L, output.getStatus());
-    assertEquals("settled", output.getMessage());
+    assertEquals("payments.csv", output.csvPaymentsOutputFilename());
+    assertEquals(Path.of("/tmp/payments.csv"), output.csvPaymentsInputFilePath());
+    assertEquals("csv-1", output.csvId());
+    assertEquals("alice", output.recipient());
+    assertEquals(202L, output.status());
+    assertEquals("settled", output.message());
   }
 
   @Test
@@ -61,12 +62,12 @@ class PaymentStatusBranchingServicesTest {
 
     UnapprovedPaymentOutput output = unapprovedService.process(status).await().indefinitely();
 
-    assertEquals("payments.csv", output.getCsvPaymentsOutputFilename());
-    assertEquals(Path.of("/tmp/payments.csv"), output.getCsvPaymentsInputFilePath());
-    assertEquals("csv-1", output.getCsvId());
-    assertEquals("alice", output.getRecipient());
-    assertEquals(400L, output.getStatus());
-    assertEquals("declined", output.getMessage());
+    assertEquals("payments.csv", output.csvPaymentsOutputFilename());
+    assertEquals(Path.of("/tmp/payments.csv"), output.csvPaymentsInputFilePath());
+    assertEquals("csv-1", output.csvId());
+    assertEquals("alice", output.recipient());
+    assertEquals(400L, output.status());
+    assertEquals("declined", output.message());
   }
 
   @Test
@@ -74,18 +75,18 @@ class PaymentStatusBranchingServicesTest {
     ApprovedPaymentOutput branchOutput =
         approvedService.process(approvedStatus()).await().indefinitely();
 
-    PaymentOutput finalOutput = finalizeService.process(branchOutput).await().indefinitely();
+    PaymentOutput finalOutput = finalizeService.process(new PaymentOutputBranch.Approved(branchOutput)).await().indefinitely();
 
-    assertEquals(branchOutput.getCsvPaymentsOutputFilename(), finalOutput.getCsvPaymentsOutputFilename());
-    assertEquals(branchOutput.getCsvPaymentsInputFilePath(), finalOutput.getCsvPaymentsInputFilePath());
-    assertEquals(branchOutput.getCsvId(), finalOutput.getCsvId());
-    assertEquals(branchOutput.getRecipient(), finalOutput.getRecipient());
-    assertEquals(branchOutput.getAmount(), finalOutput.getAmount());
-    assertEquals(branchOutput.getCurrency(), finalOutput.getCurrency());
-    assertEquals(branchOutput.getConversationId(), finalOutput.getConversationId());
-    assertEquals(branchOutput.getStatus(), finalOutput.getStatus());
-    assertEquals(branchOutput.getMessage(), finalOutput.getMessage());
-    assertEquals(branchOutput.getFee(), finalOutput.getFee());
+    assertEquals(branchOutput.csvPaymentsOutputFilename(), finalOutput.csvPaymentsOutputFilename());
+    assertEquals(branchOutput.csvPaymentsInputFilePath(), finalOutput.csvPaymentsInputFilePath());
+    assertEquals(branchOutput.csvId(), finalOutput.csvId());
+    assertEquals(branchOutput.recipient(), finalOutput.recipient());
+    assertEquals(branchOutput.amount(), finalOutput.amount());
+    assertEquals(branchOutput.currency(), finalOutput.currency());
+    assertEquals(branchOutput.conversationId(), finalOutput.conversationId());
+    assertEquals(branchOutput.status(), finalOutput.status());
+    assertEquals(branchOutput.message(), finalOutput.message());
+    assertEquals(branchOutput.fee(), finalOutput.fee());
   }
 
   @Test
@@ -93,24 +94,23 @@ class PaymentStatusBranchingServicesTest {
     UnapprovedPaymentOutput branchOutput =
         unapprovedService.process(unapprovedStatus()).await().indefinitely();
 
-    PaymentOutput finalOutput = finalizeService.process(branchOutput).await().indefinitely();
+    PaymentOutput finalOutput = finalizeService.process(new PaymentOutputBranch.Unapproved(branchOutput)).await().indefinitely();
 
-    assertEquals(branchOutput.getCsvPaymentsOutputFilename(), finalOutput.getCsvPaymentsOutputFilename());
-    assertEquals(branchOutput.getCsvPaymentsInputFilePath(), finalOutput.getCsvPaymentsInputFilePath());
-    assertEquals(branchOutput.getCsvId(), finalOutput.getCsvId());
-    assertEquals(branchOutput.getRecipient(), finalOutput.getRecipient());
-    assertEquals(branchOutput.getAmount(), finalOutput.getAmount());
-    assertEquals(branchOutput.getCurrency(), finalOutput.getCurrency());
-    assertEquals(branchOutput.getConversationId(), finalOutput.getConversationId());
-    assertEquals(branchOutput.getStatus(), finalOutput.getStatus());
-    assertEquals(branchOutput.getMessage(), finalOutput.getMessage());
-    assertEquals(branchOutput.getFee(), finalOutput.getFee());
+    assertEquals(branchOutput.csvPaymentsOutputFilename(), finalOutput.csvPaymentsOutputFilename());
+    assertEquals(branchOutput.csvPaymentsInputFilePath(), finalOutput.csvPaymentsInputFilePath());
+    assertEquals(branchOutput.csvId(), finalOutput.csvId());
+    assertEquals(branchOutput.recipient(), finalOutput.recipient());
+    assertEquals(branchOutput.amount(), finalOutput.amount());
+    assertEquals(branchOutput.currency(), finalOutput.currency());
+    assertEquals(branchOutput.conversationId(), finalOutput.conversationId());
+    assertEquals(branchOutput.status(), finalOutput.status());
+    assertEquals(branchOutput.message(), finalOutput.message());
+    assertEquals(branchOutput.fee(), finalOutput.fee());
   }
 
   @Test
   void approvedStatusWithoutPaymentRecordFailsFast() {
-    ApprovedPaymentStatus status = approvedStatus();
-    status.setPaymentRecord(null);
+    ApprovedPaymentStatus status = new ApprovedPaymentStatus("provider-ref", "Complete", "settled", new BigDecimal("0.12"), UUID.randomUUID(), 202L, null, null);
 
     NonRetryableException failure =
         assertThrows(
@@ -118,14 +118,14 @@ class PaymentStatusBranchingServicesTest {
             () -> approvedService.process(status).await().indefinitely());
 
     assertEquals(
-        "ApprovedPaymentStatus must include paymentRecord for CSV output mapping",
+        "ApprovedPaymentStatus must include paymentRecord and csvPaymentsInputFilePath",
         failure.getMessage());
   }
 
   @Test
   void unapprovedStatusWithoutInputFilePathFailsFast() {
-    UnapprovedPaymentStatus status = unapprovedStatus();
-    status.getPaymentRecord().setCsvPaymentsInputFilePath(null);
+    PaymentRecord record = new PaymentRecord(UUID.randomUUID(), "csv-1", "alice", new BigDecimal("12.34"), Currency.getInstance("EUR"), null);
+    UnapprovedPaymentStatus status = new UnapprovedPaymentStatus("provider-ref", "Rejected", "declined", BigDecimal.ZERO, UUID.randomUUID(), 400L, record.id(), record);
 
     NonRetryableException failure =
         assertThrows(
@@ -133,46 +133,24 @@ class PaymentStatusBranchingServicesTest {
             () -> unapprovedService.process(status).await().indefinitely());
 
     assertEquals(
-        "UnapprovedPaymentStatus must include csvPaymentsInputFilePath for CSV output naming",
+        "UnapprovedPaymentStatus must include paymentRecord and csvPaymentsInputFilePath",
         failure.getMessage());
   }
 
   private static PaymentRecord paymentRecord() {
-    PaymentRecord record = new PaymentRecord();
-    record.setId(UUID.randomUUID());
-    record.setCsvId("csv-1");
-    record.setRecipient("alice");
-    record.setAmount(new BigDecimal("12.34"));
-    record.setCurrency(Currency.getInstance("EUR"));
-    record.setCsvPaymentsInputFilePath(Path.of("/tmp/payments.csv"));
-    return record;
+    return new PaymentRecord(UUID.randomUUID(), "csv-1", "alice", new BigDecimal("12.34"),
+        Currency.getInstance("EUR"), Path.of("/tmp/payments.csv"));
   }
 
   private static ApprovedPaymentStatus approvedStatus() {
     PaymentRecord record = paymentRecord();
-    ApprovedPaymentStatus status = new ApprovedPaymentStatus();
-    status.setReference("provider-ref");
-    status.setStatus("Complete");
-    status.setMessage("settled");
-    status.setFee(new BigDecimal("0.12"));
-    status.setConversationId(UUID.randomUUID());
-    status.setStatusCode(202L);
-    status.setPaymentRecord(record);
-    status.setPaymentRecordId(record.getId());
-    return status;
+    return new ApprovedPaymentStatus("provider-ref", "Complete", "settled", new BigDecimal("0.12"),
+        UUID.randomUUID(), 202L, record.id(), record);
   }
 
   private static UnapprovedPaymentStatus unapprovedStatus() {
     PaymentRecord record = paymentRecord();
-    UnapprovedPaymentStatus status = new UnapprovedPaymentStatus();
-    status.setReference("provider-ref");
-    status.setStatus("Rejected");
-    status.setMessage("declined");
-    status.setFee(BigDecimal.ZERO);
-    status.setConversationId(UUID.randomUUID());
-    status.setStatusCode(400L);
-    status.setPaymentRecord(record);
-    status.setPaymentRecordId(record.getId());
-    return status;
+    return new UnapprovedPaymentStatus("provider-ref", "Rejected", "declined", BigDecimal.ZERO,
+        UUID.randomUUID(), 400L, record.id(), record);
   }
 }

@@ -46,6 +46,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
         PipelineTransport transportMode = PipelineTransport.fromStringOptional(binding.normalizedTransport()).orElse(PipelineTransport.GRPC);
         boolean restMode = transportMode == PipelineTransport.REST;
         boolean localMode = transportMode == PipelineTransport.LOCAL;
+        boolean v3 = ctx.v3GeneratedDomainTypes();
         ClassName pipelineExecutionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
         ClassName orchestratorConfig = ClassName.get("org.pipelineframework.orchestrator", "PipelineOrchestratorConfig");
         ClassName orchestratorMode = ClassName.get("org.pipelineframework.orchestrator", "OrchestratorMode");
@@ -83,6 +84,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             inputType = resolveGrpcInputType(binding, ctx);
         }
         ParameterizedTypeName inputMultiType = ParameterizedTypeName.get(multi, inputType);
+        TypeName deserializedInputType = v3 ? inputType : inputDtoType;
 
         FieldSpec inputField = FieldSpec.builder(String.class, "input", Modifier.PUBLIC)
             .addAnnotation(AnnotationSpec.builder(option)
@@ -138,7 +140,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .build();
 
         FieldSpec mapperField = null;
-        if (!restMode) {
+        if (!restMode && !v3) {
             ClassName mapperType = ClassName.get(binding.basePackage() + ".common.mapper", binding.inputTypeName() + "Mapper");
             mapperField = FieldSpec.builder(mapperType, lowerCamel(mapperType.simpleName()))
                 .addAnnotation(inject)
@@ -253,8 +255,8 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 commandLine,
                 inputMultiType,
                 commandLine,
-                inputDtoType,
-                inputDtoType,
+                deserializedInputType,
+                deserializedInputType,
                 commandLine,
                 commandLine,
                 duration,

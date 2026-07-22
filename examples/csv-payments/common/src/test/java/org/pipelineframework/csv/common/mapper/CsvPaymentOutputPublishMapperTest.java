@@ -11,7 +11,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.pipelineframework.csv.common.domain.PaymentOutput;
+import org.pipelineframework.csv.domain.PaymentOutput;
 import org.pipelineframework.objectpublish.ObjectPublishGroupRenderer;
 
 class CsvPaymentOutputPublishMapperTest {
@@ -35,6 +35,7 @@ class CsvPaymentOutputPublishMapperTest {
         assertTrue(csv.contains("CSV ID"));
         assertTrue(csv.contains("RECIPIENT"));
         assertTrue(csv.contains("STATUS"));
+        assertTrue(csv.contains("Success"));
         assertTrue(csv.contains("100.00"));
         assertTrue(csv.contains("csv-1"));
         assertTrue(csv.contains("Alice"));
@@ -57,18 +58,10 @@ class CsvPaymentOutputPublishMapperTest {
     }
 
     private PaymentOutput paymentOutput(Path inputFile, String csvId, String recipient, String amount) {
-        PaymentOutput output = new PaymentOutput();
-        output.setCsvPaymentsOutputFilename(inputFile.getFileName().toString());
-        output.setCsvPaymentsInputFilePath(inputFile);
-        output.setCsvId(csvId);
-        output.setRecipient(recipient);
-        output.setAmount(new BigDecimal(amount));
-        output.setCurrency(Currency.getInstance("USD"));
-        output.setConversationId(UUID.randomUUID());
-        output.setStatus(1000L);
-        output.setMessage("Success");
-        output.setFee(BigDecimal.ZERO);
-        return output;
+        return new PaymentOutput(
+            inputFile.getFileName().toString(), inputFile, csvId, recipient,
+            new BigDecimal(amount), Currency.getInstance("USD"), UUID.randomUUID(),
+            1000L, "Success", BigDecimal.ZERO);
     }
 
     private int occurrences(String value, String token) {

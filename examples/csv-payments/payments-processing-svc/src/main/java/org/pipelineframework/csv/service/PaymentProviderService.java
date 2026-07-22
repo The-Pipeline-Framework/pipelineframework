@@ -16,8 +16,8 @@
 
 package org.pipelineframework.csv.service;
 
-import org.pipelineframework.csv.common.domain.PaymentStatus;
-import org.pipelineframework.csv.common.domain.PaymentRecord;
+import org.pipelineframework.csv.domain.PaymentRecord;
+import org.pipelineframework.csv.domain.PaymentStatus;
 
 public interface PaymentProviderService {
   PaymentStatus processPayment(PaymentRecord paymentRecord);

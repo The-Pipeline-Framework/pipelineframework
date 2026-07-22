@@ -881,7 +881,13 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     role,
                     java.util.Set.of(),
                     cacheKeyGenerator,
-                    descriptorSet));
+                    descriptorSet,
+                    org.pipelineframework.processor.ir.PipelineTransport.fromStringOptional(binding.normalizedTransport())
+                        .orElse(org.pipelineframework.processor.ir.PipelineTransport.GRPC),
+                    binding.basePackage(),
+                    null,
+                    ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig templateConfig
+                        && templateConfig.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3));
             }
 
             if (!rest && !local) {

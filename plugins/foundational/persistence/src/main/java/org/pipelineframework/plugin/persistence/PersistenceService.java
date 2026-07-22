@@ -75,28 +75,42 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
             return Uni.createFrom().nullItem();
         }
 
+        return persistRepresentation(item).replaceWith(item);
+    }
+
+    /**
+     * Persists an external representation using the standard persistence policy.
+     *
+     * <p>This protected seam lets a generated component boundary translate a canonical domain
+     * value before persistence while retaining all existing provider, duplicate-key, retry, and
+     * Vert.x-context behavior. It deliberately does not know how a representation is mapped.</p>
+     *
+     * @param representation the value supplied to the persistence provider
+     * @param <R> representation type
+     * @return the persisted representation
+     */
+    protected <R> Uni<R> persistRepresentation(R representation) {
+        java.util.Objects.requireNonNull(representation, "representation must not be null");
         logger.debugf("Using persistenceManager: %s to persist item of type: %s",
             persistenceManager != null ? persistenceManager.getClass().getName() : "null",
-            item.getClass().getName());
-
+            representation.getClass().getName());
         if (persistenceManager == null) {
             return Uni.createFrom().failure(new IllegalStateException("PersistenceManager is not available"));
         }
         boolean useVertx = shouldUseVertxContext();
-        Uni<T> persistUni = !useVertx
-            ? persistenceManager.persist(item)
+        Uni<R> persistUni = !useVertx
+            ? persistenceManager.persist(representation)
             : (hasManagedReactiveContext()
-                ? persistenceManager.persist(item)
-                : persistOnVertxContext(item));
+                ? persistenceManager.persist(representation)
+                : persistOnVertxContext(representation));
         return persistUni
             .onFailure(this::isDuplicateKeyError)
-            .recoverWithUni(failure -> handleDuplicateKey(item, failure))
+            .recoverWithUni(failure -> handleDuplicateKey(representation, failure))
             .onItem().invoke(result -> logger.debugf("Successfully persisted entity: %s", result != null ? result.getClass().getName() : "null"))
             .onFailure().invoke(failure -> logger.error("Failed to persist entity", failure))
             .onFailure().transform(failure -> isTransientDbError(failure)
                 ? failure
-                : new NonRetryableException("Non-transient persistence error", failure))
-            .replaceWith(item); // Return the original item as it was just persisted (side effect)
+                : new NonRetryableException("Non-transient persistence error", failure));
     }
 
     /**
@@ -152,7 +166,7 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
      *
      * @return a Uni that emits the persisted item on success, or fails with the underlying error or a timeout error if no item is emitted within the configured timeout
      */
-    private Uni<T> persistOnVertxContext(T item) {
+    private <R> Uni<R> persistOnVertxContext(R item) {
         if (vertx == null) {
             return persistenceManager.persist(item);
         }
@@ -160,7 +174,7 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
         Context baseContext = vertx.getOrCreateContext();
         Context context = VertxContext.createNewDuplicatedContext(baseContext);
         VertxContextSafetyToggle.setContextSafe(context, true);
-        return Uni.createFrom().<T>emitter(emitter -> {
+        return Uni.createFrom().<R>emitter(emitter -> {
             AtomicReference<Cancellable> subscriptionRef = new AtomicReference<>();
             emitter.onTermination(() -> {
                 context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
@@ -199,7 +213,7 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
      *         - performs an upsert and then emits the original `item` when the policy is UPSERT,
      *         - fails with the original `failure` when the policy is FAIL
      */
-    private Uni<T> handleDuplicateKey(T item, Throwable failure) {
+    private <R> Uni<R> handleDuplicateKey(R item, Throwable failure) {
         String policyValue = config != null ? config.duplicateKey() : null;
         DuplicateKeyPolicy policy = DuplicateKeyPolicy.fromConfig(policyValue);
         return switch (policy) {

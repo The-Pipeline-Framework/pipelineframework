@@ -628,5 +628,41 @@
                 </plugins>
             </reporting>
         </profile>
+        <profile>
+            <id>csv-v3-persistence</id>
+            <activation>
+                <property>
+                    <name>csv.v3.persistence</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <properties>
+                <pipeline.configArg>-Apipeline.config=${project.parent.basedir}/config/pipeline.v3-persistence.yaml</pipeline.configArg>
+                <pipeline.protoConfigArg>--config=${project.parent.basedir}/config/pipeline.v3-persistence.yaml</pipeline.protoConfigArg>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>add-v3-persistence-demo-source</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>add-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>${project.basedir}/src/v3-persistence/java</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>

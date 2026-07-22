@@ -17,20 +17,35 @@
 package org.pipelineframework.csv.service;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import lombok.Getter;
+import io.smallrye.mutiny.Uni;
 import org.pipelineframework.annotation.PipelineStep;
-import org.pipelineframework.csv.common.domain.ApprovedPaymentOutput;
-import org.pipelineframework.csv.common.domain.ApprovedPaymentStatus;
+import org.pipelineframework.csv.domain.ApprovedPaymentOutput;
+import org.pipelineframework.csv.domain.ApprovedPaymentStatus;
+import org.pipelineframework.service.ReactiveService;
+import org.pipelineframework.step.NonRetryableException;
 
 @PipelineStep
 @ApplicationScoped
-@Getter
 public class ProcessApprovedPaymentStatusService
-    extends AbstractProcessPaymentStatusService<
-        ApprovedPaymentStatus, ApprovedPaymentOutput> {
+    implements ReactiveService<ApprovedPaymentStatus, ApprovedPaymentOutput> {
 
   @Override
-  protected ApprovedPaymentOutput newOutput() {
-    return new ApprovedPaymentOutput();
+  public Uni<ApprovedPaymentOutput> process(ApprovedPaymentStatus status) {
+    if (status.paymentRecord() == null || status.paymentRecord().csvPaymentsInputFilePath() == null) {
+      return Uni.createFrom().failure(new NonRetryableException(
+          "ApprovedPaymentStatus must include paymentRecord and csvPaymentsInputFilePath"));
+    }
+    var record = status.paymentRecord();
+    return Uni.createFrom().item(new ApprovedPaymentOutput(
+        record.csvPaymentsInputFilePath().getFileName().toString(),
+        record.csvPaymentsInputFilePath(),
+        record.csvId(),
+        record.recipient(),
+        record.amount(),
+        record.currency(),
+        status.conversationId(),
+        status.statusCode(),
+        status.message(),
+        status.fee()));
   }
 }

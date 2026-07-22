@@ -18,9 +18,11 @@ package org.pipelineframework.plugin.persistence;
 
 import java.sql.SQLException;
 import java.sql.SQLTransientException;
+import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.UniAssertSubscriber;
+import org.pipelineframework.mapper.Mapper;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.step.NonRetryableException;
 
@@ -33,12 +35,75 @@ class PersistenceServiceTest {
     static class TestEntity {
     }
 
+    static class CanonicalPayment {
+        private final String id;
+
+        CanonicalPayment(String id) {
+            this.id = id;
+        }
+    }
+
+    static class PaymentEntity {
+        private final String id;
+
+        PaymentEntity(String id) {
+            this.id = id;
+        }
+    }
+
+    static class PaymentPersistenceMapper implements Mapper<CanonicalPayment, PaymentEntity> {
+        @Override
+        public CanonicalPayment fromExternal(PaymentEntity external) {
+            return new CanonicalPayment(external.id);
+        }
+
+        @Override
+        public PaymentEntity toExternal(CanonicalPayment domain) {
+            return new PaymentEntity(domain.id);
+        }
+    }
+
+    static class RepresentationAwarePersistenceService extends PersistenceService<CanonicalPayment> {
+        Uni<PaymentEntity> persistPaymentEntity(PaymentEntity entity) {
+            return persistRepresentation(entity);
+        }
+    }
+
+    @Test
+    void persistRepresentation_UsesTheRepresentationInsteadOfTheCanonicalType() {
+        PersistenceManager manager = mock(PersistenceManager.class);
+        RepresentationAwarePersistenceService service = new RepresentationAwarePersistenceService();
+        service.persistenceManager = manager;
+
+        PaymentEntity entity = new PaymentEntity("payment-1");
+        when(manager.persist(entity)).thenReturn(Uni.createFrom().item(entity));
+
+        UniAssertSubscriber<PaymentEntity> subscriber = service.persistPaymentEntity(entity)
+            .subscribe().withSubscriber(UniAssertSubscriber.create());
+        subscriber.awaitItem();
+
+        assertSame(entity, subscriber.getItem());
+        verify(manager).persist(entity);
+    }
+
+    @Test
+    void representationMapperSupportsBothBoundaryDirections() {
+        PaymentPersistenceMapper mapper = new PaymentPersistenceMapper();
+        CanonicalPayment canonical = new CanonicalPayment("payment-1");
+
+        PaymentEntity representation = mapper.toExternal(canonical);
+        CanonicalPayment restored = mapper.fromExternal(representation);
+
+        assertTrue(representation.id.equals("payment-1"));
+        assertTrue(restored.id.equals("payment-1"));
+    }
+
     @Test
     void process_WithDuplicateKeyFailureAndIgnorePolicy_ShouldReturnItem() {
         PersistenceManager manager = mock(PersistenceManager.class);
         PersistenceService<TestEntity> service = new PersistenceService<>();
         service.persistenceManager = manager;
-        service.config = () -> "ignore";
+        service.config = config("ignore");
 
         TestEntity entity = new TestEntity();
         SQLException duplicate = new SQLException("duplicate key", "23505");
@@ -57,7 +122,7 @@ class PersistenceServiceTest {
         PersistenceManager manager = mock(PersistenceManager.class);
         PersistenceService<TestEntity> service = new PersistenceService<>();
         service.persistenceManager = manager;
-        service.config = () -> "upsert";
+        service.config = config("upsert");
 
         TestEntity entity = new TestEntity();
         SQLException duplicate = new SQLException("duplicate key", "23505");
@@ -97,7 +162,7 @@ class PersistenceServiceTest {
         PersistenceManager manager = mock(PersistenceManager.class);
         PersistenceService<TestEntity> service = new PersistenceService<>();
         service.persistenceManager = manager;
-        service.config = () -> "fail";
+        service.config = config("fail");
 
         TestEntity entity = new TestEntity();
         SQLException duplicate = new SQLException("duplicate key", "23505");
@@ -128,5 +193,24 @@ class PersistenceServiceTest {
 
         Throwable thrown = subscriber.getFailure();
         assertSame(failure, thrown);
+    }
+
+    private PersistenceConfig config(String duplicateKey) {
+        return new PersistenceConfig() {
+            @Override
+            public String duplicateKey() {
+                return duplicateKey;
+            }
+
+            @Override
+            public Optional<String> providerClass() {
+                return Optional.empty();
+            }
+
+            @Override
+            public int vertxContextTimeoutSeconds() {
+                return 30;
+            }
+        };
     }
 }

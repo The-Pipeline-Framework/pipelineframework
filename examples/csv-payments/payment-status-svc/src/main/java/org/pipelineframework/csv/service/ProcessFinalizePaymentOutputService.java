@@ -21,8 +21,10 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 import org.pipelineframework.annotation.PipelineStep;
-import org.pipelineframework.csv.common.domain.PaymentOutput;
-import org.pipelineframework.csv.common.domain.PaymentOutputBranch;
+import org.pipelineframework.csv.domain.ApprovedPaymentOutput;
+import org.pipelineframework.csv.domain.PaymentOutput;
+import org.pipelineframework.csv.domain.PaymentOutputBranch;
+import org.pipelineframework.csv.domain.UnapprovedPaymentOutput;
 import org.pipelineframework.service.ReactiveService;
 
 @PipelineStep
@@ -34,17 +36,10 @@ public class ProcessFinalizePaymentOutputService
 
   @Override
   public Uni<PaymentOutput> process(PaymentOutputBranch branchOutput) {
-    PaymentOutput output = new PaymentOutput();
-    output.setCsvPaymentsOutputFilename(branchOutput.getCsvPaymentsOutputFilename());
-    output.setCsvPaymentsInputFilePath(branchOutput.getCsvPaymentsInputFilePath());
-    output.setCsvId(branchOutput.getCsvId());
-    output.setRecipient(branchOutput.getRecipient());
-    output.setAmount(branchOutput.getAmount());
-    output.setCurrency(branchOutput.getCurrency());
-    output.setConversationId(branchOutput.getConversationId());
-    output.setStatus(branchOutput.getStatus());
-    output.setMessage(branchOutput.getMessage());
-    output.setFee(branchOutput.getFee());
+    PaymentOutput output = switch (branchOutput) {
+      case PaymentOutputBranch.Approved(ApprovedPaymentOutput value) -> toOutput(value);
+      case PaymentOutputBranch.Unapproved(UnapprovedPaymentOutput value) -> toOutput(value);
+    };
 
     return Uni.createFrom()
         .item(output)
@@ -54,5 +49,15 @@ public class ProcessFinalizePaymentOutputService
               LOGGER.infof("Executed command on %s --> %s", branchOutput, result);
               MDC.remove("serviceId");
             });
+  }
+
+  private PaymentOutput toOutput(ApprovedPaymentOutput value) {
+    return new PaymentOutput(value.csvPaymentsOutputFilename(), value.csvPaymentsInputFilePath(), value.csvId(),
+        value.recipient(), value.amount(), value.currency(), value.conversationId(), value.status(), value.message(), value.fee());
+  }
+
+  private PaymentOutput toOutput(UnapprovedPaymentOutput value) {
+    return new PaymentOutput(value.csvPaymentsOutputFilename(), value.csvPaymentsInputFilePath(), value.csvId(),
+        value.recipient(), value.amount(), value.currency(), value.conversationId(), value.status(), value.message(), value.fee());
   }
 }
