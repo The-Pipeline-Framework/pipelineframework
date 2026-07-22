@@ -1,7 +1,7 @@
-name: CI — CSV Self-Hosted HA
+name: Scheduled — CSV Self-Hosted HA Admission Scale
 
 on:
-  pull_request:
+  push:
     branches:
       - main
     paths:
@@ -12,7 +12,9 @@ on:
       - "mvnw"
       - ".mvn/**"
       - ".github/actions/setup-testcontainers/**"
-      - ".github/workflows/self-host-ha-csv.yml"
+      - ".github/workflows/self-host-ha-csv-scale.yml"
+  schedule:
+    - cron: "0 3 * * 1-5"
   workflow_dispatch:
 
 concurrency:
@@ -26,10 +28,10 @@ env:
   MAVEN_OPTS: -Xmx2g -Xms512m
 
 jobs:
-  csv-self-host-ha:
-    name: CSV Self-Hosted HA (${{ matrix.await-transport }}, ${{ matrix.admission-profile }})
+  csv-self-host-ha-scale:
+    name: CSV Self-Hosted HA Scale (${{ matrix.await-transport }}, ${{ matrix.admission-profile }})
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     strategy:
       fail-fast: false
@@ -104,10 +106,11 @@ jobs:
             examples/csv-payments/orchestrator-svc/target
           key: ${{ steps.csv-application-images.outputs['cache-primary-key'] }}
 
-      - name: Run CSV self-host HA demo
+      - name: Run CSV self-host HA admission scale profile
         env:
           TPF_CSV_AWAIT_TRANSPORT: ${{ matrix.await-transport }}
           TPF_CSV_ADMISSION_PROFILE: ${{ matrix.admission-profile }}
+          TPF_CSV_RECORD_COUNT: "10000"
           TPF_SKIP_CONTAINER_BUILD: "true"
           TPF_KEEP_STACK_ON_FAILURE: "true"
         run: ./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
@@ -126,18 +129,18 @@ jobs:
           docker compose "${compose_files[@]}" logs --no-color --tail=500 || true
           docker compose "${compose_files[@]}" down -v --remove-orphans || true
 
-      - name: Make CSV self-host failure artifacts readable
+      - name: Make CSV self-host scale failure artifacts readable
         if: failure()
         run: sudo chmod -R a+rX examples/csv-payments/self-host/container/target/tpf-container-ha || true
 
-      - name: Upload CSV self-host failure artifacts
+      - name: Upload CSV self-host scale failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: csv-self-host-ha-${{ matrix.await-transport }}-${{ matrix.admission-profile }}
+          name: csv-self-host-ha-scale-${{ matrix.await-transport }}-${{ matrix.admission-profile }}
           path: |
             examples/csv-payments/self-host/container/target/tpf-container-ha/**
             examples/csv-payments/**/target/replay/**
             examples/csv-payments/self-host/container/compose*.yaml
-          retention-days: 7
+          retention-days: 14
           if-no-files-found: warn

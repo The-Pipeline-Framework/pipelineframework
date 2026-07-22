@@ -17,11 +17,13 @@
 package org.pipelineframework.csv.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -29,6 +31,7 @@ import io.smallrye.mutiny.Uni;
 import io.smallrye.reactive.messaging.MutinyEmitter;
 import java.math.BigDecimal;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Currency;
 import java.util.Map;
 import java.util.UUID;
@@ -80,6 +83,7 @@ class PaymentProviderKafkaAwaitMockTest {
   void consumesDispatchEnvelopeAndPublishesCompletionEnvelope() throws Exception {
     PaymentRecord paymentRecord = validPaymentRecord();
     PaymentStatus status = validPaymentStatus(paymentRecord);
+    paymentRecord.setId(null);
     when(paymentProvider.processPayment(any(PaymentRecord.class))).thenReturn(status);
     when(results.send(anyString())).thenReturn(Uni.createFrom().voidItem());
 
@@ -109,6 +113,36 @@ class PaymentProviderKafkaAwaitMockTest {
         AwaitPayloadSupport.coercePayload(payload, PipelineTypes.PaymentStatus.class);
     assertTrue(rebuilt.hasApproved());
     assertEquals("provider-ref", rebuilt.getApproved().getReference());
+  }
+
+  @Test
+  void releasesKafkaCompletionsAsAConfiguredBurst() throws Exception {
+    PaymentRecord firstRecord = validPaymentRecord();
+    PaymentRecord secondRecord = validPaymentRecord();
+    when(paymentProvider.processPayment(any(PaymentRecord.class)))
+        .thenReturn(validPaymentStatus(firstRecord), validPaymentStatus(secondRecord));
+    when(results.send(anyString())).thenReturn(Uni.createFrom().voidItem());
+    mockProvider.paymentProviderConfig = new PaymentProviderServiceMockTest.FakePaymentProviderConfig() {
+      @Override
+      public int completionBurstSize() {
+        return 2;
+      }
+
+      @Override
+      public Duration completionBurstFlushDelay() {
+        return Duration.ofSeconds(1);
+      }
+    };
+
+    var first = mockProvider.consume(Message.of(dispatchJson(firstRecord))).toCompletableFuture();
+    assertFalse(first.isDone());
+    var second = mockProvider.consume(Message.of(dispatchJson(secondRecord))).toCompletableFuture();
+
+    second.get(5, TimeUnit.SECONDS);
+    first.get(5, TimeUnit.SECONDS);
+
+    verify(results, times(2)).send(anyString());
+    mockProvider.flushPendingCompletions();
   }
 
   @Test

@@ -27,6 +27,18 @@ Run the Kafka lane with the same coordinator/worker topology:
 TPF_CSV_AWAIT_TRANSPORT=kafka ./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
 ```
 
+Exercise durable admission with a deterministic 1k-record provider profile:
+
+```bash
+TPF_CSV_ADMISSION_PROFILE=slow ./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
+TPF_CSV_ADMISSION_PROFILE=burst TPF_CSV_AWAIT_TRANSPORT=kafka ./examples/csv-payments/self-host/container/run-container-ha-demo.sh --ci
+```
+
+The `slow` profile delays every completion. The `burst` profile holds completions until its configured
+batch size and flushes the final partial batch. Both profiles verify the LocalStack admission-table peak
+never exceeds `pipeline.max-concurrency`, that reservations are empty after handoff, and that one durable
+await interaction and one output row exist for every generated input row.
+
 The script:
 
 1. builds the current framework,
@@ -49,6 +61,12 @@ Set `TPF_SKIP_FRAMEWORK_INSTALL=true` or `TPF_SKIP_CONTAINER_BUILD=true` for fas
 | `TPF_CSV_RUNTIME_IMAGE` | `localhost/csv-payments/pipeline-runtime-svc:latest` |
 | `TPF_CSV_PERSISTENCE_IMAGE` | `localhost/csv-payments/persistence-svc:latest` |
 | `TPF_CSV_AWAIT_TRANSPORT` | `sqs` |
+| `TPF_CSV_ADMISSION_PROFILE` | empty; `slow` and `burst` run deterministic admission checks |
+| `TPF_CSV_RECORD_COUNT` | `1000` for an admission profile, otherwise the supplied CSV file |
+| `TPF_PIPELINE_MAX_CONCURRENCY` | `25` for an admission profile, otherwise `250` |
+| `TPF_CSV_PROVIDER_RESPONSE_DELAY_MILLIS` | `25` for `slow`, `0` for `burst` |
+| `TPF_CSV_PROVIDER_COMPLETION_BURST_SIZE` | `1` for `slow`, `25` for `burst` |
+| `TPF_CSV_PROVIDER_COMPLETION_BURST_FLUSH_DELAY` | `PT0.25S` for `burst` |
 | `TPF_TENANT_ID` | `csv-demo` |
 | `TPF_PIPELINE_ID` | `org.pipelineframework.csv` |
 | `TPF_COORDINATOR_PORT` | `8082` |
@@ -68,6 +86,8 @@ These defaults are for local verification only. Real deployments should use secr
 2. A separated REST worker can execute the grouped pipeline runtime while the coordinator owns durable execution, await, release, worker lifecycle, work queue, and DLQ state.
 3. SQS and Kafka await dispatch/completion can run through the same self-host shape. In the Kafka lane, the transition worker consumes completion messages so the live await session can continue immediately while await records still use the shared Dynamo tables.
 4. The example persistence path can run beside the durable coordinator substrates.
+5. The admission profiles observe this stack's Dynamo reservation table; they prove its configured durable
+   budget, not a provider-global quota across independently configured deployments.
 
 This is still a local reference stack, not a production deployment package.
 

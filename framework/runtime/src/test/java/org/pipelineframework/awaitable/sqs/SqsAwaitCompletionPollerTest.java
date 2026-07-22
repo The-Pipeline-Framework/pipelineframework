@@ -3,6 +3,7 @@ package org.pipelineframework.awaitable.sqs;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
@@ -14,8 +15,15 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.subscription.UniEmitter;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.PipelineExecutionService;
@@ -43,6 +51,11 @@ class SqsAwaitCompletionPollerTest {
         poller = new SqsAwaitCompletionPoller(config(), executionService, client);
     }
 
+    @AfterEach
+    void tearDown() {
+        poller.shutdown();
+    }
+
     @Test
     void pollOnceDeletesMessageAfterSuccessfulCompletion() throws Exception {
         when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
@@ -51,7 +64,7 @@ class SqsAwaitCompletionPollerTest {
         when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class)))
             .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(null, false)));
 
-        assertDoesNotThrow(() -> poller.pollOnce(enabledConfig()));
+        assertDoesNotThrow(() -> awaitPoll(enabledConfig()));
 
         verify(executionService).completeAwaitInteraction(argThat(command ->
             command.tenantId().equals("tenant-1")
@@ -74,7 +87,7 @@ class SqsAwaitCompletionPollerTest {
             .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(null, false)));
         when(client.deleteMessage(any(DeleteMessageRequest.class))).thenThrow(new IllegalStateException("sqs down"));
 
-        assertDoesNotThrow(() -> poller.pollOnce(enabledConfig()));
+        assertDoesNotThrow(() -> awaitPoll(enabledConfig()));
 
         verify(executionService).completeAwaitInteraction(any(AwaitCompletionCommand.class));
         verify(client).deleteMessage(any(DeleteMessageRequest.class));
@@ -88,7 +101,7 @@ class SqsAwaitCompletionPollerTest {
         when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class)))
             .thenReturn(Uni.createFrom().failure(new AwaitInteractionNotFoundException("missing")));
 
-        assertDoesNotThrow(() -> poller.pollOnce(enabledConfig()));
+        assertDoesNotThrow(() -> awaitPoll(enabledConfig()));
 
         verify(client).deleteMessage(argThat((DeleteMessageRequest request) ->
             request.queueUrl().equals("http://sqs.local/responses")
@@ -104,7 +117,7 @@ class SqsAwaitCompletionPollerTest {
             .thenReturn(Uni.createFrom().failure(new AwaitInteractionNotFoundException("missing")));
         when(client.deleteMessage(any(DeleteMessageRequest.class))).thenThrow(new IllegalStateException("sqs down"));
 
-        assertDoesNotThrow(() -> poller.pollOnce(enabledConfig()));
+        assertDoesNotThrow(() -> awaitPoll(enabledConfig()));
 
         verify(client).deleteMessage(any(DeleteMessageRequest.class));
     }
@@ -117,7 +130,7 @@ class SqsAwaitCompletionPollerTest {
         when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class)))
             .thenReturn(Uni.createFrom().failure(new IllegalStateException("store down")));
 
-        assertDoesNotThrow(() -> poller.pollOnce(enabledConfig()));
+        assertDoesNotThrow(() -> awaitPoll(enabledConfig()));
 
         verify(client, never()).deleteMessage(any(DeleteMessageRequest.class));
     }
@@ -128,7 +141,7 @@ class SqsAwaitCompletionPollerTest {
             .messages(message("receipt-4", "{not-json"))
             .build());
 
-        assertDoesNotThrow(() -> poller.pollOnce(enabledConfig()));
+        assertDoesNotThrow(() -> awaitPoll(enabledConfig()));
 
         verify(client, never()).deleteMessage(any(DeleteMessageRequest.class));
         verify(executionService, never()).completeAwaitInteraction(any(AwaitCompletionCommand.class));
@@ -136,7 +149,7 @@ class SqsAwaitCompletionPollerTest {
 
     @Test
     void pollOnceSkipsWhenDisabled() {
-        assertDoesNotThrow(() -> poller.pollOnce(disabledConfig()));
+        assertDoesNotThrow(() -> awaitPoll(disabledConfig()));
 
         verify(client, never()).receiveMessage(any(ReceiveMessageRequest.class));
         verify(executionService, never()).completeAwaitInteraction(any(AwaitCompletionCommand.class));
@@ -147,7 +160,7 @@ class SqsAwaitCompletionPollerTest {
         when(client.receiveMessage(any(ReceiveMessageRequest.class)))
             .thenReturn(ReceiveMessageResponse.builder().messages(List.of()).build());
 
-        assertDoesNotThrow(() -> poller.pollOnce(enabledConfig()));
+        assertDoesNotThrow(() -> awaitPoll(enabledConfig()));
 
         verify(client).receiveMessage(argThat((ReceiveMessageRequest request) ->
             request.queueUrl().equals("http://sqs.local/responses")
@@ -171,6 +184,71 @@ class SqsAwaitCompletionPollerTest {
 
         assertEquals("tpf.await.sqs.visibility-timeout must be between PT0S and PT43200S.", failure.getMessage());
         verify(client, never()).receiveMessage(any(ReceiveMessageRequest.class));
+    }
+
+    @Test
+    void pollOnceAdmitsEachReceivedMessageConcurrently() throws Exception {
+        when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
+            .messages(
+                message("receipt-1", completionJson()),
+                message("receipt-2", completionJson()),
+                message("receipt-3", completionJson()))
+            .build());
+        AtomicInteger subscriptions = new AtomicInteger();
+        List<UniEmitter<? super AwaitCompletionResult>> emitters = new CopyOnWriteArrayList<>();
+        when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class))).thenAnswer(invocation ->
+            Uni.createFrom().emitter(emitter -> {
+                if (subscriptions.incrementAndGet() == 3) {
+                    emitters.forEach(active -> active.complete(new AwaitCompletionResult(null, false)));
+                    emitter.complete(new AwaitCompletionResult(null, false));
+                } else {
+                    emitters.add(emitter);
+                }
+            }));
+
+        awaitPoll(enabledConfig());
+
+        assertEquals(3, subscriptions.get());
+        verify(client).deleteMessage(argThat((DeleteMessageRequest request) ->
+            request.receiptHandle().equals("receipt-1")));
+        verify(client).deleteMessage(argThat((DeleteMessageRequest request) ->
+            request.receiptHandle().equals("receipt-2")));
+        verify(client).deleteMessage(argThat((DeleteMessageRequest request) ->
+            request.receiptHandle().equals("receipt-3")));
+    }
+
+    @Test
+    void pollOnceDeletesReceivedMessagesConcurrently() throws Exception {
+        when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
+            .messages(
+                message("receipt-1", completionJson()),
+                message("receipt-2", completionJson()),
+                message("receipt-3", completionJson()))
+            .build());
+        when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class)))
+            .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(null, false)));
+        CountDownLatch deletesStarted = new CountDownLatch(3);
+        CountDownLatch allowDeletes = new CountDownLatch(1);
+        when(client.deleteMessage(any(DeleteMessageRequest.class))).thenAnswer(ignored -> {
+            deletesStarted.countDown();
+            allowDeletes.await(5, TimeUnit.SECONDS);
+            return null;
+        });
+        CompletableFuture<Void> completed = new CompletableFuture<>();
+
+        poller.pollOnce(enabledConfig()).subscribe().with(
+            ignored -> completed.complete(null),
+            completed::completeExceptionally);
+        try {
+            assertTrue(deletesStarted.await(1, TimeUnit.SECONDS));
+        } finally {
+            allowDeletes.countDown();
+        }
+        completed.get(5, TimeUnit.SECONDS);
+    }
+
+    private void awaitPoll(SqsAwaitCompletionPoller.SqsAwaitPollerConfig config) {
+        poller.pollOnce(config).await().atMost(Duration.ofSeconds(5));
     }
 
     private static PipelineOrchestratorConfig config() {

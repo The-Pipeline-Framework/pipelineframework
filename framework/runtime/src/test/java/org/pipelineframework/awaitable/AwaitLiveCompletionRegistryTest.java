@@ -3,6 +3,9 @@ package org.pipelineframework.awaitable;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Flow;
+import java.util.concurrent.TimeUnit;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
@@ -37,6 +40,84 @@ class AwaitLiveCompletionRegistryTest {
         session.accept(completion(1)).await().indefinitely();
         subscriber.awaitItems(2, Duration.ofSeconds(5));
         assertTrue(third.isDone());
+    }
+
+    @Test
+    void enqueuesCompletionBeforeDownstreamDemandWhileRetainingTheLocalPermit() {
+        AwaitLiveCompletionRegistry registry = new AwaitLiveCompletionRegistry();
+        AwaitLiveCompletionRegistry.LiveAwaitSession<String> session = registry.open(descriptor(), "tenant", "unit");
+        AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
+        Multi.createFrom().publisher(session).subscribe().withSubscriber(subscriber);
+
+        session.acquirePermit("item:0", 1).await().indefinitely();
+        CompletableFuture<Void> next = session.acquirePermit("item:1", 1).subscribeAsCompletionStage();
+
+        session.enqueue(completion(0)).await().indefinitely();
+        assertFalse(next.isDone());
+
+        subscriber.request(1);
+        subscriber.awaitItems(1, Duration.ofSeconds(5));
+        assertTrue(next.isDone());
+    }
+
+    @Test
+    void enqueuesAFullBurstWithoutReleasingLocalPermitsBeforeDelivery() {
+        AwaitLiveCompletionRegistry registry = new AwaitLiveCompletionRegistry();
+        AwaitLiveCompletionRegistry.LiveAwaitSession<String> session = registry.open(descriptor(), "tenant", "unit");
+        AssertSubscriber<String> subscriber = AssertSubscriber.create(0);
+        Multi.createFrom().publisher(session).subscribe().withSubscriber(subscriber);
+
+        for (int index = 0; index < 3; index++) {
+            session.acquirePermit("item:" + index, 3).await().indefinitely();
+        }
+        CompletableFuture<Void> next = session.acquirePermit("item:3", 3).subscribeAsCompletionStage();
+
+        for (int index = 0; index < 3; index++) {
+            session.enqueue(completion(index)).await().indefinitely();
+        }
+        session.enqueue(completion(0)).await().indefinitely();
+        assertFalse(next.isDone());
+
+        subscriber.request(3);
+        subscriber.awaitItems(3, Duration.ofSeconds(5));
+        assertTrue(next.isDone());
+    }
+
+    @Test
+    void enqueuesBeforeBlockingEagerDownstreamDelivery() throws Exception {
+        AwaitLiveCompletionRegistry registry = new AwaitLiveCompletionRegistry();
+        AwaitLiveCompletionRegistry.LiveAwaitSession<String> session = registry.open(descriptor(), "tenant", "unit");
+        CountDownLatch delivered = new CountDownLatch(1);
+        Multi.createFrom().publisher(session).subscribe().withSubscriber(new Flow.Subscriber<>() {
+            @Override
+            public void onSubscribe(Flow.Subscription subscription) {
+                subscription.request(1);
+            }
+
+            @Override
+            public void onNext(String item) {
+                delivered.countDown();
+                try {
+                    Thread.sleep(1_000);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+            @Override
+            public void onError(Throwable failure) {
+            }
+
+            @Override
+            public void onComplete() {
+            }
+        });
+
+        long started = System.nanoTime();
+        session.enqueue(completion(0)).await().indefinitely();
+
+        assertTrue(Duration.ofNanos(System.nanoTime() - started).compareTo(Duration.ofMillis(500)) < 0);
+        assertTrue(delivered.await(2, TimeUnit.SECONDS));
     }
 
     @Test

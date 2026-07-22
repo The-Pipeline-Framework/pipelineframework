@@ -107,9 +107,10 @@ For a smaller first pass, use the 1k input:
 cd <repo-root>
 ./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
   -Dcsv.e2e.telemetry.enabled=true \
-  -Dquarkus.otel.traces.sampler.arg=1 \
-  -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
-  -Dcsv.e2e.pipeline.wait.seconds=1800 \
+   -Dquarkus.otel.traces.sampler.arg=1 \
+   -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
+   -Dcsv-payments.payment-provider.provider-reject-probability=0.08 \
+   -Dcsv.e2e.pipeline.wait.seconds=1800 \
   -Dcsv.e2e.orchestrator.wait.seconds=1800 \
   -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
   -Dsurefire.failIfNoSpecifiedTests=false \
@@ -121,7 +122,7 @@ Open the supported replay viewer at `/replay-viewer/` and either:
 - select `CSV Payments built-in` from the viewer sidebar, or
 - switch the sidebar selector to `Custom replay` and load the generated JSON locally
 
-The built-in CSV dataset is sourced from the 1k-input replay lane and is intended as the longer default demo dataset for the viewer.
+The built-in CSV dataset is sourced from the 1k-input replay lane and is intended as the longer default demo dataset for the viewer. Its capture must retain the deterministic 907/93 approved/unapproved split, so keep the explicit `provider-reject-probability` setting when refreshing it.
 
 For the unified runtime demo suite, use these capture profiles.
 
