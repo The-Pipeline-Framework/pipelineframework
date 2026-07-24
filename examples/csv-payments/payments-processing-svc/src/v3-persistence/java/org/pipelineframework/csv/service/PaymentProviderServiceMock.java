@@ -36,7 +36,7 @@ import org.pipelineframework.csv.domain.UnapprovedPaymentStatus;
 @SuppressWarnings("UnstableApiUsage")
 @ApplicationScoped
 public class PaymentProviderServiceMock implements PaymentProviderService {
-    
+
   private static final Logger LOG = Logger.getLogger(PaymentProviderServiceMock.class);
 
   private final RateLimiter rateLimiter;
@@ -63,10 +63,10 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
   public PaymentStatus processPayment(@NonNull PaymentRecord paymentRecord) {
     LOG.debugf("processPayment called with paymentRecordId=%s, csvId=%s",
         paymentRecord.id(), paymentRecord.csvId());
-        
+
     LOG.debugf("Attempting to acquire rate limiter permit with timeout: %sms", timeoutMillis);
     boolean acquired = (this.timeoutMillis != -1L && rateLimiter.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS));
-    
+
     if (!acquired) {
       LOG.debugf("Failed to acquire rate limiter permit within timeout period: %sms", timeoutMillis);
       throw new StatusRuntimeException(
@@ -80,7 +80,7 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
           Status.DEADLINE_EXCEEDED.withDescription(
               "Mock payment provider timed out while processing payment."));
     }
-    
+
     LOG.debug("Rate limiter permit acquired successfully");
 
     UUID conversationId = UUID.randomUUID();

@@ -167,6 +167,45 @@ jobs:
             "-Dit.test=${{ env.GENERIC_VERIFY_IT_PATTERN }}" \
             -Dquarkus.container-image.build=false
 
+  csv-v3-profile-verify:
+    name: CSV Payments V3 Profile Verify
+    needs: bootstrap
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Configure Maven
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_PR }} --no-transfer-progress" >> $GITHUB_ENV
+
+      - name: Download framework artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.bootstrap.outputs.artifact_name }}
+          path: /tmp/m2-artifacts
+
+      - name: Extract framework artifacts
+        run: |
+          mkdir -p ~/.m2/repository
+          tar -xzf /tmp/m2-artifacts/${{ needs.bootstrap.outputs.artifact_name }}.tar.gz -C ~/.m2/repository
+
+      - name: Run CSV Payments v3 profile verification
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.xml clean test \
+            -Dcsv.v3.persistence=true \
+            -DskipITs=true \
+            -DskipNative=true \
+            -Dquarkus.container-image.build=false
+
   e2e-csv-monolith:
     name: CSV Monolith E2E
     needs: bootstrap
