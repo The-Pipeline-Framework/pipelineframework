@@ -19,12 +19,13 @@ package org.pipelineframework.csv.service;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.CompletionStage;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.quarkus.arc.properties.IfBuildProperty;
 import io.smallrye.mutiny.Uni;
-import io.smallrye.mutiny.infrastructure.Infrastructure;
+import io.smallrye.reactive.messaging.annotations.Blocking;
 import io.smallrye.reactive.messaging.MutinyEmitter;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
@@ -61,14 +62,16 @@ public class PaymentProviderKafkaAwaitMock {
   @Channel(RESULT_CHANNEL)
   MutinyEmitter<String> results;
 
+  private volatile PaymentProviderCompletionProfile<KafkaAwaitCompletionEnvelope> completionProfile;
+
   @Incoming(REQUEST_CHANNEL)
+  @Blocking(value = "csv-payment-provider", ordered = false)
   public CompletionStage<Void> consume(Message<String> message) {
     Objects.requireNonNull(message, "message must not be null");
     return Uni.createFrom().item(() -> parseDispatch(message.getPayload()))
-        .runSubscriptionOn(Infrastructure.getDefaultExecutor())
         .onItem().transform(this::handle)
         .onItem().transformToUni(this::delayCompletion)
-        .onItem().transformToUni(completion -> results.send(serialize(completion)))
+        .onItem().transformToUni(completion -> sendCompletion(completion))
         .replaceWithVoid()
         .subscribeAsCompletionStage()
         .thenCompose(ignored -> message.ack())
@@ -76,6 +79,14 @@ public class PaymentProviderKafkaAwaitMock {
           LOG.error("Failed processing Kafka await payment request", failure);
           return message.nack(failure);
         });
+  }
+
+  @PreDestroy
+  void flushPendingCompletions() {
+    PaymentProviderCompletionProfile<KafkaAwaitCompletionEnvelope> active = completionProfile;
+    if (active != null) {
+      active.close();
+    }
   }
 
   private KafkaAwaitCompletionEnvelope handle(KafkaAwaitDispatchEnvelope dispatch) {
@@ -95,10 +106,42 @@ public class PaymentProviderKafkaAwaitMock {
   private Uni<KafkaAwaitCompletionEnvelope> delayCompletion(KafkaAwaitCompletionEnvelope completion) {
     long delayMillis = paymentProviderConfig.responseDelayMillis();
     Uni<KafkaAwaitCompletionEnvelope> completionUni = Uni.createFrom().item(completion);
-    if (delayMillis <= 0) {
-      return completionUni;
+    if (delayMillis > 0) {
+      completionUni = completionUni.onItem().delayIt().by(Duration.ofMillis(delayMillis));
     }
-    return completionUni.onItem().delayIt().by(Duration.ofMillis(delayMillis));
+    return completionUni
+        .onItem().transformToUni(value -> Uni.createFrom().completionStage(completionProfile().releaseWhenReady(value)));
+  }
+
+  private PaymentProviderCompletionProfile<KafkaAwaitCompletionEnvelope> completionProfile() {
+    PaymentProviderCompletionProfile<KafkaAwaitCompletionEnvelope> active = completionProfile;
+    if (active != null) {
+      return active;
+    }
+    synchronized (this) {
+      if (completionProfile == null) {
+        completionProfile = new PaymentProviderCompletionProfile<>(
+            paymentProviderConfig.completionBurstSize(),
+            paymentProviderConfig.completionBurstFlushDelay(),
+            "csv-kafka-await-provider-completion-profile");
+      }
+      return completionProfile;
+    }
+  }
+
+  private Uni<Void> sendCompletion(KafkaAwaitCompletionEnvelope completion) {
+    PaymentProviderCompletionProfile<KafkaAwaitCompletionEnvelope> profile = completionProfile();
+    boolean handledOnTermination = false;
+    try {
+      Uni<Void> send = results.send(serialize(completion))
+          .onTermination().invoke(profile::completionHandled);
+      handledOnTermination = true;
+      return send;
+    } finally {
+      if (!handledOnTermination) {
+        profile.completionHandled();
+      }
+    }
   }
 
   private static void validatePaymentRecord(PaymentRecord paymentRecord) {
@@ -106,8 +149,8 @@ public class PaymentProviderKafkaAwaitMock {
       throw new IllegalArgumentException("Kafka await payment request payload must contain a PaymentRecord");
     }
     if (paymentRecord.getAmount() == null || paymentRecord.getRecipient() == null || paymentRecord.getRecipient().isBlank()
-        || paymentRecord.getCurrency() == null || paymentRecord.getId() == null) {
-      throw new IllegalArgumentException("PaymentRecord must include id, amount, recipient, and currency");
+        || paymentRecord.getCurrency() == null) {
+      throw new IllegalArgumentException("PaymentRecord must include amount, recipient, and currency");
     }
   }
 

@@ -5,13 +5,17 @@ work while waiting for I/O.
 
 ### How to size `pipeline.max-concurrency`
 
-`pipeline.max-concurrency` limits live work admitted by a step or live connector segment. For a Kafka or SQS `ONE_TO_ONE` await over a stream, it also acts as the pending-interaction window: the parser can dispatch up to that many unresolved interactions, then advances only after a completion is durably admitted and accepted by the live await session. This window is local to one live await unit in one runtime instance; it is not a distributed provider quota across replicas.
+`pipeline.max-concurrency` limits live work admitted by a step or live connector segment. For platform-owned compute and I/O work, it is a density control: more permitted in-flight work can use available platform capacity more efficiently, subject to memory, downstream demand, and the work's own saturation point.
+
+For a `ONE_TO_ONE` await that depends on a third-party provider, the same setting has a more specific meaning. It bounds unresolved provider interactions. The provider, rather than TPF, performs the long-running work, so increasing this value cannot make the pipeline complete faster than the provider can accept and complete work. Size it from the provider's sustainable concurrency, latency, and contractual limits—not from the CPU available to the await service.
+
+Kafka and SQS live awaits use the value as the local pending-interaction window: the source can dispatch up to that many unresolved interactions, then advances only after a completion is durably admitted and accepted by the live await session.
 
 With `parallelism=AUTO` or parallel execution, TPF uses bounded merge at that same limit so completed items may continue out of source order. Set `parallelism=SEQUENTIAL` when source order matters: TPF concatenates work and uses an effective window of one. Webhook and interaction-API awaits remain durable-only unless their transport adapter explicitly opts into the live-window capability.
 
 ### Durable provider admission
 
-Set `pipeline.await-admission.enabled=true` to apply the existing `pipeline.max-concurrency` value as a durable pending-interaction budget for `ONE_TO_ONE` awaits in `QUEUE_ASYNC` mode. The budget is scoped to the logical pipeline, await step, and normalized provider endpoint, so it is shared across tenants and runtime replicas rather than multiplied by each worker. A full budget pauses source admission; it is not a dispatch-rate limiter or a provider-side quota.
+Durable admission is enabled by default for `ONE_TO_ONE` awaits whose adapter exposes a provider endpoint, such as Kafka and SQS in `QUEUE_ASYNC` mode. It makes that same value a durable pending-interaction budget. The budget is scoped to the logical pipeline, await step, and normalized provider endpoint, so it is shared across tenants and runtime replicas rather than multiplied by each worker. A full budget pauses source admission; it is framework-enforced backpressure, not a dispatch-rate limiter or a provider-side quota. Durable-only adapters without a provider endpoint, including interaction API and webhook awaits, do not acquire a reservation. Set `pipeline.await-admission.enabled=false` only for a deliberate compatibility or recovery override.
 
 Use `pipeline.await-admission.store=dynamo` for multi-replica deployment and provision `tpf_await_admission` with `scope_key` (string) and `slot` (number) as its composite key. The in-memory store is intended for tests and single-process development. Reservations survive dispatch retries and are released only after durable completion handoff, terminal failure, timeout, cancellation, or expiry.
 
@@ -37,7 +41,7 @@ Observe `tpf.await.admission.pending` for reservations made by the current runti
 
 ### Practical starting point (example)
 
-For a 4-core Graviton pod running I/O-heavy steps:
+For a 4-core Graviton pod running platform-owned I/O-heavy steps:
 - `pipeline.max-concurrency`: start at 32–64 for I/O-heavy steps, 4–8 for CPU-heavy steps.
 - `pipeline.defaults.backpressure-buffer-capacity`: start at 2,048–8,192 for bursty streams and tune downward.
 
@@ -53,6 +57,12 @@ Always validate in your environment using the in-flight and buffer metrics and a
 
 Tune downward if the buffer stays high or GC increases, and upward only when `tpf.step.inflight` is consistently
 below the limit while `tpf.step.buffer.queued` spikes.
+
+### Sizing a third-party await
+
+Treat an enabled durable-admission budget as a provider-facing safety limit, not a target for keeping local CPUs busy. Start below the provider's demonstrated sustainable unresolved-work capacity, exercise slow and burst completion profiles, then increase only when provider latency, error rate, and admission waiting show spare capacity.
+
+An await deployed as its own service normally needs modest compute: it coordinates durable interaction state, broker I/O, and source backpressure while the provider performs the substantive work. More replicas improve availability and recovery capacity, but do not multiply provider throughput because they share the durable admission budget. In a function deployment, the initiated interaction is persisted and the invocation can return while the provider works; it does not consume compute while synchronously waiting for a response.
 
 ### Durable boundaries
 

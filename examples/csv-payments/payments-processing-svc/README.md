@@ -115,6 +115,9 @@ The service uses the following configuration properties:
 - `csv-payments.payment-provider.timeout-millis`: Timeout for acquiring permits (default: 2000)
 - `csv-payments.payment-provider.provider-timeout-probability`: Deterministic fraction of provider calls that time out
 - `csv-payments.payment-provider.provider-reject-probability`: Deterministic fraction of provider calls that return `PaymentStatus.status=Rejected`
+- `csv-payments.payment-provider.response-delay-millis`: Delay every await completion for a deterministic slow-provider profile
+- `csv-payments.payment-provider.completion-burst-size`: Number of await completions held before publishing a burst
+- `csv-payments.payment-provider.completion-burst-flush-delay`: Maximum delay before publishing a final partial burst
 - `csv-payments.payment-provider.sqs.enabled`: Enables the example-local SQS await mock provider
 - `csv-payments.payment-provider.sqs.request-queue-url`: SQS await request queue consumed by the mock provider
 - `csv-payments.payment-provider.sqs.response-queue-url`: SQS await completion queue published by the mock provider

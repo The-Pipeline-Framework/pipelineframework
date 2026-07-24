@@ -44,13 +44,17 @@ public interface PaymentProviderConfig {
   @WithDefault("0.0")
   double providerRejectProbability();
 
-  /**
-   * Optional delay before publishing Kafka await completions. This keeps local
-   * self-host demos deterministic when the mock provider runs in the same process
-   * as the transition worker.
-   */
+  /** Optional delay before publishing await completions. */
   @WithDefault("0")
   long responseDelayMillis();
+
+  /** Number of completions held before the mock provider publishes a burst. */
+  @WithDefault("1")
+  int completionBurstSize();
+
+  /** Maximum time the mock provider holds a final partial completion burst. */
+  @WithDefault("PT1S")
+  Duration completionBurstFlushDelay();
 
   /** SQS await mock provider configuration. */
   Sqs sqs();

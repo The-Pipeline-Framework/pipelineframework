@@ -18,7 +18,7 @@ Parallelism is configured at the pipeline level. See [All Settings](/develop/con
 - `AUTO` enables parallel execution for expanding steps (1→N), unless a step advises strict ordering.
 - `PARALLEL` enables parallel execution for all per-item steps, overriding advisory ordering.
 
-`pipeline.max-concurrency` caps in-flight items during parallel execution to control backpressure and memory usage.
+`pipeline.max-concurrency` caps in-flight items during parallel execution to control backpressure and memory usage. For a durable `ONE_TO_ONE` await, size it from the external provider's sustainable unresolved-work capacity rather than the platform's CPU capacity; see [Concurrency and backpressure](/deploy/concurrency-and-backpressure#sizing-a-third-party-await).
 
 ## Avoid Breaking Parallelism
 
