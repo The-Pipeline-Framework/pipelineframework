@@ -93,7 +93,6 @@ jobs:
             -pl orchestrator-svc \
             -Dcsv.runtime.layout=monolith \
             -Dcsv.e2e.pipeline.wait.seconds=120 \
-            -Dtest=CsvPaymentsEndToEndIT \
             -Dit.test=CsvPaymentsEndToEndIT \
             -Dquarkus.container-image.build=false \
             verify
