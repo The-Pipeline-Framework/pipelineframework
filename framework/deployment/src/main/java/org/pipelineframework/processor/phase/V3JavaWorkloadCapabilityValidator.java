@@ -35,10 +35,6 @@ final class V3JavaWorkloadCapabilityValidator {
                 throw new IllegalStateException("Version: 3 Java workload realization supports local inspectable steps only; "
                     + "remote step '" + step.name() + "' remains pending.");
             }
-            if (!"ONE_TO_ONE".equalsIgnoreCase(step.cardinality())) {
-                throw new IllegalStateException("Version: 3 Java workload realization supports ONE_TO_ONE steps only; step '"
-                    + step.name() + "' declares '" + step.cardinality() + "'.");
-            }
         }
     }
 }

@@ -71,6 +71,26 @@ types:
 
 Field names are unique within a product type. A field can reference a semantic scalar or another named type.
 
+### External representations
+
+A v3 domain type can optionally declare a named external representation for a framework component. The pipeline and business functions continue to use the generated canonical domain type; the component performs the explicit conversion at its boundary.
+
+```yaml
+types:
+  PaymentOutput:
+    fields:
+      - [id, uuid]
+      - [amount, decimal]
+    mappings:
+      persistence:
+        type: org.example.persistence.PaymentOutputEntity
+        mapper: org.example.persistence.PaymentOutputPersistenceMapper
+```
+
+`mappings` is a generic named-type declaration. A mapping key is not limited to a predefined spelling by the DSL, and a mapping can omit either class name for a future representation resolver. Consumers define their own readiness rules. In this release, the `persistence` consumer requires both values, supports concrete record domain types, and requires the declared mapper to implement `Mapper<GeneratedDomain, Representation>`.
+
+The mapper's `toExternal` direction is used only when writing the persistence representation. Its `fromExternal` direction remains part of the same generic mapper contract for readers and later boundaries; a persistence write does not round-trip the saved entity back into the pipeline.
+
 ### Nominal wrappers
 
 Use `wraps` when the underlying representation has a distinct business identity. `OrderId` and `CustomerId` can both wrap `uuid` without becoming interchangeable.
@@ -163,6 +183,8 @@ TPF records the union name, declared discriminator, and payload contract in gene
 ## Wire identity and compatibility
 
 Names, field names, and variant discriminators are the DSL-facing identities. The compiler allocates protobuf tags and records them in the sibling IDL lock file (`pipeline.idl.json` for `pipeline.yaml`). YAML never contains field or variant numbers.
+
+Representation mappings are application/build configuration, not domain wire identity. Changing a declared representation class or mapper does not change protobuf tags or automatically constitute a v3 compatibility change.
 
 The compiler preserves tags and reservations as types evolve. Changing a field representation, a wrapper representation, an alias target, or a variant discriminator changes the contract and is checked before generation. A generated target must preserve nominal identity and discriminator semantics; a target that cannot do so reports a clear diagnostic instead of silently flattening the type.
 

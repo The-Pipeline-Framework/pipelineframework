@@ -1,0 +1,491 @@
+{
+  "version" : 3,
+  "appName" : "csv-payments",
+  "basePackage" : "org.pipelineframework.csv",
+  "messages" : { },
+  "unions" : { },
+  "types" : {
+    "CsvPaymentsInputFile" : {
+      "name" : "CsvPaymentsInputFile",
+      "kind" : "record",
+      "fields" : [ {
+        "number" : 1,
+        "name" : "csvFolderPath",
+        "protoName" : "csv_folder_path",
+        "type" : "path"
+      }, {
+        "number" : 2,
+        "name" : "filepath",
+        "protoName" : "filepath",
+        "type" : "path"
+      } ],
+      "target" : null,
+      "variants" : [ ],
+      "reservedNumbers" : [ 3 ],
+      "reservedNames" : [ "id" ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
+    },
+    "PaymentRecord" : {
+      "name" : "PaymentRecord",
+      "kind" : "record",
+      "fields" : [ {
+        "number" : 1,
+        "name" : "amount",
+        "protoName" : "amount",
+        "type" : "decimal"
+      }, {
+        "number" : 2,
+        "name" : "csvId",
+        "protoName" : "csv_id",
+        "type" : "string"
+      }, {
+        "number" : 3,
+        "name" : "csvPaymentsInputFilePath",
+        "protoName" : "csv_payments_input_file_path",
+        "type" : "path"
+      }, {
+        "number" : 4,
+        "name" : "currency",
+        "protoName" : "currency",
+        "type" : "currency"
+      }, {
+        "number" : 5,
+        "name" : "id",
+        "protoName" : "id",
+        "type" : "uuid"
+      }, {
+        "number" : 6,
+        "name" : "recipient",
+        "protoName" : "recipient",
+        "type" : "string"
+      } ],
+      "target" : null,
+      "variants" : [ ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
+    },
+    "ApprovedPaymentStatus" : {
+      "name" : "ApprovedPaymentStatus",
+      "kind" : "record",
+      "fields" : [ {
+        "number" : 1,
+        "name" : "conversationId",
+        "protoName" : "conversation_id",
+        "type" : "uuid"
+      }, {
+        "number" : 2,
+        "name" : "fee",
+        "protoName" : "fee",
+        "type" : "decimal"
+      }, {
+        "number" : 4,
+        "name" : "message",
+        "protoName" : "message",
+        "type" : "string"
+      }, {
+        "number" : 5,
+        "name" : "paymentRecord",
+        "protoName" : "payment_record",
+        "type" : "PaymentRecord"
+      }, {
+        "number" : 6,
+        "name" : "paymentRecordId",
+        "protoName" : "payment_record_id",
+        "type" : "uuid"
+      }, {
+        "number" : 7,
+        "name" : "reference",
+        "protoName" : "reference",
+        "type" : "string"
+      }, {
+        "number" : 8,
+        "name" : "status",
+        "protoName" : "status",
+        "type" : "string"
+      }, {
+        "number" : 9,
+        "name" : "statusCode",
+        "protoName" : "status_code",
+        "type" : "int64"
+      } ],
+      "target" : null,
+      "variants" : [ ],
+      "reservedNumbers" : [ 3 ],
+      "reservedNames" : [ "id" ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
+    },
+    "UnapprovedPaymentStatus" : {
+      "name" : "UnapprovedPaymentStatus",
+      "kind" : "record",
+      "fields" : [ {
+        "number" : 1,
+        "name" : "conversationId",
+        "protoName" : "conversation_id",
+        "type" : "uuid"
+      }, {
+        "number" : 2,
+        "name" : "fee",
+        "protoName" : "fee",
+        "type" : "decimal"
+      }, {
+        "number" : 4,
+        "name" : "message",
+        "protoName" : "message",
+        "type" : "string"
+      }, {
+        "number" : 5,
+        "name" : "paymentRecord",
+        "protoName" : "payment_record",
+        "type" : "PaymentRecord"
+      }, {
+        "number" : 6,
+        "name" : "paymentRecordId",
+        "protoName" : "payment_record_id",
+        "type" : "uuid"
+      }, {
+        "number" : 7,
+        "name" : "reference",
+        "protoName" : "reference",
+        "type" : "string"
+      }, {
+        "number" : 8,
+        "name" : "status",
+        "protoName" : "status",
+        "type" : "string"
+      }, {
+        "number" : 9,
+        "name" : "statusCode",
+        "protoName" : "status_code",
+        "type" : "int64"
+      } ],
+      "target" : null,
+      "variants" : [ ],
+      "reservedNumbers" : [ 3 ],
+      "reservedNames" : [ "id" ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
+    },
+    "ApprovedPaymentOutput" : {
+      "name" : "ApprovedPaymentOutput",
+      "kind" : "record",
+      "fields" : [ {
+        "number" : 1,
+        "name" : "amount",
+        "protoName" : "amount",
+        "type" : "decimal"
+      }, {
+        "number" : 2,
+        "name" : "conversationId",
+        "protoName" : "conversation_id",
+        "type" : "uuid"
+      }, {
+        "number" : 3,
+        "name" : "csvId",
+        "protoName" : "csv_id",
+        "type" : "string"
+      }, {
+        "number" : 4,
+        "name" : "csvPaymentsInputFilePath",
+        "protoName" : "csv_payments_input_file_path",
+        "type" : "path"
+      }, {
+        "number" : 5,
+        "name" : "csvPaymentsOutputFilename",
+        "protoName" : "csv_payments_output_filename",
+        "type" : "string"
+      }, {
+        "number" : 6,
+        "name" : "currency",
+        "protoName" : "currency",
+        "type" : "currency"
+      }, {
+        "number" : 7,
+        "name" : "fee",
+        "protoName" : "fee",
+        "type" : "decimal"
+      }, {
+        "number" : 9,
+        "name" : "message",
+        "protoName" : "message",
+        "type" : "string"
+      }, {
+        "number" : 10,
+        "name" : "recipient",
+        "protoName" : "recipient",
+        "type" : "string"
+      }, {
+        "number" : 11,
+        "name" : "status",
+        "protoName" : "status",
+        "type" : "int64"
+      } ],
+      "target" : null,
+      "variants" : [ ],
+      "reservedNumbers" : [ 8 ],
+      "reservedNames" : [ "id" ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
+    },
+    "UnapprovedPaymentOutput" : {
+      "name" : "UnapprovedPaymentOutput",
+      "kind" : "record",
+      "fields" : [ {
+        "number" : 1,
+        "name" : "amount",
+        "protoName" : "amount",
+        "type" : "decimal"
+      }, {
+        "number" : 2,
+        "name" : "conversationId",
+        "protoName" : "conversation_id",
+        "type" : "uuid"
+      }, {
+        "number" : 3,
+        "name" : "csvId",
+        "protoName" : "csv_id",
+        "type" : "string"
+      }, {
+        "number" : 4,
+        "name" : "csvPaymentsInputFilePath",
+        "protoName" : "csv_payments_input_file_path",
+        "type" : "path"
+      }, {
+        "number" : 5,
+        "name" : "csvPaymentsOutputFilename",
+        "protoName" : "csv_payments_output_filename",
+        "type" : "string"
+      }, {
+        "number" : 6,
+        "name" : "currency",
+        "protoName" : "currency",
+        "type" : "currency"
+      }, {
+        "number" : 7,
+        "name" : "fee",
+        "protoName" : "fee",
+        "type" : "decimal"
+      }, {
+        "number" : 9,
+        "name" : "message",
+        "protoName" : "message",
+        "type" : "string"
+      }, {
+        "number" : 10,
+        "name" : "recipient",
+        "protoName" : "recipient",
+        "type" : "string"
+      }, {
+        "number" : 11,
+        "name" : "status",
+        "protoName" : "status",
+        "type" : "int64"
+      } ],
+      "target" : null,
+      "variants" : [ ],
+      "reservedNumbers" : [ 8 ],
+      "reservedNames" : [ "id" ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
+    },
+    "PaymentOutput" : {
+      "name" : "PaymentOutput",
+      "kind" : "record",
+      "fields" : [ {
+        "number" : 1,
+        "name" : "amount",
+        "protoName" : "amount",
+        "type" : "decimal"
+      }, {
+        "number" : 2,
+        "name" : "conversationId",
+        "protoName" : "conversation_id",
+        "type" : "uuid"
+      }, {
+        "number" : 3,
+        "name" : "csvId",
+        "protoName" : "csv_id",
+        "type" : "string"
+      }, {
+        "number" : 4,
+        "name" : "csvPaymentsInputFilePath",
+        "protoName" : "csv_payments_input_file_path",
+        "type" : "path"
+      }, {
+        "number" : 5,
+        "name" : "csvPaymentsOutputFilename",
+        "protoName" : "csv_payments_output_filename",
+        "type" : "string"
+      }, {
+        "number" : 6,
+        "name" : "currency",
+        "protoName" : "currency",
+        "type" : "currency"
+      }, {
+        "number" : 7,
+        "name" : "fee",
+        "protoName" : "fee",
+        "type" : "decimal"
+      }, {
+        "number" : 9,
+        "name" : "message",
+        "protoName" : "message",
+        "type" : "string"
+      }, {
+        "number" : 10,
+        "name" : "recipient",
+        "protoName" : "recipient",
+        "type" : "string"
+      }, {
+        "number" : 11,
+        "name" : "status",
+        "protoName" : "status",
+        "type" : "int64"
+      } ],
+      "target" : null,
+      "variants" : [ ],
+      "reservedNumbers" : [ 8 ],
+      "reservedNames" : [ "id" ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
+    },
+    "PaymentStatus" : {
+      "name" : "PaymentStatus",
+      "kind" : "union",
+      "fields" : [ ],
+      "target" : null,
+      "variants" : [ {
+        "discriminator" : "approved",
+        "payload" : "ApprovedPaymentStatus",
+        "protoName" : "approved",
+        "number" : 1
+      }, {
+        "discriminator" : "unapproved",
+        "payload" : "UnapprovedPaymentStatus",
+        "protoName" : "unapproved",
+        "number" : 2
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
+    },
+    "PaymentOutputBranch" : {
+      "name" : "PaymentOutputBranch",
+      "kind" : "union",
+      "fields" : [ ],
+      "target" : null,
+      "variants" : [ {
+        "discriminator" : "approved",
+        "payload" : "ApprovedPaymentOutput",
+        "protoName" : "approved",
+        "number" : 1
+      }, {
+        "discriminator" : "unapproved",
+        "payload" : "UnapprovedPaymentOutput",
+        "protoName" : "unapproved",
+        "number" : 2
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
+    }
+  },
+  "steps" : [ {
+    "name" : "Process Csv Payments Input",
+    "inputTypeName" : "CsvPaymentsInputFile",
+    "outputTypeName" : "PaymentRecord"
+  }, {
+    "name" : "Await Payment Provider",
+    "inputTypeName" : "PaymentRecord",
+    "outputTypeName" : "PaymentStatus"
+  }, {
+    "name" : "Process Approved Payment Status",
+    "inputTypeName" : "ApprovedPaymentStatus",
+    "outputTypeName" : "ApprovedPaymentOutput"
+  }, {
+    "name" : "Process Unapproved Payment Status",
+    "inputTypeName" : "UnapprovedPaymentStatus",
+    "outputTypeName" : "UnapprovedPaymentOutput"
+  }, {
+    "name" : "Finalize Payment Output",
+    "inputTypeName" : "PaymentOutputBranch",
+    "outputTypeName" : "PaymentOutput"
+  } ]
+}

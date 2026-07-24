@@ -17,6 +17,7 @@
 package org.pipelineframework.proto;
 
 import java.nio.file.Path;
+import java.util.Optional;
 
 /** Runs the independent v3 protobuf and Java-domain generators in one build lifecycle command. */
 public final class PipelineV3ContractGenerator {
@@ -36,7 +37,8 @@ public final class PipelineV3ContractGenerator {
     /** Generate both v3 target surfaces while keeping their renderers independent. */
     public static void generate(Path moduleDir, Path configPath, Path outputDir) {
         new PipelineProtoGenerator().generate(moduleDir, configPath, outputDir);
-        new PipelineV3JavaDomainGenerator().generate(moduleDir, configPath, outputDir);
+        new PipelineV3JavaDomainGenerator().generate(
+            moduleDir, Optional.ofNullable(configPath), Optional.ofNullable(outputDir));
     }
 
     static record Arguments(Path moduleDir, Path configPath, Path outputDir, boolean help) {

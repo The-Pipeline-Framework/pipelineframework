@@ -102,7 +102,9 @@ final class CheckpointBoundaryValidator {
                 "Object output consumes type '" + expected + "' must match last step output '" + lastStepOutput + "'");
         }
         validateObjectOutputMapper(objectOutput, expected, processingEnv);
-        validateTerminalOutputMapper(templateConfig, expected, processingEnv);
+        if (templateConfig.dialect() != org.pipelineframework.config.template.PipelineTemplateDialect.V3) {
+            validateTerminalOutputMapper(templateConfig, expected, processingEnv);
+        }
     }
 
     private void validateObjectOutputMapper(

@@ -854,6 +854,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         Path processDir = moduleDir;
         List<String> command = new ArrayList<>();
         String mavenRepoLocal = System.getProperty("maven.repo.local", "").trim();
+        boolean v3PersistenceProfile = Boolean.getBoolean("csv.v3.persistence");
         Path activeRuntimeMapping = activeRuntimeMappingPath();
         Path desiredRuntimeMapping = desiredRuntimeMappingPath();
         Path runtimeMappingBackup = null;
@@ -865,6 +866,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
             command.add("-DskipTests");
             command.add("-Dquarkus.container-image.build=false");
             command.add("-Dquarkus.container-image.push=false");
+            if (v3PersistenceProfile) {
+                command.add("-Dcsv.v3.persistence=true");
+            }
             if (!mavenRepoLocal.isBlank()) {
                 command.add("-Dmaven.repo.local=" + mavenRepoLocal);
             }
@@ -878,6 +882,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
             command.add("-DskipTests");
             command.add("-Dquarkus.container-image.build=false");
             command.add("-Dquarkus.container-image.push=false");
+            if (v3PersistenceProfile) {
+                command.add("-Dcsv.v3.persistence=true");
+            }
             if (!mavenRepoLocal.isBlank()) {
                 command.add("-Dmaven.repo.local=" + mavenRepoLocal);
             }
@@ -1415,7 +1422,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static Path writeE2ePipelineConfig() throws IOException {
         Path config = Paths.get(TEST_E2E_DIR, "pipeline-e2e.yaml");
         Path canonical = Paths.get(System.getProperty("user.dir"))
-                .resolve("../config/pipeline.yaml")
+                .resolve(Boolean.getBoolean("csv.v3.persistence")
+                    ? "../config/pipeline.v3-persistence.yaml"
+                    : "../config/pipeline.yaml")
                 .normalize()
                 .toAbsolutePath();
         String root = Paths.get(TEST_E2E_DIR).toAbsolutePath().normalize().toString();

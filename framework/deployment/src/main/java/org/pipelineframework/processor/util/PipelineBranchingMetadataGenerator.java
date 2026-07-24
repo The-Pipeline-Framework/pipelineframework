@@ -200,6 +200,22 @@ public final class PipelineBranchingMetadataGenerator {
             return domainType.reflectionName();
         }
         PipelineTransport transportMode = java.util.Objects.requireNonNullElse(ctx.getTransportMode(), PipelineTransport.GRPC);
+        if (transportMode == PipelineTransport.GRPC
+            && ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig templateConfig
+            && templateConfig.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3
+            && domainType.reflectionName().contains("$")) {
+            String nestedName = domainType.reflectionName();
+            String unionName = nestedName.substring(nestedName.lastIndexOf('.') + 1, nestedName.indexOf('$'));
+            ClassName unionType = ClassName.get(templateConfig.basePackage() + ".grpc", "PipelineTypes", unionName);
+            if (ctx.getProcessingEnv() != null
+                && ctx.getProcessingEnv().getElementUtils() != null
+                && ctx.getProcessingEnv().getElementUtils().getTypeElement(unionType.canonicalName()) == null) {
+                throw new IllegalStateException("Branch-aware step accepted gRPC runtime type '"
+                    + unionType.canonicalName() + "' (derived from domain type '" + domainType.reflectionName()
+                    + "') could not be resolved. Ensure gRPC descriptor-set bindings are generated before compiling the pipeline.");
+            }
+            return unionType.reflectionName();
+        }
         TypeName transportType = clientStepType(domainType, transportMode, pipelineBasePackage(ctx, domainType));
         if (transportType instanceof ClassName className) {
             if (transportMode == PipelineTransport.GRPC

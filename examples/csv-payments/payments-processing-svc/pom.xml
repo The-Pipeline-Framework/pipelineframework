@@ -204,5 +204,34 @@
                 </plugins>
             </build>
         </profile>
+        <profile>
+            <id>csv-v3-persistence-domain</id>
+            <activation>
+                <property>
+                    <name>csv.v3.persistence</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>default-testCompile</id>
+                                <configuration>
+                                    <!-- Legacy envelope tests depend on the retired v2 status mappers. -->
+                                    <testExcludes>
+                                        <testExclude>org/pipelineframework/csv/service/PaymentProviderKafkaAwaitMockTest.java</testExclude>
+                                        <testExclude>org/pipelineframework/csv/service/PaymentProviderSqsAwaitMockTest.java</testExclude>
+                                    </testExcludes>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>

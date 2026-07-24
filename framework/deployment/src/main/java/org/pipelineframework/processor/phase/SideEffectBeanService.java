@@ -5,15 +5,21 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import org.jboss.logging.Logger;
+import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateDialect;
+import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
+import org.pipelineframework.config.template.RepresentationMapping;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.DeploymentRole;
@@ -27,6 +33,7 @@ public class SideEffectBeanService {
 
     private static final Logger LOG = Logger.getLogger(SideEffectBeanService.class);
     private static final String CACHE_SERVICE_CLASS = "org.pipelineframework.plugin.cache.CacheService";
+    private static final String PERSISTENCE_SERVICE_CLASS = "org.pipelineframework.plugin.persistence.PersistenceService";
 
     private final GenerationPathResolver pathResolver;
 
@@ -80,6 +87,22 @@ public class SideEffectBeanService {
         if (constructor != null) {
             beanBuilder.addMethod(constructor);
         }
+        resolvePersistenceMapping(ctx, model, observedType).ifPresent(mapping -> {
+            beanBuilder.addField(FieldSpec.builder(mapping.mapperType(), "representationMapper", Modifier.PRIVATE)
+                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
+                .build());
+            beanBuilder.addMethod(MethodSpec.methodBuilder("process")
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(com.squareup.javapoet.ParameterizedTypeName.get(
+                    ClassName.get("io.smallrye.mutiny", "Uni"), observedType))
+                .addParameter(observedType, "item")
+                .beginControlFlow("if (item == null)")
+                .addStatement("return super.process(item)")
+                .endControlFlow()
+                .addStatement("return persistRepresentation(representationMapper.toExternal(item)).replaceWith(item)")
+                .build());
+        });
 
         TypeSpec beanClass = beanBuilder.build();
         Path outputDir = pathResolver.resolveRoleOutputDir(ctx, outputRole == null ? role : outputRole);
@@ -92,6 +115,67 @@ public class SideEffectBeanService {
                 "Failed to generate side-effect bean for '" + model.serviceName() + "' at '" + outputDir
                     + "': " + e.getMessage());
         }
+    }
+
+    private java.util.Optional<PersistenceRepresentationMapping> resolvePersistenceMapping(
+        PipelineCompilationContext ctx,
+        PipelineStepModel model,
+        TypeName observedType
+    ) {
+        if (!PERSISTENCE_SERVICE_CLASS.equals(model.serviceClassName().canonicalName())
+            || !(ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config)
+            || config.dialect() != PipelineTemplateDialect.V3
+            || !(observedType instanceof ClassName domainType)) {
+            return java.util.Optional.empty();
+        }
+        String domainPrefix = config.basePackage() + ".domain.";
+        if (!domainType.canonicalName().startsWith(domainPrefix)) {
+            return java.util.Optional.empty();
+        }
+        String domainName = domainType.simpleName();
+        RepresentationMapping mapping = config.typeModel().representationMapping(domainName, "persistence").orElse(null);
+        if (mapping == null) {
+            return java.util.Optional.empty();
+        }
+        if (!(config.typeModel().definition(domainName).orElse(null) instanceof PipelineTemplateTypeDefinition.RecordType)) {
+            throw representationFailure(mapping, "persistence mappings currently support only record domain types");
+        }
+        String representationName = mapping.representationType().orElseThrow(() ->
+            representationFailure(mapping, "persistence mapping requires representation type"));
+        String mapperName = mapping.mapperType().orElseThrow(() ->
+            representationFailure(mapping, "persistence mapping requires mapper type"));
+        javax.lang.model.element.TypeElement representation = ctx.getProcessingEnv().getElementUtils().getTypeElement(representationName);
+        if (representation == null) {
+            throw representationFailure(mapping, "representation class is unavailable");
+        }
+        javax.lang.model.element.TypeElement mapper = ctx.getProcessingEnv().getElementUtils().getTypeElement(mapperName);
+        if (mapper == null) {
+            throw representationFailure(mapping, "mapper class is unavailable");
+        }
+        javax.lang.model.element.TypeElement mapperContract = ctx.getProcessingEnv().getElementUtils()
+            .getTypeElement("org.pipelineframework.mapper.Mapper");
+        javax.lang.model.element.TypeElement domain = ctx.getProcessingEnv().getElementUtils()
+            .getTypeElement(domainType.canonicalName());
+        if (mapperContract == null || domain == null) {
+            throw representationFailure(mapping, "canonical mapper contract is unavailable");
+        }
+        javax.lang.model.type.DeclaredType expected = ctx.getProcessingEnv().getTypeUtils().getDeclaredType(
+            mapperContract, domain.asType(), representation.asType());
+        if (!ctx.getProcessingEnv().getTypeUtils().isAssignable(mapper.asType(), expected)) {
+            throw representationFailure(mapping, "mapper must implement Mapper<" + domainType.canonicalName() + ", "
+                + representationName + ">");
+        }
+        return java.util.Optional.of(new PersistenceRepresentationMapping(ClassName.bestGuess(mapperName)));
+    }
+
+    private IllegalStateException representationFailure(RepresentationMapping mapping, String reason) {
+        return new IllegalStateException("Representation mapping failure for domain type '" + mapping.domainType()
+            + "', key '" + mapping.key() + "', representation type '"
+            + mapping.representationType().orElse("<missing>") + "', mapper type '"
+            + mapping.mapperType().orElse("<missing>") + "': " + reason);
+    }
+
+    private record PersistenceRepresentationMapping(ClassName mapperType) {
     }
 
     private MethodSpec buildSideEffectConstructor(javax.lang.model.element.TypeElement pluginElement) {

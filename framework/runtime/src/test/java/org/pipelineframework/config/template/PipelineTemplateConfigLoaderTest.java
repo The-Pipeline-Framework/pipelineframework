@@ -92,6 +92,23 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void loadsCsvPaymentsV3PersistenceVariation() throws Exception {
+        Path configPath = Path.of("..", "..", "examples", "csv-payments", "config", "pipeline.v3-persistence.yaml")
+            .toRealPath();
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        assertEquals(PipelineTemplateDialect.V3, config.dialect());
+        RepresentationMapping mapping = config.typeModel()
+            .representationMapping("PaymentOutput", "persistence")
+            .orElseThrow();
+        assertEquals("org.pipelineframework.csv.common.domain.PaymentOutput", mapping.representationType().orElseThrow());
+        assertEquals("org.pipelineframework.csv.common.mapper.PaymentOutputPersistenceMapper", mapping.mapperType().orElseThrow());
+        assertEquals("CsvPaymentsInputFile", config.steps().getFirst().inputTypeName());
+        assertEquals("PaymentRecord", config.steps().getFirst().outputTypeName());
+    }
+
+    @Test
     void loadsUnionDefinitions() throws Exception {
         String yaml = """
             version: 2
@@ -1291,6 +1308,87 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void loadsOptionalV3RepresentationMappingsOutsideWireIdentity() throws Exception {
+        Path configPath = tempDir.resolve("v3-representation-mappings.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: V3 Representation Mappings
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Payment:
+                fields: [[id, uuid]]
+                mappings:
+                  persistence:
+                    type: com.example.persistence.PaymentEntity
+                    mapper: com.example.persistence.PaymentEntityMapper
+                  json: {}
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Payment, output: Payment }]
+            """);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        RepresentationMapping persistence = config.typeModel().representationMapping("Payment", "persistence").orElseThrow();
+        assertEquals("Payment", persistence.domainType());
+        assertEquals("com.example.persistence.PaymentEntity", persistence.representationType().orElseThrow());
+        assertEquals("com.example.persistence.PaymentEntityMapper", persistence.mapperType().orElseThrow());
+        assertTrue(config.typeModel().representationMapping("Payment", "json").orElseThrow().representationType().isEmpty());
+        Path mappingFreeConfigPath = tempDir.resolve("v3-representation-mappings-free.yaml");
+        Files.writeString(mappingFreeConfigPath, """
+            version: 3
+            appName: V3 Representation Mappings
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Payment:
+                fields: [[id, uuid]]
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Payment, output: Payment }]
+            """);
+        PipelineIdlSnapshot mappedSnapshot = PipelineIdlSnapshot.from(config);
+        assertEquals(mappedSnapshot, PipelineIdlSnapshot.from(new PipelineTemplateConfigLoader().load(mappingFreeConfigPath)));
+        assertTrue(mappedSnapshot.types().containsKey("Payment"));
+    }
+
+    @Test
+    void rejectsMalformedV3RepresentationMappings() throws Exception {
+        Path invalidValue = tempDir.resolve("v3-invalid-representation-mapping.yaml");
+        Files.writeString(invalidValue, """
+            version: 3
+            appName: V3 Representation Mappings
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Payment:
+                fields: [[id, uuid]]
+                mappings:
+                  persistence: com.example.PaymentEntity
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Payment, output: Payment }]
+            """);
+        IllegalStateException valueError = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(invalidValue));
+        assertTrue(valueError.getMessage().contains("Payment") && valueError.getMessage().contains("persistence"));
+
+        Path invalidProperty = tempDir.resolve("v3-invalid-representation-mapping-property.yaml");
+        Files.writeString(invalidProperty, """
+            version: 3
+            appName: V3 Representation Mappings
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Payment:
+                fields: [[id, uuid]]
+                mappings:
+                  persistence:
+                    type: com.example.PaymentEntity
+                    unexpected: value
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Payment, output: Payment }]
+            """);
+        IllegalStateException propertyError = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(invalidProperty));
+        assertTrue(propertyError.getMessage().contains("Payment") && propertyError.getMessage().contains("unexpected"));
+    }
+
+    @Test
     void loadsTargetNeutralV3WrapperConstraints() throws Exception {
         Path configPath = tempDir.resolve("v3-wrapper-constraints.yaml");
         Files.writeString(configPath, """
@@ -1572,6 +1670,45 @@ class PipelineTemplateConfigLoaderTest {
         IllegalStateException materializationError = assertThrows(IllegalStateException.class,
             () -> new PipelineTemplateConfigLoader().load(materialized));
         assertEquals("Version: 3 does not support materialization declarations.", materializationError.getMessage());
+    }
+
+    @Test
+    void rejectsV3FlowBetweenOverlappingButIncompatibleUnions() throws Exception {
+        Path configPath = tempDir.resolve("v3-overlapping-unions.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: V3 Overlapping Unions
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Start: { fields: [[id, uuid]] }
+              Shared: { fields: [[id, uuid]] }
+              SourceOnly: { fields: [[id, uuid]] }
+              TargetOnly: { fields: [[id, uuid]] }
+              Result: { fields: [[id, uuid]] }
+              SourceUnion:
+                variants:
+                  shared: Shared
+                  sourceOnly: SourceOnly
+              TargetUnion:
+                variants:
+                  shared: Shared
+                  targetOnly: TargetOnly
+            steps:
+              - name: produce
+                cardinality: ONE_TO_ONE
+                input: Start
+                output: SourceUnion
+              - name: consume
+                cardinality: ONE_TO_ONE
+                input: TargetUnion
+                output: Result
+            """);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("No preceding step output is assignable to step 'consume'"));
     }
 
     @Test
