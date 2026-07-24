@@ -240,9 +240,12 @@
             </dependencies>
             <properties>
                 <pipeline.runtime.source.root>${project.basedir}/..</pipeline.runtime.source.root>
-                <pipeline.runtime.source.dir.input>${pipeline.runtime.source.root}/input-csv-file-processing-svc/src/main/java</pipeline.runtime.source.dir.input>
-                <pipeline.runtime.source.dir.payments>${pipeline.runtime.source.root}/payments-processing-svc/src/main/java</pipeline.runtime.source.dir.payments>
-                <pipeline.runtime.source.dir.status>${pipeline.runtime.source.root}/payment-status-svc/src/main/java</pipeline.runtime.source.dir.status>
+                <pipeline.runtime.source.dir.input>${pipeline.runtime.source.root}/input-csv-file-processing-svc/src/v2/java</pipeline.runtime.source.dir.input>
+                <pipeline.runtime.source.dir.payments>${pipeline.runtime.source.root}/payments-processing-svc/src/v2/java</pipeline.runtime.source.dir.payments>
+                <pipeline.runtime.source.dir.status>${pipeline.runtime.source.root}/payment-status-svc/src/v2/java</pipeline.runtime.source.dir.status>
+                <pipeline.runtime.source.dir.input.support>${pipeline.runtime.source.root}/input-csv-file-processing-svc/src/main/java</pipeline.runtime.source.dir.input.support>
+                <pipeline.runtime.source.dir.payments.support>${pipeline.runtime.source.root}/payments-processing-svc/src/main/java</pipeline.runtime.source.dir.payments.support>
+                <pipeline.runtime.source.dir.status.support>${pipeline.runtime.source.root}/payment-status-svc/src/main/java</pipeline.runtime.source.dir.status.support>
                 <pipeline.runtime.source.exclude.executor>org/pipelineframework/csv/service/ExecutorProducer.java</pipeline.runtime.source.exclude.executor>
                 <pipeline.runtime.source.exclude.payment-provider-kafka-mock>org/pipelineframework/csv/service/PaymentProviderKafkaAwaitMock.java</pipeline.runtime.source.exclude.payment-provider-kafka-mock>
                 <pipeline.runtime.source.exclude.payment-provider-sqs-mock>org/pipelineframework/csv/service/PaymentProviderSqsAwaitMock.java</pipeline.runtime.source.exclude.payment-provider-sqs-mock>
@@ -277,6 +280,9 @@
                                             <arg value="${pipeline.runtime.source.dir.input}" />
                                             <arg value="${pipeline.runtime.source.dir.payments}" />
                                             <arg value="${pipeline.runtime.source.dir.status}" />
+                                            <arg value="${pipeline.runtime.source.dir.input.support}" />
+                                            <arg value="${pipeline.runtime.source.dir.payments.support}" />
+                                            <arg value="${pipeline.runtime.source.dir.status.support}" />
                                         </exec>
                                         <copy todir="${project.build.directory}/pipeline-runtime-sources">
                                             <fileset dir="${pipeline.runtime.source.dir.input}" />
@@ -291,6 +297,17 @@
                                         </copy>
                                         <copy todir="${project.build.directory}/pipeline-runtime-sources">
                                             <fileset dir="${pipeline.runtime.source.dir.status}" />
+                                        </copy>
+                                        <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                            <fileset dir="${pipeline.runtime.source.dir.input.support}" />
+                                        </copy>
+                                        <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                            <fileset dir="${pipeline.runtime.source.dir.payments.support}">
+                                                <exclude name="${pipeline.runtime.source.exclude.executor}" />
+                                            </fileset>
+                                        </copy>
+                                        <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                            <fileset dir="${pipeline.runtime.source.dir.status.support}" />
                                         </copy>
                                     </target>
                                 </configuration>
@@ -329,9 +346,12 @@
             </activation>
             <properties>
                 <pipeline.runtime.source.root>${project.basedir}/..</pipeline.runtime.source.root>
-                <pipeline.runtime.source.dir.input>${pipeline.runtime.source.root}/input-csv-file-processing-svc/src/main/java</pipeline.runtime.source.dir.input>
-                <pipeline.runtime.source.dir.payments>${pipeline.runtime.source.root}/payments-processing-svc/src/main/java</pipeline.runtime.source.dir.payments>
-                <pipeline.runtime.source.dir.status>${pipeline.runtime.source.root}/payment-status-svc/src/main/java</pipeline.runtime.source.dir.status>
+                <pipeline.runtime.source.dir.input>${pipeline.runtime.source.root}/input-csv-file-processing-svc/src/v2/java</pipeline.runtime.source.dir.input>
+                <pipeline.runtime.source.dir.payments>${pipeline.runtime.source.root}/payments-processing-svc/src/v2/java</pipeline.runtime.source.dir.payments>
+                <pipeline.runtime.source.dir.status>${pipeline.runtime.source.root}/payment-status-svc/src/v2/java</pipeline.runtime.source.dir.status>
+                <pipeline.runtime.source.dir.input.support>${pipeline.runtime.source.root}/input-csv-file-processing-svc/src/main/java</pipeline.runtime.source.dir.input.support>
+                <pipeline.runtime.source.dir.payments.support>${pipeline.runtime.source.root}/payments-processing-svc/src/main/java</pipeline.runtime.source.dir.payments.support>
+                <pipeline.runtime.source.dir.status.support>${pipeline.runtime.source.root}/payment-status-svc/src/main/java</pipeline.runtime.source.dir.status.support>
                 <pipeline.runtime.source.exclude.executor>org/pipelineframework/csv/service/ExecutorProducer.java</pipeline.runtime.source.exclude.executor>
                 <pipeline.runtime.duplicate.check.script>${pipeline.runtime.source.root}/build-tools/check-duplicate-sources.sh</pipeline.runtime.duplicate.check.script>
             </properties>
@@ -371,6 +391,9 @@
                                             <arg value="${pipeline.runtime.source.dir.input}" />
                                             <arg value="${pipeline.runtime.source.dir.payments}" />
                                             <arg value="${pipeline.runtime.source.dir.status}" />
+                                            <arg value="${pipeline.runtime.source.dir.input.support}" />
+                                            <arg value="${pipeline.runtime.source.dir.payments.support}" />
+                                            <arg value="${pipeline.runtime.source.dir.status.support}" />
                                         </exec>
                                         <copy todir="${project.build.directory}/pipeline-runtime-sources">
                                             <fileset dir="${pipeline.runtime.source.dir.input}" />
@@ -382,6 +405,17 @@
                                         </copy>
                                         <copy todir="${project.build.directory}/pipeline-runtime-sources">
                                             <fileset dir="${pipeline.runtime.source.dir.status}" />
+                                        </copy>
+                                        <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                            <fileset dir="${pipeline.runtime.source.dir.input.support}" />
+                                        </copy>
+                                        <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                            <fileset dir="${pipeline.runtime.source.dir.payments.support}">
+                                                <exclude name="${pipeline.runtime.source.exclude.executor}" />
+                                            </fileset>
+                                        </copy>
+                                        <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                            <fileset dir="${pipeline.runtime.source.dir.status.support}" />
                                         </copy>
                                     </target>
                                 </configuration>
@@ -409,6 +443,20 @@
                     </plugin>
                 </plugins>
             </build>
+        </profile>
+        <profile>
+            <id>csv-v3-persistence-orchestrator-sources</id>
+            <activation>
+                <property>
+                    <name>csv.v3.persistence</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <properties>
+                <pipeline.runtime.source.dir.input>${pipeline.runtime.source.root}/input-csv-file-processing-svc/src/v3-persistence/java</pipeline.runtime.source.dir.input>
+                <pipeline.runtime.source.dir.payments>${pipeline.runtime.source.root}/payments-processing-svc/src/v3-persistence/java</pipeline.runtime.source.dir.payments>
+                <pipeline.runtime.source.dir.status>${pipeline.runtime.source.root}/payment-status-svc/src/v3-persistence/java</pipeline.runtime.source.dir.status>
+            </properties>
         </profile>
         <profile>
             <id>native</id>
