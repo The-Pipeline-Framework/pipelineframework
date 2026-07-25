@@ -17,6 +17,7 @@ Runtime settings control how a generated application starts, connects, stores, o
 | In-flight probe | operator-facing pause/kill switch | [In-flight Probe](/develop/configuration/all-settings#in-flight-probe-kill-switch) |
 | Health checks | startup/runtime health validation | [Startup Health Checks](/develop/configuration/all-settings#startup-health-checks) |
 | Global defaults | defaults shared across generated components | [Global Defaults](/develop/configuration/all-settings#global-defaults) |
+| Circuit protection | global policy, boundary overrides, and runtime scope capability | [Circuit Protection](/develop/configuration/all-settings#circuit-protection) |
 
 ## Design Guidance
 

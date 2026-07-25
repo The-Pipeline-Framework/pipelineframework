@@ -65,6 +65,8 @@ Inside a live segment, normal reactive demand and backpressure can apply between
 
 For brokered `ONE_TO_ONE` await over a stream, `QUEUE_ASYNC` can keep a live await session open while the parent transition is still running. The session is keyed by the durable await unit. Each input item creates a durable interaction and is dispatched through the await transport; each completion is recorded durably before it is offered to the live resumed segment. Source parsing then advances by demand and the configured in-flight window, not by a forced sleep or demand pacer.
 
+This provider-facing admission budget is backpressure: it bounds unresolved interactions. It does not make outbound provider dispatch a circuit boundary. Circuit admission currently protects generated remote calls and eligible shared transition-worker dispatch; it is complementary to await admission, not a replacement for it. See [Execution Safety](/design/execution-safety).
+
 The durable await model still matters. If the process restarts, the worker lease is lost, or a completion arrives after the live session is gone, TPF falls back to durable coordination:
 
 1. record dispatched interactions and dispatch completion for the await unit,

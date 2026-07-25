@@ -401,8 +401,43 @@ Prefix: `pipeline.defaults`
 | `pipeline.defaults.jitter`                       | boolean | `false`  | Adds jitter to retry delays.                |
 | `pipeline.defaults.backpressure-buffer-capacity` | integer | `128`   | Per-step backpressure buffer capacity (in items). |
 | `pipeline.defaults.backpressure-strategy`        | string  | `BUFFER` | Backpressure strategy (`BUFFER` or `DROP`). |
+| `pipeline.defaults.circuit.enabled` | boolean | `true` | Enables circuit admission for eligible TPF-managed transport boundaries. Set `false` for global compatibility opt-out. |
+| `pipeline.defaults.circuit.failure-threshold` | integer | `5` | Health-affecting failures required to open a circuit. |
+| `pipeline.defaults.circuit.failure-window` | duration | `PT1M` | Failure counting window. |
+| `pipeline.defaults.circuit.open-duration` | duration | `PT30S` | Minimum OPEN duration. |
+| `pipeline.defaults.circuit.half-open-max-permits` | integer | `1` | Concurrent recovery probes. |
+| `pipeline.defaults.circuit.half-open-retry-delay` | duration | `PT1S` | Scheduling hint while half-open probes are saturated. |
+| `pipeline.defaults.circuit.half-open-probe-lease-duration` | duration | `PT30S` | Shared probe lease duration. |
 
-These defaults apply to every step unless a step-level override is present.
+Step defaults apply to every step unless a step-level override is present. Circuit defaults apply only to eligible TPF-managed transport boundaries; they do not instrument local transformations or outbound calls hidden in user code.
+
+### Circuit Protection
+
+Circuit policy is configured globally first, then optionally overridden for an exact generated boundary. Deployment configuration supplies the default scope and any shared backend capability.
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `pipeline.resilience.default-circuit-scope` | enum | `LOCAL_PROCESS` | Deployment default: `LOCAL_PROCESS` or `SHARED_DEPENDENCY`. |
+| `pipeline.resilience.circuit."protocol:target".enabled` | boolean | inherited | Advanced exact-boundary enable/disable override. |
+| `pipeline.resilience.circuit."protocol:target".scope` | enum | deployment default | Advanced boundary scope override; it must be supported by the runtime backend. |
+| `pipeline.resilience.circuit."protocol:target".identity` | string | boundary key | Optional logical grouping identity. Shared exact overrides require one. |
+| `pipeline.resilience.shared.dynamo-table` | string | none | Required when any resolved circuit uses `SHARED_DEPENDENCY`. |
+| `pipeline.resilience.shared.max-state-staleness` | duration | `PT1S` | Maximum fresh shared-state cache age for CLOSED admission. |
+| `pipeline.resilience.shared.backend-retry-delay` | duration | `PT1S` | Hint returned when shared protection authority is unavailable. |
+
+An exact boundary may override any circuit policy value under the same prefix. It is an advanced operational setting: the stable `protocol:target` key is emitted by generated transport diagnostics, but normal applications should use the global default.
+
+```properties
+# Compatibility opt-out for an existing deployment.
+pipeline.defaults.circuit.enabled=false
+
+# One shared-capable deployment can still keep this boundary process-local.
+pipeline.resilience.default-circuit-scope=SHARED_DEPENDENCY
+pipeline.resilience.shared.dynamo-table=tpf_shared_circuits
+pipeline.resilience.circuit."grpc:catalog.remoteProcess".scope=LOCAL_PROCESS
+```
+
+Shared scope never falls back to local protection. A shared boundary without a Dynamo table fails startup. A local default does not protect durable transition-worker dispatch; it becomes eligible only when its resolved scope is shared and `pipeline.orchestrator.max-circuit-deferral` is finite.
 
 ### Function Transport Context Attributes (Function Handlers/Adapters)
 
