@@ -155,11 +155,24 @@ types:
       requiresReview: PaymentRequiresReview
 ```
 
-A union value is assignable to its union contract. A concrete variant can be introduced into that union, but the union itself is not assignable to a concrete variant. Variants reference named payload types; inline payload records and payload-less variants are intentionally outside this DSL.
+A union value is assignable to its union contract. A concrete variant can be introduced into that union. When a downstream step declares a concrete variant as its input, the compiler routes only that variant from an earlier union-producing step; this does not make the union contract itself substitutable for every concrete variant. Variants reference named payload types; inline payload records and payload-less variants are intentionally outside this DSL.
 
 A union declares a contract, not a routing graph. Branch applicability remains type-based and linear. Use a union contract where a step consumes the complete outcome set; use `accepts` only when a branch deliberately narrows that set.
 
 When a branch-aware step declares a union as its `input`, omitting `accepts` means it accepts every declared variant. An explicit list narrows the accepted payload contracts and must be a subset of that union. The final `terminal: true` step must cover every alternative still reachable after earlier branches; the compiler reports uncovered alternatives before generation.
+
+A step can also declare a concrete variant directly when it only handles that outcome. This is equivalent to a type-based branch from the preceding union; use `accepts` when the step keeps the union contract as its input and wants to name the accepted alternatives explicitly.
+
+```yaml
+steps:
+  - name: Classify payment
+    input: PaymentRequest
+    output: PaymentOutcome
+
+  - name: Process declined payment
+    input: PaymentDeclined
+    output: PaymentResult
+```
 
 ```yaml
 steps:

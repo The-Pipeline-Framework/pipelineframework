@@ -743,6 +743,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
             if (needsPackagedRefresh(jar)) {
                 LOG.infof("Packaged orchestrator at %s is stale or missing; rebuilding executable jar.", jar);
                 rebuildPackagedOrchestrator();
+                recordPackagedV3PersistenceProfile(jar);
             }
             orchestratorPackagingVerified = true;
         }
@@ -764,6 +765,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         if (!runtimeMappingMatchesActiveLayout()) {
             return true;
         }
+        if (!packagedV3PersistenceProfileMatches(jar)) {
+            return true;
+        }
         long packagedAt = Files.getLastModifiedTime(jar).toMillis();
         long classesAt = latestModifiedUnder(Paths.get(System.getProperty("user.dir")).resolve("target/classes"));
         long mainSourcesAt = latestModifiedUnder(Paths.get(System.getProperty("user.dir")).resolve("src/main"));
@@ -773,6 +777,24 @@ abstract class AbstractCsvPaymentsEndToEnd {
         long latestDependencyAt = Math.max(Math.max(runtimeAt, pomAt), runtimeMappingAt);
         long latestLocalAt = Math.max(classesAt, mainSourcesAt);
         return packagedAt < latestDependencyAt || packagedAt < latestLocalAt;
+    }
+
+    static boolean packagedV3PersistenceProfileMatches(Path jar) throws IOException {
+        Path marker = packagedV3PersistenceProfileMarker(jar);
+        return Files.isRegularFile(marker)
+                && Files.readString(marker, StandardCharsets.UTF_8).trim()
+                        .equals(Boolean.toString(Boolean.getBoolean("csv.v3.persistence")));
+    }
+
+    static Path packagedV3PersistenceProfileMarker(Path jar) {
+        return jar.resolveSibling("csv-v3-persistence.profile");
+    }
+
+    private static void recordPackagedV3PersistenceProfile(Path jar) throws IOException {
+        Files.writeString(
+                packagedV3PersistenceProfileMarker(jar),
+                Boolean.toString(Boolean.getBoolean("csv.v3.persistence")),
+                StandardCharsets.UTF_8);
     }
 
     private static boolean runtimeMappingMatchesActiveLayout() throws IOException {

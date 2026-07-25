@@ -167,6 +167,10 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
         String mapperMethod = localMode ? "fromDto" : "toGrpc";
         String mapSuffix = mapperName == null ? "" : ".map(" + mapperName + "::" + mapperMethod + ")";
         String uniToMultiSuffix = ".toMulti()";
+        boolean v3GrpcInput = v3 && !restMode && !localMode;
+        String listDeserializer = v3GrpcInput ? "multiFromProtoJsonList" : "multiFromJsonList";
+        String objectDeserializer = v3GrpcInput ? "uniFromProtoJson" : "uniFromJson";
+        String deserializerTypeArgument = v3GrpcInput ? "$T::newBuilder" : "$T.class";
 
         MethodSpec callMethod = MethodSpec.methodBuilder("call")
             .addAnnotation(Override.class)
@@ -191,10 +195,10 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                             return $T.ExitCode.USAGE;
                         }
                         inputMulti = inputDeserializer
-                            .multiFromJsonList(actualInputList, $T.class)%s;
+                            .%s(actualInputList, %s)%s;
                     } else if (looksLikeJsonObject(actualInput)) {
                         inputMulti = inputDeserializer
-                            .uniFromJson(actualInput, $T.class)%s%s;
+                            .%s(actualInput, %s)%s%s;
                     } else {
                         System.err.println("Input must be a JSON object.");
                         return $T.ExitCode.USAGE;
@@ -251,7 +255,14 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                     }
                     $T.flush();
                 }
-                """.formatted(mapSuffix, mapSuffix, uniToMultiSuffix),
+                """.formatted(
+                        listDeserializer,
+                        deserializerTypeArgument,
+                        mapSuffix,
+                        objectDeserializer,
+                        deserializerTypeArgument,
+                        mapSuffix,
+                        uniToMultiSuffix),
                 commandLine,
                 inputMultiType,
                 commandLine,
