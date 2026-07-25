@@ -170,7 +170,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
         boolean v3GrpcInput = v3 && !restMode && !localMode;
         String listDeserializer = v3GrpcInput ? "multiFromProtoJsonList" : "multiFromJsonList";
         String objectDeserializer = v3GrpcInput ? "uniFromProtoJson" : "uniFromJson";
-        String deserializerTypeArgument = v3GrpcInput ? "$T::newBuilder" : "$T.class";
+        String deserializerTypeArgument = "$T.class";
 
         MethodSpec callMethod = MethodSpec.methodBuilder("call")
             .addAnnotation(Override.class)

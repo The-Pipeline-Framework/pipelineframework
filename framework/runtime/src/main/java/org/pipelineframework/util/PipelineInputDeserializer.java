@@ -5,7 +5,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Supplier;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -67,12 +66,12 @@ public class PipelineInputDeserializer {
     }
 
     public <T extends Message> Uni<T> uniFromProtoJson(
-            String json, Supplier<? extends Message.Builder> builderSupplier) throws IOException {
-        return Uni.createFrom().item(fromProtoJson(json, builderSupplier));
+            String json, Class<T> type) throws IOException {
+        return Uni.createFrom().item(fromProtoJson(json, type));
     }
 
     public <T extends Message> Multi<T> multiFromProtoJsonList(
-            String json, Supplier<? extends Message.Builder> builderSupplier) throws IOException {
+            String json, Class<T> type) throws IOException {
         if (json == null || json.trim().isEmpty()) {
             throw new IllegalArgumentException("JSON input list is required.");
         }
@@ -82,19 +81,27 @@ public class PipelineInputDeserializer {
         }
         List<T> values = new ArrayList<>();
         for (JsonNode valueNode : valuesNode) {
-            values.add(fromProtoJson(objectMapper.writeValueAsString(valueNode), builderSupplier));
+            values.add(fromProtoJson(objectMapper.writeValueAsString(valueNode), type));
         }
         return Multi.createFrom().iterable(values);
     }
 
     @SuppressWarnings("unchecked")
     private <T extends Message> T fromProtoJson(
-            String json, Supplier<? extends Message.Builder> builderSupplier) throws IOException {
+            String json, Class<T> type) throws IOException {
         if (json == null || json.trim().isEmpty()) {
             throw new IllegalArgumentException("JSON input is required.");
         }
-        Message.Builder builder = Objects.requireNonNull(builderSupplier, "builderSupplier").get();
+        Message.Builder builder = newBuilder(Objects.requireNonNull(type, "type"));
         JsonFormat.parser().merge(json, builder);
-        return (T) builder.build();
+        return type.cast(builder.build());
+    }
+
+    private static Message.Builder newBuilder(Class<? extends Message> type) {
+        try {
+            return (Message.Builder) type.getMethod("newBuilder").invoke(null);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalArgumentException("Protobuf message type must expose newBuilder(): " + type.getName(), e);
+        }
     }
 }
