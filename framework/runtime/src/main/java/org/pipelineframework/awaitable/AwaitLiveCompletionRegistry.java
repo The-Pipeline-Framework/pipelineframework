@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 
 /**
  * In-memory bridge from durable await completion admission to a live brokered await stream.
@@ -67,7 +68,7 @@ public class AwaitLiveCompletionRegistry {
         if (session == null) {
             return Uni.createFrom().item(false);
         }
-        return session.accept(record).replaceWith(Boolean.TRUE);
+        return session.enqueue(record).replaceWith(Boolean.TRUE);
     }
 
     public void close(String tenantId, String unitId) {
@@ -148,7 +149,12 @@ public class AwaitLiveCompletionRegistry {
             drain();
         }
 
-        public Uni<Void> accept(AwaitInteractionRecord record) {
+        /**
+         * Adds a durably admitted completion to this session's bounded handoff queue.
+         * A successful result means the session owns the completion; it does not mean
+         * downstream has consumed it yet.
+         */
+        public Uni<Void> enqueue(AwaitInteractionRecord record) {
             Objects.requireNonNull(record, "record must not be null");
             if (record.status() != AwaitInteractionStatus.COMPLETED) {
                 IllegalStateException failure = new IllegalStateException(
@@ -157,7 +163,6 @@ public class AwaitLiveCompletionRegistry {
                 fail(failure);
                 return Uni.createFrom().failure(failure);
             }
-            CompletableFuture<Void> accepted = new CompletableFuture<>();
             String completionKey = completionKey(record);
             O payload;
             try {
@@ -165,24 +170,29 @@ public class AwaitLiveCompletionRegistry {
                 O coerced = (O) AwaitPayloadSupport.coercePayload(record.responsePayload(), outputType);
                 payload = coerced;
             } catch (Throwable failure) {
-                accepted.completeExceptionally(failure);
                 fail(failure);
-                return Uni.createFrom().completionStage(accepted);
+                return Uni.createFrom().failure(failure);
             }
             synchronized (lock) {
                 if (cancelled || terminated) {
-                    accepted.completeExceptionally(new IllegalStateException(
+                    return Uni.createFrom().failure(new IllegalStateException(
                         "Live await stream is no longer accepting completions for unit " + key.unitId()));
-                    return Uni.createFrom().completionStage(accepted);
                 }
                 if (!seenCompletions.add(completionKey)) {
-                    accepted.complete(null);
-                    return Uni.createFrom().completionStage(accepted);
+                    return Uni.createFrom().voidItem();
                 }
-                pending.addLast(new Pending<>(completionKey, payload, accepted));
+                pending.addLast(new Pending<>(completionKey, payload));
             }
-            drain();
-            return Uni.createFrom().completionStage(accepted);
+            scheduleDrain();
+            return Uni.createFrom().voidItem();
+        }
+
+        /**
+         * Compatibility delivery acknowledgement. The result completes only after
+         * downstream receives the item and the local dispatch permit is released.
+         */
+        public Uni<Void> accept(AwaitInteractionRecord record) {
+            return enqueue(record).chain(() -> awaitAccepted(record));
         }
 
         public Uni<Void> awaitAccepted(AwaitInteractionRecord record) {
@@ -262,9 +272,6 @@ public class AwaitLiveCompletionRegistry {
                     current = null;
                 }
             }
-            for (Pending<O> item : rejected) {
-                item.accepted().completeExceptionally(failure);
-            }
             failAcceptedWaiters(failure);
             failPermitWaiters(failure);
             if (current != null) {
@@ -284,6 +291,10 @@ public class AwaitLiveCompletionRegistry {
             drain();
         }
 
+        private void scheduleDrain() {
+            Infrastructure.getDefaultExecutor().execute(this::drain);
+        }
+
         private void cancel() {
             List<Pending<O>> rejected;
             synchronized (lock) {
@@ -297,9 +308,6 @@ public class AwaitLiveCompletionRegistry {
             }
             IllegalStateException failure = new IllegalStateException(
                 "Live await stream cancelled for unit " + key.unitId());
-            for (Pending<O> item : rejected) {
-                item.accepted().completeExceptionally(failure);
-            }
             failAcceptedWaiters(failure);
             failPermitWaiters(failure);
             close();
@@ -329,10 +337,8 @@ public class AwaitLiveCompletionRegistry {
                 for (Pending<O> item : toEmit) {
                     try {
                         subscriber.onNext(item.item());
-                        item.accepted().complete(null);
                         completeAcceptedWaiter(item.completionKey());
                     } catch (Throwable failure) {
-                        item.accepted().completeExceptionally(failure);
                         failAcceptedWaiter(item.completionKey(), failure);
                         fail(failure);
                         finishDrain();
@@ -490,7 +496,7 @@ public class AwaitLiveCompletionRegistry {
             }
         }
 
-        private record Pending<O>(String completionKey, O item, CompletableFuture<Void> accepted) {
+        private record Pending<O>(String completionKey, O item) {
         }
     }
 }

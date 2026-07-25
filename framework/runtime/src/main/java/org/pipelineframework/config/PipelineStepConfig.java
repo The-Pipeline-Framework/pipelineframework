@@ -134,7 +134,7 @@ public interface PipelineStepConfig {
         /**
          * Whether durable provider-facing admission is active.
          */
-        @WithDefault("false")
+        @WithDefault("true")
         boolean enabled();
 
         /**

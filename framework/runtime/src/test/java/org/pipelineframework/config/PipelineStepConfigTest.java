@@ -43,6 +43,9 @@ class PipelineStepConfigTest {
 
         // Then
         assertNotNull(defaults, "Defaults should not be null");
+        assertTrue(
+                pipelineStepConfig.awaitAdmission().enabled(),
+                "Durable await admission should be enabled by default");
     }
 
     @Test

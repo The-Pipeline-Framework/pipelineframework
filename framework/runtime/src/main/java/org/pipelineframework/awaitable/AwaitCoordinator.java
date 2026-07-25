@@ -516,8 +516,32 @@ public class AwaitCoordinator {
                 now,
                 deadline,
                 ttl))
-                .onItem().invoke(created -> bindAdmission(created.record(), lease))
+                .onItem().transformToUni(created -> bindOrReleaseAdmission(created, lease))
                 .onFailure().call(ignored -> releaseAdmissionAfterDefiniteCreateFailure(lease, tenantId, correlationId)));
+    }
+
+    /**
+     * A retry can acquire a new lease before discovering that its interaction already completed.
+     * That lease never represented provider work, so release it instead of retaining it until TTL.
+     */
+    private Uni<AwaitCreateResult> bindOrReleaseAdmission(
+        AwaitCreateResult created,
+        Optional<AwaitAdmissionCoordinator.AdmissionLease> lease
+    ) {
+        if (awaitAdmissionCoordinator == null || lease.isEmpty()) {
+            return Uni.createFrom().item(created);
+        }
+        if (created.duplicate() && created.record().status().terminal()) {
+            return awaitAdmissionCoordinator.release(lease.orElseThrow().reservation())
+                .onFailure().invoke(failure -> LOG.warnf(
+                    failure,
+                    "Failed releasing duplicate terminal await admission lease interactionId=%s",
+                    created.record().interactionId()))
+                .onFailure().recoverWithUni(failure -> Uni.createFrom().voidItem())
+                .replaceWith(created);
+        }
+        bindAdmission(created.record(), lease);
+        return Uni.createFrom().item(created);
     }
 
     /**

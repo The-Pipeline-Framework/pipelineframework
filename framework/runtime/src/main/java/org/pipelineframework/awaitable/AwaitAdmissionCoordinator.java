@@ -12,7 +12,6 @@ import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
-import io.quarkus.runtime.StartupEvent;
 import org.pipelineframework.awaitable.admission.AwaitAdmissionAcquireResult;
 import org.pipelineframework.awaitable.admission.AwaitAdmissionOwner;
 import org.pipelineframework.awaitable.admission.AwaitAdmissionReservation;
@@ -37,6 +36,7 @@ public class AwaitAdmissionCoordinator {
     private static final String METADATA_SLOT = "tpf.await.admission.slot";
     private static final String METADATA_EXPIRES_AT = "tpf.await.admission.expires_at";
     private static final String METADATA_LEASE_TOKEN = "tpf.await.admission.lease_token";
+    private static final long MAX_RETRY_WAIT_MS = 1_000L;
     public record AdmissionLease(
         AwaitAdmissionReservation reservation,
         boolean reused,
@@ -69,17 +69,6 @@ public class AwaitAdmissionCoordinator {
         return stepConfig != null && stepConfig.awaitAdmission().enabled();
     }
 
-    void validateStartup(@Observes StartupEvent event) {
-        if (!enabled()) {
-            return;
-        }
-        if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
-            throw new IllegalStateException(
-                "pipeline.await-admission.enabled requires pipeline.orchestrator.mode=QUEUE_ASYNC");
-        }
-        store();
-    }
-
     public Uni<Optional<AdmissionLease>> acquire(
         AwaitStepDescriptor descriptor,
         String tenantId,
@@ -91,22 +80,24 @@ public class AwaitAdmissionCoordinator {
         if (!enabled()) {
             return Uni.createFrom().item(Optional.empty());
         }
+        AwaitTransportAdapter<?> adapter = adapter(descriptor.transportType());
+        Optional<String> endpoint = adapter.admissionEndpoint(descriptor);
+        if (endpoint.isEmpty()) {
+            return Uni.createFrom().item(Optional.empty());
+        }
         if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
             return Uni.createFrom().failure(new IllegalStateException(
                 "pipeline.await-admission.enabled requires pipeline.orchestrator.mode=QUEUE_ASYNC"));
         }
-        AwaitTransportAdapter<?> adapter = adapter(descriptor.transportType());
-        String endpoint = adapter.admissionEndpoint(descriptor).orElseThrow(() -> new IllegalStateException(
-            "Await transport '" + descriptor.transportType() + "' does not define a durable admission endpoint"));
         AwaitAdmissionScope scope = new AwaitAdmissionScope(
-            releaseIdentityResolver.pipelineId(orchestratorConfig), descriptor.stepId(), endpoint);
+            releaseIdentityResolver.pipelineId(orchestratorConfig), descriptor.stepId(), endpoint.orElseThrow());
         AwaitAdmissionOwner owner = new AwaitAdmissionOwner(AwaitAdmissionScope.lengthPrefixedKey(
             tenantId,
             unitId,
             itemIndex == null ? "single" : itemIndex.toString(),
             executionId));
         long startedAtEpochMs = System.currentTimeMillis();
-        return acquireWhenAvailable(scope, owner, expiresAtEpochMs)
+        return acquireWhenAvailable(scope, owner, expiresAtEpochMs, 0)
             .onItem().transform(result -> Optional.of(new AdmissionLease(
                 result.reservation().orElseThrow(),
                 result.reused(),
@@ -203,7 +194,8 @@ public class AwaitAdmissionCoordinator {
     private Uni<AwaitAdmissionAcquireResult> acquireWhenAvailable(
         AwaitAdmissionScope scope,
         AwaitAdmissionOwner owner,
-        long expiresAtEpochMs
+        long expiresAtEpochMs,
+        int attempt
     ) {
         int capacity = Math.max(1, pipelineConfig.maxConcurrency());
         long now = System.currentTimeMillis();
@@ -214,8 +206,18 @@ public class AwaitAdmissionCoordinator {
             .onItem().transformToUni(result -> result.reservation().isPresent()
                 ? Uni.createFrom().item(result)
                 : Uni.createFrom().voidItem()
-                    .onItem().delayIt().by(Duration.ofMillis(Math.max(1, stepConfig.awaitAdmission().retryWaitMs())))
-                    .chain(() -> acquireWhenAvailable(scope, owner, expiresAtEpochMs)));
+                    .onItem().delayIt().by(Duration.ofMillis(retryDelayMillis(owner, attempt)))
+                    .chain(() -> acquireWhenAvailable(scope, owner, expiresAtEpochMs, attempt + 1)));
+    }
+
+    private long retryDelayMillis(AwaitAdmissionOwner owner, int attempt) {
+        long baseDelay = Math.max(1L, stepConfig.awaitAdmission().retryWaitMs());
+        long multiplier = 1L << Math.min(4, Math.max(0, attempt));
+        long cappedDelay = Math.min(MAX_RETRY_WAIT_MS, Math.multiplyExact(Math.min(baseDelay, MAX_RETRY_WAIT_MS), multiplier));
+        long spread = Math.max(1L, cappedDelay / 4);
+        return Math.min(
+            MAX_RETRY_WAIT_MS,
+            Math.max(1L, cappedDelay - spread + Math.floorMod(owner.key().hashCode(), spread * 2 + 1)));
     }
 
     private AwaitAdmissionStore store() {

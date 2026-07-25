@@ -65,4 +65,33 @@ for (const entry of datasetEntries) {
   }
 }
 
+const csvPaymentsEntry = datasetEntries.find((entry) => entry.key === "csv-payments");
+if (!csvPaymentsEntry) {
+  throw new Error("CSV Payments built-in replay dataset is not registered.");
+}
+
+const csvPaymentsReplay = JSON.parse(
+  readFileSync(path.join(viewerDir, csvPaymentsEntry.path.replace(/^\.\//, "")), "utf8"),
+);
+const branchStarts = csvPaymentsReplay.events.reduce(
+  (counts, event) => {
+    if (event.event !== "start") {
+      return counts;
+    }
+    if (event.step === "ProcessApprovedPaymentStatus") {
+      counts.approved += 1;
+    } else if (event.step === "ProcessUnapprovedPaymentStatus") {
+      counts.unapproved += 1;
+    }
+    return counts;
+  },
+  { approved: 0, unapproved: 0 },
+);
+
+if (branchStarts.approved !== 907 || branchStarts.unapproved !== 93) {
+  throw new Error(
+    `CSV Payments built-in replay must preserve the deterministic 907/93 approved/unapproved split; got ${branchStarts.approved}/${branchStarts.unapproved}.`,
+  );
+}
+
 console.log(`Replay dataset size check passed; startup source '${defaultSourceKey}' is within budget.`);
