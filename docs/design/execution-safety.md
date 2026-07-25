@@ -40,6 +40,6 @@ For queue-async transition work under shared protection, the durable scheduler u
 
 A reactive streaming pipeline can slow source parsing when an await or downstream step has no demand. A `BlockingIteratorService` is different: TPF requests the next iterator item only when downstream asks, but the iterator implementation might have already loaded a page, buffered rows, or contacted a dependency. Prefer the iterator form over a list-returning blocking form when a synchronous library exposes a cursor or reader, but do not mistake it for full end-to-end backpressure.
 
-Circuit admission cannot protect user-written outbound calls hidden in any blocking or reactive business method. Put that I/O behind a TPF-managed transport or effect boundary when the framework must own its admission, retry, telemetry, and durability semantics.
+Circuit admission cannot protect user-written outbound calls hidden in any blocking or reactive business method. Put that I/O behind a TPF-managed transport boundary when the framework must own circuit admission, retry, telemetry, and durability semantics.
 
 See [Concurrency and Backpressure Sizing](/deploy/concurrency-and-backpressure), [Code a Step](/develop/code-a-step), and [Operate Circuit Protection](/operate/circuit-breakers).
