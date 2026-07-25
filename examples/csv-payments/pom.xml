@@ -115,6 +115,29 @@
         </resources>
         <plugins>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.2.0</version>
+                <executions>
+                    <execution>
+                        <id>reset-profile-generated-artifacts</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <delete dir="${project.build.outputDirectory}"/>
+                                <delete dir="${project.build.testOutputDirectory}"/>
+                                <delete dir="${project.build.directory}/classes-pipeline"/>
+                                <delete dir="${project.build.directory}/generated-sources/annotations"/>
+                                <delete dir="${project.build.directory}/generated-sources/pipeline"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.5.0</version>
@@ -282,6 +305,7 @@
                         <target>21</target>
                         <release>21</release>
                         <enablePreview>true</enablePreview>
+                        <useIncrementalCompilation>false</useIncrementalCompilation>
                         <annotationProcessorPaths>
                             <!-- lombok must come first -->
                             <path>
@@ -634,7 +658,7 @@
             <activation>
                 <property>
                     <name>csv.v3.persistence</name>
-                    <value>false</value>
+                    <value>!true</value>
                 </property>
             </activation>
             <build>
