@@ -36,6 +36,9 @@ class PipelineStepConfigTest {
     @Inject
     PipelineStepConfig pipelineStepConfig;
 
+    @Inject
+    PipelineCircuitDefaultsConfig circuitDefaults;
+
     @Test
     void testDefaultsAreAccessible() {
         // When
@@ -67,6 +70,9 @@ class PipelineStepConfigTest {
                 "BUFFER",
                 defaults.backpressureStrategy(),
                 "Default backpressureStrategy should be BUFFER");
+        assertTrue(circuitDefaults.enabled());
+        assertEquals(5, circuitDefaults.failureThreshold());
+        assertEquals(java.time.Duration.ofMinutes(1), circuitDefaults.failureWindow());
     }
 
     @Test
@@ -101,7 +107,12 @@ class PipelineStepConfigTest {
                     "pipeline.defaults.max-backoff", "60000",
                     "pipeline.defaults.jitter", "true",
                     "pipeline.defaults.backpressure-buffer-capacity", "2048",
-                    "pipeline.defaults.backpressure-strategy", "DROP");
+                    "pipeline.defaults.backpressure-strategy", "DROP",
+                    "pipeline.defaults.circuit.enabled", "false",
+                    "pipeline.defaults.circuit.failure-threshold", "9",
+                    "pipeline.defaults.circuit.open-duration", "PT45S",
+                    "pipeline.resilience.circuit.\"grpc:pricing.remoteProcess\".enabled", "true",
+                    "pipeline.resilience.circuit.\"grpc:pricing.remoteProcess\".failure-threshold", "2");
         }
     }
 
@@ -111,6 +122,12 @@ class PipelineStepConfigTest {
 
         @Inject
         PipelineStepConfig pipelineStepConfig;
+
+        @Inject
+        PipelineCircuitDefaultsConfig circuitDefaults;
+
+        @Inject
+        PipelineCircuitOverridesConfig circuitOverrides;
 
         @Test
         void testCustomDefaultValues() {
@@ -125,6 +142,12 @@ class PipelineStepConfigTest {
             assertTrue(defaults.jitter());
             assertEquals(2048, defaults.backpressureBufferCapacity());
             assertEquals("DROP", defaults.backpressureStrategy());
+            assertFalse(circuitDefaults.enabled());
+            assertEquals(9, circuitDefaults.failureThreshold());
+            assertEquals(java.time.Duration.ofSeconds(45), circuitDefaults.openDuration());
+            assertTrue(circuitOverrides.circuit().get("grpc:pricing.remoteProcess").enabled().orElseThrow());
+            assertEquals(2, circuitOverrides.circuit().get("grpc:pricing.remoteProcess")
+                .failureThreshold().orElseThrow());
         }
     }
 

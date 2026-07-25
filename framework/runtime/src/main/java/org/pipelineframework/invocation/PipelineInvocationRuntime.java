@@ -241,7 +241,7 @@ public class PipelineInvocationRuntime {
                 yield new TerminalCircuitPermit(permitted.permit());
             }
             case CircuitDecision.Rejected rejected -> {
-                circuitTelemetry.rejected(descriptor, rejected.open());
+                circuitTelemetry.rejected(descriptor, policy, rejected.open());
                 transportBoundaryDiagnostics.recordCircuitRejected(descriptor);
                 throw new CircuitOpenException(rejected.open());
             }

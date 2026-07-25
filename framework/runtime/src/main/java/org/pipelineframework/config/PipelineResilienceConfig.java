@@ -18,6 +18,15 @@ import org.pipelineframework.runtime.core.resilience.CircuitScope;
 public interface PipelineResilienceConfig {
 
     /**
+     * Deployment-provided circuit guarantee used unless a boundary requests a compatible override.
+     *
+     * @return default circuit scope for this runtime
+     */
+    @WithName("default-circuit-scope")
+    @WithDefault("LOCAL_PROCESS")
+    CircuitScope defaultCircuitScope();
+
+    /**
      * Circuit settings keyed by stable {@code protocol:target} transport-boundary identity.
      *
      * @return configured circuit settings

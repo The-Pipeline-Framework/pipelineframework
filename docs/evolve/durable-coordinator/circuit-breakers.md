@@ -9,7 +9,7 @@ TPF's circuit-breaker seam protects a dependency invocation before it starts. It
 - `LOCAL_PROCESS` protects only calls admitted by one runtime process. It can reduce pressure from that process, but it does not provide fleet-wide dependency protection, coordinated half-open probes, or HA scheduling guarantees.
 - `SHARED_DEPENDENCY` protects replicas that use the same configured DynamoDB table in one AWS Region. It coordinates state transitions and half-open probe leases across those replicas; it does not claim global-table or cross-region coherence.
 
-The required scope belongs to `CircuitPolicy`; it is deliberately separate from `CircuitIdentity`. A backend must refuse a policy whose guarantee it cannot provide. The current in-memory backend therefore accepts only `LOCAL_PROCESS`.
+The resolved scope belongs to `CircuitPolicy`; it is deliberately separate from `CircuitIdentity`. Deployment configuration provides the default capability, while advanced exact-boundary configuration can request a compatible override. A backend must refuse a policy whose guarantee it cannot provide. The in-memory backend therefore accepts only `LOCAL_PROCESS`.
 
 ## Admission Result
 
@@ -19,9 +19,9 @@ Acquiring a circuit is asynchronous and returns either a permit, `CircuitOpen(id
 
 ## Current Integration
 
-`PipelineInvocationRuntime` resolves policies from `pipeline.resilience.circuit` using the stable `protocol:target` transport-boundary key. A missing entry is disabled. When enabled, it acquires a permit before calling the transport supplier and returns `CircuitOpenException` without invoking that supplier when admission is denied.
+`PipelineInvocationRuntime` resolves the built-in/global policy for eligible transport boundaries, then applies an advanced `pipeline.resilience.circuit` exact-boundary override using the stable `protocol:target` key. It acquires a permit before calling the transport supplier and returns `CircuitOpenException` without invoking that supplier when admission is denied. The public configuration and operations guidance live in [Circuit Protection](/develop/configuration/all-settings#circuit-protection) and [Operate Circuit Protection](/operate/circuit-breakers).
 
-For example, a generated gRPC operator with boundary key `grpc:pricing.remoteProcess` can be enabled with:
+For example, a generated gRPC operator with boundary key `grpc:pricing.remoteProcess` can receive an advanced exact-boundary override with:
 
 ```properties
 pipeline.resilience.circuit."grpc:pricing.remoteProcess".enabled=true

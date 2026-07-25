@@ -3,6 +3,12 @@
 Concurrency and backpressure settings are the two levers that determine how well the pipeline can keep doing useful
 work while waiting for I/O.
 
+## Backpressure versus circuit admission
+
+Backpressure controls how much work can flow through a live reactive path. It is the right protection for slow consumers and bounded outstanding await interactions. Circuit admission answers a separate question: whether a TPF-managed dependency call should begin when recent health failures show that dependency is unavailable. A circuit-open rejection performs no remote I/O; for eligible shared transition-worker dispatch, its `notBefore` hint lets durable scheduling defer the encountered execution without consuming a remote-attempt retry.
+
+These mechanisms are complementary. Backpressure does not prevent rapid connection-refused loops, and a circuit does not replace demand propagation or provider-capacity sizing. See [Execution Safety](/design/execution-safety) and [Operate Circuit Protection](/operate/circuit-breakers).
+
 ### How to size `pipeline.max-concurrency`
 
 `pipeline.max-concurrency` limits live work admitted by a step or live connector segment. For platform-owned compute and I/O work, it is a density control: more permitted in-flight work can use available platform capacity more efficiently, subject to memory, downstream demand, and the work's own saturation point.
