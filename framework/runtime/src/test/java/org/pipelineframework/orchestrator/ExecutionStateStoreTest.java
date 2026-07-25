@@ -70,6 +70,8 @@ class ExecutionStateStoreTest {
         assertNotNull(store.markAwaitCompleted("tenant1", "exec1", "unit1", 2, now));
         assertNotNull(store.markAwaitItemContinuationsCompleted("tenant1", "exec1", "unit1", 2, "input", now));
         assertNotNull(store.scheduleRetry("tenant1", "exec1", 1L, 2, now + 5000, "key1", "Error", "msg", now));
+        assertNotNull(store.deferCircuit(
+            "tenant1", "exec1", 1L, now + 5000, "key1", "pricing", "circuit_open", "msg", now, 1, now));
         assertNotNull(store.markTerminalFailure("tenant1", "exec1", 1L, ExecutionStatus.FAILED, "key1", "Error", "msg", now));
         assertNotNull(store.redriveTerminalExecution("tenant1", "exec1", 1L, true, "redrive", now));
         assertNotNull(store.findDueExecutions(now, 10));

@@ -36,8 +36,10 @@ class CircuitTelemetryTest {
                 1,
                 Duration.ofSeconds(1));
 
-            telemetry.permitted(boundary, new ResolvedCircuitPolicy(identity, policy));
-            telemetry.rejected(boundary, new CircuitOpen(
+            ResolvedCircuitPolicy resolved = new ResolvedCircuitPolicy(
+                identity, policy, CircuitPolicySource.GLOBAL_DEFAULT);
+            telemetry.permitted(boundary, resolved);
+            telemetry.rejected(boundary, resolved, new CircuitOpen(
                 identity, CircuitScope.LOCAL_PROCESS, Instant.now().plusSeconds(30)));
             telemetry.onTransition(
                 identity, CircuitScope.LOCAL_PROCESS, CircuitStateTransition.CLOSED_TO_OPEN);
@@ -49,6 +51,7 @@ class CircuitTelemetryTest {
                 .put("tpf.transport.protocol", "grpc")
                 .put("tpf.transport.target", "pricing.remoteProcess")
                 .put("tpf.circuit.admission", "permitted")
+                .put("tpf.circuit.policy.source", "GLOBAL_DEFAULT")
                 .build()));
             assertTrue(hasPoint(metrics, "tpf.circuit.admissions", Attributes.builder()
                 .put("tpf.circuit.identity", "pricing-service")
@@ -56,6 +59,7 @@ class CircuitTelemetryTest {
                 .put("tpf.transport.protocol", "grpc")
                 .put("tpf.transport.target", "pricing.remoteProcess")
                 .put("tpf.circuit.admission", "rejected")
+                .put("tpf.circuit.policy.source", "GLOBAL_DEFAULT")
                 .build()));
             assertTrue(hasPoint(metrics, "tpf.circuit.transitions", Attributes.builder()
                 .put("tpf.circuit.identity", "pricing-service")

@@ -12,6 +12,14 @@ compose() {
   docker compose -f "${COMPOSE_FILE}" "$@"
 }
 
+compose_up() {
+  if [[ "${TPF_CI_QUIET:-false}" == "true" ]]; then
+    compose up --quiet-pull "$@"
+    return
+  fi
+  compose up "$@"
+}
+
 awslocal() {
   compose exec -T localstack awslocal "$@"
 }
@@ -63,7 +71,7 @@ create_bucket_if_missing() {
   awslocal s3api create-bucket --bucket "${bucket}" >/dev/null
 }
 
-compose up -d localstack postgres
+compose_up -d localstack postgres
 wait_for_localstack
 
 create_table_if_missing tpf_execution \
@@ -78,6 +86,15 @@ create_table_if_missing tpf_execution \
 create_table_if_missing tpf_execution_key \
   --attribute-definitions AttributeName=tenant_execution_key,AttributeType=S \
   --key-schema AttributeName=tenant_execution_key,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST
+
+create_table_if_missing tpf_execution_payload \
+  --attribute-definitions \
+    AttributeName=payload_id,AttributeType=S \
+    AttributeName=payload_part,AttributeType=S \
+  --key-schema \
+    AttributeName=payload_id,KeyType=HASH \
+    AttributeName=payload_part,KeyType=RANGE \
   --billing-mode PAY_PER_REQUEST
 
 create_table_if_missing tpf_await_unit \

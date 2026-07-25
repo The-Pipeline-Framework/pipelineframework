@@ -7,6 +7,8 @@ import java.util.Deque;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -35,12 +37,12 @@ public final class InMemoryCircuitBreaker implements CircuitBreaker {
     }
 
     @Override
-    public CircuitDecision acquire(CircuitIdentity identity, CircuitPolicy policy) {
+    public CompletionStage<CircuitDecision> acquire(CircuitIdentity identity, CircuitPolicy policy) {
         Objects.requireNonNull(identity, "identity must not be null");
         Objects.requireNonNull(policy, "policy must not be null");
         if (policy.requiredScope() != CircuitScope.LOCAL_PROCESS) {
-            throw new IllegalArgumentException(
-                "InMemoryCircuitBreaker only guarantees " + CircuitScope.LOCAL_PROCESS);
+            return CompletableFuture.failedFuture(new IllegalArgumentException(
+                "InMemoryCircuitBreaker only guarantees " + CircuitScope.LOCAL_PROCESS));
         }
 
         CircuitStateTransition transition = null;
@@ -52,7 +54,7 @@ public final class InMemoryCircuitBreaker implements CircuitBreaker {
 
             if (state.status == Status.OPEN) {
                 if (now.isBefore(state.openUntil)) {
-                    return rejected(identity, policy, state.openUntil);
+                    return CompletableFuture.completedFuture(rejected(identity, policy, state.openUntil));
                 }
                 state.enterHalfOpen();
                 transition = CircuitStateTransition.OPEN_TO_HALF_OPEN;
@@ -63,7 +65,7 @@ public final class InMemoryCircuitBreaker implements CircuitBreaker {
                         ? state.nextHalfOpenRejection
                         : now.plus(policy.halfOpenRetryDelay());
                     state.nextHalfOpenRejection = notBefore.plus(policy.halfOpenRetryDelay());
-                    return rejected(identity, policy, notBefore);
+                    return CompletableFuture.completedFuture(rejected(identity, policy, notBefore));
                 }
                 state.halfOpenPermitsInFlight++;
                 decision = permitted(identity, state, policy, true);
@@ -72,7 +74,7 @@ public final class InMemoryCircuitBreaker implements CircuitBreaker {
             }
         }
         notifyTransition(identity, policy, transition);
-        return decision;
+        return CompletableFuture.completedFuture(decision);
     }
 
     private CircuitDecision permitted(
@@ -111,11 +113,12 @@ public final class InMemoryCircuitBreaker implements CircuitBreaker {
         }
 
         @Override
-        public void complete(CircuitOutcome outcome) {
+        public CompletionStage<Void> complete(CircuitOutcome outcome) {
             Objects.requireNonNull(outcome, "outcome must not be null");
             if (completed.compareAndSet(false, true)) {
                 recordOutcome(identity, state, policy, halfOpen, generation, outcome);
             }
+            return CompletableFuture.completedFuture(null);
         }
     }
 

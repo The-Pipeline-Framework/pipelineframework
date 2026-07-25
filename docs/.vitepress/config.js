@@ -56,6 +56,7 @@ const mainSidebar = [
             {text: 'Application Structure', link: '/design/application-structure'},
             {text: 'Common Module Structure', link: '/design/common-module-structure'},
             {text: 'Operators', link: '/design/operators'},
+            {text: 'Execution Safety', link: '/design/execution-safety'},
             {text: 'Await Boundaries', link: '/design/await-boundaries'},
             {text: 'Object Ingest', link: '/design/object-ingest'},
             {
@@ -219,6 +220,7 @@ const mainSidebar = [
         items: [
             {text: 'Overview', link: '/operate/'},
             {text: 'Await Boundaries', link: '/operate/await-boundaries'},
+            {text: 'Circuit Protection', link: '/operate/circuit-breakers'},
             {text: 'Error Handling & DLQ', link: '/operate/error-handling'},
             {text: 'In-flight Probe', link: '/operate/in-flight-probe'},
             {text: 'AWS Lambda SnapStart', link: '/operate/aws-lambda-snapstart'},

@@ -79,6 +79,15 @@ public interface PipelineOrchestratorConfig {
     int maxRetries();
 
     /**
+     * Finite lifetime for durable circuit deferrals. Required when a shared circuit protects
+     * transition-worker dispatch; unlike remote attempts, a denied call does not consume retries.
+     *
+     * @return configured deferral lifetime when queue-async shared dispatch is enabled
+     */
+    @WithName("max-circuit-deferral")
+    Optional<Duration> maxCircuitDeferral();
+
+    /**
      * Base retry delay for execution-level retries.
      *
      * @return retry delay
@@ -318,6 +327,15 @@ public interface PipelineOrchestratorConfig {
         @WithName("execution-key-table")
         @WithDefault("tpf_execution_key")
         String executionKeyTable();
+
+        /**
+         * Immutable manifests and chunks for execution payloads that must not be stored inline.
+         *
+         * @return execution payload table name
+         */
+        @WithName("execution-payload-table")
+        @WithDefault("tpf_execution_payload")
+        String executionPayloadTable();
 
         /**
          * Await interaction table name.

@@ -1,6 +1,12 @@
 name: 'Setup Testcontainers Docker Environment'
 description: 'Configures Docker and environment variables for Testcontainers on GitHub Actions Ubuntu runners'
 
+inputs:
+  images:
+    description: 'Newline-delimited Docker images to pre-pull quietly and cache for this workflow'
+    required: false
+    default: ''
+
 runs:
   using: 'composite'
   steps:
@@ -42,13 +48,67 @@ runs:
         # auto-detect the correct Docker client provider strategy
         echo "TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" >> "$GITHUB_ENV"
         echo "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock" >> "$GITHUB_ENV"
-        
-        # Configure Java logging manager for Quarkus tests
-        # Use JAVA_TOOL_OPTIONS so forked test JVMs (Surefire/Failsafe) inherit the setting
-        echo "JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
-        echo "MAVEN_OPTS=${MAVEN_OPTS} -Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
+        echo "TPF_CI_QUIET=true" >> "$GITHUB_ENV"
         
         # Write Testcontainers properties file for explicit configuration
         # This ensures Testcontainers uses the Unix socket strategy consistently
         echo "docker.client.strategy=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" > "$HOME/.testcontainers.properties"
         echo "docker.host=unix:///var/run/docker.sock" >> "$HOME/.testcontainers.properties"
+        mkdir -p "$HOME/.cache/google-cloud-tools-java/jib"
+
+    - name: Prepare Docker image cache key
+      id: image-cache-key
+      if: ${{ inputs.images != '' }}
+      shell: bash
+      env:
+        TPF_CI_IMAGES: ${{ inputs.images }}
+      run: |
+        set -euo pipefail
+        image_list="${RUNNER_TEMP}/tpf-ci-images.txt"
+        printf '%s\n' "${TPF_CI_IMAGES}" | sed '/^[[:space:]]*$/d' | sort -u > "${image_list}"
+        digest="$(sha256sum "${image_list}" | cut -d' ' -f1)"
+        echo "archive=${RUNNER_TEMP}/tpf-ci-images-${digest}.tar" >> "$GITHUB_OUTPUT"
+        echo "key=tpf-docker-images-v1-${RUNNER_OS}-${RUNNER_ARCH}-${digest}" >> "$GITHUB_OUTPUT"
+        echo "images=${image_list}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore Docker base images
+      id: docker-images
+      if: ${{ inputs.images != '' }}
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ steps.image-cache-key.outputs.archive }}
+        key: ${{ steps.image-cache-key.outputs.key }}
+
+    - name: Load cached Docker base images
+      if: ${{ inputs.images != '' && steps.docker-images.outputs.cache-hit == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        docker load --input "${{ steps.image-cache-key.outputs.archive }}" >/dev/null
+        echo "Docker base image cache hit."
+
+    - name: Pull Docker base images
+      if: ${{ inputs.images != '' && steps.docker-images.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        mapfile -t images < "${{ steps.image-cache-key.outputs.images }}"
+        for image in "${images[@]}"; do
+          docker pull --quiet "${image}"
+        done
+        docker save --output "${{ steps.image-cache-key.outputs.archive }}" "${images[@]}"
+        echo "Docker base image cache miss; prepared ${#images[@]} images."
+
+    - name: Save Docker base images
+      if: ${{ inputs.images != '' && steps.docker-images.outputs.cache-hit != 'true' }}
+      continue-on-error: true
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ steps.image-cache-key.outputs.archive }}
+        key: ${{ steps.image-cache-key.outputs.key }}
+
+    - name: Cache Jib layers
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/google-cloud-tools-java/jib
+        key: tpf-jib-v1-${{ runner.os }}-${{ runner.arch }}

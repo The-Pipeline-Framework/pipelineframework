@@ -131,6 +131,16 @@ class PaymentProviderServiceMockTest {
     }
 
     @Override
+    public int completionBurstSize() {
+      return 1;
+    }
+
+    @Override
+    public Duration completionBurstFlushDelay() {
+      return Duration.ofSeconds(1);
+    }
+
+    @Override
     public Sqs sqs() {
       return disabledSqs();
     }

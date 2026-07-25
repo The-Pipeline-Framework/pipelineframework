@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -141,9 +143,12 @@ class PipelineInvocationCircuitLifecycleTest {
         private final List<CircuitOutcome> outcomes = new ArrayList<>();
 
         @Override
-        public CircuitDecision acquire(CircuitIdentity identity, CircuitPolicy policy) {
+        public CompletionStage<CircuitDecision> acquire(CircuitIdentity identity, CircuitPolicy policy) {
             acquisitions.incrementAndGet();
-            return new CircuitDecision.Permitted(outcome -> outcomes.add(outcome));
+            return CompletableFuture.completedFuture(new CircuitDecision.Permitted(outcome -> {
+                outcomes.add(outcome);
+                return CompletableFuture.completedFuture(null);
+            }));
         }
 
         private int acquisitions() {

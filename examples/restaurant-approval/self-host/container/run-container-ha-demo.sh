@@ -27,12 +27,32 @@ export TPF_RELEASE_DESCRIPTOR="${TPF_RELEASE_DESCRIPTOR:-${TPF_RUN_DIR}/pipeline
 export TPF_SKIP_CONTAINER_BUILD="${TPF_SKIP_CONTAINER_BUILD:-false}"
 
 CI_MODE=false
-if [[ "${1:-}" == "--ci" ]]; then
-  CI_MODE=true
-fi
+PREPARE_IMAGES_ONLY=false
+for argument in "$@"; do
+  case "${argument}" in
+    --ci)
+      CI_MODE=true
+      ;;
+    --prepare-images)
+      PREPARE_IMAGES_ONLY=true
+      ;;
+    *)
+      echo "ERROR: unsupported argument '${argument}'." >&2
+      exit 1
+      ;;
+  esac
+done
 
 compose() {
   docker compose -f "${COMPOSE_FILE}" "$@"
+}
+
+compose_up() {
+  if [[ "${TPF_CI_QUIET:-false}" == "true" ]]; then
+    compose up --quiet-pull "$@"
+    return
+  fi
+  compose up "$@"
 }
 
 cleanup() {
@@ -69,10 +89,15 @@ fi
 find "${EXAMPLE_DIR}/target/dev-certs" -type f \( -name "*.p12" -o -name "*.jks" \) \
   -exec chmod "${CERT_FILE_PERMISSIONS}" {} +
 
+if [[ "${PREPARE_IMAGES_ONLY}" == "true" ]]; then
+  echo "Restaurant approval container image prepared."
+  exit 0
+fi
+
 "${SCRIPT_DIR}/bootstrap-localstack.sh"
 
 echo "Starting restaurant approval worker and coordinator containers..."
-compose up -d worker coordinator
+compose_up -d worker coordinator
 
 python3 "${SELF_HOST_DIR}/demo-client.py" wait-health \
   --base-url "http://localhost:${TPF_WORKER_PORT}" \

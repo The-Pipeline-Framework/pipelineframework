@@ -120,7 +120,7 @@ steps:
 Quarkus generated REST/gRPC entrypoints for virtual-thread steps also receive `@RunOnVirtualThread`.
 Spring generated unary steps adapt `processBlocking(In): Out` through `RuntimeAdapters.executeBlocking(..., true)`.
 
-`BlockingStreamingService`, `BlockingStreamingClientService`, and `BlockingBidirectionalStreamingService` are materialising contracts. They trade away automatic backpressure and also increase heap usage, GC pressure, first-item latency, and whole-batch retry cost. `BlockingIteratorService` reduces those materialisation costs, but it is still blocking work and should be used only when synchronous authoring is worth the throughput trade-off.
+`BlockingStreamingService`, `BlockingStreamingClientService`, `BlockingBidirectionalStreamingService`, `StepOneToManyBlocking`, `StepManyToOneBlocking`, and `StepManyToManyBlocking` are materialising contracts. They trade away automatic backpressure and also increase heap usage, GC pressure, first-item latency, and whole-batch retry cost. `BlockingIteratorService` and `StepOneToManyBlockingIterator` reduce those materialisation costs: TPF pulls their iterator output according to downstream demand, but cannot prevent eager reads, buffering, or hidden I/O inside the synchronous implementation. `BlockingIteratorPacer` is an optional blocking rate limiter, not reactive backpressure. See [Execution Safety](/design/execution-safety) for the boundary guarantees.
 
 ## 4) Add Mappers
 

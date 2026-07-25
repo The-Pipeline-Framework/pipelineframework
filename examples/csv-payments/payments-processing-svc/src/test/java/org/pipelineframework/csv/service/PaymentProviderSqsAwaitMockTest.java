@@ -18,12 +18,14 @@ package org.pipelineframework.csv.service;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,6 +37,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -74,10 +77,16 @@ class PaymentProviderSqsAwaitMockTest {
         paymentStatusMapper());
   }
 
+  @AfterEach
+  void tearDown() {
+    mockProvider.shutdown();
+  }
+
   @Test
   void pollOnceProcessesRequestSendsCompletionAndDeletesRequest() throws Exception {
     PaymentRecord paymentRecord = validPaymentRecord();
     PaymentStatus status = validPaymentStatus(paymentRecord);
+    paymentRecord.setId(null);
     when(paymentProvider.processPayment(any(PaymentRecord.class))).thenReturn(status);
     when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
         .messages(message("receipt-1", dispatchJson(paymentRecord)))
@@ -91,7 +100,7 @@ class PaymentProviderSqsAwaitMockTest {
     assertEquals(paymentRecord.getRecipient(), requestCaptor.getValue().getRecipient());
     assertEquals(paymentRecord.getCurrency(), requestCaptor.getValue().getCurrency());
 
-    verify(client).sendMessage(argThat((SendMessageRequest request) -> {
+    verify(client, timeout(1_000)).sendMessage(argThat((SendMessageRequest request) -> {
       try {
         SqsAwaitCompletionEnvelope completion = PipelineJson.mapper()
             .readValue(request.messageBody(), SqsAwaitCompletionEnvelope.class);
@@ -107,9 +116,34 @@ class PaymentProviderSqsAwaitMockTest {
         throw new AssertionError(e);
       }
     }));
-    verify(client).deleteMessage(argThat((DeleteMessageRequest request) ->
+    verify(client, timeout(1_000)).deleteMessage(argThat((DeleteMessageRequest request) ->
         request.queueUrl().equals("http://sqs.local/requests")
             && request.receiptHandle().equals("receipt-1")));
+  }
+
+  @Test
+  void pollOnceContinuesReceivingWhileACompletionBurstIsBuffered() throws Exception {
+    PaymentRecord firstRecord = validPaymentRecord();
+    PaymentRecord secondRecord = validPaymentRecord();
+    when(paymentProvider.processPayment(any(PaymentRecord.class)))
+        .thenReturn(validPaymentStatus(firstRecord), validPaymentStatus(secondRecord));
+    PaymentProviderSqsAwaitMock burstProvider = new PaymentProviderSqsAwaitMock(
+        paymentProvider,
+        new FakePaymentProviderConfig(2, Duration.ofSeconds(1)),
+        client,
+        paymentStatusMapper());
+    when(client.receiveMessage(any(ReceiveMessageRequest.class)))
+        .thenReturn(ReceiveMessageResponse.builder().messages(message("receipt-1", dispatchJson(firstRecord))).build())
+        .thenReturn(ReceiveMessageResponse.builder().messages(message("receipt-2", dispatchJson(secondRecord))).build());
+
+    assertDoesNotThrow(() -> burstProvider.pollOnce(enabledConfig()));
+    verify(client, never()).sendMessage(any(SendMessageRequest.class));
+    verify(client, never()).deleteMessage(any(DeleteMessageRequest.class));
+    assertDoesNotThrow(() -> burstProvider.pollOnce(enabledConfig()));
+
+    verify(client, timeout(1_000).times(2)).sendMessage(any(SendMessageRequest.class));
+    verify(client, timeout(1_000).times(2)).deleteMessage(any(DeleteMessageRequest.class));
+    burstProvider.shutdown();
   }
 
   @Test
@@ -299,6 +333,18 @@ class PaymentProviderSqsAwaitMockTest {
   }
 
   private static final class FakePaymentProviderConfig implements PaymentProviderConfig {
+    private final int completionBurstSize;
+    private final Duration completionBurstFlushDelay;
+
+    private FakePaymentProviderConfig() {
+      this(1, Duration.ofSeconds(1));
+    }
+
+    private FakePaymentProviderConfig(int completionBurstSize, Duration completionBurstFlushDelay) {
+      this.completionBurstSize = completionBurstSize;
+      this.completionBurstFlushDelay = completionBurstFlushDelay;
+    }
+
     @Override
     public double permitsPerSecond() {
       return 1000.0;
@@ -322,6 +368,16 @@ class PaymentProviderSqsAwaitMockTest {
     @Override
     public long responseDelayMillis() {
       return 0L;
+    }
+
+    @Override
+    public int completionBurstSize() {
+      return completionBurstSize;
+    }
+
+    @Override
+    public Duration completionBurstFlushDelay() {
+      return completionBurstFlushDelay;
     }
 
     @Override

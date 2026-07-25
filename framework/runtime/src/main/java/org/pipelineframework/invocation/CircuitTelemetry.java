@@ -25,6 +25,8 @@ final class CircuitTelemetry implements CircuitBreakerListener {
     private static final AttributeKey<String> PROTOCOL = AttributeKey.stringKey("tpf.transport.protocol");
     private static final AttributeKey<String> TARGET = AttributeKey.stringKey("tpf.transport.target");
     private static final AttributeKey<String> ADMISSION = AttributeKey.stringKey("tpf.circuit.admission");
+    private static final AttributeKey<String> POLICY_SOURCE =
+        AttributeKey.stringKey("tpf.circuit.policy.source");
     private static final AttributeKey<String> TRANSITION = AttributeKey.stringKey("tpf.circuit.transition");
     private final LongCounter admissions;
     private final LongCounter transitions;
@@ -40,11 +42,13 @@ final class CircuitTelemetry implements CircuitBreakerListener {
     }
 
     void permitted(TransportBoundaryDescriptor descriptor, ResolvedCircuitPolicy circuit) {
-        admissions.add(1, admissionAttributes(descriptor, circuit.identity(), circuit.policy().requiredScope(), "permitted"));
+        admissions.add(1, admissionAttributes(
+            descriptor, circuit.identity(), circuit.policy().requiredScope(), "permitted", circuit.source()));
     }
 
-    void rejected(TransportBoundaryDescriptor descriptor, CircuitOpen open) {
-        admissions.add(1, admissionAttributes(descriptor, open.identity(), open.scope(), "rejected"));
+    void rejected(TransportBoundaryDescriptor descriptor, ResolvedCircuitPolicy circuit, CircuitOpen open) {
+        admissions.add(1, admissionAttributes(
+            descriptor, open.identity(), open.scope(), "rejected", circuit.source()));
     }
 
     @Override
@@ -60,7 +64,8 @@ final class CircuitTelemetry implements CircuitBreakerListener {
         TransportBoundaryDescriptor descriptor,
         CircuitIdentity identity,
         CircuitScope scope,
-        String admission
+        String admission,
+        CircuitPolicySource source
     ) {
         return Attributes.builder()
             .put(IDENTITY, identity.value())
@@ -68,6 +73,7 @@ final class CircuitTelemetry implements CircuitBreakerListener {
             .put(PROTOCOL, descriptor.protocol())
             .put(TARGET, descriptor.target())
             .put(ADMISSION, admission)
+            .put(POLICY_SOURCE, source.name())
             .build();
     }
 }

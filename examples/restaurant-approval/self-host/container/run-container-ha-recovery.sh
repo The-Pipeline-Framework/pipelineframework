@@ -35,6 +35,14 @@ compose() {
   docker compose -f "${COMPOSE_FILE}" "$@"
 }
 
+compose_up() {
+  if [[ "${TPF_CI_QUIET:-false}" == "true" ]]; then
+    compose up --quiet-pull "$@"
+    return
+  fi
+  compose up "$@"
+}
+
 cleanup() {
   local exit_code="${1:-0}"
   if [[ "${CI_MODE}" == "true" && "${exit_code}" != "0" && "${TPF_KEEP_STACK_ON_FAILURE:-false}" == "true" ]]; then
@@ -130,7 +138,7 @@ find "${EXAMPLE_DIR}/target/dev-certs" -type f \( -name "*.p12" -o -name "*.jks"
 "${SCRIPT_DIR}/bootstrap-localstack.sh"
 
 echo "Starting restaurant approval worker and coordinator containers for recovery proof..."
-compose up -d worker coordinator
+compose_up -d worker coordinator
 wait_health worker "${TPF_WORKER_PORT}"
 wait_health coordinator "${TPF_COORDINATOR_PORT}"
 

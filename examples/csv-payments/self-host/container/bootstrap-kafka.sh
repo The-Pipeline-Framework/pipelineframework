@@ -13,6 +13,14 @@ compose() {
   docker compose -f "${COMPOSE_FILE}" -f "${COMPOSE_KAFKA_FILE}" "$@"
 }
 
+compose_up() {
+  if [[ "${TPF_CI_QUIET:-false}" == "true" ]]; then
+    compose up --quiet-pull "$@"
+    return
+  fi
+  compose up "$@"
+}
+
 wait_for_kafka() {
   local timeout_seconds="${KAFKA_WAIT_SECONDS:-180}"
   echo "Waiting for Kafka..."
@@ -46,7 +54,7 @@ create_topic_if_missing() {
     --replication-factor 1 >/dev/null
 }
 
-compose up -d kafka
+compose_up -d kafka
 wait_for_kafka
 create_topic_if_missing csv-payments.payment.requests
 create_topic_if_missing csv-payments.payment.results

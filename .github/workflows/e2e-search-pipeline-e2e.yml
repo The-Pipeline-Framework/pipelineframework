@@ -62,8 +62,26 @@ jobs:
 
       - name: Setup Testcontainers Docker environment
         uses: ./.github/actions/setup-testcontainers
+        with:
+          images: |
+            testcontainers/ryuk:0.13.0
+            alpine:3.17
+
+      - name: Restore Search topology images
+        id: search-topology-images
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/search-topology-images.tar
+          key: tpf-search-topology-images-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pom.xml', 'framework/**', 'connectors/**', 'examples/search/**') }}
+
+      - name: Load Search topology images
+        if: ${{ steps.search-topology-images.outputs.cache-hit == 'true' }}
+        run: |
+          docker load --input "${{ runner.temp }}/search-topology-images.tar" >/dev/null
+          echo "Search topology image cache hit."
 
       - name: Build Search topology images
+        if: ${{ steps.search-topology-images.outputs.cache-hit != 'true' }}
         run: |
           local_maven_args="${MAVEN_ARGS/-T 1C/-T 1}"
           read -r -a maven_args <<< "$local_maven_args"
@@ -72,6 +90,27 @@ jobs:
             -DskipNative=true \
             -Dquarkus.container-image.build=true \
             clean install
+
+      - name: Archive Search topology images
+        if: ${{ steps.search-topology-images.outputs.cache-hit != 'true' }}
+        run: |
+          docker save --output "${{ runner.temp }}/search-topology-images.tar" \
+            localhost/search-pipeline/orchestrator-svc:latest \
+            localhost/search-pipeline/persistence-svc:latest \
+            localhost/search-pipeline/cache-invalidation-svc:latest \
+            localhost/search-pipeline/index-document-svc:latest \
+            localhost/search-pipeline/tokenize-content-svc:latest \
+            localhost/search-pipeline/crawl-source-svc:latest \
+            localhost/search-pipeline/parse-document-svc:latest \
+            localhost/search-pipeline/embed-content-svc:latest
+
+      - name: Save Search topology images
+        if: ${{ steps.search-topology-images.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/search-topology-images.tar
+          key: ${{ steps.search-topology-images.outputs['cache-primary-key'] }}
 
       - name: Run Search pipeline end-to-end test
         run: |

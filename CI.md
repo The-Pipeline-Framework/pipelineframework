@@ -22,6 +22,29 @@ The project uses three independent workflows:
 [![Full Tests (Main)](https://github.com/The-Pipeline-Framework/pipelineframework/actions/workflows/full-tests.yml/badge.svg)](https://github.com/The-Pipeline-Framework/pipelineframework/actions/workflows/full-tests.yml)
 [![Release](https://github.com/The-Pipeline-Framework/pipelineframework/actions/workflows/publish.yml/badge.svg)](https://github.com/The-Pipeline-Framework/pipelineframework/actions/workflows/publish.yml)
 
+## Container-backed CI caching
+
+The container-backed CSV Payments, Restaurant Approval, and Search E2E lanes
+cache the expensive inputs that are safe to reuse:
+
+- Jib layer cache, scoped by runner OS and architecture.
+- Testcontainers and Compose base-image sets, keyed by their exact image list.
+- Built topology images for the CSV, Restaurant, and Search stacks, keyed by
+  their relevant source inputs. CSV and Restaurant bundles also include the
+  generated release artifact needed to register the pipeline after a cache hit.
+
+The first run that encounters a new cache key still pulls or builds the image,
+then saves it for later jobs. Re-runs of the same PR reuse its cache. Caches
+warmed on `main` are also available to later PRs when their exact keys match;
+topology-image caches intentionally miss when their application or framework
+inputs change.
+
+Container bootstrap scripts use quieter pull output only in CI. Local runs keep
+their normal Docker output for diagnosis. The shared CI setup does not set a
+global Java logging-manager option: Quarkus test JVMs configure JBoss LogManager
+through their Maven test configuration, while Maven bootstrap JVMs must not try
+to load it.
+
 ## 🛠️ Build Flags Cheat Sheet
 
 - `-DskipITs` — Skip integration tests
