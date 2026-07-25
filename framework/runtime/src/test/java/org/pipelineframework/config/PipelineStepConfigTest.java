@@ -100,19 +100,19 @@ class PipelineStepConfigTest {
     public static class CustomDefaultsProfile implements QuarkusTestProfile {
         @Override
         public Map<String, String> getConfigOverrides() {
-            return Map.of(
-                    "pipeline.defaults.retry-limit", "10",
-                    "pipeline.defaults.retry-wait-ms", "5000",
-                    "pipeline.defaults.recover-on-failure", "true",
-                    "pipeline.defaults.max-backoff", "60000",
-                    "pipeline.defaults.jitter", "true",
-                    "pipeline.defaults.backpressure-buffer-capacity", "2048",
-                    "pipeline.defaults.backpressure-strategy", "DROP",
-                    "pipeline.defaults.circuit.enabled", "false",
-                    "pipeline.defaults.circuit.failure-threshold", "9",
-                    "pipeline.defaults.circuit.open-duration", "PT45S",
-                    "pipeline.resilience.circuit.\"grpc:pricing.remoteProcess\".enabled", "true",
-                    "pipeline.resilience.circuit.\"grpc:pricing.remoteProcess\".failure-threshold", "2");
+            return Map.ofEntries(
+                    Map.entry("pipeline.defaults.retry-limit", "10"),
+                    Map.entry("pipeline.defaults.retry-wait-ms", "5000"),
+                    Map.entry("pipeline.defaults.recover-on-failure", "true"),
+                    Map.entry("pipeline.defaults.max-backoff", "60000"),
+                    Map.entry("pipeline.defaults.jitter", "true"),
+                    Map.entry("pipeline.defaults.backpressure-buffer-capacity", "2048"),
+                    Map.entry("pipeline.defaults.backpressure-strategy", "DROP"),
+                    Map.entry("pipeline.defaults.circuit.enabled", "false"),
+                    Map.entry("pipeline.defaults.circuit.failure-threshold", "9"),
+                    Map.entry("pipeline.defaults.circuit.open-duration", "PT45S"),
+                    Map.entry("pipeline.resilience.circuit.\"grpc:pricing.remoteProcess\".enabled", "true"),
+                    Map.entry("pipeline.resilience.circuit.\"grpc:pricing.remoteProcess\".failure-threshold", "2"));
         }
     }
 
