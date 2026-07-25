@@ -67,15 +67,20 @@ configure_queue_redrive() {
   local queue_url
   local dead_letter_queue_url
   local dead_letter_queue_arn
-  local redrive_policy
+  local queue_attributes
 
   queue_url="$(awslocal sqs get-queue-url --queue-name "${queue_name}" --query 'QueueUrl' --output text)"
   dead_letter_queue_url="$(awslocal sqs get-queue-url --queue-name "${dead_letter_queue_name}" --query 'QueueUrl' --output text)"
   dead_letter_queue_arn="$(awslocal sqs get-queue-attributes --queue-url "${dead_letter_queue_url}" \
     --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)"
-  redrive_policy="$(printf '{\"deadLetterTargetArn\":\"%s\",\"maxReceiveCount\":\"5\"}' "${dead_letter_queue_arn}")"
+  queue_attributes="$(printf '%s%s%s%s%s' \
+    '{"RedrivePolicy":"' \
+    '{\"deadLetterTargetArn\":\"' \
+    "${dead_letter_queue_arn}" \
+    '\",\"maxReceiveCount\":\"5\"}' \
+    '"}')"
   awslocal sqs set-queue-attributes --queue-url "${queue_url}" \
-    --attributes "RedrivePolicy=${redrive_policy}" >/dev/null
+    --attributes "${queue_attributes}" >/dev/null
 }
 
 create_bucket_if_missing() {
