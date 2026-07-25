@@ -42,6 +42,7 @@ public final class CsvPaymentOutputPublishMapper
 
     private static final class CsvPaymentOutputGroupRenderer
         implements ObjectPublishGroupRenderer<org.pipelineframework.csv.domain.PaymentOutput> {
+        private final PaymentOutputPersistenceMapper paymentOutputPersistenceMapper = new PaymentOutputPersistenceMapper();
         private final String groupKey;
         private final StringWriter writer = new StringWriter();
         private final StatefulBeanToCsv<org.pipelineframework.csv.common.domain.PaymentOutput> csv;
@@ -63,7 +64,7 @@ public final class CsvPaymentOutputPublishMapper
         @Override
         public ObjectPayloadChunk onItem(org.pipelineframework.csv.domain.PaymentOutput item) {
             try {
-                csv.write(new PaymentOutputPersistenceMapper().toExternal(item));
+                csv.write(paymentOutputPersistenceMapper.toExternal(item));
                 recordCount++;
                 return drain();
             } catch (Exception e) {

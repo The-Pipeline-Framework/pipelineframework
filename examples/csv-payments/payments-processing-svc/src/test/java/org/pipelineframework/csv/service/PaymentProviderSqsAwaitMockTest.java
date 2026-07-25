@@ -215,6 +215,32 @@ class PaymentProviderSqsAwaitMockTest {
   }
 
   @Test
+  void pollOnceExtendsVisibilityTimeoutForConfiguredProcessingAndCompletionDelay() {
+    PaymentProviderSqsAwaitMock delayedProvider = new PaymentProviderSqsAwaitMock(
+        paymentProvider,
+        new FakePaymentProviderConfig(1, Duration.ofSeconds(4), 2_000L, 3_000L),
+        client,
+        paymentStatusMapper());
+    when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder().build());
+    PaymentProviderSqsAwaitMock.SqsProviderConfig shortVisibility = new PaymentProviderSqsAwaitMock.SqsProviderConfig(
+        true,
+        Optional.of("http://sqs.local/requests"),
+        Optional.of("http://sqs.local/responses"),
+        Optional.empty(),
+        Optional.empty(),
+        Duration.ZERO,
+        Duration.ofSeconds(1),
+        1,
+        1);
+
+    delayedProvider.pollOnce(shortVisibility);
+
+    ArgumentCaptor<ReceiveMessageRequest> requestCaptor = ArgumentCaptor.forClass(ReceiveMessageRequest.class);
+    verify(client).receiveMessage(requestCaptor.capture());
+    assertEquals(9, requestCaptor.getValue().visibilityTimeout());
+  }
+
+  @Test
   void onStartupFailsFastWhenEnabledWithoutResponseQueue() {
     assertStartupFails(
         Optional.of("http://sqs.local/requests"),
@@ -335,14 +361,23 @@ class PaymentProviderSqsAwaitMockTest {
   private static final class FakePaymentProviderConfig implements PaymentProviderConfig {
     private final int completionBurstSize;
     private final Duration completionBurstFlushDelay;
+    private final long timeoutMillis;
+    private final long responseDelayMillis;
 
     private FakePaymentProviderConfig() {
-      this(1, Duration.ofSeconds(1));
+      this(1, Duration.ofSeconds(1), 5_000L, 0L);
     }
 
     private FakePaymentProviderConfig(int completionBurstSize, Duration completionBurstFlushDelay) {
+      this(completionBurstSize, completionBurstFlushDelay, 5_000L, 0L);
+    }
+
+    private FakePaymentProviderConfig(
+        int completionBurstSize, Duration completionBurstFlushDelay, long timeoutMillis, long responseDelayMillis) {
       this.completionBurstSize = completionBurstSize;
       this.completionBurstFlushDelay = completionBurstFlushDelay;
+      this.timeoutMillis = timeoutMillis;
+      this.responseDelayMillis = responseDelayMillis;
     }
 
     @Override
@@ -352,7 +387,7 @@ class PaymentProviderSqsAwaitMockTest {
 
     @Override
     public long timeoutMillis() {
-      return 5000;
+      return timeoutMillis;
     }
 
     @Override
@@ -367,7 +402,7 @@ class PaymentProviderSqsAwaitMockTest {
 
     @Override
     public long responseDelayMillis() {
-      return 0L;
+      return responseDelayMillis;
     }
 
     @Override

@@ -171,10 +171,14 @@ jobs:
     name: CSV Payments V3 Profile Verify
     needs: bootstrap
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup JDK 21
         uses: actions/setup-java@v4
@@ -193,9 +197,11 @@ jobs:
           path: /tmp/m2-artifacts
 
       - name: Extract framework artifacts
+        env:
+          FRAMEWORK_ARTIFACT_NAME: ${{ needs.bootstrap.outputs.artifact_name }}
         run: |
           mkdir -p ~/.m2/repository
-          tar -xzf /tmp/m2-artifacts/${{ needs.bootstrap.outputs.artifact_name }}.tar.gz -C ~/.m2/repository
+          tar -xzf "/tmp/m2-artifacts/${FRAMEWORK_ARTIFACT_NAME}.tar.gz" -C ~/.m2/repository
 
       - name: Run CSV Payments v3 profile verification
         run: |

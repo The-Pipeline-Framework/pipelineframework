@@ -157,13 +157,19 @@ public class PaymentProviderSqsAwaitMock {
     return true;
   }
 
-  private static int visibilityTimeoutSeconds(SqsProviderConfig config) {
-    long seconds = config.visibilityTimeout().toSeconds();
+  private int visibilityTimeoutSeconds(SqsProviderConfig config) {
+    Duration processingWindow = Duration.ofMillis(Math.max(0L, paymentProviderConfig.timeoutMillis()))
+        .plusMillis(Math.max(0L, paymentProviderConfig.responseDelayMillis()));
+    Duration visibilityWindow = config.visibilityTimeout().compareTo(processingWindow) >= 0
+        ? config.visibilityTimeout()
+        : processingWindow;
+    long visibilityMillis = visibilityWindow.toMillis();
+    long seconds = visibilityMillis / 1_000L + (visibilityMillis % 1_000L == 0 ? 0L : 1L);
     if (seconds < 0 || seconds > 43_200) {
       throw new IllegalArgumentException(
           "csv-payments.payment-provider.sqs.visibility-timeout must be between PT0S and PT43200S.");
     }
-    return (int) seconds;
+    return (int) Math.max(1L, seconds);
   }
 
   private static String requiredQueueUrl(Optional<String> value, String configKey) {

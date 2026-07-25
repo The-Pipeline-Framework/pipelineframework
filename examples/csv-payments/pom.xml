@@ -72,6 +72,7 @@
         <assertj.version>3.27.7</assertj.version>
         <skipUnitTests>false</skipUnitTests>
         <csv.runtime.layout>modular</csv.runtime.layout>
+        <csv.v3.persistence>false</csv.v3.persistence>
     </properties>
 
     <dependencyManagement>
@@ -632,7 +633,8 @@
             <id>csv-v2-default-sources</id>
             <activation>
                 <property>
-                    <name>!csv.v3.persistence</name>
+                    <name>csv.v3.persistence</name>
+                    <value>false</value>
                 </property>
             </activation>
             <build>
