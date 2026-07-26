@@ -114,6 +114,31 @@ class AwaitStepDescriptorFactoryTest {
     }
 
     @Test
+    void rebuildsLegacyAwaitDescriptorUsingGeneratedClientRuntimeTypes() throws Exception {
+        Path explicit = tempDir.resolve("pipeline.yaml");
+        Files.writeString(explicit, pipelineYaml("interaction-api", "")
+            .replace("basePackage: org.example", "basePackage: org.pipelineframework.awaitable.fixture"));
+        System.setProperty("pipeline.config", explicit.toString());
+
+        AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
+        try {
+            AwaitStepDescriptor descriptor =
+                factory.descriptorByStepIdNow("ProcessAwaitPaymentProviderService");
+
+            assertEquals(
+                "org.pipelineframework.awaitable.fixture.service.pipeline.LegacyAwaitInput",
+                descriptor.inputType());
+            assertEquals(
+                "org.pipelineframework.awaitable.fixture.service.pipeline.LegacyAwaitOutput",
+                descriptor.outputType());
+            assertEquals(descriptor.inputType(), descriptor.transportInputType());
+            assertEquals(descriptor.outputType(), descriptor.transportOutputType());
+        } finally {
+            factory.shutdown();
+        }
+    }
+
+    @Test
     void rejectsUndeclaredAwaitStepIdDuringDurableContractReconstruction() throws Exception {
         Path explicit = tempDir.resolve("pipeline.yaml");
         Files.writeString(explicit, pipelineYaml("interaction-api", ""));

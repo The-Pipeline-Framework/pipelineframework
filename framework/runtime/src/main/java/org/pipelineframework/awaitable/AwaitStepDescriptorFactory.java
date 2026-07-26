@@ -1,8 +1,11 @@
 package org.pipelineframework.awaitable;
 
 import java.nio.file.Path;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -184,23 +187,80 @@ public class AwaitStepDescriptorFactory {
     }
 
     private AwaitStepDescriptor loadLegacyDescriptor(String serviceName) {
-        PipelineYamlStep step = awaitStep(serviceName);
-        String inputType = requiredType(step.inputType(), serviceName, "input");
-        String outputType = requiredType(step.outputType(), serviceName, "output");
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(resolveConfigPath(serviceName));
+        PipelineYamlStep step = awaitStep(config, serviceName);
+        AwaitTypeIdentities identities = generatedLegacyTypeIdentities(config, serviceName)
+            .orElseGet(() -> new AwaitTypeIdentities(
+                requiredType(step.inputType(), serviceName, "input"),
+                requiredType(step.outputType(), serviceName, "output")));
         return descriptorForStep(
             serviceName,
             step,
-            inputType,
-            outputType,
-            inputType,
-            outputType,
+            identities.inputType(),
+            identities.outputType(),
+            identities.inputType(),
+            identities.outputType(),
             Function.identity(),
             Function.identity());
+    }
+
+    private static Optional<AwaitTypeIdentities> generatedLegacyTypeIdentities(
+        PipelineYamlConfig config,
+        String serviceName
+    ) {
+        if (config.basePackage() == null || config.basePackage().isBlank()) {
+            return Optional.empty();
+        }
+        String baseName = serviceName.endsWith("Service")
+            ? serviceName.substring(0, serviceName.length() - "Service".length())
+            : serviceName;
+        String generatedClientName = config.basePackage() + ".service.pipeline." + baseName + "AwaitClientStep";
+        return loadClass(generatedClientName)
+            .flatMap(AwaitStepDescriptorFactory::awaitTypeIdentities);
+    }
+
+    private static Optional<Class<?>> loadClass(String className) {
+        ClassLoader contextLoader = Thread.currentThread().getContextClassLoader();
+        ClassLoader factoryLoader = AwaitStepDescriptorFactory.class.getClassLoader();
+        for (ClassLoader loader : new ClassLoader[] { contextLoader, factoryLoader }) {
+            if (loader == null) {
+                continue;
+            }
+            try {
+                return Optional.of(Class.forName(className, false, loader));
+            } catch (ClassNotFoundException ignored) {
+                // The generated client may be absent in a runtime that only carries legacy YAML.
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<AwaitTypeIdentities> awaitTypeIdentities(Class<?> generatedClientType) {
+        for (Type implementedType : generatedClientType.getGenericInterfaces()) {
+            if (!(implementedType instanceof ParameterizedType parameterizedType)
+                || !(parameterizedType.getRawType() instanceof Class<?> rawType)
+                || !rawType.getPackageName().equals("org.pipelineframework.awaitable")
+                || !rawType.getSimpleName().startsWith("Await")) {
+                continue;
+            }
+            Type[] typeArguments = parameterizedType.getActualTypeArguments();
+            if (typeArguments.length != 2
+                || !(typeArguments[0] instanceof Class<?> inputType)
+                || !(typeArguments[1] instanceof Class<?> outputType)) {
+                continue;
+            }
+            return Optional.of(new AwaitTypeIdentities(inputType.getName(), outputType.getName()));
+        }
+        return Optional.empty();
     }
 
     private PipelineYamlStep awaitStep(String serviceName) {
         Path configPath = resolveConfigPath(serviceName);
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath);
+        return awaitStep(config, serviceName);
+    }
+
+    private static PipelineYamlStep awaitStep(PipelineYamlConfig config, String serviceName) {
         PipelineYamlStep step = config.steps().stream()
             .filter(candidate -> serviceName.equals(toServiceName(candidate.name())))
             .findFirst()
@@ -320,5 +380,8 @@ public class AwaitStepDescriptorFactory {
             }
         }
         return formatted.isEmpty() ? "ProcessStepService" : "Process" + formatted + "Service";
+    }
+
+    private record AwaitTypeIdentities(String inputType, String outputType) {
     }
 }
