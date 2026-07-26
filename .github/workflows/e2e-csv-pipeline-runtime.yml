@@ -13,6 +13,11 @@ on:
         required: false
         default: true
         type: boolean
+      v3_persistence:
+        description: 'Run the clean v3 canonical-domain persistence proof'
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - main
@@ -40,6 +45,7 @@ env:
 jobs:
   csv-pipeline-runtime-e2e:
     name: CSV Pipeline Runtime Topology + E2E
+    if: ${{ !inputs.v3_persistence }}
     runs-on: ubuntu-latest
 
     steps:
@@ -118,6 +124,100 @@ jobs:
         with:
           name: csv-pipeline-runtime-e2e-reports
           path: |
+            **/target/surefire-reports/*.txt
+            **/target/surefire-reports/*.xml
+            **/target/failsafe-reports/*.txt
+            **/target/failsafe-reports/*.xml
+            **/target/failsafe-reports/*.dumpstream
+            **/target/failsafe-reports/*.dump
+            examples/csv-payments/**/target/test-e2e/**
+          retention-days: 7
+          if-no-files-found: warn
+
+  csv-pipeline-runtime-v3-persistence-e2e:
+    name: CSV Pipeline Runtime v3 Persistence E2E
+    if: ${{ inputs.v3_persistence || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Configure Maven
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+
+      - name: Download framework artifacts
+        if: ${{ inputs.download_artifacts }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: /tmp/m2-artifacts
+
+      - name: Extract framework artifacts
+        if: ${{ inputs.download_artifacts }}
+        run: |
+          mkdir -p ~/.m2/repository
+          tar -xzf /tmp/m2-artifacts/${{ inputs.artifact_name }}.tar.gz -C ~/.m2/repository
+
+      - name: Bootstrap framework artifacts locally
+        if: ${{ !inputs.download_artifacts }}
+        run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
+
+      - name: Setup Testcontainers Docker environment
+        uses: ./.github/actions/setup-testcontainers
+        with:
+          images: |
+            postgres:17
+            apache/kafka-native:3.8.0
+            testcontainers/ryuk:0.13.0
+            alpine:3.17
+
+      - name: Cleanly regenerate and build v3 csv-payments pipeline-runtime images
+        run: |
+          local_maven_args="${MAVEN_ARGS/-T 1C/-T 1}"
+          MAVEN_ARGS="$local_maven_args" \
+            ./examples/csv-payments/build-pipeline-runtime.sh \
+            -Dcsv.v3.persistence=true \
+            -DskipTests \
+            -Dquarkus.container-image.build=true
+
+      - name: Run v3 csv-payments pipeline-runtime persistence E2E
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.pipeline-runtime.xml \
+            -pl orchestrator-svc \
+            -Dcsv.runtime.layout=pipeline-runtime \
+            -Dcsv.v3.persistence=true \
+            -Dcsv.e2e.pipeline.wait.seconds=240 \
+            -Dtest=PipelineRuntimeTopologyTest \
+            -Dit.test=CsvPaymentsPipelineRuntimeEndToEndIT \
+            -Dquarkus.container-image.build=false \
+            verify
+
+      - name: Dump v3 reports on failure
+        if: failure()
+        run: |
+          find . -path "*/target/failsafe-reports/*.txt" -print -exec tail -n 200 {} \;
+          find . -path "*/target/failsafe-reports/*.dumpstream" -print -exec tail -n 400 {} \;
+          find . -path "*/target/failsafe-reports/*.dump" -print -exec tail -n 200 {} \;
+          find . -path "*/target/surefire-reports/*.txt" -print -exec tail -n 200 {} \;
+          find examples/csv-payments -type d -path "*/target/generated-sources/*" -print
+          find examples/csv-payments -type d -path "*/target/test-e2e" -print -exec sh -c 'ls -la "$1"' _ {} \;
+
+      - name: Upload v3 reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csv-pipeline-runtime-v3-persistence-e2e-reports
+          path: |
+            **/target/generated-sources/**
             **/target/surefire-reports/*.txt
             **/target/surefire-reports/*.xml
             **/target/failsafe-reports/*.txt

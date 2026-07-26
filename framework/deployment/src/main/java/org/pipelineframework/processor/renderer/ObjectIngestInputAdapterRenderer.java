@@ -32,23 +32,32 @@ public final class ObjectIngestInputAdapterRenderer {
         GenerationContext ctx
     ) throws IOException {
         if (!(domainType instanceof ClassName domainClass)
-            || !(externalType instanceof ClassName externalClass)
-            || !(mapperType instanceof ClassName mapperClass)) {
-            throw new IllegalArgumentException("Object Ingest input adapter requires class-backed domain, external, and mapper types");
+            || !(externalType instanceof ClassName externalClass)) {
+            throw new IllegalArgumentException("Object Ingest input adapter requires class-backed domain and pipeline input types");
         }
+        boolean directCanonical = ctx.v3GeneratedDomainTypes() && domainClass.equals(externalClass);
+        if (!directCanonical && !(mapperType instanceof ClassName)) {
+            throw new IllegalArgumentException("Object Ingest transport adapter requires a class-backed mapper type");
+        }
+        ClassName mapperClass = mapperType instanceof ClassName className ? className : null;
         String packageName = basePackage + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX;
         ClassName adapterClass = ClassName.get(packageName, CLASS_NAME);
-        TypeSpec type = TypeSpec.classBuilder(CLASS_NAME)
+        TypeSpec.Builder type = TypeSpec.classBuilder(CLASS_NAME)
             .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
             .addSuperinterface(ParameterizedTypeName.get(
                 ClassName.get(ObjectIngestInputAdapter.class),
                 domainClass,
-                externalClass))
-            .addField(mapperClass, "mapper", Modifier.PRIVATE, Modifier.FINAL)
-            .addMethod(MethodSpec.constructorBuilder()
-                .addModifiers(Modifier.PUBLIC)
-                .addStatement("this.mapper = loadMapper()")
-                .build())
+                externalClass));
+        if (!directCanonical) {
+            type.addField(mapperClass, "mapper", Modifier.PRIVATE, Modifier.FINAL)
+                .addMethod(MethodSpec.constructorBuilder()
+                    .addModifiers(Modifier.PUBLIC)
+                    .addStatement("this.mapper = loadMapper()")
+                    .build());
+        } else {
+            type.addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC).build());
+        }
+        type
             .addMethod(MethodSpec.methodBuilder("domainType")
                 .addAnnotation(Override.class)
                 .addModifiers(Modifier.PUBLIC)
@@ -60,9 +69,10 @@ public final class ObjectIngestInputAdapterRenderer {
                 .addModifiers(Modifier.PUBLIC)
                 .returns(externalType)
                 .addParameter(domainClass, "item")
-                .addStatement("return mapper.toExternal(item)")
-                .build())
-            .addMethod(MethodSpec.methodBuilder("loadMapper")
+                .addStatement(directCanonical ? "return item" : "return mapper.toExternal(item)")
+                .build());
+        if (!directCanonical) {
+            type.addMethod(MethodSpec.methodBuilder("loadMapper")
                 .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
                 .returns(mapperClass)
                 .addCode("""
@@ -94,9 +104,10 @@ public final class ObjectIngestInputAdapterRenderer {
                     mapperClass.canonicalName(),
                     mapperClass.canonicalName())
                 .build())
-            .build();
+                ;
+        }
 
-        JavaFile javaFile = JavaFile.builder(packageName, type).build();
+        JavaFile javaFile = JavaFile.builder(packageName, type.build()).build();
         if (ctx.processingEnv() != null) {
             javaFile.writeTo(ctx.processingEnv().getFiler());
             writeServiceDescriptor(ctx.processingEnv().getFiler(), adapterClass.canonicalName());

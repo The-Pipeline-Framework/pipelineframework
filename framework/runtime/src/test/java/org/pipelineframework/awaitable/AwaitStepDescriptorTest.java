@@ -53,6 +53,41 @@ class AwaitStepDescriptorTest {
     }
 
     @Test
+    void keepsCanonicalAndTransportIdentitiesDistinctWhenExplicitlyConfigured() {
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "await-payment-provider",
+            "com.example.domain.PaymentRecord",
+            "com.example.domain.PaymentStatus",
+            "ONE_TO_ONE",
+            Duration.ofMinutes(5),
+            "interactionId",
+            "kafka",
+            Map.of(),
+            List.of(),
+            "com.example.grpc.PipelineTypes.PaymentRecord",
+            "com.example.grpc.PipelineTypes.PaymentStatus",
+            value -> "proto:" + value,
+            value -> "domain:" + value);
+
+        assertEquals("com.example.domain.PaymentRecord", descriptor.inputType());
+        assertEquals("com.example.domain.PaymentStatus", descriptor.outputType());
+        assertEquals("com.example.grpc.PipelineTypes.PaymentRecord", descriptor.transportInputType());
+        assertEquals("com.example.grpc.PipelineTypes.PaymentStatus", descriptor.transportOutputType());
+        assertEquals("proto:payment", descriptor.inputToTransport().apply("payment"));
+        assertEquals("domain:status", descriptor.outputFromTransport().apply("status"));
+    }
+
+    @Test
+    void defaultsLegacyTransportIdentitiesToCanonicalIdentities() {
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "review-step", "com.example.Input", "com.example.Output",
+            Duration.ofMinutes(5), "interactionId", "webhook", null, null);
+
+        assertEquals(descriptor.inputType(), descriptor.transportInputType());
+        assertEquals(descriptor.outputType(), descriptor.transportOutputType());
+    }
+
+    @Test
     void defaultsCorrelationStrategyToInteractionIdWhenNull() {
         AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             "review-step", "com.example.Input", "com.example.Output",

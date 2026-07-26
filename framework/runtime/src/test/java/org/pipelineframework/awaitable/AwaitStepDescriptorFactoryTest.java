@@ -8,6 +8,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AwaitStepDescriptorFactoryTest {
 
@@ -49,6 +51,40 @@ class AwaitStepDescriptorFactoryTest {
             assertEquals(
                 "http://localhost:4566/000000000000/requests",
                 request.get("queueUrl"));
+        } finally {
+            factory.shutdown();
+        }
+    }
+
+    @Test
+    void legacyDescriptorOverloadRejectsConflictingCachedTransportIdentity() throws Exception {
+        Path explicit = tempDir.resolve("pipeline.yaml");
+        Files.writeString(explicit, pipelineYaml("kafka", """
+                    request:
+                      topic: payments.requests
+                    response:
+                      topic: payments.responses
+            """));
+        System.setProperty("pipeline.config", explicit.toString());
+
+        AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
+        try {
+            factory.descriptor(
+                "ProcessAwaitPaymentProviderService",
+                "org.example.PaymentRecord",
+                "org.example.PaymentStatus",
+                "org.example.transport.PaymentRecord",
+                "org.example.transport.PaymentStatus").await().indefinitely();
+
+            IllegalStateException failure = assertThrows(IllegalStateException.class, () ->
+                factory.descriptor(
+                    "ProcessAwaitPaymentProviderService",
+                    "org.example.PaymentRecord",
+                    "org.example.PaymentStatus",
+                    "org.example.transport.PaymentRecord",
+                    "org.example.transport.DifferentPaymentStatus"));
+
+            assertTrue(failure.getMessage().contains("Conflicting await descriptor identities"));
         } finally {
             factory.shutdown();
         }

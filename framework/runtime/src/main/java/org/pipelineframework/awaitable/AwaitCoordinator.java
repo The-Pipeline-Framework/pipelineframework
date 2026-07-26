@@ -52,11 +52,15 @@ public class AwaitCoordinator {
     AwaitAdmissionCoordinator awaitAdmissionCoordinator;
 
     @Inject
+    AwaitStepDescriptorFactory descriptorFactory;
+
+    @Inject
     PipelineTelemetry telemetry;
 
     private volatile AwaitInteractionStore resolvedInteractionStore;
     private volatile AwaitUnitStore resolvedUnitStore;
     private final Map<String, AwaitTransportAdapter<?>> resolvedAdapters = new ConcurrentHashMap<>();
+    private final Map<String, AwaitStepDescriptor> directDescriptors = new ConcurrentHashMap<>();
 
     public Uni<AwaitCreateResult> createOrGet(
         AwaitStepDescriptor descriptor,
@@ -68,6 +72,7 @@ public class AwaitCoordinator {
         String assignee,
         String group
     ) {
+        registerDescriptor(descriptor);
         String unitId = deriveUnitId(tenantId, executionId, descriptor.stepId(), stepIndex);
         return createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex)
             .onItem().transformToUni(unit -> createInteraction(
@@ -101,6 +106,7 @@ public class AwaitCoordinator {
         String assignee,
         String group
     ) {
+        registerDescriptor(descriptor);
         if (itemIndex < 0) {
             return Uni.createFrom().failure(new IllegalArgumentException("itemIndex must be non-negative"));
         }
@@ -185,26 +191,31 @@ public class AwaitCoordinator {
     public Uni<AwaitCompletionResult> complete(AwaitCompletionCommand command) {
         AwaitCompletionCommand normalized = normalizeCompletionCommand(command);
         return resolveForCompletion(normalized)
-            .onItem().transformToUni(record -> enforceCompletionPayloadLimitIfUnitPresent(record, normalized)
-                .onItem().transform(safeCommand -> new ValidatedCompletion(record, safeCommand)))
-            .onItem().transformToUni(validated -> {
-                AwaitCompletionCommand safeCommand = validated.command();
-                AwaitInteractionRecord record = validated.record();
-                if (safeCommand.resumeToken() == null) {
-                    return Uni.createFrom().item(withResolvedInteractionId(safeCommand, record));
-                }
-                if (record.status().terminal() && record.status() != AwaitInteractionStatus.COMPLETED) {
-                    return Uni.createFrom().failure(
-                        new AwaitInteractionTerminalException("Await interaction is terminal: " + record.status()));
-                }
-                return Uni.createFrom().item(() -> {
-                        resumeTokenService.validate(safeCommand.resumeToken(), record, safeCommand.nowEpochMs());
-                        return safeCommand;
-                    })
-                    .runSubscriptionOn(Infrastructure.getDefaultExecutor())
-                    .replaceWith(withResolvedInteractionId(safeCommand, record));
+            .onItem().transformToUni(record -> validateCompletionAdmission(record, normalized)
+                .onItem().transform(safeCommand -> completionContract(record, safeCommand)))
+            .onItem().transformToUni(validated -> enforceCompletionPayloadLimitIfUnitPresent(
+                    validated.record(),
+                    validated.command())
+                .onItem().transform(safeCommand -> new ValidatedCompletion(validated.record(), safeCommand)))
+            .onItem().transformToUni(validated -> interactionStore().complete(validated.command()));
+    }
+
+    private Uni<AwaitCompletionCommand> validateCompletionAdmission(
+        AwaitInteractionRecord record,
+        AwaitCompletionCommand command
+    ) {
+        if (record.status().terminal() && record.status() != AwaitInteractionStatus.COMPLETED) {
+            return Uni.createFrom().failure(
+                new AwaitInteractionTerminalException("Await interaction is terminal: " + record.status()));
+        }
+        if (command.resumeToken() == null) {
+            return Uni.createFrom().item(withResolvedInteractionId(command, record));
+        }
+        return Uni.createFrom().item(() -> {
+                resumeTokenService.validate(command.resumeToken(), record, command.nowEpochMs());
+                return withResolvedInteractionId(command, record);
             })
-            .onItem().transformToUni(safeCommand -> interactionStore().complete(safeCommand));
+            .runSubscriptionOn(Infrastructure.getDefaultExecutor());
     }
 
     private static AwaitCompletionCommand withResolvedInteractionId(
@@ -490,11 +501,13 @@ public class AwaitCoordinator {
         String assignee,
         String group
     ) {
-        Object normalizedRequestPayload = AwaitPayloadSupport.normalize(requestPayload);
+        Object canonicalRequestPayload = AwaitPayloadSupport.normalize(requestPayload);
+        Object transportRequestPayload = AwaitPayloadSupport.normalize(
+            descriptor.inputToTransport().apply(canonicalRequestPayload));
         long now = System.currentTimeMillis();
         long deadline = now + descriptor.timeout().toMillis();
         long ttl = Instant.ofEpochMilli(deadline).plusSeconds(86_400).getEpochSecond();
-        String idempotencyKey = deriveIdempotencyKey(descriptor, executionId, normalizedRequestPayload)
+        String idempotencyKey = deriveIdempotencyKey(descriptor, executionId, canonicalRequestPayload)
             + (itemIndex == null ? "" : ":item=" + itemIndex);
         String correlationId = deriveCorrelationId(descriptor, tenantId, executionId, idempotencyKey);
         return acquireAdmission(descriptor, tenantId, unitId, itemIndex, executionId, deadline)
@@ -504,10 +517,11 @@ public class AwaitCoordinator {
                 descriptor.stepId(),
                 stepIndex,
                 descriptor.outputType(),
+                descriptor.transportOutputType(),
                 causationId,
                 idempotencyKey,
                 correlationId,
-                normalizedRequestPayload,
+                transportRequestPayload,
                 assignee,
                 group,
                 descriptor.transportType(),
@@ -734,16 +748,96 @@ public class AwaitCoordinator {
 
     private Object coerceResumePayload(AwaitInteractionRecord record) {
         try {
+            AwaitStepDescriptor descriptor = descriptorFor(record);
+            validateDurableOutputContract(record, descriptor);
             Class<?> outputType = AwaitPayloadSupport.resolvePayloadClass(
-                record.outputType(),
+                record.transportOutputType(),
                 Thread.currentThread().getContextClassLoader());
-            return AwaitPayloadSupport.coercePayload(record.responsePayload(), outputType);
+            Object transportPayload = AwaitPayloadSupport.coercePayload(record.responsePayload(), outputType);
+            return descriptor.outputFromTransport().apply(transportPayload);
         } catch (ClassNotFoundException e) {
             throw new IllegalStateException(
-                "Failed resolving await output type " + record.outputType()
-                    + " for interaction " + record.interactionId(),
+                "Failed resolving await transport output type " + record.transportOutputType()
+                    + " for interaction " + record.interactionId() + " stepId=" + record.stepId(),
                 e);
         }
+    }
+
+    private ValidatedCompletion completionContract(
+        AwaitInteractionRecord record,
+        AwaitCompletionCommand command
+    ) {
+        AwaitStepDescriptor descriptor = descriptorFor(record);
+        validateDurableOutputContract(record, descriptor);
+        Object transportPayload = coerceTransportPayload(record, command.responsePayload());
+        return new ValidatedCompletion(record, withResponsePayload(command, transportPayload));
+    }
+
+    private Object coerceTransportPayload(AwaitInteractionRecord record, Object payload) {
+        try {
+            Class<?> transportOutputType = AwaitPayloadSupport.resolvePayloadClass(
+                record.transportOutputType(),
+                Thread.currentThread().getContextClassLoader());
+            return AwaitPayloadSupport.coercePayload(payload, transportOutputType);
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException(
+                "Await transport completion validation failed for interaction " + record.interactionId()
+                    + " stepId=" + record.stepId()
+                    + ": transportOutputType " + record.transportOutputType() + " is unavailable",
+                e);
+        }
+    }
+
+    private void validateDurableOutputContract(AwaitInteractionRecord record, AwaitStepDescriptor descriptor) {
+        if (!descriptor.outputType().equals(record.outputType())) {
+            throw new IllegalStateException(
+                "Await durable-contract compatibility failed for execution " + record.executionId()
+                    + " interaction " + record.interactionId()
+                    + " stepId=" + record.stepId()
+                    + ": durable canonical outputType=" + record.outputType()
+                    + " differs from rebuilt descriptor outputType=" + descriptor.outputType());
+        }
+        if (!descriptor.transportOutputType().equals(record.transportOutputType())) {
+            throw new IllegalStateException(
+                "Await durable transport-contract compatibility failed for execution " + record.executionId()
+                    + " interaction " + record.interactionId()
+                    + " stepId=" + record.stepId()
+                    + ": durable transportOutputType=" + record.transportOutputType()
+                    + " differs from rebuilt descriptor transportOutputType=" + descriptor.transportOutputType());
+        }
+    }
+
+    private void registerDescriptor(AwaitStepDescriptor descriptor) {
+        directDescriptors.putIfAbsent(descriptor.stepId(), descriptor);
+        if (descriptorFactory != null) {
+            descriptorFactory.register(descriptor);
+        }
+    }
+
+    private AwaitStepDescriptor descriptorFor(AwaitInteractionRecord record) {
+        try {
+            if (descriptorFactory != null) {
+                return descriptorFactory.descriptorByStepIdNow(record.stepId());
+            }
+            AwaitStepDescriptor descriptor = directDescriptors.get(record.stepId());
+            if (descriptor != null) {
+                return descriptor;
+            }
+        } catch (RuntimeException e) {
+            throw durableDescriptorFailure(record, e);
+        }
+        throw durableDescriptorFailure(record, null);
+    }
+
+    private static IllegalStateException durableDescriptorFailure(
+        AwaitInteractionRecord record,
+        Throwable cause
+    ) {
+        String message = "Await durable-contract resolution failed for execution " + record.executionId()
+            + " interaction " + record.interactionId()
+            + " stepId=" + record.stepId()
+            + ": no AwaitStepDescriptor is available";
+        return cause == null ? new IllegalStateException(message) : new IllegalStateException(message, cause);
     }
 
     private Object enforceAggregateOutputLimit(AwaitUnitRecord unit, Object payload) {

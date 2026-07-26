@@ -9,6 +9,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -45,13 +46,118 @@ public class AwaitStepDescriptorFactory {
      * Resolves the descriptor for a generated await step.
      */
     public Uni<AwaitStepDescriptor> descriptor(String serviceName, String inputType, String outputType) {
+        return descriptor(serviceName, inputType, outputType, inputType, outputType);
+    }
+
+    public Uni<AwaitStepDescriptor> descriptor(
+        String serviceName,
+        String inputType,
+        String outputType,
+        String transportInputType,
+        String transportOutputType
+    ) {
         AwaitStepDescriptor cached = descriptors.get(serviceName);
         if (cached != null) {
+            ensureCompatible(cached, inputType, outputType, transportInputType, transportOutputType);
             return Uni.createFrom().item(cached);
         }
         return Uni.createFrom()
-            .item(() -> descriptors.computeIfAbsent(serviceName, key -> loadDescriptor(key, inputType, outputType)))
+            .item(() -> descriptors.computeIfAbsent(serviceName,
+                key -> loadDescriptor(
+                    key,
+                    inputType,
+                    outputType,
+                    transportInputType,
+                    transportOutputType,
+                    Function.identity(),
+                    Function.identity())))
+            .onItem().invoke(resolved -> ensureCompatible(
+                resolved,
+                inputType,
+                outputType,
+                transportInputType,
+                transportOutputType))
             .runSubscriptionOn(blockingExecutor);
+    }
+
+    /**
+     * Resolves and registers a generated canonical-to-transport boundary.
+     *
+     * <p>The functions are runtime-only generated adapters. Durable interactions retain only
+     * stable type identities; on replay the descriptor is rebuilt by its stable step id.</p>
+     */
+    public Uni<AwaitStepDescriptor> descriptor(
+        String serviceName,
+        String inputType,
+        String outputType,
+        String transportInputType,
+        String transportOutputType,
+        Function<Object, Object> inputToTransport,
+        Function<Object, Object> outputFromTransport
+    ) {
+        AwaitStepDescriptor cached = descriptors.get(serviceName);
+        if (cached != null) {
+            ensureCompatible(cached, inputType, outputType, transportInputType, transportOutputType);
+            return Uni.createFrom().item(cached);
+        }
+        return Uni.createFrom()
+            .item(() -> descriptors.computeIfAbsent(serviceName,
+                key -> loadDescriptor(
+                    key,
+                    inputType,
+                    outputType,
+                    transportInputType,
+                    transportOutputType,
+                    inputToTransport,
+                    outputFromTransport)))
+            .onItem().invoke(resolved -> ensureCompatible(
+                resolved,
+                inputType,
+                outputType,
+                transportInputType,
+                transportOutputType))
+            .runSubscriptionOn(blockingExecutor);
+    }
+
+    /**
+     * Registers a descriptor constructed by a direct runtime caller so completion and replay can
+     * resolve it from the durable interaction's stable step id.
+     */
+    public AwaitStepDescriptor register(AwaitStepDescriptor descriptor) {
+        if (descriptor == null) {
+            throw new IllegalArgumentException("descriptor must not be null");
+        }
+        AwaitStepDescriptor existing = descriptors.putIfAbsent(descriptor.stepId(), descriptor);
+        if (existing == null) {
+            return descriptor;
+        }
+        ensureCompatible(
+            existing,
+            descriptor.inputType(),
+            descriptor.outputType(),
+            descriptor.transportInputType(),
+            descriptor.transportOutputType());
+        return existing;
+    }
+
+    /**
+     * Resolves a descriptor for a durable interaction. The interaction never persisted input
+     * identities, so they must come from this rebuilt descriptor rather than be guessed.
+     */
+    public Uni<AwaitStepDescriptor> descriptorByStepId(String stepId) {
+        return Uni.createFrom().item(() -> descriptorByStepIdNow(stepId));
+    }
+
+    public AwaitStepDescriptor descriptorByStepIdNow(String stepId) {
+        if (stepId == null || stepId.isBlank()) {
+            throw new IllegalArgumentException("stepId must not be blank");
+        }
+        AwaitStepDescriptor descriptor = descriptors.get(stepId);
+        if (descriptor == null) {
+            throw new IllegalStateException(
+                "Await durable-contract resolution failed: no AwaitStepDescriptor is registered for stepId " + stepId);
+        }
+        return descriptor;
     }
 
     @PreDestroy
@@ -59,7 +165,15 @@ public class AwaitStepDescriptorFactory {
         blockingExecutor.shutdown();
     }
 
-    private AwaitStepDescriptor loadDescriptor(String serviceName, String inputType, String outputType) {
+    private AwaitStepDescriptor loadDescriptor(
+        String serviceName,
+        String inputType,
+        String outputType,
+        String transportInputType,
+        String transportOutputType,
+        Function<Object, Object> inputToTransport,
+        Function<Object, Object> outputFromTransport
+    ) {
         Path configPath = resolveConfigPath(serviceName);
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath);
         PipelineYamlStep step = config.steps().stream()
@@ -99,8 +213,30 @@ public class AwaitStepDescriptorFactory {
             step.awaitConfig().correlation().strategy(),
             step.awaitConfig().transport().type(),
             step.awaitConfig().transport().config(),
-            step.idempotencyKeyFields());
+            step.idempotencyKeyFields(),
+            transportInputType,
+            transportOutputType,
+            inputToTransport,
+            outputFromTransport);
         return descriptor;
+    }
+
+    private static void ensureCompatible(
+        AwaitStepDescriptor descriptor,
+        String inputType,
+        String outputType,
+        String transportInputType,
+        String transportOutputType
+    ) {
+        if (!descriptor.inputType().equals(inputType)
+            || !descriptor.outputType().equals(outputType)
+            || !descriptor.transportInputType().equals(transportInputType)
+            || !descriptor.transportOutputType().equals(transportOutputType)) {
+            throw new IllegalStateException(
+                "Conflicting await descriptor identities for stepId " + descriptor.stepId()
+                    + ": canonical=" + descriptor.inputType() + " -> " + descriptor.outputType()
+                    + ", transport=" + descriptor.transportInputType() + " -> " + descriptor.transportOutputType());
+        }
     }
 
     private static Path resolveConfigPath(String serviceName) {

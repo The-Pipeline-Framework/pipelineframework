@@ -127,21 +127,23 @@ public record StepBranchingDescriptor(
 
     private VariantExtractor variantExtractor(Class<?> itemClass, Method getter) {
         String suffix = getter.getName().substring("get".length());
+        return variantExtractor(itemClass, getter, decapitalize(suffix));
+    }
+
+    private VariantExtractor variantExtractor(Class<?> itemClass, Method getter, String discriminator) {
         getter.trySetAccessible();
-        Optional<Method> hasMethod = findHasMethod(itemClass, suffix);
+        Optional<Method> hasMethod = getter.getName().startsWith("get")
+            ? findHasMethod(itemClass, getter.getName().substring("get".length()))
+            : Optional.empty();
         hasMethod.ifPresent(Method::trySetAccessible);
-        return new VariantExtractor(getter, hasMethod, decapitalize(suffix));
+        return new VariantExtractor(getter, hasMethod, discriminator);
     }
 
     private List<VariantExtractor> findExtractors(Class<?> itemClass) {
         List<VariantExtractor> extractors = new ArrayList<>();
         Method[] methods = getSortedMethods(itemClass);
         for (Method method : methods) {
-            if (method.getParameterCount() != 0 || !method.getName().startsWith("get")) {
-                continue;
-            }
-            String suffix = method.getName().substring("get".length());
-            if (suffix.isBlank()) {
+            if (method.getParameterCount() != 0 || !isVariantAccessor(itemClass, method)) {
                 continue;
             }
             Class<?> returnType = method.getReturnType();
@@ -152,9 +154,26 @@ public record StepBranchingDescriptor(
             if (!returnTypeAccepted) {
                 continue;
             }
-            extractors.add(variantExtractor(itemClass, method));
+            extractors.add(variantExtractor(itemClass, method, accessorDiscriminator(method)));
         }
         return List.copyOf(extractors);
+    }
+
+    private static boolean isVariantAccessor(Class<?> itemClass, Method method) {
+        if (method.getName().startsWith("get")) {
+            return !method.getName().substring("get".length()).isBlank();
+        }
+        // Generated v3 unions are Java records such as PaymentStatus.Approved(value).
+        // Their canonical payload accessor is therefore value(), rather than a protobuf
+        // getApproved()-style accessor. Restrict this to records so arbitrary domain methods
+        // cannot become branch extractors.
+        return itemClass.isRecord() && method.getName().equals("value");
+    }
+
+    private static String accessorDiscriminator(Method method) {
+        return method.getName().startsWith("get")
+            ? decapitalize(method.getName().substring("get".length()))
+            : method.getName();
     }
 
     private record VariantExtractor(Method getter, Optional<Method> hasMethod, String discriminator) {
@@ -179,6 +198,10 @@ public record StepBranchingDescriptor(
     }
 
     private Optional<Object> wrapWithBuilder(Object item) {
+        Optional<Object> canonicalUnion = wrapWithCanonicalRecordUnion(item);
+        if (canonicalUnion.isPresent()) {
+            return canonicalUnion;
+        }
         try {
             Method newBuilder = inputRuntimeType.getMethod("newBuilder");
             newBuilder.trySetAccessible();
@@ -203,6 +226,33 @@ public record StepBranchingDescriptor(
             }
         } catch (ReflectiveOperationException ignored) {
             // Not a builder-backed wrapper type; fall back to the concrete item.
+        }
+        return Optional.empty();
+    }
+
+    private Optional<Object> wrapWithCanonicalRecordUnion(Object item) {
+        if (inputRuntimeType == null || !inputRuntimeType.isSealed()) {
+            return Optional.empty();
+        }
+        for (Class<?> variantType : inputRuntimeType.getPermittedSubclasses()) {
+            if (!variantType.isRecord()) {
+                continue;
+            }
+            for (java.lang.reflect.Constructor<?> constructor : variantType.getDeclaredConstructors()) {
+                Class<?>[] parameterTypes = constructor.getParameterTypes();
+                if (parameterTypes.length != 1 || !parameterTypes[0].isAssignableFrom(item.getClass())) {
+                    continue;
+                }
+                try {
+                    constructor.trySetAccessible();
+                    Object wrapped = constructor.newInstance(item);
+                    if (inputRuntimeType.isInstance(wrapped)) {
+                        return Optional.of(wrapped);
+                    }
+                } catch (ReflectiveOperationException ignored) {
+                    // Try another generated union variant; this one may not own the payload type.
+                }
+            }
         }
         return Optional.empty();
     }

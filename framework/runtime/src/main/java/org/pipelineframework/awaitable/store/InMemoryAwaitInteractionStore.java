@@ -86,7 +86,8 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
                     command.deadlineEpochMs(),
                     command.nowEpochMs(),
                     command.nowEpochMs(),
-                    command.ttlEpochS());
+                    command.ttlEpochS(),
+                    command.transportOutputType());
                 interactionsByScopedId.put(scopedInteractionId(created.tenantId(), created.interactionId()), created);
                 interactionIdByScopedIdempotencyKey.put(scopedKey, interactionId);
                 interactionIdByScopedCorrelation.put(scopedCorrelation(command.tenantId(), command.correlationId()), interactionId);
@@ -210,7 +211,8 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
             current.deadlineEpochMs(),
             current.createdAtEpochMs(),
             nowEpochMs,
-            current.ttlEpochS()));
+            current.ttlEpochS(),
+            current.transportOutputType()));
     }
 
     @Override
@@ -252,10 +254,11 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
                     current.group(),
                     current.transportType(),
                     current.transportMetadata(),
-                    current.deadlineEpochMs(),
-                    current.createdAtEpochMs(),
-                    command.nowEpochMs(),
-                    current.ttlEpochS());
+            current.deadlineEpochMs(),
+            current.createdAtEpochMs(),
+            command.nowEpochMs(),
+            current.ttlEpochS(),
+            current.transportOutputType());
                 interactionsByScopedId.put(scopedInteractionId(completed.tenantId(), completed.interactionId()), completed);
                 return new AwaitCompletionResult(completed, false);
             }
@@ -411,7 +414,8 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
             current.deadlineEpochMs(),
             current.createdAtEpochMs(),
             nowEpochMs,
-            current.ttlEpochS());
+            current.ttlEpochS(),
+            current.transportOutputType());
     }
 
     private void purgeExpired(long nowEpochMs) {

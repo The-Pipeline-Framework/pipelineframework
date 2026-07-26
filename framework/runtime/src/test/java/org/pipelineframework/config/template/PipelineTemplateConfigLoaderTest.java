@@ -1350,6 +1350,72 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void representationMappingConformanceCoversEveryNamedV3TypeKind() throws Exception {
+        Path configPath = tempDir.resolve("v3-representation-mapping-conformance.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: V3 Representation Mapping Conformance
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Payment:
+                fields: [[id, uuid]]
+                mappings:
+                  record-boundary:
+                    type: com.example.RecordRepresentation
+              PaymentId:
+                wraps: uuid
+                mappings:
+                  wrapper-boundary:
+                    mapper: com.example.WrapperMapper
+              PaymentAlias:
+                alias: Payment
+                mappings:
+                  alias-boundary: {}
+              PaymentOutcome:
+                variants:
+                  accepted: Payment
+                mappings:
+                  union-boundary: {}
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Payment, output: Payment }]
+            """);
+
+        PipelineTemplateTypeModel typeModel = new PipelineTemplateConfigLoader().load(configPath).typeModel();
+
+        assertEquals("Payment", typeModel.representationMapping("Payment", "record-boundary").orElseThrow().domainType());
+        assertEquals("com.example.RecordRepresentation",
+            typeModel.representationMapping("Payment", "record-boundary").orElseThrow().representationType().orElseThrow());
+        assertEquals("com.example.WrapperMapper",
+            typeModel.representationMapping("PaymentId", "wrapper-boundary").orElseThrow().mapperType().orElseThrow());
+        assertTrue(typeModel.representationMapping("PaymentAlias", "alias-boundary").orElseThrow().representationType().isEmpty());
+        assertTrue(typeModel.representationMapping("PaymentOutcome", "union-boundary").orElseThrow().mapperType().isEmpty());
+        assertTrue(typeModel.representationMapping("Payment", "missing-boundary").isEmpty());
+    }
+
+    @Test
+    void rejectsDuplicateV3RepresentationMappingKeysDeterministically() throws Exception {
+        Path configPath = tempDir.resolve("v3-duplicate-representation-mapping.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: Duplicate mappings
+            basePackage: com.example.v3
+            transport: GRPC
+            types:
+              Payment:
+                fields: [[id, uuid]]
+                mappings:
+                  persistence: {}
+                  persistence: {}
+            steps: [{ name: process, cardinality: ONE_TO_ONE, input: Payment, output: Payment }]
+            """);
+
+        RuntimeException error = assertThrows(RuntimeException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(error.getMessage().contains("duplicate key"), error.getMessage());
+    }
+
+    @Test
     void rejectsMalformedV3RepresentationMappings() throws Exception {
         Path invalidValue = tempDir.resolve("v3-invalid-representation-mapping.yaml");
         Files.writeString(invalidValue, """

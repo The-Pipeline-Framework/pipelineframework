@@ -371,6 +371,7 @@ const mainSidebar = [
             {text: 'Runtime Core Decoupling', link: '/evolve/runtime-core-decoupling'},
             {text: 'I/O Shell Absorption', link: '/evolve/io-shell-absorption'},
             {text: 'Data Types', link: '/evolve/data-types'},
+            {text: 'V3 Canonical Domain Readiness', link: '/evolve/v3-canonical-domain-readiness'},
             {text: 'Typed Union Output Contracts', link: '/evolve/typed-union-output-contracts'},
             {text: 'Plugins Architecture', link: '/evolve/plugins-architecture'},
             {text: 'Reference Implementation', link: '/evolve/reference-implementation'},

@@ -29,8 +29,10 @@ import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.csv.common.domain.CsvPaymentsStableIdSupport;
 import org.pipelineframework.csv.common.domain.FilePathAwareMappingStrategy;
+import org.pipelineframework.csv.common.mapper.PaymentRecordRepresentationMapper;
 import org.pipelineframework.csv.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.domain.PaymentRecord;
+import org.pipelineframework.mapper.Mapper;
 import org.pipelineframework.service.blocking.BlockingIteratorService;
 
 @PipelineStep
@@ -42,12 +44,14 @@ public class ProcessCsvPaymentsInputService
   private static final Logger LOG = Logger.getLogger(ProcessCsvPaymentsInputService.class);
   private final long rowsPerPeriod;
   private final long millisPeriod;
+  private final Mapper<PaymentRecord, org.pipelineframework.csv.common.domain.PaymentRecord> representationMapper;
 
     @Inject
-    public ProcessCsvPaymentsInputService() {
+    public ProcessCsvPaymentsInputService(PaymentRecordRepresentationMapper representationMapper) {
+        this.representationMapper = java.util.Objects.requireNonNull(representationMapper, "representationMapper must not be null");
         rowsPerPeriod = 0L;
         millisPeriod = 0L;
-        LOG.info("ProcessCsvPaymentsInputService initialized without legacy demand pacing");
+        LOG.info("ProcessCsvPaymentsInputService initialized with the OpenCSV representation mapper");
     }
 
   /**
@@ -67,7 +71,7 @@ public class ProcessCsvPaymentsInputService
                     .withIgnoreEmptyLine(true)
                     .build()
                     .iterator();
-            return new OpenCsvPaymentRecordIterator(reader, delegate, input, rowsPerPeriod, millisPeriod);
+            return new OpenCsvPaymentRecordIterator(reader, delegate, input, representationMapper, rowsPerPeriod, millisPeriod);
         } catch (Exception e) {
             reader.close();
             throw e;
@@ -89,6 +93,7 @@ public class ProcessCsvPaymentsInputService
     private final Reader reader;
     private final Iterator<org.pipelineframework.csv.common.domain.PaymentRecord> delegate;
     private final CsvPaymentsInputFile input;
+    private final Mapper<PaymentRecord, org.pipelineframework.csv.common.domain.PaymentRecord> representationMapper;
     private final long rowsPerPeriod;
     private final long millisPeriod;
     private long emitted;
@@ -98,12 +103,14 @@ public class ProcessCsvPaymentsInputService
         Reader reader,
         Iterator<org.pipelineframework.csv.common.domain.PaymentRecord> delegate,
         CsvPaymentsInputFile input,
+        Mapper<PaymentRecord, org.pipelineframework.csv.common.domain.PaymentRecord> representationMapper,
         long rowsPerPeriod,
         long millisPeriod
     ) {
         this.reader = reader;
         this.delegate = delegate;
         this.input = input;
+        this.representationMapper = representationMapper;
         this.rowsPerPeriod = rowsPerPeriod;
         this.millisPeriod = millisPeriod;
     }
@@ -116,14 +123,9 @@ public class ProcessCsvPaymentsInputService
     @Override
     public PaymentRecord next() {
         org.pipelineframework.csv.common.domain.PaymentRecord row = delegate.next();
-        PaymentRecord record = new PaymentRecord(
-            CsvPaymentsStableIdSupport.paymentRecordId(
-                row.getCsvPaymentsInputFilePath(), row.getCsvId(), row.getRecipient(), row.getAmount(), row.getCurrency()),
-            row.getCsvId(),
-            row.getRecipient(),
-            row.getAmount(),
-            row.getCurrency(),
-            row.getCsvPaymentsInputFilePath());
+        row.setId(CsvPaymentsStableIdSupport.paymentRecordId(
+            row.getCsvPaymentsInputFilePath(), row.getCsvId(), row.getRecipient(), row.getAmount(), row.getCurrency()));
+        PaymentRecord record = representationMapper.fromExternal(row);
         emitted++;
         String serviceId = ProcessCsvPaymentsInputService.class.toString();
         MDC.put("serviceId", serviceId);

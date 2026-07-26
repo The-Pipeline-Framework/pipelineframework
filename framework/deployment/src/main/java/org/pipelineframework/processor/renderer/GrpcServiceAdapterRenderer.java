@@ -39,9 +39,10 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
     public void render(GrpcBinding binding, GenerationContext ctx) throws IOException {
         GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = GRPC_TYPE_RESOLVER.resolve(
             binding, ctx.processingEnv().getMessager());
-        boolean generatedV3DomainBinding = V3GeneratedDomainBinding.applies(binding.model(), grpcTypes, ctx);
+        V3GeneratedDomainBinding.RepresentationBoundary boundary = V3GeneratedDomainBinding.resolve(
+            binding.model(), grpcTypes, ctx);
         TypeSpec grpcServiceClass = buildGrpcServiceClass(
-            binding, ctx.processingEnv().getMessager(), ctx.role(), generatedV3DomainBinding);
+            binding, ctx.processingEnv().getMessager(), ctx.role(), boundary);
 
         // Write the generated class
         JavaFile javaFile = JavaFile.builder(
@@ -64,7 +65,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             GrpcBinding binding,
             Messager messager,
             org.pipelineframework.processor.ir.DeploymentRole role,
-            boolean generatedV3DomainBinding) {
+            V3GeneratedDomainBinding.RepresentationBoundary boundary) {
         PipelineStepModel model = binding.model();
         String simpleClassName;
         // For gRPC services: ${ServiceName}GrpcService
@@ -89,7 +90,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
 
         // Use generic Mapper interfaces so AP generation does not require concrete mapper resolution.
         boolean cacheSideEffect = isCacheSideEffect(model);
-        if (!cacheSideEffect && !generatedV3DomainBinding) {
+        if (!cacheSideEffect && !boundary.convertsAtBoundary()) {
             TypeName inputGrpcType = grpcTypes.grpcParameterType() != null
                 ? grpcTypes.grpcParameterType()
                 : ClassName.OBJECT;
@@ -130,16 +131,16 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         // Add the required gRPC service method implementation based on streaming shape
         switch (model.streamingShape()) {
             case UNARY_UNARY:
-                addUnaryUnaryMethod(grpcServiceBuilder, binding, messager, generatedV3DomainBinding);
+                addUnaryUnaryMethod(grpcServiceBuilder, binding, messager, boundary);
                 break;
             case UNARY_STREAMING:
-                addUnaryStreamingMethod(grpcServiceBuilder, binding, messager, generatedV3DomainBinding);
+                addUnaryStreamingMethod(grpcServiceBuilder, binding, messager, boundary);
                 break;
             case STREAMING_UNARY:
-                addStreamingUnaryMethod(grpcServiceBuilder, binding, messager, generatedV3DomainBinding);
+                addStreamingUnaryMethod(grpcServiceBuilder, binding, messager, boundary);
                 break;
             case STREAMING_STREAMING:
-                addStreamingStreamingMethod(grpcServiceBuilder, binding, messager, generatedV3DomainBinding);
+                addStreamingStreamingMethod(grpcServiceBuilder, binding, messager, boundary);
                 break;
         }
 
@@ -161,7 +162,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             TypeSpec.Builder builder,
             GrpcBinding binding,
             Messager messager,
-            boolean generatedV3DomainBinding) {
+            V3GeneratedDomainBinding.RepresentationBoundary boundary) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
                 ClassName.get("org.pipelineframework.grpc", "GrpcReactiveServiceAdapter");
@@ -176,15 +177,15 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
 
         // Create the inline adapter
         TypeSpec inlineAdapter = inlineAdapterBuilder(
-            binding, grpcAdapterClassName, messager, generatedV3DomainBinding);
+            binding, grpcAdapterClassName, messager, boundary);
 
         boolean cacheSideEffect = isCacheSideEffect(model);
         TypeName inputDomainTypeUnary = cacheSideEffect
             ? grpcTypes.grpcParameterType()
-            : model.inboundDomainType();
+            : domainInputType(model, boundary);
         TypeName outputDomainTypeUnary = cacheSideEffect
             ? grpcTypes.grpcReturnType()
-            : model.outboundDomainType();
+            : domainOutputType(model, boundary);
 
         // Validate that required domain types are available
         if (!cacheSideEffect && (inputDomainTypeUnary == null || outputDomainTypeUnary == null)) {
@@ -249,7 +250,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             TypeSpec.Builder builder,
             GrpcBinding binding,
             Messager messager,
-            boolean generatedV3DomainBinding) {
+            V3GeneratedDomainBinding.RepresentationBoundary boundary) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
                 ClassName.get("org.pipelineframework.grpc", "GrpcServiceStreamingAdapter");
@@ -264,15 +265,15 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
 
         // Create the inline adapter
         TypeSpec inlineAdapter = inlineAdapterBuilder(
-            binding, grpcAdapterClassName, messager, generatedV3DomainBinding);
+            binding, grpcAdapterClassName, messager, boundary);
 
         boolean cacheSideEffect = isCacheSideEffect(model);
         TypeName inputDomainTypeUnaryStreaming = cacheSideEffect
             ? grpcTypes.grpcParameterType()
-            : model.inboundDomainType();
+            : domainInputType(model, boundary);
         TypeName outputDomainTypeUnaryStreaming = cacheSideEffect
             ? grpcTypes.grpcReturnType()
-            : model.outboundDomainType();
+            : domainOutputType(model, boundary);
 
         // Validate that required domain types are available
         if (!cacheSideEffect && (inputDomainTypeUnaryStreaming == null || outputDomainTypeUnaryStreaming == null)) {
@@ -333,7 +334,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             TypeSpec.Builder builder,
             GrpcBinding binding,
             Messager messager,
-            boolean generatedV3DomainBinding) {
+            V3GeneratedDomainBinding.RepresentationBoundary boundary) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
                 ClassName.get("org.pipelineframework.grpc", "GrpcServiceClientStreamingAdapter");
@@ -348,15 +349,15 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
 
         // Create the inline adapter
         TypeSpec inlineAdapter = inlineAdapterBuilder(
-            binding, grpcAdapterClassName, messager, generatedV3DomainBinding);
+            binding, grpcAdapterClassName, messager, boundary);
 
         boolean cacheSideEffect = isCacheSideEffect(model);
         TypeName inputDomainTypeStreamingUnary = cacheSideEffect
             ? grpcTypes.grpcParameterType()
-            : model.inboundDomainType();
+            : domainInputType(model, boundary);
         TypeName outputDomainTypeStreamingUnary = cacheSideEffect
             ? grpcTypes.grpcReturnType()
-            : model.outboundDomainType();
+            : domainOutputType(model, boundary);
 
         // Validate that required domain types are available
         if (!cacheSideEffect && (inputDomainTypeStreamingUnary == null || outputDomainTypeStreamingUnary == null)) {
@@ -421,7 +422,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             TypeSpec.Builder builder,
             GrpcBinding binding,
             Messager messager,
-            boolean generatedV3DomainBinding) {
+            V3GeneratedDomainBinding.RepresentationBoundary boundary) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
                 ClassName.get("org.pipelineframework.grpc", "GrpcServiceBidirectionalStreamingAdapter");
@@ -436,15 +437,15 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
 
         // Create the inline adapter
         TypeSpec inlineAdapterStreaming = inlineAdapterBuilder(
-            binding, grpcAdapterClassName, messager, generatedV3DomainBinding);
+            binding, grpcAdapterClassName, messager, boundary);
 
         boolean cacheSideEffect = isCacheSideEffect(model);
         TypeName inputDomainTypeStreamingStreaming = cacheSideEffect
             ? grpcTypes.grpcParameterType()
-            : model.inboundDomainType();
+            : domainInputType(model, boundary);
         TypeName outputDomainTypeStreamingStreaming = cacheSideEffect
             ? grpcTypes.grpcReturnType()
-            : model.outboundDomainType();
+            : domainOutputType(model, boundary);
 
         // Validate that required domain types are available
         if (!cacheSideEffect && (inputDomainTypeStreamingStreaming == null || outputDomainTypeStreamingStreaming == null)) {
@@ -506,7 +507,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             GrpcBinding binding,
             ClassName grpcAdapterClassName,
             Messager messager,
-            boolean generatedV3DomainBinding
+            V3GeneratedDomainBinding.RepresentationBoundary boundary
     ) {
         PipelineStepModel model = binding.model();
 
@@ -521,8 +522,8 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         TypeName inputGrpcType = grpcTypes.grpcParameterType(); // Get the correct input gRPC type
         TypeName outputGrpcType = grpcTypes.grpcReturnType(); // Get the correct output gRPC type
         boolean cacheSideEffect = isCacheSideEffect(model);
-        TypeName inputDomainType = cacheSideEffect ? inputGrpcType : model.inboundDomainType();
-        TypeName outputDomainType = cacheSideEffect ? outputGrpcType : model.outboundDomainType();
+        TypeName inputDomainType = cacheSideEffect ? inputGrpcType : domainInputType(model, boundary);
+        TypeName outputDomainType = cacheSideEffect ? outputGrpcType : domainOutputType(model, boundary);
 
         // Validate that required domain types are available
         if (!cacheSideEffect && (inputDomainType == null || outputDomainType == null)) {
@@ -534,11 +535,9 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .addModifiers(Modifier.PROTECTED)
                 .returns(inputDomainType)
                 .addParameter(inputGrpcType, "grpcIn");
-        if (generatedV3DomainBinding) {
+        if (boundary.convertsAtBoundary()) {
             fromGrpcMethodBuilder.addStatement("return $T.fromProto(grpcIn)",
-                ClassName.get(inputDomainType instanceof ClassName inputDomain
-                    ? inputDomain.packageName()
-                    : "", "PipelineDomainProtoAdapters"));
+                boundary.adaptersOrThrow());
         } else if (!cacheSideEffect) {
             fromGrpcMethodBuilder.addStatement("return inboundMapper.fromExternal(grpcIn)");
         } else {
@@ -550,11 +549,9 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .addModifiers(Modifier.PROTECTED)
                 .returns(outputGrpcType)
                 .addParameter(outputDomainType, "output");
-        if (generatedV3DomainBinding) {
+        if (boundary.convertsAtBoundary()) {
             toGrpcMethodBuilder.addStatement("return $T.toProto(output)",
-                ClassName.get(outputDomainType instanceof ClassName outputDomain
-                    ? outputDomain.packageName()
-                    : "", "PipelineDomainProtoAdapters"));
+                boundary.adaptersOrThrow());
         } else if (!cacheSideEffect) {
             toGrpcMethodBuilder.addStatement("return outboundMapper.toExternal(output)");
         } else {
@@ -580,6 +577,20 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .addMethod(fromGrpcMethodBuilder.build())
                 .addMethod(toGrpcMethodBuilder.build())
                 .build();
+    }
+
+    private static TypeName domainInputType(
+        PipelineStepModel model,
+        V3GeneratedDomainBinding.RepresentationBoundary boundary
+    ) {
+        return boundary.convertsAtBoundary() ? boundary.stepInputType() : model.inboundDomainType();
+    }
+
+    private static TypeName domainOutputType(
+        PipelineStepModel model,
+        V3GeneratedDomainBinding.RepresentationBoundary boundary
+    ) {
+        return boundary.convertsAtBoundary() ? boundary.stepOutputType() : model.outboundDomainType();
     }
 
     /**

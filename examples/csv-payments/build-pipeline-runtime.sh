@@ -18,6 +18,19 @@ if [[ ! -f "$PIPELINE_RUNTIME_MAPPING" ]]; then
   exit 1
 fi
 
+csv_v3_persistence=false
+for argument in "$@"; do
+  if [[ "$argument" == "-Dcsv.v3.persistence=true" ]]; then
+    csv_v3_persistence=true
+  fi
+done
+if [[ " ${MAVEN_ARGS:-} " == *" -Dcsv.v3.persistence=true "* ]]; then
+  csv_v3_persistence=true
+fi
+if [[ "$csv_v3_persistence" == true && -z "${PIPELINE_CONFIG:-}" ]]; then
+  export PIPELINE_CONFIG="$CSV_DIR/config/pipeline.v3-persistence.yaml"
+fi
+
 mkdir -p "$(dirname "$ACTIVE_MAPPING")"
 
 backup_file=""
@@ -92,6 +105,10 @@ if [[ " ${MAVEN_ARGS:-} " != *" -Dmaven.repo.local="* ]]; then
   export MAVEN_ARGS="${MAVEN_ARGS:-} -Dmaven.repo.local=$ROOT_DIR/.m2/repository"
 fi
 read -r -a maven_args <<< "${MAVEN_ARGS}"
+if [[ "$csv_v3_persistence" == true && " ${MAVEN_ARGS} " != *" -Dcsv.v3.persistence=true "* ]]; then
+  export MAVEN_ARGS="${MAVEN_ARGS} -Dcsv.v3.persistence=true"
+  maven_args+=("-Dcsv.v3.persistence=true")
+fi
 (
   cd "$ROOT_DIR"
   "$ROOT_DIR/scripts/ci/bootstrap-local-repo-prereqs.sh" csv

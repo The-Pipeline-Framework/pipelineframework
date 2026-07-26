@@ -416,7 +416,10 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 "Object Ingest requires the first business step to declare an inbound mapper"));
         TypeName domainType = firstModel.inputMapping().domainType();
         TypeName mapperType = firstModel.inputMapping().mapperType();
-        TypeName externalType = objectIngestExternalType(ctx, firstModel);
+        boolean v3GeneratedDomainTypes = ctx.getPipelineTemplateConfig()
+            instanceof org.pipelineframework.config.template.PipelineTemplateConfig template
+            && template.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3;
+        TypeName externalType = v3GeneratedDomainTypes ? domainType : objectIngestExternalType(ctx, firstModel);
         GenerationContext adapterContext = new GenerationContext(
             ctx.getProcessingEnv(),
             generationPathResolver.resolveRoleOutputDir(ctx, resolveClientRole(firstModel.deploymentRole())),
@@ -425,7 +428,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             cacheKeyGenerator,
             descriptorSet,
             ctx.getTransportMode(),
-            objectIngestConfig.get().basePackage());
+            objectIngestConfig.get().basePackage(),
+            null,
+            v3GeneratedDomainTypes);
         try {
             ClassName generatedClass = renderer.render(
                 objectIngestConfig.get().basePackage(), domainType, externalType, mapperType, adapterContext);

@@ -38,8 +38,8 @@ public record SqsAwaitDispatchEnvelope(
             interaction.correlationId(),
             interaction.stepId(),
             interaction.deadlineEpochMs(),
-            descriptor.inputType(),
-            descriptor.outputType(),
+            descriptor.transportInputType(),
+            descriptor.transportOutputType(),
             resumeToken,
             payload,
             transportMetadata);

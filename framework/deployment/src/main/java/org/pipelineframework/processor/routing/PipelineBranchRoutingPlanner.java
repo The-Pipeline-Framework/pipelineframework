@@ -378,8 +378,7 @@ public final class PipelineBranchRoutingPlanner {
             }
             contractRuntimeTypes.putIfAbsent(payload.orElseThrow(), ClassName.get(
                 templateConfig.basePackage() + ".domain",
-                union.name(),
-                javaVariantTypeName(variant.discriminator())));
+                payload.orElseThrow()));
         }
     }
 
@@ -544,10 +543,6 @@ public final class PipelineBranchRoutingPlanner {
             .map(entry -> new BranchVariantIdentity(union.name(), entry.getKey(), entry.getValue().type()))
             .sorted(Comparator.comparing(BranchVariantIdentity::discriminator))
             .toList();
-    }
-
-    private String javaVariantTypeName(String discriminator) {
-        return Character.toUpperCase(discriminator.charAt(0)) + discriminator.substring(1);
     }
 
     private boolean validateAssignableAcceptedTypes(

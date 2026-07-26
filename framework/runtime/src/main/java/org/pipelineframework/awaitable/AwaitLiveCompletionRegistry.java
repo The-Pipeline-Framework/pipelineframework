@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -47,11 +48,12 @@ public class AwaitLiveCompletionRegistry {
         Objects.requireNonNull(descriptor, "descriptor must not be null");
         Objects.requireNonNull(tenantId, "tenantId must not be null");
         Objects.requireNonNull(unitId, "unitId must not be null");
-        Class<?> outputType = resolveOutputType(descriptor);
+        Class<?> transportOutputType = resolveTransportOutputType(descriptor);
         Key key = new Key(tenantId, unitId);
         LiveAwaitSession<O> session = new LiveAwaitSession<>(
             key,
-            outputType,
+            transportOutputType,
+            descriptor.outputFromTransport(),
             () -> sessions.remove(key));
         LiveAwaitSession<?> existing = sessions.putIfAbsent(key, session);
         if (existing != null) {
@@ -77,16 +79,16 @@ public class AwaitLiveCompletionRegistry {
         }
     }
 
-    private static Class<?> resolveOutputType(AwaitStepDescriptor descriptor) {
+    private static Class<?> resolveTransportOutputType(AwaitStepDescriptor descriptor) {
         try {
             ClassLoader loader = Thread.currentThread().getContextClassLoader();
             if (loader == null) {
                 loader = AwaitPayloadSupport.class.getClassLoader();
             }
-            return AwaitPayloadSupport.resolvePayloadClass(descriptor.outputType(), loader);
+            return AwaitPayloadSupport.resolvePayloadClass(descriptor.transportOutputType(), loader);
         } catch (ClassNotFoundException e) {
             throw new IllegalStateException(
-                "Failed resolving await output type " + descriptor.outputType()
+                "Failed resolving await transport output type " + descriptor.transportOutputType()
                     + " for live await stream " + descriptor.stepId(),
                 e);
         }
@@ -97,7 +99,8 @@ public class AwaitLiveCompletionRegistry {
 
     public static final class LiveAwaitSession<O> implements Flow.Publisher<O> {
         private final Key key;
-        private final Class<?> outputType;
+        private final Class<?> transportOutputType;
+        private final Function<Object, Object> outputFromTransport;
         private final Runnable closeHook;
         private final Object lock = new Object();
         private final ArrayDeque<Pending<O>> pending = new ArrayDeque<>();
@@ -120,9 +123,15 @@ public class AwaitLiveCompletionRegistry {
         private boolean draining;
         private boolean drainAgain;
 
-        private LiveAwaitSession(Key key, Class<?> outputType, Runnable closeHook) {
+        private LiveAwaitSession(
+            Key key,
+            Class<?> transportOutputType,
+            Function<Object, Object> outputFromTransport,
+            Runnable closeHook
+        ) {
             this.key = key;
-            this.outputType = outputType;
+            this.transportOutputType = transportOutputType;
+            this.outputFromTransport = outputFromTransport;
             this.closeHook = closeHook;
         }
 
@@ -167,8 +176,9 @@ public class AwaitLiveCompletionRegistry {
             O payload;
             try {
                 @SuppressWarnings("unchecked")
-                O coerced = (O) AwaitPayloadSupport.coercePayload(record.responsePayload(), outputType);
-                payload = coerced;
+                Object transportPayload = AwaitPayloadSupport.coercePayload(record.responsePayload(), transportOutputType);
+                O converted = (O) outputFromTransport.apply(transportPayload);
+                payload = converted;
             } catch (Throwable failure) {
                 fail(failure);
                 return Uni.createFrom().failure(failure);
