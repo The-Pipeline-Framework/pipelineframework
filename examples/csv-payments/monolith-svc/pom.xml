@@ -19,6 +19,14 @@
         <!-- Build `common` first, or pass -Dprotobuf.descriptor.path=... to point to a pre-built descriptor set. -->
         <protobuf.descriptor.path>${project.basedir}/../common/target/generated-sources/grpc/descriptor_set.dsc</protobuf.descriptor.path>
         <protobuf.descriptor.fileArg>-Aprotobuf.descriptor.file=${protobuf.descriptor.path}</protobuf.descriptor.fileArg>
+        <csv.monolith.source.root>${project.basedir}/..</csv.monolith.source.root>
+        <csv.monolith.source.dir.input>${csv.monolith.source.root}/input-csv-file-processing-svc/src/v2/java</csv.monolith.source.dir.input>
+        <csv.monolith.source.dir.payments>${csv.monolith.source.root}/payments-processing-svc/src/v2/java</csv.monolith.source.dir.payments>
+        <csv.monolith.source.dir.status>${csv.monolith.source.root}/payment-status-svc/src/v2/java</csv.monolith.source.dir.status>
+        <csv.monolith.source.dir.input.support>${csv.monolith.source.root}/input-csv-file-processing-svc/src/main/java</csv.monolith.source.dir.input.support>
+        <csv.monolith.source.dir.payments.support>${csv.monolith.source.root}/payments-processing-svc/src/main/java</csv.monolith.source.dir.payments.support>
+        <csv.monolith.source.dir.status.support>${csv.monolith.source.root}/payment-status-svc/src/main/java</csv.monolith.source.dir.status.support>
+        <csv.monolith.source.dir.orchestrator>${csv.monolith.source.root}/orchestrator-svc/src/main/java</csv.monolith.source.dir.orchestrator>
     </properties>
 
     <dependencies>
@@ -170,24 +178,38 @@
                                 <exec executable="bash" failonerror="true">
                                     <arg value="${project.basedir}/../build-tools/check-duplicate-sources.sh"/>
                                     <arg value="${project.build.directory}/monolith-sources"/>
-                                    <arg value="${project.basedir}/../input-csv-file-processing-svc/src/main/java"/>
-                                    <arg value="${project.basedir}/../payments-processing-svc/src/main/java"/>
-                                    <arg value="${project.basedir}/../payment-status-svc/src/main/java"/>
-                                    <arg value="${project.basedir}/../orchestrator-svc/src/main/java"/>
+                                    <arg value="${csv.monolith.source.dir.input}"/>
+                                    <arg value="${csv.monolith.source.dir.payments}"/>
+                                    <arg value="${csv.monolith.source.dir.status}"/>
+                                    <arg value="${csv.monolith.source.dir.input.support}"/>
+                                    <arg value="${csv.monolith.source.dir.payments.support}"/>
+                                    <arg value="${csv.monolith.source.dir.status.support}"/>
+                                    <arg value="${csv.monolith.source.dir.orchestrator}"/>
                                 </exec>
                                 <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
-                                    <fileset dir="${project.basedir}/../input-csv-file-processing-svc/src/main/java"/>
+                                    <fileset dir="${csv.monolith.source.dir.input}"/>
                                 </copy>
                                 <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
-                                    <fileset dir="${project.basedir}/../payments-processing-svc/src/main/java">
+                                    <fileset dir="${csv.monolith.source.dir.payments}">
                                         <exclude name="org/pipelineframework/csv/service/ExecutorProducer.java"/>
                                     </fileset>
                                 </copy>
                                 <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
-                                    <fileset dir="${project.basedir}/../payment-status-svc/src/main/java"/>
+                                    <fileset dir="${csv.monolith.source.dir.status}"/>
                                 </copy>
                                 <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
-                                    <fileset dir="${project.basedir}/../orchestrator-svc/src/main/java"/>
+                                    <fileset dir="${csv.monolith.source.dir.input.support}"/>
+                                </copy>
+                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
+                                    <fileset dir="${csv.monolith.source.dir.payments.support}">
+                                        <exclude name="org/pipelineframework/csv/service/ExecutorProducer.java"/>
+                                    </fileset>
+                                </copy>
+                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
+                                    <fileset dir="${csv.monolith.source.dir.status.support}"/>
+                                </copy>
+                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
+                                    <fileset dir="${csv.monolith.source.dir.orchestrator}"/>
                                 </copy>
                             </target>
                         </configuration>
@@ -247,4 +269,21 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>csv-v3-persistence-sources</id>
+            <activation>
+                <property>
+                    <name>csv.v3.persistence</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <properties>
+                <csv.monolith.source.dir.input>${csv.monolith.source.root}/input-csv-file-processing-svc/src/v3-persistence/java</csv.monolith.source.dir.input>
+                <csv.monolith.source.dir.payments>${csv.monolith.source.root}/payments-processing-svc/src/v3-persistence/java</csv.monolith.source.dir.payments>
+                <csv.monolith.source.dir.status>${csv.monolith.source.root}/payment-status-svc/src/v3-persistence/java</csv.monolith.source.dir.status>
+            </properties>
+        </profile>
+    </profiles>
 </project>

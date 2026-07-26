@@ -55,7 +55,7 @@ for arg in "${ORCHESTRATOR_ARGS[@]}"; do
 done
 "$ROOT_DIR/scripts/ci/bootstrap-local-repo-prereqs.sh" csv
 
-"$MVN_BIN" -f "$CSV_DIR/pom.pipeline-runtime.xml" -Dcsv.runtime.layout=monolith -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean install -pl orchestrator-svc -am "${ORCHESTRATOR_ARGS[@]}"
+"$MVN_BIN" -f "$CSV_DIR/pom.pipeline-runtime.xml" -Dcsv.runtime.layout=monolith -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean compile -pl orchestrator-svc -am "${ORCHESTRATOR_ARGS[@]}"
 
 echo "Building monolith..."
 "$MVN_BIN" -f "$CSV_DIR/pom.monolith.xml" -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean install "$@"

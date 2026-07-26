@@ -71,6 +71,26 @@ types:
 
 Field names are unique within a product type. A field can reference a semantic scalar or another named type.
 
+### External representations
+
+A v3 domain type can optionally declare a named external representation for a framework component. The pipeline and business functions continue to use the generated canonical domain type; the component performs the explicit conversion at its boundary.
+
+```yaml
+types:
+  PaymentOutput:
+    fields:
+      - [id, uuid]
+      - [amount, decimal]
+    mappings:
+      persistence:
+        type: org.example.persistence.PaymentOutputEntity
+        mapper: org.example.persistence.PaymentOutputPersistenceMapper
+```
+
+`mappings` is a generic named-type declaration. A mapping key is not limited to a predefined spelling by the DSL, and a mapping can omit either class name for a future representation resolver. Consumers define their own readiness rules. In this release, the `persistence` consumer requires both values, supports concrete record domain types, and requires the declared mapper to implement `Mapper<GeneratedDomain, Representation>`.
+
+The mapper's `toExternal` direction is used only when writing the persistence representation. Its `fromExternal` direction remains part of the same generic mapper contract for readers and later boundaries; a persistence write does not round-trip the saved entity back into the pipeline.
+
 ### Nominal wrappers
 
 Use `wraps` when the underlying representation has a distinct business identity. `OrderId` and `CustomerId` can both wrap `uuid` without becoming interchangeable.
@@ -135,11 +155,24 @@ types:
       requiresReview: PaymentRequiresReview
 ```
 
-A union value is assignable to its union contract. A concrete variant can be introduced into that union, but the union itself is not assignable to a concrete variant. Variants reference named payload types; inline payload records and payload-less variants are intentionally outside this DSL.
+A union value is assignable to its union contract. A concrete variant can be introduced into that union. When a downstream step declares a concrete variant as its input, the compiler routes only that variant from an earlier union-producing step; this does not make the union contract itself substitutable for every concrete variant. Variants reference named payload types; inline payload records and payload-less variants are intentionally outside this DSL.
 
 A union declares a contract, not a routing graph. Branch applicability remains type-based and linear. Use a union contract where a step consumes the complete outcome set; use `accepts` only when a branch deliberately narrows that set.
 
 When a branch-aware step declares a union as its `input`, omitting `accepts` means it accepts every declared variant. An explicit list narrows the accepted payload contracts and must be a subset of that union. The final `terminal: true` step must cover every alternative still reachable after earlier branches; the compiler reports uncovered alternatives before generation.
+
+A step can also declare a concrete variant directly when it only handles that outcome. This is equivalent to a type-based branch from the preceding union; use `accepts` when the step keeps the union contract as its input and wants to name the accepted alternatives explicitly.
+
+```yaml
+steps:
+  - name: Classify payment
+    input: PaymentRequest
+    output: PaymentOutcome
+
+  - name: Process declined payment
+    input: PaymentDeclined
+    output: PaymentResult
+```
 
 ```yaml
 steps:
@@ -163,6 +196,8 @@ TPF records the union name, declared discriminator, and payload contract in gene
 ## Wire identity and compatibility
 
 Names, field names, and variant discriminators are the DSL-facing identities. The compiler allocates protobuf tags and records them in the sibling IDL lock file (`pipeline.idl.json` for `pipeline.yaml`). YAML never contains field or variant numbers.
+
+Representation mappings are application/build configuration, not domain wire identity. Changing a declared representation class or mapper does not change protobuf tags or automatically constitute a v3 compatibility change.
 
 The compiler preserves tags and reservations as types evolve. Changing a field representation, a wrapper representation, an alias target, or a variant discriminator changes the contract and is checked before generation. A generated target must preserve nominal identity and discriminator semantics; a target that cannot do so reports a clear diagnostic instead of silently flattening the type.
 

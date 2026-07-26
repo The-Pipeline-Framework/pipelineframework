@@ -28,15 +28,15 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import lombok.NonNull;
 import org.jboss.logging.Logger;
-import org.pipelineframework.csv.common.domain.ApprovedPaymentStatus;
-import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.common.domain.PaymentStatus;
-import org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus;
+import org.pipelineframework.csv.domain.ApprovedPaymentStatus;
+import org.pipelineframework.csv.domain.PaymentRecord;
+import org.pipelineframework.csv.domain.PaymentStatus;
+import org.pipelineframework.csv.domain.UnapprovedPaymentStatus;
 
 @SuppressWarnings("UnstableApiUsage")
 @ApplicationScoped
 public class PaymentProviderServiceMock implements PaymentProviderService {
-    
+
   private static final Logger LOG = Logger.getLogger(PaymentProviderServiceMock.class);
 
   private final RateLimiter rateLimiter;
@@ -62,11 +62,11 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
   @Override
   public PaymentStatus processPayment(@NonNull PaymentRecord paymentRecord) {
     LOG.debugf("processPayment called with paymentRecordId=%s, csvId=%s",
-        paymentRecord.getId(), paymentRecord.getCsvId());
-        
+        paymentRecord.id(), paymentRecord.csvId());
+
     LOG.debugf("Attempting to acquire rate limiter permit with timeout: %sms", timeoutMillis);
     boolean acquired = (this.timeoutMillis != -1L && rateLimiter.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS));
-    
+
     if (!acquired) {
       LOG.debugf("Failed to acquire rate limiter permit within timeout period: %sms", timeoutMillis);
       throw new StatusRuntimeException(
@@ -75,36 +75,24 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
     }
 
     if (shouldSimulate(timeoutProbability, simulationKey(paymentRecord), "provider-timeout")) {
-      LOG.warnf("Simulating payment-provider timeout for paymentRecordId=%s", paymentRecord.getId());
+      LOG.warnf("Simulating payment-provider timeout for paymentRecordId=%s", paymentRecord.id());
       throw new StatusRuntimeException(
           Status.DEADLINE_EXCEEDED.withDescription(
               "Mock payment provider timed out while processing payment."));
     }
-    
+
     LOG.debug("Rate limiter permit acquired successfully");
 
-    PaymentStatus paymentStatus =
-        shouldSimulate(rejectProbability, simulationKey(paymentRecord), "provider-reject")
-            ? new UnapprovedPaymentStatus()
-            : new ApprovedPaymentStatus();
-    paymentStatus.setId(UUID.randomUUID());
-    paymentStatus.setReference("101");
-    paymentStatus.setConversationId(UUID.randomUUID());
-    paymentStatus.setStatusCode(1000L);
-    if (paymentStatus instanceof UnapprovedPaymentStatus) {
-      paymentStatus.setStatus("Rejected");
-      paymentStatus.setMessage("Mock payment provider rejected the payment.");
-    } else {
-      paymentStatus.setStatus("Complete");
-      paymentStatus.setMessage("Mock response");
+    UUID conversationId = UUID.randomUUID();
+    UUID paymentRecordId = paymentRecord.id() != null ? paymentRecord.id() : stableFallbackPaymentRecordId(paymentRecord);
+    if (shouldSimulate(rejectProbability, simulationKey(paymentRecord), "provider-reject")) {
+      return new PaymentStatus.Unapproved(new UnapprovedPaymentStatus(
+          "101", "Rejected", "Mock payment provider rejected the payment.", new BigDecimal("1.01"),
+          conversationId, 1000L, paymentRecordId, paymentRecord));
     }
-    paymentStatus.setFee(new BigDecimal("1.01"));
-    paymentStatus.setPaymentRecord(paymentRecord);
-    paymentStatus.setPaymentRecordId(
-        paymentRecord.getId() != null
-            ? paymentRecord.getId()
-            : stableFallbackPaymentRecordId(paymentRecord));
-    return paymentStatus;
+    return new PaymentStatus.Approved(new ApprovedPaymentStatus(
+        "101", "Complete", "Mock response", new BigDecimal("1.01"),
+        conversationId, 1000L, paymentRecordId, paymentRecord));
   }
 
   private static double normalizeProbability(double probability) {
@@ -127,20 +115,20 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
   }
 
   private static String simulationKey(PaymentRecord paymentRecord) {
-    if (paymentRecord.getCsvId() != null) {
-      return paymentRecord.getCsvId();
+    if (paymentRecord.csvId() != null) {
+      return paymentRecord.csvId();
     }
-    if (paymentRecord.getId() != null) {
-      return paymentRecord.getId().toString();
+    if (paymentRecord.id() != null) {
+      return paymentRecord.id().toString();
     }
     return "payment-unknown";
   }
 
   private static UUID stableFallbackPaymentRecordId(PaymentRecord paymentRecord) {
     String stableSource = String.join("|",
-        paymentRecord.getCsvId() == null ? "" : paymentRecord.getCsvId(),
-        paymentRecord.getRecipient() == null ? "" : paymentRecord.getRecipient(),
-        paymentRecord.getAmount() == null ? "" : paymentRecord.getAmount().toPlainString());
+        paymentRecord.csvId() == null ? "" : paymentRecord.csvId(),
+        paymentRecord.recipient() == null ? "" : paymentRecord.recipient(),
+        paymentRecord.amount() == null ? "" : paymentRecord.amount().toPlainString());
     return UUID.nameUUIDFromBytes(stableSource.getBytes(StandardCharsets.UTF_8));
   }
 }

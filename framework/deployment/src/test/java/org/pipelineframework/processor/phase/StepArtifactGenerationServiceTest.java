@@ -5,7 +5,11 @@ import java.nio.file.Files;
 import java.util.Set;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
 
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
@@ -19,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.pipelineframework.config.template.PipelineTemplateRemoteTarget;
 import org.pipelineframework.config.template.PipelineTemplateStepExecution;
+import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
@@ -44,6 +49,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -61,6 +67,9 @@ class StepArtifactGenerationServiceTest {
 
     @Mock
     private Elements elements;
+
+    @Mock
+    private Types types;
 
     @TempDir
     Path tempDir;
@@ -184,6 +193,79 @@ class StepArtifactGenerationServiceTest {
         Path generatedBean = tempDir.resolve(
             "generated-sources/orchestrator-client/com/example/invoice/pipeline/ObservePersistenceInvoiceApprovalSideEffectService.java");
         assertTrue(Files.exists(generatedBean));
+    }
+
+    @Test
+    void v3PersistenceMappingGeneratesCanonicalToRepresentationBoundary() throws Exception {
+        TypeElement persistenceService = mock(TypeElement.class);
+        TypeElement canonicalDomain = mock(TypeElement.class);
+        TypeElement representation = mock(TypeElement.class);
+        TypeElement mapper = mock(TypeElement.class);
+        TypeElement mapperContract = mock(TypeElement.class);
+        TypeMirror canonicalMirror = mock(TypeMirror.class);
+        TypeMirror representationMirror = mock(TypeMirror.class);
+        TypeMirror mapperMirror = mock(TypeMirror.class);
+        DeclaredType expectedMapperContract = mock(DeclaredType.class);
+        when(processingEnv.getElementUtils()).thenReturn(elements);
+        when(processingEnv.getTypeUtils()).thenReturn(types);
+        when(elements.getTypeElement(anyString())).thenAnswer(invocation -> switch (invocation.getArgument(0, String.class)) {
+            case "org.pipelineframework.plugin.persistence.PersistenceService" -> persistenceService;
+            case "com.example.domain.CanonicalPayment" -> canonicalDomain;
+            case "com.example.persistence.PaymentEntity" -> representation;
+            case "com.example.persistence.CanonicalPaymentPersistenceMapper" -> mapper;
+            case "org.pipelineframework.mapper.Mapper" -> mapperContract;
+            default -> null;
+        });
+        when(canonicalDomain.asType()).thenReturn(canonicalMirror);
+        when(representation.asType()).thenReturn(representationMirror);
+        when(mapper.asType()).thenReturn(mapperMirror);
+        when(types.getDeclaredType(eq(mapperContract), any(TypeMirror[].class))).thenReturn(expectedMapperContract);
+        when(types.isAssignable(mapperMirror, expectedMapperContract)).thenReturn(true);
+
+        Path configPath = tempDir.resolve("pipeline-v3-persistence.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: Persistence mapping test
+            basePackage: com.example
+            transport: GRPC
+            types:
+              CanonicalPayment:
+                fields: [[id, uuid]]
+                mappings:
+                  persistence:
+                    type: com.example.persistence.PaymentEntity
+                    mapper: com.example.persistence.CanonicalPaymentPersistenceMapper
+            steps:
+              - name: process
+                cardinality: ONE_TO_ONE
+                input: CanonicalPayment
+                output: CanonicalPayment
+            """);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, null);
+        ctx.setPipelineTemplateConfig(new PipelineTemplateConfigLoader().load(configPath));
+        ctx.setGeneratedSourcesRoot(tempDir.resolve("generated-sources"));
+
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("PersistenceCanonicalPaymentSideEffect")
+            .generatedName("PersistenceCanonicalPaymentSideEffect")
+            .servicePackage("com.example.service")
+            .serviceClassName(ClassName.get("org.pipelineframework.plugin.persistence", "PersistenceService"))
+            .inputMapping(new TypeMapping(ClassName.get("com.example.domain", "CanonicalPayment"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("com.example.domain", "CanonicalPayment"), null, false))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(Set.of(GenerationTarget.GRPC_SERVICE_SIDE_EFFECT_ONLY))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+            .sideEffect(true)
+            .build();
+
+        invokeGenerateArtifacts(ctx, model);
+
+        Path generatedBean = tempDir.resolve(
+            "generated-sources/orchestrator-client/com/example/service/pipeline/PersistenceCanonicalPaymentSideEffect.java");
+        String source = Files.readString(generatedBean);
+        assertTrue(source.contains("CanonicalPaymentPersistenceMapper representationMapper"));
+        assertTrue(source.contains("persistRepresentation(representationMapper.toExternal(item)).replaceWith(item)"));
     }
 
     private void invokeGenerateArtifacts(PipelineCompilationContext ctx, PipelineStepModel model) throws Exception {

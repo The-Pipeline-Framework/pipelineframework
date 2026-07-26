@@ -571,6 +571,12 @@ public final class PipelineBranchRoutingPlanner {
         }
         Types types = processingEnv.getTypeUtils();
         TypeMirror stepInputType = stepInputElement.asType();
+        PipelineTemplateConfig templateConfig = requireTemplateConfig(ctx);
+        boolean v3UnionInput = templateConfig != null
+            && templateConfig.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3
+            && templateConfig.typeModel().definition(templateStep.inputTypeName())
+                .filter(org.pipelineframework.config.template.PipelineTemplateTypeDefinition.UnionType.class::isInstance)
+                .isPresent();
         for (ClassName acceptedType : acceptedDomainTypes) {
             TypeElement acceptedElement = processingEnv.getElementUtils().getTypeElement(acceptedType.canonicalName());
             if (acceptedElement == null) {
@@ -578,7 +584,7 @@ public final class PipelineBranchRoutingPlanner {
                     + "' could not be resolved during branch routing validation.");
                 return false;
             }
-            if (!types.isAssignable(acceptedElement.asType(), stepInputType)) {
+            if (!v3UnionInput && !types.isAssignable(acceptedElement.asType(), stepInputType)) {
                 error(ctx, "Step '" + templateStep.name() + "' accepts '" + acceptedType.simpleName()
                     + "', but that type is not assignable to Java input type '"
                     + stepDefinition.inputType().canonicalName() + "'.");

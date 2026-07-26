@@ -72,6 +72,7 @@
         <assertj.version>3.27.7</assertj.version>
         <skipUnitTests>false</skipUnitTests>
         <csv.runtime.layout>modular</csv.runtime.layout>
+        <csv.v3.persistence>false</csv.v3.persistence>
     </properties>
 
     <dependencyManagement>
@@ -113,6 +114,29 @@
             </resource>
         </resources>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.2.0</version>
+                <executions>
+                    <execution>
+                        <id>reset-profile-generated-artifacts</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <delete dir="${project.build.outputDirectory}"/>
+                                <delete dir="${project.build.testOutputDirectory}"/>
+                                <delete dir="${project.build.directory}/classes-pipeline"/>
+                                <delete dir="${project.build.directory}/generated-sources/annotations"/>
+                                <delete dir="${project.build.directory}/generated-sources/pipeline"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
@@ -281,6 +305,7 @@
                         <target>21</target>
                         <release>21</release>
                         <enablePreview>true</enablePreview>
+                        <useIncrementalCompilation>false</useIncrementalCompilation>
                         <annotationProcessorPaths>
                             <!-- lombok must come first -->
                             <path>
@@ -627,6 +652,98 @@
                     </plugin>
                 </plugins>
             </reporting>
+        </profile>
+        <profile>
+            <id>csv-v2-default-sources</id>
+            <activation>
+                <property>
+                    <name>csv.v3.persistence</name>
+                    <value>!true</value>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>add-v2-default-source</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>add-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>${project.basedir}/src/v2/java</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>add-v2-default-test-source</id>
+                                <phase>generate-test-sources</phase>
+                                <goals>
+                                    <goal>add-test-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>${project.basedir}/src/v2/test</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>csv-v3-persistence</id>
+            <activation>
+                <property>
+                    <name>csv.v3.persistence</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <properties>
+                <pipeline.configArg>-Apipeline.config=${project.parent.basedir}/config/pipeline.v3-persistence.yaml</pipeline.configArg>
+                <pipeline.protoConfigArg>--config=${project.parent.basedir}/config/pipeline.v3-persistence.yaml</pipeline.protoConfigArg>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>add-v3-persistence-demo-source</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>add-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>${project.basedir}/src/v3-persistence/java</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>add-v3-persistence-demo-test-source</id>
+                                <phase>generate-test-sources</phase>
+                                <goals>
+                                    <goal>add-test-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>${project.basedir}/src/v3-persistence/test</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 </project>

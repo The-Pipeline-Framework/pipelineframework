@@ -19,6 +19,7 @@ package org.pipelineframework.proto;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.pipelineframework.config.pipeline.PipelineJson;
@@ -36,12 +37,24 @@ public final class PipelineV3JavaDomainGenerator {
     private static final ObjectMapper IDL_MAPPER = PipelineJson.mapper().copy().findAndRegisterModules();
     private final PipelineV3GenerationCoordinator coordinator = new PipelineV3GenerationCoordinator();
 
+    /** Command-line entry point used by build integrations. */
+    public static void main(String[] args) {
+        Arguments arguments = Arguments.parse(args);
+        new PipelineV3JavaDomainGenerator().generate(
+            arguments.moduleDir().orElse(Path.of("")), arguments.configPath(), arguments.outputDir());
+    }
+
     /** Generate domain records, wrappers, unions, and adapters from a committed v3 IDL state. */
     public void generate(Path moduleDir, Path configPath, Path outputDir) {
-        Path resolvedModuleDir = moduleDir == null ? Path.of("") : moduleDir;
+        generate(moduleDir, Optional.ofNullable(configPath), Optional.ofNullable(outputDir));
+    }
+
+    /** Generate domain records, wrappers, unions, and adapters from explicit optional build arguments. */
+    public void generate(Path moduleDir, Optional<Path> configPath, Optional<Path> outputDir) {
+        Path resolvedModuleDir = java.util.Objects.requireNonNull(moduleDir, "moduleDir must not be null");
         Path resolvedConfig = resolveConfigPath(resolvedModuleDir, configPath).toAbsolutePath().normalize();
-        Path resolvedOutput = outputDir != null
-            ? outputDir : resolvedModuleDir.resolve("target").resolve("generated-sources").resolve("pipeline-domain");
+        Path resolvedOutput = outputDir.orElseGet(() ->
+            resolvedModuleDir.resolve("target").resolve("generated-sources").resolve("pipeline-domain"));
         PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(resolvedConfig);
         if (config.dialect() != PipelineTemplateDialect.V3) {
             throw new IllegalStateException("Java domain generation requires version: 3.");
@@ -55,12 +68,9 @@ public final class PipelineV3JavaDomainGenerator {
         coordinator.generateJava(resolvedOutput, coordinator.plan(config, state));
     }
 
-    private Path resolveConfigPath(Path moduleDir, Path explicit) {
-        if (explicit != null) {
-            return explicit;
-        }
-        return new PipelineYamlConfigLocator().locate(moduleDir)
-            .orElseThrow(() -> new IllegalStateException("Pipeline template config not found under " + moduleDir));
+    private Path resolveConfigPath(Path moduleDir, Optional<Path> explicit) {
+        return explicit.orElseGet(() -> new PipelineYamlConfigLocator().locate(moduleDir)
+            .orElseThrow(() -> new IllegalStateException("Pipeline template config not found under " + moduleDir)));
     }
 
     private PipelineIdlSnapshot readState(Path statePath) {
@@ -77,5 +87,28 @@ public final class PipelineV3JavaDomainGenerator {
             ? configFileName.substring(0, configFileName.length() - ".yaml".length()) + ".idl.json"
             : "pipeline.idl.json";
         return configPath.getParent().resolve(stateFileName);
+    }
+
+    private record Arguments(Optional<Path> moduleDir, Optional<Path> configPath, Optional<Path> outputDir) {
+        private static Arguments parse(String[] args) {
+            Optional<Path> moduleDir = Optional.empty();
+            Optional<Path> configPath = Optional.empty();
+            Optional<Path> outputDir = Optional.empty();
+            for (String argument : args) {
+                if (argument == null || argument.isBlank()) {
+                    continue;
+                }
+                if (argument.startsWith("--module-dir=")) {
+                    moduleDir = Optional.of(Path.of(argument.substring("--module-dir=".length())));
+                } else if (argument.startsWith("--config=")) {
+                    configPath = Optional.of(Path.of(argument.substring("--config=".length())));
+                } else if (argument.startsWith("--output-dir=")) {
+                    outputDir = Optional.of(Path.of(argument.substring("--output-dir=".length())));
+                } else {
+                    throw new IllegalArgumentException("Unsupported version 3 Java domain generator argument: " + argument);
+                }
+            }
+            return new Arguments(moduleDir, configPath, outputDir);
+        }
     }
 }

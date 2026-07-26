@@ -61,6 +61,28 @@ create_queue_if_missing() {
   awslocal sqs create-queue --queue-name "${queue_name}" >/dev/null
 }
 
+configure_queue_redrive() {
+  local queue_name="$1"
+  local dead_letter_queue_name="$2"
+  local queue_url
+  local dead_letter_queue_url
+  local dead_letter_queue_arn
+  local queue_attributes
+
+  queue_url="$(awslocal sqs get-queue-url --queue-name "${queue_name}" --query 'QueueUrl' --output text)"
+  dead_letter_queue_url="$(awslocal sqs get-queue-url --queue-name "${dead_letter_queue_name}" --query 'QueueUrl' --output text)"
+  dead_letter_queue_arn="$(awslocal sqs get-queue-attributes --queue-url "${dead_letter_queue_url}" \
+    --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)"
+  queue_attributes="$(printf '%s%s%s%s%s' \
+    '{"RedrivePolicy":"' \
+    '{\"deadLetterTargetArn\":\"' \
+    "${dead_letter_queue_arn}" \
+    '\",\"maxReceiveCount\":\"5\"}' \
+    '"}')"
+  awslocal sqs set-queue-attributes --queue-url "${queue_url}" \
+    --attributes "${queue_attributes}" >/dev/null
+}
+
 create_bucket_if_missing() {
   local bucket="$1"
   if awslocal s3api head-bucket --bucket "${bucket}" >/dev/null 2>&1; then
@@ -165,8 +187,10 @@ create_table_if_missing tpf_worker_registry \
 
 create_queue_if_missing tpf-work
 create_queue_if_missing tpf-execution-dlq
+create_queue_if_missing csv-payment-await-requests-dlq
 create_queue_if_missing csv-payment-await-requests
 create_queue_if_missing csv-payment-await-results
+configure_queue_redrive csv-payment-await-requests csv-payment-await-requests-dlq
 create_bucket_if_missing tpf-release-artifacts
 
 echo "CSV LocalStack bootstrap complete."

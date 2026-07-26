@@ -26,12 +26,21 @@ import java.util.*;
  */
 public final class PipelineTemplateTypeModel {
     private final Map<String, PipelineTemplateTypeDefinition> definitions;
+    private final Map<String, Map<String, RepresentationMapping>> representationMappings;
 
     public PipelineTemplateTypeModel(Map<String, PipelineTemplateTypeDefinition> definitions) {
+        this(definitions, Map.of());
+    }
+
+    public PipelineTemplateTypeModel(
+        Map<String, PipelineTemplateTypeDefinition> definitions,
+        Map<String, Map<String, RepresentationMapping>> representationMappings
+    ) {
         Map<String, PipelineTemplateTypeDefinition> copy = definitions == null
             ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(definitions));
         validate(copy);
         this.definitions = copy;
+        this.representationMappings = normalizeRepresentationMappings(copy, representationMappings);
     }
 
     public static PipelineTemplateTypeModel empty() {
@@ -88,6 +97,18 @@ public final class PipelineTemplateTypeModel {
 
     public boolean contains(String name) {
         return definitions.containsKey(name);
+    }
+
+    /**
+     * All external representation declarations, grouped by named v3 domain type then component key.
+     */
+    public Map<String, Map<String, RepresentationMapping>> representationMappings() {
+        return representationMappings;
+    }
+
+    /** Finds an optional representation declaration without imposing consumer policy. */
+    public Optional<RepresentationMapping> representationMapping(String domainType, String key) {
+        return Optional.ofNullable(representationMappings.getOrDefault(domainType, Map.of()).get(key));
     }
 
     public PipelineTemplateTypeReference resolveAliases(PipelineTemplateTypeReference reference) {
@@ -168,6 +189,38 @@ public final class PipelineTemplateTypeModel {
         for (String name : definitions.keySet()) {
             detectCycle(name, definitions, new ArrayList<>(), new HashSet<>());
         }
+    }
+
+    private static Map<String, Map<String, RepresentationMapping>> normalizeRepresentationMappings(
+        Map<String, PipelineTemplateTypeDefinition> definitions,
+        Map<String, Map<String, RepresentationMapping>> mappings
+    ) {
+        if (mappings == null || mappings.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Map<String, RepresentationMapping>> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, Map<String, RepresentationMapping>> typeEntry : mappings.entrySet()) {
+            String domainType = typeEntry.getKey();
+            if (!definitions.containsKey(domainType)) {
+                throw new IllegalStateException("Representation mapping references unknown type '" + domainType + "'");
+            }
+            Map<String, RepresentationMapping> byKey = new LinkedHashMap<>();
+            Map<String, RepresentationMapping> declared = typeEntry.getValue() == null ? Map.of() : typeEntry.getValue();
+            for (Map.Entry<String, RepresentationMapping> mappingEntry : declared.entrySet()) {
+                RepresentationMapping mapping = mappingEntry.getValue();
+                if (mappingEntry.getKey() == null || mappingEntry.getKey().isBlank() || mapping == null
+                    || !mappingEntry.getKey().equals(mapping.key()) || !domainType.equals(mapping.domainType())) {
+                    throw new IllegalStateException("Invalid representation mapping for type '" + domainType + "'");
+                }
+                if (byKey.putIfAbsent(mapping.key(), mapping) != null) {
+                    throw new IllegalStateException("Type '" + domainType + "' declares duplicate representation mapping '" + mapping.key() + "'");
+                }
+            }
+            if (!byKey.isEmpty()) {
+                normalized.put(domainType, Collections.unmodifiableMap(byKey));
+            }
+        }
+        return Collections.unmodifiableMap(normalized);
     }
 
     private static void validateReference(

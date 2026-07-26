@@ -26,7 +26,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-final class CsvPaymentsStableIdSupport {
+public final class CsvPaymentsStableIdSupport {
 
   private CsvPaymentsStableIdSupport() {}
 
@@ -42,6 +42,15 @@ final class CsvPaymentsStableIdSupport {
     return Optional.of(
         UUID.nameUUIDFromBytes(
             (namespace.strip() + "|" + normalizedParts).getBytes(StandardCharsets.UTF_8)));
+  }
+
+  /**
+   * Stable business identifier used before a payment record crosses the await boundary.
+   */
+  public static UUID paymentRecordId(
+      Path inputFile, String csvId, String recipient, BigDecimal amount, Currency currency) {
+    return stableId("PaymentRecord", inputFile, csvId, recipient, amount, currency)
+        .orElseThrow(() -> new IllegalArgumentException("Payment record needs complete stable-id fields"));
   }
 
   private static String normalize(Object part) {

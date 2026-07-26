@@ -46,6 +46,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
         PipelineTransport transportMode = PipelineTransport.fromStringOptional(binding.normalizedTransport()).orElse(PipelineTransport.GRPC);
         boolean restMode = transportMode == PipelineTransport.REST;
         boolean localMode = transportMode == PipelineTransport.LOCAL;
+        boolean v3 = ctx.v3GeneratedDomainTypes();
         ClassName pipelineExecutionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
         ClassName orchestratorConfig = ClassName.get("org.pipelineframework.orchestrator", "PipelineOrchestratorConfig");
         ClassName orchestratorMode = ClassName.get("org.pipelineframework.orchestrator", "OrchestratorMode");
@@ -83,6 +84,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             inputType = resolveGrpcInputType(binding, ctx);
         }
         ParameterizedTypeName inputMultiType = ParameterizedTypeName.get(multi, inputType);
+        TypeName deserializedInputType = v3 ? inputType : inputDtoType;
 
         FieldSpec inputField = FieldSpec.builder(String.class, "input", Modifier.PUBLIC)
             .addAnnotation(AnnotationSpec.builder(option)
@@ -138,7 +140,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .build();
 
         FieldSpec mapperField = null;
-        if (!restMode) {
+        if (!restMode && !v3) {
             ClassName mapperType = ClassName.get(binding.basePackage() + ".common.mapper", binding.inputTypeName() + "Mapper");
             mapperField = FieldSpec.builder(mapperType, lowerCamel(mapperType.simpleName()))
                 .addAnnotation(inject)
@@ -165,6 +167,10 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
         String mapperMethod = localMode ? "fromDto" : "toGrpc";
         String mapSuffix = mapperName == null ? "" : ".map(" + mapperName + "::" + mapperMethod + ")";
         String uniToMultiSuffix = ".toMulti()";
+        boolean v3GrpcInput = v3 && !restMode && !localMode;
+        String listDeserializer = v3GrpcInput ? "multiFromProtoJsonList" : "multiFromJsonList";
+        String objectDeserializer = v3GrpcInput ? "uniFromProtoJson" : "uniFromJson";
+        String deserializerTypeArgument = "$T.class";
 
         MethodSpec callMethod = MethodSpec.methodBuilder("call")
             .addAnnotation(Override.class)
@@ -189,10 +195,10 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                             return $T.ExitCode.USAGE;
                         }
                         inputMulti = inputDeserializer
-                            .multiFromJsonList(actualInputList, $T.class)%s;
+                            .%s(actualInputList, %s)%s;
                     } else if (looksLikeJsonObject(actualInput)) {
                         inputMulti = inputDeserializer
-                            .uniFromJson(actualInput, $T.class)%s%s;
+                            .%s(actualInput, %s)%s%s;
                     } else {
                         System.err.println("Input must be a JSON object.");
                         return $T.ExitCode.USAGE;
@@ -249,12 +255,19 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                     }
                     $T.flush();
                 }
-                """.formatted(mapSuffix, mapSuffix, uniToMultiSuffix),
+                """.formatted(
+                        listDeserializer,
+                        deserializerTypeArgument,
+                        mapSuffix,
+                        objectDeserializer,
+                        deserializerTypeArgument,
+                        mapSuffix,
+                        uniToMultiSuffix),
                 commandLine,
                 inputMultiType,
                 commandLine,
-                inputDtoType,
-                inputDtoType,
+                deserializedInputType,
+                deserializedInputType,
                 commandLine,
                 commandLine,
                 duration,
