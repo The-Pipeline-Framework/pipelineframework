@@ -152,12 +152,7 @@ public class AwaitStepDescriptorFactory {
         if (stepId == null || stepId.isBlank()) {
             throw new IllegalArgumentException("stepId must not be blank");
         }
-        AwaitStepDescriptor descriptor = descriptors.get(stepId);
-        if (descriptor == null) {
-            throw new IllegalStateException(
-                "Await durable-contract resolution failed: no AwaitStepDescriptor is registered for stepId " + stepId);
-        }
-        return descriptor;
+        return descriptors.computeIfAbsent(stepId, this::loadLegacyDescriptor);
     }
 
     @PreDestroy
@@ -174,6 +169,34 @@ public class AwaitStepDescriptorFactory {
         Function<Object, Object> inputToTransport,
         Function<Object, Object> outputFromTransport
     ) {
+        PipelineYamlStep step = awaitStep(serviceName);
+        return descriptorForStep(
+            serviceName,
+            step,
+            inputType,
+            outputType,
+            transportInputType,
+            transportOutputType,
+            inputToTransport,
+            outputFromTransport);
+    }
+
+    private AwaitStepDescriptor loadLegacyDescriptor(String serviceName) {
+        PipelineYamlStep step = awaitStep(serviceName);
+        String inputType = requiredType(step.inputType(), serviceName, "input");
+        String outputType = requiredType(step.outputType(), serviceName, "output");
+        return descriptorForStep(
+            serviceName,
+            step,
+            inputType,
+            outputType,
+            inputType,
+            outputType,
+            Function.identity(),
+            Function.identity());
+    }
+
+    private PipelineYamlStep awaitStep(String serviceName) {
         Path configPath = resolveConfigPath(serviceName);
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath);
         PipelineYamlStep step = config.steps().stream()
@@ -198,6 +221,19 @@ public class AwaitStepDescriptorFactory {
         if (step.timeout() == null || step.timeout().isBlank()) {
             throw new IllegalArgumentException("Await step " + serviceName + " is missing timeout");
         }
+        return step;
+    }
+
+    private static AwaitStepDescriptor descriptorForStep(
+        String serviceName,
+        PipelineYamlStep step,
+        String inputType,
+        String outputType,
+        String transportInputType,
+        String transportOutputType,
+        Function<Object, Object> inputToTransport,
+        Function<Object, Object> outputFromTransport
+    ) {
         Duration timeout;
         try {
             timeout = Duration.parse(step.timeout());
@@ -219,6 +255,14 @@ public class AwaitStepDescriptorFactory {
             inputToTransport,
             outputFromTransport);
         return descriptor;
+    }
+
+    private static String requiredType(String typeName, String serviceName, String position) {
+        if (typeName == null || typeName.isBlank()) {
+            throw new IllegalStateException(
+                "Await step " + serviceName + " is missing " + position + " type required for durable-contract reconstruction");
+        }
+        return typeName;
     }
 
     private static void ensureCompatible(

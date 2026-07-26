@@ -90,6 +90,44 @@ class AwaitStepDescriptorFactoryTest {
         }
     }
 
+    @Test
+    void rebuildsLegacyAwaitDescriptorFromDeclaredStepIdForASeparateRuntime() throws Exception {
+        Path explicit = tempDir.resolve("pipeline.yaml");
+        Files.writeString(explicit, pipelineYaml("interaction-api", ""));
+        System.setProperty("pipeline.config", explicit.toString());
+
+        AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
+        try {
+            AwaitStepDescriptor descriptor =
+                factory.descriptorByStepIdNow("ProcessAwaitPaymentProviderService");
+
+            assertEquals("org.example.PaymentRecord", descriptor.inputType());
+            assertEquals("org.example.PaymentStatus", descriptor.outputType());
+            assertEquals(descriptor.inputType(), descriptor.transportInputType());
+            assertEquals(descriptor.outputType(), descriptor.transportOutputType());
+            assertEquals("interaction-api", descriptor.transportType());
+        } finally {
+            factory.shutdown();
+        }
+    }
+
+    @Test
+    void rejectsUndeclaredAwaitStepIdDuringDurableContractReconstruction() throws Exception {
+        Path explicit = tempDir.resolve("pipeline.yaml");
+        Files.writeString(explicit, pipelineYaml("interaction-api", ""));
+        System.setProperty("pipeline.config", explicit.toString());
+
+        AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
+        try {
+            IllegalStateException failure = assertThrows(IllegalStateException.class,
+                () -> factory.descriptorByStepIdNow("ProcessUnknownAwaitService"));
+
+            assertTrue(failure.getMessage().contains("No await YAML step found"));
+        } finally {
+            factory.shutdown();
+        }
+    }
+
     private static String pipelineYaml(String transportType, String transportConfig) {
         return """
             basePackage: org.example
