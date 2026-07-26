@@ -105,7 +105,7 @@ if [[ " ${MAVEN_ARGS:-} " != *" -Dmaven.repo.local="* ]]; then
   export MAVEN_ARGS="${MAVEN_ARGS:-} -Dmaven.repo.local=$ROOT_DIR/.m2/repository"
 fi
 read -r -a maven_args <<< "${MAVEN_ARGS}"
-if [[ "$csv_v3_persistence" == true && " ${MAVEN_ARGS} " != *" -Dcsv.v3.persistence=true "* ]]; then
+if [[ "$csv_v3_persistence" == true && " ${MAVEN_ARGS:-} " != *" -Dcsv.v3.persistence=true "* ]]; then
   export MAVEN_ARGS="${MAVEN_ARGS} -Dcsv.v3.persistence=true"
   maven_args+=("-Dcsv.v3.persistence=true")
 fi

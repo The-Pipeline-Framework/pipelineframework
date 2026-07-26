@@ -324,7 +324,7 @@ public final class PipelineBranchRoutingPlanner {
             return;
         }
         if (templateConfig.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3) {
-            registerV3ContractRuntimeType(templateConfig, contractTypeName, runtimeType, contractRuntimeTypes);
+            registerV3ContractRuntimeType(ctx, templateConfig, contractTypeName, runtimeType, contractRuntimeTypes);
             return;
         }
         if (templateConfig.messages().containsKey(contractTypeName)) {
@@ -354,6 +354,7 @@ public final class PipelineBranchRoutingPlanner {
     }
 
     private void registerV3ContractRuntimeType(
+        PipelineCompilationContext ctx,
         PipelineTemplateConfig templateConfig,
         String contractTypeName,
         ClassName runtimeType,
@@ -376,9 +377,16 @@ public final class PipelineBranchRoutingPlanner {
             if (payload.isEmpty()) {
                 continue;
             }
-            contractRuntimeTypes.putIfAbsent(payload.orElseThrow(), ClassName.get(
+            ClassName payloadRuntimeType = ClassName.get(
                 templateConfig.basePackage() + ".domain",
-                payload.orElseThrow()));
+                payload.orElseThrow());
+            if (isResolvable(ctx, payloadRuntimeType)) {
+                contractRuntimeTypes.putIfAbsent(payload.orElseThrow(), payloadRuntimeType);
+            } else {
+                report(ctx, Diagnostic.Kind.WARNING, "V3 union contract '" + contractTypeName
+                    + "' variant '" + variant.discriminator() + "' maps to unresolved canonical runtime type '"
+                    + payloadRuntimeType.canonicalName() + "'; skipping runtime type indexing.");
+            }
         }
     }
 

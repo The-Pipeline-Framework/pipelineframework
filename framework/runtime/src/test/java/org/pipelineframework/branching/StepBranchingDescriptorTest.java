@@ -1,5 +1,8 @@
 package org.pipelineframework.branching;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 import java.util.List;
@@ -26,6 +29,7 @@ class StepBranchingDescriptorTest {
             false);
 
         assertSame(payload, descriptor.applicableItem(approved));
+        assertEquals("approved", descriptor.variantIdentity(approved).orElseThrow().discriminator());
     }
 
     @Test
@@ -40,14 +44,18 @@ class StepBranchingDescriptorTest {
             List.of(ApprovedPaymentOutput.class.getName()),
             List.of(ApprovedPaymentOutput.class.getName()),
             List.of(ApprovedPaymentOutput.class),
-            List.of(),
-            List.of(),
+            List.of(
+                new BranchVariantIdentity("PaymentOutputBranch", "approved", ApprovedPaymentOutput.class.getName()),
+                new BranchVariantIdentity("PaymentOutputBranch", "approvedRetry", ApprovedPaymentOutput.class.getName())),
+            List.of(new BranchVariantIdentity(
+                "PaymentOutputBranch", "approvedRetry", ApprovedPaymentOutput.class.getName())),
             List.of(),
             true);
 
         Object applicable = descriptor.applicableItem(payload);
 
-        assertSame(payload, ((PaymentOutputBranch.Approved) applicable).value());
+        assertSame(payload, assertInstanceOf(PaymentOutputBranch.ApprovedRetry.class, applicable).value());
+        assertNull(descriptor.applicableItem(new RejectedPaymentOutput("rejected")));
     }
 
     private sealed interface PaymentStatus permits PaymentStatus.Approved {
@@ -58,11 +66,17 @@ class StepBranchingDescriptorTest {
     private record ApprovedPaymentStatus(String reference) {
     }
 
-    private sealed interface PaymentOutputBranch permits PaymentOutputBranch.Approved {
+    private sealed interface PaymentOutputBranch permits PaymentOutputBranch.Approved, PaymentOutputBranch.ApprovedRetry {
         record Approved(ApprovedPaymentOutput value) implements PaymentOutputBranch {
+        }
+
+        record ApprovedRetry(ApprovedPaymentOutput value) implements PaymentOutputBranch {
         }
     }
 
     private record ApprovedPaymentOutput(String reference) {
+    }
+
+    private record RejectedPaymentOutput(String reference) {
     }
 }

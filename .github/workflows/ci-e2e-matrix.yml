@@ -80,7 +80,6 @@ jobs:
     with:
       artifact_name: framework-m2-cache
       v3_persistence: true
-    secrets: inherit
 
   e2e-csv-provider-reject:
     name: CSV Provider Reject E2E

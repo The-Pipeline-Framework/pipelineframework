@@ -39,7 +39,7 @@ public record SqsAwaitDispatchEnvelope(
             interaction.stepId(),
             interaction.deadlineEpochMs(),
             descriptor.transportInputType(),
-            descriptor.transportOutputType(),
+            interaction.transportOutputType(),
             resumeToken,
             payload,
             transportMetadata);

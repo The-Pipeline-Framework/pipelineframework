@@ -522,8 +522,12 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         TypeName inputGrpcType = grpcTypes.grpcParameterType(); // Get the correct input gRPC type
         TypeName outputGrpcType = grpcTypes.grpcReturnType(); // Get the correct output gRPC type
         boolean cacheSideEffect = isCacheSideEffect(model);
-        TypeName inputDomainType = cacheSideEffect ? inputGrpcType : domainInputType(model, boundary);
-        TypeName outputDomainType = cacheSideEffect ? outputGrpcType : domainOutputType(model, boundary);
+        TypeName inputDomainType = boundary.convertsAtBoundary()
+            ? boundary.stepInputType()
+            : cacheSideEffect ? inputGrpcType : domainInputType(model, boundary);
+        TypeName outputDomainType = boundary.convertsAtBoundary()
+            ? boundary.stepOutputType()
+            : cacheSideEffect ? outputGrpcType : domainOutputType(model, boundary);
 
         // Validate that required domain types are available
         if (!cacheSideEffect && (inputDomainType == null || outputDomainType == null)) {

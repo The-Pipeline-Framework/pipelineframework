@@ -27,14 +27,14 @@ final class V3GeneratedDomainBinding {
         if (!context.v3GeneratedDomainTypes() || context.pipelineBasePackage() == null) {
             return RepresentationBoundary.transportOnly(transportInputType, transportOutputType);
         }
-        Optional<TypeName> canonicalInputType = canonicalAwaitType(
-            model.inboundDomainType(),
-            transportInputType,
-            context.pipelineBasePackage());
-        Optional<TypeName> canonicalOutputType = canonicalAwaitType(
-            model.outboundDomainType(),
-            transportOutputType,
-            context.pipelineBasePackage());
+        Optional<TypeName> canonicalInputType = isExactPair(
+            model.inboundDomainType(), transportInputType, context.pipelineBasePackage())
+                ? Optional.of(model.inboundDomainType())
+                : Optional.empty();
+        Optional<TypeName> canonicalOutputType = isExactPair(
+            model.outboundDomainType(), transportOutputType, context.pipelineBasePackage())
+                ? Optional.of(model.outboundDomainType())
+                : Optional.empty();
         if (canonicalInputType.isPresent() && canonicalOutputType.isPresent()) {
             return new RepresentationBoundary(
                 canonicalInputType.orElseThrow(),
@@ -76,17 +76,6 @@ final class V3GeneratedDomainBinding {
         return domain.canonicalName().startsWith(domainPrefix)
             && proto.canonicalName().startsWith(protoPrefix)
             && domain.simpleName().equals(proto.simpleName());
-    }
-
-    private static Optional<TypeName> canonicalAwaitType(TypeName modelType, TypeName transportType, String basePackage) {
-        if (isExactPair(modelType, transportType, basePackage)) {
-            return Optional.of(modelType);
-        }
-        if (transportType instanceof ClassName transport
-            && transport.canonicalName().startsWith(basePackage + ".grpc.PipelineTypes.")) {
-            return Optional.of(ClassName.get(basePackage + ".domain", transport.simpleName()));
-        }
-        return Optional.empty();
     }
 
     /**

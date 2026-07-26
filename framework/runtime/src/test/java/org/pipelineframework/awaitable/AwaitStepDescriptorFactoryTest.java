@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -76,13 +77,14 @@ class AwaitStepDescriptorFactoryTest {
                 "org.example.transport.PaymentRecord",
                 "org.example.transport.PaymentStatus").await().indefinitely();
 
-            IllegalStateException failure = assertThrows(IllegalStateException.class, () ->
-                factory.descriptor(
-                    "ProcessAwaitPaymentProviderService",
-                    "org.example.PaymentRecord",
-                    "org.example.PaymentStatus",
-                    "org.example.transport.PaymentRecord",
-                    "org.example.transport.DifferentPaymentStatus"));
+            var conflictingDescriptor = assertDoesNotThrow(() -> factory.descriptor(
+                "ProcessAwaitPaymentProviderService",
+                "org.example.PaymentRecord",
+                "org.example.PaymentStatus",
+                "org.example.transport.PaymentRecord",
+                "org.example.transport.DifferentPaymentStatus"));
+            IllegalStateException failure = assertThrows(IllegalStateException.class,
+                () -> conflictingDescriptor.await().indefinitely());
 
             assertTrue(failure.getMessage().contains("Conflicting await descriptor identities"));
         } finally {

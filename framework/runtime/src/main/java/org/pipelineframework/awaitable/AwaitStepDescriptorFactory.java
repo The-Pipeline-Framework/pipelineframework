@@ -58,8 +58,9 @@ public class AwaitStepDescriptorFactory {
     ) {
         AwaitStepDescriptor cached = descriptors.get(serviceName);
         if (cached != null) {
-            ensureCompatible(cached, inputType, outputType, transportInputType, transportOutputType);
-            return Uni.createFrom().item(cached);
+            return Uni.createFrom().item(cached)
+                .onItem().invoke(resolved -> ensureCompatible(
+                    resolved, inputType, outputType, transportInputType, transportOutputType));
         }
         return Uni.createFrom()
             .item(() -> descriptors.computeIfAbsent(serviceName,
@@ -97,8 +98,9 @@ public class AwaitStepDescriptorFactory {
     ) {
         AwaitStepDescriptor cached = descriptors.get(serviceName);
         if (cached != null) {
-            ensureCompatible(cached, inputType, outputType, transportInputType, transportOutputType);
-            return Uni.createFrom().item(cached);
+            return Uni.createFrom().item(cached)
+                .onItem().invoke(resolved -> ensureCompatible(
+                    resolved, inputType, outputType, transportInputType, transportOutputType));
         }
         return Uni.createFrom()
             .item(() -> descriptors.computeIfAbsent(serviceName,

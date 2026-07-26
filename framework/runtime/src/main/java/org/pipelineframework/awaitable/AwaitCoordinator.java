@@ -72,9 +72,9 @@ public class AwaitCoordinator {
         String assignee,
         String group
     ) {
-        registerDescriptor(descriptor);
         String unitId = deriveUnitId(tenantId, executionId, descriptor.stepId(), stepIndex);
-        return createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex)
+        return registerDescriptor(descriptor)
+            .chain(() -> createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex))
             .onItem().transformToUni(unit -> createInteraction(
                 descriptor,
                 unit.unitId(),
@@ -106,12 +106,13 @@ public class AwaitCoordinator {
         String assignee,
         String group
     ) {
-        registerDescriptor(descriptor);
-        if (itemIndex < 0) {
-            return Uni.createFrom().failure(new IllegalArgumentException("itemIndex must be non-negative"));
-        }
-        return createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex)
-            .onItem().transformToUni(ignored -> createInteraction(
+        return registerDescriptor(descriptor)
+            .onItem().transformToUni(ignored -> {
+                if (itemIndex < 0) {
+                    return Uni.createFrom().failure(new IllegalArgumentException("itemIndex must be non-negative"));
+                }
+                return createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex)
+                    .onItem().transformToUni(unit -> createInteraction(
                 descriptor,
                 unitId,
                 tenantId,
@@ -122,6 +123,7 @@ public class AwaitCoordinator {
                 itemIndex,
                 assignee,
                 group));
+            });
     }
 
     @SuppressWarnings("unchecked")
@@ -807,11 +809,14 @@ public class AwaitCoordinator {
         }
     }
 
-    private void registerDescriptor(AwaitStepDescriptor descriptor) {
-        directDescriptors.putIfAbsent(descriptor.stepId(), descriptor);
-        if (descriptorFactory != null) {
-            descriptorFactory.register(descriptor);
-        }
+    private Uni<Void> registerDescriptor(AwaitStepDescriptor descriptor) {
+        return Uni.createFrom().item(() -> {
+            directDescriptors.putIfAbsent(descriptor.stepId(), descriptor);
+            if (descriptorFactory != null) {
+                descriptorFactory.register(descriptor);
+            }
+            return descriptor;
+        }).replaceWithVoid();
     }
 
     private AwaitStepDescriptor descriptorFor(AwaitInteractionRecord record) {

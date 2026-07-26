@@ -1,5 +1,6 @@
 package org.pipelineframework.branching;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -28,6 +29,7 @@ public record StepBranchingDescriptor(
 
     private static final ConcurrentHashMap<MethodCacheKey, List<VariantExtractor>> extractionCache = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<MethodCacheKey, List<VariantExtractor>> inputVariantExtractionCache = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<RecordUnionConstructorCacheKey, Optional<Constructor<?>>> recordUnionConstructorCache = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<Class<?>, Method[]> sortedMethodsCache = new ConcurrentHashMap<>();
 
     public StepBranchingDescriptor {
@@ -116,18 +118,12 @@ public record StepBranchingDescriptor(
 
     private List<VariantExtractor> findInputVariantExtractors(Class<?> itemClass) {
         return Arrays.stream(getSortedMethods(itemClass))
-            .filter(method -> method.getParameterCount() == 0 && method.getName().startsWith("get"))
-            .filter(method -> !method.getName().substring("get".length()).isBlank())
+            .filter(method -> method.getParameterCount() == 0 && isVariantAccessor(itemClass, method))
             .filter(method -> method.getReturnType() != Void.TYPE)
             .filter(method -> inputVariants.stream().anyMatch(variant ->
-                variant.discriminator().equals(decapitalize(method.getName().substring("get".length())))))
-            .map(method -> variantExtractor(itemClass, method))
+                variant.discriminator().equals(accessorDiscriminator(itemClass, method))))
+            .map(method -> variantExtractor(itemClass, method, accessorDiscriminator(itemClass, method)))
             .toList();
-    }
-
-    private VariantExtractor variantExtractor(Class<?> itemClass, Method getter) {
-        String suffix = getter.getName().substring("get".length());
-        return variantExtractor(itemClass, getter, decapitalize(suffix));
     }
 
     private VariantExtractor variantExtractor(Class<?> itemClass, Method getter, String discriminator) {
@@ -154,7 +150,7 @@ public record StepBranchingDescriptor(
             if (!returnTypeAccepted) {
                 continue;
             }
-            extractors.add(variantExtractor(itemClass, method, accessorDiscriminator(method)));
+            extractors.add(variantExtractor(itemClass, method, accessorDiscriminator(itemClass, method)));
         }
         return List.copyOf(extractors);
     }
@@ -170,10 +166,10 @@ public record StepBranchingDescriptor(
         return itemClass.isRecord() && method.getName().equals("value");
     }
 
-    private static String accessorDiscriminator(Method method) {
+    private static String accessorDiscriminator(Class<?> itemClass, Method method) {
         return method.getName().startsWith("get")
             ? decapitalize(method.getName().substring("get".length()))
-            : method.getName();
+            : decapitalize(itemClass.getSimpleName());
     }
 
     private record VariantExtractor(Method getter, Optional<Method> hasMethod, String discriminator) {
@@ -234,27 +230,37 @@ public record StepBranchingDescriptor(
         if (inputRuntimeType == null || !inputRuntimeType.isSealed()) {
             return Optional.empty();
         }
-        for (Class<?> variantType : inputRuntimeType.getPermittedSubclasses()) {
-            if (!variantType.isRecord()) {
-                continue;
-            }
-            for (java.lang.reflect.Constructor<?> constructor : variantType.getDeclaredConstructors()) {
-                Class<?>[] parameterTypes = constructor.getParameterTypes();
-                if (parameterTypes.length != 1 || !parameterTypes[0].isAssignableFrom(item.getClass())) {
-                    continue;
-                }
-                try {
-                    constructor.trySetAccessible();
-                    Object wrapped = constructor.newInstance(item);
-                    if (inputRuntimeType.isInstance(wrapped)) {
-                        return Optional.of(wrapped);
-                    }
-                } catch (ReflectiveOperationException ignored) {
-                    // Try another generated union variant; this one may not own the payload type.
-                }
-            }
+        RecordUnionConstructorCacheKey cacheKey = new RecordUnionConstructorCacheKey(
+            inputRuntimeType, item.getClass(), acceptedVariants);
+        return recordUnionConstructorCache.computeIfAbsent(cacheKey, ignored -> selectRecordUnionConstructor(item.getClass()))
+            .flatMap(constructor -> instantiateRecordUnionConstructor(constructor, item));
+    }
+
+    private Optional<Constructor<?>> selectRecordUnionConstructor(Class<?> payloadType) {
+        List<Constructor<?>> candidates = Arrays.stream(inputRuntimeType.getPermittedSubclasses())
+            .filter(Class::isRecord)
+            .flatMap(variantType -> Arrays.stream(variantType.getDeclaredConstructors()))
+            .filter(constructor -> constructor.getParameterCount() == 1)
+            .filter(constructor -> constructor.getParameterTypes()[0].isAssignableFrom(payloadType))
+            .toList();
+        if (candidates.size() == 1) {
+            return Optional.of(candidates.getFirst());
         }
-        return Optional.empty();
+        List<Constructor<?>> selected = candidates.stream()
+            .filter(constructor -> acceptedVariants.stream().anyMatch(variant ->
+                variant.discriminator().equals(decapitalize(constructor.getDeclaringClass().getSimpleName()))))
+            .toList();
+        return selected.size() == 1 ? Optional.of(selected.getFirst()) : Optional.empty();
+    }
+
+    private Optional<Object> instantiateRecordUnionConstructor(Constructor<?> constructor, Object item) {
+        try {
+            constructor.trySetAccessible();
+            Object wrapped = constructor.newInstance(item);
+            return inputRuntimeType.isInstance(wrapped) ? Optional.of(wrapped) : Optional.empty();
+        } catch (ReflectiveOperationException ignored) {
+            return Optional.empty();
+        }
     }
 
     private static Optional<Method> findHasMethod(Class<?> itemClass, String suffix) {
@@ -317,5 +323,12 @@ public record StepBranchingDescriptor(
     }
 
     private record MethodCacheKey(Class<?> itemClass, StepBranchingDescriptor descriptor) {
+    }
+
+    private record RecordUnionConstructorCacheKey(
+        Class<?> inputRuntimeType,
+        Class<?> payloadType,
+        List<BranchVariantIdentity> acceptedVariants
+    ) {
     }
 }
