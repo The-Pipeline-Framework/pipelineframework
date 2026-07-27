@@ -120,6 +120,7 @@ jobs:
           read -r -a maven_args <<< "$MAVEN_ARGS"
           # Search transport/topology-specific tests stay in their dedicated smoke or E2E lanes, not in the generic unit lane.
           ./mvnw "${maven_args[@]}" clean test \
+            -Dcsv.v3.persistence=true \
             "-Dtest=${{ env.UNIT_TEST_PATTERN }}" \
             -Dsurefire.failIfNoSpecifiedTests=false \
             -DskipITs=true \
@@ -161,6 +162,7 @@ jobs:
           read -r -a maven_args <<< "$MAVEN_ARGS"
           # Dedicated E2E or topology-specific tests stay in their reusable jobs, not in generic verify.
           ./mvnw "${maven_args[@]}" clean verify \
+            -Dcsv.v3.persistence=true \
             -DskipUnitTests=true \
             -Dfailsafe.failIfNoSpecifiedTests=false \
             -DskipNative=true \

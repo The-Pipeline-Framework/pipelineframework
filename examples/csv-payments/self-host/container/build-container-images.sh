@@ -93,6 +93,12 @@ COMMON_BUILD_PROPS=(
   -Dquarkus.devservices.enabled=false
 )
 
+if grep -Eq '^version:[[:space:]]*3[[:space:]]*$' "${TPF_CSV_PIPELINE_CONFIG}"; then
+  COMMON_BUILD_PROPS+=(
+    -Dcsv.v3.persistence=true
+  )
+fi
+
 if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "sqs" ]]; then
   COMMON_BUILD_PROPS+=(
     -Dtpf.await.kafka.reactive-messaging.enabled=false

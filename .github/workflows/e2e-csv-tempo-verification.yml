@@ -83,7 +83,7 @@ jobs:
             alpine:3.17
 
       - name: Build csv-payments modular observability images
-        run: bash ./examples/csv-payments/build-modular-observability-images.sh
+        run: bash ./examples/csv-payments/build-modular-observability-images.sh -Dcsv.v3.persistence=true
 
       - name: Run csv-payments Tempo verification E2E
         run: |
@@ -91,6 +91,7 @@ jobs:
           ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.xml \
             -pl orchestrator-svc \
             -am \
+            -Dcsv.v3.persistence=true \
             -Dcsv.e2e.tempo.enabled=true \
             -Dcsv.e2e.reader-demand-pacer.rows-per-period=20 \
             -Dcsv.e2e.reader-demand-pacer.millis-period=1000 \

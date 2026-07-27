@@ -30,18 +30,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.blocking.CloseableIterator;
-import org.pipelineframework.csv.common.mapper.PaymentRecordRepresentationMapper;
+import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.domain.CsvPaymentsInputFile;
-import org.pipelineframework.csv.domain.PaymentRecord;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 
 class ProcessCsvPaymentsInputServiceTest {
 
@@ -61,7 +56,7 @@ class ProcessCsvPaymentsInputServiceTest {
                         + UUID.randomUUID()
                         + ",Jane Smith,200.50,EUR\n";
         Files.writeString(tempCsvFile, csvContent);
-        service = new ProcessCsvPaymentsInputService(new PaymentRecordRepresentationMapper());
+        service = new ProcessCsvPaymentsInputService();
     }
 
     @AfterEach
@@ -87,20 +82,20 @@ class ProcessCsvPaymentsInputServiceTest {
         assertEquals(2, records.size());
 
         PaymentRecord record1 = records.getFirst();
-        assertNotNull(record1.id());
-        assertNotNull(record1.csvId());
-        assertEquals("John Doe", record1.recipient());
-        assertEquals(new BigDecimal("100.00"), record1.amount());
-        assertEquals(Currency.getInstance("USD"), record1.currency());
-        assertEquals(csvFile.filepath(), record1.csvPaymentsInputFilePath());
+        assertNotNull(record1.getId());
+        assertNotNull(record1.getCsvId());
+        assertEquals("John Doe", record1.getRecipient());
+        assertEquals(new BigDecimal("100.00"), record1.getAmount());
+        assertEquals(Currency.getInstance("USD"), record1.getCurrency());
+        assertEquals(csvFile.filepath(), record1.getCsvPaymentsInputFilePath());
 
         PaymentRecord record2 = records.get(1);
-        assertNotNull(record2.id());
-        assertNotNull(record2.csvId());
-        assertEquals("Jane Smith", record2.recipient());
-        assertEquals(new BigDecimal("200.50"), record2.amount());
-        assertEquals(Currency.getInstance("EUR"), record2.currency());
-        assertEquals(csvFile.filepath(), record2.csvPaymentsInputFilePath());
+        assertNotNull(record2.getId());
+        assertNotNull(record2.getCsvId());
+        assertEquals("Jane Smith", record2.getRecipient());
+        assertEquals(new BigDecimal("200.50"), record2.getAmount());
+        assertEquals(Currency.getInstance("EUR"), record2.getCurrency());
+        assertEquals(csvFile.filepath(), record2.getCsvPaymentsInputFilePath());
 
         List<PaymentRecord> rereadRecords;
         try (CloseableIterator<PaymentRecord> iterator = service.iterateBlocking(csvFile)) {
@@ -109,10 +104,10 @@ class ProcessCsvPaymentsInputServiceTest {
                 rereadRecords.add(iterator.next());
             }
         }
-        assertEquals(records.stream().map(PaymentRecord::id).toList(),
-            rereadRecords.stream().map(PaymentRecord::id).toList());
-        assertEquals(records.stream().map(PaymentRecord::csvId).toList(),
-            rereadRecords.stream().map(PaymentRecord::csvId).toList());
+        assertEquals(records.stream().map(PaymentRecord::getId).toList(),
+            rereadRecords.stream().map(PaymentRecord::getId).toList());
+        assertEquals(records.stream().map(PaymentRecord::getCsvId).toList(),
+            rereadRecords.stream().map(PaymentRecord::getCsvId).toList());
     }
 
     @Test
@@ -126,19 +121,6 @@ class ProcessCsvPaymentsInputServiceTest {
     }
 
     @Test
-    void iterateBlockingConvertsOpenCsvRowsThroughTheDeclaredRepresentationMapper() throws Exception {
-        PaymentRecordRepresentationMapper mapper = spy(new PaymentRecordRepresentationMapper());
-        service = new ProcessCsvPaymentsInputService(mapper);
-
-        try (CloseableIterator<PaymentRecord> iterator = service.iterateBlocking(inputFile(tempCsvFile))) {
-            while (iterator.hasNext()) {
-                iterator.next();
-            }
-        }
-
-        verify(mapper, times(2)).fromExternal(any());
-    }
-
     @Test
     @SneakyThrows
     void process_fileNotFound() {
