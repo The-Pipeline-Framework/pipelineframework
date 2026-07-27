@@ -121,7 +121,6 @@ class ProcessCsvPaymentsInputServiceTest {
     }
 
     @Test
-    @Test
     @SneakyThrows
     void process_fileNotFound() {
         CsvPaymentsInputFile csvFile =

@@ -218,6 +218,7 @@
             <groupId>org.pipelineframework</groupId>
             <artifactId>representation-provider-fixture</artifactId>
             <version>${project.version}</version>
+            <classifier>discovery</classifier>
             <scope>test</scope>
         </dependency>
         <dependency>

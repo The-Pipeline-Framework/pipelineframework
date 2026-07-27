@@ -18,6 +18,7 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.pipelineframework.fixture.ExternalFixtureRepresentationProvider;
 import org.pipelineframework.representation.spi.ArtifactDescription;
 import org.pipelineframework.representation.spi.ArtifactKind;
 import org.pipelineframework.representation.spi.ArtifactPhase;
@@ -41,14 +42,11 @@ class RepresentationProviderRegistryTest {
 
     @Test
     void discoversFixtureFromItsSeparateJar() throws Exception {
-        Path fixtureTarget = Path.of(System.getProperty("user.dir"))
-            .resolve("../representation-provider-fixture/target").normalize();
-        Path fixtureJar;
-        try (var files = Files.list(fixtureTarget)) {
-            fixtureJar = files.filter(path -> path.getFileName().toString().endsWith("-discovery.jar"))
-                .findFirst().orElseThrow(() -> new IllegalStateException("Missing packaged external provider fixture JAR."));
+        Path fixtureJar = Path.of(ExternalFixtureRepresentationProvider.class.getProtectionDomain()
+            .getCodeSource().getLocation().toURI());
+        if (!Files.isRegularFile(fixtureJar) || !fixtureJar.getFileName().toString().endsWith("-discovery.jar")) {
+            throw new IllegalStateException("Missing packaged external provider fixture JAR.");
         }
-        assertTrue(Files.isRegularFile(fixtureJar));
         try (FixtureJarClassLoader loader = new FixtureJarClassLoader(fixtureJar.toUri().toURL())) {
             RepresentationProviderRegistry registry = RepresentationProviderRegistry.discover(loader);
             assertTrue(registry.providers().stream().map(provider -> provider.metadata().key())

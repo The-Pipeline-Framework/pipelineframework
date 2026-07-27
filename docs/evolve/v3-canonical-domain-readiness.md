@@ -88,9 +88,9 @@ The next material improvement is direct JSON for generated v3 records and wrappe
 
 #### Active compiler-host bridge
 
-The public Representation Provider SPI is host-neutral: providers receive normalized canonical types, mapping requests,
-boundary claims, resolved representations, schema fragments, and artifact descriptions. They do not receive JSR-269,
-Quarkus, Maven, renderer, or filesystem-writer types.
+The public Representation Provider SPI is host-neutral: providers receive configuration, mapping, boundary, and generation
+requests, and return claims, resolved representations, schema fragments, and artifact descriptions. They do not receive
+JSR-269, Quarkus, Maven, renderer, or filesystem-writer types.
 
 TPF's current production build host is nevertheless the JSR-269 processor. That host owns source-symbol discovery,
 normalizes the YAML and Java source model into provider requests, discovers provider JARs through `META-INF/services`
@@ -108,7 +108,7 @@ This bridge is not a new permanent compiler host. A future build host can supply
 the same artifact descriptions, while retaining the invariant that providers describe artifacts and the host writes
 them.
 
-1. **Completed reference implementation.** The host-neutral SPI now proves dependency discovery, normalized-model access, mapping resolution, host-owned artifact writing, schema composition, and an OpenCSV consumer—without migrating protobuf.
+1. **Completed reference implementation.** The host-neutral SPI now proves provider discovery and processor-host visibility, normalized-model access, mapping resolution, host-owned artifact writing, schema composition, and an OpenCSV consumer—without migrating protobuf.
 2. **Provider lifecycle migration.** Gradually move additional built-in boundaries only where provider ownership removes real duplication; preserve generated protobuf transport adapters.
 3. **Third-party and target expansion.** Extend provider-owned configuration/documentation proof and target-specific capability declarations without promising all-language parity.
 
