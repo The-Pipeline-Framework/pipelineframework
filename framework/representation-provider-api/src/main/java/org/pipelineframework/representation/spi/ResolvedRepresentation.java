@@ -14,7 +14,18 @@ public record ResolvedRepresentation(
             throw new IllegalArgumentException("providerKey and domainType must be present");
         }
         providerKey = providerKey.trim();
-        representationType = representationType == null ? Optional.empty() : representationType;
-        mapperType = mapperType == null ? Optional.empty() : mapperType;
+        representationType = normalized(representationType, "representationType");
+        mapperType = normalized(mapperType, "mapperType");
+    }
+
+    private static Optional<String> normalized(Optional<String> value, String fieldName) {
+        if (value == null || value.isEmpty()) {
+            return Optional.empty();
+        }
+        String normalized = value.orElseThrow().trim();
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank when present");
+        }
+        return Optional.of(normalized);
     }
 }

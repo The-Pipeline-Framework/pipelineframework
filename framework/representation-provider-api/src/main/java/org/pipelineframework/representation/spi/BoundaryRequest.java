@@ -1,6 +1,5 @@
 package org.pipelineframework.representation.spi;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -27,6 +26,6 @@ public record BoundaryRequest(
         }
         cardinality = cardinality.trim();
         declaredBoundaryContracts = declaredBoundaryContracts == null ? Set.of() : Set.copyOf(declaredBoundaryContracts);
-        configuration = configuration == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(configuration));
+        configuration = ImmutableMapSupport.copy(configuration);
     }
 }

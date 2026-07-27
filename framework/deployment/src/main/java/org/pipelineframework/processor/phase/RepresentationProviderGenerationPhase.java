@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.phase;
 
 import com.squareup.javapoet.ClassName;
+import java.util.ArrayList;
 import java.util.List;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.processor.PipelineCompilationContext;
@@ -8,6 +9,7 @@ import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.representation.ProviderArtifactWriter;
 import org.pipelineframework.processor.representation.ResolvedProviderBoundary;
+import org.pipelineframework.representation.spi.ArtifactDescription;
 import org.pipelineframework.representation.spi.ProviderGenerationRequest;
 
 /**
@@ -36,11 +38,15 @@ public final class RepresentationProviderGenerationPhase implements PipelineComp
                 || ctx.getRepresentationProviderRegistry() == null) {
             return;
         }
-        for (ResolvedProviderBoundary boundary : ctx.getResolvedProviderBoundaries()) {
+        List<ResolvedProviderBoundary> boundaries = List.copyOf(ctx.getResolvedProviderBoundaries());
+        List<ArtifactDescription> artifacts = new ArrayList<>();
+        for (ResolvedProviderBoundary boundary : boundaries) {
             var provider = ctx.getRepresentationProviderRegistry().provider(boundary.claim().providerKey());
-            var artifacts = provider.describeArtifacts(new ProviderGenerationRequest(
-                boundary.boundary(), boundary.claim(), boundary.representations(), boundary.configuration()));
-            artifactWriter.write(ctx.getProcessingEnv().getFiler(), artifacts);
+            artifacts.addAll(provider.describeArtifacts(new ProviderGenerationRequest(
+                boundary.boundary(), boundary.claim(), boundary.representations(), boundary.configuration())));
+        }
+        artifactWriter.write(ctx.getProcessingEnv().getFiler(), artifacts);
+        for (ResolvedProviderBoundary boundary : boundaries) {
             replaceServiceWithFacade(ctx, boundary);
         }
     }

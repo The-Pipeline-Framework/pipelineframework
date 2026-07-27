@@ -1,6 +1,5 @@
 package org.pipelineframework.representation.spi;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -21,7 +20,7 @@ public record RepresentationMappingRequest(
         domainType = Objects.requireNonNull(domainType, "domainType must not be null");
         representationType = normalized(representationType);
         mapperType = normalized(mapperType);
-        options = options == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(options));
+        options = ImmutableMapSupport.copy(options);
     }
 
     private static Optional<String> normalized(Optional<String> value) {

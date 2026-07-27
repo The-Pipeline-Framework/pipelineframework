@@ -524,7 +524,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         return (ctx.getStepModels() == null ? List.<PipelineStepModel>of() : ctx.getStepModels()).stream()
             .filter(model -> model != null && !model.sideEffect())
             .map(model -> model.serviceName() + "="
-                + (model.inputMapping() == null ? "<none>" : String.valueOf(model.inputMapping().mapperType())))
+                + (model.inputMapping() == null || model.inputMapping().mapperType() == null
+                    ? "<none>" : String.valueOf(model.inputMapping().mapperType())))
             .collect(java.util.stream.Collectors.joining(", "));
     }
 

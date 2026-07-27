@@ -12,4 +12,10 @@
     <artifactId>representation-provider-api</artifactId>
     <name>TPF Representation Provider API</name>
     <description>Host-neutral contracts for representation providers.</description>
+    <dependencies>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+        </dependency>
+    </dependencies>
 </project>

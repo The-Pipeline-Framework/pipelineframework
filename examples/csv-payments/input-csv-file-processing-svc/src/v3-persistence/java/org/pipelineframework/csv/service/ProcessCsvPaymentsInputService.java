@@ -21,7 +21,6 @@ import java.util.Iterator;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import com.opencsv.bean.CsvToBeanBuilder;
-import lombok.Getter;
 import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 import org.pipelineframework.blocking.CloseableIterator;
@@ -31,13 +30,10 @@ import org.pipelineframework.csv.domain.CsvPaymentsInputFile;
 import org.pipelineframework.opencsv.OpenCsvInputBoundary;
 
 @ApplicationScoped
-@Getter
 public class ProcessCsvPaymentsInputService
     implements OpenCsvInputBoundary<CsvPaymentsInputFile, org.pipelineframework.csv.common.domain.PaymentRecord> {
 
   private static final Logger LOG = Logger.getLogger(ProcessCsvPaymentsInputService.class);
-  private final long rowsPerPeriod = 0L;
-  private final long millisPeriod = 0L;
 
   /**
    * Open a blocking iterator over the CSV records without materializing the full file in memory.
@@ -56,7 +52,7 @@ public class ProcessCsvPaymentsInputService
                     .withIgnoreEmptyLine(true)
                     .build()
                     .iterator();
-        return new OpenCsvPaymentRecordIterator(reader, delegate, input, rowsPerPeriod, millisPeriod);
+        return new OpenCsvPaymentRecordIterator(reader, delegate, input);
         } catch (Exception e) {
             reader.close();
             throw e;
@@ -78,23 +74,17 @@ public class ProcessCsvPaymentsInputService
     private final Reader reader;
     private final Iterator<org.pipelineframework.csv.common.domain.PaymentRecord> delegate;
     private final CsvPaymentsInputFile input;
-    private final long rowsPerPeriod;
-    private final long millisPeriod;
     private long emitted;
     private boolean closed;
 
     private OpenCsvPaymentRecordIterator(
         Reader reader,
         Iterator<org.pipelineframework.csv.common.domain.PaymentRecord> delegate,
-        CsvPaymentsInputFile input,
-        long rowsPerPeriod,
-        long millisPeriod
+        CsvPaymentsInputFile input
     ) {
         this.reader = reader;
         this.delegate = delegate;
         this.input = input;
-        this.rowsPerPeriod = rowsPerPeriod;
-        this.millisPeriod = millisPeriod;
     }
 
     @Override
@@ -129,11 +119,9 @@ public class ProcessCsvPaymentsInputService
         closed = true;
         reader.close();
         LOG.infof(
-            "Closed CSV reader for: %s (iterated %d records, rowsPerPeriod=%d, periodMillis=%d)",
+            "Closed CSV reader for: %s (iterated %d records)",
             input.filepath(),
-            emitted,
-            rowsPerPeriod,
-            millisPeriod);
+            emitted);
     }
   }
 }

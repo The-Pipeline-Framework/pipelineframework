@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.representation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -9,7 +10,9 @@ import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -24,8 +27,14 @@ import org.pipelineframework.representation.spi.CanonicalType;
 import org.pipelineframework.representation.spi.CanonicalTypeShape;
 import org.pipelineframework.representation.spi.ProviderMetadata;
 import org.pipelineframework.representation.spi.ProviderConfiguration;
+import org.pipelineframework.representation.spi.ProviderExecutionStyle;
+import org.pipelineframework.representation.spi.ProviderGenerationRequest;
 import org.pipelineframework.representation.spi.RepresentationProvider;
 import org.pipelineframework.representation.spi.RepresentationScope;
+import org.pipelineframework.representation.spi.ProviderSchemaFragment;
+import org.pipelineframework.representation.spi.ProviderStepContract;
+import org.pipelineframework.representation.spi.RepresentationMappingRequest;
+import org.pipelineframework.representation.spi.ResolvedRepresentation;
 
 class RepresentationProviderRegistryTest {
     private static final CanonicalType PAYMENT = new CanonicalType("Payment", "example.Payment", CanonicalTypeShape.RECORD);
@@ -57,6 +66,60 @@ class RepresentationProviderRegistryTest {
         assertEquals("Representation provider 'missing' is not available to the annotation-processor host for TYPE "
                 + "configuration. Application classpath visibility does not register a provider; add its JAR to the "
                 + "annotation processor path.", diagnostic.message());
+    }
+
+    @Test
+    void providerValueContractsNormalizeAndRejectInvalidValues() {
+        assertThrows(IllegalArgumentException.class, () -> new BoundaryClaim("provider", "binding", "example.Facade"));
+        assertThrows(IllegalArgumentException.class, () -> new ProviderSchemaFragment("bad\"key",
+            Optional.empty(), Optional.empty(), Optional.empty()));
+        assertThrows(IllegalArgumentException.class, () -> new ProviderSchemaFragment("provider",
+            Optional.of("{invalid"), Optional.empty(), Optional.empty()));
+
+        ProviderSchemaFragment schema = new ProviderSchemaFragment("provider",
+            Optional.of(" {\"type\":\"object\"} "), Optional.empty(), Optional.empty());
+        assertEquals(Optional.of("{\"type\":\"object\"}"), schema.globalSchemaJson());
+
+        ResolvedRepresentation representation = new ResolvedRepresentation(" provider ", PAYMENT,
+            Optional.of(" example.Row "), Optional.of(" example.Mapper "));
+        assertEquals("provider", representation.providerKey());
+        assertEquals(Optional.of("example.Row"), representation.representationType());
+        assertEquals(Optional.of("example.Mapper"), representation.mapperType());
+        assertThrows(IllegalArgumentException.class, () -> new ResolvedRepresentation("provider", PAYMENT,
+            Optional.of(" "), Optional.empty()));
+    }
+
+    @Test
+    void registryReuseAndOpaqueConfigurationPreserveDeterministicOrder() {
+        ResolvedRepresentationRegistry registry = new ResolvedRepresentationRegistry();
+        ResolvedRepresentation first = new ResolvedRepresentation("provider", PAYMENT,
+            Optional.of("example.Row"), Optional.of("example.Mapper"));
+        registry.register(first);
+        registry.register(first);
+        assertEquals(first, registry.find("Payment", "provider").orElseThrow());
+        assertEquals(List.of("Payment#provider"), registry.all().keySet().stream().toList());
+        assertThrows(IllegalStateException.class, () -> registry.register(new ResolvedRepresentation("provider", PAYMENT,
+            Optional.of("example.OtherRow"), Optional.of("example.Mapper"))));
+        assertThrows(UnsupportedOperationException.class, () -> registry.all().clear());
+
+        Map<String, Object> options = new LinkedHashMap<>();
+        options.put("first", 1);
+        options.put("second", 2);
+        BoundaryRequest boundary = new BoundaryRequest("Read", "example.Reader", PAYMENT, PAYMENT,
+            "UNARY", Set.of(), options);
+        ProviderConfiguration configuration = new ProviderConfiguration(RepresentationScope.GLOBAL, "provider", options);
+        RepresentationMappingRequest mapping = new RepresentationMappingRequest("provider", PAYMENT,
+            Optional.empty(), Optional.empty(), options);
+        ProviderGenerationRequest generation = new ProviderGenerationRequest(boundary,
+            new BoundaryClaim("provider", "Read", "example.Facade",
+                Optional.of(new ProviderStepContract(ProviderExecutionStyle.BLOCKING_ITERATOR, "UNARY_STREAMING"))),
+            List.of(), options);
+        assertEquals(List.of("first", "second"), boundary.configuration().keySet().stream().toList());
+        assertEquals(List.of("first", "second"), configuration.options().keySet().stream().toList());
+        assertEquals(List.of("first", "second"), mapping.options().keySet().stream().toList());
+        assertEquals(List.of("first", "second"), generation.globalConfiguration().keySet().stream().toList());
+        assertThrows(UnsupportedOperationException.class, () -> boundary.configuration().put("third", 3));
+        assertFalse(boundary.configuration().containsKey("third"));
     }
 
     @Test
@@ -115,7 +178,8 @@ class RepresentationProviderRegistryTest {
         return new RepresentationProvider() {
             @Override public ProviderMetadata metadata() { return new ProviderMetadata(key, Set.of(), Set.of()); }
             @Override public Optional<BoundaryClaim> claim(BoundaryRequest request) {
-                return Optional.of(new BoundaryClaim(key, request.stepName(), "example." + key));
+                return Optional.of(new BoundaryClaim(key, request.stepName(), "example." + key,
+                    Optional.of(new ProviderStepContract(ProviderExecutionStyle.BLOCKING_ITERATOR, "UNARY_STREAMING"))));
             }
         };
     }

@@ -11,6 +11,6 @@ public record ProviderGenerationRequest(BoundaryRequest boundary, BoundaryClaim 
         boundary = java.util.Objects.requireNonNull(boundary, "boundary must not be null");
         claim = java.util.Objects.requireNonNull(claim, "claim must not be null");
         representations = representations == null ? List.of() : List.copyOf(representations);
-        globalConfiguration = globalConfiguration == null ? Map.of() : Map.copyOf(globalConfiguration);
+        globalConfiguration = ImmutableMapSupport.copy(globalConfiguration);
     }
 }

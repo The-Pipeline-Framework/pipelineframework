@@ -1,6 +1,5 @@
 package org.pipelineframework.representation.spi;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Opaque provider configuration at either GLOBAL or TYPE scope. */
@@ -13,6 +12,6 @@ public record ProviderConfiguration(RepresentationScope scope, String providerKe
             throw new IllegalArgumentException("providerKey must not be blank");
         }
         providerKey = providerKey.trim();
-        options = options == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(options));
+        options = ImmutableMapSupport.copy(options);
     }
 }

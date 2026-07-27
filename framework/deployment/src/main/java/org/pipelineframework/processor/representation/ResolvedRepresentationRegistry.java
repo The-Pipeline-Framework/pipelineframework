@@ -3,6 +3,7 @@ package org.pipelineframework.processor.representation;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Collections;
 
 import org.pipelineframework.representation.spi.ResolvedRepresentation;
 
@@ -12,7 +13,8 @@ public final class ResolvedRepresentationRegistry {
 
     public void register(ResolvedRepresentation representation) {
         String key = representation.domainType().name() + "#" + representation.providerKey();
-        if (representations.putIfAbsent(key, representation) != null) {
+        ResolvedRepresentation existing = representations.putIfAbsent(key, representation);
+        if (existing != null && !existing.equals(representation)) {
             throw new IllegalStateException("Duplicate resolved representation '" + key + "'.");
         }
     }
@@ -22,6 +24,6 @@ public final class ResolvedRepresentationRegistry {
     }
 
     public Map<String, ResolvedRepresentation> all() {
-        return Map.copyOf(representations);
+        return Collections.unmodifiableMap(new LinkedHashMap<>(representations));
     }
 }
