@@ -34,7 +34,7 @@ class AwaitCoordinatorCompletionTest {
             .setPackage("org.pipelineframework.checkout")
             .build();
         AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
-            "FraudCheck",
+            "ProtoFraudCheck",
             DescriptorProtos.FileDescriptorProto.class.getName(),
             "com.example.Decision",
             java.time.Duration.ofMinutes(10),
@@ -56,7 +56,41 @@ class AwaitCoordinatorCompletionTest {
         assertTrue(result.record().requestPayload() instanceof Map<?, ?>);
         Map<?, ?> requestPayload = (Map<?, ?>) result.record().requestPayload();
         assertEquals("checkout.proto", requestPayload.get("name"));
-        assertEquals("FraudCheck:name=checkout.proto", result.record().idempotencyKey());
+        assertEquals("ProtoFraudCheck:name=checkout.proto", result.record().idempotencyKey());
+    }
+
+    @Test
+    void createOrGetDerivesIdentityFromCanonicalRequestAndPersistsTransportRequest() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "V3PaymentProvider",
+            Map.class.getName(),
+            Map.class.getName(),
+            "ONE_TO_ONE",
+            java.time.Duration.ofMinutes(10),
+            "interactionId",
+            "interaction-api",
+            Map.of(),
+            List.of("id"),
+            "com.example.transport.PaymentRequest",
+            "com.example.transport.PaymentStatus",
+            value -> Map.of("wireRequest", value),
+            value -> value);
+
+        AwaitCreateResult result = coordinator.createOrGet(
+            descriptor,
+            "tenant-1",
+            "exec-1",
+            1,
+            "cause-1",
+            Map.of("id", "canonical-payment-1"),
+            null,
+            null).await().indefinitely();
+
+        assertEquals("V3PaymentProvider:id=canonical-payment-1", result.record().idempotencyKey());
+        assertEquals(Map.of("wireRequest", Map.of("id", "canonical-payment-1")),
+            result.record().requestPayload());
     }
 
     @Test
@@ -296,6 +330,28 @@ class AwaitCoordinatorCompletionTest {
     }
 
     @Test
+    void failsDeterministicallyWhenDurableInteractionStepCannotResolveADescriptor() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        coordinator.descriptorFactory = new AwaitStepDescriptorFactory();
+        AwaitInteractionRecord record = store.createOrGet(createCommand(20_000L)).await().indefinitely().record();
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> coordinator.complete(
+            new AwaitCompletionCommand(
+                "tenant-1",
+                record.interactionId(),
+                null,
+                "completion-1",
+                Map.of("decision", "approved"),
+                "alice",
+                11_000L)).await().indefinitely());
+
+        assertTrue(error.getMessage().contains("execution exec-1"));
+        assertTrue(error.getMessage().contains("interaction " + record.interactionId()));
+        assertTrue(error.getMessage().contains("stepId=FraudCheck"));
+    }
+
+    @Test
     void loadResumePayloadCoercesStoredSnapshotToDeclaredOutputType() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
@@ -332,6 +388,46 @@ class AwaitCoordinatorCompletionTest {
 
         assertTrue(payload instanceof DescriptorProtos.FileDescriptorProto);
         assertEquals("approval.proto", ((DescriptorProtos.FileDescriptorProto) payload).getName());
+    }
+
+    @Test
+    void defersLegacySemanticPayloadConversionUntilResume() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "LegacyDecision",
+            Map.class.getName(),
+            StrictDecision.class.getName(),
+            java.time.Duration.ofMinutes(10),
+            "interactionId",
+            "interaction-api",
+            Map.of(),
+            List.of());
+        coordinator.descriptorFactory.register(descriptor);
+
+        AwaitCreateResult created = coordinator.createOrGet(
+            descriptor,
+            "tenant-1",
+            "exec-1",
+            1,
+            "cause-1",
+            Map.of("orderId", "o-1"),
+            null,
+            null).await().indefinitely();
+        AwaitCompletionResult completed = coordinator.complete(new AwaitCompletionCommand(
+            "tenant-1",
+            created.record().interactionId(),
+            null,
+            "completion-1",
+            Map.of("orderId", "not-a-uuid"),
+            "alice",
+            11_000L)).await().indefinitely();
+        coordinator.recordCompletion(completed.record(), 11_000L).await().indefinitely();
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> coordinator.loadResumePayload("tenant-1", created.record().unitId()).await().indefinitely());
+
+        assertTrue(error.getMessage().contains("Failed converting await payload"));
     }
 
     @Test
@@ -419,6 +515,8 @@ class AwaitCoordinatorCompletionTest {
         coordinator.adapters = new SimpleInstance<>(List.<AwaitTransportAdapter<?>>of());
         coordinator.resumeTokenService = new AwaitResumeTokenService("secret-value-for-tests");
         coordinator.orchestratorConfig = config;
+        coordinator.descriptorFactory = new AwaitStepDescriptorFactory();
+        coordinator.descriptorFactory.register(descriptor("FraudCheck"));
         return coordinator;
     }
 
@@ -432,7 +530,7 @@ class AwaitCoordinatorCompletionTest {
             "exec-1",
             "FraudCheck",
             1,
-            "com.example.Decision",
+            Map.class.getName(),
             "cause-1",
             idempotencyKey,
             correlationId,
@@ -455,6 +553,9 @@ class AwaitCoordinatorCompletionTest {
             "interaction-api",
             Map.of(),
             List.of("paymentRecordId"));
+    }
+
+    private record StrictDecision(java.util.UUID orderId) {
     }
 
     private static final class SimpleInstance<T> implements Instance<T> {

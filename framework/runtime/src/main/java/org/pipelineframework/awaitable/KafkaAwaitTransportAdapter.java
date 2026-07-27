@@ -73,8 +73,8 @@ public class KafkaAwaitTransportAdapter implements AwaitTransportAdapter<Object>
             interaction.correlationId(),
             interaction.stepId(),
             interaction.deadlineEpochMs(),
-            descriptor.inputType(),
-            descriptor.outputType(),
+            descriptor.transportInputType(),
+            descriptor.transportOutputType(),
             resumeToken,
             normalizedPayload,
             metadata);

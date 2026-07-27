@@ -72,6 +72,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     private static final String STEP_ID = "step_id";
     private static final String STEP_INDEX = "step_index";
     private static final String OUTPUT_TYPE = "output_type";
+    private static final String TRANSPORT_OUTPUT_TYPE = "transport_output_type";
     private static final String CORRELATION_ID = "correlation_id";
     private static final String CAUSATION_ID = "causation_id";
     private static final String IDEMPOTENCY_KEY = "idempotency_key";
@@ -523,7 +524,8 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             command.deadlineEpochMs(),
             command.nowEpochMs(),
             command.nowEpochMs(),
-            command.ttlEpochS());
+            command.ttlEpochS(),
+            command.transportOutputType());
 
         try {
             dynamoClient().transactWriteItems(TransactWriteItemsRequest.builder()
@@ -767,6 +769,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         item.put(STEP_ID, avS(record.stepId()));
         item.put(STEP_INDEX, avN(record.stepIndex()));
         item.put(OUTPUT_TYPE, avS(record.outputType()));
+        item.put(TRANSPORT_OUTPUT_TYPE, avS(record.transportOutputType()));
         item.put(CORRELATION_ID, avS(record.correlationId()));
         item.put(IDEMPOTENCY_KEY, avS(record.idempotencyKey()));
         item.put(VERSION, avN(record.version()));
@@ -817,7 +820,8 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             readLong(item, DEADLINE_EPOCH_MS),
             readLong(item, CREATED_AT_EPOCH_MS),
             readLong(item, UPDATED_AT_EPOCH_MS),
-            readLong(item, TTL_EPOCH_S));
+            readLong(item, TTL_EPOCH_S),
+            readString(item, TRANSPORT_OUTPUT_TYPE));
     }
 
     private <T> Uni<T> blocking(Supplier<T> supplier) {

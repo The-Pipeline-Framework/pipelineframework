@@ -20,6 +20,7 @@ class AwaitInteractionRecordTest {
         assertEquals("review", record.stepId());
         assertEquals(0, record.stepIndex());
         assertEquals("com.example.Output", record.outputType());
+        assertEquals("com.example.Output", record.transportOutputType());
         assertEquals("interaction-id", record.interactionId());
         assertEquals("corr-id", record.correlationId());
         assertEquals("idem-key", record.idempotencyKey());
@@ -64,7 +65,7 @@ class AwaitInteractionRecordTest {
             "", "exec-1", "review", 0, "Out.class",
             "interaction-id", "corr-id", "cause-id", "idem-key",
             0L, AwaitInteractionStatus.WAITING,
-            null, null, null, null, null, "webhook", null,
+            null, null, "unit-1", null, null, null, null, "webhook", null,
             70_000L, 10_000L, 10_000L, Long.MAX_VALUE));
     }
 
@@ -168,6 +169,20 @@ class AwaitInteractionRecordTest {
             70_000L, 10_000L, 10_000L, Long.MAX_VALUE);
 
         assertEquals(0, record.stepIndex());
+    }
+
+    @Test
+    void preservesDistinctTransportOutputTypeForNewRecords() {
+        AwaitInteractionRecord record = new AwaitInteractionRecord(
+            "tenant1", "exec-1", "review", 0, "com.example.domain.Output",
+            "interaction-id", "corr-id", "cause-id", "idem-key",
+            0L, AwaitInteractionStatus.WAITING,
+            null, null, "unit-1", null, null, null, null, "webhook", null,
+            70_000L, 10_000L, 10_000L, Long.MAX_VALUE,
+            "com.example.grpc.PipelineTypes.Output");
+
+        assertEquals("com.example.domain.Output", record.outputType());
+        assertEquals("com.example.grpc.PipelineTypes.Output", record.transportOutputType());
     }
 
     private static AwaitInteractionRecord sampleRecord() {

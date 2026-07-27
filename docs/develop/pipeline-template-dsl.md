@@ -91,6 +91,14 @@ types:
 
 The mapper's `toExternal` direction is used only when writing the persistence representation. Its `fromExternal` direction remains part of the same generic mapper contract for readers and later boundaries; a persistence write does not round-trip the saved entity back into the pipeline.
 
+### Preview representation support
+
+Version 3 representation support is experimental and intentionally narrow. Generated protobuf adapters are the normal transport boundary for generated v3 domain values. The `persistence` consumer supports an explicit mapping for a generated record when both the representation and `Mapper<GeneratedDomain, Representation>` are available to the compiling module. CSV Payments also proves the same generic mapper contract at an OpenCSV row boundary before the first canonical business step.
+
+JSON, REST, checkpoint, object-publish, and broker boundaries retain their current application-owned or transport-owned conversion paths. They do not yet infer or generate a `json` representation from `mappings`. A declared mapping is therefore not a user-selectable conversion mode and does not promise support from every component.
+
+See [v3 canonical-domain readiness](/evolve/v3-canonical-domain-readiness) for the experimental support matrix, known limits, and the representation-consumer inventory.
+
 ### Nominal wrappers
 
 Use `wraps` when the underlying representation has a distinct business identity. `OrderId` and `CustomerId` can both wrap `uuid` without becoming interchangeable.

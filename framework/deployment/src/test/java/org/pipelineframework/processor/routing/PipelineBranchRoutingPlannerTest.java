@@ -145,10 +145,10 @@ class PipelineBranchRoutingPlannerTest {
             new BranchVariantIdentity("OrderDecision", "physical", "PhysicalOrder"),
             new BranchVariantIdentity("OrderDecision", "physicalRetry", "PhysicalOrder")),
             plan.orElseThrow().steps().get(1).acceptedVariants());
-        assertEquals(List.of(ClassName.get("com.example.order.domain", "OrderDecision", "Physical")),
+        assertEquals(List.of(ClassName.get("com.example.order.domain", "PhysicalOrder")),
             plan.orElseThrow().steps().get(1).acceptedDomainTypes());
         assertEquals(List.of("DigitalOrder"), plan.orElseThrow().steps().get(2).acceptedContractTypes());
-        assertEquals(List.of(ClassName.get("com.example.order.domain", "OrderDecision", "Digital")),
+        assertEquals(List.of(ClassName.get("com.example.order.domain", "DigitalOrder")),
             plan.orElseThrow().steps().get(2).acceptedDomainTypes());
         assertEquals(List.of("StockReserved", "LicenseProvisioned"), plan.orElseThrow().steps().get(3).acceptedContractTypes());
         assertEquals(List.of("StockReserved", "LicenseProvisioned"), plan.orElseThrow().steps().get(3).acceptedDomainTypes().stream()

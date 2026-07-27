@@ -29,8 +29,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.MockitoAnnotations;
 import org.pipelineframework.blocking.CloseableIterator;
+import org.pipelineframework.csv.common.mapper.PaymentRecordRepresentationMapper;
 import org.pipelineframework.csv.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.domain.PaymentRecord;
 
@@ -38,6 +38,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 class ProcessCsvPaymentsInputServiceTest {
 
@@ -57,8 +61,7 @@ class ProcessCsvPaymentsInputServiceTest {
                         + UUID.randomUUID()
                         + ",Jane Smith,200.50,EUR\n";
         Files.writeString(tempCsvFile, csvContent);
-        MockitoAnnotations.openMocks(this);
-        service = new ProcessCsvPaymentsInputService();
+        service = new ProcessCsvPaymentsInputService(new PaymentRecordRepresentationMapper());
     }
 
     @AfterEach
@@ -120,6 +123,20 @@ class ProcessCsvPaymentsInputServiceTest {
             assertNotNull(iterator);
             assertTrue(iterator.hasNext());
         }
+    }
+
+    @Test
+    void iterateBlockingConvertsOpenCsvRowsThroughTheDeclaredRepresentationMapper() throws Exception {
+        PaymentRecordRepresentationMapper mapper = spy(new PaymentRecordRepresentationMapper());
+        service = new ProcessCsvPaymentsInputService(mapper);
+
+        try (CloseableIterator<PaymentRecord> iterator = service.iterateBlocking(inputFile(tempCsvFile))) {
+            while (iterator.hasNext()) {
+                iterator.next();
+            }
+        }
+
+        verify(mapper, times(2)).fromExternal(any());
     }
 
     @Test

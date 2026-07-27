@@ -196,7 +196,7 @@ public final class PipelineBranchingMetadataGenerator {
     }
 
     private String runtimeAcceptedType(ClassName domainType, PipelineCompilationContext ctx, boolean transportMappedRuntime) {
-        if (!transportMappedRuntime) {
+        if (!transportMappedRuntime || generatedV3DomainTypes(ctx)) {
             return domainType.reflectionName();
         }
         PipelineTransport transportMode = java.util.Objects.requireNonNullElse(ctx.getTransportMode(), PipelineTransport.GRPC);
@@ -242,6 +242,9 @@ public final class PipelineBranchingMetadataGenerator {
         if (!transportMappedRuntime) {
             return Optional.of(className.reflectionName());
         }
+        if (generatedV3DomainTypes(ctx)) {
+            return Optional.of(canonicalV3InputType(className, ctx).reflectionName());
+        }
         TypeName transportType = clientStepType(className, java.util.Objects.requireNonNullElse(
             ctx.getTransportMode(),
             PipelineTransport.GRPC), pipelineBasePackage(ctx, className));
@@ -249,6 +252,24 @@ public final class PipelineBranchingMetadataGenerator {
             return Optional.of(transportClassName.reflectionName());
         }
         return Optional.of(transportType.toString());
+    }
+
+    private static boolean generatedV3DomainTypes(PipelineCompilationContext ctx) {
+        return ctx.getPipelineTemplateConfig()
+            instanceof org.pipelineframework.config.template.PipelineTemplateConfig templateConfig
+            && templateConfig.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3;
+    }
+
+    private static ClassName canonicalV3InputType(ClassName type, PipelineCompilationContext ctx) {
+        if (!(ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig templateConfig)
+            || templateConfig.basePackage() == null
+            || templateConfig.basePackage().isBlank()) {
+            return type;
+        }
+        String transportPrefix = templateConfig.basePackage() + ".grpc.PipelineTypes.";
+        return type.canonicalName().startsWith(transportPrefix)
+            ? ClassName.get(templateConfig.basePackage() + ".domain", type.simpleName())
+            : type;
     }
 
     private String pipelineBasePackage(PipelineCompilationContext ctx, ClassName domainType) {

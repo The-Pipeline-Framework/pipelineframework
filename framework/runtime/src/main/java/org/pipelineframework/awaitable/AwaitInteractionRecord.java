@@ -54,8 +54,40 @@ public record AwaitInteractionRecord(
     long deadlineEpochMs,
     long createdAtEpochMs,
     long updatedAtEpochMs,
-    long ttlEpochS
+    long ttlEpochS,
+    String transportOutputType
 ) {
+    public AwaitInteractionRecord(
+        String tenantId,
+        String executionId,
+        String stepId,
+        int stepIndex,
+        String outputType,
+        String interactionId,
+        String correlationId,
+        String causationId,
+        String idempotencyKey,
+        long version,
+        AwaitInteractionStatus status,
+        Object requestPayload,
+        Object responsePayload,
+        String unitId,
+        Integer itemIndex,
+        String actor,
+        String assignee,
+        String group,
+        String transportType,
+        Map<String, Object> transportMetadata,
+        long deadlineEpochMs,
+        long createdAtEpochMs,
+        long updatedAtEpochMs,
+        long ttlEpochS
+    ) {
+        this(tenantId, executionId, stepId, stepIndex, outputType, interactionId, correlationId, causationId,
+            idempotencyKey, version, status, requestPayload, responsePayload, unitId, itemIndex, actor, assignee,
+            group, transportType, transportMetadata, deadlineEpochMs, createdAtEpochMs, updatedAtEpochMs,
+            ttlEpochS, outputType);
+    }
     public AwaitInteractionRecord(
         String tenantId,
         String executionId,
@@ -104,7 +136,8 @@ public record AwaitInteractionRecord(
             deadlineEpochMs,
             createdAtEpochMs,
             updatedAtEpochMs,
-            ttlEpochS);
+            ttlEpochS,
+            outputType);
     }
 
     public AwaitInteractionRecord {
@@ -142,6 +175,9 @@ public record AwaitInteractionRecord(
             throw new IllegalArgumentException("itemIndex must be non-negative when set");
         }
         transportMetadata = transportMetadata == null ? Map.of() : Map.copyOf(transportMetadata);
+        transportOutputType = transportOutputType == null || transportOutputType.isBlank()
+            ? outputType
+            : transportOutputType;
     }
 
     public boolean itemInteraction() {

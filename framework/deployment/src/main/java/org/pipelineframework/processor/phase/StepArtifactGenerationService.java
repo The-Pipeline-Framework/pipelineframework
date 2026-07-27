@@ -7,6 +7,7 @@ import java.util.Set;
 import com.google.protobuf.DescriptorProtos;
 import com.squareup.javapoet.ClassName;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateDialect;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.DeploymentRole;
@@ -98,6 +99,10 @@ class StepArtifactGenerationService {
             AwaitClientStepRenderer awaitClientStepRenderer,
             CommandClientStepRenderer commandClientStepRenderer,
             QueryClientStepRenderer queryClientStepRenderer) throws IOException {
+        PipelineTemplateConfig template = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            ? config
+            : null;
+        boolean v3GeneratedDomainTypes = template != null && template.dialect() == PipelineTemplateDialect.V3;
         for (GenerationTarget target : model.enabledTargets()) {
             switch (target) {
                 case COMMAND_CLIENT_STEP -> {
@@ -112,7 +117,9 @@ class StepArtifactGenerationService {
                         cacheKeyGenerator,
                         descriptorSet,
                         ctx.getTransportMode(),
-                        ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config ? config.basePackage() : null));
+                        template == null ? null : template.basePackage(),
+                        null,
+                        v3GeneratedDomainTypes));
                     roleMetadataGenerator.recordClassWithRole(commandClientClassName, clientRole.name());
                 }
                 case AWAIT_CLIENT_STEP -> {
@@ -127,7 +134,9 @@ class StepArtifactGenerationService {
                         cacheKeyGenerator,
                         descriptorSet,
                         ctx.getTransportMode(),
-                        ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config ? config.basePackage() : null));
+                        template == null ? null : template.basePackage(),
+                        null,
+                        v3GeneratedDomainTypes));
                     roleMetadataGenerator.recordClassWithRole(awaitClientClassName, clientRole.name());
                 }
                 case QUERY_CLIENT_STEP -> {
@@ -190,7 +199,11 @@ class StepArtifactGenerationService {
                         grpcRole,
                         enabledAspects,
                         cacheKeyGenerator,
-                        descriptorSet));
+                        descriptorSet,
+                        ctx.getTransportMode(),
+                        template == null ? null : template.basePackage(),
+                        null,
+                        v3GeneratedDomainTypes));
                     roleMetadataGenerator.recordClassWithRole(grpcClassName, grpcRole.name());
                 }
                 case GRPC_SERVICE_SIDE_EFFECT_ONLY -> {
@@ -231,7 +244,11 @@ class StepArtifactGenerationService {
                         clientRole,
                         enabledAspects,
                         cacheKeyGenerator,
-                        descriptorSet));
+                        descriptorSet,
+                        ctx.getTransportMode(),
+                        template == null ? null : template.basePackage(),
+                        null,
+                        v3GeneratedDomainTypes));
                     roleMetadataGenerator.recordClassWithRole(clientClassName, clientRole.name());
                 }
                 case LOCAL_CLIENT_STEP -> {

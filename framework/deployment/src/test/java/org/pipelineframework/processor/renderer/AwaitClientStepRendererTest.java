@@ -95,6 +95,67 @@ class AwaitClientStepRendererTest {
     }
 
     @Test
+    void rendersV3AwaitWithCanonicalContractAndDistinctProtobufTransportMetadata() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("AwaitPaymentProvider")
+            .generatedName("AwaitPaymentProviderService")
+            .servicePackage("com.example.payment")
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .inputMapping(new TypeMapping(
+                ClassName.get("com.example.payment.domain", "PaymentRecord"), null, false))
+            .outputMapping(new TypeMapping(
+                ClassName.get("com.example.payment.domain", "PaymentStatus"), null, false))
+            .enabledTargets(Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .build();
+
+        new AwaitClientStepRenderer().render(model, generationContextV3());
+
+        String source = Files.readString(tempDir.resolve(
+            "com/example/payment/pipeline/AwaitPaymentProviderAwaitClientStep.java"));
+
+        assertTrue(source.contains("StepOneToOne<PaymentRecord, PaymentStatus>"));
+        assertTrue(source.contains("PaymentRecord.class.getName(), PaymentStatus.class.getName(), "
+            + "PipelineTypes.PaymentRecord.class.getName(), PipelineTypes.PaymentStatus.class.getName()"));
+        assertTrue(source.contains("PipelineDomainProtoAdapters.toProto"));
+        assertTrue(source.contains("PipelineDomainProtoAdapters.fromProto"));
+        assertTrue(!source.contains("Mapper<"));
+    }
+
+    @Test
+    void rendersV3StreamingAwaitWithCanonicalPerItemContractAndProtobufMetadata() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("AwaitPaymentProvider")
+            .generatedName("AwaitPaymentProviderService")
+            .servicePackage("com.example.payment")
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .streamingShape(StreamingShape.STREAMING_STREAMING)
+            .executionMode(ExecutionMode.DEFAULT)
+            .inputMapping(new TypeMapping(
+                ClassName.get("com.example.payment.domain", "PaymentRecord"), null, false))
+            .outputMapping(new TypeMapping(
+                ClassName.get("com.example.payment.domain", "PaymentStatus"), null, false))
+            .enabledTargets(Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .build();
+
+        new AwaitClientStepRenderer().render(model, generationContextV3());
+
+        String source = Files.readString(tempDir.resolve(
+            "com/example/payment/pipeline/AwaitPaymentProviderAwaitClientStep.java"));
+
+        assertTrue(source.contains("StepManyToMany<PaymentRecord, PaymentStatus>"));
+        assertTrue(source.contains("support.awaitManyToMany"));
+        assertTrue(source.contains("PaymentRecord.class.getName(), PaymentStatus.class.getName(), "
+            + "PipelineTypes.PaymentRecord.class.getName(), PipelineTypes.PaymentStatus.class.getName()"));
+        assertTrue(source.contains("PipelineDomainProtoAdapters.toProto"));
+        assertTrue(source.contains("PipelineDomainProtoAdapters.fromProto"));
+        assertTrue(!source.contains("Mapper<"));
+    }
+
+    @Test
     void fallsBackToPipelineConfigForRestTransportAndBasePackage() throws IOException {
         Path pipelineConfig = tempDir.resolve("pipeline.yaml");
         Files.writeString(pipelineConfig, """
@@ -220,5 +281,21 @@ class AwaitClientStepRendererTest {
             null,
             null,
             pipelineBasePackage);
+    }
+
+    private GenerationContext generationContextV3() {
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.transport", "GRPC"));
+        return new GenerationContext(
+            processingEnv,
+            tempDir,
+            DeploymentRole.ORCHESTRATOR_CLIENT,
+            Set.of(),
+            null,
+            null,
+            org.pipelineframework.processor.ir.PipelineTransport.GRPC,
+            "com.example.payment",
+            null,
+            true);
     }
 }

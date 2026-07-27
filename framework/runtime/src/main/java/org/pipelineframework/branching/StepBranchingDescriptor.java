@@ -1,5 +1,6 @@
 package org.pipelineframework.branching;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -28,6 +29,7 @@ public record StepBranchingDescriptor(
 
     private static final ConcurrentHashMap<MethodCacheKey, List<VariantExtractor>> extractionCache = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<MethodCacheKey, List<VariantExtractor>> inputVariantExtractionCache = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<RecordUnionConstructorCacheKey, Optional<Constructor<?>>> recordUnionConstructorCache = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<Class<?>, Method[]> sortedMethodsCache = new ConcurrentHashMap<>();
 
     public StepBranchingDescriptor {
@@ -116,32 +118,28 @@ public record StepBranchingDescriptor(
 
     private List<VariantExtractor> findInputVariantExtractors(Class<?> itemClass) {
         return Arrays.stream(getSortedMethods(itemClass))
-            .filter(method -> method.getParameterCount() == 0 && method.getName().startsWith("get"))
-            .filter(method -> !method.getName().substring("get".length()).isBlank())
+            .filter(method -> method.getParameterCount() == 0 && isVariantAccessor(itemClass, method))
             .filter(method -> method.getReturnType() != Void.TYPE)
             .filter(method -> inputVariants.stream().anyMatch(variant ->
-                variant.discriminator().equals(decapitalize(method.getName().substring("get".length())))))
-            .map(method -> variantExtractor(itemClass, method))
+                variant.discriminator().equals(accessorDiscriminator(itemClass, method))))
+            .map(method -> variantExtractor(itemClass, method, accessorDiscriminator(itemClass, method)))
             .toList();
     }
 
-    private VariantExtractor variantExtractor(Class<?> itemClass, Method getter) {
-        String suffix = getter.getName().substring("get".length());
+    private VariantExtractor variantExtractor(Class<?> itemClass, Method getter, String discriminator) {
         getter.trySetAccessible();
-        Optional<Method> hasMethod = findHasMethod(itemClass, suffix);
+        Optional<Method> hasMethod = getter.getName().startsWith("get")
+            ? findHasMethod(itemClass, getter.getName().substring("get".length()))
+            : Optional.empty();
         hasMethod.ifPresent(Method::trySetAccessible);
-        return new VariantExtractor(getter, hasMethod, decapitalize(suffix));
+        return new VariantExtractor(getter, hasMethod, discriminator);
     }
 
     private List<VariantExtractor> findExtractors(Class<?> itemClass) {
         List<VariantExtractor> extractors = new ArrayList<>();
         Method[] methods = getSortedMethods(itemClass);
         for (Method method : methods) {
-            if (method.getParameterCount() != 0 || !method.getName().startsWith("get")) {
-                continue;
-            }
-            String suffix = method.getName().substring("get".length());
-            if (suffix.isBlank()) {
+            if (method.getParameterCount() != 0 || !isVariantAccessor(itemClass, method)) {
                 continue;
             }
             Class<?> returnType = method.getReturnType();
@@ -152,9 +150,26 @@ public record StepBranchingDescriptor(
             if (!returnTypeAccepted) {
                 continue;
             }
-            extractors.add(variantExtractor(itemClass, method));
+            extractors.add(variantExtractor(itemClass, method, accessorDiscriminator(itemClass, method)));
         }
         return List.copyOf(extractors);
+    }
+
+    private static boolean isVariantAccessor(Class<?> itemClass, Method method) {
+        if (method.getName().startsWith("get")) {
+            return !method.getName().substring("get".length()).isBlank();
+        }
+        // Generated v3 unions are Java records such as PaymentStatus.Approved(value).
+        // Their canonical payload accessor is therefore value(), rather than a protobuf
+        // getApproved()-style accessor. Restrict this to records so arbitrary domain methods
+        // cannot become branch extractors.
+        return itemClass.isRecord() && method.getName().equals("value");
+    }
+
+    private static String accessorDiscriminator(Class<?> itemClass, Method method) {
+        return method.getName().startsWith("get")
+            ? decapitalize(method.getName().substring("get".length()))
+            : decapitalize(itemClass.getSimpleName());
     }
 
     private record VariantExtractor(Method getter, Optional<Method> hasMethod, String discriminator) {
@@ -179,6 +194,10 @@ public record StepBranchingDescriptor(
     }
 
     private Optional<Object> wrapWithBuilder(Object item) {
+        Optional<Object> canonicalUnion = wrapWithCanonicalRecordUnion(item);
+        if (canonicalUnion.isPresent()) {
+            return canonicalUnion;
+        }
         try {
             Method newBuilder = inputRuntimeType.getMethod("newBuilder");
             newBuilder.trySetAccessible();
@@ -205,6 +224,43 @@ public record StepBranchingDescriptor(
             // Not a builder-backed wrapper type; fall back to the concrete item.
         }
         return Optional.empty();
+    }
+
+    private Optional<Object> wrapWithCanonicalRecordUnion(Object item) {
+        if (inputRuntimeType == null || !inputRuntimeType.isSealed()) {
+            return Optional.empty();
+        }
+        RecordUnionConstructorCacheKey cacheKey = new RecordUnionConstructorCacheKey(
+            inputRuntimeType, item.getClass(), acceptedVariants);
+        return recordUnionConstructorCache.computeIfAbsent(cacheKey, ignored -> selectRecordUnionConstructor(item.getClass()))
+            .flatMap(constructor -> instantiateRecordUnionConstructor(constructor, item));
+    }
+
+    private Optional<Constructor<?>> selectRecordUnionConstructor(Class<?> payloadType) {
+        List<Constructor<?>> candidates = Arrays.stream(inputRuntimeType.getPermittedSubclasses())
+            .filter(Class::isRecord)
+            .flatMap(variantType -> Arrays.stream(variantType.getDeclaredConstructors()))
+            .filter(constructor -> constructor.getParameterCount() == 1)
+            .filter(constructor -> constructor.getParameterTypes()[0].isAssignableFrom(payloadType))
+            .toList();
+        if (candidates.size() == 1) {
+            return Optional.of(candidates.getFirst());
+        }
+        List<Constructor<?>> selected = candidates.stream()
+            .filter(constructor -> acceptedVariants.stream().anyMatch(variant ->
+                variant.discriminator().equals(decapitalize(constructor.getDeclaringClass().getSimpleName()))))
+            .toList();
+        return selected.size() == 1 ? Optional.of(selected.getFirst()) : Optional.empty();
+    }
+
+    private Optional<Object> instantiateRecordUnionConstructor(Constructor<?> constructor, Object item) {
+        try {
+            constructor.trySetAccessible();
+            Object wrapped = constructor.newInstance(item);
+            return inputRuntimeType.isInstance(wrapped) ? Optional.of(wrapped) : Optional.empty();
+        } catch (ReflectiveOperationException ignored) {
+            return Optional.empty();
+        }
     }
 
     private static Optional<Method> findHasMethod(Class<?> itemClass, String suffix) {
@@ -267,5 +323,12 @@ public record StepBranchingDescriptor(
     }
 
     private record MethodCacheKey(Class<?> itemClass, StepBranchingDescriptor descriptor) {
+    }
+
+    private record RecordUnionConstructorCacheKey(
+        Class<?> inputRuntimeType,
+        Class<?> payloadType,
+        List<BranchVariantIdentity> acceptedVariants
+    ) {
     }
 }

@@ -10,6 +10,7 @@ import java.time.Instant;
  * @param stepId authored await step identifier
  * @param stepIndex authored await step index
  * @param outputType expected completion payload type
+ * @param transportOutputType serialization representation used for completion payloads
  * @param causationId stable causation identifier for deduplication
  * @param idempotencyKey stable interaction idempotency key
  * @param correlationId external correlation identifier
@@ -29,6 +30,7 @@ public record AwaitCreateCommand(
     String stepId,
     int stepIndex,
     String outputType,
+    String transportOutputType,
     String causationId,
     String idempotencyKey,
     String correlationId,
@@ -55,6 +57,8 @@ public record AwaitCreateCommand(
         String assignee,
         String group,
         String transportType,
+        String unitId,
+        Integer itemIndex,
         long nowEpochMs,
         long deadlineEpochMs,
         long ttlEpochS
@@ -64,6 +68,45 @@ public record AwaitCreateCommand(
             executionId,
             stepId,
             stepIndex,
+            outputType,
+            outputType,
+            causationId,
+            idempotencyKey,
+            correlationId,
+            requestPayload,
+            assignee,
+            group,
+            transportType,
+            unitId,
+            itemIndex,
+            nowEpochMs,
+            deadlineEpochMs,
+            ttlEpochS);
+    }
+
+    public AwaitCreateCommand(
+        String tenantId,
+        String executionId,
+        String stepId,
+        int stepIndex,
+        String outputType,
+        String causationId,
+        String idempotencyKey,
+        String correlationId,
+        Object requestPayload,
+        String assignee,
+        String group,
+        String transportType,
+        long nowEpochMs,
+        long deadlineEpochMs,
+        long ttlEpochS
+    ) {
+        this(
+            tenantId,
+            executionId,
+            stepId,
+            stepIndex,
+            outputType,
             outputType,
             causationId,
             idempotencyKey,
@@ -95,6 +138,9 @@ public record AwaitCreateCommand(
         if (outputType == null || outputType.isBlank()) {
             throw new IllegalArgumentException("outputType must not be blank");
         }
+        transportOutputType = transportOutputType == null || transportOutputType.isBlank()
+            ? outputType
+            : transportOutputType;
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new IllegalArgumentException("idempotencyKey must not be blank");
         }

@@ -102,7 +102,7 @@ public class WebhookAwaitTransportAdapter implements AwaitTransportAdapter<Objec
         envelope.put("resumeToken", resumeToken);
         envelope.put("executionId", interaction.executionId());
         envelope.put("stepId", interaction.stepId());
-        envelope.put("outputType", interaction.outputType());
+        envelope.put("outputType", interaction.transportOutputType());
         envelope.put("deadlineEpochMs", interaction.deadlineEpochMs());
         envelope.put("requestPayload", payload);
         Object callbackObj = descriptor.transportConfig().get("callback");
