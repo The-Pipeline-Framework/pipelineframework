@@ -194,7 +194,8 @@ public class PipelineRunner implements AutoCloseable {
         // Terminal object publish only runs after a full pipeline execution, not for partial/early-stop runs.
         Object terminal = current;
         boolean terminalOutputPublished = false;
-        if (stopBeforeStepIndex == orderedSteps.size()) {
+        if (stopBeforeStepIndex == orderedSteps.size()
+            && (awaitContext == null || !awaitContext.durableAwaitBoundary())) {
             ObjectPublishRunner publishRunner = objectPublishRunner();
             if (publishRunner.enabled()) {
                 terminal = publishRunner.publish(current);

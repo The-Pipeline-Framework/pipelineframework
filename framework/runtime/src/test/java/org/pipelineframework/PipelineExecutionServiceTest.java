@@ -292,22 +292,19 @@ class PipelineExecutionServiceTest {
     }
 
     @Test
-    void terminalPortableTransitionPublishesLocallyWithoutReturningMaterializedOutput() throws Exception {
+    void terminalPortableTransitionRetainsMaterializedInputAtCoordinator() throws Exception {
         markStartupHealthy(service);
         JsonTransitionPayloadCodec codec = new JsonTransitionPayloadCodec();
         service.transitionPayloadCodec = codec;
         List<Object> steps = List.of();
         when(releaseIdentityResolver.validateCommandIdentity(any(), isNull())).thenReturn(Optional.empty());
         when(pipelineStepResolver.loadPipelineSteps()).thenReturn(steps);
-        when(pipelineRunner.runFromStepUntilWithContext(any(), eq(steps), eq(0), eq(0)))
-            .thenReturn(new PipelineRunner.ExecutionResult(
-                Multi.createFrom().items("first", "second"), telemetryContext, true));
-
         TransitionResultEnvelope envelope = service.executePortableTransition(transitionCommand(codec, 0, -1))
             .await().indefinitely();
 
         assertEquals(TransitionWorkerOutcome.COMPLETED, envelope.outcome());
-        assertTrue(envelope.terminalOutputPublished());
+        assertTrue(envelope.terminalInputPassthrough());
+        assertFalse(envelope.terminalOutputPublished());
         assertTrue(envelope.outputPayloads().isEmpty());
     }
 

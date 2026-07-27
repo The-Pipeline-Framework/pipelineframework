@@ -39,6 +39,9 @@ record TerminalPublicationPlan(
 
   List<?> decodedOutputItems(TransitionPayloadCodec payloadCodec) {
     Objects.requireNonNull(payloadCodec, "payloadCodec must not be null");
+    if (result.terminalInputPassthrough()) {
+      return persistedOutputItems;
+    }
     return result.decodeOutputItems(payloadCodec);
   }
 }
