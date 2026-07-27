@@ -14,6 +14,9 @@ import zipfile
 from pathlib import Path
 
 PAYLOAD_ENCODING = "application/tpf-transition+json"
+V3_CSV_INPUT_FILE_TYPE = "org.pipelineframework.csv.domain.CsvPaymentsInputFile"
+V2_CSV_INPUT_FILE_TYPE = "org.pipelineframework.csv.common.domain.CsvPaymentsInputFile"
+V2_CSV_INPUT_FILE_TRANSPORT_TYPE = "org.pipelineframework.csv.grpc.PipelineTypes$CsvPaymentsInputFile"
 
 
 def request(method, url, token=None, body=None, timeout=10):
@@ -174,6 +177,15 @@ def pipeline_input_type(release_descriptor_path):
     return input_type
 
 
+def pipeline_input_transport_type(release_descriptor_path):
+    input_type = pipeline_input_type(release_descriptor_path)
+    if input_type == V3_CSV_INPUT_FILE_TYPE:
+        return input_type
+    if input_type == V2_CSV_INPUT_FILE_TYPE:
+        return V2_CSV_INPUT_FILE_TRANSPORT_TYPE
+    raise RuntimeError(f"Unsupported CSV Payments input contract type: {input_type}")
+
+
 def default_idempotency_key(args, input_file):
     """Build a stable key for safe command retries; callers may override it explicitly."""
     path = Path(input_file).resolve()
@@ -196,7 +208,7 @@ def submit_csv_input_file(args, input_file):
         "inputPayload": encoded_payload({
             "filepath": str(path),
             "csvFolderPath": str(folder),
-        }, pipeline_input_type(args.release_descriptor_path)),
+        }, pipeline_input_transport_type(args.release_descriptor_path)),
         "idempotencyKey": args.idempotency_key or default_idempotency_key(args, path),
         "outputStreaming": False,
     }

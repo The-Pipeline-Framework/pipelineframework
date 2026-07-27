@@ -141,7 +141,7 @@ class QueueAsyncSegmentPipeline {
         .recordSegmentAttemptStarted(record, segment.transitionKey(), claimedAtEpochMs)
         .chain(() -> transitionCommand(segment))
         .onItem().transformToUni(command -> transitionWorkerExecutor.execute(worker, command))
-        .onItem().transform(result -> SegmentCommitPlan.from(segment, result))
+        .onItem().transform(result -> SegmentCommitPlan.from(segment, result, payloadCodec.get()))
         .onItem().transformToUni(plan -> segmentCommitEffects.commit(plan, itemContinuationHandler))
         .onFailure(AwaitThrowableSupport::containsAwaitSuspension)
         .recoverWithUni(failure -> suspendedPlan(segment, failure)

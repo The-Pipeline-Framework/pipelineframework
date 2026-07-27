@@ -162,7 +162,11 @@ public class PipelineRunner implements AutoCloseable {
             (step, value, index) -> {
                 AwaitExecutionContext awaitContextSnapshot = awaitContext == null
                     ? null
-                    : new AwaitExecutionContext(awaitContext.tenantId(), awaitContext.executionId(), index);
+                    : new AwaitExecutionContext(
+                        awaitContext.tenantId(),
+                        awaitContext.executionId(),
+                        index,
+                        awaitContext.durableAwaitBoundary());
 
                 if (step instanceof Configurable configurable) {
                     configurable.initialiseWithConfig(configFactory.buildConfig(step.getClass(), pipelineConfig));
@@ -190,7 +194,8 @@ public class PipelineRunner implements AutoCloseable {
         // Terminal object publish only runs after a full pipeline execution, not for partial/early-stop runs.
         Object terminal = current;
         boolean terminalOutputPublished = false;
-        if (stopBeforeStepIndex == orderedSteps.size()) {
+        if (stopBeforeStepIndex == orderedSteps.size()
+            && (awaitContext == null || !awaitContext.durableAwaitBoundary())) {
             ObjectPublishRunner publishRunner = objectPublishRunner();
             if (publishRunner.enabled()) {
                 terminal = publishRunner.publish(current);

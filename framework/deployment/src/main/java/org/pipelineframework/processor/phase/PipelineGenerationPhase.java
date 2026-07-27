@@ -371,7 +371,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             return;
         }
         boolean v3GeneratedDomainTypes = hasV3GeneratedDomainTypes(ctx);
-        Optional<PipelineStepModel> terminalModel = terminalBusinessStepWithOutputMapper(ctx);
+        Optional<PipelineStepModel> terminalModel = v3GeneratedDomainTypes
+            ? terminalBusinessStepWithDeploymentRole(ctx)
+            : terminalBusinessStepWithOutputMapper(ctx);
         if (!v3GeneratedDomainTypes && terminalModel.isEmpty()) {
             throw new IllegalStateException("Object Publish requires a terminal business step with an outbound mapper");
         }
@@ -423,7 +425,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             return;
         }
         boolean v3GeneratedDomainTypes = hasV3GeneratedDomainTypes(ctx);
-        Optional<PipelineStepModel> firstModel = firstBusinessStepWithInputMapper(ctx);
+        Optional<PipelineStepModel> firstModel = v3GeneratedDomainTypes
+            ? firstBusinessStepWithDeploymentRole(ctx)
+            : firstBusinessStepWithInputMapper(ctx);
         if (!v3GeneratedDomainTypes && firstModel.isEmpty()) {
             throw new IllegalStateException(
                 "Object Ingest requires the first business step to declare an inbound mapper; available business steps: "
@@ -538,6 +542,16 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         return Optional.empty();
     }
 
+    private Optional<PipelineStepModel> firstBusinessStepWithDeploymentRole(PipelineCompilationContext ctx) {
+        List<PipelineStepModel> models = ctx.getStepModels() == null ? List.of() : ctx.getStepModels();
+        for (PipelineStepModel model : models) {
+            if (model != null && !model.sideEffect() && model.deploymentRole() != null) {
+                return Optional.of(model);
+            }
+        }
+        return Optional.empty();
+    }
+
     private static String describeInputMappings(PipelineCompilationContext ctx) {
         return (ctx.getStepModels() == null ? List.<PipelineStepModel>of() : ctx.getStepModels()).stream()
             .filter(model -> model != null && !model.sideEffect())
@@ -555,6 +569,17 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 && !model.sideEffect()
                 && model.outputMapping() != null
                 && model.outputMapping().mapperType() != null) {
+                return Optional.of(model);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<PipelineStepModel> terminalBusinessStepWithDeploymentRole(PipelineCompilationContext ctx) {
+        List<PipelineStepModel> models = ctx.getStepModels() == null ? List.of() : ctx.getStepModels();
+        for (int i = models.size() - 1; i >= 0; i--) {
+            PipelineStepModel model = models.get(i);
+            if (model != null && !model.sideEffect() && model.deploymentRole() != null) {
                 return Optional.of(model);
             }
         }

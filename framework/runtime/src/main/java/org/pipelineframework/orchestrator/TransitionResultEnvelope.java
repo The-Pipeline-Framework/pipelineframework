@@ -18,13 +18,14 @@ public record TransitionResultEnvelope(
     TransitionAwaitSuspension awaitSuspension,
     TransitionFailureEnvelope failure,
     @JsonIgnore List<?> decodedOutputItems,
-    boolean terminalOutputPublished) {
+    boolean terminalOutputPublished,
+    boolean terminalInputPassthrough) {
     public TransitionResultEnvelope(
         TransitionWorkerOutcome outcome,
         List<SerializedTransitionPayload> outputPayloads,
         TransitionAwaitSuspension awaitSuspension,
         TransitionFailureEnvelope failure) {
-        this(outcome, outputPayloads, awaitSuspension, failure, null, false);
+        this(outcome, outputPayloads, awaitSuspension, failure, null, false, false);
     }
 
     public TransitionResultEnvelope(
@@ -33,7 +34,7 @@ public record TransitionResultEnvelope(
         TransitionAwaitSuspension awaitSuspension,
         TransitionFailureEnvelope failure,
         List<?> decodedOutputItems) {
-        this(outcome, outputPayloads, awaitSuspension, failure, decodedOutputItems, false);
+        this(outcome, outputPayloads, awaitSuspension, failure, decodedOutputItems, false, false);
     }
 
     public TransitionResultEnvelope {
@@ -57,6 +58,16 @@ public record TransitionResultEnvelope(
         }
         if (outcome != TransitionWorkerOutcome.COMPLETED && terminalOutputPublished) {
             throw new IllegalArgumentException("Only COMPLETED transition envelopes may mark terminal output as published");
+        }
+        if (outcome != TransitionWorkerOutcome.COMPLETED && terminalInputPassthrough) {
+            throw new IllegalArgumentException("Only COMPLETED transition envelopes may retain terminal input");
+        }
+        if (terminalOutputPublished && terminalInputPassthrough) {
+            throw new IllegalArgumentException("A terminal transition cannot publish output and retain terminal input");
+        }
+        if (terminalInputPassthrough && (!outputPayloads.isEmpty() || decodedOutputItems != null)) {
+            throw new IllegalArgumentException(
+                "A terminal input passthrough transition must not include output items");
         }
         if (outcome == TransitionWorkerOutcome.WAITING_EXTERNAL && (!outputPayloads.isEmpty() || failure != null || decodedOutputItems != null)) {
             throw new IllegalArgumentException("WAITING_EXTERNAL transition envelope must only include awaitSuspension");
@@ -91,7 +102,8 @@ public record TransitionResultEnvelope(
             null,
             null,
             null,
-            terminalOutputPublished);
+            terminalOutputPublished,
+            false);
     }
 
     /**
@@ -111,7 +123,26 @@ public record TransitionResultEnvelope(
             null,
             null,
             outputItems == null ? List.of() : outputItems,
-            terminalOutputPublished);
+            terminalOutputPublished,
+            false);
+    }
+
+    /**
+     * Creates a completed envelope for a terminal transition whose input is already materialized
+     * at the coordinator. The worker performs no work and does not copy the materialized payload
+     * across the worker boundary.
+     *
+     * @return completed terminal pass-through envelope
+     */
+    public static TransitionResultEnvelope completedTerminalInputPassthrough() {
+        return new TransitionResultEnvelope(
+            TransitionWorkerOutcome.COMPLETED,
+            List.of(),
+            null,
+            null,
+            null,
+            false,
+            true);
     }
 
     /**

@@ -206,7 +206,11 @@ public class CommandStepSupport {
         if (context == null) {
             throw new IllegalStateException("Command step executed without queue-async execution context.");
         }
-        return new AwaitExecutionContext(context.tenantId(), context.executionId(), context.currentStepIndex());
+        return new AwaitExecutionContext(
+            context.tenantId(),
+            context.executionId(),
+            context.currentStepIndex(),
+            context.durableAwaitBoundary());
     }
 
     @SuppressWarnings("unchecked")

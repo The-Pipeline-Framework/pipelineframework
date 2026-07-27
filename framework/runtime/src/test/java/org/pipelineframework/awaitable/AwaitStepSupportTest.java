@@ -467,6 +467,52 @@ class AwaitStepSupportTest {
     }
 
     @Test
+    void durableAwaitBoundarySuspendsInsteadOfRetainingTheLiveWorkerSession() {
+        AwaitStepSupport support = support();
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2, true));
+        AwaitStepDescriptor testDescriptor = kafkaDescriptor();
+        when(awaitCoordinator.createOrGetItem(
+            org.mockito.ArgumentMatchers.eq(testDescriptor),
+            org.mockito.ArgumentMatchers.eq("tenant1"),
+            org.mockito.ArgumentMatchers.eq("exec123"),
+            org.mockito.ArgumentMatchers.eq(2),
+            any(), any(), any(), anyInt(),
+            org.mockito.ArgumentMatchers.isNull(),
+            org.mockito.ArgumentMatchers.isNull()))
+            .thenAnswer(invocation -> {
+                int index = invocation.getArgument(7, Integer.class);
+                return Uni.createFrom().item(new AwaitCreateResult(itemRecord(
+                    index, AwaitInteractionStatus.WAITING, invocation.getArgument(5), null), false));
+            });
+        when(awaitCoordinator.dispatch(org.mockito.ArgumentMatchers.eq(testDescriptor), any()))
+            .thenAnswer(invocation -> {
+                AwaitInteractionRecord record = invocation.getArgument(1, AwaitInteractionRecord.class);
+                return Uni.createFrom().item(record);
+            });
+        when(awaitCoordinator.markDispatchComplete(any(), any(), anyInt(), anyLong()))
+            .thenAnswer(invocation -> Uni.createFrom().item(awaitUnit(
+                invocation.getArgument(1, String.class), AwaitUnitStatus.WAITING_EXTERNAL, 3, 0, true)));
+
+        assertThrows(
+            AwaitSuspendedException.class,
+            () -> support.<String, String>awaitOneToOneStream(
+                    testDescriptor,
+                    Multi.createFrom().items("first", "second", "third"))
+                .collect().asList()
+                .await().indefinitely());
+
+        org.mockito.Mockito.verify(awaitCoordinator).markDispatchComplete(
+            org.mockito.ArgumentMatchers.eq("tenant1"),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.eq(3),
+            anyLong());
+        org.mockito.Mockito.verify(awaitCoordinator, org.mockito.Mockito.times(3))
+            .dispatch(org.mockito.ArgumentMatchers.eq(testDescriptor), any());
+        org.mockito.Mockito.verify(awaitCoordinator, never()).supportsLiveAwaitWindow(testDescriptor);
+    }
+
+    @Test
     void sequentialOneToOneStreamUsesAnEffectiveWindowOfOne() {
         AwaitStepSupport support = support();
         support.pipelineConfig.maxConcurrency(2);

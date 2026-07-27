@@ -3,9 +3,12 @@ package org.pipelineframework;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.orchestrator.ExecutionInputShape;
+import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionStatus;
+import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
 import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
 import org.pipelineframework.orchestrator.TransitionResultEnvelope;
 
@@ -69,7 +72,44 @@ class SegmentCommitPlanTest {
     assertTrue(failed.failure().getMessage().contains("boom"));
   }
 
+  @Test
+  void terminalInputPassThroughUsesCoordinatorMaterializedInput() {
+    JsonTransitionPayloadCodec codec = new JsonTransitionPayloadCodec();
+    ExecutionInputSnapshot input = new ExecutionInputSnapshot(
+        ExecutionInputShape.MULTI,
+        List.of(codec.encode("a"), codec.encode("b")));
+    ClaimedSegment segment = ClaimedSegment.from(record(
+        "exec-terminal",
+        ExecutionResultShape.MATERIALIZED_MULTI,
+        input));
+
+    CompletedSegment completed = assertInstanceOf(CompletedSegment.class,
+        SegmentCommitPlan.from(segment, TransitionResultEnvelope.completedTerminalInputPassthrough(), codec));
+
+    assertEquals(List.of("a", "b"), completed.outputItems());
+    assertEquals(List.of("a", "b"), completed.terminalPublication().decodedOutputItems(codec));
+  }
+
+  @Test
+  void terminalInputPassThroughDecodesSingleSerializedInput() {
+    JsonTransitionPayloadCodec codec = new JsonTransitionPayloadCodec();
+    ExecutionInputSnapshot input = new ExecutionInputSnapshot(ExecutionInputShape.UNI, codec.encode("one"));
+    ClaimedSegment segment = ClaimedSegment.from(record("exec-terminal-single", ExecutionResultShape.SINGLE, input));
+
+    CompletedSegment completed = assertInstanceOf(CompletedSegment.class,
+        SegmentCommitPlan.from(segment, TransitionResultEnvelope.completedTerminalInputPassthrough(), codec));
+
+    assertEquals(List.of("one"), completed.outputItems());
+  }
+
   private static ExecutionRecord<Object, Object> record(String executionId, ExecutionResultShape resultShape) {
+    return record(executionId, resultShape, "input");
+  }
+
+  private static ExecutionRecord<Object, Object> record(
+      String executionId,
+      ExecutionResultShape resultShape,
+      Object input) {
     return new ExecutionRecord<>(
         "tenant-1",
         executionId,
@@ -86,7 +126,7 @@ class SegmentCommitPlanTest {
         0L,
         0L,
         null,
-        "input",
+        input,
         null,
         null,
         null,
