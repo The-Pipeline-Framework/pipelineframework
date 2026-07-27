@@ -403,6 +403,7 @@ class AwaitCoordinatorCompletionTest {
             "interaction-api",
             Map.of(),
             List.of());
+        coordinator.descriptorFactory.register(descriptor);
 
         AwaitCreateResult created = coordinator.createOrGet(
             descriptor,

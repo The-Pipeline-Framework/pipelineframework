@@ -2,6 +2,7 @@ package org.pipelineframework.awaitable;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -108,6 +109,26 @@ class AwaitStepDescriptorFactoryTest {
             assertEquals(descriptor.inputType(), descriptor.transportInputType());
             assertEquals(descriptor.outputType(), descriptor.transportOutputType());
             assertEquals("interaction-api", descriptor.transportType());
+        } finally {
+            factory.shutdown();
+        }
+    }
+
+    @Test
+    void rebuildsLegacyAwaitDescriptorOffTheCallingThread() throws Exception {
+        Path explicit = tempDir.resolve("pipeline.yaml");
+        Files.writeString(explicit, pipelineYaml("interaction-api", ""));
+        System.setProperty("pipeline.config", explicit.toString());
+
+        AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
+        try {
+            AtomicReference<String> resolutionThread = new AtomicReference<>();
+
+            factory.descriptorByStepId("ProcessAwaitPaymentProviderService")
+                .invoke(ignored -> resolutionThread.set(Thread.currentThread().getName()))
+                .await().indefinitely();
+
+            assertTrue(resolutionThread.get().startsWith("await-descriptor-loader-"));
         } finally {
             factory.shutdown();
         }

@@ -150,7 +150,9 @@ public class AwaitStepDescriptorFactory {
      * identities, so they must come from this rebuilt descriptor rather than be guessed.
      */
     public Uni<AwaitStepDescriptor> descriptorByStepId(String stepId) {
-        return Uni.createFrom().item(() -> descriptorByStepIdNow(stepId));
+        return Uni.createFrom()
+            .item(() -> descriptorByStepIdNow(stepId))
+            .runSubscriptionOn(blockingExecutor);
     }
 
     public AwaitStepDescriptor descriptorByStepIdNow(String stepId) {
