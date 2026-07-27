@@ -14,7 +14,6 @@ import zipfile
 from pathlib import Path
 
 PAYLOAD_ENCODING = "application/tpf-transition+json"
-CSV_INPUT_FILE_TYPE = "org.pipelineframework.csv.grpc.PipelineTypes$CsvPaymentsInputFile"
 
 
 def request(method, url, token=None, body=None, timeout=10):
@@ -154,6 +153,27 @@ def encoded_payload(payload, payload_type):
     }
 
 
+def pipeline_input_type(release_descriptor_path):
+    descriptor = json.loads(Path(release_descriptor_path).read_text(encoding="utf-8"))
+    artifacts = descriptor.get("artifacts", [])
+    if not artifacts:
+        raise RuntimeError("Release descriptor does not declare a pipeline artifact")
+
+    artifact_path = Path(artifacts[0]["uri"])
+    with zipfile.ZipFile(artifact_path) as jar:
+        with jar.open("META-INF/pipeline/pipeline-contract.json") as contract_file:
+            contract = json.load(contract_file)
+
+    steps = contract.get("steps", [])
+    if not steps:
+        raise RuntimeError("Pipeline contract does not declare any steps")
+    first_step = min(steps, key=lambda step: step["index"])
+    input_type = first_step.get("inputTypeId")
+    if not input_type:
+        raise RuntimeError("Pipeline contract does not declare the first step input type")
+    return input_type
+
+
 def default_idempotency_key(args, input_file):
     """Build a stable key for safe command retries; callers may override it explicitly."""
     path = Path(input_file).resolve()
@@ -176,7 +196,7 @@ def submit_csv_input_file(args, input_file):
         "inputPayload": encoded_payload({
             "filepath": str(path),
             "csvFolderPath": str(folder),
-        }, CSV_INPUT_FILE_TYPE),
+        }, pipeline_input_type(args.release_descriptor_path)),
         "idempotencyKey": args.idempotency_key or default_idempotency_key(args, path),
         "outputStreaming": False,
     }
@@ -348,6 +368,7 @@ def main():
     run.add_argument("--tenant-id", required=True)
     run.add_argument("--pipeline-id", required=True)
     run.add_argument("--control-plane-token", required=True)
+    run.add_argument("--release-descriptor-path", required=True)
     run.add_argument("--input-dir", required=True)
     run.add_argument("--output-dir", required=True)
     run.add_argument("--source-csv")

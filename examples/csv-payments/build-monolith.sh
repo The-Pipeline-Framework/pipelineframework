@@ -40,6 +40,7 @@ PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-LOCAL}"
 ORCHESTRATOR_ARGS=()
 for arg in "$@"; do
   if [[ "$arg" == "-DskipTests" \
+    || "$arg" == "-Dcsv.v3.persistence=true" \
     || "$arg" == -Dmaven.repo.local=* \
     || "$arg" == -Dquarkus.container-image.* \
     || "$arg" == -Dquarkus.jib.* ]]; then

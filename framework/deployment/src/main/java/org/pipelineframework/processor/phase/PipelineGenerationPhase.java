@@ -370,27 +370,38 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         if (objectPublishConfig.isEmpty() || ctx.isTransportModeLocal() || ctx.isPluginHost()) {
             return;
         }
-        PipelineStepModel terminalModel = terminalBusinessStepWithOutputMapper(ctx)
-            .orElseThrow(() -> new IllegalStateException(
-                "Object Publish requires a terminal business step with an outbound mapper"));
-        TypeName domainType = terminalModel.outputMapping().domainType();
-        TypeName mapperType = terminalModel.outputMapping().mapperType();
-        TypeName externalType = objectPublishExternalType(ctx, terminalModel);
+        boolean v3GeneratedDomainTypes = hasV3GeneratedDomainTypes(ctx);
+        Optional<PipelineStepModel> terminalModel = terminalBusinessStepWithOutputMapper(ctx);
+        if (!v3GeneratedDomainTypes && terminalModel.isEmpty()) {
+            throw new IllegalStateException("Object Publish requires a terminal business step with an outbound mapper");
+        }
+        TypeName domainType = v3GeneratedDomainTypes
+            ? v3ObjectPublishType(ctx)
+            : terminalModel.orElseThrow().outputMapping().domainType();
+        TypeName mapperType = v3GeneratedDomainTypes ? null : terminalModel.orElseThrow().outputMapping().mapperType();
+        TypeName externalType = v3GeneratedDomainTypes
+            ? domainType
+            : objectPublishExternalType(ctx, terminalModel.orElseThrow());
+        DeploymentRole adapterRole = terminalModel
+            .map(model -> resolveClientRole(model.deploymentRole()))
+            .orElse(DeploymentRole.PIPELINE_SERVER);
         GenerationContext adapterContext = new GenerationContext(
             ctx.getProcessingEnv(),
-            generationPathResolver.resolveRoleOutputDir(ctx, resolveClientRole(terminalModel.deploymentRole())),
-            resolveClientRole(terminalModel.deploymentRole()),
+            generationPathResolver.resolveRoleOutputDir(ctx, adapterRole),
+            adapterRole,
             Set.of(),
             cacheKeyGenerator,
             descriptorSet,
             ctx.getTransportMode(),
-            objectPublishConfig.get().basePackage());
+            objectPublishConfig.get().basePackage(),
+            null,
+            v3GeneratedDomainTypes);
         try {
             ClassName generatedClass = renderer.render(
                 objectPublishConfig.get().basePackage(), domainType, externalType, mapperType, adapterContext);
             roleMetadataGenerator.recordClassWithRole(
                 generatedClass.canonicalName(),
-                resolveClientRole(terminalModel.deploymentRole()).name());
+                adapterRole.name());
         } catch (IOException | RuntimeException e) {
             String message = "Failed to generate Object Publish terminal output adapter: " + e.getMessage();
             if (ctx.getProcessingEnv() != null) {
@@ -411,20 +422,27 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         if (objectIngestConfig.isEmpty() || ctx.isTransportModeLocal() || ctx.isPluginHost()) {
             return;
         }
-        PipelineStepModel firstModel = firstBusinessStepWithInputMapper(ctx)
-            .orElseThrow(() -> new IllegalStateException(
+        boolean v3GeneratedDomainTypes = hasV3GeneratedDomainTypes(ctx);
+        Optional<PipelineStepModel> firstModel = firstBusinessStepWithInputMapper(ctx);
+        if (!v3GeneratedDomainTypes && firstModel.isEmpty()) {
+            throw new IllegalStateException(
                 "Object Ingest requires the first business step to declare an inbound mapper; available business steps: "
-                    + describeInputMappings(ctx)));
-        TypeName domainType = firstModel.inputMapping().domainType();
-        TypeName mapperType = firstModel.inputMapping().mapperType();
-        boolean v3GeneratedDomainTypes = ctx.getPipelineTemplateConfig()
-            instanceof org.pipelineframework.config.template.PipelineTemplateConfig template
-            && template.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3;
-        TypeName externalType = v3GeneratedDomainTypes ? domainType : objectIngestExternalType(ctx, firstModel);
+                    + describeInputMappings(ctx));
+        }
+        TypeName domainType = v3GeneratedDomainTypes
+            ? v3ObjectIngestType(ctx)
+            : firstModel.orElseThrow().inputMapping().domainType();
+        TypeName mapperType = v3GeneratedDomainTypes ? null : firstModel.orElseThrow().inputMapping().mapperType();
+        TypeName externalType = v3GeneratedDomainTypes
+            ? domainType
+            : objectIngestExternalType(ctx, firstModel.orElseThrow());
+        DeploymentRole adapterRole = firstModel
+            .map(model -> resolveClientRole(model.deploymentRole()))
+            .orElse(DeploymentRole.PIPELINE_SERVER);
         GenerationContext adapterContext = new GenerationContext(
             ctx.getProcessingEnv(),
-            generationPathResolver.resolveRoleOutputDir(ctx, resolveClientRole(firstModel.deploymentRole())),
-            resolveClientRole(firstModel.deploymentRole()),
+            generationPathResolver.resolveRoleOutputDir(ctx, adapterRole),
+            adapterRole,
             Set.of(),
             cacheKeyGenerator,
             descriptorSet,
@@ -437,7 +455,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 objectIngestConfig.get().basePackage(), domainType, externalType, mapperType, adapterContext);
             roleMetadataGenerator.recordClassWithRole(
                 generatedClass.canonicalName(),
-                resolveClientRole(firstModel.deploymentRole()).name());
+                adapterRole.name());
         } catch (IOException | RuntimeException e) {
             String message = "Failed to generate Object Ingest input adapter: " + e.getMessage();
             if (ctx.getProcessingEnv() != null) {
@@ -541,6 +559,22 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             }
         }
         return Optional.empty();
+    }
+
+    private static boolean hasV3GeneratedDomainTypes(PipelineCompilationContext ctx) {
+        return ctx.getPipelineTemplateConfig()
+            instanceof org.pipelineframework.config.template.PipelineTemplateConfig template
+            && template.version() == 3;
+    }
+
+    private static TypeName v3ObjectIngestType(PipelineCompilationContext ctx) {
+        var template = (org.pipelineframework.config.template.PipelineTemplateConfig) ctx.getPipelineTemplateConfig();
+        return ClassName.bestGuess(template.input().object().type());
+    }
+
+    private static TypeName v3ObjectPublishType(PipelineCompilationContext ctx) {
+        var template = (org.pipelineframework.config.template.PipelineTemplateConfig) ctx.getPipelineTemplateConfig();
+        return ClassName.bestGuess(template.output().object().type());
     }
 
     private TypeName objectPublishExternalType(

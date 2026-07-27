@@ -159,11 +159,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                     + boundary.boundary().stepName() + "' has no YAML step definition."));
             ClassName inputType = ClassName.bestGuess(boundary.boundary().inputType().targetTypeName());
             ClassName outputType = ClassName.bestGuess(boundary.boundary().outputType().targetTypeName());
-            ClassName inboundMapper = resolveInternalMapper(ctx, step.name(), "inboundMapper", step.inboundMapper(), null, inputType);
-            ClassName outboundMapper = resolveInternalMapper(ctx, step.name(), "outboundMapper", step.outboundMapper(), null, outputType);
-            if (inboundMapper == INVALID_CLASS_NAME || outboundMapper == INVALID_CLASS_NAME) {
-                continue;
-            }
             StreamingShape streamingShape = StreamingShape.valueOf(contract.cardinality());
             ServiceApiKind apiKind = ServiceApiKind.valueOf(contract.executionStyle().name());
             models.add(new PipelineStepModel.Builder()
@@ -171,8 +166,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 .generatedName(toYamlServiceName(step.name()))
                 .servicePackage(deriveYamlServicePackage(inputType, ctxWarningLogger))
                 .serviceClassName(ClassName.bestGuess(serviceType))
-                .inputMapping(new TypeMapping(inputType, inboundMapper, inboundMapper != null, inputType))
-                .outputMapping(new TypeMapping(outputType, outboundMapper, outboundMapper != null, outputType))
+                .inputMapping(new TypeMapping(inputType, null, false, inputType))
+                .outputMapping(new TypeMapping(outputType, null, false, outputType))
                 .streamingShape(streamingShape)
                 .enabledTargets(java.util.EnumSet.of(GenerationTarget.GRPC_SERVICE, GenerationTarget.CLIENT_STEP))
                 .executionMode(executionMode(ctx, step, apiKind))
