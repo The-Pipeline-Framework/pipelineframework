@@ -125,6 +125,41 @@ class AwaitClientStepRendererTest {
     }
 
     @Test
+    void rendersV3AwaitWithProtobufTransportMetadataWhenPipelineIsLocal() throws IOException {
+        Path pipelineConfig = tempDir.resolve("pipeline.v3.yaml");
+        Files.writeString(pipelineConfig, """
+            version: 3
+            basePackage: com.example.payment
+            transport: GRPC
+            steps: []
+            aspects: []
+            """);
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("AwaitPaymentProvider")
+            .generatedName("AwaitPaymentProviderService")
+            .servicePackage("com.example.payment")
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .inputMapping(TypeMapping.withoutMapper(ClassName.get("com.example.payment.domain", "PaymentRecord")))
+            .outputMapping(TypeMapping.withoutMapper(ClassName.get("com.example.payment.domain", "PaymentStatus")))
+            .enabledTargets(Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .build();
+
+        new AwaitClientStepRenderer().render(model, generationContext(
+            Map.of("pipeline.transport", "LOCAL", "pipeline.config", pipelineConfig.toString())));
+
+        String source = Files.readString(tempDir.resolve(
+            "com/example/payment/pipeline/AwaitPaymentProviderAwaitClientStep.java"));
+
+        assertTrue(source.contains("StepOneToOne<PaymentRecord, PaymentStatus>"));
+        assertTrue(source.contains("PipelineTypes.PaymentRecord.class.getName(), PipelineTypes.PaymentStatus.class.getName()"));
+        assertTrue(source.contains("PipelineDomainProtoAdapters.toProto"));
+        assertTrue(source.contains("PipelineDomainProtoAdapters.fromProto"));
+    }
+
+    @Test
     void rendersV3StreamingAwaitWithCanonicalPerItemContractAndProtobufMetadata() throws IOException {
         PipelineStepModel model = new PipelineStepModel.Builder()
             .serviceName("AwaitPaymentProvider")
@@ -284,8 +319,12 @@ class AwaitClientStepRendererTest {
     }
 
     private GenerationContext generationContextV3() {
+        return generationContextV3("GRPC");
+    }
+
+    private GenerationContext generationContextV3(String transport) {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.transport", "GRPC"));
+        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.transport", transport));
         return new GenerationContext(
             processingEnv,
             tempDir,
@@ -293,9 +332,10 @@ class AwaitClientStepRendererTest {
             Set.of(),
             null,
             null,
-            org.pipelineframework.processor.ir.PipelineTransport.GRPC,
+            org.pipelineframework.processor.ir.PipelineTransport.fromString(transport),
             "com.example.payment",
             null,
             true);
     }
+
 }

@@ -47,13 +47,19 @@ public class AwaitClientStepRenderer {
         String className = baseName + "AwaitClientStep";
         PipelineConfigHints configHints = resolveConfigHints(ctx);
         PipelineTransport transportMode = configHints.transportMode();
-        TypeName transportInputType = clientStepType(model.inboundDomainType(), transportMode, configHints.basePackage());
-        TypeName transportOutputType = clientStepType(model.outboundDomainType(), transportMode, configHints.basePackage());
+        boolean generatedV3DomainTypes = ctx.v3GeneratedDomainTypes()
+            || V3GeneratedDomainBinding.hasGeneratedCanonicalContracts(model, configHints.basePackage());
+        PipelineTransport representationTransport = generatedV3DomainTypes
+            ? PipelineTransport.GRPC
+            : transportMode;
+        TypeName transportInputType = clientStepType(model.inboundDomainType(), representationTransport, configHints.basePackage());
+        TypeName transportOutputType = clientStepType(model.outboundDomainType(), representationTransport, configHints.basePackage());
         V3GeneratedDomainBinding.RepresentationBoundary boundary = V3GeneratedDomainBinding.resolveAwait(
             model,
             transportInputType,
             transportOutputType,
-            ctx);
+            configHints.basePackage(),
+            generatedV3DomainTypes);
         TypeName inputType = boundary.stepInputType();
         TypeName outputType = boundary.stepOutputType();
 

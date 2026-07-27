@@ -177,16 +177,15 @@ class PipelineGenerationPhaseTest {
             .generatedName(serviceName)
             .servicePackage("com.example")
             .serviceClassName(com.squareup.javapoet.ClassName.get("com.example", serviceName))
-            .inputMapping(new org.pipelineframework.processor.ir.TypeMapping(
-                com.squareup.javapoet.ClassName.get("com.example", serviceName + "Input"), null, false))
-            .outputMapping(new org.pipelineframework.processor.ir.TypeMapping(
-                com.squareup.javapoet.ClassName.get("com.example", serviceName + "Output"), null, false))
+            .inputMapping(org.pipelineframework.processor.ir.TypeMapping.withoutMapper(
+                com.squareup.javapoet.ClassName.get("com.example", serviceName + "Input")))
+            .outputMapping(org.pipelineframework.processor.ir.TypeMapping.withoutMapper(
+                com.squareup.javapoet.ClassName.get("com.example", serviceName + "Output")))
             .streamingShape(org.pipelineframework.processor.ir.StreamingShape.UNARY_UNARY)
             .enabledTargets(Set.of(org.pipelineframework.processor.ir.GenerationTarget.CLIENT_STEP))
             .executionMode(org.pipelineframework.processor.ir.ExecutionMode.DEFAULT)
             .deploymentRole(deploymentRole)
             .sideEffect(sideEffect)
-            .cacheKeyGenerator(null)
             .orderingRequirement(org.pipelineframework.parallelism.OrderingRequirement.RELAXED)
             .threadSafety(org.pipelineframework.parallelism.ThreadSafety.SAFE)
             .build();

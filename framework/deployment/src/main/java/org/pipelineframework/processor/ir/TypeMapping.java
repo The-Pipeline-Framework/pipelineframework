@@ -40,6 +40,19 @@ public record TypeMapping(
     }
 
     /**
+     * Creates a mapping with a domain contract and no mapper metadata.
+     *
+     * <p>This is the explicit representation for boundaries whose contract is
+     * resolved without an application mapper.</p>
+     *
+     * @param domainType the domain type for the mapping
+     * @return a mapping with no inferred mapper
+     */
+    public static TypeMapping withoutMapper(TypeName domainType) {
+        return new TypeMapping(domainType, null, false, domainType);
+    }
+
+    /**
      * Create a new TypeMapping that records the provided inferred mapper type.
      *
      * @param inferredMapperType the mapper ClassName to set on the returned mapping
