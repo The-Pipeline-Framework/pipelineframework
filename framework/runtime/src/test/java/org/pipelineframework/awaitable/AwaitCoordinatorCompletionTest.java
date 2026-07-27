@@ -391,6 +391,45 @@ class AwaitCoordinatorCompletionTest {
     }
 
     @Test
+    void defersLegacySemanticPayloadConversionUntilResume() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "LegacyDecision",
+            Map.class.getName(),
+            StrictDecision.class.getName(),
+            java.time.Duration.ofMinutes(10),
+            "interactionId",
+            "interaction-api",
+            Map.of(),
+            List.of());
+
+        AwaitCreateResult created = coordinator.createOrGet(
+            descriptor,
+            "tenant-1",
+            "exec-1",
+            1,
+            "cause-1",
+            Map.of("orderId", "o-1"),
+            null,
+            null).await().indefinitely();
+        AwaitCompletionResult completed = coordinator.complete(new AwaitCompletionCommand(
+            "tenant-1",
+            created.record().interactionId(),
+            null,
+            "completion-1",
+            Map.of("orderId", "not-a-uuid"),
+            "alice",
+            11_000L)).await().indefinitely();
+        coordinator.recordCompletion(completed.record(), 11_000L).await().indefinitely();
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> coordinator.loadResumePayload("tenant-1", created.record().unitId()).await().indefinitely());
+
+        assertTrue(error.getMessage().contains("Failed converting await payload"));
+    }
+
+    @Test
     void completeRejectsOversizedMaterializedOutputUnit() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         PipelineOrchestratorConfig config = org.mockito.Mockito.mock(PipelineOrchestratorConfig.class);
@@ -513,6 +552,9 @@ class AwaitCoordinatorCompletionTest {
             "interaction-api",
             Map.of(),
             List.of("paymentRecordId"));
+    }
+
+    private record StrictDecision(java.util.UUID orderId) {
     }
 
     private static final class SimpleInstance<T> implements Instance<T> {

@@ -771,7 +771,9 @@ public class AwaitCoordinator {
     ) {
         AwaitStepDescriptor descriptor = descriptorFor(record);
         validateDurableOutputContract(record, descriptor);
-        Object transportPayload = coerceTransportPayload(record, command.responsePayload());
+        Object transportPayload = record.outputType().equals(record.transportOutputType())
+            ? command.responsePayload()
+            : coerceTransportPayload(record, command.responsePayload());
         return new ValidatedCompletion(record, withResponsePayload(command, transportPayload));
     }
 
