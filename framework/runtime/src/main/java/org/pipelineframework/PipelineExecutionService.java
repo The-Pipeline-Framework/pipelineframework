@@ -415,9 +415,13 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     AtomicBoolean terminalOutputPublished = new AtomicBoolean(false);
     return executePipelineStreamingFromCommand(decodedCommand, terminalOutputPublished, encodeOutputs)
         .collect().asList()
-        .onItem().transform(items -> encodeOutputs
-            ? TransitionResultEnvelope.completed(payloadCodec(), items, terminalOutputPublished.get())
-            : TransitionResultEnvelope.completedInProcess(items, terminalOutputPublished.get()))
+        .onItem().transform(items -> {
+          boolean published = terminalOutputPublished.get();
+          List<?> responseItems = encodeOutputs && published ? List.of() : items;
+          return encodeOutputs
+              ? TransitionResultEnvelope.completed(payloadCodec(), responseItems, published)
+              : TransitionResultEnvelope.completedInProcess(responseItems, published);
+        })
         .onFailure(AwaitThrowableSupport::containsAwaitSuspension).recoverWithUni(failure -> {
           AwaitSuspendedException suspended = AwaitThrowableSupport.extractAwaitSuspension(failure);
           return awaitCoordinator.suspensionSnapshot(suspended)
@@ -534,7 +538,8 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
           int stopBeforeStepIndex = requestedStopBeforeStepIndex < 0
               ? steps.size()
               : requestedStopBeforeStepIndex;
-          if (stopBeforeStepIndex == command.currentStepIndex()) {
+          if (stopBeforeStepIndex == command.currentStepIndex()
+              && (!durableAwaitBoundary || command.currentStepIndex() != steps.size())) {
             return reactiveInput instanceof Multi<?> multi
                 ? multi
                 : ((Uni<?>) reactiveInput).toMulti();
