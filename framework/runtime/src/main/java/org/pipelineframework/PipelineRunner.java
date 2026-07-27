@@ -162,7 +162,11 @@ public class PipelineRunner implements AutoCloseable {
             (step, value, index) -> {
                 AwaitExecutionContext awaitContextSnapshot = awaitContext == null
                     ? null
-                    : new AwaitExecutionContext(awaitContext.tenantId(), awaitContext.executionId(), index);
+                    : new AwaitExecutionContext(
+                        awaitContext.tenantId(),
+                        awaitContext.executionId(),
+                        index,
+                        awaitContext.durableAwaitBoundary());
 
                 if (step instanceof Configurable configurable) {
                     configurable.initialiseWithConfig(configFactory.buildConfig(step.getClass(), pipelineConfig));

@@ -39,6 +39,7 @@ import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import org.pipelineframework.awaitable.AwaitCoordinator;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
+import org.pipelineframework.telemetry.PipelineTelemetry;
 import org.pipelineframework.objectpublish.ObjectPayloadChunk;
 import org.pipelineframework.objectpublish.ObjectPublishGroupRenderer;
 import org.pipelineframework.objectpublish.ObjectPublishRunner;
@@ -84,6 +85,9 @@ class PipelineExecutionServiceTest {
 
     @Mock
     private AwaitCoordinator awaitCoordinator;
+
+    @Mock
+    private PipelineTelemetry.RunContext telemetryContext;
 
     @BeforeEach
     void setUp() {
@@ -256,6 +260,35 @@ class PipelineExecutionServiceTest {
 
         assertEquals(TransitionWorkerOutcome.FAILED, result.outcome());
         assertTrue(result.failure().message().contains("identity mismatch sentinel"));
+    }
+
+    @Test
+    void executePortableTransitionForcesDurableAwaitHandoff() throws Exception {
+        markStartupHealthy(service);
+        JsonTransitionPayloadCodec codec = new JsonTransitionPayloadCodec();
+        service.transitionPayloadCodec = codec;
+        List<Object> steps = List.of(new Object());
+        AtomicReference<Boolean> durableAwaitBoundary = new AtomicReference<>();
+        when(releaseIdentityResolver.validateCommandIdentity(any(), isNull())).thenReturn(Optional.empty());
+        when(pipelineStepResolver.loadPipelineSteps()).thenReturn(steps);
+        when(pipelineRunner.runFromStepUntilWithContext(any(), eq(steps), eq(0), eq(1)))
+            .thenAnswer(invocation -> {
+                durableAwaitBoundary.set(
+                    org.pipelineframework.awaitable.AwaitExecutionContextHolder.get().durableAwaitBoundary());
+                return new PipelineRunner.ExecutionResult(Multi.createFrom().empty(), telemetryContext);
+            });
+
+        TransitionResultEnvelope envelope = service.executePortableTransition(transitionCommand(codec, 0, -1))
+            .await().indefinitely();
+
+        assertEquals(TransitionWorkerOutcome.COMPLETED, envelope.outcome());
+        assertTrue(durableAwaitBoundary.get());
+
+        TransitionResultEnvelope inProcessEnvelope = service.executeTransition(transitionCommand(codec, 0, -1))
+            .await().indefinitely();
+
+        assertEquals(TransitionWorkerOutcome.COMPLETED, inProcessEnvelope.outcome());
+        assertFalse(durableAwaitBoundary.get());
     }
 
     @Test

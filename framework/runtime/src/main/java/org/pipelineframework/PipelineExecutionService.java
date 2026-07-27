@@ -413,7 +413,7 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
       return Uni.createFrom().item(TransitionResultEnvelope.failed(failure));
     }
     AtomicBoolean terminalOutputPublished = new AtomicBoolean(false);
-    return executePipelineStreamingFromCommand(decodedCommand, terminalOutputPublished)
+    return executePipelineStreamingFromCommand(decodedCommand, terminalOutputPublished, encodeOutputs)
         .collect().asList()
         .onItem().transform(items -> encodeOutputs
             ? TransitionResultEnvelope.completed(payloadCodec(), items, terminalOutputPublished.get())
@@ -500,7 +500,8 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
 
   private Multi<?> executePipelineStreamingFromCommand(
       TransitionWorkerCommand command,
-      AtomicBoolean terminalOutputPublished) {
+      AtomicBoolean terminalOutputPublished,
+      boolean durableAwaitBoundary) {
     return Multi.createFrom().deferred(() -> {
       Uni<Object> sourcePayload = Uni.createFrom().item(command.inputPayload());
       return sourcePayload.onItem().transformToMulti(payload -> {
@@ -509,7 +510,8 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
         AwaitExecutionContextHolder.set(new AwaitExecutionContext(
             command.tenantId(),
             command.executionId(),
-            command.currentStepIndex()));
+            command.currentStepIndex(),
+            durableAwaitBoundary));
         try {
           RuntimeException healthFailure = healthCheckFailure();
           if (healthFailure != null) {

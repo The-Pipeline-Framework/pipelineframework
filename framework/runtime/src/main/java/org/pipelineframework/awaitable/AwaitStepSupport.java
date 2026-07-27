@@ -262,7 +262,11 @@ public class AwaitStepSupport {
         if (context == null) {
             throw new IllegalStateException("Await step executed without queue-async execution context.");
         }
-        return new AwaitExecutionContext(context.tenantId(), context.executionId(), context.currentStepIndex());
+        return new AwaitExecutionContext(
+            context.tenantId(),
+            context.executionId(),
+            context.currentStepIndex(),
+            context.durableAwaitBoundary());
     }
 
     @SuppressWarnings("unchecked")
@@ -271,7 +275,7 @@ public class AwaitStepSupport {
         Multi<I> input,
         AwaitExecutionContext context
     ) {
-        if (awaitCoordinator.supportsLiveAwaitWindow(descriptor)) {
+        if (!context.durableAwaitBoundary() && awaitCoordinator.supportsLiveAwaitWindow(descriptor)) {
             return awaitOneToOneLiveStream(descriptor, input, context);
         }
         return awaitOneToOneStreamSuspending(descriptor, input, context);

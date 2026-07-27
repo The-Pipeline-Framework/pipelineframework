@@ -164,7 +164,7 @@ class PipelineRunnerTest {
 
     @Test
     void runBindsAwaitContextPerStepInsteadOfLeakingFinalLoopIndex() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant-1", "exec-1", 0));
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant-1", "exec-1", 0, true));
 
         @SuppressWarnings("unchecked")
         Multi<Object> result = (Multi<Object>) runner.run(
@@ -176,7 +176,7 @@ class PipelineRunnerTest {
 
         AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(1));
         subscriber.awaitItems(1, Duration.ofSeconds(5)).assertCompleted();
-        subscriber.assertItems("last:await-step-index=1,first:input");
+        subscriber.assertItems("last:await-step-index=1,durable=true,first:input");
     }
 
     @Test
@@ -337,7 +337,9 @@ class PipelineRunnerTest {
         public Uni<String> applyOneToOne(String in) {
             AwaitExecutionContext context = AwaitExecutionContextHolder.get();
             int index = context == null ? -1 : context.currentStepIndex();
-            return Uni.createFrom().item("await-step-index=" + index + "," + in);
+            boolean durableAwaitBoundary = context != null && context.durableAwaitBoundary();
+            return Uni.createFrom().item(
+                "await-step-index=" + index + ",durable=" + durableAwaitBoundary + "," + in);
         }
     }
 

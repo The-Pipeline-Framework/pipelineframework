@@ -30,7 +30,7 @@ import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 class AwaitCoordinatorCompletionTest {
 
     @Test
-    void createOrGetRestoresCanonicalRequestBeforeTransportAdapter() {
+    void createOrGetRestoresCanonicalRequestBeforeInputToTransportMapping() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
         AtomicReference<CanonicalRequest> adapterInput = new AtomicReference<>();
