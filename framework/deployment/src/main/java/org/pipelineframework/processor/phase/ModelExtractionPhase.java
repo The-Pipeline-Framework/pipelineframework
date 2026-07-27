@@ -76,6 +76,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (hasYamlStepDefinitions) {
             // Extract pipeline step models based on explicit YAML step definitions.
             stepModels = new ArrayList<>(extractStepModelsFromYaml(ctx, stepDefinitions, ctxWarningLogger));
+            stepModels = addProviderBoundaryModels(ctx, stepDefinitions, stepModels, ctxWarningLogger);
             // Some template-driven YAMLs declare logical steps without resolvable execution classes
             // for plugin-host modules. Keep legacy behavior by falling back to annotation extraction.
             if (stepModels.isEmpty()) {
@@ -133,6 +134,58 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         return stepModels;
+    }
+
+    private List<PipelineStepModel> addProviderBoundaryModels(
+            PipelineCompilationContext ctx,
+            List<org.pipelineframework.processor.ir.StepDefinition> stepDefinitions,
+            List<PipelineStepModel> extracted,
+            Consumer<String> ctxWarningLogger) {
+        List<PipelineStepModel> models = new ArrayList<>(extracted);
+        for (var boundary : ctx.getResolvedProviderBoundaries()) {
+            String serviceType = boundary.boundary().serviceTypeName();
+            boolean alreadyExtracted = models.stream()
+                .anyMatch(model -> serviceType.equals(model.serviceClassName().canonicalName()));
+            if (alreadyExtracted) {
+                continue;
+            }
+            var contract = boundary.claim().stepContract().orElseThrow(() -> new IllegalStateException(
+                "Representation provider '" + boundary.claim().providerKey() + "' claimed boundary '"
+                    + boundary.boundary().stepName() + "' but did not declare its generated facade contract."));
+            var step = stepDefinitions.stream()
+                .filter(candidate -> boundary.boundary().stepName().equals(candidate.name()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Resolved provider boundary '"
+                    + boundary.boundary().stepName() + "' has no YAML step definition."));
+            ClassName inputType = ClassName.bestGuess(boundary.boundary().inputType().targetTypeName());
+            ClassName outputType = ClassName.bestGuess(boundary.boundary().outputType().targetTypeName());
+            ClassName inboundMapper = resolveInternalMapper(ctx, step.name(), "inboundMapper", step.inboundMapper(), null, inputType);
+            ClassName outboundMapper = resolveInternalMapper(ctx, step.name(), "outboundMapper", step.outboundMapper(), null, outputType);
+            if (inboundMapper == INVALID_CLASS_NAME || outboundMapper == INVALID_CLASS_NAME) {
+                continue;
+            }
+            StreamingShape streamingShape = StreamingShape.valueOf(contract.cardinality());
+            ServiceApiKind apiKind = ServiceApiKind.valueOf(contract.executionStyle().name());
+            models.add(new PipelineStepModel.Builder()
+                .serviceName(toYamlServiceName(step.name()))
+                .generatedName(toYamlServiceName(step.name()))
+                .servicePackage(deriveYamlServicePackage(inputType, ctxWarningLogger))
+                .serviceClassName(ClassName.bestGuess(serviceType))
+                .inputMapping(new TypeMapping(inputType, inboundMapper, inboundMapper != null, inputType))
+                .outputMapping(new TypeMapping(outputType, outboundMapper, outboundMapper != null, outputType))
+                .streamingShape(streamingShape)
+                .enabledTargets(java.util.EnumSet.of(GenerationTarget.GRPC_SERVICE, GenerationTarget.CLIENT_STEP))
+                .executionMode(executionMode(ctx, step, apiKind))
+                .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+                .sideEffect(false)
+                .cacheKeyGenerator(null)
+                .orderingRequirement(OrderingRequirement.RELAXED)
+                .threadSafety(ThreadSafety.SAFE)
+                .serviceApiKind(apiKind)
+                .reactiveReturnKind(ReactiveReturnKind.MUTINY_UNI)
+                .build());
+        }
+        return models;
     }
 
     /**
@@ -493,6 +546,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return extractedModel.toBuilder()
             .serviceName(serviceName)
             .generatedName(serviceName)
+            .serviceClassName(extractedModel.serviceClassName())
             .inputMapping(new TypeMapping(inputType, inboundMapper, inboundMapper != null, inputType))
             .outputMapping(new TypeMapping(outputType, outboundMapper, outboundMapper != null, outputType))
             .streamingShape(serviceSignature.shape())
@@ -1563,9 +1617,12 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             String stepName,
             String direction,
             TypeName yamlType,
-            TypeName annotationType,
-            TypeName reactiveType) {
+        TypeName annotationType,
+        TypeName reactiveType) {
         if (yamlType != null) {
+            if (ctx.getResolvedProviderBoundary(stepName).isPresent()) {
+                return yamlType;
+            }
             if (reactiveType != null && !yamlType.equals(reactiveType)) {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.ERROR,

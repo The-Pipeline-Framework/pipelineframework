@@ -236,6 +236,7 @@ public class PipelineTemplateConfigLoader {
         }
         Map<String, PipelineTemplateTypeDefinition> definitions = new LinkedHashMap<>();
         Map<String, Map<String, RepresentationMapping>> representationMappings = new LinkedHashMap<>();
+        Map<String, Map<String, Object>> providerConfigurations = readV3RepresentationProviderConfigurations(rootMap);
         for (Map.Entry<?, ?> entry : typesMap.entrySet()) {
             String name = stringify(entry.getKey());
             if (name == null || name.isBlank()) {
@@ -253,7 +254,7 @@ public class PipelineTemplateConfigLoader {
                 representationMappings.put(name, mappings);
             }
         }
-        return new PipelineTemplateTypeModel(definitions, representationMappings);
+        return new PipelineTemplateTypeModel(definitions, representationMappings, providerConfigurations);
     }
 
     private PipelineTemplateTypeDefinition readV3Type(String name, Map<?, ?> declaration) {
@@ -307,17 +308,53 @@ public class PipelineTemplateConfigLoader {
             if (!(entry.getValue() instanceof Map<?, ?> declaration)) {
                 throw new IllegalStateException("Type '" + domainType + "' mapping '" + key + "' must be a YAML map.");
             }
-            rejectUnexpectedV3Keys(declaration, domainType + "' mapping '" + key, "type", "mapper");
+            rejectUnexpectedV3Keys(declaration, domainType + "' mapping '" + key, "type", "mapper", "options");
             RepresentationMapping mapping = new RepresentationMapping(
                 key,
                 domainType,
                 readV3OptionalClassName(domainType, key, declaration, "type"),
-                readV3OptionalClassName(domainType, key, declaration, "mapper"));
+                readV3OptionalClassName(domainType, key, declaration, "mapper"),
+                readV3ProviderOptions(domainType, key, declaration.get("options")));
             if (result.putIfAbsent(key, mapping) != null) {
                 throw new IllegalStateException("Type '" + domainType + "' declares duplicate mapping '" + key + "'.");
             }
         }
         return Map.copyOf(result);
+    }
+
+    private Map<String, Map<String, Object>> readV3RepresentationProviderConfigurations(Map<?, ?> rootMap) {
+        Object raw = rootMap.get("representations");
+        if (raw == null) {
+            return Map.of();
+        }
+        if (!(raw instanceof Map<?, ?> configurations)) {
+            throw new IllegalStateException("Top-level 'representations' must be a YAML map.");
+        }
+        Map<String, Map<String, Object>> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : configurations.entrySet()) {
+            String key = stringify(entry.getKey());
+            if (key == null || key.isBlank() || !(entry.getValue() instanceof Map<?, ?> options)) {
+                throw new IllegalStateException("Representation provider configuration must use non-blank keys and YAML maps.");
+            }
+            Map<String, Object> normalized = new LinkedHashMap<>();
+            options.forEach((optionKey, value) -> normalized.put(String.valueOf(optionKey), value));
+            if (result.putIfAbsent(key, Map.copyOf(normalized)) != null) {
+                throw new IllegalStateException("Duplicate representation provider configuration '" + key + "'.");
+            }
+        }
+        return Map.copyOf(result);
+    }
+
+    private Map<String, Object> readV3ProviderOptions(String domainType, String key, Object rawOptions) {
+        if (rawOptions == null) {
+            return Map.of();
+        }
+        if (!(rawOptions instanceof Map<?, ?> options)) {
+            throw new IllegalStateException("Type '" + domainType + "' mapping '" + key + "' options must be a YAML map.");
+        }
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        options.forEach((optionKey, value) -> normalized.put(String.valueOf(optionKey), value));
+        return Map.copyOf(normalized);
     }
 
     private Optional<String> readV3OptionalClassName(

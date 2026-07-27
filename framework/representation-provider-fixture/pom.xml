@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.pipelineframework</groupId>
+        <artifactId>framework-parent</artifactId>
+        <version>27.7.2-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    <artifactId>representation-provider-fixture</artifactId>
+    <name>TPF External Representation Provider Fixture</name>
+    <dependencies>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>representation-provider-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.2</version>
+                <executions>
+                    <execution>
+                        <id>prepare-discovery-jar</id>
+                        <phase>process-test-classes</phase>
+                        <goals><goal>jar</goal></goals>
+                        <configuration><classifier>discovery</classifier></configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

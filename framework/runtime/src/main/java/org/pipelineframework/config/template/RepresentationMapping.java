@@ -17,6 +17,8 @@
 package org.pipelineframework.config.template;
 
 import java.util.Optional;
+import java.util.Map;
+import java.util.LinkedHashMap;
 
 /**
  * An optional external representation for one named v3 domain type.
@@ -34,13 +36,24 @@ public record RepresentationMapping(
     String key,
     String domainType,
     Optional<String> representationType,
-    Optional<String> mapperType
+    Optional<String> mapperType,
+    Map<String, Object> options
 ) {
     public RepresentationMapping {
         requireText(key, "key");
         requireText(domainType, "domainType");
         representationType = normalize(representationType);
         mapperType = normalize(mapperType);
+        options = options == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(options));
+    }
+
+    public RepresentationMapping(
+        String key,
+        String domainType,
+        Optional<String> representationType,
+        Optional<String> mapperType
+    ) {
+        this(key, domainType, representationType, mapperType, Map.of());
     }
 
     private static Optional<String> normalize(Optional<String> value) {

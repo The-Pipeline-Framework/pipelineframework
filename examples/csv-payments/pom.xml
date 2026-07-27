@@ -328,6 +328,11 @@
                                 <artifactId>pipelineframework-deployment</artifactId>
                                 <version>${project.version}</version>
                             </path>
+                            <path>
+                                <groupId>org.pipelineframework</groupId>
+                                <artifactId>representation-provider-opencsv</artifactId>
+                                <version>${project.version}</version>
+                            </path>
                         </annotationProcessorPaths>
                     </configuration>
                     <executions>

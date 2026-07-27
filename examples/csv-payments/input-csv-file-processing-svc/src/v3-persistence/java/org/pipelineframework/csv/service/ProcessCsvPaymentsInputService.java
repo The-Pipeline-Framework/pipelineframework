@@ -19,46 +19,31 @@ package org.pipelineframework.csv.service;
 import java.io.Reader;
 import java.util.Iterator;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 
 import com.opencsv.bean.CsvToBeanBuilder;
 import lombok.Getter;
 import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
-import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.csv.common.domain.CsvPaymentsStableIdSupport;
 import org.pipelineframework.csv.common.domain.FilePathAwareMappingStrategy;
-import org.pipelineframework.csv.common.mapper.PaymentRecordRepresentationMapper;
 import org.pipelineframework.csv.domain.CsvPaymentsInputFile;
-import org.pipelineframework.csv.domain.PaymentRecord;
-import org.pipelineframework.mapper.Mapper;
-import org.pipelineframework.service.blocking.BlockingIteratorService;
+import org.pipelineframework.opencsv.OpenCsvInputBoundary;
 
-@PipelineStep
 @ApplicationScoped
 @Getter
 public class ProcessCsvPaymentsInputService
-    implements BlockingIteratorService<CsvPaymentsInputFile, PaymentRecord> {
+    implements OpenCsvInputBoundary<CsvPaymentsInputFile, org.pipelineframework.csv.common.domain.PaymentRecord> {
 
   private static final Logger LOG = Logger.getLogger(ProcessCsvPaymentsInputService.class);
-  private final long rowsPerPeriod;
-  private final long millisPeriod;
-  private final Mapper<PaymentRecord, org.pipelineframework.csv.common.domain.PaymentRecord> representationMapper;
-
-    @Inject
-    public ProcessCsvPaymentsInputService(PaymentRecordRepresentationMapper representationMapper) {
-        this.representationMapper = java.util.Objects.requireNonNull(representationMapper, "representationMapper must not be null");
-        rowsPerPeriod = 0L;
-        millisPeriod = 0L;
-        LOG.info("ProcessCsvPaymentsInputService initialized with the OpenCSV representation mapper");
-    }
+  private final long rowsPerPeriod = 0L;
+  private final long millisPeriod = 0L;
 
   /**
    * Open a blocking iterator over the CSV records without materializing the full file in memory.
    */
   @Override
-  public CloseableIterator<PaymentRecord> iterateBlocking(CsvPaymentsInputFile input) {
+  public CloseableIterator<org.pipelineframework.csv.common.domain.PaymentRecord> iterateBlocking(CsvPaymentsInputFile input) {
     try {
         Reader reader = java.nio.file.Files.newBufferedReader(input.filepath(), java.nio.charset.StandardCharsets.UTF_8);
         try {
@@ -71,7 +56,7 @@ public class ProcessCsvPaymentsInputService
                     .withIgnoreEmptyLine(true)
                     .build()
                     .iterator();
-            return new OpenCsvPaymentRecordIterator(reader, delegate, input, representationMapper, rowsPerPeriod, millisPeriod);
+        return new OpenCsvPaymentRecordIterator(reader, delegate, input, rowsPerPeriod, millisPeriod);
         } catch (Exception e) {
             reader.close();
             throw e;
@@ -89,11 +74,10 @@ public class ProcessCsvPaymentsInputService
     return strategy;
   }
 
-  private static final class OpenCsvPaymentRecordIterator implements CloseableIterator<PaymentRecord> {
+  private static final class OpenCsvPaymentRecordIterator implements CloseableIterator<org.pipelineframework.csv.common.domain.PaymentRecord> {
     private final Reader reader;
     private final Iterator<org.pipelineframework.csv.common.domain.PaymentRecord> delegate;
     private final CsvPaymentsInputFile input;
-    private final Mapper<PaymentRecord, org.pipelineframework.csv.common.domain.PaymentRecord> representationMapper;
     private final long rowsPerPeriod;
     private final long millisPeriod;
     private long emitted;
@@ -103,14 +87,12 @@ public class ProcessCsvPaymentsInputService
         Reader reader,
         Iterator<org.pipelineframework.csv.common.domain.PaymentRecord> delegate,
         CsvPaymentsInputFile input,
-        Mapper<PaymentRecord, org.pipelineframework.csv.common.domain.PaymentRecord> representationMapper,
         long rowsPerPeriod,
         long millisPeriod
     ) {
         this.reader = reader;
         this.delegate = delegate;
         this.input = input;
-        this.representationMapper = representationMapper;
         this.rowsPerPeriod = rowsPerPeriod;
         this.millisPeriod = millisPeriod;
     }
@@ -121,11 +103,10 @@ public class ProcessCsvPaymentsInputService
     }
 
     @Override
-    public PaymentRecord next() {
+    public org.pipelineframework.csv.common.domain.PaymentRecord next() {
         org.pipelineframework.csv.common.domain.PaymentRecord row = delegate.next();
         row.setId(CsvPaymentsStableIdSupport.paymentRecordId(
             row.getCsvPaymentsInputFilePath(), row.getCsvId(), row.getRecipient(), row.getAmount(), row.getCurrency()));
-        PaymentRecord record = representationMapper.fromExternal(row);
         emitted++;
         String serviceId = ProcessCsvPaymentsInputService.class.toString();
         MDC.put("serviceId", serviceId);
@@ -133,11 +114,11 @@ public class ProcessCsvPaymentsInputService
             LOG.debugf(
                 "Executed blocking CSV iteration on %s (csvId=%s)",
                 input.filepath(),
-                record.csvId());
+                row.getCsvId());
         } finally {
             MDC.remove("serviceId");
         }
-        return record;
+        return row;
     }
 
     @Override

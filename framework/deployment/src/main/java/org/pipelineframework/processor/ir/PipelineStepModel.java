@@ -59,6 +59,14 @@ public record PipelineStepModel(
         ServiceApiKind serviceApiKind,
         ReactiveReturnKind reactiveReturnKind
 ) {
+    /** Returns this immutable semantic model with a provider-generated canonical facade as its service implementation. */
+    public PipelineStepModel withServiceClassName(ClassName replacement) {
+        return new PipelineStepModel(serviceName, generatedName, servicePackage, replacement, inputMapping, outputMapping,
+            streamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
+            orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper, mapperFallbackMode,
+            remoteExecution, serviceApiKind, reactiveReturnKind);
+    }
+
     /**
          * Creates a new PipelineStepModel with the supplied service identity, type mappings and generation configuration.
          *

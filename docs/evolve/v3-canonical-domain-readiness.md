@@ -86,6 +86,28 @@ The next material improvement is direct JSON for generated v3 records and wrappe
 
 ### Horizon 3 — representation provider platform
 
+#### Active compiler-host bridge
+
+The public Representation Provider SPI is host-neutral: providers receive normalized canonical types, mapping requests,
+boundary claims, resolved representations, schema fragments, and artifact descriptions. They do not receive JSR-269,
+Quarkus, Maven, renderer, or filesystem-writer types.
+
+TPF's current production build host is nevertheless the JSR-269 processor. That host owns source-symbol discovery,
+normalizes the YAML and Java source model into provider requests, discovers provider JARs through `META-INF/services`
+from its annotation-processor classloader, resolves ordered claims, and is the only process that writes generated
+sources or resources. Maven application dependencies make a provider available at runtime; annotation-processor-path
+dependencies make it available during generation. Those are deliberately separate concerns.
+
+OpenCSV is the reference boundary: its provider recognizes the provider marker, validates the explicit row type and
+`Mapper<Canonical, External>` pair, describes a canonical blocking-iterator facade, and owns the injected mapper and
+`fromExternal` conversion. Core never contains an OpenCSV key, row type, convention, or renderer. The authored CSV
+reader therefore remains an external-row reader with stable raw-row identity only; canonical values begin in the
+provider-generated facade.
+
+This bridge is not a new permanent compiler host. A future build host can supply the same neutral requests and consume
+the same artifact descriptions, while retaining the invariant that providers describe artifacts and the host writes
+them.
+
 1. **Feasibility prototype.** Prove dependency discovery, normalized-model access, one mapping resolution, one registered artifact/metadata item, and one consumer use—without migrating protobuf.
 2. **Provider lifecycle SPI.** Add registration, ordering, conflicts, cycle diagnostics, GLOBAL/TYPE scope, and artifact aggregation without making a renderer semantic.
 3. **Provider-owned schema and third-party proof.** Add configuration validation/composition and absent-provider diagnostics; preserve target-specific capability declarations.

@@ -89,8 +89,10 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
         // The annotation processor only extracts pipeline metadata.
         List<PipelineCompilationPhase> phases = List.of(
             new org.pipelineframework.processor.phase.PipelineDiscoveryPhase(),
+            new org.pipelineframework.processor.phase.RepresentationProviderPreparationPhase(),
             new org.pipelineframework.processor.phase.ModelExtractionPhase(),
             new org.pipelineframework.processor.phase.PipelineRuntimeMappingPhase(),
+            new org.pipelineframework.processor.phase.RepresentationProviderGenerationPhase(),
             new org.pipelineframework.processor.phase.PipelineSemanticAnalysisPhase(),
             new org.pipelineframework.processor.phase.PipelineTargetResolutionPhase(),
             new org.pipelineframework.processor.phase.PipelineBindingConstructionPhase(),
@@ -99,6 +101,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
         );
 
         this.compiler = new PipelineCompiler(phases);
+        this.compiler.setRepresentationProviderClassLoader(getClass().getClassLoader());
         this.compiler.init(processingEnv);
     }
 

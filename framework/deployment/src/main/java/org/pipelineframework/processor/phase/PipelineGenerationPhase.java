@@ -413,7 +413,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         }
         PipelineStepModel firstModel = firstBusinessStepWithInputMapper(ctx)
             .orElseThrow(() -> new IllegalStateException(
-                "Object Ingest requires the first business step to declare an inbound mapper"));
+                "Object Ingest requires the first business step to declare an inbound mapper; available business steps: "
+                    + describeInputMappings(ctx)));
         TypeName domainType = firstModel.inputMapping().domainType();
         TypeName mapperType = firstModel.inputMapping().mapperType();
         boolean v3GeneratedDomainTypes = ctx.getPipelineTemplateConfig()
@@ -517,6 +518,14 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             }
         }
         return Optional.empty();
+    }
+
+    private static String describeInputMappings(PipelineCompilationContext ctx) {
+        return (ctx.getStepModels() == null ? List.<PipelineStepModel>of() : ctx.getStepModels()).stream()
+            .filter(model -> model != null && !model.sideEffect())
+            .map(model -> model.serviceName() + "="
+                + (model.inputMapping() == null ? "<none>" : String.valueOf(model.inputMapping().mapperType())))
+            .collect(java.util.stream.Collectors.joining(", "));
     }
 
     private Optional<PipelineStepModel> terminalBusinessStepWithOutputMapper(PipelineCompilationContext ctx) {

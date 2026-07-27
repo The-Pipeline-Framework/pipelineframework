@@ -48,6 +48,7 @@ public class PipelineCompiler extends AbstractProcessingTool {
 
     private final List<PipelineCompilationPhase> phases;
     private boolean compilationExecuted;
+    private ClassLoader representationProviderClassLoader;
 
     /**
      * Creates a new PipelineCompiler with the ordered compilation phases.
@@ -68,6 +69,14 @@ public class PipelineCompiler extends AbstractProcessingTool {
     public synchronized void init(ProcessingEnvironment processingEnv) {
         super.init(processingEnv);
         this.compilationExecuted = false;
+    }
+
+    /**
+     * Supplies the classloader of the active annotation-processing host. Provider discovery uses
+     * this host realm, never an application runtime classloader.
+     */
+    public void setRepresentationProviderClassLoader(ClassLoader representationProviderClassLoader) {
+        this.representationProviderClassLoader = representationProviderClassLoader;
     }
 
     /**
@@ -122,6 +131,7 @@ public class PipelineCompiler extends AbstractProcessingTool {
 
         // Create the compilation context
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        context.setRepresentationProviderClassLoader(representationProviderClassLoader);
 
         // Execute each phase in sequence
         for (PipelineCompilationPhase phase : phases) {
