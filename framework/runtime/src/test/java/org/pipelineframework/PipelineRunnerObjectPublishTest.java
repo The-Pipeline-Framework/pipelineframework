@@ -174,6 +174,24 @@ class PipelineRunnerObjectPublishTest {
         assertEquals(1, provider.writeAttempts());
     }
 
+    @Test
+    void durableWorkerBoundaryDoesNotPublishTerminalOutput() {
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant-1", "exec-1", 0, true));
+
+        PipelineRunner.ExecutionResult execution = runner.runFromStepUntilWithContext(
+            Multi.createFrom().item(new TestTerminalOutput("file-a", "line-1")),
+            List.of(new IdentityStep()),
+            0,
+            1);
+
+        assertFalse(execution.terminalOutputPublished());
+        @SuppressWarnings("unchecked")
+        Multi<TestTerminalOutput> stream = (Multi<TestTerminalOutput>) execution.result();
+        assertEquals(List.of(new TestTerminalOutput("file-a", "line-1")),
+            stream.collect().asList().await().indefinitely());
+        assertEquals(0, provider.writeAttempts());
+    }
+
     private static PipelineYamlConfig objectPublishConfig(String provider) {
         return new PipelineYamlConfig(
             "org.pipelineframework",

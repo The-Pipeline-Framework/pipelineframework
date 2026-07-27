@@ -503,7 +503,7 @@ public class AwaitCoordinator {
         String assignee,
         String group
     ) {
-        Object canonicalRequestPayload = AwaitPayloadSupport.normalize(requestPayload);
+        Object canonicalRequestPayload = restoreCanonicalRequestPayload(descriptor, requestPayload);
         Object transportRequestPayload = AwaitPayloadSupport.normalize(
             descriptor.inputToTransport().apply(canonicalRequestPayload));
         long now = System.currentTimeMillis();
@@ -534,6 +534,19 @@ public class AwaitCoordinator {
                 ttl))
                 .onItem().transformToUni(created -> bindOrReleaseAdmission(created, lease))
                 .onFailure().call(ignored -> releaseAdmissionAfterDefiniteCreateFailure(lease, tenantId, correlationId)));
+    }
+
+    private static Object restoreCanonicalRequestPayload(AwaitStepDescriptor descriptor, Object requestPayload) {
+        try {
+            Class<?> canonicalType = AwaitPayloadSupport.resolvePayloadClass(
+                descriptor.inputType(), Thread.currentThread().getContextClassLoader());
+            return AwaitPayloadSupport.coercePayload(requestPayload, canonicalType);
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                "Failed restoring await request payload to canonical type "
+                    + descriptor.inputType() + " for step " + descriptor.stepId(),
+                e);
+        }
     }
 
     /**

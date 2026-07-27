@@ -6,9 +6,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.annotation.Annotation;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.UnsatisfiedResolutionException;
@@ -24,6 +28,44 @@ import org.pipelineframework.awaitable.store.InMemoryAwaitUnitStore;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 
 class AwaitCoordinatorCompletionTest {
+
+    @Test
+    void createOrGetRestoresCanonicalRequestBeforeInputToTransportMapping() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AtomicReference<CanonicalRequest> adapterInput = new AtomicReference<>();
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "CanonicalRequest",
+            CanonicalRequest.class.getName(),
+            String.class.getName(),
+            "ONE_TO_ONE",
+            java.time.Duration.ofMinutes(10),
+            "interactionId",
+            "interaction-api",
+            Map.of(),
+            List.of("id"),
+            Map.class.getName(),
+            String.class.getName(),
+            value -> {
+                CanonicalRequest canonical = (CanonicalRequest) value;
+                adapterInput.set(canonical);
+                return Map.of("id", canonical.id().toString(), "sourcePath", canonical.sourcePath().toString());
+            },
+            Function.identity());
+        UUID id = UUID.fromString("8ee4c940-15a8-42a4-8f4e-af5a898c37a1");
+
+        coordinator.createOrGet(
+            descriptor,
+            "tenant-1",
+            "exec-1",
+            1,
+            "cause-1",
+            Map.of("id", id.toString(), "sourcePath", "/app/test-e2e"),
+            null,
+            null).await().indefinitely();
+
+        assertEquals(new CanonicalRequest(id, Path.of("/app/test-e2e")), adapterInput.get());
+    }
 
     @Test
     void createOrGetNormalizesProtobufRequestPayload() {
@@ -556,6 +598,9 @@ class AwaitCoordinatorCompletionTest {
     }
 
     private record StrictDecision(java.util.UUID orderId) {
+    }
+
+    private record CanonicalRequest(UUID id, Path sourcePath) {
     }
 
     private static final class SimpleInstance<T> implements Instance<T> {
