@@ -59,6 +59,33 @@ class AwaitStepDescriptorFactoryTest {
     }
 
     @Test
+    void descriptorByStepIdNowRebuildsV3CanonicalAndTransportIdentities() throws Exception {
+        Path explicit = tempDir.resolve("pipeline.v3.yaml");
+        Files.writeString(explicit, v3PipelineYaml());
+        System.setProperty("pipeline.config", explicit.toString());
+
+        AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
+        try {
+            AwaitStepDescriptor descriptor = factory.descriptorByStepIdNow("ProcessAwaitPaymentProviderService");
+
+            assertEquals("org.pipelineframework.awaitable.fixture.domain.PaymentRecord", descriptor.inputType());
+            assertEquals("org.pipelineframework.awaitable.fixture.domain.PaymentStatus", descriptor.outputType());
+            assertEquals("org.pipelineframework.awaitable.fixture.grpc.PipelineTypes$PaymentRecord",
+                descriptor.transportInputType());
+            assertEquals("org.pipelineframework.awaitable.fixture.grpc.PipelineTypes$PaymentStatus",
+                descriptor.transportOutputType());
+            assertEquals(new org.pipelineframework.awaitable.fixture.grpc.PipelineTypes.PaymentRecord("record-1"),
+                descriptor.inputToTransport().apply(
+                    new org.pipelineframework.awaitable.fixture.domain.PaymentRecord("record-1")));
+            var transport = new org.pipelineframework.awaitable.fixture.grpc.PipelineTypes.PaymentStatus("APPROVED");
+            assertEquals(new org.pipelineframework.awaitable.fixture.domain.PaymentStatus("APPROVED"),
+                descriptor.outputFromTransport().apply(transport));
+        } finally {
+            factory.shutdown();
+        }
+    }
+
+    @Test
     void legacyDescriptorOverloadRejectsConflictingCachedTransportIdentity() throws Exception {
         Path explicit = tempDir.resolve("pipeline.yaml");
         Files.writeString(explicit, pipelineYaml("kafka", """
@@ -194,5 +221,40 @@ class AwaitStepDescriptorFactoryTest {
                     type: %s
             %s
             """.formatted(transportType, transportConfig);
+    }
+
+    private static String v3PipelineYaml() {
+        return """
+            version: 3
+            appName: await-fixture
+            basePackage: org.pipelineframework.awaitable.fixture
+            transport: GRPC
+            types:
+              PaymentRecord:
+                fields:
+                  - [id, string]
+              PaymentStatus:
+                fields:
+                  - [status, string]
+            steps:
+              - name: Await Payment Provider
+                kind: await
+                cardinality: ONE_TO_ONE
+                input: PaymentRecord
+                output: PaymentStatus
+                java:
+                  input: org.pipelineframework.awaitable.fixture.domain.PaymentRecord
+                  output: org.pipelineframework.awaitable.fixture.domain.PaymentStatus
+                timeout: PT5M
+                await:
+                  correlation:
+                    strategy: signedResumeToken
+                  transport:
+                    type: kafka
+                    request:
+                      topic: payments.requests
+                    response:
+                      topic: payments.responses
+            """;
     }
 }
