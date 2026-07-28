@@ -163,8 +163,8 @@ class PipelineGenerationPhaseTest {
 
         assertEquals(first, selectedFirst.orElseThrow());
         assertEquals(terminal, selectedTerminal.orElseThrow());
-        assertNull(selectedFirst.orElseThrow().inputMapping().mapperType());
-        assertNull(selectedTerminal.orElseThrow().outputMapping().mapperType());
+        assertTrue(selectedFirst.orElseThrow().inputMapping().mapperType().isEmpty());
+        assertTrue(selectedTerminal.orElseThrow().outputMapping().mapperType().isEmpty());
     }
 
     private static org.pipelineframework.processor.ir.PipelineStepModel model(
@@ -203,16 +203,15 @@ class PipelineGenerationPhaseTest {
                 .generatedName("ProcessMissingBindingService")
                 .servicePackage("com.example")
                 .serviceClassName(com.squareup.javapoet.ClassName.get("com.example", "MissingBindingService"))
-                .inputMapping(new org.pipelineframework.processor.ir.TypeMapping(
-                    com.squareup.javapoet.ClassName.get("com.example", "In"), null, false))
-                .outputMapping(new org.pipelineframework.processor.ir.TypeMapping(
-                    com.squareup.javapoet.ClassName.get("com.example", "Out"), null, false))
+                .inputMapping(org.pipelineframework.processor.ir.TypeMapping.withoutMapper(
+                    com.squareup.javapoet.ClassName.get("com.example", "In")))
+                .outputMapping(org.pipelineframework.processor.ir.TypeMapping.withoutMapper(
+                    com.squareup.javapoet.ClassName.get("com.example", "Out")))
                 .streamingShape(org.pipelineframework.processor.ir.StreamingShape.UNARY_UNARY)
                 .enabledTargets(java.util.Set.of(org.pipelineframework.processor.ir.GenerationTarget.CLIENT_STEP))
                 .executionMode(org.pipelineframework.processor.ir.ExecutionMode.DEFAULT)
                 .deploymentRole(org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT)
                 .sideEffect(false)
-                .cacheKeyGenerator(null)
                 .orderingRequirement(org.pipelineframework.parallelism.OrderingRequirement.RELAXED)
                 .threadSafety(org.pipelineframework.parallelism.ThreadSafety.SAFE)
                 .build();

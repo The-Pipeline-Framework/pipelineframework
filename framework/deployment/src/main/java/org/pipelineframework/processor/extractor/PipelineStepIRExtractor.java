@@ -149,14 +149,14 @@ public class PipelineStepIRExtractor {
     private TypeMapping extractTypeMapping(TypeMirror domainType, TypeMirror mapperTypeMirror, TypeName inferredDomainType) {
         TypeName effectiveDomainType = isNullOrVoid(domainType) ? inferredDomainType : TypeName.get(domainType);
         if (effectiveDomainType == null) {
-            return new TypeMapping(null, null, false, null);
+            return TypeMapping.withoutMapper(null);
         }
 
         ClassName mapperType = resolveOptionalMapperType(mapperTypeMirror);
 
         return new TypeMapping(
             effectiveDomainType,
-            mapperType,
+            java.util.Optional.ofNullable(mapperType),
             mapperType != null,
             effectiveDomainType
         );

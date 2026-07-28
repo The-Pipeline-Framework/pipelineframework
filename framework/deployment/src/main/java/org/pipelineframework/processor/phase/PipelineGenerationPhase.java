@@ -380,7 +380,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         TypeName domainType = v3GeneratedDomainTypes
             ? v3ObjectPublishType(ctx)
             : terminalModel.orElseThrow().outputMapping().domainType();
-        TypeName mapperType = v3GeneratedDomainTypes ? null : terminalModel.orElseThrow().outputMapping().mapperType();
+        TypeName mapperType = v3GeneratedDomainTypes ? null : terminalModel.orElseThrow().outputMapping().mapperType()
+            .orElseThrow(() -> new IllegalStateException("Terminal business step is missing an outbound mapper"));
         TypeName externalType = v3GeneratedDomainTypes
             ? domainType
             : objectPublishExternalType(ctx, terminalModel.orElseThrow());
@@ -436,7 +437,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         TypeName domainType = v3GeneratedDomainTypes
             ? v3ObjectIngestType(ctx)
             : firstModel.orElseThrow().inputMapping().domainType();
-        TypeName mapperType = v3GeneratedDomainTypes ? null : firstModel.orElseThrow().inputMapping().mapperType();
+        TypeName mapperType = v3GeneratedDomainTypes ? null : firstModel.orElseThrow().inputMapping().mapperType()
+            .orElseThrow(() -> new IllegalStateException("First business step is missing an inbound mapper"));
         TypeName externalType = v3GeneratedDomainTypes
             ? domainType
             : objectIngestExternalType(ctx, firstModel.orElseThrow());
@@ -535,7 +537,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             if (model != null
                 && !model.sideEffect()
                 && model.inputMapping() != null
-                && model.inputMapping().mapperType() != null) {
+                && model.inputMapping().mapperType().isPresent()) {
                 return Optional.of(model);
             }
         }
@@ -556,8 +558,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         return (ctx.getStepModels() == null ? List.<PipelineStepModel>of() : ctx.getStepModels()).stream()
             .filter(model -> model != null && !model.sideEffect())
             .map(model -> model.serviceName() + "="
-                + (model.inputMapping() == null || model.inputMapping().mapperType() == null
-                    ? "<none>" : String.valueOf(model.inputMapping().mapperType())))
+                + (model.inputMapping() == null || model.inputMapping().mapperType().isEmpty()
+                    ? "<none>" : String.valueOf(model.inputMapping().mapperType().orElseThrow())))
             .collect(java.util.stream.Collectors.joining(", "));
     }
 
@@ -568,7 +570,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             if (model != null
                 && !model.sideEffect()
                 && model.outputMapping() != null
-                && model.outputMapping().mapperType() != null) {
+                && model.outputMapping().mapperType().isPresent()) {
                 return Optional.of(model);
             }
         }

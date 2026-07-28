@@ -1,6 +1,7 @@
 package org.pipelineframework.awaitable;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -25,7 +26,9 @@ import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 import org.pipelineframework.awaitable.spi.AwaitTransportAdapter;
 import org.pipelineframework.awaitable.store.InMemoryAwaitInteractionStore;
 import org.pipelineframework.awaitable.store.InMemoryAwaitUnitStore;
+import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
 
 class AwaitCoordinatorCompletionTest {
 
@@ -99,6 +102,54 @@ class AwaitCoordinatorCompletionTest {
         Map<?, ?> requestPayload = (Map<?, ?>) result.record().requestPayload();
         assertEquals("checkout.proto", requestPayload.get("name"));
         assertEquals("ProtoFraudCheck:name=checkout.proto", result.record().idempotencyKey());
+    }
+
+    @Test
+    void suspensionSnapshotNormalizesProtobufPayloadsForPortableTransition() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        DescriptorProtos.FileDescriptorProto payload = DescriptorProtos.FileDescriptorProto.newBuilder()
+            .setName("checkout.proto")
+            .setPackage("org.pipelineframework.checkout")
+            .build();
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "ProtoFraudCheck",
+            DescriptorProtos.FileDescriptorProto.class.getName(),
+            DescriptorProtos.FileDescriptorProto.class.getName(),
+            java.time.Duration.ofMinutes(10),
+            "interactionId",
+            "interaction-api",
+            Map.of(),
+            List.of("name"));
+        AwaitInteractionRecord created = coordinator.createOrGet(
+            descriptor,
+            "tenant-1",
+            "exec-1",
+            1,
+            "cause-1",
+            payload,
+            null,
+            null).await().indefinitely().record();
+        AwaitInteractionRecord rawProtobufPayload = new AwaitInteractionRecord(
+            created.tenantId(), created.executionId(), created.stepId(), created.stepIndex(), created.outputType(),
+            "portable-protobuf", "portable-protobuf", created.causationId(), "portable-protobuf",
+            created.version(), created.status(), payload, payload, created.unitId(), created.itemIndex(),
+            created.actor(), created.assignee(), created.group(), created.transportType(), created.transportMetadata(),
+            created.deadlineEpochMs(), created.createdAtEpochMs(), created.updatedAtEpochMs(), created.ttlEpochS(),
+            created.transportOutputType());
+        store.importRecord(rawProtobufPayload).await().indefinitely();
+
+        TransitionAwaitSuspension snapshot = coordinator.suspensionSnapshot(
+            new AwaitSuspendedException("tenant-1", "exec-1", created.unitId(), created.stepIndex()))
+            .await().indefinitely();
+        AwaitInteractionRecord portable = snapshot.interactions().stream()
+            .filter(interaction -> interaction.interactionId().equals("portable-protobuf"))
+            .findFirst()
+            .orElseThrow();
+
+        assertTrue(portable.requestPayload() instanceof Map<?, ?>);
+        assertTrue(portable.responsePayload() instanceof Map<?, ?>);
+        assertDoesNotThrow(() -> PipelineJson.mapper().writeValueAsString(snapshot));
     }
 
     @Test

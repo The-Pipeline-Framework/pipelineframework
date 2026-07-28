@@ -49,11 +49,13 @@ public class AwaitClientStepRenderer {
         PipelineTransport transportMode = configHints.transportMode();
         boolean generatedV3DomainTypes = ctx.v3GeneratedDomainTypes()
             || V3GeneratedDomainBinding.hasGeneratedCanonicalContracts(model, configHints.basePackage());
-        PipelineTransport representationTransport = generatedV3DomainTypes
-            ? PipelineTransport.GRPC
-            : transportMode;
-        TypeName transportInputType = clientStepType(model.inboundDomainType(), representationTransport, configHints.basePackage());
-        TypeName transportOutputType = clientStepType(model.outboundDomainType(), representationTransport, configHints.basePackage());
+        ClientRepresentation transportRepresentation = generatedV3DomainTypes
+            ? ClientRepresentation.PROTOBUF
+            : ClientRepresentation.forPipelineTransport(transportMode);
+        TypeName transportInputType = clientStepType(
+            model.inboundDomainType(), transportRepresentation, configHints.basePackage());
+        TypeName transportOutputType = clientStepType(
+            model.outboundDomainType(), transportRepresentation, configHints.basePackage());
         V3GeneratedDomainBinding.RepresentationBoundary boundary = V3GeneratedDomainBinding.resolveAwait(
             model,
             transportInputType,
@@ -246,15 +248,19 @@ public class AwaitClientStepRenderer {
         }
     }
 
-    private TypeName clientStepType(TypeName domainType, PipelineTransport transportMode, String pipelineBasePackage) {
+    private TypeName clientStepType(
+        TypeName domainType,
+        ClientRepresentation representation,
+        String pipelineBasePackage
+    ) {
         if (!(domainType instanceof ClassName className)) {
             return domainType;
         }
         String basePackage = basePackage(className, pipelineBasePackage);
-        return switch (transportMode) {
-            case LOCAL -> className;
-            case REST -> ClassName.get(basePackage + ".common.dto", className.simpleName() + "Dto");
-            case GRPC -> ClassName.get(basePackage + ".grpc", "PipelineTypes", className.simpleName());
+        return switch (representation) {
+            case CANONICAL -> className;
+            case REST_DTO -> ClassName.get(basePackage + ".common.dto", className.simpleName() + "Dto");
+            case PROTOBUF -> ClassName.get(basePackage + ".grpc", "PipelineTypes", className.simpleName());
         };
     }
 
@@ -286,5 +292,22 @@ public class AwaitClientStepRenderer {
     }
 
     private record PipelineConfigHints(PipelineTransport transportMode, String basePackage) {
+    }
+
+    /**
+     * Selects the generated client representation independently of the pipeline transport mode.
+     */
+    private enum ClientRepresentation {
+        CANONICAL,
+        REST_DTO,
+        PROTOBUF;
+
+        static ClientRepresentation forPipelineTransport(PipelineTransport pipelineTransport) {
+            return switch (pipelineTransport) {
+                case LOCAL -> CANONICAL;
+                case REST -> REST_DTO;
+                case GRPC -> PROTOBUF;
+            };
+        }
     }
 }

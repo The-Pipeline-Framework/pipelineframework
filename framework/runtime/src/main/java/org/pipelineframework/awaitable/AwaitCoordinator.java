@@ -342,7 +342,13 @@ public class AwaitCoordinator {
                     suspended.unitId(),
                     suspended.stepIndex(),
                     unit,
-                    interactions)));
+                    interactions.stream().map(this::transportSafeSnapshot).toList())));
+    }
+
+    private AwaitInteractionRecord transportSafeSnapshot(AwaitInteractionRecord interaction) {
+        return interaction.withPayloadSnapshots(
+            AwaitPayloadSupport.normalize(interaction.requestPayload()),
+            AwaitPayloadSupport.normalize(interaction.responsePayload()));
     }
 
     public Uni<Void> importSuspension(TransitionAwaitSuspension suspension) {
