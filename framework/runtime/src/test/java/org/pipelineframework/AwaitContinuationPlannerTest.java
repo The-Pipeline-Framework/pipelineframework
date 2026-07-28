@@ -135,6 +135,27 @@ class AwaitContinuationPlannerTest {
     assertInstanceOf(PaymentOutput.class, ((List<?>) release.release().resumePayload().payload()).getFirst());
   }
 
+  @Test
+  void durableSerializedChildPaymentOutputListDecodesBeforeParentRelease() {
+    AwaitUnitRecord unit = unit(AwaitUnitStatus.COMPLETED, 1, 1, true, null);
+    ExecutionRecord<Object, Object> parent = parent(ExecutionStatus.WAITING_EXTERNAL);
+    JsonTransitionPayloadCodec payloadCodec = new JsonTransitionPayloadCodec();
+    PaymentOutput expected = new PaymentOutput("payment-1", "APPROVED");
+    SerializedTransitionPayload serialized = payloadCodec.encode(expected);
+    ExecutionRecord<Object, Object> child = child("child-0", List.of(Map.of(
+        "payloadTypeId", serialized.payloadTypeId(),
+        "payloadEncoding", serialized.payloadEncoding(),
+        "payload", serialized.payload())));
+
+    AwaitContinuationPlan plan = planner.releaseItemizedParent(
+        parent, unit, 4, List.of(Optional.of(child)), payloadCodec);
+
+    AwaitContinuationPlan.ReleaseItemizedParent release =
+        assertInstanceOf(AwaitContinuationPlan.ReleaseItemizedParent.class, plan);
+    assertEquals(List.of(expected), release.release().resumePayload().payload());
+    assertInstanceOf(PaymentOutput.class, ((List<?>) release.release().resumePayload().payload()).getFirst());
+  }
+
   private static AwaitInteractionRecord scalarRecord() {
     return record(null);
   }

@@ -17,6 +17,7 @@ import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
 import jakarta.enterprise.inject.Instance;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.pipelineframework.cache.ProtobufMessageParser;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
@@ -268,6 +269,35 @@ class DynamoExecutionStateStoreTest {
         assertTrue(updated.isPresent());
         assertEquals(ExecutionStatus.SUCCEEDED, updated.get().status());
         assertFalse(updated.get().executionId().isBlank());
+    }
+
+    @Test
+    void markSucceededPreservesCanonicalResultItemIdentity() throws Exception {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        long now = System.currentTimeMillis();
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(Map.of()).build());
+
+        store.markSucceeded(
+                "tenant-a",
+                "exec-canonical-result",
+                1L,
+                "exec-canonical-result:0:0",
+                List.of(new CanonicalPaymentOutput("payment-1", "APPROVED")),
+                now)
+            .await().indefinitely();
+
+        ArgumentCaptor<UpdateItemRequest> request = ArgumentCaptor.forClass(UpdateItemRequest.class);
+        verify(client).updateItem(request.capture());
+        String serializedResults = request.getValue().expressionAttributeValues().get(":result").s();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> resultItems = PipelineJson.mapper().readValue(serializedResults, List.class);
+
+        assertEquals(1, resultItems.size());
+        assertEquals(CanonicalPaymentOutput.class.getName(), resultItems.getFirst().get("payloadTypeId"));
+        assertEquals("application/tpf-transition+json", resultItems.getFirst().get("payloadEncoding"));
     }
 
     @Test
@@ -835,6 +865,9 @@ class DynamoExecutionStateStoreTest {
             Base64.getEncoder().encodeToString(payload.toByteArray())))
             .build());
         return item;
+    }
+
+    private record CanonicalPaymentOutput(String paymentId, String status) {
     }
 
     private static DescriptorProtos.FileDescriptorSet samplePayload() {
