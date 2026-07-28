@@ -70,22 +70,17 @@ public final class RepresentationProviderPreparationPhase implements PipelineCom
         if (claim.isEmpty()) {
             return;
         }
-        ProviderConfiguration providerConfiguration = new ProviderConfiguration(
-            org.pipelineframework.representation.spi.RepresentationScope.GLOBAL,
-            claim.get().providerKey(),
-            config.typeModel().representationProviderConfiguration(claim.get().providerKey())
-                .orElseThrow(() -> new IllegalStateException("Representation provider '" + claim.get().providerKey()
-                    + "' claimed boundary '" + step.name() + "' but has no GLOBAL configuration.")));
+        RepresentationMapping mapping = config.typeModel().representationMapping(output.name(), claim.get().providerKey())
+            .orElseThrow(() -> new IllegalStateException("Representation provider '" + claim.get().providerKey()
+                + "' claimed boundary '" + step.name() + "' but canonical type '" + output.name()
+                + "' has no matching mapping (type/key)."));
+        ProviderConfiguration providerConfiguration = typeConfiguration(claim.get(), mapping);
         List<ProviderDiagnostic> diagnostics = providers.validate(List.of(providerConfiguration));
         reportDiagnostics(ctx, diagnostics);
         if (diagnostics.stream().anyMatch(diagnostic -> diagnostic.severity() == ProviderDiagnostic.Severity.ERROR)) {
             throw new IllegalStateException("Representation provider '" + claim.get().providerKey()
                 + "' configuration is invalid for claimed boundary '" + step.name() + "'.");
         }
-        RepresentationMapping mapping = config.typeModel().representationMapping(output.name(), claim.get().providerKey())
-            .orElseThrow(() -> new IllegalStateException("Representation provider '" + claim.get().providerKey()
-                + "' claimed boundary '" + step.name() + "' but canonical type '" + output.name()
-                + "' has no matching mapping (type/key)."));
         ResolvedRepresentation resolved = providers.resolve(new RepresentationMappingRequest(mapping.key(), output,
             mapping.representationType(), mapping.mapperType(), mapping.options()))
             .orElseThrow(() -> new IllegalStateException("Representation provider '" + claim.get().providerKey()
@@ -101,6 +96,11 @@ public final class RepresentationProviderPreparationPhase implements PipelineCom
             .map(entry -> new ProviderConfiguration(org.pipelineframework.representation.spi.RepresentationScope.GLOBAL,
                 entry.getKey(), entry.getValue()))
             .toList();
+    }
+
+    static ProviderConfiguration typeConfiguration(BoundaryClaim claim, RepresentationMapping mapping) {
+        return new ProviderConfiguration(org.pipelineframework.representation.spi.RepresentationScope.TYPE,
+            claim.providerKey(), mapping.options());
     }
 
     private static CanonicalType canonical(PipelineTemplateConfig config, ClassName javaType) {

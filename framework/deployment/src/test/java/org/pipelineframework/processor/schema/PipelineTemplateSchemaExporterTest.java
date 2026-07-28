@@ -284,6 +284,7 @@ class PipelineTemplateSchemaExporterTest {
         assertContains(awaitStep.getAsJsonArray("required"), "kind");
         assertContains(awaitStep.getAsJsonArray("required"), "timeout");
         assertContains(awaitStep.getAsJsonArray("required"), "await");
+        assertTrue(awaitProperties.has("idempotency"));
         assertTrue(awaitProperties.has("idempotencyKeyFields"));
 
         JsonObject awaitConfig = definitions.getAsJsonObject("awaitConfig");

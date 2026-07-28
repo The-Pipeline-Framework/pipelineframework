@@ -83,6 +83,7 @@ public class StepDefinitionParser {
         "kind",
         "await",
         "timeout",
+        "idempotency",
         "idempotencyKeyFields",
         "command",
         "commandIdGenerator",
@@ -536,7 +537,7 @@ public class StepDefinitionParser {
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
             }
-            List<String> idempotencyKeyFields = parseStringList(stepData.get("idempotencyKeyFields"), name, "idempotencyKeyFields");
+            List<String> idempotencyKeyFields = parseAwaitIdempotencyKeyFields(stepData, name);
             if (idempotencyKeyFields == null) {
                 return null;
             }
@@ -1201,6 +1202,28 @@ public class StepDefinitionParser {
             }
         }
         return List.copyOf(result);
+    }
+
+    private List<String> parseAwaitIdempotencyKeyFields(Map<String, Object> stepData, String stepName) {
+        Object structured = stepData.get("idempotency");
+        Object legacy = stepData.get("idempotencyKeyFields");
+        if (structured != null && legacy != null) {
+            String message = "Skipping step '" + stepName
+                + "': 'idempotency' and 'idempotencyKeyFields' are aliases and are mutually exclusive";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        if (structured == null) {
+            return parseStringList(legacy, stepName, "idempotencyKeyFields");
+        }
+        if (!(structured instanceof Map<?, ?> idempotency)) {
+            String message = "Skipping step '" + stepName + "': idempotency must be a map";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        return parseStringList(idempotency.get("fields"), stepName, "idempotency.fields");
     }
 
     private Map<String, Object> normalizeMap(Map<?, ?> map) {

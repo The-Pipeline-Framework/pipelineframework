@@ -308,7 +308,8 @@ class StepDefinitionParserTest {
                 input: "com.example.FraudCheckRequest"
                 output: "com.example.FraudCheckDecision"
                 timeout: "PT10M"
-                idempotencyKeyFields: ["orderId"]
+                idempotency:
+                  fields: ["orderId"]
                 await:
                   correlation:
                     strategy: "interactionId"
@@ -331,6 +332,7 @@ class StepDefinitionParserTest {
         assertEquals("https://partner.example/check",
             ((java.util.Map<?, ?>) ((java.util.Map<?, ?>) step.awaitConfig().get("transport")).get("request")).get("url"));
         assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains("unsupported keys")), diagnostics.toString());
     }
 
     @Test
