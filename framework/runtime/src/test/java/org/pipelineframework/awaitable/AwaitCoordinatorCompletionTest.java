@@ -484,6 +484,46 @@ class AwaitCoordinatorCompletionTest {
     }
 
     @Test
+    void resumePayloadUsesTransportTypeBeforeApplyingCanonicalAdapter() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "CanonicalDecision",
+            Map.class.getName(),
+            CanonicalDecision.class.getName(),
+            "ONE_TO_ONE",
+            java.time.Duration.ofMinutes(10),
+            "interactionId",
+            "interaction-api",
+            Map.of(),
+            List.of(),
+            Map.class.getName(),
+            Map.class.getName(),
+            java.util.function.Function.identity(),
+            payload -> new CanonicalDecision(((Map<?, ?>) payload).get("status").toString()));
+
+        AwaitCreateResult created = coordinator.createOrGet(
+            descriptor,
+            "tenant-1",
+            "exec-1",
+            1,
+            "cause-1",
+            Map.of("orderId", "o-1"),
+            null,
+            null).await().indefinitely();
+        AwaitCompletionResult completed = coordinator.complete(new AwaitCompletionCommand(
+            "tenant-1",
+            created.record().interactionId(),
+            null,
+            null,
+            Map.of("status", "APPROVED"),
+            "alice",
+            11_000L)).await().indefinitely();
+
+        assertEquals(new CanonicalDecision("APPROVED"), coordinator.resumePayload(completed.record()));
+    }
+
+    @Test
     void defersLegacySemanticPayloadConversionUntilResume() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
@@ -652,6 +692,9 @@ class AwaitCoordinatorCompletionTest {
     }
 
     private record CanonicalRequest(UUID id, Path sourcePath) {
+    }
+
+    private record CanonicalDecision(String status) {
     }
 
     private static final class SimpleInstance<T> implements Instance<T> {

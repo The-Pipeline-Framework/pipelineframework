@@ -297,7 +297,7 @@ public class AwaitCoordinator {
                     .onItem().transform(optional -> optional.orElseThrow(
                         () -> new IllegalStateException("Await interaction not found for primary interaction id "
                             + unit.primaryInteractionId())))
-                    .onItem().transform(record -> enforceAggregateOutputLimit(unit, coerceResumePayload(record)));
+                    .onItem().transform(record -> enforceAggregateOutputLimit(unit, resumePayload(record)));
             }
             return interactionStore().findByUnit(tenantId, unitId)
                 .onItem().transform(records -> {
@@ -314,7 +314,7 @@ public class AwaitCoordinator {
                                     .thenComparing(AwaitInteractionRecord::version))
                                 .orElseThrow();
                         })
-                        .map(this::coerceResumePayload)
+                                .map(this::resumePayload)
                         .toList();
                 });
         });
@@ -767,7 +767,17 @@ public class AwaitCoordinator {
             command.nowEpochMs());
     }
 
-    private Object coerceResumePayload(AwaitInteractionRecord record) {
+    /**
+     * Decodes one durable await interaction's transport payload and returns its canonical pipeline value.
+     *
+     * <p>The durable record preserves the canonical contract separately from the transport representation.
+     * This method validates both identities against the rebuilt step descriptor before applying the generated
+     * transport-to-canonical adapter.</p>
+     *
+     * @param record completed durable interaction
+     * @return canonical pipeline payload
+     */
+    public Object resumePayload(AwaitInteractionRecord record) {
         try {
             AwaitStepDescriptor descriptor = descriptorFor(record);
             validateDurableOutputContract(record, descriptor);
