@@ -524,6 +524,34 @@ class AwaitCoordinatorCompletionTest {
     }
 
     @Test
+    void acceptsLegacyV2NestedProtobufSourceTypeIdentity() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        String binaryType = DescriptorProtos.FileDescriptorProto.class.getName();
+        String sourceType = DescriptorProtos.FileDescriptorProto.class.getCanonicalName();
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "LegacyProtobufDecision", binaryType, binaryType, java.time.Duration.ofMinutes(10),
+            "interactionId", "interaction-api", Map.of(), List.of());
+
+        AwaitCreateResult created = coordinator.createOrGet(
+            descriptor, "tenant-1", "exec-1", 1, "cause-1", DescriptorProtos.FileDescriptorProto.getDefaultInstance(),
+            null, null).await().indefinitely();
+        AwaitCompletionResult completed = coordinator.complete(new AwaitCompletionCommand(
+            "tenant-1", created.record().interactionId(), null, null,
+            DescriptorProtos.FileDescriptorProto.getDefaultInstance(), "alice", 11_000L)).await().indefinitely();
+        AwaitInteractionRecord record = completed.record();
+        AwaitInteractionRecord legacySourceNamed = new AwaitInteractionRecord(
+            record.tenantId(), record.executionId(), record.stepId(), record.stepIndex(), sourceType,
+            record.interactionId(), record.correlationId(), record.causationId(), record.idempotencyKey(),
+            record.version(), record.status(), record.requestPayload(), record.responsePayload(), record.unitId(),
+            record.itemIndex(), record.actor(), record.assignee(), record.group(), record.transportType(),
+            record.transportMetadata(), record.deadlineEpochMs(), record.createdAtEpochMs(), record.updatedAtEpochMs(),
+            record.ttlEpochS(), sourceType);
+
+        assertEquals(DescriptorProtos.FileDescriptorProto.getDefaultInstance(), coordinator.resumePayload(legacySourceNamed));
+    }
+
+    @Test
     void defersLegacySemanticPayloadConversionUntilResume() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);

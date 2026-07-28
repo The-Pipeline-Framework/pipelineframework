@@ -800,7 +800,7 @@ public class AwaitCoordinator {
     ) {
         AwaitStepDescriptor descriptor = descriptorFor(record);
         validateDurableOutputContract(record, descriptor);
-        Object transportPayload = record.outputType().equals(record.transportOutputType())
+        Object transportPayload = sameTypeIdentity(record.outputType(), record.transportOutputType())
             ? command.responsePayload()
             : coerceTransportPayload(record, command.responsePayload());
         return new ValidatedCompletion(record, withResponsePayload(command, transportPayload));
@@ -822,7 +822,7 @@ public class AwaitCoordinator {
     }
 
     private void validateDurableOutputContract(AwaitInteractionRecord record, AwaitStepDescriptor descriptor) {
-        if (!descriptor.outputType().equals(record.outputType())) {
+        if (!sameTypeIdentity(descriptor.outputType(), record.outputType())) {
             throw new IllegalStateException(
                 "Await durable-contract compatibility failed for execution " + record.executionId()
                     + " interaction " + record.interactionId()
@@ -830,13 +830,31 @@ public class AwaitCoordinator {
                     + ": durable canonical outputType=" + record.outputType()
                     + " differs from rebuilt descriptor outputType=" + descriptor.outputType());
         }
-        if (!descriptor.transportOutputType().equals(record.transportOutputType())) {
+        if (!sameTypeIdentity(descriptor.transportOutputType(), record.transportOutputType())) {
             throw new IllegalStateException(
                 "Await durable transport-contract compatibility failed for execution " + record.executionId()
                     + " interaction " + record.interactionId()
                     + " stepId=" + record.stepId()
                     + ": durable transportOutputType=" + record.transportOutputType()
                     + " differs from rebuilt descriptor transportOutputType=" + descriptor.transportOutputType());
+        }
+    }
+
+    /**
+     * Compares durable type identities by their loadable class when source-form names differ from
+     * JVM binary names for nested types. This preserves v2's single protobuf identity while still
+     * rejecting a v3 protobuf transport type in place of its canonical domain contract.
+     */
+    private static boolean sameTypeIdentity(String left, String right) {
+        if (left.equals(right)) {
+            return true;
+        }
+        try {
+            ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+            return AwaitPayloadSupport.resolvePayloadClass(left, classLoader)
+                .equals(AwaitPayloadSupport.resolvePayloadClass(right, classLoader));
+        } catch (ClassNotFoundException ignored) {
+            return false;
         }
     }
 
