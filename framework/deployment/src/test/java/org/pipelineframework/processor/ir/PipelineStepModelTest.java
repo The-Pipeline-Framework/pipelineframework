@@ -457,4 +457,13 @@ class PipelineStepModelTest {
 
         assertEquals(ServiceApiKind.REACTIVE, model.serviceApiKind());
     }
+
+    @Test
+    void distinguishesAnUnresolvedMappingFromAnAvailableDomainWithoutMapper() {
+        TypeMapping unresolved = TypeMapping.unresolved();
+
+        assertNull(unresolved.domainType());
+        assertTrue(unresolved.mapperType().isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> TypeMapping.withoutMapper(null));
+    }
 }

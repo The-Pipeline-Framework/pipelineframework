@@ -157,7 +157,7 @@ steps:
       output: org.pipelineframework.csv.domain.PaymentStatus
     timeout: PT5M
     idempotency:
-      fields: [csvId, recipient, amount, currency]
+      fields: [id]
     await:
       correlation:
         strategy: signedResumeToken

@@ -70,6 +70,18 @@ public final class RepresentationProviderPreparationPhase implements PipelineCom
         if (claim.isEmpty()) {
             return;
         }
+        ProviderConfiguration providerConfiguration = new ProviderConfiguration(
+            org.pipelineframework.representation.spi.RepresentationScope.GLOBAL,
+            claim.get().providerKey(),
+            config.typeModel().representationProviderConfiguration(claim.get().providerKey())
+                .orElseThrow(() -> new IllegalStateException("Representation provider '" + claim.get().providerKey()
+                    + "' claimed boundary '" + step.name() + "' but has no GLOBAL configuration.")));
+        List<ProviderDiagnostic> diagnostics = providers.validate(List.of(providerConfiguration));
+        reportDiagnostics(ctx, diagnostics);
+        if (diagnostics.stream().anyMatch(diagnostic -> diagnostic.severity() == ProviderDiagnostic.Severity.ERROR)) {
+            throw new IllegalStateException("Representation provider '" + claim.get().providerKey()
+                + "' configuration is invalid for claimed boundary '" + step.name() + "'.");
+        }
         RepresentationMapping mapping = config.typeModel().representationMapping(output.name(), claim.get().providerKey())
             .orElseThrow(() -> new IllegalStateException("Representation provider '" + claim.get().providerKey()
                 + "' claimed boundary '" + step.name() + "' but canonical type '" + output.name()
@@ -81,7 +93,7 @@ public final class RepresentationProviderPreparationPhase implements PipelineCom
         validateClasses(ctx, resolved);
         ctx.getResolvedRepresentationRegistry().register(resolved);
         ctx.registerResolvedProviderBoundary(new ResolvedProviderBoundary(request, claim.get(), List.of(resolved),
-            config.typeModel().representationProviderConfiguration(claim.get().providerKey()).orElse(Map.of())));
+            providerConfiguration.options()));
     }
 
     private static List<ProviderConfiguration> globalConfigurations(PipelineTemplateConfig config) {

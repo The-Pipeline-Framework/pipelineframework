@@ -120,6 +120,9 @@ public class PipelineTemplateConfigLoader {
         if (dialect == PipelineTemplateDialect.V1 && (rootMap.containsKey("types") || rootMap.containsKey("messages"))) {
             throw new IllegalStateException("Top-level types/messages require version: 2");
         }
+        if (dialect != PipelineTemplateDialect.V3 && rootMap.containsKey("representations")) {
+            throw new IllegalStateException("Top-level representations require version: 3");
+        }
 
         if (dialect == PipelineTemplateDialect.V3) {
             return loadV3(rootMap, version, appName, basePackage, transport, resolvedPlatform);

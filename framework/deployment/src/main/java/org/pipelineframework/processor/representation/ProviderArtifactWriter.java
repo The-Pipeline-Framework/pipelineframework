@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.representation;
 
 import java.io.IOException;
+import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -8,18 +9,18 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.io.Writer;
 import javax.annotation.processing.Filer;
 import javax.tools.JavaFileObject;
 
 import org.pipelineframework.representation.spi.ArtifactDescription;
+import org.pipelineframework.representation.spi.ArtifactKind;
 
 /** The only component permitted to materialize provider-described source and resource artifacts. */
 public final class ProviderArtifactWriter {
     private static final Comparator<ArtifactDescription> ORDER = Comparator
         .comparing((ArtifactDescription artifact) -> artifact.phase().ordinal())
         .thenComparing(ArtifactDescription::providerKey)
-        .thenComparing(artifact -> artifact.kind().name())
+        .thenComparing(ArtifactDescription::kind)
         .thenComparing(ArtifactDescription::logicalPath)
         .thenComparingInt(ArtifactDescription::providerOrdinal);
 
@@ -27,17 +28,9 @@ public final class ProviderArtifactWriter {
         if (root == null) {
             throw new IllegalArgumentException("artifact root must not be null");
         }
-        Map<String, ArtifactDescription> unique = new LinkedHashMap<>();
-        for (ArtifactDescription description : descriptions == null ? List.<ArtifactDescription>of() : descriptions.stream().sorted(ORDER).toList()) {
-            validate(description);
-            ArtifactDescription previous = unique.putIfAbsent(description.logicalPath(), description);
-            if (previous != null) {
-                throw new IllegalStateException("Representation artifact conflict at '" + description.logicalPath()
-                    + "' between providers '" + previous.providerKey() + "' and '" + description.providerKey() + "'.");
-            }
-        }
+        List<ArtifactDescription> unique = orderedAndDeduped(descriptions);
         List<Path> written = new java.util.ArrayList<>();
-        for (ArtifactDescription description : unique.values()) {
+        for (ArtifactDescription description : unique) {
             Path target = root.resolve(description.logicalPath()).normalize();
             if (!target.startsWith(root.normalize())) {
                 throw new IllegalStateException("Representation artifact path escapes generated output: " + description.logicalPath());
@@ -54,18 +47,10 @@ public final class ProviderArtifactWriter {
         if (filer == null) {
             throw new IllegalArgumentException("filer must not be null");
         }
-        Map<String, ArtifactDescription> unique = new LinkedHashMap<>();
-        for (ArtifactDescription description : descriptions == null ? List.<ArtifactDescription>of() : descriptions.stream().sorted(ORDER).toList()) {
-            validate(description);
-            ArtifactDescription previous = unique.putIfAbsent(description.logicalPath(), description);
-            if (previous != null) {
-                throw new IllegalStateException("Representation artifact conflict at '" + description.logicalPath()
-                    + "' between providers '" + previous.providerKey() + "' and '" + description.providerKey() + "'.");
-            }
-        }
-        for (ArtifactDescription description : unique.values()) {
-            if (description.kind().name().equals("RESOURCE")) {
-                throw new IllegalStateException("Provider resource artifacts require a file-system host output root.");
+        for (ArtifactDescription description : orderedAndDeduped(descriptions)) {
+            if (description.kind() != ArtifactKind.JAVA_SOURCE) {
+                throw new IllegalStateException("The compiler host accepts only JAVA_SOURCE provider artifacts; got "
+                    + description.kind() + " for '" + description.logicalPath() + "'.");
             }
             String className = description.logicalPath().substring(0, description.logicalPath().length() - ".java".length())
                 .replace('/', '.');
@@ -82,8 +67,22 @@ public final class ProviderArtifactWriter {
             throw new IllegalStateException("Representation artifact path must be relative and normalized: "
                 + description.logicalPath());
         }
-        if (description.kind().name().equals("JAVA_SOURCE") && !description.logicalPath().endsWith(".java")) {
+        if (description.kind() == ArtifactKind.JAVA_SOURCE && !description.logicalPath().endsWith(".java")) {
             throw new IllegalStateException("Java representation artifact must end in .java: " + description.logicalPath());
         }
+    }
+
+    private static List<ArtifactDescription> orderedAndDeduped(List<ArtifactDescription> descriptions) {
+        Map<String, ArtifactDescription> unique = new LinkedHashMap<>();
+        for (ArtifactDescription description : descriptions == null ? List.<ArtifactDescription>of()
+            : descriptions.stream().sorted(ORDER).toList()) {
+            validate(description);
+            ArtifactDescription previous = unique.putIfAbsent(description.logicalPath(), description);
+            if (previous != null) {
+                throw new IllegalStateException("Representation artifact conflict at '" + description.logicalPath()
+                    + "' between providers '" + previous.providerKey() + "' and '" + description.providerKey() + "'.");
+            }
+        }
+        return List.copyOf(unique.values());
     }
 }

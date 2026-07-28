@@ -23,7 +23,9 @@ public record TypeMapping(
      * Creates a new TypeMapping instance with entity type for inference.
      */
     public TypeMapping {
-        mapperType = mapperType == null ? Optional.empty() : mapperType;
+        if (mapperType == null) {
+            throw new IllegalArgumentException("mapperType must not be null; use Optional.empty()");
+        }
         // entityType defaults to domainType if not specified
         if (entityType == null) {
             entityType = domainType;
@@ -51,7 +53,15 @@ public record TypeMapping(
      * @return a mapping with no inferred mapper
      */
     public static TypeMapping withoutMapper(TypeName domainType) {
+        if (domainType == null) {
+            throw new IllegalArgumentException("domainType must not be null; use unresolved() for an unavailable contract");
+        }
         return new TypeMapping(domainType, Optional.empty(), false, domainType);
+    }
+
+    /** Creates an explicit mapping for a contract that is not available at extraction time. */
+    public static TypeMapping unresolved() {
+        return new TypeMapping(null, Optional.empty(), false, null);
     }
 
     /**

@@ -77,7 +77,7 @@ class TemplateModelBuilder {
 
     private TypeMapping buildMapping(String basePackage, String typeName) {
         if (typeName == null || typeName.isBlank()) {
-            return TypeMapping.withoutMapper(null);
+            return TypeMapping.unresolved();
         }
         ClassName domainType = ClassName.get(basePackage + ".common.domain", typeName);
         return TypeMapping.withoutMapper(domainType);

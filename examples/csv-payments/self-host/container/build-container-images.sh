@@ -98,10 +98,13 @@ if [[ ! -r "${TPF_CSV_PIPELINE_CONFIG}" ]]; then
   exit 1
 fi
 
-if grep -Eq '^version:[[:space:]]*3[[:space:]]*$' "${TPF_CSV_PIPELINE_CONFIG}"; then
+if grep -Eq "^[[:space:]]*version:[[:space:]]*['\"]?3['\"]?[[:space:]]*(#.*)?$" "${TPF_CSV_PIPELINE_CONFIG}"; then
+  echo "Selected CSV pipeline version 3 build mode (csv.v3.persistence=true)."
   COMMON_BUILD_PROPS+=(
     -Dcsv.v3.persistence=true
   )
+else
+  echo "Selected legacy CSV pipeline build mode."
 fi
 
 if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "sqs" ]]; then

@@ -178,8 +178,8 @@ public record PipelineStepModel(
         this.generatedName = generatedName;
         this.servicePackage = servicePackage;
         this.serviceClassName = serviceClassName;
-        this.inputMapping = inputMapping != null ? inputMapping : TypeMapping.withoutMapper(null);
-        this.outputMapping = outputMapping != null ? outputMapping : TypeMapping.withoutMapper(null);
+        this.inputMapping = inputMapping != null ? inputMapping : TypeMapping.unresolved();
+        this.outputMapping = outputMapping != null ? outputMapping : TypeMapping.unresolved();
         this.streamingShape = streamingShape;
         this.enabledTargets = Set.copyOf(enabledTargets); // Defensive copy
         this.executionMode = executionMode;
@@ -426,8 +426,8 @@ public record PipelineStepModel(
         private String generatedName;
         private String servicePackage;
         private ClassName serviceClassName;
-        private TypeMapping inputMapping = TypeMapping.withoutMapper(null);
-        private TypeMapping outputMapping = TypeMapping.withoutMapper(null);
+        private TypeMapping inputMapping = TypeMapping.unresolved();
+        private TypeMapping outputMapping = TypeMapping.unresolved();
         private StreamingShape streamingShape;
         private Set<GenerationTarget> enabledTargets = new HashSet<>();
         private ExecutionMode executionMode;

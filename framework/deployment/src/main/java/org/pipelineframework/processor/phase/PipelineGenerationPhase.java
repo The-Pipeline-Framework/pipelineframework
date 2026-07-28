@@ -380,8 +380,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         TypeName domainType = v3GeneratedDomainTypes
             ? v3ObjectPublishType(ctx)
             : terminalModel.orElseThrow().outputMapping().domainType();
-        TypeName mapperType = v3GeneratedDomainTypes ? null : terminalModel.orElseThrow().outputMapping().mapperType()
-            .orElseThrow(() -> new IllegalStateException("Terminal business step is missing an outbound mapper"));
+        Optional<TypeName> mapperType = v3GeneratedDomainTypes ? Optional.empty()
+            : Optional.of(terminalModel.orElseThrow().outputMapping().mapperType()
+                .orElseThrow(() -> new IllegalStateException("Terminal business step is missing an outbound mapper")));
         TypeName externalType = v3GeneratedDomainTypes
             ? domainType
             : objectPublishExternalType(ctx, terminalModel.orElseThrow());
@@ -437,8 +438,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         TypeName domainType = v3GeneratedDomainTypes
             ? v3ObjectIngestType(ctx)
             : firstModel.orElseThrow().inputMapping().domainType();
-        TypeName mapperType = v3GeneratedDomainTypes ? null : firstModel.orElseThrow().inputMapping().mapperType()
-            .orElseThrow(() -> new IllegalStateException("First business step is missing an inbound mapper"));
+        Optional<TypeName> mapperType = v3GeneratedDomainTypes ? Optional.empty()
+            : Optional.of(firstModel.orElseThrow().inputMapping().mapperType()
+                .orElseThrow(() -> new IllegalStateException("First business step is missing an inbound mapper")));
         TypeName externalType = v3GeneratedDomainTypes
             ? domainType
             : objectIngestExternalType(ctx, firstModel.orElseThrow());

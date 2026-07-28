@@ -68,7 +68,9 @@ class RepresentationProviderRegistryTest {
 
     @Test
     void providerValueContractsNormalizeAndRejectInvalidValues() {
-        assertThrows(IllegalArgumentException.class, () -> new BoundaryClaim("provider", "binding", "example.Facade"));
+        assertTrue(new BoundaryClaim("provider", "binding", "example.Facade").stepContract().isEmpty());
+        assertThrows(IllegalArgumentException.class,
+            () -> new ProviderStepContract(ProviderExecutionStyle.BLOCKING_ITERATOR, "NOT_A_CARDINALITY"));
         assertThrows(IllegalArgumentException.class, () -> new ProviderSchemaFragment("bad\"key",
             Optional.empty(), Optional.empty(), Optional.empty()));
         assertThrows(IllegalArgumentException.class, () -> new ProviderSchemaFragment("provider",

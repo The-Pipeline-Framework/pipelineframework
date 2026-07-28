@@ -515,26 +515,28 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return null;
         }
 
+        Optional<ClassName> annotationInboundMapper = annotationBacked && extractedModel.inputMapping() != null
+            ? extractedModel.inputMapping().mapperType().map(this::castToClassName)
+            : Optional.empty();
         ClassName inboundMapper = resolveInternalMapper(
             ctx,
             stepDef.name(),
             "inboundMapper",
             stepDef.inboundMapper(),
-            annotationBacked && extractedModel.inputMapping() != null
-                ? extractedModel.inputMapping().mapperType().map(this::castToClassName).orElse(null)
-                : null,
+            annotationInboundMapper,
             inputType);
         if (inboundMapper == INVALID_CLASS_NAME) {
             return null;
         }
+        Optional<ClassName> annotationOutboundMapper = annotationBacked && extractedModel.outputMapping() != null
+            ? extractedModel.outputMapping().mapperType().map(this::castToClassName)
+            : Optional.empty();
         ClassName outboundMapper = resolveInternalMapper(
             ctx,
             stepDef.name(),
             "outboundMapper",
             stepDef.outboundMapper(),
-            annotationBacked && extractedModel.outputMapping() != null
-                ? extractedModel.outputMapping().mapperType().map(this::castToClassName).orElse(null)
-                : null,
+            annotationOutboundMapper,
             outputType);
         if (outboundMapper == INVALID_CLASS_NAME) {
             return null;
@@ -1657,16 +1659,16 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             String stepName,
             String fieldName,
             ClassName yamlMapper,
-            ClassName annotationMapper,
+            Optional<ClassName> annotationMapper,
             TypeName expectedDomainType) {
-        if (yamlMapper != null && annotationMapper != null) {
+        if (yamlMapper != null && annotationMapper.isPresent()) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.WARNING,
                 "Internal step '" + stepName + "' declares " + fieldName + " '" + yamlMapper.canonicalName()
                     + "' in YAML and deprecated @PipelineStep metadata declares '"
-                    + annotationMapper.canonicalName() + "'. YAML is authoritative.");
+                    + annotationMapper.get().canonicalName() + "'. YAML is authoritative.");
         }
-        ClassName effective = yamlMapper != null ? yamlMapper : annotationMapper;
+        ClassName effective = yamlMapper != null ? yamlMapper : annotationMapper.orElse(null);
         if (effective == null) {
             return null;
         }

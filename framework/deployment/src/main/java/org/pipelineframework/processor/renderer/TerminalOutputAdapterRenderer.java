@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 import javax.annotation.processing.Filer;
 import javax.lang.model.element.Modifier;
 import javax.tools.StandardLocation;
@@ -28,7 +29,7 @@ public final class TerminalOutputAdapterRenderer {
         String basePackage,
         TypeName domainType,
         TypeName externalType,
-        TypeName mapperType,
+        Optional<TypeName> mapperType,
         GenerationContext ctx
     ) throws IOException {
         if (!(domainType instanceof ClassName domainClass)
@@ -36,10 +37,11 @@ public final class TerminalOutputAdapterRenderer {
             throw new IllegalArgumentException("Object Publish terminal adapter requires class-backed domain and external types");
         }
         boolean directCanonical = ctx.v3GeneratedDomainTypes() && domainClass.equals(externalClass);
-        if (!directCanonical && !(mapperType instanceof ClassName)) {
+        if (!directCanonical && !(mapperType.orElseThrow(() -> new IllegalArgumentException(
+            "Object Publish terminal adapter requires a mapper type for non-canonical output")) instanceof ClassName)) {
             throw new IllegalArgumentException("Object Publish terminal adapter requires a class-backed mapper type");
         }
-        ClassName mapperClass = mapperType instanceof ClassName className ? className : null;
+        ClassName mapperClass = mapperType.filter(ClassName.class::isInstance).map(ClassName.class::cast).orElse(null);
         String packageName = basePackage + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX;
         ClassName adapterClass = ClassName.get(packageName, CLASS_NAME);
         TypeSpec.Builder type = TypeSpec.classBuilder(CLASS_NAME)

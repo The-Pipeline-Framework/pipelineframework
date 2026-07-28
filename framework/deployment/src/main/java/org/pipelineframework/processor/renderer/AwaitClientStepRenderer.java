@@ -47,8 +47,7 @@ public class AwaitClientStepRenderer {
         String className = baseName + "AwaitClientStep";
         PipelineConfigHints configHints = resolveConfigHints(ctx);
         PipelineTransport transportMode = configHints.transportMode();
-        boolean generatedV3DomainTypes = ctx.v3GeneratedDomainTypes()
-            || V3GeneratedDomainBinding.hasGeneratedCanonicalContracts(model, configHints.basePackage());
+        boolean generatedV3DomainTypes = ctx.v3GeneratedDomainTypes();
         ClientRepresentation transportRepresentation = generatedV3DomainTypes
             ? ClientRepresentation.PROTOBUF
             : ClientRepresentation.forPipelineTransport(transportMode);

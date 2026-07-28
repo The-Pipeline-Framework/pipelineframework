@@ -7,8 +7,7 @@ public record BoundaryClaim(String providerKey, String bindingId, String generat
                             Optional<ProviderStepContract> stepContract) {
     public BoundaryClaim {
         if (providerKey == null || providerKey.isBlank() || bindingId == null || bindingId.isBlank()
-            || generatedFacadeTypeName == null || generatedFacadeTypeName.isBlank() || stepContract == null
-            || stepContract.isEmpty()) {
+            || generatedFacadeTypeName == null || generatedFacadeTypeName.isBlank() || stepContract == null) {
             throw new IllegalArgumentException("boundary claim fields must not be blank");
         }
         providerKey = providerKey.trim();

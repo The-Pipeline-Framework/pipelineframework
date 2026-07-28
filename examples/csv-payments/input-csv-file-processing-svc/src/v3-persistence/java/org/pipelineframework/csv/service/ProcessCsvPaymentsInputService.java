@@ -98,15 +98,16 @@ public class ProcessCsvPaymentsInputService
         row.setId(CsvPaymentsStableIdSupport.paymentRecordId(
             row.getCsvPaymentsInputFilePath(), row.getCsvId(), row.getRecipient(), row.getAmount(), row.getCurrency()));
         emitted++;
-        String serviceId = ProcessCsvPaymentsInputService.class.toString();
-        MDC.put("serviceId", serviceId);
-        try {
-            LOG.debugf(
-                "Executed blocking CSV iteration on %s (csvId=%s)",
-                input.filepath(),
-                row.getCsvId());
-        } finally {
-            MDC.remove("serviceId");
+        if (LOG.isDebugEnabled()) {
+            MDC.put("serviceId", ProcessCsvPaymentsInputService.class.getName());
+            try {
+                LOG.debugf(
+                    "Executed blocking CSV iteration on %s (csvId=%s)",
+                    input.filepath(),
+                    row.getCsvId());
+            } finally {
+                MDC.remove("serviceId");
+            }
         }
         return row;
     }

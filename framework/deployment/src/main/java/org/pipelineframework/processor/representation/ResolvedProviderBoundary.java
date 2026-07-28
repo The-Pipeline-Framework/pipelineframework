@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import org.pipelineframework.representation.spi.BoundaryClaim;
 import org.pipelineframework.representation.spi.BoundaryRequest;
+import org.pipelineframework.representation.spi.ImmutableMapSupport;
 import org.pipelineframework.representation.spi.ResolvedRepresentation;
 
 /** Host-owned normalized provider binding, resolved before core service classification. */
@@ -15,6 +16,6 @@ public record ResolvedProviderBoundary(
 ) {
     public ResolvedProviderBoundary {
         representations = List.copyOf(representations);
-        configuration = Map.copyOf(configuration);
+        configuration = ImmutableMapSupport.copy(configuration);
     }
 }
