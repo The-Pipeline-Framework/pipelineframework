@@ -12,6 +12,8 @@ import org.pipelineframework.orchestrator.ExecutionInputShape;
 import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionStatus;
+import org.pipelineframework.orchestrator.SerializedTransitionPayload;
+import org.pipelineframework.orchestrator.TransitionPayloadCodec;
 
 class AwaitContinuationPlanner {
 
@@ -82,7 +84,8 @@ class AwaitContinuationPlanner {
       ExecutionRecord<Object, Object> parent,
       AwaitUnitRecord unit,
       int aggregateStepIndex,
-      List<Optional<ExecutionRecord<Object, Object>>> children) {
+      List<Optional<ExecutionRecord<Object, Object>>> children,
+      TransitionPayloadCodec payloadCodec) {
     if (parent == null || unit == null || !usesItemContinuations(unit)
         || !unit.dispatchComplete() || unit.expectedItemCount() == null) {
       return new AwaitContinuationPlan.NoOp("itemized-parent-release-not-ready");
@@ -92,7 +95,7 @@ class AwaitContinuationPlanner {
       if (child.isEmpty() || child.get().status() != ExecutionStatus.SUCCEEDED) {
         return new AwaitContinuationPlan.NoOp("itemized-child-not-succeeded");
       }
-      Object payload = child.get().resultPayload();
+      Object payload = decodePayload(child.get().resultPayload(), payloadCodec);
       if (payload instanceof Iterable<?> iterable) {
         iterable.forEach(orderedOutputs::add);
       } else if (payload != null) {
@@ -104,6 +107,10 @@ class AwaitContinuationPlanner {
         unit,
         aggregateStepIndex,
         new ExecutionInputSnapshot(ExecutionInputShape.MULTI, List.copyOf(orderedOutputs))));
+  }
+
+  private static Object decodePayload(Object payload, TransitionPayloadCodec payloadCodec) {
+    return payload instanceof SerializedTransitionPayload serialized ? payloadCodec.decode(serialized) : payload;
   }
 
   void validateItemIndex(AwaitInteractionRecord interaction, AwaitUnitRecord unit) {

@@ -15,6 +15,7 @@ import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionStatus;
+import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -87,7 +88,8 @@ class AwaitContinuationPlannerTest {
         parent,
         unit,
         4,
-        List.of(Optional.of(first), Optional.of(second)));
+        List.of(Optional.of(first), Optional.of(second)),
+        new JsonTransitionPayloadCodec());
 
     AwaitContinuationPlan.ReleaseItemizedParent release =
         assertInstanceOf(AwaitContinuationPlan.ReleaseItemizedParent.class, plan);

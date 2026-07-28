@@ -14,6 +14,7 @@ import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitUnitRecord;
 import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRecord;
+import org.pipelineframework.orchestrator.TransitionPayloadCodec;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
 import org.pipelineframework.orchestrator.TransitionWorkerExecutor;
@@ -62,6 +63,28 @@ class AwaitContinuations {
       Supplier<Duration> saturatedDelay,
       Supplier<SegmentBoundaryLedger> segmentBoundaryLedger,
       Consumer<AwaitReplayLifecycleEvent> lifecycleRecorder) {
+    this(
+        executionStateStore,
+        workDispatcher,
+        awaitCoordinator,
+        transitionWorkerExecutor,
+        queueSweepExecutor,
+        saturatedDelay,
+        segmentBoundaryLedger,
+        lifecycleRecorder,
+        org.pipelineframework.orchestrator.JsonTransitionPayloadCodec::new);
+  }
+
+  AwaitContinuations(
+      ExecutionStateStore executionStateStore,
+      WorkDispatcher workDispatcher,
+      AwaitCoordinator awaitCoordinator,
+      TransitionWorkerExecutor transitionWorkerExecutor,
+      ScheduledExecutorService queueSweepExecutor,
+      Supplier<Duration> saturatedDelay,
+      Supplier<SegmentBoundaryLedger> segmentBoundaryLedger,
+      Consumer<AwaitReplayLifecycleEvent> lifecycleRecorder,
+      Supplier<TransitionPayloadCodec> payloadCodec) {
     this.planner = new AwaitContinuationPlanner();
     this.awaitCoordinator = awaitCoordinator;
     ItemContinuationClaims claims = new ItemContinuationClaims();
@@ -80,7 +103,8 @@ class AwaitContinuations {
         segmentBoundaryLedger,
         lifecycleRecorder,
         planner,
-        claims);
+        claims,
+        payloadCodec);
   }
 
   Uni<AwaitCompletionResult> afterRecordedCompletion(
