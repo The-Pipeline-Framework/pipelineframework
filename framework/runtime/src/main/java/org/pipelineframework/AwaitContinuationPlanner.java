@@ -2,6 +2,7 @@ package org.pipelineframework;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
@@ -110,7 +111,25 @@ class AwaitContinuationPlanner {
   }
 
   private static Object decodePayload(Object payload, TransitionPayloadCodec payloadCodec) {
-    return payload instanceof SerializedTransitionPayload serialized ? payloadCodec.decode(serialized) : payload;
+    if (payload instanceof SerializedTransitionPayload serialized) {
+      return payloadCodec.decode(serialized);
+    }
+    if (payload instanceof Map<?, ?> map) {
+      return durableSerializedPayload(map).map(payloadCodec::decode).orElse(payload);
+    }
+    return payload;
+  }
+
+  private static Optional<SerializedTransitionPayload> durableSerializedPayload(Map<?, ?> payload) {
+    Object payloadTypeId = payload.get("payloadTypeId");
+    Object payloadEncoding = payload.get("payloadEncoding");
+    Object payloadValue = payload.get("payload");
+    if (payloadTypeId instanceof String typeId && !typeId.isBlank()
+        && payloadEncoding instanceof String encoding && !encoding.isBlank()
+        && payloadValue instanceof String serialized) {
+      return Optional.of(new SerializedTransitionPayload(typeId, encoding, serialized));
+    }
+    return Optional.empty();
   }
 
   void validateItemIndex(AwaitInteractionRecord interaction, AwaitUnitRecord unit) {
