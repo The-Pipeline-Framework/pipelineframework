@@ -15,6 +15,7 @@ import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionStatus;
+import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -87,11 +88,29 @@ class AwaitContinuationPlannerTest {
         parent,
         unit,
         4,
-        List.of(Optional.of(first), Optional.of(second)));
+        List.of(Optional.of(first), Optional.of(second)),
+        new JsonTransitionPayloadCodec());
 
     AwaitContinuationPlan.ReleaseItemizedParent release =
         assertInstanceOf(AwaitContinuationPlan.ReleaseItemizedParent.class, plan);
     assertEquals(List.of("out-0", "out-1"), release.release().resumePayload().payload());
+  }
+
+  @Test
+  void serializedChildPaymentOutputDecodesBeforeParentRelease() {
+    AwaitUnitRecord unit = unit(AwaitUnitStatus.COMPLETED, 1, 1, true, null);
+    ExecutionRecord<Object, Object> parent = parent(ExecutionStatus.WAITING_EXTERNAL);
+    JsonTransitionPayloadCodec payloadCodec = new JsonTransitionPayloadCodec();
+    PaymentOutput expected = new PaymentOutput("payment-1", "APPROVED");
+    ExecutionRecord<Object, Object> child = child("child-0", payloadCodec.encode(expected));
+
+    AwaitContinuationPlan plan = planner.releaseItemizedParent(
+        parent, unit, 4, List.of(Optional.of(child)), payloadCodec);
+
+    AwaitContinuationPlan.ReleaseItemizedParent release =
+        assertInstanceOf(AwaitContinuationPlan.ReleaseItemizedParent.class, plan);
+    assertEquals(List.of(expected), release.release().resumePayload().payload());
+    assertInstanceOf(PaymentOutput.class, ((List<?>) release.release().resumePayload().payload()).getFirst());
   }
 
   private static AwaitInteractionRecord scalarRecord() {
@@ -203,5 +222,8 @@ class AwaitContinuationPlannerTest {
         1L,
         2L,
         999_999L);
+  }
+
+  private record PaymentOutput(String paymentId, String status) {
   }
 }

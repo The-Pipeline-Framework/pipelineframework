@@ -27,6 +27,7 @@ import java.util.*;
 public final class PipelineTemplateTypeModel {
     private final Map<String, PipelineTemplateTypeDefinition> definitions;
     private final Map<String, Map<String, RepresentationMapping>> representationMappings;
+    private final Map<String, Map<String, Object>> representationProviderConfigurations;
 
     public PipelineTemplateTypeModel(Map<String, PipelineTemplateTypeDefinition> definitions) {
         this(definitions, Map.of());
@@ -36,11 +37,20 @@ public final class PipelineTemplateTypeModel {
         Map<String, PipelineTemplateTypeDefinition> definitions,
         Map<String, Map<String, RepresentationMapping>> representationMappings
     ) {
+        this(definitions, representationMappings, Map.of());
+    }
+
+    public PipelineTemplateTypeModel(
+        Map<String, PipelineTemplateTypeDefinition> definitions,
+        Map<String, Map<String, RepresentationMapping>> representationMappings,
+        Map<String, Map<String, Object>> representationProviderConfigurations
+    ) {
         Map<String, PipelineTemplateTypeDefinition> copy = definitions == null
             ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(definitions));
         validate(copy);
         this.definitions = copy;
         this.representationMappings = normalizeRepresentationMappings(copy, representationMappings);
+        this.representationProviderConfigurations = normalizeProviderConfigurations(representationProviderConfigurations);
     }
 
     public static PipelineTemplateTypeModel empty() {
@@ -111,6 +121,15 @@ public final class PipelineTemplateTypeModel {
         return Optional.ofNullable(representationMappings.getOrDefault(domainType, Map.of()).get(key));
     }
 
+    /** Provider-owned GLOBAL configuration keyed by representation provider. */
+    public Map<String, Map<String, Object>> representationProviderConfigurations() {
+        return representationProviderConfigurations;
+    }
+
+    public Optional<Map<String, Object>> representationProviderConfiguration(String key) {
+        return Optional.ofNullable(representationProviderConfigurations.get(key));
+    }
+
     public PipelineTemplateTypeReference resolveAliases(PipelineTemplateTypeReference reference) {
         PipelineTemplateTypeReference current = reference;
         while (current instanceof PipelineTemplateTypeReference.Named named) {
@@ -146,6 +165,24 @@ public final class PipelineTemplateTypeModel {
         return PipelineTemplateTypeMappings.isV3ScalarType(value)
             ? new PipelineTemplateTypeReference.Scalar(value)
             : new PipelineTemplateTypeReference.Named(value);
+    }
+
+    private static Map<String, Map<String, Object>> normalizeProviderConfigurations(
+        Map<String, Map<String, Object>> configurations
+    ) {
+        if (configurations == null || configurations.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Map<String, Object>> normalized = new LinkedHashMap<>();
+        configurations.forEach((key, options) -> {
+            if (key == null || key.isBlank() || options == null) {
+                throw new IllegalStateException("Invalid representation provider configuration");
+            }
+            if (normalized.putIfAbsent(key, Map.copyOf(new LinkedHashMap<>(options))) != null) {
+                throw new IllegalStateException("Duplicate representation provider configuration '" + key + "'");
+            }
+        });
+        return Collections.unmodifiableMap(normalized);
     }
 
     private static void validate(Map<String, PipelineTemplateTypeDefinition> definitions) {

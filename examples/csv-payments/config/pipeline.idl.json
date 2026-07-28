@@ -1,837 +1,470 @@
 {
-  "version" : 2,
+  "version" : 3,
   "appName" : "csv-payments",
   "basePackage" : "org.pipelineframework.csv",
-  "messages" : {
-    "ApprovedPaymentStatus" : {
-      "name" : "ApprovedPaymentStatus",
+  "messages" : { },
+  "unions" : { },
+  "types" : {
+    "CsvPaymentsInputFile" : {
+      "name" : "CsvPaymentsInputFile",
+      "kind" : "record",
       "fields" : [ {
-        "number" : 6,
-        "name" : "conversationId",
-        "canonicalType" : "uuid",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 5,
-        "name" : "fee",
-        "canonicalType" : "decimal",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
         "number" : 1,
-        "name" : "id",
-        "canonicalType" : "uuid",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 4,
-        "name" : "message",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 9,
-        "name" : "paymentRecord",
-        "canonicalType" : "message",
-        "messageRef" : "PaymentRecord",
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "PaymentRecord",
-        "referenceField" : null
-      }, {
-        "number" : 8,
-        "name" : "paymentRecordId",
-        "canonicalType" : "uuid",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "name" : "csvFolderPath",
+        "protoName" : "csv_folder_path",
+        "type" : "path"
       }, {
         "number" : 2,
-        "name" : "reference",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 3,
-        "name" : "status",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 7,
-        "name" : "statusCode",
-        "canonicalType" : "int64",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "int64",
-        "referenceField" : null
+        "name" : "filepath",
+        "protoName" : "filepath",
+        "type" : "path"
       } ],
-      "reservedNumbers" : [ ],
-      "reservedNames" : [ ]
-    },
-    "UnapprovedPaymentStatus" : {
-      "name" : "UnapprovedPaymentStatus",
-      "fields" : [ {
-        "number" : 6,
-        "name" : "conversationId",
-        "canonicalType" : "uuid",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 5,
-        "name" : "fee",
-        "canonicalType" : "decimal",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 1,
-        "name" : "id",
-        "canonicalType" : "uuid",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 4,
-        "name" : "message",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 9,
-        "name" : "paymentRecord",
-        "canonicalType" : "message",
-        "messageRef" : "PaymentRecord",
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "PaymentRecord",
-        "referenceField" : null
-      }, {
-        "number" : 8,
-        "name" : "paymentRecordId",
-        "canonicalType" : "uuid",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 2,
-        "name" : "reference",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 3,
-        "name" : "status",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 7,
-        "name" : "statusCode",
-        "canonicalType" : "int64",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "int64",
-        "referenceField" : null
-      } ],
-      "reservedNumbers" : [ ],
-      "reservedNames" : [ ]
+      "target" : null,
+      "variants" : [ ],
+      "reservedNumbers" : [ 3 ],
+      "reservedNames" : [ "id" ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
     },
     "PaymentRecord" : {
       "name" : "PaymentRecord",
+      "kind" : "record",
       "fields" : [ {
-        "number" : 4,
+        "number" : 1,
         "name" : "amount",
-        "canonicalType" : "decimal",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "protoName" : "amount",
+        "type" : "decimal"
       }, {
         "number" : 2,
         "name" : "csvId",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "protoName" : "csv_id",
+        "type" : "string"
       }, {
-        "number" : 6,
+        "number" : 3,
         "name" : "csvPaymentsInputFilePath",
-        "canonicalType" : "path",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "protoName" : "csv_payments_input_file_path",
+        "type" : "path"
+      }, {
+        "number" : 4,
+        "name" : "currency",
+        "protoName" : "currency",
+        "type" : "currency"
       }, {
         "number" : 5,
-        "name" : "currency",
-        "canonicalType" : "currency",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 1,
         "name" : "id",
-        "canonicalType" : "uuid",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "protoName" : "id",
+        "type" : "uuid"
       }, {
-        "number" : 3,
-        "name" : "recipient",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      } ],
-      "reservedNumbers" : [ ],
-      "reservedNames" : [ ]
-    },
-    "PaymentOutput" : {
-      "name" : "PaymentOutput",
-      "fields" : [ {
         "number" : 6,
-        "name" : "amount",
-        "canonicalType" : "decimal",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 8,
+        "name" : "recipient",
+        "protoName" : "recipient",
+        "type" : "string"
+      } ],
+      "target" : null,
+      "variants" : [ ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
+    },
+    "ApprovedPaymentStatus" : {
+      "name" : "ApprovedPaymentStatus",
+      "kind" : "record",
+      "fields" : [ {
+        "number" : 1,
         "name" : "conversationId",
-        "canonicalType" : "uuid",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 4,
-        "name" : "csvId",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 3,
-        "name" : "csvPaymentsInputFilePath",
-        "canonicalType" : "path",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "protoName" : "conversation_id",
+        "type" : "uuid"
       }, {
         "number" : 2,
-        "name" : "csvPaymentsOutputFilename",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "name" : "fee",
+        "protoName" : "fee",
+        "type" : "decimal"
+      }, {
+        "number" : 4,
+        "name" : "message",
+        "protoName" : "message",
+        "type" : "string"
+      }, {
+        "number" : 5,
+        "name" : "paymentRecord",
+        "protoName" : "payment_record",
+        "type" : "PaymentRecord"
+      }, {
+        "number" : 6,
+        "name" : "paymentRecordId",
+        "protoName" : "payment_record_id",
+        "type" : "uuid"
       }, {
         "number" : 7,
-        "name" : "currency",
-        "canonicalType" : "currency",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "name" : "reference",
+        "protoName" : "reference",
+        "type" : "string"
       }, {
-        "number" : 11,
-        "name" : "fee",
-        "canonicalType" : "decimal",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 1,
-        "name" : "id",
-        "canonicalType" : "uuid",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 10,
-        "name" : "message",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 5,
-        "name" : "recipient",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "number" : 8,
+        "name" : "status",
+        "protoName" : "status",
+        "type" : "string"
       }, {
         "number" : 9,
-        "name" : "status",
-        "canonicalType" : "int64",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "int64",
-        "referenceField" : null
+        "name" : "statusCode",
+        "protoName" : "status_code",
+        "type" : "int64"
       } ],
-      "reservedNumbers" : [ ],
-      "reservedNames" : [ ]
+      "target" : null,
+      "variants" : [ ],
+      "reservedNumbers" : [ 3 ],
+      "reservedNames" : [ "id" ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
     },
-    "CsvPaymentsOutputFile" : {
-      "name" : "CsvPaymentsOutputFile",
+    "UnapprovedPaymentStatus" : {
+      "name" : "UnapprovedPaymentStatus",
+      "kind" : "record",
       "fields" : [ {
-        "number" : 3,
-        "name" : "csvFolderPath",
-        "canonicalType" : "path",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "number" : 1,
+        "name" : "conversationId",
+        "protoName" : "conversation_id",
+        "type" : "uuid"
       }, {
         "number" : 2,
-        "name" : "filepath",
-        "canonicalType" : "path",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "name" : "fee",
+        "protoName" : "fee",
+        "type" : "decimal"
       }, {
-        "number" : 1,
-        "name" : "id",
-        "canonicalType" : "uuid",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "number" : 4,
+        "name" : "message",
+        "protoName" : "message",
+        "type" : "string"
+      }, {
+        "number" : 5,
+        "name" : "paymentRecord",
+        "protoName" : "payment_record",
+        "type" : "PaymentRecord"
+      }, {
+        "number" : 6,
+        "name" : "paymentRecordId",
+        "protoName" : "payment_record_id",
+        "type" : "uuid"
+      }, {
+        "number" : 7,
+        "name" : "reference",
+        "protoName" : "reference",
+        "type" : "string"
+      }, {
+        "number" : 8,
+        "name" : "status",
+        "protoName" : "status",
+        "type" : "string"
+      }, {
+        "number" : 9,
+        "name" : "statusCode",
+        "protoName" : "status_code",
+        "type" : "int64"
       } ],
-      "reservedNumbers" : [ ],
-      "reservedNames" : [ ]
+      "target" : null,
+      "variants" : [ ],
+      "reservedNumbers" : [ 3 ],
+      "reservedNames" : [ "id" ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
     },
     "ApprovedPaymentOutput" : {
       "name" : "ApprovedPaymentOutput",
+      "kind" : "record",
       "fields" : [ {
-        "number" : 6,
+        "number" : 1,
         "name" : "amount",
-        "canonicalType" : "decimal",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 8,
-        "name" : "conversationId",
-        "canonicalType" : "uuid",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 4,
-        "name" : "csvId",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 3,
-        "name" : "csvPaymentsInputFilePath",
-        "canonicalType" : "path",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "protoName" : "amount",
+        "type" : "decimal"
       }, {
         "number" : 2,
-        "name" : "csvPaymentsOutputFilename",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "name" : "conversationId",
+        "protoName" : "conversation_id",
+        "type" : "uuid"
       }, {
-        "number" : 7,
-        "name" : "currency",
-        "canonicalType" : "currency",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "number" : 3,
+        "name" : "csvId",
+        "protoName" : "csv_id",
+        "type" : "string"
       }, {
-        "number" : 11,
-        "name" : "fee",
-        "canonicalType" : "decimal",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 1,
-        "name" : "id",
-        "canonicalType" : "uuid",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 10,
-        "name" : "message",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "number" : 4,
+        "name" : "csvPaymentsInputFilePath",
+        "protoName" : "csv_payments_input_file_path",
+        "type" : "path"
       }, {
         "number" : 5,
-        "name" : "recipient",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "name" : "csvPaymentsOutputFilename",
+        "protoName" : "csv_payments_output_filename",
+        "type" : "string"
+      }, {
+        "number" : 6,
+        "name" : "currency",
+        "protoName" : "currency",
+        "type" : "currency"
+      }, {
+        "number" : 7,
+        "name" : "fee",
+        "protoName" : "fee",
+        "type" : "decimal"
       }, {
         "number" : 9,
+        "name" : "message",
+        "protoName" : "message",
+        "type" : "string"
+      }, {
+        "number" : 10,
+        "name" : "recipient",
+        "protoName" : "recipient",
+        "type" : "string"
+      }, {
+        "number" : 11,
         "name" : "status",
-        "canonicalType" : "int64",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "int64",
-        "referenceField" : null
+        "protoName" : "status",
+        "type" : "int64"
       } ],
-      "reservedNumbers" : [ ],
-      "reservedNames" : [ ]
+      "target" : null,
+      "variants" : [ ],
+      "reservedNumbers" : [ 8 ],
+      "reservedNames" : [ "id" ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
     },
     "UnapprovedPaymentOutput" : {
       "name" : "UnapprovedPaymentOutput",
+      "kind" : "record",
       "fields" : [ {
-        "number" : 6,
+        "number" : 1,
         "name" : "amount",
-        "canonicalType" : "decimal",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "protoName" : "amount",
+        "type" : "decimal"
       }, {
-        "number" : 8,
+        "number" : 2,
         "name" : "conversationId",
-        "canonicalType" : "uuid",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "protoName" : "conversation_id",
+        "type" : "uuid"
+      }, {
+        "number" : 3,
+        "name" : "csvId",
+        "protoName" : "csv_id",
+        "type" : "string"
       }, {
         "number" : 4,
-        "name" : "csvId",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 3,
         "name" : "csvPaymentsInputFilePath",
-        "canonicalType" : "path",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 2,
-        "name" : "csvPaymentsOutputFilename",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 7,
-        "name" : "currency",
-        "canonicalType" : "currency",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 11,
-        "name" : "fee",
-        "canonicalType" : "decimal",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 1,
-        "name" : "id",
-        "canonicalType" : "uuid",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
-      }, {
-        "number" : 10,
-        "name" : "message",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "protoName" : "csv_payments_input_file_path",
+        "type" : "path"
       }, {
         "number" : 5,
-        "name" : "recipient",
-        "canonicalType" : "string",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "name" : "csvPaymentsOutputFilename",
+        "protoName" : "csv_payments_output_filename",
+        "type" : "string"
+      }, {
+        "number" : 6,
+        "name" : "currency",
+        "protoName" : "currency",
+        "type" : "currency"
+      }, {
+        "number" : 7,
+        "name" : "fee",
+        "protoName" : "fee",
+        "type" : "decimal"
       }, {
         "number" : 9,
+        "name" : "message",
+        "protoName" : "message",
+        "type" : "string"
+      }, {
+        "number" : 10,
+        "name" : "recipient",
+        "protoName" : "recipient",
+        "type" : "string"
+      }, {
+        "number" : 11,
         "name" : "status",
-        "canonicalType" : "int64",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "int64",
-        "referenceField" : null
+        "protoName" : "status",
+        "type" : "int64"
       } ],
-      "reservedNumbers" : [ ],
-      "reservedNames" : [ ]
+      "target" : null,
+      "variants" : [ ],
+      "reservedNumbers" : [ 8 ],
+      "reservedNames" : [ "id" ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
     },
-    "CsvPaymentsInputFile" : {
-      "name" : "CsvPaymentsInputFile",
+    "PaymentOutput" : {
+      "name" : "PaymentOutput",
+      "kind" : "record",
       "fields" : [ {
-        "number" : 3,
-        "name" : "csvFolderPath",
-        "canonicalType" : "path",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "number" : 1,
+        "name" : "amount",
+        "protoName" : "amount",
+        "type" : "decimal"
       }, {
         "number" : 2,
-        "name" : "filepath",
-        "canonicalType" : "path",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "name" : "conversationId",
+        "protoName" : "conversation_id",
+        "type" : "uuid"
       }, {
-        "number" : 1,
-        "name" : "id",
-        "canonicalType" : "uuid",
-        "messageRef" : null,
-        "keyType" : null,
-        "valueType" : null,
-        "optional" : false,
-        "repeated" : false,
-        "deprecated" : false,
-        "protoType" : "string",
-        "referenceField" : null
+        "number" : 3,
+        "name" : "csvId",
+        "protoName" : "csv_id",
+        "type" : "string"
+      }, {
+        "number" : 4,
+        "name" : "csvPaymentsInputFilePath",
+        "protoName" : "csv_payments_input_file_path",
+        "type" : "path"
+      }, {
+        "number" : 5,
+        "name" : "csvPaymentsOutputFilename",
+        "protoName" : "csv_payments_output_filename",
+        "type" : "string"
+      }, {
+        "number" : 6,
+        "name" : "currency",
+        "protoName" : "currency",
+        "type" : "currency"
+      }, {
+        "number" : 7,
+        "name" : "fee",
+        "protoName" : "fee",
+        "type" : "decimal"
+      }, {
+        "number" : 9,
+        "name" : "message",
+        "protoName" : "message",
+        "type" : "string"
+      }, {
+        "number" : 10,
+        "name" : "recipient",
+        "protoName" : "recipient",
+        "type" : "string"
+      }, {
+        "number" : 11,
+        "name" : "status",
+        "protoName" : "status",
+        "type" : "int64"
       } ],
-      "reservedNumbers" : [ ],
-      "reservedNames" : [ ]
-    }
-  },
-  "unions" : {
+      "target" : null,
+      "variants" : [ ],
+      "reservedNumbers" : [ 8 ],
+      "reservedNames" : [ "id" ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
+    },
     "PaymentStatus" : {
       "name" : "PaymentStatus",
+      "kind" : "union",
+      "fields" : [ ],
+      "target" : null,
       "variants" : [ {
-        "name" : "approved",
-        "type" : "ApprovedPaymentStatus",
+        "discriminator" : "approved",
+        "payload" : "ApprovedPaymentStatus",
+        "protoName" : "approved",
         "number" : 1
       }, {
-        "name" : "unapproved",
-        "type" : "UnapprovedPaymentStatus",
+        "discriminator" : "unapproved",
+        "payload" : "UnapprovedPaymentStatus",
+        "protoName" : "unapproved",
         "number" : 2
-      } ]
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
     },
     "PaymentOutputBranch" : {
       "name" : "PaymentOutputBranch",
+      "kind" : "union",
+      "fields" : [ ],
+      "target" : null,
       "variants" : [ {
-        "name" : "approved",
-        "type" : "ApprovedPaymentOutput",
+        "discriminator" : "approved",
+        "payload" : "ApprovedPaymentOutput",
+        "protoName" : "approved",
         "number" : 1
       }, {
-        "name" : "unapproved",
-        "type" : "UnapprovedPaymentOutput",
+        "discriminator" : "unapproved",
+        "payload" : "UnapprovedPaymentOutput",
+        "protoName" : "unapproved",
         "number" : 2
-      } ]
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null
+      }
     }
   },
   "steps" : [ {

@@ -606,7 +606,8 @@ class QueueAsyncCoordinator {
             queueSweepExecutor,
             this::saturatedDelay,
             this::segmentBoundaryLedger,
-            this::recordAwaitLifecycle);
+            this::recordAwaitLifecycle,
+            this::payloadCodec);
         awaitContinuations = current;
       }
       return current;

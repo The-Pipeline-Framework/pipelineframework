@@ -31,6 +31,11 @@
 
     <dependencies>
         <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>representation-provider-opencsv</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.pipelineframework.csv</groupId>
             <artifactId>common</artifactId>
             <version>${project.version}</version>
@@ -283,6 +288,8 @@
                 <csv.monolith.source.dir.input>${csv.monolith.source.root}/input-csv-file-processing-svc/src/v3-persistence/java</csv.monolith.source.dir.input>
                 <csv.monolith.source.dir.payments>${csv.monolith.source.root}/payments-processing-svc/src/v3-persistence/java</csv.monolith.source.dir.payments>
                 <csv.monolith.source.dir.status>${csv.monolith.source.root}/payment-status-svc/src/v3-persistence/java</csv.monolith.source.dir.status>
+                <pipeline.configArg>-Apipeline.config=${project.basedir}/../config/pipeline.v3-persistence.yaml</pipeline.configArg>
+                <pipeline.protoConfigArg>--config=${project.basedir}/../config/pipeline.v3-persistence.yaml</pipeline.protoConfigArg>
             </properties>
         </profile>
     </profiles>

@@ -1,5 +1,11 @@
 package org.pipelineframework.awaitable;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.io.IOException;
+import java.io.Reader;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -21,6 +27,10 @@ import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.pipeline.PipelineYamlStep;
+import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
+import org.pipelineframework.config.template.PipelineTemplateStep;
+import org.yaml.snakeyaml.Yaml;
 
 /**
  * Builds await descriptors from runtime pipeline YAML.
@@ -189,8 +199,22 @@ public class AwaitStepDescriptorFactory {
     }
 
     private AwaitStepDescriptor loadLegacyDescriptor(String serviceName) {
-        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(resolveConfigPath(serviceName));
+        Path configPath = resolveConfigPath(serviceName);
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath);
         PipelineYamlStep step = awaitStep(config, serviceName);
+        Optional<V3AwaitTypeBinding> v3Binding = generatedV3TypeBinding(configPath, serviceName);
+        if (v3Binding.isPresent()) {
+            V3AwaitTypeBinding binding = v3Binding.get();
+            return descriptorForStep(
+                serviceName,
+                step,
+                binding.inputType(),
+                binding.outputType(),
+                binding.transportInputType(),
+                binding.transportOutputType(),
+                binding.inputToTransport(),
+                binding.outputFromTransport());
+        }
         AwaitTypeIdentities identities = generatedLegacyTypeIdentities(config, serviceName)
             .orElseGet(() -> new AwaitTypeIdentities(
                 requiredType(step.inputType(), serviceName, "input"),
@@ -204,6 +228,94 @@ public class AwaitStepDescriptorFactory {
             identities.outputType(),
             Function.identity(),
             Function.identity());
+    }
+
+    private static Optional<V3AwaitTypeBinding> generatedV3TypeBinding(Path configPath, String serviceName) {
+        if (!isVersion3(configPath)) {
+            return Optional.empty();
+        }
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+        PipelineTemplateStep step = config.steps().stream()
+            .filter(candidate -> serviceName.equals(toServiceName(candidate.name())))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException(
+                "No version 3 await step found for generated service " + serviceName));
+        String inputLogicalType = requiredType(step.inputTypeName(), serviceName, "input");
+        String outputLogicalType = requiredType(step.outputTypeName(), serviceName, "output");
+        String domainPackage = config.basePackage() + ".domain.";
+        String protoTypes = config.basePackage() + ".grpc.PipelineTypes";
+        Class<?> canonicalInput = requiredGeneratedClass(domainPackage + inputLogicalType, serviceName, "canonical input");
+        Class<?> canonicalOutput = requiredGeneratedClass(domainPackage + outputLogicalType, serviceName, "canonical output");
+        Class<?> transportInput = requiredGeneratedClass(protoTypes + "$" + inputLogicalType, serviceName, "transport input");
+        Class<?> transportOutput = requiredGeneratedClass(protoTypes + "$" + outputLogicalType, serviceName, "transport output");
+        Class<?> adapters = requiredGeneratedClass(domainPackage + "PipelineDomainProtoAdapters", serviceName, "domain protobuf adapters");
+        return Optional.of(new V3AwaitTypeBinding(
+            canonicalInput.getName(),
+            canonicalOutput.getName(),
+            transportInput.getName(),
+            transportOutput.getName(),
+            generatedAdapter(adapters, "toProto", canonicalInput, transportInput, serviceName),
+            generatedAdapter(adapters, "fromProto", transportOutput, canonicalOutput, serviceName)));
+    }
+
+    private static boolean isVersion3(Path configPath) {
+        try (Reader reader = Files.newBufferedReader(configPath)) {
+            Object document = new Yaml().load(reader);
+            if (!(document instanceof Map<?, ?> values)) {
+                return false;
+            }
+            Object version = values.get("version");
+            if (version instanceof Number number) {
+                return number.intValue() == 3;
+            }
+            return version != null && "3".equals(version.toString().trim());
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed reading pipeline configuration " + configPath, e);
+        }
+    }
+
+    private static Class<?> requiredGeneratedClass(String className, String serviceName, String role) {
+        return loadClass(className).orElseThrow(() -> new IllegalStateException(
+            "Version 3 await step " + serviceName + " cannot rebuild " + role
+                + ": generated class " + className + " is unavailable"));
+    }
+
+    private static Function<Object, Object> generatedAdapter(
+        Class<?> adapters,
+        String methodName,
+        Class<?> inputType,
+        Class<?> outputType,
+        String serviceName
+    ) {
+        Method method;
+        try {
+            method = adapters.getMethod(methodName, inputType);
+        } catch (NoSuchMethodException e) {
+            throw new IllegalStateException(
+                "Version 3 await step " + serviceName + " cannot rebuild generated adapter "
+                    + adapters.getName() + "." + methodName + "(" + inputType.getName() + ")", e);
+        }
+        if (!Modifier.isStatic(method.getModifiers()) || !method.getReturnType().equals(outputType)) {
+            throw new IllegalStateException(
+                "Version 3 await step " + serviceName + " has incompatible generated adapter "
+                    + adapters.getName() + "." + methodName + " for " + inputType.getName()
+                    + " -> " + outputType.getName());
+        }
+        return value -> invokeGeneratedAdapter(method, value, serviceName);
+    }
+
+    private static Object invokeGeneratedAdapter(Method method, Object value, String serviceName) {
+        try {
+            return method.invoke(null, value);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            Throwable cause = e instanceof InvocationTargetException invocation && invocation.getCause() != null
+                ? invocation.getCause()
+                : e;
+            throw new IllegalStateException(
+                "Version 3 await step " + serviceName + " failed invoking generated adapter "
+                    + method.getDeclaringClass().getName() + "." + method.getName(),
+                cause);
+        }
     }
 
     private static Optional<AwaitTypeIdentities> generatedLegacyTypeIdentities(
@@ -385,5 +497,15 @@ public class AwaitStepDescriptorFactory {
     }
 
     private record AwaitTypeIdentities(String inputType, String outputType) {
+    }
+
+    private record V3AwaitTypeBinding(
+        String inputType,
+        String outputType,
+        String transportInputType,
+        String transportOutputType,
+        Function<Object, Object> inputToTransport,
+        Function<Object, Object> outputFromTransport
+    ) {
     }
 }

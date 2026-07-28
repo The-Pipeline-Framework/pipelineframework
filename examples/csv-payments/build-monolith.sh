@@ -40,6 +40,7 @@ PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-LOCAL}"
 ORCHESTRATOR_ARGS=()
 for arg in "$@"; do
   if [[ "$arg" == "-DskipTests" \
+    || "$arg" == "-Dcsv.v3.persistence=true" \
     || "$arg" == -Dmaven.repo.local=* \
     || "$arg" == -Dquarkus.container-image.* \
     || "$arg" == -Dquarkus.jib.* ]]; then
@@ -49,7 +50,7 @@ done
 
 # Ensure module parent POM is available in local repository for Quarkus bootstrap/codegen.
 for arg in "${ORCHESTRATOR_ARGS[@]}"; do
-  if [[ "$arg" == -Dmaven.repo.local=* ]]; then
+  if [[ "$arg" == -Dmaven.repo.local=* || "$arg" == "-Dcsv.v3.persistence=true" ]]; then
     export MAVEN_ARGS="${MAVEN_ARGS:+$MAVEN_ARGS }$arg"
   fi
 done

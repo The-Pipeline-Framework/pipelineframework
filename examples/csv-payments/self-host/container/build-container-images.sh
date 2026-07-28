@@ -93,6 +93,17 @@ COMMON_BUILD_PROPS=(
   -Dquarkus.devservices.enabled=false
 )
 
+if [[ ! -r "${TPF_CSV_PIPELINE_CONFIG}" ]]; then
+  echo "ERROR: TPF_CSV_PIPELINE_CONFIG must reference a readable pipeline configuration: ${TPF_CSV_PIPELINE_CONFIG}" >&2
+  exit 1
+fi
+
+if grep -Eq '^version:[[:space:]]*3[[:space:]]*$' "${TPF_CSV_PIPELINE_CONFIG}"; then
+  COMMON_BUILD_PROPS+=(
+    -Dcsv.v3.persistence=true
+  )
+fi
+
 if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "sqs" ]]; then
   COMMON_BUILD_PROPS+=(
     -Dtpf.await.kafka.reactive-messaging.enabled=false

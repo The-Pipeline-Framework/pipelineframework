@@ -76,6 +76,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (hasYamlStepDefinitions) {
             // Extract pipeline step models based on explicit YAML step definitions.
             stepModels = new ArrayList<>(extractStepModelsFromYaml(ctx, stepDefinitions, ctxWarningLogger));
+            stepModels = addProviderBoundaryModels(ctx, stepDefinitions, stepModels, ctxWarningLogger);
             // Some template-driven YAMLs declare logical steps without resolvable execution classes
             // for plugin-host modules. Keep legacy behavior by falling back to annotation extraction.
             if (stepModels.isEmpty()) {
@@ -133,6 +134,53 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         return stepModels;
+    }
+
+    private List<PipelineStepModel> addProviderBoundaryModels(
+            PipelineCompilationContext ctx,
+            List<org.pipelineframework.processor.ir.StepDefinition> stepDefinitions,
+            List<PipelineStepModel> extracted,
+            Consumer<String> ctxWarningLogger) {
+        List<PipelineStepModel> models = new ArrayList<>(extracted);
+        for (var boundary : ctx.getResolvedProviderBoundaries()) {
+            String serviceType = boundary.boundary().serviceTypeName();
+            boolean alreadyExtracted = models.stream()
+                .anyMatch(model -> serviceType.equals(model.serviceClassName().canonicalName()));
+            if (alreadyExtracted) {
+                continue;
+            }
+            var contract = boundary.claim().stepContract().orElseThrow(() -> new IllegalStateException(
+                "Representation provider '" + boundary.claim().providerKey() + "' claimed boundary '"
+                    + boundary.boundary().stepName() + "' but did not declare its generated facade contract."));
+            var step = stepDefinitions.stream()
+                .filter(candidate -> boundary.boundary().stepName().equals(candidate.name()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Resolved provider boundary '"
+                    + boundary.boundary().stepName() + "' has no YAML step definition."));
+            ClassName inputType = ClassName.bestGuess(boundary.boundary().inputType().targetTypeName());
+            ClassName outputType = ClassName.bestGuess(boundary.boundary().outputType().targetTypeName());
+            StreamingShape streamingShape = StreamingShape.valueOf(contract.cardinality());
+            ServiceApiKind apiKind = ServiceApiKind.valueOf(contract.executionStyle().name());
+            models.add(new PipelineStepModel.Builder()
+                .serviceName(toYamlServiceName(step.name()))
+                .generatedName(toYamlServiceName(step.name()))
+                .servicePackage(deriveYamlServicePackage(inputType, ctxWarningLogger))
+                .serviceClassName(ClassName.bestGuess(serviceType))
+                .inputMapping(TypeMapping.withoutMapper(inputType))
+                .outputMapping(TypeMapping.withoutMapper(outputType))
+                .streamingShape(streamingShape)
+                .enabledTargets(java.util.EnumSet.of(GenerationTarget.GRPC_SERVICE, GenerationTarget.CLIENT_STEP))
+                .executionMode(executionMode(ctx, step, apiKind))
+                .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+                .sideEffect(false)
+                .cacheKeyGenerator(null)
+                .orderingRequirement(OrderingRequirement.RELAXED)
+                .threadSafety(ThreadSafety.SAFE)
+                .serviceApiKind(apiKind)
+                .reactiveReturnKind(ReactiveReturnKind.MUTINY_UNI)
+                .build());
+        }
+        return models;
     }
 
     /**
@@ -239,8 +287,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .generatedName(serviceName)
             .servicePackage(servicePackage)
             .serviceClassName(ClassName.get("org.pipelineframework.command", "CommandStepDescriptor"))
-            .inputMapping(new TypeMapping(inputType, null, false, inputType))
-            .outputMapping(new TypeMapping(outputType, null, false, outputType))
+            .inputMapping(TypeMapping.withoutMapper(inputType))
+            .outputMapping(TypeMapping.withoutMapper(outputType))
             .streamingShape(StreamingShape.UNARY_UNARY)
             .enabledTargets(java.util.Set.of(GenerationTarget.COMMAND_CLIENT_STEP))
             .executionMode(ExecutionMode.DEFAULT)
@@ -286,8 +334,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .generatedName(serviceName)
             .servicePackage(servicePackage)
             .serviceClassName(ClassName.get("org.pipelineframework.query", "QueryStepDescriptor"))
-            .inputMapping(new TypeMapping(inputType, null, false, inputType))
-            .outputMapping(new TypeMapping(outputType, null, false, outputType))
+            .inputMapping(TypeMapping.withoutMapper(inputType))
+            .outputMapping(TypeMapping.withoutMapper(outputType))
             .streamingShape(StreamingShape.UNARY_UNARY)
             .enabledTargets(java.util.Set.of(GenerationTarget.QUERY_CLIENT_STEP))
             .executionMode(ExecutionMode.DEFAULT)
@@ -327,8 +375,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .generatedName(serviceName)
             .servicePackage(servicePackage)
             .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
-            .inputMapping(new TypeMapping(inputType, null, false, inputType))
-            .outputMapping(new TypeMapping(outputType, null, false, outputType))
+            .inputMapping(TypeMapping.withoutMapper(inputType))
+            .outputMapping(TypeMapping.withoutMapper(outputType))
             .streamingShape(streamingShape)
             .enabledTargets(java.util.Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
             .executionMode(ExecutionMode.DEFAULT)
@@ -381,8 +429,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             // Remote steps carry the same contract type on both sides of TypeMapping inputMapping/outputMapping.
             // Unlike createDelegatedStepModel, domain vs. gRPC/external types are not split here because the
             // protobuf contract is resolved later from descriptors and the remote adapter uses that directly.
-            .inputMapping(new TypeMapping(stepDef.inputType(), null, false, stepDef.inputType()))
-            .outputMapping(new TypeMapping(stepDef.outputType(), null, false, stepDef.outputType()))
+            .inputMapping(TypeMapping.withoutMapper(stepDef.inputType()))
+            .outputMapping(TypeMapping.withoutMapper(stepDef.outputType()))
             .streamingShape(StreamingShape.UNARY_UNARY)
             .enabledTargets(EnumSet.of(GenerationTarget.REMOTE_OPERATOR_ADAPTER))
             .executionMode(ExecutionMode.DEFAULT)
@@ -472,7 +520,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             stepDef.name(),
             "inboundMapper",
             stepDef.inboundMapper(),
-            annotationBacked && extractedModel.inputMapping() != null ? castToClassName(extractedModel.inputMapping().mapperType()) : null,
+            annotationBacked && extractedModel.inputMapping() != null
+                ? extractedModel.inputMapping().mapperType().map(this::castToClassName).orElse(null)
+                : null,
             inputType);
         if (inboundMapper == INVALID_CLASS_NAME) {
             return null;
@@ -482,7 +532,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             stepDef.name(),
             "outboundMapper",
             stepDef.outboundMapper(),
-            annotationBacked && extractedModel.outputMapping() != null ? castToClassName(extractedModel.outputMapping().mapperType()) : null,
+            annotationBacked && extractedModel.outputMapping() != null
+                ? extractedModel.outputMapping().mapperType().map(this::castToClassName).orElse(null)
+                : null,
             outputType);
         if (outboundMapper == INVALID_CLASS_NAME) {
             return null;
@@ -493,8 +545,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return extractedModel.toBuilder()
             .serviceName(serviceName)
             .generatedName(serviceName)
-            .inputMapping(new TypeMapping(inputType, inboundMapper, inboundMapper != null, inputType))
-            .outputMapping(new TypeMapping(outputType, outboundMapper, outboundMapper != null, outputType))
+            .serviceClassName(extractedModel.serviceClassName())
+            .inputMapping(new TypeMapping(inputType, java.util.Optional.ofNullable(inboundMapper), inboundMapper != null, inputType))
+            .outputMapping(new TypeMapping(outputType, java.util.Optional.ofNullable(outboundMapper), outboundMapper != null, outputType))
             .streamingShape(serviceSignature.shape())
             .executionMode(resolvedExecutionMode)
             .serviceApiKind(serviceSignature.apiKind())
@@ -534,8 +587,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .generatedName(serviceClass.getSimpleName().toString())
             .servicePackage(ctx.getProcessingEnv().getElementUtils().getPackageOf(serviceClass).getQualifiedName().toString())
             .serviceClassName(serviceClassName)
-            .inputMapping(new TypeMapping(serviceSignature.inputType(), null, false, serviceSignature.inputType()))
-            .outputMapping(new TypeMapping(serviceSignature.outputType(), null, false, serviceSignature.outputType()))
+            .inputMapping(TypeMapping.withoutMapper(serviceSignature.inputType()))
+            .outputMapping(TypeMapping.withoutMapper(serviceSignature.outputType()))
             .streamingShape(serviceSignature.shape())
             .enabledTargets(EnumSet.of(GenerationTarget.GRPC_SERVICE, GenerationTarget.CLIENT_STEP))
             .executionMode(ExecutionMode.DEFAULT)
@@ -597,12 +650,12 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .serviceClassName(stepDef.executionClass())
             .inputMapping(new TypeMapping(
                 inputType,
-                stepDef.inboundMapper(),
+                java.util.Optional.ofNullable(stepDef.inboundMapper()),
                 stepDef.inboundMapper() != null,
                 inputType))
             .outputMapping(new TypeMapping(
                 outputType,
-                stepDef.outboundMapper(),
+                java.util.Optional.ofNullable(stepDef.outboundMapper()),
                 stepDef.outboundMapper() != null,
                 outputType))
             .streamingShape(streamingShape)
@@ -799,8 +852,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         // Create type mappings based on the input/output types specified in the YAML
-        TypeMapping inputMapping = new TypeMapping(inputType, null, false, resolvedDelegateSignature.inputType());
-        TypeMapping outputMapping = new TypeMapping(outputType, null, false, resolvedDelegateSignature.outputType());
+        TypeMapping inputMapping = TypeMapping.withoutMapper(inputType);
+        TypeMapping outputMapping = TypeMapping.withoutMapper(outputType);
 
         // Derive package from execution class or use default
         String servicePackage = stepDef.executionClass().packageName().isEmpty()
@@ -1563,9 +1616,12 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             String stepName,
             String direction,
             TypeName yamlType,
-            TypeName annotationType,
-            TypeName reactiveType) {
+        TypeName annotationType,
+        TypeName reactiveType) {
         if (yamlType != null) {
+            if (ctx.getResolvedProviderBoundary(stepName).isPresent()) {
+                return yamlType;
+            }
             if (reactiveType != null && !yamlType.equals(reactiveType)) {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.ERROR,

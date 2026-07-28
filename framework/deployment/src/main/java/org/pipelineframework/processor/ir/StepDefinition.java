@@ -81,6 +81,7 @@ public record StepDefinition(
         List<String> accepts,
         boolean terminal
 ) {
+
     public StepDefinition(
         String name,
         StepKind kind,
