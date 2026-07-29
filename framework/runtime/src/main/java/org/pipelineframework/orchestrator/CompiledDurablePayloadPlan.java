@@ -13,7 +13,7 @@ public record CompiledDurablePayloadPlan(
     public static CompiledDurablePayloadPlan compile(CanonicalPayloadBinding binding) {
         return new CompiledDurablePayloadPlan(
             binding,
-            PipelineJson.mapper().writerFor(binding.runtimeClass()),
-            PipelineJson.mapper().readerFor(binding.runtimeClass()));
+            PipelineJson.mapper().writerFor(binding.runtimeType()),
+            PipelineJson.mapper().readerFor(binding.runtimeType()));
     }
 }
