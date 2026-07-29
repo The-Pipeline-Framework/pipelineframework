@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCreateCommand;
+import org.pipelineframework.awaitable.AwaitDurablePayloadResolver;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
@@ -34,6 +36,49 @@ import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
 
 class DynamoAwaitInteractionStoreTest {
+
+    @Test
+    void writesAndRestoresTypedDurableAwaitPayloads() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        AwaitDurablePayloadResolver payloads = mock(AwaitDurablePayloadResolver.class);
+        DynamoAwaitInteractionStore store = new DynamoAwaitInteractionStore(client, mockConfig(), payloads);
+        String typedRequest = "{\"canonicalTypeId\":\"Request\",\"typeExpressionFingerprint\":\"request\",\"catalogFingerprint\":\"catalog\",\"encoding\":\"json\",\"encodingVersion\":1,\"payload\":\"e30=\"}";
+        String typedResponse = "{\"canonicalTypeId\":\"Decision\",\"typeExpressionFingerprint\":\"response\",\"catalogFingerprint\":\"catalog\",\"encoding\":\"json\",\"encodingVersion\":1,\"payload\":\"e30=\"}";
+        Decision decision = new Decision("approved");
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().build());
+        when(payloads.encode(any(), eq(AwaitDurablePayloadResolver.Slot.REQUEST), any())).thenReturn(typedRequest);
+
+        store.createOrGet(command("tenant-a", "execution-1", "review", "idem-1", "corr-1", "unit-1", 0, "alice", "finance", 20_000L))
+            .await().indefinitely();
+
+        ArgumentCaptor<TransactWriteItemsRequest> create = ArgumentCaptor.forClass(TransactWriteItemsRequest.class);
+        verify(client).transactWriteItems(create.capture());
+        assertEquals(typedRequest, create.getValue().transactItems().getFirst().put().item().get("request_payload_json").s());
+
+        Map<String, AttributeValue> waiting = item("tenant-a", "interaction-1", "unit-1", 0,
+            AwaitInteractionStatus.WAITING, 20_000L, "alice", "finance");
+        Map<String, AttributeValue> completed = new java.util.HashMap<>(waiting);
+        completed.put("status", avS(AwaitInteractionStatus.COMPLETED.name()));
+        completed.put("response_payload_json", avS(typedResponse));
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().item(waiting).build());
+        when(client.updateItem(any(UpdateItemRequest.class))).thenReturn(UpdateItemResponse.builder().attributes(completed).build());
+        when(payloads.encode(any(), eq(AwaitDurablePayloadResolver.Slot.RESPONSE), any())).thenReturn(typedResponse);
+        when(payloads.decode(any(), eq(AwaitDurablePayloadResolver.Slot.RESPONSE), eq(typedResponse))).thenReturn(decision);
+
+        var completion = store.complete(new AwaitCompletionCommand(
+            "tenant-a", "interaction-1", null, "completion-1", decision, "provider", 2_000L)).await().indefinitely();
+
+        ArgumentCaptor<UpdateItemRequest> update = ArgumentCaptor.forClass(UpdateItemRequest.class);
+        verify(client).updateItem(update.capture());
+        assertEquals(typedResponse, update.getValue().expressionAttributeValues().get(":response").s());
+        assertEquals(decision, completion.record().responsePayload());
+        verify(payloads).encode(any(), eq(AwaitDurablePayloadResolver.Slot.REQUEST), any());
+        verify(payloads).encode(any(), eq(AwaitDurablePayloadResolver.Slot.RESPONSE), eq(decision));
+        verify(payloads).decode(any(), eq(AwaitDurablePayloadResolver.Slot.RESPONSE), eq(typedResponse));
+    }
+
+    private record Decision(String result) {
+    }
 
     @Test
     void createOrGetWritesUnitPendingAndDeadlineQueryKeys() {

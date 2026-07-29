@@ -59,7 +59,9 @@ class PipelineContractMetadataGeneratorTest {
         JsonObject second = readContract(secondOutput);
         assertEquals(first.get("contractHash").getAsString(), second.get("contractHash").getAsString());
         assertEquals(first.get("contractVersion").getAsString(), second.get("contractVersion").getAsString());
-        assertEquals(1, first.get("schemaVersion").getAsInt());
+        assertEquals(2, first.get("schemaVersion").getAsInt());
+        assertTrue(first.getAsJsonObject("canonicalTypes").entrySet().isEmpty());
+        assertTrue(first.get("canonicalCatalogFingerprint").getAsString().matches("[0-9a-f]{64}"));
         assertEquals("org.example.restaurant", first.get("pipelineId").getAsString());
         assertEquals("COMPUTE", first.get("platform").getAsString());
         assertEquals("REST", first.get("transport").getAsString());
