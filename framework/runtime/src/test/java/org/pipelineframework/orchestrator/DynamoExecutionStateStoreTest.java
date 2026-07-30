@@ -127,6 +127,24 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
+    void legacyInputWriteDoesNotClaimTypedDurableMetadata() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
+        long now = System.currentTimeMillis();
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().build());
+
+        store.createOrGetExecution(new ExecutionCreateCommand(
+            "tenant-a", "legacy-key", new PaymentRecord("payment-1"), ExecutionResultShape.SINGLE,
+            now, now / 1000 + 3600)).await().indefinitely();
+
+        ArgumentCaptor<TransactWriteItemsRequest> created = ArgumentCaptor.forClass(TransactWriteItemsRequest.class);
+        verify(client).transactWriteItems(created.capture());
+        Map<String, AttributeValue> item = created.getValue().transactItems().getFirst().put().item();
+        assertFalse(item.containsKey("input_payload_type_id"));
+        assertFalse(item.containsKey("input_payload_encoding"));
+    }
+
+    @Test
     void rejectsExternalTypedPayloadWhenItsEnvelopeDigestDoesNotMatch() throws Exception {
         DynamoDbClient client = mock(DynamoDbClient.class);
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));

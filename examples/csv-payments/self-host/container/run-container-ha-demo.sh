@@ -179,7 +179,9 @@ generate_container_pipeline_config() {
     source_pipeline_config="${TPF_CSV_PIPELINE_CONFIG_TEMPLATE}"
   fi
   export TPF_CSV_PIPELINE_CONFIG="${TPF_RUN_DIR}/pipeline.container-${TPF_CSV_AWAIT_TRANSPORT}.yaml"
-  cp "${source_pipeline_config}" "${TPF_CSV_PIPELINE_CONFIG}"
+  if [[ ! -e "${TPF_CSV_PIPELINE_CONFIG}" || ! "${source_pipeline_config}" -ef "${TPF_CSV_PIPELINE_CONFIG}" ]]; then
+    cp "${source_pipeline_config}" "${TPF_CSV_PIPELINE_CONFIG}"
+  fi
   TPF_CONTAINER_OBJECT_ROOT="${TPF_INPUT_DIR}" \
     perl -0pi -e 's#root: \.\./input-csv-file-processing-svc/csv#root: $ENV{TPF_CONTAINER_OBJECT_ROOT}#g' \
     "${TPF_CSV_PIPELINE_CONFIG}"

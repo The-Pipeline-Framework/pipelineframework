@@ -26,6 +26,11 @@ public record TypedDurablePayload(
         payload = Objects.requireNonNull(payload, "payload").clone();
     }
 
+    @Override
+    public byte[] payload() {
+        return payload.clone();
+    }
+
     /** Normalizes the durable JSON-map representation without accepting arbitrary maps as values. */
     public static Optional<TypedDurablePayload> fromDurableValue(Object value) {
         if (value instanceof TypedDurablePayload payload) {

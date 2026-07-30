@@ -883,9 +883,9 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             return payload;
         }
         try {
-            if (map.containsKey("canonicalTypeId") && map.containsKey("payload")) {
-                TypedDurablePayload envelope = PipelineJson.mapper().convertValue(map, TypedDurablePayload.class);
-                return durablePayloadResolver.decodeEnvelope(interaction, slot, envelope);
+            var envelope = TypedDurablePayload.fromDurableValue(map);
+            if (envelope.isPresent()) {
+                return durablePayloadResolver.decodeEnvelope(interaction, slot, envelope.get());
             }
             // Transition records written before their payload field carried the typed envelope may
             // still materialize as a JSON object. Bind that known legacy shape to the descriptor,
@@ -915,12 +915,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     }
 
     private static boolean isTypedDurablePayload(String payload) {
-        try {
-            Object parsed = PipelineJson.mapper().readValue(payload, Object.class);
-            return parsed instanceof Map<?, ?> map && map.containsKey("canonicalTypeId");
-        } catch (Exception ignored) {
-            return false;
-        }
+        return TypedDurablePayload.fromSerializedBytes(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8)).isPresent();
     }
 
     private <T> Uni<T> blocking(Supplier<T> supplier) {

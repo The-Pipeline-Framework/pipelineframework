@@ -2,8 +2,10 @@ package org.pipelineframework.awaitable;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.util.HexFormat;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -35,6 +37,8 @@ public class AwaitDurablePayloadResolver {
     @Inject JsonDurablePayloadCodec codec;
 
     private final DurablePayloadPlanRegistry plans = new DurablePayloadPlanRegistry();
+    private final ConcurrentHashMap<ReleaseCacheKey, PipelineReleaseRecord> releases = new ConcurrentHashMap<>();
+    private static final Duration RELEASE_LOOKUP_TIMEOUT = Duration.ofSeconds(10);
 
     public String encode(AwaitInteractionRecord interaction, Slot slot, Object value) {
         CompiledDurablePayloadPlan plan = resolve(interaction, slot);
@@ -92,8 +96,7 @@ public class AwaitDurablePayloadResolver {
     private CompiledDurablePayloadPlan resolve(AwaitInteractionRecord interaction, Slot slot) {
         ExecutionRecord<Object, Object> execution = executionStateStore().getExecution(interaction.tenantId(), interaction.executionId())
             .await().indefinitely().orElseThrow(() -> new IllegalStateException("owning execution is unavailable"));
-        PipelineReleaseRecord release = releaseRegistry.get(interaction.tenantId(), execution.pipelineId(), execution.releaseVersion())
-            .await().indefinitely().orElseThrow(() -> new IllegalStateException("pinned release is unavailable"));
+        PipelineReleaseRecord release = pinnedRelease(interaction.tenantId(), execution);
         AwaitStepDescriptor descriptor = descriptors.descriptorByStepIdNow(interaction.stepId());
         String requestedTypeId = slot == Slot.REQUEST ? descriptor.inputType() : interaction.outputType();
         var resolvedDefinition = CanonicalPayloadBindingLookup.resolve(
@@ -132,18 +135,34 @@ public class AwaitDurablePayloadResolver {
                     + " differs from rebuilt descriptor outputType=" + descriptorOutputType);
             }
         }
+        DurablePayloadReleaseCoordinate coordinate = new DurablePayloadReleaseCoordinate(
+            execution.pipelineId(), execution.contractVersion(), execution.releaseVersion());
+        var cached = plans.find(coordinate, expression);
+        if (cached.isPresent()) {
+            return cached.get();
+        }
         Class<?> runtimeClass;
         try {
             runtimeClass = Class.forName(runtimeType, false, Thread.currentThread().getContextClassLoader());
         } catch (ClassNotFoundException e) {
             throw new IllegalStateException("pinned release binding class is unavailable: " + runtimeType, e);
         }
-        DurablePayloadReleaseCoordinate coordinate = new DurablePayloadReleaseCoordinate(
-            execution.pipelineId(), execution.contractVersion(), execution.releaseVersion());
         CanonicalPayloadBinding binding = new CanonicalPayloadBinding(canonicalTypeId, expression,
             catalog, runtimeClass);
         plans.activate(coordinate, Map.of(expression, binding));
         return plans.plan(coordinate, expression);
+    }
+
+    private PipelineReleaseRecord pinnedRelease(String tenantId, ExecutionRecord<?, ?> execution) {
+        DurablePayloadReleaseCoordinate coordinate = new DurablePayloadReleaseCoordinate(
+            execution.pipelineId(), execution.contractVersion(), execution.releaseVersion());
+        return releases.computeIfAbsent(new ReleaseCacheKey(tenantId, coordinate), ignored ->
+            releaseRegistry.get(tenantId, execution.pipelineId(), execution.releaseVersion())
+                .await().atMost(RELEASE_LOOKUP_TIMEOUT)
+                .orElseThrow(() -> new IllegalStateException("pinned release is unavailable")));
+    }
+
+    private record ReleaseCacheKey(String tenantId, DurablePayloadReleaseCoordinate coordinate) {
     }
 
     private static IllegalStateException failure(AwaitInteractionRecord interaction, Slot slot, String type, String action, Exception cause) {

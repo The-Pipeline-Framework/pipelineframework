@@ -1365,8 +1365,10 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             record.updatedAtEpochMs(),
             record.ttlEpochS());
         putStoredPayload(item, INPUT_PAYLOAD_JSON, INPUT_PAYLOAD_REFERENCE, INPUT_PAYLOAD_DIGEST, storedInput);
-        putIfPresent(item, INPUT_PAYLOAD_TYPE_ID, "typed-durable");
-        putIfPresent(item, INPUT_PAYLOAD_ENCODING, JsonDurablePayloadCodec.ENCODING);
+        if (isTypedDurablePayload(serialized)) {
+            putIfPresent(item, INPUT_PAYLOAD_TYPE_ID, "typed-durable");
+            putIfPresent(item, INPUT_PAYLOAD_ENCODING, JsonDurablePayloadCodec.ENCODING);
+        }
     }
 
     private StoredPayload storeInputPayload(
@@ -1757,12 +1759,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     }
 
     private static boolean isTypedDurablePayload(String payload) {
-        try {
-            Object parsed = PipelineJson.mapper().readValue(payload, Object.class);
-            return parsed instanceof Map<?, ?> map && map.containsKey("canonicalTypeId");
-        } catch (Exception ignored) {
-            return false;
-        }
+        return TypedDurablePayload.fromSerializedBytes(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8)).isPresent();
     }
 
     private static String payloadDigest(String payload) {

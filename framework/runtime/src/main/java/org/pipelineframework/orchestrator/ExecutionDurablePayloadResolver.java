@@ -1,10 +1,12 @@
 package org.pipelineframework.orchestrator;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -25,6 +27,8 @@ public class ExecutionDurablePayloadResolver {
     @Inject JsonDurablePayloadCodec codec;
 
     private final DurablePayloadPlanRegistry plans = new DurablePayloadPlanRegistry();
+    private final ConcurrentHashMap<ReleaseCacheKey, PipelineReleaseRecord> releases = new ConcurrentHashMap<>();
+    private static final Duration RELEASE_LOOKUP_TIMEOUT = Duration.ofSeconds(10);
 
     public String encode(ExecutionRecord<?, ?> execution, Slot slot, Object value) {
         CompiledDurablePayloadPlan plan = resolve(execution, slot, value instanceof List<?>);
@@ -135,27 +139,35 @@ public class ExecutionDurablePayloadResolver {
         } else {
             throw new IllegalStateException("pinned release has no canonical binding for " + canonicalTypeId);
         }
+        String expression = collection ? fingerprint("List<" + definitionFingerprint + ">") : definitionFingerprint;
+        DurablePayloadReleaseCoordinate coordinate = new DurablePayloadReleaseCoordinate(
+            execution.pipelineId(), execution.contractVersion(), execution.releaseVersion());
+        var cached = plans.find(coordinate, expression);
+        if (cached.isPresent()) {
+            return cached.get();
+        }
         Class<?> runtimeClass;
         try {
             runtimeClass = Class.forName(className, false, Thread.currentThread().getContextClassLoader());
         } catch (ClassNotFoundException error) {
             throw new IllegalStateException("pinned release binding class is unavailable: " + className, error);
         }
-        String expression = collection ? fingerprint("List<" + definitionFingerprint + ">") : definitionFingerprint;
         JavaType runtimeType = collection
             ? TypeFactory.defaultInstance().constructCollectionType(List.class, runtimeClass)
             : TypeFactory.defaultInstance().constructType(runtimeClass);
         String identity = collection ? "List<" + canonicalTypeId + ">" : canonicalTypeId;
         CanonicalPayloadBinding binding = new CanonicalPayloadBinding(identity, expression, catalog, collection ? List.class : runtimeClass, runtimeType);
-        DurablePayloadReleaseCoordinate coordinate = new DurablePayloadReleaseCoordinate(
-            execution.pipelineId(), execution.contractVersion(), execution.releaseVersion());
         plans.activate(coordinate, Map.of(expression, binding));
         return plans.plan(coordinate, expression);
     }
 
     private PipelineReleaseRecord pinnedRelease(ExecutionRecord<?, ?> execution) {
-        return releaseRegistry.get(execution.tenantId(), execution.pipelineId(), execution.releaseVersion())
-            .await().indefinitely().orElseThrow(() -> new IllegalStateException("pinned release is unavailable"));
+        DurablePayloadReleaseCoordinate coordinate = new DurablePayloadReleaseCoordinate(
+            execution.pipelineId(), execution.contractVersion(), execution.releaseVersion());
+        return releases.computeIfAbsent(new ReleaseCacheKey(execution.tenantId(), coordinate), ignored ->
+            releaseRegistry.get(execution.tenantId(), execution.pipelineId(), execution.releaseVersion())
+                .await().atMost(RELEASE_LOOKUP_TIMEOUT)
+                .orElseThrow(() -> new IllegalStateException("pinned release is unavailable")));
     }
 
     private static void validatePermitted(
@@ -203,6 +215,9 @@ public class ExecutionDurablePayloadResolver {
             }
             return new StoredExpression(canonicalTypeId, false);
         }
+    }
+
+    private record ReleaseCacheKey(String tenantId, DurablePayloadReleaseCoordinate coordinate) {
     }
 
     private static String canonicalTypeId(List<PipelineBundleStepDescriptor> steps, ExecutionRecord<?, ?> execution, Slot slot) {

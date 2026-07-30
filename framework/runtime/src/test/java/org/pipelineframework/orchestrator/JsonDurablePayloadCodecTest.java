@@ -41,6 +41,20 @@ class JsonDurablePayloadCodecTest {
             .contains("_tpf_java_class"));
     }
 
+    @Test
+    void protectsTheEncodedBytesFromCallerMutation() {
+        byte[] bytes = new byte[] {1, 2, 3};
+        TypedDurablePayload payload = new TypedDurablePayload(
+            "Decision", "expression", "catalog", "application/test", 1, bytes);
+
+        bytes[0] = 9;
+        byte[] exposed = payload.payload();
+        exposed[1] = 9;
+
+        assertEquals(1, payload.payload()[0]);
+        assertEquals(2, payload.payload()[1]);
+    }
+
     record Decision(String result) {
     }
 

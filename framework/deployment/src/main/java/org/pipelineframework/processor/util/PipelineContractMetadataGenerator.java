@@ -74,8 +74,9 @@ public class PipelineContractMetadataGenerator {
         String pipelineId = resolvePipelineId(ctx);
         Map<String, Object> contractWithoutHash = new LinkedHashMap<>();
         Map<String, Object> canonicalTypes = canonicalTypes(ctx);
+        int schemaVersion = canonicalTypes.isEmpty() ? 1 : 2;
         String canonicalCatalogFingerprint = sha256(CANONICAL_GSON.toJson(canonicalTypes));
-        contractWithoutHash.put("schemaVersion", 2);
+        contractWithoutHash.put("schemaVersion", schemaVersion);
         contractWithoutHash.put("pipelineId", pipelineId);
         contractWithoutHash.put("platform", ctx.getPlatformMode() == null ? "COMPUTE" : ctx.getPlatformMode().name());
         contractWithoutHash.put("transport", ctx.getTransportMode() == null ? "GRPC" : ctx.getTransportMode().name());
@@ -89,7 +90,7 @@ public class PipelineContractMetadataGenerator {
 
         String contractHash = sha256(CANONICAL_GSON.toJson(contractWithoutHash));
         Map<String, Object> finalContract = new LinkedHashMap<>();
-        finalContract.put("schemaVersion", 2);
+        finalContract.put("schemaVersion", schemaVersion);
         finalContract.put("pipelineId", pipelineId);
         finalContract.put("contractVersion", "sha256:" + contractHash);
         finalContract.put("contractHash", contractHash);

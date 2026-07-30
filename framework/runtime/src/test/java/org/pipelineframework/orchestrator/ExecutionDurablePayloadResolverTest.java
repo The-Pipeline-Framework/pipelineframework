@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -128,7 +130,23 @@ class ExecutionDurablePayloadResolverTest {
         assertEquals(expected, assertInstanceOf(CsvPaymentsInputFile.class, restored));
     }
 
+    @Test
+    void cachesThePinnedReleaseAndCompiledPlanAcrossWarmCodecCalls() {
+        ResolverFixture fixture = resolverFixture();
+        ExecutionRecord<Object, Object> execution = execution(0);
+        CsvPaymentsInputFile input = new CsvPaymentsInputFile("/app/test-e2e/payments.csv");
+
+        fixture.resolver().encode(execution, ExecutionDurablePayloadResolver.Slot.INPUT, input);
+        fixture.resolver().encode(execution, ExecutionDurablePayloadResolver.Slot.INPUT, input);
+
+        verify(fixture.registry(), times(1)).get("tenant", "payments", "release");
+    }
+
     private static ExecutionDurablePayloadResolver resolver() {
+        return resolverFixture().resolver();
+    }
+
+    private static ResolverFixture resolverFixture() {
         PipelineReleaseRegistry registry = mock(PipelineReleaseRegistry.class);
         PipelineContractDescriptor contract = new PipelineContractDescriptor(2, "payments", "3", "contract", null, null,
             null, false, null, List.of(
@@ -150,7 +168,7 @@ class ExecutionDurablePayloadResolverTest {
         ExecutionDurablePayloadResolver resolver = new ExecutionDurablePayloadResolver();
         resolver.releaseRegistry = registry;
         resolver.codec = new JsonDurablePayloadCodec();
-        return resolver;
+        return new ResolverFixture(resolver, registry);
     }
 
     @SuppressWarnings("unchecked")
@@ -181,4 +199,7 @@ class ExecutionDurablePayloadResolverTest {
     private record ApprovedPaymentOutput(String id, String status) { }
     private record PaymentOutput(String id, String status) { }
     private record Unrelated(String value) { }
+
+    private record ResolverFixture(ExecutionDurablePayloadResolver resolver, PipelineReleaseRegistry registry) {
+    }
 }
