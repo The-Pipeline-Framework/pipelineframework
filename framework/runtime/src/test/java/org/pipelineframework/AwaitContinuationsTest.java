@@ -365,7 +365,7 @@ class AwaitContinuationsTest {
   }
 
   @Test
-  void firstChildContinuationCompletionDoesNotFetchAllSiblings() {
+  void itemContinuationChecksDurableSiblingsWhenAwaitUnitIsComplete() {
     ExecutionRecord<Object, Object> parent =
         record("tenant-1", "exec-1", "key-1", ExecutionStatus.WAITING_EXTERNAL, 7L);
     ExecutionRecord<Object, Object> child =
@@ -376,6 +376,8 @@ class AwaitContinuationsTest {
     when(executionStateStore.getExecution("tenant-1", "exec-1"))
         .thenReturn(Uni.createFrom().item(java.util.Optional.of(parent)));
     when(executionStateStore.getExecutionByKey("tenant-1", "key-1:await-item:unit-1:0"))
+        .thenReturn(Uni.createFrom().item(java.util.Optional.empty()));
+    when(executionStateStore.getExecutionByKey("tenant-1", "key-1:await-item:unit-1:1"))
         .thenReturn(Uni.createFrom().item(java.util.Optional.empty()));
     when(executionStateStore.createOrGetExecution(any()))
         .thenReturn(Uni.createFrom().item(new CreateExecutionResult(child, false)));
@@ -397,7 +399,9 @@ class AwaitContinuationsTest {
             1234L)
         .await().indefinitely();
 
-    verify(executionStateStore, never())
+    // All provider completions are durable, but no local claim set is allowed to decide the
+    // parent release.  The missing sibling therefore keeps the parent held.
+    verify(executionStateStore)
         .getExecutionByKey("tenant-1", "key-1:await-item:unit-1:1");
     verify(workDispatcher, never()).enqueueNow(any());
   }

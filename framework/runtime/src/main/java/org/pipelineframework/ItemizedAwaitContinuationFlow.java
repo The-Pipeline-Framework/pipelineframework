@@ -389,9 +389,12 @@ class ItemizedAwaitContinuationFlow {
       Integer itemIndex,
       int aggregateStepIndex,
       long nowEpochMs) {
-    if (itemIndex == null || !claims.recordCompleted(parent, unit, itemIndex)) {
+    if (itemIndex == null) {
       return Uni.createFrom().voidItem();
     }
+    // Claims only suppress duplicate work within this process. They cannot decide whether a
+    // durable parent is releasable because another worker may have completed other children.
+    claims.recordCompleted(parent, unit, itemIndex);
     return releaseParentIfReady(parent, unit, aggregateStepIndex, nowEpochMs);
   }
 

@@ -116,6 +116,40 @@ In that model, `PipelineRunner` still runs synchronous step segments. An await s
 
 That continuation is the future beginning of the suspended pipeline. `AwaitContinuationPlanner` decides whether a completion is still held, releases a scalar resume, dispatches item continuations, records item output, or releases an itemized parent. `ScalarAwaitContinuationFlow` and `ItemizedAwaitContinuationFlow` interpret those decisions through the existing projection stores and dispatcher. `ItemContinuationClaims` is only process-local duplicate suppression; durable truth remains in the stores and immutable ledger facts.
 
+## Durable Recovery Contract
+
+Every await transition must be reconstructable from durable state. A worker-local observation,
+claim, cache, live session, or scheduler entry may reduce duplicate work, but it cannot be needed
+to determine whether an interaction, child continuation, or parent execution may progress.
+
+| Durable precondition | Event | Durable mutation | Emitted action | Restart reconstruction |
+| --- | --- | --- | --- | --- |
+| pending interaction | request creation | interaction persists | dispatch request | reload interaction and redispatch by its delivery contract |
+| pending interaction | completion admission | response persists as completed | release evaluation | reload interaction and await unit |
+| completed scalar interaction | release evaluation | parent becomes queued | continuation work | reload parent state and deduplicate by transition identity |
+| completed item interaction | item continuation | child becomes succeeded | parent release evaluation | query the durable child execution |
+| all required children succeeded | parent release evaluation | parent becomes queued | aggregate continuation work | query every required durable child execution |
+| queued parent | transition admission | next execution state persists | business segment | reload the execution and lease/retry safely |
+
+The itemized parent release rule is deliberately strict: a parent remains held while any required
+durable child execution is missing, pending, failed, or otherwise non-successful. Local child
+claims never prove aggregate completion. More than one worker may physically attempt release or
+continuation work, but optimistic durable admission permits only one accepted semantic advance.
+
+The runtime suite keeps this contract executable through a compact, machine-readable lifecycle
+coverage registry. It covers every declared transition, crash boundary, race, and supported await
+shape with named journeys rather than a Cartesian product. Restart journeys discard coordinator,
+live-session, claim, cache, and scheduler state before rebuilding from the same Dynamo records.
+
+Completion ingress has one real Dynamo-backed admission anchor per supported transport: the Kafka
+consumer, the SQS poller, and the hosted control-plane webhook callback each deserialize their
+transport envelope, admit exactly one completion, and are verified through a fresh await-store
+read. The terminal empty-itemized journey proves the corresponding terminal invariants at the
+durable boundary: the execution is terminal, the await unit is complete, there are no pending
+interactions, and there are no child executions or continuation facts to reconcile. Admission
+capacity and item-claim cleanup are asserted by their owning admission and continuation paths;
+they are not inferred from a worker-local lifecycle fixture.
+
 ## CSV Payments Applied Model
 
 `csv-payments` applies this model to a Kafka-backed payment-provider boundary:

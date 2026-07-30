@@ -50,6 +50,14 @@ class ItemContinuationClaims {
     completedIndexes.remove(completionKey(parent, unit));
   }
 
+  boolean hasPendingClaims(
+      ExecutionRecord<Object, Object> parent,
+      AwaitUnitRecord unit) {
+    String prefix = unit.tenantId() + "::" + unit.executionId() + "::" + unit.unitId() + "::";
+    return dispatchClaims.stream().anyMatch(key -> key.startsWith(prefix))
+        || completedIndexes.containsKey(completionKey(parent, unit));
+  }
+
   private static String completionKey(
       ExecutionRecord<Object, Object> parent,
       AwaitUnitRecord unit) {

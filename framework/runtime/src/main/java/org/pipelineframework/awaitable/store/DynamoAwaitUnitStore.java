@@ -55,6 +55,18 @@ public class DynamoAwaitUnitStore implements AwaitUnitStore {
 
     private volatile DynamoDbClient client;
 
+    /**
+     * Explicit test/runtime-host seam. CDI continues to use the no-arg constructor; alternate
+     * hosts can supply the already-resolved Dynamo client and configuration without reflection.
+     */
+    DynamoAwaitUnitStore(DynamoDbClient client, PipelineOrchestratorConfig orchestratorConfig) {
+        this.client = java.util.Objects.requireNonNull(client, "client");
+        this.orchestratorConfig = java.util.Objects.requireNonNull(orchestratorConfig, "orchestratorConfig");
+    }
+
+    public DynamoAwaitUnitStore() {
+    }
+
     @Override
     public String providerName() {
         return "dynamo";
