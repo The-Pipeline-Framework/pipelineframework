@@ -29,6 +29,7 @@ import org.pipelineframework.awaitable.AwaitInteractionTerminalException;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.TypedDurablePayload;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
@@ -870,7 +871,31 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         if (durablePayloadResolver == null) {
             return toJson(payload);
         }
-        return durablePayloadResolver.encode(interaction, slot, payload);
+        return durablePayloadResolver.encode(interaction, slot, restoreTransitionTypedPayload(interaction, slot, payload));
+    }
+
+    private Object restoreTransitionTypedPayload(
+        AwaitInteractionRecord interaction,
+        AwaitDurablePayloadResolver.Slot slot,
+        Object payload
+    ) {
+        if (!(payload instanceof Map<?, ?> map)) {
+            return payload;
+        }
+        try {
+            if (map.containsKey("canonicalTypeId") && map.containsKey("payload")) {
+                TypedDurablePayload envelope = PipelineJson.mapper().convertValue(map, TypedDurablePayload.class);
+                return durablePayloadResolver.decodeEnvelope(interaction, slot, envelope);
+            }
+            // Transition records written before their payload field carried the typed envelope may
+            // still materialize as a JSON object. Bind that known legacy shape to the descriptor,
+            // never pass the map through to another durable write.
+            return durablePayloadResolver.decodeLegacy(interaction, slot,
+                PipelineJson.mapper().writeValueAsString(map));
+        } catch (Exception e) {
+            throw new IllegalStateException("Await transition carried an invalid typed durable payload: interactionId="
+                + interaction.interactionId() + ", slot=" + slot, e);
+        }
     }
 
     private Object deserializePayload(AwaitInteractionRecord interaction, AwaitDurablePayloadResolver.Slot slot, String payload) {

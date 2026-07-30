@@ -100,6 +100,33 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
+    void writesAnAwaitItemChildInputUsingItsContinuationContract() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
+        ExecutionDurablePayloadResolver payloads = mock(ExecutionDurablePayloadResolver.class);
+        store.durablePayloadResolver = payloads;
+        PaymentStatus continuation = new PaymentStatus("payment-1", "approved");
+        ExecutionInputSnapshot input = new ExecutionInputSnapshot(ExecutionInputShape.UNI, continuation);
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().build());
+        when(payloads.encode(any(), eq(PaymentStatus.class.getName()), eq(continuation)))
+            .thenReturn(typed("PaymentStatus"));
+
+        store.createOrGetExecution(new ExecutionCreateCommand(
+            "tenant-a", "await-item-child", "org.example.pipeline", "sha256:contract", "sha256:release", input,
+            ExecutionResultShape.MATERIALIZED_MULTI, Optional.of(PaymentStatus.class.getName()), 3, now, ttl)).await().indefinitely();
+
+        ArgumentCaptor<TransactWriteItemsRequest> created = ArgumentCaptor.forClass(TransactWriteItemsRequest.class);
+        verify(client).transactWriteItems(created.capture());
+        Map<String, AttributeValue> item = created.getValue().transactItems().getFirst().put().item();
+        assertEquals("3", item.get("current_step_index").n());
+        assertEquals(typed("PaymentStatus"), item.get("input_payload_json").s());
+        verify(payloads).encode(any(), eq(PaymentStatus.class.getName()), eq(continuation));
+        verify(payloads, never()).encode(any(), eq(ExecutionDurablePayloadResolver.Slot.INPUT), eq(continuation));
+    }
+
+    @Test
     void rejectsExternalTypedPayloadWhenItsEnvelopeDigestDoesNotMatch() throws Exception {
         DynamoDbClient client = mock(DynamoDbClient.class);
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
@@ -140,6 +167,7 @@ class DynamoExecutionStateStoreTest {
     }
 
     private record PaymentRecord(String id) { }
+    private record PaymentStatus(String id, String status) { }
     private record PaymentOutput(String id, String status) { }
 
     @Test

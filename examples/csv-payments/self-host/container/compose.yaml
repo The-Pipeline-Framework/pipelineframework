@@ -204,6 +204,8 @@ services:
         -Dpipeline.orchestrator.dynamo.await-unit-table=tpf_await_unit
         -Dpipeline.orchestrator.dynamo.await-interaction-table=tpf_await_interaction
         -Dpipeline.orchestrator.dynamo.await-interaction-key-table=tpf_await_interaction_key
+        -Dpipeline.orchestrator.dynamo.release-table=tpf_release_registry
+        -Dpipeline.orchestrator.releases.registry.provider=dynamo
         -Dpipeline.await-admission.enabled=true
         -Dpipeline.await-admission.store=dynamo
         -Dpipeline.orchestrator.dynamo.await-admission-table=tpf_await_admission

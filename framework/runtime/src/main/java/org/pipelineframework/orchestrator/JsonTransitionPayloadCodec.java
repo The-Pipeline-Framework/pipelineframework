@@ -59,6 +59,9 @@ public class JsonTransitionPayloadCodec implements TransitionPayloadCodec {
 
     @Override
     public SerializedTransitionPayload encode(Object payload) {
+        if (payload instanceof SerializedTransitionPayload serialized) {
+            return serialized;
+        }
         if (payload instanceof ExecutionInputSnapshot snapshot) {
             return encodeExecutionInputSnapshot(snapshot);
         }

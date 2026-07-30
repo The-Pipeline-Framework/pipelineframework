@@ -3,10 +3,12 @@ package org.pipelineframework.awaitable;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 
@@ -38,8 +40,8 @@ class AwaitDurablePayloadResolverTest {
 
         PipelineContractDescriptor contract = new PipelineContractDescriptor(
             2, "payments", "3", "contract-hash", null, null, null, false, null,
-            java.util.List.of(new PipelineBundleStepDescriptor(2, "await", "await", "ONE_TO_ONE",
-                "Request", "Decision", null, null, "kafka")),
+            java.util.List.of(new PipelineBundleStepDescriptor(2, "branch-after-await", "internal", "ONE_TO_ONE",
+                Decision.class.getName(), Decision.class.getName(), null, null, null)),
             PipelineBundleCapabilities.defaults(),
             Map.of(
                 "Request", binding(Request.class, "request-fingerprint"),
@@ -54,6 +56,7 @@ class AwaitDurablePayloadResolverTest {
         resolver.releaseRegistry = releases;
         resolver.descriptors = descriptors;
         resolver.codec = new JsonDurablePayloadCodec();
+        when(descriptors.descriptorByStepIdNow("await")).thenReturn(descriptor());
         AwaitInteractionRecord interaction = interaction();
 
         String encodedRequest = resolver.encode(interaction, AwaitDurablePayloadResolver.Slot.REQUEST, new Request("r-1"));
@@ -64,6 +67,8 @@ class AwaitDurablePayloadResolverTest {
 
         assertEquals(new Request("r-1"), assertInstanceOf(Request.class, restoredRequest));
         assertEquals(new Decision("approved"), assertInstanceOf(Decision.class, restoredResponse));
+        assertTrue(encodedRequest.contains("\"canonicalTypeId\":\"Request\""));
+        assertTrue(encodedResponse.contains("\"canonicalTypeId\":\"Decision\""));
     }
 
     @Test
@@ -109,6 +114,7 @@ class AwaitDurablePayloadResolverTest {
         resolver.executionStateStore = executionStore;
         resolver.releaseRegistry = releases;
         resolver.descriptors = mock(AwaitStepDescriptorFactory.class);
+        when(resolver.descriptors.descriptorByStepIdNow("await")).thenReturn(descriptor());
         resolver.codec = new JsonDurablePayloadCodec();
         return resolver;
     }
@@ -121,6 +127,11 @@ class AwaitDurablePayloadResolverTest {
         return new AwaitInteractionRecord("tenant", "execution", "await", 2, Decision.class.getName(), "interaction",
             "correlation", null, "idem", 0, AwaitInteractionStatus.WAITING, null, null, "unit", 0, null, null,
             null, "kafka", Map.of(), 100_000L, 1L, 1L, 1_000L, Decision.class.getName());
+    }
+
+    private static AwaitStepDescriptor descriptor() {
+        return new AwaitStepDescriptor("await", Request.class.getName(), Decision.class.getName(),
+            "ONE_TO_ONE", Duration.ofSeconds(30), "correlation", "kafka", Map.of(), java.util.List.of());
     }
 
     private record Request(String id) { }

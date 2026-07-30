@@ -172,12 +172,14 @@ trap 'cleanup $?' EXIT
 
 generate_container_pipeline_config() {
   mkdir -p "${TPF_RUN_DIR}" "${TPF_INPUT_DIR}"
+  local source_pipeline_config
   if [[ -n "${TPF_CSV_PIPELINE_CONFIG_EXPLICIT}" ]]; then
-    export TPF_CSV_PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG_EXPLICIT}"
-    return
+    source_pipeline_config="${TPF_CSV_PIPELINE_CONFIG_EXPLICIT}"
+  else
+    source_pipeline_config="${TPF_CSV_PIPELINE_CONFIG_TEMPLATE}"
   fi
   export TPF_CSV_PIPELINE_CONFIG="${TPF_RUN_DIR}/pipeline.container-${TPF_CSV_AWAIT_TRANSPORT}.yaml"
-  cp "${TPF_CSV_PIPELINE_CONFIG_TEMPLATE}" "${TPF_CSV_PIPELINE_CONFIG}"
+  cp "${source_pipeline_config}" "${TPF_CSV_PIPELINE_CONFIG}"
   TPF_CONTAINER_OBJECT_ROOT="${TPF_INPUT_DIR}" \
     perl -0pi -e 's#root: \.\./input-csv-file-processing-svc/csv#root: $ENV{TPF_CONTAINER_OBJECT_ROOT}#g' \
     "${TPF_CSV_PIPELINE_CONFIG}"

@@ -5,6 +5,7 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Map;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import org.pipelineframework.orchestrator.CanonicalPayloadBinding;
 import org.pipelineframework.orchestrator.CompiledDurablePayloadPlan;
@@ -12,7 +13,9 @@ import org.pipelineframework.orchestrator.DurablePayloadPlanRegistry;
 import org.pipelineframework.orchestrator.DurablePayloadReleaseCoordinate;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
+import org.pipelineframework.orchestrator.CanonicalPayloadBindingLookup;
 import org.pipelineframework.orchestrator.JsonDurablePayloadCodec;
+import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.TypedDurablePayload;
 import org.pipelineframework.orchestrator.release.PipelineReleaseRecord;
 import org.pipelineframework.orchestrator.release.PipelineReleaseRegistry;
@@ -23,7 +26,10 @@ import org.pipelineframework.config.pipeline.PipelineJson;
 public class AwaitDurablePayloadResolver {
     public enum Slot { REQUEST, RESPONSE }
 
-    @Inject ExecutionStateStore executionStateStore;
+    /** Direct override for focused tests; production selection is provider-name based. */
+    ExecutionStateStore executionStateStore;
+    @Inject Instance<ExecutionStateStore> executionStateStores;
+    @Inject PipelineOrchestratorConfig orchestratorConfig;
     @Inject PipelineReleaseRegistry releaseRegistry;
     @Inject AwaitStepDescriptorFactory descriptors;
     @Inject JsonDurablePayloadCodec codec;
@@ -43,6 +49,15 @@ public class AwaitDurablePayloadResolver {
         try {
             TypedDurablePayload payload = TypedDurablePayload.fromSerializedBytes(stored.getBytes(StandardCharsets.UTF_8))
                 .orElseThrow(() -> new IllegalArgumentException("not a typed durable payload"));
+            return decodeEnvelope(interaction, slot, payload);
+        } catch (Exception e) {
+            throw failure(interaction, slot, slot.name().toLowerCase(), "decode", e);
+        }
+    }
+
+    /** Restores a typed envelope that crossed a transition command as JSON object metadata. */
+    public Object decodeEnvelope(AwaitInteractionRecord interaction, Slot slot, TypedDurablePayload payload) {
+        try {
             CompiledDurablePayloadPlan plan = resolve(interaction, slot);
             return codec.decode(payload, plan);
         } catch (Exception e) {
@@ -75,18 +90,24 @@ public class AwaitDurablePayloadResolver {
     }
 
     private CompiledDurablePayloadPlan resolve(AwaitInteractionRecord interaction, Slot slot) {
-        ExecutionRecord<Object, Object> execution = executionStateStore.getExecution(interaction.tenantId(), interaction.executionId())
+        ExecutionRecord<Object, Object> execution = executionStateStore().getExecution(interaction.tenantId(), interaction.executionId())
             .await().indefinitely().orElseThrow(() -> new IllegalStateException("owning execution is unavailable"));
         PipelineReleaseRecord release = releaseRegistry.get(interaction.tenantId(), execution.pipelineId(), execution.releaseVersion())
             .await().indefinitely().orElseThrow(() -> new IllegalStateException("pinned release is unavailable"));
-        var step = release.contract().steps().stream().filter(candidate -> candidate.index() == interaction.stepIndex()).findFirst()
-            .orElseThrow(() -> new IllegalStateException("pinned release does not contain await step index " + interaction.stepIndex()));
-        String canonicalTypeId = slot == Slot.REQUEST ? step.inputTypeId() : step.outputTypeId();
-        Map<String, Object> canonicalDefinition = release.contract().canonicalTypes().get(canonicalTypeId);
+        AwaitStepDescriptor descriptor = descriptors.descriptorByStepIdNow(interaction.stepId());
+        String requestedTypeId = slot == Slot.REQUEST ? descriptor.inputType() : interaction.outputType();
+        var resolvedDefinition = CanonicalPayloadBindingLookup.resolve(
+            release.contract().canonicalTypes(), requestedTypeId);
+        String canonicalTypeId = resolvedDefinition
+            .map(CanonicalPayloadBindingLookup.ResolvedCanonicalDefinition::canonicalTypeId)
+            .orElse(requestedTypeId);
+        Map<String, Object> canonicalDefinition = resolvedDefinition
+            .map(CanonicalPayloadBindingLookup.ResolvedCanonicalDefinition::definition)
+            .orElse(Map.of());
         String runtimeType;
         String expression;
         String catalog;
-        if (canonicalDefinition != null) {
+        if (resolvedDefinition.isPresent()) {
             runtimeType = requiredString(canonicalDefinition, "runtimeClass", canonicalTypeId);
             expression = requiredString(canonicalDefinition, "definitionFingerprint", canonicalTypeId);
             catalog = release.contract().canonicalCatalogFingerprint();
@@ -94,12 +115,22 @@ public class AwaitDurablePayloadResolver {
                 throw new IllegalStateException("pinned release canonical catalog fingerprint is unavailable");
             }
         } else if (release.contract().schemaVersion() == 1) {
-            AwaitStepDescriptor descriptor = descriptors.descriptorByStepIdNow(interaction.stepId());
             runtimeType = slot == Slot.REQUEST ? descriptor.inputType() : interaction.outputType();
             expression = fingerprint(canonicalTypeId);
             catalog = release.contract().contractHash();
         } else {
             throw new IllegalStateException("pinned release has no canonical binding for " + canonicalTypeId);
+        }
+        if (slot == Slot.RESPONSE) {
+            String descriptorOutputType = CanonicalPayloadBindingLookup.resolve(
+                release.contract().canonicalTypes(), descriptor.outputType())
+                .map(CanonicalPayloadBindingLookup.ResolvedCanonicalDefinition::canonicalTypeId)
+                .orElse(descriptor.outputType());
+            if (!descriptorOutputType.equals(canonicalTypeId)) {
+                throw new IllegalStateException("await durable-contract compatibility failed for stepId="
+                    + interaction.stepId() + ": durable canonical outputType=" + canonicalTypeId
+                    + " differs from rebuilt descriptor outputType=" + descriptorOutputType);
+            }
         }
         Class<?> runtimeClass;
         try {
@@ -119,6 +150,21 @@ public class AwaitDurablePayloadResolver {
         return new IllegalStateException("Await durable payload " + action + " failed: interactionId="
             + interaction.interactionId() + ", executionId=" + interaction.executionId() + ", slot=" + slot
             + ", canonicalTypeId=" + type, cause);
+    }
+
+    private ExecutionStateStore executionStateStore() {
+        if (executionStateStore != null) {
+            return executionStateStore;
+        }
+        if (executionStateStores == null || orchestratorConfig == null) {
+            throw new IllegalStateException("Await durable payload resolver has no execution-state provider");
+        }
+        String requested = orchestratorConfig.stateProvider();
+        return executionStateStores.stream()
+            .filter(store -> requested == null || requested.isBlank() || requested.equalsIgnoreCase(store.providerName()))
+            .sorted((left, right) -> Integer.compare(right.priority(), left.priority()))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("No ExecutionStateStore provider found for '" + requested + "'"));
     }
 
     private static String fingerprint(String value) {

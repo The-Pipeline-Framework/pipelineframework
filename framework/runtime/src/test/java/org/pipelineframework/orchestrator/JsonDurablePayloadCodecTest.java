@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,31 @@ class JsonDurablePayloadCodecTest {
         assertThrows(IllegalArgumentException.class, () -> codec.decode(encoded, incompatible));
     }
 
+    @Test
+    void roundTripsASealedCanonicalUnionCaseWithoutJavaClassMetadata() {
+        CanonicalPayloadBinding unionBinding = new CanonicalPayloadBinding(
+            DecisionStatus.class.getSimpleName(), "union-expression", "catalog-fingerprint", DecisionStatus.class);
+
+        TypedDurablePayload encoded = codec.encode(new DecisionStatus.Approved(new Decision("approved")), unionBinding);
+        Object decoded = codec.decode(encoded, unionBinding);
+
+        assertEquals(new DecisionStatus.Approved(new Decision("approved")), decoded);
+        assertFalse(new String(encoded.payload(), java.nio.charset.StandardCharsets.UTF_8)
+            .contains("_tpf_java_class"));
+    }
+
     record Decision(String result) {
+    }
+
+    sealed interface DecisionStatus permits DecisionStatus.Approved, DecisionStatus.Rejected {
+        String discriminator();
+
+        record Approved(Decision value) implements DecisionStatus {
+            @Override public String discriminator() { return "approved"; }
+        }
+
+        record Rejected(Decision value) implements DecisionStatus {
+            @Override public String discriminator() { return "rejected"; }
+        }
     }
 }

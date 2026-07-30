@@ -1,6 +1,7 @@
 package org.pipelineframework.awaitable;
 
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +24,7 @@ import org.pipelineframework.awaitable.admission.AwaitAdmissionReservation;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
+import org.pipelineframework.orchestrator.TypedDurablePayload;
 import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 
@@ -53,6 +55,9 @@ public class AwaitCoordinator {
 
     @Inject
     AwaitStepDescriptorFactory descriptorFactory;
+
+    @Inject
+    AwaitDurablePayloadResolver durablePayloadResolver;
 
     @Inject
     PipelineTelemetry telemetry;
@@ -141,7 +146,7 @@ public class AwaitCoordinator {
             .onItem().transformToUni(claimedInteraction -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
                     descriptor,
                     claimedInteraction,
-                    claimedInteraction.requestPayload()))
+                    transportRequestPayload(descriptor, claimedInteraction)))
                 .onFailure().call(failure -> interactionStore().fail(
                     claimedInteraction.tenantId(),
                     claimedInteraction.interactionId(),
@@ -361,9 +366,27 @@ public class AwaitCoordinator {
     }
 
     private AwaitInteractionRecord transportSafeSnapshot(AwaitInteractionRecord interaction) {
+        if (durablePayloadResolver != null) {
+            return interaction.withPayloadSnapshots(
+                typedSnapshot(interaction, AwaitDurablePayloadResolver.Slot.REQUEST, interaction.requestPayload()),
+                typedSnapshot(interaction, AwaitDurablePayloadResolver.Slot.RESPONSE, interaction.responsePayload()));
+        }
         return interaction.withPayloadSnapshots(
             AwaitPayloadSupport.normalize(interaction.requestPayload()),
             AwaitPayloadSupport.normalize(interaction.responsePayload()));
+    }
+
+    private TypedDurablePayload typedSnapshot(
+        AwaitInteractionRecord interaction,
+        AwaitDurablePayloadResolver.Slot slot,
+        Object payload
+    ) {
+        if (payload == null) {
+            return null;
+        }
+        return TypedDurablePayload.fromSerializedBytes(
+            durablePayloadResolver.encode(interaction, slot, payload).getBytes(StandardCharsets.UTF_8))
+            .orElseThrow(() -> new IllegalStateException("Await typed snapshot encoding failed for " + interaction.interactionId()));
     }
 
     public Uni<Void> importSuspension(TransitionAwaitSuspension suspension) {
@@ -525,8 +548,6 @@ public class AwaitCoordinator {
         String group
     ) {
         Object canonicalRequestPayload = restoreCanonicalRequestPayload(descriptor, requestPayload);
-        Object transportRequestPayload = AwaitPayloadSupport.normalize(
-            descriptor.inputToTransport().apply(canonicalRequestPayload));
         long now = System.currentTimeMillis();
         long deadline = now + descriptor.timeout().toMillis();
         long ttl = Instant.ofEpochMilli(deadline).plusSeconds(86_400).getEpochSecond();
@@ -544,7 +565,7 @@ public class AwaitCoordinator {
                 causationId,
                 idempotencyKey,
                 correlationId,
-                transportRequestPayload,
+                canonicalRequestPayload,
                 assignee,
                 group,
                 descriptor.transportType(),
@@ -568,6 +589,18 @@ public class AwaitCoordinator {
                     + descriptor.inputType() + " for step " + descriptor.stepId(),
                 e);
         }
+    }
+
+    /**
+     * The durable interaction owns the canonical request. The representation adapter is deliberately
+     * applied only at dispatch, so protobuf/JSON transport values cannot become replay inputs.
+     */
+    private static Object transportRequestPayload(
+        AwaitStepDescriptor descriptor,
+        AwaitInteractionRecord interaction
+    ) {
+        Object canonical = restoreCanonicalRequestPayload(descriptor, interaction.requestPayload());
+        return AwaitPayloadSupport.normalize(descriptor.inputToTransport().apply(canonical));
     }
 
     /**
@@ -796,14 +829,16 @@ public class AwaitCoordinator {
         try {
             AwaitStepDescriptor descriptor = descriptorFor(record);
             validateDurableOutputContract(record, descriptor);
-            Class<?> outputType = AwaitPayloadSupport.resolvePayloadClass(
-                record.transportOutputType(),
+            Class<?> canonicalOutputType = AwaitPayloadSupport.resolvePayloadClass(
+                record.outputType(),
                 Thread.currentThread().getContextClassLoader());
-            Object transportPayload = AwaitPayloadSupport.coercePayload(record.responsePayload(), outputType);
-            return descriptor.outputFromTransport().apply(transportPayload);
+            if (canonicalOutputType.isInstance(record.responsePayload())) {
+                return record.responsePayload();
+            }
+            return canonicalCompletionPayload(record, descriptor, record.responsePayload());
         } catch (ClassNotFoundException e) {
             throw new IllegalStateException(
-                "Failed resolving await transport output type " + record.transportOutputType()
+                "Failed resolving await canonical output type " + record.outputType()
                     + " for interaction " + record.interactionId() + " stepId=" + record.stepId(),
                 e);
         }
@@ -815,10 +850,23 @@ public class AwaitCoordinator {
     ) {
         AwaitStepDescriptor descriptor = descriptorFor(record);
         validateDurableOutputContract(record, descriptor);
-        Object transportPayload = sameTypeIdentity(record.outputType(), record.transportOutputType())
-            ? command.responsePayload()
-            : coerceTransportPayload(record, command.responsePayload());
-        return new ValidatedCompletion(record, withResponsePayload(command, transportPayload));
+        Object canonicalPayload = canonicalCompletionPayload(record, descriptor, command.responsePayload());
+        return new ValidatedCompletion(record, withResponsePayload(command, canonicalPayload));
+    }
+
+    /**
+     * Admits a transport completion at the await boundary and converts it before it crosses the
+     * durable canonical boundary. New interaction records therefore persist canonical values;
+     * the legacy transport projection remains readable only when restoring older records.
+     */
+    private Object canonicalCompletionPayload(
+        AwaitInteractionRecord record,
+        AwaitStepDescriptor descriptor,
+        Object payload
+    ) {
+        Object transportPayload = coerceTransportPayload(record, payload);
+        Object canonicalPayload = descriptor.outputFromTransport().apply(transportPayload);
+        return coerceCanonicalPayload(record, canonicalPayload);
     }
 
     private Object coerceTransportPayload(AwaitInteractionRecord record, Object payload) {
@@ -832,6 +880,21 @@ public class AwaitCoordinator {
                 "Await transport completion validation failed for interaction " + record.interactionId()
                     + " stepId=" + record.stepId()
                     + ": transportOutputType " + record.transportOutputType() + " is unavailable",
+                e);
+        }
+    }
+
+    private Object coerceCanonicalPayload(AwaitInteractionRecord record, Object payload) {
+        try {
+            Class<?> canonicalOutputType = AwaitPayloadSupport.resolvePayloadClass(
+                record.outputType(),
+                Thread.currentThread().getContextClassLoader());
+            return AwaitPayloadSupport.coercePayload(payload, canonicalOutputType);
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException(
+                "Await canonical completion validation failed for interaction " + record.interactionId()
+                    + " stepId=" + record.stepId()
+                    + ": outputType " + record.outputType() + " is unavailable",
                 e);
         }
     }
