@@ -1,6 +1,7 @@
 package org.pipelineframework.awaitable;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -89,6 +90,28 @@ class AwaitDurablePayloadResolverTest {
         Object restored = resolver.decodeLegacy(interaction(), AwaitDurablePayloadResolver.Slot.RESPONSE, legacy);
 
         assertEquals(new Decision("approved"), assertInstanceOf(Decision.class, restored));
+    }
+
+    @Test
+    void leavesSchemaV1AwaitInteractionsOnTheirLegacyPayloadFormat() {
+        ExecutionStateStore executionStore = mock(ExecutionStateStore.class);
+        PipelineReleaseRegistry releases = mock(PipelineReleaseRegistry.class);
+        @SuppressWarnings("unchecked")
+        ExecutionRecord<Object, Object> execution = mock(ExecutionRecord.class);
+        when(execution.pipelineId()).thenReturn("consumer-validation");
+        when(execution.contractVersion()).thenReturn("1");
+        when(execution.releaseVersion()).thenReturn("1");
+        when(executionStore.getExecution(any(), any())).thenReturn(Uni.createFrom().item(Optional.of(execution)));
+        PipelineReleaseRecord release = mock(PipelineReleaseRecord.class);
+        when(release.contract()).thenReturn(new PipelineContractDescriptor(
+            1, "consumer-validation", "1", "contract", null, null, null, false, null,
+            java.util.List.of(), PipelineBundleCapabilities.defaults()));
+        when(releases.get(any(), any(), any())).thenReturn(Uni.createFrom().item(Optional.of(release)));
+        AwaitDurablePayloadResolver resolver = new AwaitDurablePayloadResolver();
+        resolver.executionStateStore = executionStore;
+        resolver.releaseRegistry = releases;
+
+        assertFalse(resolver.supportsTypedPayloads(interaction()));
     }
 
     private static AwaitDurablePayloadResolver resolverForPinnedRelease() {

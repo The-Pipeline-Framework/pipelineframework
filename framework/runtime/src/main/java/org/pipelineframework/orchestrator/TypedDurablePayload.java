@@ -1,5 +1,6 @@
 package org.pipelineframework.orchestrator;
 
+import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -44,14 +45,15 @@ public record TypedDurablePayload(
             return Optional.empty();
         }
         try {
+            int encodingVersion = positiveInt(number);
             return Optional.of(new TypedDurablePayload(
                 string(map, "canonicalTypeId"),
                 string(map, "typeExpressionFingerprint"),
                 string(map, "catalogFingerprint"),
                 string(map, "encoding"),
-                number.intValue(),
+                encodingVersion,
                 java.util.Base64.getDecoder().decode(string(map, "payload"))));
-        } catch (IllegalArgumentException ignored) {
+        } catch (IllegalArgumentException | ArithmeticException ignored) {
             return Optional.empty();
         }
     }
@@ -71,6 +73,15 @@ public record TypedDurablePayload(
             throw new IllegalArgumentException("Typed durable payload field '" + key + "' must be a string");
         }
         return string;
+    }
+
+    private static int positiveInt(Number value) {
+        BigDecimal decimal = new BigDecimal(value.toString());
+        int parsed = decimal.intValueExact();
+        if (parsed <= 0) {
+            throw new IllegalArgumentException("encodingVersion must be a positive integer");
+        }
+        return parsed;
     }
 
     private static void require(String value, String name) {

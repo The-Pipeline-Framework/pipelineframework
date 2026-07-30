@@ -46,6 +46,7 @@ class DynamoAwaitInteractionStoreTest {
         String typedResponse = "{\"canonicalTypeId\":\"Decision\",\"typeExpressionFingerprint\":\"response\",\"catalogFingerprint\":\"catalog\",\"encoding\":\"json\",\"encodingVersion\":1,\"payload\":\"e30=\"}";
         Decision decision = new Decision("approved");
         when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().build());
+        when(payloads.supportsTypedPayloads(any())).thenReturn(true);
         when(payloads.encode(any(), eq(AwaitDurablePayloadResolver.Slot.REQUEST), any())).thenReturn(typedRequest);
 
         store.createOrGet(command("tenant-a", "execution-1", "review", "idem-1", "corr-1", "unit-1", 0, "alice", "finance", 20_000L))

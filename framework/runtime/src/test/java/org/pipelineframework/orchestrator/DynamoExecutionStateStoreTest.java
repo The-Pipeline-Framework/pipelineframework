@@ -179,6 +179,39 @@ class DynamoExecutionStateStoreTest {
         verify(store.durablePayloadResolver, never()).decode(any(), any(), any());
     }
 
+    @Test
+    void rejectsExternalLegacyPayloadWhenItsDigestDoesNotMatch() throws Exception {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
+        long ttl = System.currentTimeMillis() / 1000 + 3600;
+        String payload = "{\\\"legacy\\\":true}";
+        Map<String, AttributeValue> execution = new java.util.HashMap<>(executionItem(
+            "tenant-a", "exec-legacy-external", "key-legacy-external", ttl, ExecutionStatus.SUCCEEDED));
+        execution.put("result_payload_reference", AttributeValue.builder().s("legacy-payload").build());
+        execution.put("result_payload_digest", AttributeValue.builder().s("deliberately-wrong").build());
+        byte[] bytes = payload.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String hash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+        Map<String, AttributeValue> manifest = Map.of(
+            "payload_id", AttributeValue.builder().s("legacy-payload").build(),
+            "payload_part", AttributeValue.builder().s("MANIFEST").build(),
+            "payload_length_bytes", AttributeValue.builder().n(Integer.toString(bytes.length)).build(),
+            "chunk_count", AttributeValue.builder().n("1").build(),
+            "sha256", AttributeValue.builder().s(hash).build());
+        Map<String, AttributeValue> chunk = Map.of(
+            "payload_id", AttributeValue.builder().s("legacy-payload").build(),
+            "payload_part", AttributeValue.builder().s("CHUNK#00000000").build(),
+            "payload_bytes", AttributeValue.builder().b(software.amazon.awssdk.core.SdkBytes.fromByteArray(bytes)).build());
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(
+            GetItemResponse.builder().item(execution).build(), GetItemResponse.builder().item(manifest).build());
+        when(client.query(any(software.amazon.awssdk.services.dynamodb.model.QueryRequest.class))).thenReturn(
+            software.amazon.awssdk.services.dynamodb.model.QueryResponse.builder().items(chunk).build());
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+            () -> store.getExecution("tenant-a", "exec-legacy-external").await().indefinitely());
+
+        assertTrue(failure.getMessage().contains("digest mismatch"));
+    }
+
     private static String typed(String canonicalTypeId) {
         return "{\"canonicalTypeId\":\"" + canonicalTypeId + "\",\"typeExpressionFingerprint\":\"fingerprint\","
             + "\"catalogFingerprint\":\"catalog\",\"encoding\":\"application/tpf-canonical+json\",\"encodingVersion\":1,\"payload\":\"e30=\"}";

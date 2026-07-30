@@ -16,6 +16,7 @@ import jakarta.inject.Inject;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 import org.pipelineframework.awaitable.spi.AwaitTransportAdapter;
@@ -356,6 +357,7 @@ public class AwaitCoordinator {
     public Uni<TransitionAwaitSuspension> suspensionSnapshot(AwaitSuspendedException suspended) {
         return getUnit(suspended.tenantId(), suspended.unitId())
             .onItem().transformToUni(unit -> findByUnit(suspended.tenantId(), suspended.unitId())
+                .emitOn(Infrastructure.getDefaultWorkerPool())
                 .onItem().transform(interactions -> new TransitionAwaitSuspension(
                     suspended.tenantId(),
                     suspended.executionId(),
@@ -366,7 +368,7 @@ public class AwaitCoordinator {
     }
 
     private AwaitInteractionRecord transportSafeSnapshot(AwaitInteractionRecord interaction) {
-        if (durablePayloadResolver != null) {
+        if (durablePayloadResolver != null && durablePayloadResolver.supportsTypedPayloads(interaction)) {
             return interaction.withPayloadSnapshots(
                 typedSnapshot(interaction, AwaitDurablePayloadResolver.Slot.REQUEST, interaction.requestPayload()),
                 typedSnapshot(interaction, AwaitDurablePayloadResolver.Slot.RESPONSE, interaction.responsePayload()));

@@ -6,7 +6,6 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -27,7 +26,10 @@ public class ExecutionDurablePayloadResolver {
     @Inject JsonDurablePayloadCodec codec;
 
     private final DurablePayloadPlanRegistry plans = new DurablePayloadPlanRegistry();
-    private final ConcurrentHashMap<ReleaseCacheKey, PipelineReleaseRecord> releases = new ConcurrentHashMap<>();
+    private static final int RELEASE_CACHE_MAXIMUM_SIZE = 256;
+    private static final Duration RELEASE_CACHE_EXPIRY = Duration.ofMinutes(15);
+    private final BoundedExpiringCache<ReleaseCacheKey, PipelineReleaseRecord> releases =
+        new BoundedExpiringCache<>(RELEASE_CACHE_MAXIMUM_SIZE, RELEASE_CACHE_EXPIRY);
     private static final Duration RELEASE_LOOKUP_TIMEOUT = Duration.ofSeconds(10);
 
     public String encode(ExecutionRecord<?, ?> execution, Slot slot, Object value) {
@@ -148,7 +150,7 @@ public class ExecutionDurablePayloadResolver {
         }
         Class<?> runtimeClass;
         try {
-            runtimeClass = Class.forName(className, false, Thread.currentThread().getContextClassLoader());
+            runtimeClass = CanonicalPayloadRuntimeClassLoader.load(className, Thread.currentThread().getContextClassLoader());
         } catch (ClassNotFoundException error) {
             throw new IllegalStateException("pinned release binding class is unavailable: " + className, error);
         }
@@ -164,7 +166,7 @@ public class ExecutionDurablePayloadResolver {
     private PipelineReleaseRecord pinnedRelease(ExecutionRecord<?, ?> execution) {
         DurablePayloadReleaseCoordinate coordinate = new DurablePayloadReleaseCoordinate(
             execution.pipelineId(), execution.contractVersion(), execution.releaseVersion());
-        return releases.computeIfAbsent(new ReleaseCacheKey(execution.tenantId(), coordinate), ignored ->
+        return releases.getOrLoad(new ReleaseCacheKey(execution.tenantId(), coordinate), ignored ->
             releaseRegistry.get(execution.tenantId(), execution.pipelineId(), execution.releaseVersion())
                 .await().atMost(RELEASE_LOOKUP_TIMEOUT)
                 .orElseThrow(() -> new IllegalStateException("pinned release is unavailable")));

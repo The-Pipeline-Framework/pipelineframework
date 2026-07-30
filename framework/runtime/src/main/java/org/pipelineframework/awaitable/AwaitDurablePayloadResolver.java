@@ -5,17 +5,18 @@ import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.HexFormat;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import org.pipelineframework.orchestrator.CanonicalPayloadBinding;
+import org.pipelineframework.orchestrator.BoundedExpiringCache;
 import org.pipelineframework.orchestrator.CompiledDurablePayloadPlan;
 import org.pipelineframework.orchestrator.DurablePayloadPlanRegistry;
 import org.pipelineframework.orchestrator.DurablePayloadReleaseCoordinate;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.CanonicalPayloadBindingLookup;
+import org.pipelineframework.orchestrator.CanonicalPayloadRuntimeClassLoader;
 import org.pipelineframework.orchestrator.JsonDurablePayloadCodec;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.TypedDurablePayload;
@@ -37,7 +38,10 @@ public class AwaitDurablePayloadResolver {
     @Inject JsonDurablePayloadCodec codec;
 
     private final DurablePayloadPlanRegistry plans = new DurablePayloadPlanRegistry();
-    private final ConcurrentHashMap<ReleaseCacheKey, PipelineReleaseRecord> releases = new ConcurrentHashMap<>();
+    private static final int RELEASE_CACHE_MAXIMUM_SIZE = 256;
+    private static final Duration RELEASE_CACHE_EXPIRY = Duration.ofMinutes(15);
+    private final BoundedExpiringCache<ReleaseCacheKey, PipelineReleaseRecord> releases =
+        new BoundedExpiringCache<>(RELEASE_CACHE_MAXIMUM_SIZE, RELEASE_CACHE_EXPIRY);
     private static final Duration RELEASE_LOOKUP_TIMEOUT = Duration.ofSeconds(10);
 
     public String encode(AwaitInteractionRecord interaction, Slot slot, Object value) {
@@ -47,6 +51,12 @@ public class AwaitDurablePayloadResolver {
         } catch (Exception e) {
             throw failure(interaction, slot, plan.binding().canonicalTypeId(), "encode", e);
         }
+    }
+
+    /** Returns whether the interaction's pinned release has the v3 canonical binding catalog. */
+    public boolean supportsTypedPayloads(AwaitInteractionRecord interaction) {
+        ExecutionRecord<Object, Object> execution = owningExecution(interaction);
+        return pinnedRelease(interaction.tenantId(), execution).contract().schemaVersion() >= 2;
     }
 
     public Object decode(AwaitInteractionRecord interaction, Slot slot, String stored) {
@@ -94,8 +104,7 @@ public class AwaitDurablePayloadResolver {
     }
 
     private CompiledDurablePayloadPlan resolve(AwaitInteractionRecord interaction, Slot slot) {
-        ExecutionRecord<Object, Object> execution = executionStateStore().getExecution(interaction.tenantId(), interaction.executionId())
-            .await().indefinitely().orElseThrow(() -> new IllegalStateException("owning execution is unavailable"));
+        ExecutionRecord<Object, Object> execution = owningExecution(interaction);
         PipelineReleaseRecord release = pinnedRelease(interaction.tenantId(), execution);
         AwaitStepDescriptor descriptor = descriptors.descriptorByStepIdNow(interaction.stepId());
         String requestedTypeId = slot == Slot.REQUEST ? descriptor.inputType() : interaction.outputType();
@@ -143,7 +152,7 @@ public class AwaitDurablePayloadResolver {
         }
         Class<?> runtimeClass;
         try {
-            runtimeClass = Class.forName(runtimeType, false, Thread.currentThread().getContextClassLoader());
+            runtimeClass = CanonicalPayloadRuntimeClassLoader.load(runtimeType, Thread.currentThread().getContextClassLoader());
         } catch (ClassNotFoundException e) {
             throw new IllegalStateException("pinned release binding class is unavailable: " + runtimeType, e);
         }
@@ -156,10 +165,15 @@ public class AwaitDurablePayloadResolver {
     private PipelineReleaseRecord pinnedRelease(String tenantId, ExecutionRecord<?, ?> execution) {
         DurablePayloadReleaseCoordinate coordinate = new DurablePayloadReleaseCoordinate(
             execution.pipelineId(), execution.contractVersion(), execution.releaseVersion());
-        return releases.computeIfAbsent(new ReleaseCacheKey(tenantId, coordinate), ignored ->
+        return releases.getOrLoad(new ReleaseCacheKey(tenantId, coordinate), ignored ->
             releaseRegistry.get(tenantId, execution.pipelineId(), execution.releaseVersion())
                 .await().atMost(RELEASE_LOOKUP_TIMEOUT)
                 .orElseThrow(() -> new IllegalStateException("pinned release is unavailable")));
+    }
+
+    private ExecutionRecord<Object, Object> owningExecution(AwaitInteractionRecord interaction) {
+        return executionStateStore().getExecution(interaction.tenantId(), interaction.executionId())
+            .await().indefinitely().orElseThrow(() -> new IllegalStateException("owning execution is unavailable"));
     }
 
     private record ReleaseCacheKey(String tenantId, DurablePayloadReleaseCoordinate coordinate) {

@@ -18,6 +18,7 @@ package org.pipelineframework.csv.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -38,10 +39,13 @@ import java.util.concurrent.CompletionException;
 import org.junit.jupiter.api.Test;
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitDispatchEnvelope;
+import org.pipelineframework.awaitable.kafka.KafkaAwaitCompletionEnvelope;
+import org.pipelineframework.awaitable.AwaitPayloadSupport;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.csv.domain.PaymentRecord;
 import org.pipelineframework.csv.domain.PaymentStatus;
 import org.pipelineframework.csv.domain.PipelineDomainProtoAdapters;
+import org.pipelineframework.csv.grpc.PipelineTypes;
 import io.smallrye.reactive.messaging.MutinyEmitter;
 
 class V3PaymentProviderAwaitContractTest {
@@ -76,6 +80,27 @@ class V3PaymentProviderAwaitContractTest {
 
         verify(message).ack();
         verify(results).send(anyString());
+    }
+
+    @Test
+    void kafkaAwaitCompletionPreservesTheV3PaymentStatusUnionArm() throws Exception {
+        PaymentRecord record = new PaymentRecord(
+            UUID.randomUUID(), "csv-1", "Ada", new BigDecimal("12.34"),
+            Currency.getInstance("EUR"), Path.of("/tmp/payments.csv"));
+        MutinyEmitter<String> results = mock(MutinyEmitter.class);
+        when(results.send(anyString())).thenReturn(Uni.createFrom().voidItem());
+        PaymentProviderKafkaAwaitMock awaitMock = configuredKafkaAwaitMock(results);
+
+        awaitMock.consume(acknowledgedMessage(dispatchJson(protobufJsonPayload(record)))).toCompletableFuture().join();
+
+        org.mockito.ArgumentCaptor<String> completion = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(results).send(completion.capture());
+        KafkaAwaitCompletionEnvelope envelope = PipelineJson.mapper().readValue(
+            completion.getValue(), KafkaAwaitCompletionEnvelope.class);
+        PipelineTypes.PaymentStatus transport = assertInstanceOf(PipelineTypes.PaymentStatus.class,
+            AwaitPayloadSupport.coercePayload(envelope.responsePayload(), PipelineTypes.PaymentStatus.class));
+        assertTrue(transport.hasApproved());
+        assertInstanceOf(PaymentStatus.Approved.class, PipelineDomainProtoAdapters.fromProto(transport));
     }
 
     @Test

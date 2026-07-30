@@ -2,6 +2,7 @@ package org.pipelineframework.orchestrator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import org.junit.jupiter.api.Test;
@@ -53,6 +54,19 @@ class JsonDurablePayloadCodecTest {
 
         assertEquals(1, payload.payload()[0]);
         assertEquals(2, payload.payload()[1]);
+    }
+
+    @Test
+    void rejectsNonIntegralOrOutOfRangeEncodingVersionsInDurableMaps() {
+        for (Number invalidVersion : java.util.List.of(0, -1, 1.5d, Long.MAX_VALUE, Double.NaN)) {
+            assertTrue(TypedDurablePayload.fromDurableValue(java.util.Map.of(
+                "canonicalTypeId", "Decision",
+                "typeExpressionFingerprint", "expression",
+                "catalogFingerprint", "catalog",
+                "encoding", "application/test",
+                "encodingVersion", invalidVersion,
+                "payload", "e30=")).isEmpty());
+        }
     }
 
     record Decision(String result) {

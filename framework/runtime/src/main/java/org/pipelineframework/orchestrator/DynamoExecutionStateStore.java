@@ -1661,8 +1661,9 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             String payloadReference = readString(item, INPUT_PAYLOAD_REFERENCE);
             if (payloadReference != null && !payloadReference.isBlank()) {
                 payload = payloadStore().read(payloadReference);
-                if (isTypedDurablePayload(payload)) {
-                    verifyPayloadDigest(payload, readString(item, INPUT_PAYLOAD_DIGEST), "input", execution.executionId());
+                String digest = readString(item, INPUT_PAYLOAD_DIGEST);
+                if (digest != null && !digest.isBlank()) {
+                    verifyPayloadDigest(payload, digest, "input", execution.executionId());
                 }
             }
         }
@@ -1728,8 +1729,9 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             String payloadReference = readString(item, RESULT_PAYLOAD_REFERENCE);
             if (payloadReference != null && !payloadReference.isBlank()) {
                 serialized = payloadStore().read(payloadReference);
-                if (isTypedDurablePayload(serialized)) {
-                    verifyPayloadDigest(serialized, readString(item, RESULT_PAYLOAD_DIGEST), "result", execution.executionId());
+                String digest = readString(item, RESULT_PAYLOAD_DIGEST);
+                if (digest != null && !digest.isBlank()) {
+                    verifyPayloadDigest(serialized, digest, "result", execution.executionId());
                 }
             }
         }

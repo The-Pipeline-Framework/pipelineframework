@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -127,9 +128,9 @@ public class PipelineContractMetadataGenerator {
             binding.put("definition", definition);
             binding.put("definitionFingerprint", fingerprint);
             binding.put("runtimeClass", config.basePackage() + ".domain." + entry.getKey());
-            types.put(entry.getKey(), binding);
+            types.put(entry.getKey(), immutableSortedMap(binding));
         }
-        return Map.copyOf(types);
+        return immutableSortedMap(types);
     }
 
     private Map<String, Object> definition(PipelineTemplateTypeDefinition definition) {
@@ -139,7 +140,7 @@ public class PipelineContractMetadataGenerator {
             encoded.put("kind", "record");
             List<Map<String, Object>> fields = record.fields().stream()
                 .sorted(java.util.Comparator.comparing(PipelineTemplateTypeDefinition.Field::name))
-                .map(field -> Map.of("name", field.name(), "type", typeExpression(field.type())))
+                .map(field -> immutableSortedMap(Map.of("name", field.name(), "type", typeExpression(field.type()))))
                 .toList();
             encoded.put("fields", fields);
         } else if (definition instanceof PipelineTemplateTypeDefinition.WrapperType wrapper) {
@@ -152,22 +153,24 @@ public class PipelineContractMetadataGenerator {
             encoded.put("kind", "union");
             List<Map<String, Object>> variants = union.variants().values().stream()
                 .sorted(java.util.Comparator.comparing(PipelineTemplateTypeDefinition.Variant::discriminator))
-                .map(variant -> Map.of("discriminator", variant.discriminator(), "payload", typeExpression(variant.payload())))
+                .map(variant -> immutableSortedMap(Map.of(
+                    "discriminator", variant.discriminator(), "payload", typeExpression(variant.payload()))))
                 .toList();
             encoded.put("variants", variants);
         }
-        return encoded;
+        return immutableSortedMap(encoded);
     }
 
     private Map<String, Object> typeExpression(PipelineTemplateTypeReference reference) {
         if (reference instanceof PipelineTemplateTypeReference.Named named) {
-            return Map.of("kind", "named", "id", named.name());
+            return immutableSortedMap(Map.of("kind", "named", "id", named.name()));
         }
         if (reference instanceof PipelineTemplateTypeReference.Scalar scalar) {
-            return Map.of("kind", "scalar", "id", scalar.name());
+            return immutableSortedMap(Map.of("kind", "scalar", "id", scalar.name()));
         }
         if (reference instanceof PipelineTemplateTypeReference.MapType map) {
-            return Map.of("kind", "map", "key", typeExpression(map.keyType()), "value", typeExpression(map.valueType()));
+            return immutableSortedMap(Map.of(
+                "kind", "map", "key", typeExpression(map.keyType()), "value", typeExpression(map.valueType())));
         }
         throw new IllegalArgumentException("Unsupported canonical type expression: " + reference);
     }
@@ -196,6 +199,14 @@ public class PipelineContractMetadataGenerator {
             descriptors.add(descriptor);
         }
         return descriptors;
+    }
+
+    private static Map<String, Object> immutableSortedMap(Map<String, ?> values) {
+        Map<String, Object> sorted = new LinkedHashMap<>();
+        values.entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
+            .forEach(entry -> sorted.put(entry.getKey(), entry.getValue()));
+        return Collections.unmodifiableMap(sorted);
     }
 
     private String resolvePipelineId(PipelineCompilationContext ctx) {

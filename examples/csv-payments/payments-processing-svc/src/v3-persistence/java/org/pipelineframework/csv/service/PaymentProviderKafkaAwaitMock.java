@@ -87,7 +87,7 @@ public class PaymentProviderKafkaAwaitMock {
         dispatch.correlationId(),
         dispatch.resumeToken(),
         dispatch.interactionId(),
-        PipelineDomainProtoAdapters.toProto(status),
+        PaymentProviderAwaitTransportPayload.protobufJson(PipelineDomainProtoAdapters.toProto(status)),
         "csv-payments-mock-provider");
   }
 

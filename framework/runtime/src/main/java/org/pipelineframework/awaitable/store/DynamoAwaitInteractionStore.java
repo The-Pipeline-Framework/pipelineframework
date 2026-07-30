@@ -868,7 +868,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         if (payload == null) {
             return null;
         }
-        if (durablePayloadResolver == null) {
+        if (durablePayloadResolver == null || !durablePayloadResolver.supportsTypedPayloads(interaction)) {
             return toJson(payload);
         }
         return durablePayloadResolver.encode(interaction, slot, restoreTransitionTypedPayload(interaction, slot, payload));
@@ -903,7 +903,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             return null;
         }
         if (!isTypedDurablePayload(payload)) {
-            return durablePayloadResolver == null
+            return durablePayloadResolver == null || !durablePayloadResolver.supportsTypedPayloads(interaction)
                 ? fromJson(payload)
                 : durablePayloadResolver.decodeLegacy(interaction, slot, payload);
         }

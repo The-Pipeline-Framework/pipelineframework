@@ -6,6 +6,8 @@ import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Set;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -23,6 +25,12 @@ import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.config.PlatformMode;
+import org.pipelineframework.config.template.PipelinePlatform;
+import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateMaterialization;
+import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
+import org.pipelineframework.config.template.PipelineTemplateTypeModel;
+import org.pipelineframework.config.template.PipelineTemplateTypeReference;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
@@ -98,6 +106,31 @@ class PipelineContractMetadataGeneratorTest {
     }
 
     @Test
+    void writesStableV3CanonicalDefinitionAndCatalogFingerprints() throws IOException {
+        Path pipelineYaml = writePipelineYaml();
+        Path firstOutput = tempDir.resolve("v3-first");
+        Path secondOutput = tempDir.resolve("v3-second");
+
+        writeV3Metadata(pipelineYaml, firstOutput, v3TypeModel(false));
+        writeV3Metadata(pipelineYaml, secondOutput, v3TypeModel(true));
+
+        JsonObject first = readContract(firstOutput);
+        JsonObject second = readContract(secondOutput);
+        JsonObject firstTypes = first.getAsJsonObject("canonicalTypes");
+        JsonObject secondTypes = second.getAsJsonObject("canonicalTypes");
+        assertEquals(2, first.get("schemaVersion").getAsInt());
+        assertEquals(List.of("Alpha", "Zeta"), firstTypes.keySet().stream().toList());
+        assertEquals(first.get("canonicalCatalogFingerprint").getAsString(),
+            second.get("canonicalCatalogFingerprint").getAsString());
+        assertEquals(firstTypes.getAsJsonObject("Alpha").get("definitionFingerprint").getAsString(),
+            secondTypes.getAsJsonObject("Alpha").get("definitionFingerprint").getAsString());
+        JsonObject nestedMap = firstTypes.getAsJsonObject("Zeta").getAsJsonObject("definition")
+            .getAsJsonArray("fields").get(0).getAsJsonObject().getAsJsonObject("type");
+        assertEquals("map", nestedMap.get("kind").getAsString());
+        assertEquals("Alpha", nestedMap.getAsJsonObject("value").get("id").getAsString());
+    }
+
+    @Test
     void emitsOneDescriptorPerAuthoredStepWhenMonolithHasClientAndServerModels() throws IOException {
         Path pipelineYaml = writePipelineYaml();
         Path output = tempDir.resolve("monolith");
@@ -164,6 +197,40 @@ class PipelineContractMetadataGeneratorTest {
 
         PipelineContractMetadataGenerator generator = new PipelineContractMetadataGenerator(processingEnv);
         generator.writePipelineContract(ctx);
+    }
+
+    private void writeV3Metadata(Path pipelineYaml, Path outputDir, PipelineTemplateTypeModel typeModel) throws IOException {
+        ProcessingEnvironment processingEnv = processingEnv(outputDir, Map.of("pipeline.config", pipelineYaml.toString()));
+        RoundEnvironment roundEnv = mock(RoundEnvironment.class);
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
+        ctx.setModuleName("orchestrator-svc");
+        ctx.setPlatformMode(PlatformMode.COMPUTE);
+        ctx.setTransportMode(PipelineTransport.REST);
+        ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
+            3, "v3-contract", "org.example.v3", "REST", PipelinePlatform.COMPUTE,
+            Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), null, null,
+            new PipelineTemplateMaterialization(List.of()), null, null, typeModel));
+        ctx.setStepModels(List.of(step("ProcessV3Service", "Alpha", "Zeta",
+            StreamingShape.UNARY_UNARY, Set.of(GenerationTarget.REST_CLIENT_STEP))));
+        new PipelineContractMetadataGenerator(processingEnv).writePipelineContract(ctx);
+    }
+
+    private static PipelineTemplateTypeModel v3TypeModel(boolean reverseDefinitionOrder) {
+        Map<String, PipelineTemplateTypeDefinition> definitions = new LinkedHashMap<>();
+        PipelineTemplateTypeDefinition alpha = new PipelineTemplateTypeDefinition.RecordType("Alpha", List.of(
+            new PipelineTemplateTypeDefinition.Field("code", new PipelineTemplateTypeReference.Scalar("string"))));
+        PipelineTemplateTypeDefinition zeta = new PipelineTemplateTypeDefinition.RecordType("Zeta", List.of(
+            new PipelineTemplateTypeDefinition.Field("attributes", new PipelineTemplateTypeReference.MapType(
+                new PipelineTemplateTypeReference.Scalar("string"), new PipelineTemplateTypeReference.Named("Alpha"))),
+            new PipelineTemplateTypeDefinition.Field("description", new PipelineTemplateTypeReference.Scalar("string"))));
+        if (reverseDefinitionOrder) {
+            definitions.put("Zeta", zeta);
+            definitions.put("Alpha", alpha);
+        } else {
+            definitions.put("Alpha", alpha);
+            definitions.put("Zeta", zeta);
+        }
+        return new PipelineTemplateTypeModel(definitions);
     }
 
     private PipelineStepModel step(

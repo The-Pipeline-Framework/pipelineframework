@@ -83,7 +83,13 @@ public class PipelineReleaseIdentityResolver {
         return Optional.empty();
     }
 
-    private PipelineContractDescriptor contract() {
+    /**
+     * Returns the generated contract loaded from this runtime artifact.
+     *
+     * <p>Callers must still compare this identity with a durable execution's pinned coordinate before
+     * using it as that execution's release binding.</p>
+     */
+    public PipelineContractDescriptor contract() {
         Optional<PipelineContractDescriptor> loaded = cachedContract;
         if (loaded == null) {
             synchronized (this) {
