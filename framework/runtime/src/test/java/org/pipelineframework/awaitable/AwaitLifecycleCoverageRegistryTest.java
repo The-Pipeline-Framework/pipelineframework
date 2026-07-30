@@ -32,6 +32,10 @@ class AwaitLifecycleCoverageRegistryTest {
 
     assertEquals(Set.of(
         "scalar_completion_after_restart_resumes_once",
+        "scalar_duplicate_completion_race",
+        "scalar_conflicting_completion_race",
+        "scalar_timeout_completion_race",
+        "scalar_cancellation_completion_race",
         "kafka_completion_admission_anchor",
         "sqs_completion_admission_anchor",
         "webhook_completion_admission_anchor",
@@ -42,6 +46,7 @@ class AwaitLifecycleCoverageRegistryTest {
         "many_to_one_durable_shape_after_restart",
         "itemized_empty_unit_after_restart_terminalizes",
         "itemized_final_child_after_restart_releases_parent",
+        "itemized_transition_admission_after_restart",
         "many_to_many_partial_replay_holds_parent",
         "many_to_many_parent_release_after_restart",
         "sequential_durable_shape_uninterrupted",
@@ -88,7 +93,7 @@ class AwaitLifecycleCoverageRegistryTest {
   void eachCompletionTransportHasExactlyOneAdmissionAnchor() {
     Map<AwaitLifecycleCoverageRegistry.CompletionTransport, Long> anchors = AwaitLifecycleCoverageRegistry.journeys().stream()
         .map(AwaitLifecycleCoverageRegistry.Journey::transportAnchor)
-        .filter(java.util.Objects::nonNull)
+        .flatMap(java.util.Optional::stream)
         .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
     for (AwaitLifecycleCoverageRegistry.CompletionTransport transport : AwaitLifecycleCoverageRegistry.CompletionTransport.values()) {
       assertEquals(1L, anchors.getOrDefault(transport, 0L), () -> "Missing or duplicate anchor for " + transport);

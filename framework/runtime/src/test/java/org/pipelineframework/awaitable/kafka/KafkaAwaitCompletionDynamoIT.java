@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.pipelineframework.PipelineExecutionService;
@@ -62,6 +63,11 @@ class KafkaAwaitCompletionDynamoIT {
         .build();
     table(PREFIX + "_interaction", "tenant_id", "interaction_id");
     table(PREFIX + "_interaction_key", "lookup_key", null);
+  }
+
+  @AfterAll
+  void tearDown() {
+    dynamo.close();
   }
 
   @Test

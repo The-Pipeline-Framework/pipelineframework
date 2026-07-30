@@ -26,6 +26,7 @@ import java.util.stream.Stream;
 
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
@@ -68,12 +69,14 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
 import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
 import software.amazon.awssdk.services.dynamodb.model.KeyType;
 import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughput;
 import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
 
 /**
  * A fresh-runtime proof for the most failure-prone itemized recovery seam.  The broader registry
@@ -117,17 +120,35 @@ class AwaitRestartRecoveryIT {
     }
   }
 
+  private ScheduledExecutorService replaceScheduler() {
+    if (scheduler != null) {
+      scheduler.shutdownNow();
+    }
+    scheduler = Executors.newSingleThreadScheduledExecutor();
+    return scheduler;
+  }
+
+  @AfterAll
+  void closeDynamo() {
+    dynamo.close();
+  }
+
   @TestFactory
   Stream<DynamicTest> declaredDynamoRecoveryJourneys() {
     return Stream.of(
             AwaitLifecycleCoverageRegistry.journeyNamed("scalar_dispatch_after_restart_reconstructs_completion"),
             AwaitLifecycleCoverageRegistry.journeyNamed("scalar_completion_after_restart_resumes_once"),
+            AwaitLifecycleCoverageRegistry.journeyNamed("scalar_duplicate_completion_race"),
+            AwaitLifecycleCoverageRegistry.journeyNamed("scalar_conflicting_completion_race"),
+            AwaitLifecycleCoverageRegistry.journeyNamed("scalar_timeout_completion_race"),
+            AwaitLifecycleCoverageRegistry.journeyNamed("scalar_cancellation_completion_race"),
             AwaitLifecycleCoverageRegistry.journeyNamed("one_to_many_durable_shape_uninterrupted"),
             AwaitLifecycleCoverageRegistry.journeyNamed("one_to_many_durable_shape_after_restart"),
             AwaitLifecycleCoverageRegistry.journeyNamed("many_to_one_durable_shape_uninterrupted"),
             AwaitLifecycleCoverageRegistry.journeyNamed("many_to_one_durable_shape_after_restart"),
             AwaitLifecycleCoverageRegistry.journeyNamed("itemized_empty_unit_after_restart_terminalizes"),
             AwaitLifecycleCoverageRegistry.journeyNamed("itemized_final_child_after_restart_releases_parent"),
+            AwaitLifecycleCoverageRegistry.journeyNamed("itemized_transition_admission_after_restart"),
             AwaitLifecycleCoverageRegistry.journeyNamed("many_to_many_partial_replay_holds_parent"),
             AwaitLifecycleCoverageRegistry.journeyNamed("sequential_durable_shape_uninterrupted"),
             AwaitLifecycleCoverageRegistry.journeyNamed("sequential_durable_shape_after_restart"),
@@ -139,12 +160,17 @@ class AwaitRestartRecoveryIT {
     switch (journey.fixtureScenario()) {
       case "scalarDispatchRestart" -> dispatchedRequestCompletesAfterWorkerRestart();
       case "scalarRestart" -> scalarCompletionPersistsAcrossAWorkerRestart();
+      case "duplicateCompletionRace" -> duplicateCompletionHasOneDurableWinner();
+      case "conflictingCompletionRace" -> conflictingCompletionHasOneDurableWinner();
+      case "timeoutCompletionRace" -> timeoutAndCompletionConverge();
+      case "cancellationCompletionRace" -> cancellationAndCompletionConverge();
       case "oneToManyUninterrupted" -> oneToManyCompletesWithOneRequestAndManyOutputs(false);
       case "oneToManyRestart" -> oneToManyCompletesWithOneRequestAndManyOutputs(true);
       case "manyToOneUninterrupted" -> manyToOneCompletesAfterEveryInput(false);
       case "manyToOneRestart" -> manyToOneCompletesAfterEveryInput(true);
       case "emptyItemizedRestart" -> emptyItemizedUnitReleasesParentAfterAWorkerRestart();
       case "itemizedRestart" -> finalChildAfterRestartReleasesParentFromDurableChildren();
+      case "transitionAdmissionRestart" -> recoversItemContinuationAfterWorkerDiesWithAnAdmittedTransition();
       case "partialItemReplay" -> partialDurableChildrenNeverReleaseParentFromLocalClaims();
       case "sequentialShapeUninterrupted" -> sequentialAwaitUnitsAdvanceInOrder(false);
       case "sequentialShapeRestart" -> sequentialAwaitUnitsAdvanceInOrder(true);
@@ -356,10 +382,26 @@ class AwaitRestartRecoveryIT {
     assertTrue(conflicting.duplicate());
     assertEquals(Map.of("decision", "approved"), conflicting.record().responsePayload());
 
-    concurrentDuplicateCompletionHasOneDurableWinner(workerA, now + 10L);
-    concurrentConflictingCompletionHasOneDurableWinner(workerA, now + 20L);
-    concurrentTimeoutAndCompletionConverge(workerA, now + 30L);
-    concurrentCancellationAndCompletionConverge(workerA, now + 40L);
+  }
+
+  private void duplicateCompletionHasOneDurableWinner() {
+    concurrentDuplicateCompletionHasOneDurableWinner(newInteractionStore(), System.currentTimeMillis());
+  }
+
+  private void conflictingCompletionHasOneDurableWinner() {
+    concurrentConflictingCompletionHasOneDurableWinner(newInteractionStore(), System.currentTimeMillis());
+  }
+
+  private void timeoutAndCompletionConverge() {
+    concurrentTimeoutAndCompletionConverge(newInteractionStore(), System.currentTimeMillis());
+  }
+
+  private void cancellationAndCompletionConverge() {
+    concurrentCancellationAndCompletionConverge(newInteractionStore(), System.currentTimeMillis());
+  }
+
+  private AwaitInteractionStore newInteractionStore() {
+    return org.pipelineframework.awaitable.store.DynamoAwaitLifecycleTestStores.interactionStore(dynamo, TABLE_PREFIX);
   }
 
   private void concurrentDuplicateCompletionHasOneDurableWinner(AwaitInteractionStore creator, long now) {
@@ -438,7 +480,9 @@ class AwaitRestartRecoveryIT {
         throw new IllegalStateException("Completion race contenders did not reach the start barrier");
       }
       start.countDown();
-      return List.of(firstAttempt.get(), secondAttempt.get());
+      return List.of(
+          firstAttempt.get(10, java.util.concurrent.TimeUnit.SECONDS),
+          secondAttempt.get(10, java.util.concurrent.TimeUnit.SECONDS));
     } catch (Exception exception) {
       throw new IllegalStateException("Failed executing deterministic completion race", exception);
     } finally {
@@ -509,7 +553,7 @@ class AwaitRestartRecoveryIT {
         .await().indefinitely().orElseThrow();
     AwaitUnitRecord emptyUnit = emptyUnit(waitingParent.executionId(), ttl);
 
-    scheduler = Executors.newSingleThreadScheduledExecutor();
+    replaceScheduler();
     ExecutionStateStore workerBStore = DynamoAwaitLifecycleTestStores.executionStoreForPayloadMutation(dynamo, TABLE_PREFIX);
     flow(workerBStore, dispatcher).releaseParentIfReady(waitingParent, emptyUnit, 4, now)
         .await().indefinitely();
@@ -563,7 +607,7 @@ class AwaitRestartRecoveryIT {
         .await().indefinitely().orElseThrow();
     assertEquals(AwaitUnitStatus.COMPLETED, completedUnit.status());
 
-    scheduler = Executors.newSingleThreadScheduledExecutor();
+    replaceScheduler();
     ExecutionStateStore freshExecutionStore = DynamoAwaitLifecycleTestStores
         .executionStoreForPayloadMutation(dynamo, TABLE_PREFIX);
     flow(freshExecutionStore, dispatcher).releaseParentIfReady(waiting, completedUnit, 4, now + 2L)
@@ -579,11 +623,33 @@ class AwaitRestartRecoveryIT {
     assertEquals(ExecutionStatus.SUCCEEDED, terminal.status());
     assertEquals(AwaitUnitStatus.COMPLETED, freshUnits.get(tenantId, completedUnit.unitId())
         .await().indefinitely().orElseThrow().status());
-    assertTrue(dynamo.scan(ScanRequest.builder().tableName(TABLE_PREFIX + "_interaction").build()).items().stream()
-        .noneMatch(item -> completedUnit.unitId().equals(item.get("unit_id").s())),
+    assertFalse(hasInteractionForUnit(tenantId, completedUnit.unitId()),
         "empty itemized completion must leave no pending interactions");
     assertEquals(List.of("published"), freshExecutionStore
         .getExecution(tenantId, terminal.executionId()).await().indefinitely().orElseThrow().resultPayload());
+  }
+
+  private boolean hasInteractionForUnit(String tenantId, String unitId) {
+    Map<String, AttributeValue> startKey = Map.of();
+    do {
+      ScanRequest.Builder request = ScanRequest.builder().tableName(TABLE_PREFIX + "_interaction");
+      if (!startKey.isEmpty()) {
+        request.exclusiveStartKey(startKey);
+      }
+      ScanResponse page = dynamo.scan(request.build());
+      boolean found = page.items().stream().anyMatch(item -> tenantId.equals(attribute(item, "tenant_id"))
+          && unitId.equals(attribute(item, "unit_id")));
+      if (found) {
+        return true;
+      }
+      startKey = page.lastEvaluatedKey() == null ? Map.of() : page.lastEvaluatedKey();
+    } while (!startKey.isEmpty());
+    return false;
+  }
+
+  private static String attribute(Map<String, AttributeValue> item, String name) {
+    AttributeValue value = item.get(name);
+    return value == null ? "" : value.s();
   }
 
   private void finalChildAfterRestartReleasesParentFromDurableChildren() {
@@ -624,7 +690,7 @@ class AwaitRestartRecoveryIT {
     // Worker B has a new coordinator, scheduler, claim set, and store instance.  Only Dynamo
     // contains evidence that item zero has already succeeded.
     ExecutionStateStore workerBStore = DynamoAwaitLifecycleTestStores.executionStore(dynamo, TABLE_PREFIX);
-    scheduler = Executors.newSingleThreadScheduledExecutor();
+    replaceScheduler();
     ItemizedAwaitContinuationFlow workerB = new ItemizedAwaitContinuationFlow(
         workerBStore,
         dispatcher,
@@ -676,7 +742,6 @@ class AwaitRestartRecoveryIT {
     // the durable parent beyond the one semantic continuation already accepted above.
     verify(dispatcher, times(2)).enqueueNow(new ExecutionWorkItem("tenant-restart", waitingParent.executionId()));
 
-    recoversItemContinuationAfterWorkerDiesWithAnAdmittedTransition();
   }
 
   private void recoversItemContinuationAfterWorkerDiesWithAnAdmittedTransition() {
@@ -714,7 +779,7 @@ class AwaitRestartRecoveryIT {
         return Uni.createFrom().voidItem();
       }
     };
-    scheduler = Executors.newSingleThreadScheduledExecutor();
+    replaceScheduler();
     flow(workerAStore, mock(WorkDispatcher.class), coordinator).afterParentWaiting(
             waitingParent, unit, 2, blockedHandler, now)
         .await().indefinitely();
@@ -728,12 +793,14 @@ class AwaitRestartRecoveryIT {
     // Worker A disappears after it has admitted the transition.  Worker B has no A-local claim or permit.
     scheduler.shutdownNow();
     AtomicInteger recoveredCalls = new AtomicInteger();
+    CountDownLatch recovered = new CountDownLatch(1);
     AwaitItemContinuationHandler recoveredHandler = new AwaitItemContinuationHandler() {
       @Override
       public Uni<Void> continueAwaitItem(AwaitInteractionRecord ignored, AwaitUnitRecord ignoredUnit, int nextStep,
           java.util.Optional<ExecutionRecord<Object, Object>> restoredParent, long ignoredNow) {
         assertEquals(waitingParent.executionId(), restoredParent.orElseThrow().executionId());
         recoveredCalls.incrementAndGet();
+        recovered.countDown();
         return Uni.createFrom().voidItem();
       }
 
@@ -743,13 +810,15 @@ class AwaitRestartRecoveryIT {
         return Uni.createFrom().voidItem();
       }
     };
-    scheduler = Executors.newSingleThreadScheduledExecutor();
+    replaceScheduler();
     flow(DynamoAwaitLifecycleTestStores.executionStoreForExistingState(dynamo, TABLE_PREFIX), mock(WorkDispatcher.class), coordinator)
         .afterParentWaiting(waitingParent, unit, 2, recoveredHandler, now + 1L)
         .await().indefinitely();
-    long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
-    while (recoveredCalls.get() == 0 && System.nanoTime() < deadline) {
-      Thread.onSpinWait();
+    try {
+      assertTrue(recovered.await(10, java.util.concurrent.TimeUnit.SECONDS));
+    } catch (InterruptedException interrupted) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("Interrupted waiting for recovered item continuation", interrupted);
     }
     assertEquals(1, recoveredCalls.get());
   }
@@ -775,7 +844,7 @@ class AwaitRestartRecoveryIT {
         .await().indefinitely().orElseThrow();
     AwaitUnitRecord unit = unit(waitingParent.executionId(), ttl, "tenant-premature");
 
-    scheduler = Executors.newSingleThreadScheduledExecutor();
+    replaceScheduler();
     ItemizedAwaitContinuationFlow flow = flow(store, dispatcher);
     flow.captureOutput(
             interaction(waitingParent.executionId(), 0, "tenant-premature"),

@@ -3,6 +3,7 @@ package org.pipelineframework.awaitable.sqs;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
@@ -12,6 +13,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.pipelineframework.PipelineExecutionService;
@@ -39,6 +41,7 @@ import software.amazon.awssdk.services.dynamodb.model.KeyType;
 import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughput;
 import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageResponse;
@@ -54,6 +57,10 @@ class SqsAwaitCompletionDynamoIT {
   @BeforeAll void setUp() {
     dynamo = DynamoDbClient.builder().endpointOverride(URI.create(LOCALSTACK.getEndpointOverride(LocalStackContainer.Service.DYNAMODB).toString())).region(Region.of(LOCALSTACK.getRegion())).credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(LOCALSTACK.getAccessKey(), LOCALSTACK.getSecretKey()))).build();
     table(PREFIX + "_interaction", "tenant_id", "interaction_id"); table(PREFIX + "_interaction_key", "lookup_key", null);
+  }
+
+  @AfterAll void tearDown() {
+    dynamo.close();
   }
 
   @Test void sqsCompletionEnvelopeIsAdmittedAndDeletedAfterDynamoPersistence() throws Exception {
@@ -72,6 +79,8 @@ class SqsAwaitCompletionDynamoIT {
     } finally { poller.shutdown(); }
     AwaitInteractionRecord restored = DynamoAwaitLifecycleTestStores.interactionStoreForCompletion(dynamo, PREFIX).get(pending.tenantId(), pending.interactionId()).await().indefinitely().orElseThrow();
     assertEquals(AwaitInteractionStatus.COMPLETED, restored.status()); assertEquals(Map.of("decision", "approved"), restored.responsePayload());
+    verify(client).deleteMessage(org.mockito.ArgumentMatchers.<DeleteMessageRequest>argThat(request -> "http://sqs.local/responses".equals(request.queueUrl())
+        && "receipt-1".equals(request.receiptHandle())));
   }
 
   private void table(String name, String hash, String range) {

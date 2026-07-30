@@ -1,6 +1,7 @@
 package org.pipelineframework.awaitable;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -69,7 +70,7 @@ public final class AwaitLifecycleCoverageRegistry {
       Set<String> transitionObligationIds,
       Set<String> crashObligationIds,
       Set<String> raceObligationIds,
-      CompletionTransport transportAnchor,
+      Optional<CompletionTransport> transportAnchor,
       String fixtureScenario) {
   }
 
@@ -125,31 +126,36 @@ public final class AwaitLifecycleCoverageRegistry {
 
   public static List<Journey> journeys() {
     return List.of(
-        journey("scalar_request_persisted_dispatches_once", AwaitShape.SCALAR_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("request-persisted", "dispatch-admitted"), Set.of(), Set.of("duplicate-completion"), null, "scalarDispatch"),
-        journey("kafka_completion_admission_anchor", AwaitShape.SCALAR_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of(), CompletionTransport.KAFKA, "kafkaDynamoAdmission"),
-        journey("scalar_dispatch_after_restart_reconstructs_completion", AwaitShape.SCALAR_ONE_TO_ONE, JourneyMode.RESTARTED, Set.of("dispatch-admitted"), Set.of("after-dispatch"), Set.of(), null, "scalarDispatchRestart"),
-        journey("scalar_completion_after_restart_resumes_once", AwaitShape.SCALAR_ONE_TO_ONE, JourneyMode.RESTARTED, Set.of("request-persisted", "completion-persisted", "scalar-release", "continuation-admitted"), Set.of("after-completion-persisted"), Set.of("duplicate-completion", "conflicting-completion", "timeout-completion", "cancellation-completion", "reload-completion"), null, "scalarRestart"),
-        journey("itemized_empty_unit_completes_uninterrupted", AwaitShape.EMPTY_ITEMIZED_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("terminal-cleanup"), Set.of(), Set.of(), null, "emptyItemized"),
-        journey("terminal_cleanup_durable_state", AwaitShape.EMPTY_ITEMIZED_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("terminal-cleanup"), Set.of(), Set.of(), null, "terminalCleanup"),
-        journey("itemized_empty_unit_after_restart_terminalizes", AwaitShape.EMPTY_ITEMIZED_ONE_TO_ONE, JourneyMode.RESTARTED, Set.of(), Set.of("after-request-persisted", "after-next-state-persisted"), Set.of(), null, "emptyItemizedRestart"),
-        journey("itemized_reverse_completion_releases_in_order", AwaitShape.STREAM_ITEMIZED_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("item-output-persisted", "parent-release-guard", "item-parent-release"), Set.of(), Set.of("replay-partial-item-output"), null, "itemizedReverseCompletion"),
-        journey("itemized_final_child_after_restart_releases_parent", AwaitShape.STREAM_ITEMIZED_ONE_TO_ONE, JourneyMode.RESTARTED, Set.of("item-output-persisted", "item-parent-release", "continuation-admitted"), Set.of("after-item-output-persisted", "after-transition-admission"), Set.of("final-child-parent-release", "concurrent-parent-release"), null, "itemizedRestart"),
-        journey("one_to_many_completion_timeout_race", AwaitShape.ONE_TO_MANY, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of("timeout-completion"), null, "completionTimeoutRace"),
-        journey("sqs_completion_admission_anchor", AwaitShape.SCALAR_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of(), CompletionTransport.SQS, "sqsDynamoAdmission"),
-        journey("one_to_many_dispatch_after_restart", AwaitShape.ONE_TO_MANY, JourneyMode.RESTARTED, Set.of("dispatch-admitted"), Set.of("after-dispatch"), Set.of(), null, "dispatchRestart"),
-        journey("one_to_many_durable_shape_uninterrupted", AwaitShape.ONE_TO_MANY, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of("timeout-completion"), null, "oneToManyUninterrupted"),
-        journey("one_to_many_durable_shape_after_restart", AwaitShape.ONE_TO_MANY, JourneyMode.RESTARTED, Set.of(), Set.of(), Set.of(), null, "oneToManyRestart"),
-        journey("many_to_one_cancellation_completion_race", AwaitShape.MANY_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of("cancellation-completion"), null, "cancellationCompletionRace"),
-        journey("webhook_completion_admission_anchor", AwaitShape.SCALAR_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of(), CompletionTransport.WEBHOOK, "webhookDynamoAdmission"),
-        journey("many_to_one_replay_after_next_state_persisted", AwaitShape.MANY_TO_ONE, JourneyMode.RESTARTED, Set.of(), Set.of(), Set.of(), null, "replayRestart"),
-        journey("many_to_one_durable_shape_uninterrupted", AwaitShape.MANY_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of("cancellation-completion"), null, "manyToOneUninterrupted"),
-        journey("many_to_one_durable_shape_after_restart", AwaitShape.MANY_TO_ONE, JourneyMode.RESTARTED, Set.of(), Set.of(), Set.of(), null, "manyToOneRestart"),
-        journey("many_to_many_partial_replay_holds_parent", AwaitShape.MANY_TO_MANY, JourneyMode.UNINTERRUPTED, Set.of("item-output-persisted", "parent-release-guard"), Set.of(), Set.of("replay-partial-item-output"), null, "partialItemReplay"),
-        journey("many_to_many_parent_release_after_restart", AwaitShape.MANY_TO_MANY, JourneyMode.RESTARTED, Set.of("item-parent-release"), Set.of("after-parent-release"), Set.of(), null, "aggregateRestart"),
-        journey("sequential_durable_shape_uninterrupted", AwaitShape.SEQUENTIAL_AWAITS, JourneyMode.UNINTERRUPTED, Set.of(), Set.of(), Set.of(), null, "sequentialShapeUninterrupted"),
-        journey("sequential_durable_shape_after_restart", AwaitShape.SEQUENTIAL_AWAITS, JourneyMode.RESTARTED, Set.of(), Set.of(), Set.of(), null, "sequentialShapeRestart"),
-        journey("sequential_awaits_complete_uninterrupted", AwaitShape.SEQUENTIAL_AWAITS, JourneyMode.UNINTERRUPTED, Set.of("scalar-release", "terminal-cleanup"), Set.of(), Set.of("conflicting-completion"), null, "sequentialAwaits"),
-        journey("sequential_awaits_recover_transition_admission", AwaitShape.SEQUENTIAL_AWAITS, JourneyMode.RESTARTED, Set.of("continuation-admitted"), Set.of("after-transition-admission", "after-request-persisted"), Set.of(), null, "sequentialRestart"));
+        journey("scalar_request_persisted_dispatches_once", AwaitShape.SCALAR_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("request-persisted", "dispatch-admitted"), Set.of(), Set.of("duplicate-completion"), Optional.empty(), "scalarDispatch"),
+        journey("kafka_completion_admission_anchor", AwaitShape.SCALAR_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of(), Optional.of(CompletionTransport.KAFKA), "kafkaDynamoAdmission"),
+        journey("scalar_dispatch_after_restart_reconstructs_completion", AwaitShape.SCALAR_ONE_TO_ONE, JourneyMode.RESTARTED, Set.of("dispatch-admitted"), Set.of("after-dispatch"), Set.of(), Optional.empty(), "scalarDispatchRestart"),
+        journey("scalar_completion_after_restart_resumes_once", AwaitShape.SCALAR_ONE_TO_ONE, JourneyMode.RESTARTED, Set.of("request-persisted", "completion-persisted", "scalar-release", "continuation-admitted"), Set.of("after-completion-persisted"), Set.of("reload-completion"), Optional.empty(), "scalarRestart"),
+        journey("scalar_duplicate_completion_race", AwaitShape.SCALAR_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of("duplicate-completion"), Optional.empty(), "duplicateCompletionRace"),
+        journey("scalar_conflicting_completion_race", AwaitShape.SCALAR_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of("conflicting-completion"), Optional.empty(), "conflictingCompletionRace"),
+        journey("scalar_timeout_completion_race", AwaitShape.SCALAR_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of("timeout-completion"), Optional.empty(), "timeoutCompletionRace"),
+        journey("scalar_cancellation_completion_race", AwaitShape.SCALAR_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of("cancellation-completion"), Optional.empty(), "cancellationCompletionRace"),
+        journey("itemized_empty_unit_completes_uninterrupted", AwaitShape.EMPTY_ITEMIZED_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("terminal-cleanup"), Set.of(), Set.of(), Optional.empty(), "emptyItemized"),
+        journey("terminal_cleanup_durable_state", AwaitShape.EMPTY_ITEMIZED_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("terminal-cleanup"), Set.of(), Set.of(), Optional.empty(), "terminalCleanup"),
+        journey("itemized_empty_unit_after_restart_terminalizes", AwaitShape.EMPTY_ITEMIZED_ONE_TO_ONE, JourneyMode.RESTARTED, Set.of(), Set.of("after-request-persisted", "after-next-state-persisted"), Set.of(), Optional.empty(), "emptyItemizedRestart"),
+        journey("itemized_reverse_completion_releases_in_order", AwaitShape.STREAM_ITEMIZED_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("item-output-persisted", "parent-release-guard", "item-parent-release"), Set.of(), Set.of("replay-partial-item-output"), Optional.empty(), "itemizedReverseCompletion"),
+        journey("itemized_final_child_after_restart_releases_parent", AwaitShape.STREAM_ITEMIZED_ONE_TO_ONE, JourneyMode.RESTARTED, Set.of("item-output-persisted", "item-parent-release"), Set.of("after-item-output-persisted"), Set.of("final-child-parent-release", "concurrent-parent-release"), Optional.empty(), "itemizedRestart"),
+        journey("itemized_transition_admission_after_restart", AwaitShape.STREAM_ITEMIZED_ONE_TO_ONE, JourneyMode.RESTARTED, Set.of("continuation-admitted"), Set.of("after-transition-admission"), Set.of(), Optional.empty(), "transitionAdmissionRestart"),
+        journey("one_to_many_completion_timeout_race", AwaitShape.ONE_TO_MANY, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of("timeout-completion"), Optional.empty(), "completionTimeoutRace"),
+        journey("sqs_completion_admission_anchor", AwaitShape.SCALAR_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of(), Optional.of(CompletionTransport.SQS), "sqsDynamoAdmission"),
+        journey("one_to_many_dispatch_after_restart", AwaitShape.ONE_TO_MANY, JourneyMode.RESTARTED, Set.of("dispatch-admitted"), Set.of("after-dispatch"), Set.of(), Optional.empty(), "dispatchRestart"),
+        journey("one_to_many_durable_shape_uninterrupted", AwaitShape.ONE_TO_MANY, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of("timeout-completion"), Optional.empty(), "oneToManyUninterrupted"),
+        journey("one_to_many_durable_shape_after_restart", AwaitShape.ONE_TO_MANY, JourneyMode.RESTARTED, Set.of(), Set.of(), Set.of(), Optional.empty(), "oneToManyRestart"),
+        journey("many_to_one_cancellation_completion_race", AwaitShape.MANY_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of("cancellation-completion"), Optional.empty(), "cancellationCompletionRace"),
+        journey("webhook_completion_admission_anchor", AwaitShape.SCALAR_ONE_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of(), Optional.of(CompletionTransport.WEBHOOK), "webhookDynamoAdmission"),
+        journey("many_to_one_replay_after_next_state_persisted", AwaitShape.MANY_TO_ONE, JourneyMode.RESTARTED, Set.of(), Set.of(), Set.of(), Optional.empty(), "replayRestart"),
+        journey("many_to_one_durable_shape_uninterrupted", AwaitShape.MANY_TO_ONE, JourneyMode.UNINTERRUPTED, Set.of("completion-persisted"), Set.of(), Set.of("cancellation-completion"), Optional.empty(), "manyToOneUninterrupted"),
+        journey("many_to_one_durable_shape_after_restart", AwaitShape.MANY_TO_ONE, JourneyMode.RESTARTED, Set.of(), Set.of(), Set.of(), Optional.empty(), "manyToOneRestart"),
+        journey("many_to_many_partial_replay_holds_parent", AwaitShape.MANY_TO_MANY, JourneyMode.UNINTERRUPTED, Set.of("item-output-persisted", "parent-release-guard"), Set.of(), Set.of("replay-partial-item-output"), Optional.empty(), "partialItemReplay"),
+        journey("many_to_many_parent_release_after_restart", AwaitShape.MANY_TO_MANY, JourneyMode.RESTARTED, Set.of("item-parent-release"), Set.of("after-parent-release"), Set.of(), Optional.empty(), "aggregateRestart"),
+        journey("sequential_durable_shape_uninterrupted", AwaitShape.SEQUENTIAL_AWAITS, JourneyMode.UNINTERRUPTED, Set.of(), Set.of(), Set.of(), Optional.empty(), "sequentialShapeUninterrupted"),
+        journey("sequential_durable_shape_after_restart", AwaitShape.SEQUENTIAL_AWAITS, JourneyMode.RESTARTED, Set.of(), Set.of(), Set.of(), Optional.empty(), "sequentialShapeRestart"),
+        journey("sequential_awaits_complete_uninterrupted", AwaitShape.SEQUENTIAL_AWAITS, JourneyMode.UNINTERRUPTED, Set.of("scalar-release", "terminal-cleanup"), Set.of(), Set.of("conflicting-completion"), Optional.empty(), "sequentialAwaits"),
+        journey("sequential_awaits_recover_transition_admission", AwaitShape.SEQUENTIAL_AWAITS, JourneyMode.RESTARTED, Set.of("continuation-admitted"), Set.of("after-transition-admission", "after-request-persisted"), Set.of(), Optional.empty(), "sequentialRestart"));
   }
 
   /**
@@ -166,6 +172,10 @@ public final class AwaitLifecycleCoverageRegistry {
   public static Set<String> implementedJourneyNames() {
     return Set.of(
         "scalar_completion_after_restart_resumes_once",
+        "scalar_duplicate_completion_race",
+        "scalar_conflicting_completion_race",
+        "scalar_timeout_completion_race",
+        "scalar_cancellation_completion_race",
         "kafka_completion_admission_anchor",
         "sqs_completion_admission_anchor",
         "webhook_completion_admission_anchor",
@@ -176,6 +186,7 @@ public final class AwaitLifecycleCoverageRegistry {
         "many_to_one_durable_shape_after_restart",
         "itemized_empty_unit_after_restart_terminalizes",
         "itemized_final_child_after_restart_releases_parent",
+        "itemized_transition_admission_after_restart",
         "many_to_many_partial_replay_holds_parent",
         "many_to_many_parent_release_after_restart",
         "sequential_durable_shape_uninterrupted",
@@ -201,7 +212,7 @@ public final class AwaitLifecycleCoverageRegistry {
         .collect(java.util.stream.Collectors.toUnmodifiableSet());
     Set<CompletionTransport> transportCoverage = implemented.stream()
         .map(Journey::transportAnchor)
-        .filter(java.util.Objects::nonNull)
+        .flatMap(Optional::stream)
         .collect(java.util.stream.Collectors.toUnmodifiableSet());
     return new CoverageReport(
         implementedJourneyNames(),
@@ -233,7 +244,7 @@ public final class AwaitLifecycleCoverageRegistry {
     return new RaceObligation(id, interleaving, contenders, outcomes, result);
   }
 
-  private static Journey journey(String name, AwaitShape shape, JourneyMode mode, Set<String> transitions, Set<String> crashes, Set<String> races, CompletionTransport transport, String fixture) {
+  private static Journey journey(String name, AwaitShape shape, JourneyMode mode, Set<String> transitions, Set<String> crashes, Set<String> races, Optional<CompletionTransport> transport, String fixture) {
     return new Journey(name, shape, mode, transitions, crashes, races, transport, fixture);
   }
 }

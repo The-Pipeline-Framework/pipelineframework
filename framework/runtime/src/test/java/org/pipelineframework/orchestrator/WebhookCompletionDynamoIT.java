@@ -11,6 +11,7 @@ import java.net.URI;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
@@ -66,6 +67,11 @@ class WebhookCompletionDynamoIT {
         .build();
     table(PREFIX + "_interaction", "tenant_id", "interaction_id");
     table(PREFIX + "_interaction_key", "lookup_key", null);
+  }
+
+  @AfterAll
+  void tearDown() {
+    dynamo.close();
   }
 
   @Test
@@ -143,5 +149,6 @@ class WebhookCompletionDynamoIT {
           AttributeDefinition.builder().attributeName(sortKey).attributeType(ScalarAttributeType.S).build());
     }
     dynamo.createTable(request.build());
+    dynamo.waiter().waitUntilTableExists(waiter -> waiter.tableName(name));
   }
 }

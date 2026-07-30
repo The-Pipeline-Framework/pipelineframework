@@ -136,19 +136,16 @@ durable child execution is missing, pending, failed, or otherwise non-successful
 claims never prove aggregate completion. More than one worker may physically attempt release or
 continuation work, but optimistic durable admission permits only one accepted semantic advance.
 
-The runtime suite keeps this contract executable through a compact, machine-readable lifecycle
-coverage registry. It covers every declared transition, crash boundary, race, and supported await
-shape with named journeys rather than a Cartesian product. Restart journeys discard coordinator,
-live-session, claim, cache, and scheduler state before rebuilding from the same Dynamo records.
+The runtime verifies these durable guarantees across every lifecycle transition, supported await
+shape, defined completion race, and restart boundary. A recovered runtime rebuilds progress from
+the persisted execution, await-unit, and interaction state; it does not depend on a local claim,
+cache, session, or scheduler entry from the process that observed an earlier event.
 
-Completion ingress has one real Dynamo-backed admission anchor per supported transport: the Kafka
-consumer, the SQS poller, and the hosted control-plane webhook callback each deserialize their
-transport envelope, admit exactly one completion, and are verified through a fresh await-store
-read. The terminal empty-itemized journey proves the corresponding terminal invariants at the
-durable boundary: the execution is terminal, the await unit is complete, there are no pending
-interactions, and there are no child executions or continuation facts to reconcile. Admission
-capacity and item-claim cleanup are asserted by their owning admission and continuation paths;
-they are not inferred from a worker-local lifecycle fixture.
+Kafka, SQS, and webhook completion ingress each admit a single durable completion before release
+evaluation. Terminal execution leaves no pending interaction, active await unit, orphaned child
+execution, or unresolved continuation state. Admission capacity and item claims are released by
+their owning boundaries, so duplicate physical work cannot produce additional accepted semantic
+progress.
 
 ## CSV Payments Applied Model
 
