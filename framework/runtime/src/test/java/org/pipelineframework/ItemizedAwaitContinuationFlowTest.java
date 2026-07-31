@@ -100,6 +100,21 @@ class ItemizedAwaitContinuationFlowTest {
   }
 
   @Test
+  void incompleteDurableUnitDoesNotReadSiblingsFromWorkerLocalCompletion() {
+    AwaitUnitRecord callerSnapshot = awaitUnit("exec-1", AwaitUnitStatus.COMPLETED, 2, 2, true);
+    AwaitUnitRecord durableUnit = awaitUnit("exec-1", AwaitUnitStatus.WAITING_EXTERNAL, 2, 1, true);
+    ExecutionRecord<Object, Object> parent = record("exec-1", "key-1", ExecutionStatus.WAITING_EXTERNAL, 7L);
+    when(awaitCoordinator.getUnit("tenant-1", "unit-1")).thenReturn(Uni.createFrom().item(durableUnit));
+
+    flow(executionStateStore, workDispatcher, awaitCoordinator)
+        .releaseParentIfReady(parent, callerSnapshot, 4, 1234L)
+        .await().indefinitely();
+
+    verify(executionStateStore, never()).getExecutionsByKey(any(), any());
+    verify(workDispatcher, never()).enqueueNow(any());
+  }
+
+  @Test
   void childOutputsReleaseParentOnceWithOrderedOutput() {
     InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
     when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
@@ -124,6 +139,9 @@ class ItemizedAwaitContinuationFlowTest {
             now)
         .await().indefinitely();
     AwaitUnitRecord unit = awaitUnit(parent.record().executionId(), AwaitUnitStatus.COMPLETED, 2, 2, true);
+    when(awaitCoordinator.getUnit("tenant-1", unit.unitId())).thenReturn(Uni.createFrom().item(unit));
+    when(awaitCoordinator.recordItemContinuationCompleted(any(), eq(unit.unitId()), any(Integer.class), any(Long.class)))
+        .thenReturn(Uni.createFrom().item(unit));
 
     flow.captureOutput(
             itemAwaitRecord(parent.record().executionId(), 1, AwaitInteractionStatus.COMPLETED, "second"),
@@ -185,6 +203,9 @@ class ItemizedAwaitContinuationFlowTest {
     ExecutionRecord<Object, Object> waitingParent = store.getExecution("tenant-1", parent.record().executionId())
         .await().indefinitely().orElseThrow();
     AwaitUnitRecord unit = awaitUnit(waitingParent.executionId(), AwaitUnitStatus.COMPLETED, 2, 2, true);
+    when(awaitCoordinator.getUnit("tenant-1", unit.unitId())).thenReturn(Uni.createFrom().item(unit));
+    when(awaitCoordinator.recordItemContinuationCompleted(any(), eq(unit.unitId()), any(Integer.class), any(Long.class)))
+        .thenReturn(Uni.createFrom().item(unit));
 
     // Item zero was completed by a previous worker. A restarted worker has no local claim for it.
     CreateExecutionResult completedChild = store.createOrGetExecution(new ExecutionCreateCommand(

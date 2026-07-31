@@ -136,6 +136,28 @@ durable child execution is missing, pending, failed, or otherwise non-successful
 claims never prove aggregate completion. More than one worker may physically attempt release or
 continuation work, but optimistic durable admission permits only one accepted semantic advance.
 
+### Provider completion and continuation completion
+
+Itemized await has two distinct durable progress facts. They answer different questions and must
+not be collapsed into one count:
+
+| Durable fact | Meaning | Produced by | Enables |
+| --- | --- | --- | --- |
+| provider completion | the external provider answered an interaction and TPF admitted that response | completion admission | item-continuation work for that response |
+| continuation completion | TPF durably incorporated the admitted response into its item child execution | successful child continuation | final aggregate readiness evaluation |
+
+An await unit may therefore have every provider response admitted while some child continuations
+are still pending. Each successful child writes an idempotent continuation-completion fact to the
+unit. Only when the required set of those facts is complete does the runtime read the ordered child
+executions, verify that each is successful, and attempt the parent release. This keeps the
+aggregate decision reconstructable after reassignment and avoids repeated all-sibling scans after
+each provider response.
+
+Older durable units that predate continuation-completion facts remain recoverable through their
+existing child-execution evidence. New units use the fact-based release gate. Process-local claims
+may suppress duplicate dispatch work, but they never establish either provider or continuation
+completion.
+
 The runtime verifies these durable guarantees across every lifecycle transition, supported await
 shape, defined completion race, and restart boundary. A recovered runtime rebuilds progress from
 the persisted execution, await-unit, and interaction state; it does not depend on a local claim,

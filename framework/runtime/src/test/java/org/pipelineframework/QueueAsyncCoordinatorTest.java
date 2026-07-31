@@ -1757,6 +1757,9 @@ class QueueAsyncCoordinatorTest {
                 now)
             .await().indefinitely();
         AwaitUnitRecord unit = awaitUnit("unit-1", AwaitUnitStatus.COMPLETED, 2, 2, true, null);
+        when(awaitCoordinator.getUnit("tenant-1", unit.unitId())).thenReturn(Uni.createFrom().item(unit));
+        when(awaitCoordinator.recordItemContinuationCompleted(any(), any(), any(Integer.class), any(Long.class)))
+            .thenReturn(Uni.createFrom().item(unit));
 
         coordinator.recordAwaitItemContinuation(
                 itemAwaitRecord(parent.record().executionId(), 1, AwaitInteractionStatus.COMPLETED, "second"),

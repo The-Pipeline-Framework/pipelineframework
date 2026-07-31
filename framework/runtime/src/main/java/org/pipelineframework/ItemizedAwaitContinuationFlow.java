@@ -151,19 +151,40 @@ class ItemizedAwaitContinuationFlow {
         || !unit.dispatchComplete() || unit.expectedItemCount() == null) {
       return Uni.createFrom().voidItem();
     }
-    return Multi.createFrom().range(0, unit.expectedItemCount())
-        .onItem().transformToUniAndConcatenate(index ->
-            executionStateStore.getExecutionByKey(
-                parent.tenantId(),
-                ItemContinuationKey.from(parent, unit, index).childExecutionKey()))
-        .collect().asList()
-        .onItem().transformToUni(children -> {
-          AwaitContinuationPlan plan = planner.releaseItemizedParent(parent, unit, aggregateStepIndex, children);
+    return awaitCoordinator.getUnit(parent.tenantId(), unit.unitId())
+        .onItem().transformToUni(currentUnit -> {
+          if (!allItemContinuationsDurablyCompleted(currentUnit)) {
+            return Uni.createFrom().voidItem();
+          }
+          return executionStateStore.getExecutionsByKey(
+              parent.tenantId(),
+              childExecutionKeys(parent, currentUnit))
+              .onItem().transformToUni(children -> {
+          AwaitContinuationPlan plan = planner.releaseItemizedParent(parent, currentUnit, aggregateStepIndex, children);
           if (plan instanceof AwaitContinuationPlan.ReleaseItemizedParent release) {
             return releaseParent(release.release(), nowEpochMs);
           }
           return Uni.createFrom().voidItem();
+              });
         });
+  }
+
+  private static boolean allItemContinuationsDurablyCompleted(AwaitUnitRecord unit) {
+    return unit.dispatchComplete()
+        && unit.expectedItemCount() != null
+        && unit.completedItemCount() >= unit.expectedItemCount()
+        && (!unit.hasContinuationCompletionFacts()
+            || unit.completedContinuationItemCount() >= unit.expectedItemCount());
+  }
+
+  private static List<String> childExecutionKeys(
+      ExecutionRecord<Object, Object> parent,
+      AwaitUnitRecord unit) {
+    List<String> keys = new java.util.ArrayList<>(unit.expectedItemCount());
+    for (int index = 0; index < unit.expectedItemCount(); index++) {
+      keys.add(ItemContinuationKey.from(parent, unit, index).childExecutionKey());
+    }
+    return List.copyOf(keys);
   }
 
   private Uni<Void> interpretAfterRecordedCompletion(
@@ -305,8 +326,7 @@ class ItemizedAwaitContinuationFlow {
     return executionStateStore.getExecutionByKey(plan.interaction().tenantId(), plan.key().childExecutionKey())
         .onItem().transformToUni(existing -> {
           if (existing.isPresent() && existing.get().status() == ExecutionStatus.SUCCEEDED) {
-            return recordItemContinuationSegment(plan, nowEpochMs)
-                .chain(() -> releaseParentIfReady(plan.parent(), plan.unit(), plan.aggregateStepIndex(), nowEpochMs));
+            return recordItemContinuationAndRelease(plan, nowEpochMs);
           }
           long ttl = plan.parent().ttlEpochS();
           ExecutionCreateCommand create = new ExecutionCreateCommand(
@@ -330,8 +350,7 @@ class ItemizedAwaitContinuationFlow {
       long nowEpochMs) {
     ExecutionRecord<Object, Object> child = created.record();
     if (created.duplicate() && child.status() == ExecutionStatus.SUCCEEDED) {
-      return recordItemContinuationSegment(plan, nowEpochMs)
-          .chain(() -> releaseParentIfReady(plan.parent(), plan.unit(), plan.aggregateStepIndex(), nowEpochMs));
+      return recordItemContinuationAndRelease(plan, nowEpochMs);
     }
     String transitionKey = "await-item-continuation:" + plan.unit().unitId() + ":" + plan.interaction().itemIndex();
     return executionStateStore.markSucceeded(
@@ -350,13 +369,7 @@ class ItemizedAwaitContinuationFlow {
       ExecutionRecord<Object, Object> child,
       long nowEpochMs) {
     if (updated.isPresent()) {
-      return recordItemContinuationSegment(plan, nowEpochMs)
-          .chain(() -> releaseParentWhenLocallyReady(
-              plan.parent(),
-              plan.unit(),
-              plan.interaction().itemIndex(),
-              plan.aggregateStepIndex(),
-              nowEpochMs));
+      return recordItemContinuationAndRelease(plan, nowEpochMs);
     }
     return executionStateStore.getExecutionByKey(plan.parent().tenantId(), child.executionKey())
         .onItem().transformToUni(current -> {
@@ -383,19 +396,22 @@ class ItemizedAwaitContinuationFlow {
         nowEpochMs);
   }
 
-  private Uni<Void> releaseParentWhenLocallyReady(
-      ExecutionRecord<Object, Object> parent,
-      AwaitUnitRecord unit,
-      Integer itemIndex,
-      int aggregateStepIndex,
+  private Uni<Void> recordItemContinuationAndRelease(
+      AwaitContinuationPlan.RecordItemOutput plan,
       long nowEpochMs) {
+    Integer itemIndex = plan.interaction().itemIndex();
     if (itemIndex == null) {
-      return Uni.createFrom().voidItem();
+      return Uni.createFrom().failure(new IllegalStateException(
+          "Itemized await continuation requires an item index for unit " + plan.unit().unitId()));
     }
-    // Claims only suppress duplicate work within this process. They cannot decide whether a
-    // durable parent is releasable because another worker may have completed other children.
-    claims.recordCompleted(parent, unit, itemIndex);
-    return releaseParentIfReady(parent, unit, aggregateStepIndex, nowEpochMs);
+    return recordItemContinuationSegment(plan, nowEpochMs)
+        .chain(() -> awaitCoordinator.recordItemContinuationCompleted(
+            plan.parent().tenantId(),
+            plan.unit().unitId(),
+            itemIndex,
+            nowEpochMs))
+        .onItem().transformToUni(currentUnit -> releaseParentIfReady(
+            plan.parent(), currentUnit, plan.aggregateStepIndex(), nowEpochMs));
   }
 
   private Uni<Void> releaseParent(
@@ -442,7 +458,6 @@ class ItemizedAwaitContinuationFlow {
             released.executionId())))
         .invoke(() -> {
           claims.clearDispatches(release.unit());
-          claims.clearCompletions(released, release.unit());
           lifecycleRecorder.accept(new AwaitReplayLifecycleEvent(
               AwaitReplayLifecycleEvent.RESUME_RELEASED,
               released.executionId(),

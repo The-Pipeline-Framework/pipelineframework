@@ -56,6 +56,7 @@ class AwaitContinuationsTest {
   private InMemoryControlPlaneJournal journal;
   private AwaitContinuations continuations;
   private ScheduledExecutorService scheduler;
+  private final Map<String, AwaitUnitRecord> durableUnitsById = new java.util.HashMap<>();
 
   @Mock
   private ExecutionStateStore executionStateStore;
@@ -70,6 +71,20 @@ class AwaitContinuationsTest {
   void setUp() {
     journal = new InMemoryControlPlaneJournal();
     scheduler = Executors.newSingleThreadScheduledExecutor();
+    org.mockito.Mockito.lenient().when(awaitCoordinator.getUnit(any(), any())).thenAnswer(invocation -> {
+      AwaitUnitRecord unit = durableUnitsById.get(invocation.getArgument(1, String.class));
+      return unit == null
+          ? Uni.createFrom().failure(new IllegalStateException("No durable await unit registered for test"))
+          : Uni.createFrom().item(unit);
+    });
+    org.mockito.Mockito.lenient().when(awaitCoordinator.recordItemContinuationCompleted(
+            any(), any(), any(Integer.class), any(Long.class)))
+        .thenAnswer(invocation -> {
+          AwaitUnitRecord unit = durableUnitsById.get(invocation.getArgument(1, String.class));
+          return unit == null
+              ? Uni.createFrom().failure(new IllegalStateException("No durable await unit registered for test"))
+              : Uni.createFrom().item(unit);
+        });
     continuations = continuations(executionStateStore, workDispatcher, awaitCoordinator);
   }
 
@@ -377,8 +392,10 @@ class AwaitContinuationsTest {
         .thenReturn(Uni.createFrom().item(java.util.Optional.of(parent)));
     when(executionStateStore.getExecutionByKey("tenant-1", "key-1:await-item:unit-1:0"))
         .thenReturn(Uni.createFrom().item(java.util.Optional.empty()));
-    when(executionStateStore.getExecutionByKey("tenant-1", "key-1:await-item:unit-1:1"))
-        .thenReturn(Uni.createFrom().item(java.util.Optional.empty()));
+    when(executionStateStore.getExecutionsByKey(
+        "tenant-1",
+        List.of("key-1:await-item:unit-1:0", "key-1:await-item:unit-1:1")))
+        .thenReturn(Uni.createFrom().item(List.of(java.util.Optional.of(succeeded), java.util.Optional.empty())));
     when(executionStateStore.createOrGetExecution(any()))
         .thenReturn(Uni.createFrom().item(new CreateExecutionResult(child, false)));
     when(executionStateStore.markSucceeded(
@@ -401,8 +418,9 @@ class AwaitContinuationsTest {
 
     // All provider completions are durable, but no local claim set is allowed to decide the
     // parent release.  The missing sibling therefore keeps the parent held.
-    verify(executionStateStore)
-        .getExecutionByKey("tenant-1", "key-1:await-item:unit-1:1");
+    verify(executionStateStore).getExecutionsByKey(
+        "tenant-1",
+        List.of("key-1:await-item:unit-1:0", "key-1:await-item:unit-1:1"));
     verify(workDispatcher, never()).enqueueNow(any());
   }
 
@@ -454,7 +472,7 @@ class AwaitContinuationsTest {
         999_999L);
   }
 
-    private static AwaitUnitRecord awaitUnit(
+    private AwaitUnitRecord awaitUnit(
         AwaitUnitStatus status,
         Integer expectedItemCount,
         int completedItemCount,
@@ -463,14 +481,14 @@ class AwaitContinuationsTest {
       return awaitUnit("exec-1", status, expectedItemCount, completedItemCount, dispatchComplete, primaryInteractionId);
     }
 
-    private static AwaitUnitRecord awaitUnit(
+    private AwaitUnitRecord awaitUnit(
         String executionId,
         AwaitUnitStatus status,
         Integer expectedItemCount,
         int completedItemCount,
         boolean dispatchComplete,
         String primaryInteractionId) {
-      return new AwaitUnitRecord(
+      AwaitUnitRecord unit = new AwaitUnitRecord(
           "tenant-1",
           "unit-1",
           executionId,
@@ -488,7 +506,9 @@ class AwaitContinuationsTest {
         dispatchComplete,
         1L,
         2L,
-        999_999L);
+          999_999L);
+      durableUnitsById.put(unit.unitId(), unit);
+      return unit;
   }
 
   private static ExecutionRecord<Object, Object> record(

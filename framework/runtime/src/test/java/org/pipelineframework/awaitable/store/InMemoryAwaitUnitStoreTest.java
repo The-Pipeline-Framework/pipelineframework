@@ -40,6 +40,28 @@ class InMemoryAwaitUnitStoreTest {
     }
 
     @Test
+    void continuationCompletionFactsAreIdempotentAndDoNotChangeAdmittedCount() {
+        InMemoryAwaitUnitStore store = new InMemoryAwaitUnitStore();
+        store.createOrGet(createCommand()).await().indefinitely();
+        store.recordItemCompleted("tenant", "unit-1", "item:0", 11_000L).await().indefinitely();
+        store.recordItemCompleted("tenant", "unit-1", "item:1", 12_000L).await().indefinitely();
+        store.markDispatchComplete("tenant", "unit-1", 2, 13_000L).await().indefinitely();
+
+        var first = store.recordItemContinuationCompleted(
+            "tenant", "unit-1", AwaitUnitRecord.continuationCompletionKey(0), 14_000L).await().indefinitely().orElseThrow();
+        var duplicate = store.recordItemContinuationCompleted(
+            "tenant", "unit-1", AwaitUnitRecord.continuationCompletionKey(0), 15_000L).await().indefinitely().orElseThrow();
+        var completed = store.recordItemContinuationCompleted(
+            "tenant", "unit-1", AwaitUnitRecord.continuationCompletionKey(1), 16_000L).await().indefinitely().orElseThrow();
+
+        assertEquals(2, first.completedItemCount());
+        assertEquals(1, first.completedContinuationItemCount());
+        assertEquals(1, duplicate.completedContinuationItemCount());
+        assertEquals(2, completed.completedItemCount());
+        assertEquals(2, completed.completedContinuationItemCount());
+    }
+
+    @Test
     void importedCompletedItemKeysPreserveDuplicateProtection() {
         InMemoryAwaitUnitStore store = new InMemoryAwaitUnitStore();
         store.importRecord(new AwaitUnitRecord(

@@ -221,6 +221,39 @@ public class DynamoAwaitUnitStore implements AwaitUnitStore {
     }
 
     @Override
+    public Uni<Optional<AwaitUnitRecord>> recordItemContinuationCompleted(
+        String tenantId,
+        String unitId,
+        String continuationCompletionKey,
+        long nowEpochMs) {
+        if (continuationCompletionKey == null || continuationCompletionKey.isBlank()) {
+            return Uni.createFrom().failure(new IllegalArgumentException("continuationCompletionKey must not be blank"));
+        }
+        return blocking(() -> {
+            String condition = "attribute_exists(#tenant) AND attribute_exists(#unit)"
+                + " AND (#status = :waitingStatus OR #status = :completedStatus)"
+                + " AND (attribute_not_exists(#completedKeys) OR NOT contains(#completedKeys, :continuationKey))";
+            Map<String, String> names = Map.of(
+                "#completedKeys", COMPLETED_ITEM_KEYS,
+                "#updated", UPDATED_AT_EPOCH_MS,
+                "#version", VERSION);
+            Map<String, AttributeValue> values = Map.of(
+                ":updated", avN(nowEpochMs),
+                ":one", avN(1),
+                ":continuationKey", avS(continuationCompletionKey),
+                ":continuationKeys", AttributeValue.builder().ss(continuationCompletionKey).build(),
+                ":waitingStatus", avS(AwaitUnitStatus.WAITING_EXTERNAL.name()),
+                ":completedStatus", avS(AwaitUnitStatus.COMPLETED.name()));
+            Optional<AwaitUnitRecord> updated = updateBlocking(tenantId, unitId,
+                "SET #updated = :updated ADD #version :one, #completedKeys :continuationKeys",
+                names,
+                values,
+                condition);
+            return updated.isPresent() ? updated : getBlocking(tenantId, unitId, nowEpochMs);
+        });
+    }
+
+    @Override
     public Uni<Optional<AwaitUnitRecord>> markCompleted(String tenantId, String unitId, long nowEpochMs) {
         return update(
             tenantId,
@@ -411,9 +444,17 @@ public class DynamoAwaitUnitStore implements AwaitUnitStore {
         java.util.LinkedHashMap<String, AttributeValue> merged = new java.util.LinkedHashMap<>(values);
         if (conditionExpression.contains(":completedStatus")) {
             merged.putIfAbsent(":completedStatus", avS(AwaitUnitStatus.COMPLETED.name()));
+        }
+        if (conditionExpression.contains(":failedStatus")) {
             merged.putIfAbsent(":failedStatus", avS(AwaitUnitStatus.FAILED.name()));
+        }
+        if (conditionExpression.contains(":timedOutStatus")) {
             merged.putIfAbsent(":timedOutStatus", avS(AwaitUnitStatus.TIMED_OUT.name()));
+        }
+        if (conditionExpression.contains(":cancelledStatus")) {
             merged.putIfAbsent(":cancelledStatus", avS(AwaitUnitStatus.CANCELLED.name()));
+        }
+        if (conditionExpression.contains(":expiredStatus")) {
             merged.putIfAbsent(":expiredStatus", avS(AwaitUnitStatus.EXPIRED.name()));
         }
         return merged;

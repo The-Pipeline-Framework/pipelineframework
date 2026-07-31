@@ -47,6 +47,16 @@ public interface AwaitUnitStore {
         String itemCompletionKey,
         long nowEpochMs);
 
+    /**
+     * Records the durable fact that one item continuation has stored its child result.
+     * This is distinct from provider-completion admission and does not change the admitted item count.
+     */
+    Uni<Optional<AwaitUnitRecord>> recordItemContinuationCompleted(
+        String tenantId,
+        String unitId,
+        String continuationCompletionKey,
+        long nowEpochMs);
+
     Uni<Optional<AwaitUnitRecord>> markCompleted(
         String tenantId,
         String unitId,

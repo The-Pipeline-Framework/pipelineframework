@@ -19,6 +19,8 @@ import org.pipelineframework.cache.ProtobufMessageParser;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.BatchGetItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.BatchGetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
@@ -81,6 +83,29 @@ class DynamoExecutionStateStoreTest {
         var validationError = store.startupValidationError(config);
 
         assertTrue(validationError.isEmpty());
+    }
+
+    @Test
+    void batchExecutionKeyLookupBoundsOneThousandSiblingReads() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        List<String> siblingKeys = java.util.stream.IntStream.range(0, 1_000)
+            .mapToObj(index -> "parent:await-item:unit-1:" + index)
+            .toList();
+        when(client.batchGetItem((BatchGetItemRequest) any())).thenReturn(BatchGetItemResponse.builder()
+            .responses(Map.of())
+            .unprocessedKeys(Map.of())
+            .build());
+
+        List<Optional<ExecutionRecord<Object, Object>>> resolved = store
+            .getExecutionsByKey("tenant-a", siblingKeys)
+            .await().indefinitely();
+
+        assertEquals(1_000, resolved.size());
+        assertTrue(resolved.stream().allMatch(Optional::isEmpty));
+        verify(client, times(10)).batchGetItem((BatchGetItemRequest) any());
+        verify(client, never()).getItem((GetItemRequest) any());
     }
 
     @Test
