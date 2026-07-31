@@ -131,6 +131,9 @@ class AwaitRestartRecoveryIT {
   @AfterAll
   void closeDynamo() {
     dynamo.close();
+    if (scheduler != null) {
+      scheduler.shutdownNow();
+    }
   }
 
   @TestFactory
