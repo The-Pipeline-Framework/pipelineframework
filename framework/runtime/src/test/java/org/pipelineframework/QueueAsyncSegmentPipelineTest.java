@@ -301,6 +301,34 @@ class QueueAsyncSegmentPipelineTest {
   }
 
   @Test
+  void ordinarySegmentDoesNotResolveTerminalStepCount() {
+    ExecutionRecord<Object, Object> claimed = record("exec-ordinary", ExecutionResultShape.SINGLE);
+    ExecutionRecord<Object, Object> succeeded = withStatus(claimed, ExecutionStatus.SUCCEEDED, 1L);
+    java.util.concurrent.atomic.AtomicInteger resolutions = new java.util.concurrent.atomic.AtomicInteger();
+    when(executionStateStore.claimLease(eq("tenant-1"), eq("exec-ordinary"), any(), anyLong(), eq(1000L)))
+        .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+    when(executionStateStore.markSucceeded(
+            eq("tenant-1"),
+            eq("exec-ordinary"),
+            eq(0L),
+            eq("exec-ordinary:0:0"),
+            eq("output"),
+            anyLong()))
+        .thenReturn(Uni.createFrom().item(Optional.of(succeeded)));
+
+    pipeline(transitionWorkerExecutor, objectPublishCompletionService, () -> {
+      resolutions.incrementAndGet();
+      return 1;
+    }).process(
+            new ExecutionWorkItem("tenant-1", "exec-ordinary"),
+            command -> Uni.createFrom().item(TransitionResultEnvelope.completedInProcess(List.of("output"))),
+            AwaitContinuations.NOOP_ITEM_CONTINUATION_HANDLER)
+        .await().indefinitely();
+
+    assertEquals(0, resolutions.get());
+  }
+
+  @Test
   void awaitSuspensionImportsMarksWaitingAndReleasesCompletedWork() {
     ExecutionRecord<Object, Object> claimed = record("exec-await", ExecutionResultShape.MATERIALIZED_MULTI);
     ExecutionRecord<Object, Object> waiting = withStatus(claimed, ExecutionStatus.WAITING_EXTERNAL, 1L);

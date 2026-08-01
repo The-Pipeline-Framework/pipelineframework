@@ -168,9 +168,9 @@ class QueueAsyncSegmentPipeline {
   }
 
   private boolean isCoordinatorTerminalMaterialization(ClaimedSegment segment) {
-    return segment.record().currentStepIndex() == pipelineStepCount.getAsInt()
-        && segment.record().resultShape() == ExecutionResultShape.MATERIALIZED_MULTI
-        && !segment.resumesFromAwait();
+    return segment.record().resultShape() == ExecutionResultShape.MATERIALIZED_MULTI
+        && !segment.resumesFromAwait()
+        && segment.record().currentStepIndex() == pipelineStepCount.getAsInt();
   }
 
   private Uni<TransitionCommandEnvelope> transitionCommand(ClaimedSegment segment) {

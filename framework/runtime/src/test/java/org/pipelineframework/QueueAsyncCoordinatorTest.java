@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -85,6 +86,19 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class QueueAsyncCoordinatorTest {
+
+  @Test
+  void pipelineStepCountIsResolvedOncePerCoordinatorInstance() {
+    AtomicInteger resolutions = new AtomicInteger();
+    QueueAsyncCoordinator.CachedIntSupplier count = new QueueAsyncCoordinator.CachedIntSupplier(() -> {
+      resolutions.incrementAndGet();
+      return 7;
+    });
+
+    assertEquals(7, count.getAsInt());
+    assertEquals(7, count.getAsInt());
+    assertEquals(1, resolutions.get());
+  }
 
     private QueueAsyncCoordinator coordinator;
     private ExecutionInputPolicy inputPolicy;
