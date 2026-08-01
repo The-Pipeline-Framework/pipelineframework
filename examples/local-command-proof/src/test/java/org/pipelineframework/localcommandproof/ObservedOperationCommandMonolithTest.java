@@ -136,6 +136,7 @@ class ObservedOperationCommandMonolithTest {
             assertTrue(manager.awaitBlockingOperationEntered(5, TimeUnit.SECONDS));
             Future<ObservedOperationResult> second = probeExecutor.submit(
                 () -> manager.executeBlocking(secondCommand, Map.of("maxConcurrency", 1)));
+            assertTrue(manager.awaitBlockingOperationAttempted(5, TimeUnit.SECONDS));
             manager.releaseBlockingOperation();
 
             assertEquals(firstCommand.operationId(), getFutureResult(first).operationId());
@@ -155,6 +156,8 @@ class ObservedOperationCommandMonolithTest {
             () -> new ObservedOperationCommand(" leading", ObservedOperationCommand.Behavior.SUCCESS));
         assertThrows(IllegalArgumentException.class,
             () -> new ObservedOperationCommand("trailing ", ObservedOperationCommand.Behavior.SUCCESS));
+        assertThrows(IllegalArgumentException.class,
+            () -> new ObservedOperationCommand("\u2003surrounded\u2003", ObservedOperationCommand.Behavior.SUCCESS));
     }
 
     private RunAsyncAcceptedDto submit(ObservedOperationCommand command, String submissionName) {
@@ -230,6 +233,9 @@ class ObservedOperationCommandMonolithTest {
     private static ObservedOperationResult getFutureResult(Future<ObservedOperationResult> operation) {
         try {
             return operation.get(5, TimeUnit.SECONDS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError("Serialized manager operation did not complete", interrupted);
         } catch (Exception failure) {
             throw new AssertionError("Serialized manager operation did not complete", failure);
         }

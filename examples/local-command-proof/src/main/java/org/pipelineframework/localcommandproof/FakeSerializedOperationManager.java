@@ -33,6 +33,7 @@ public class FakeSerializedOperationManager {
     private final AtomicReference<ObservedOperationCommand> lastInput = new AtomicReference<>();
     private final AtomicReference<Map<String, Object>> lastConfig = new AtomicReference<>(Map.of());
     private volatile CountDownLatch blockingOperationEntered = new CountDownLatch(0);
+    private volatile CountDownLatch blockingOperationAttempted = new CountDownLatch(0);
     private volatile CountDownLatch releaseBlockingOperation = new CountDownLatch(0);
 
     @Inject
@@ -49,6 +50,9 @@ public class FakeSerializedOperationManager {
     public ObservedOperationResult executeBlocking(ObservedOperationCommand input, Map<String, Object> config) {
         boolean acquired = false;
         try {
+            if (input.behavior() == ObservedOperationCommand.Behavior.BLOCKING_SUCCESS) {
+                blockingOperationAttempted.countDown();
+            }
             activePermit.acquire();
             acquired = true;
             int active = activeOperations.incrementAndGet();
@@ -86,6 +90,7 @@ public class FakeSerializedOperationManager {
 
     void prepareBlockingOperation() {
         blockingOperationEntered = new CountDownLatch(1);
+        blockingOperationAttempted = new CountDownLatch(2);
         releaseBlockingOperation = new CountDownLatch(1);
     }
 
@@ -99,6 +104,10 @@ public class FakeSerializedOperationManager {
 
     boolean awaitBlockingOperationEntered(long timeout, TimeUnit unit) throws InterruptedException {
         return blockingOperationEntered.await(timeout, unit);
+    }
+
+    boolean awaitBlockingOperationAttempted(long timeout, TimeUnit unit) throws InterruptedException {
+        return blockingOperationAttempted.await(timeout, unit);
     }
 
     void resetForTest() {
