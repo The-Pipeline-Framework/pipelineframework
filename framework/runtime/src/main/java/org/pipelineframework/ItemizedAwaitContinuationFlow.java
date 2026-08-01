@@ -259,7 +259,8 @@ class ItemizedAwaitContinuationFlow {
       int aggregateStepIndex,
       List<Optional<ExecutionRecord<Object, Object>>> children,
       long nowEpochMs) {
-    AwaitContinuationPlan plan = planner.releaseItemizedParent(parent, unit, aggregateStepIndex, children);
+    AwaitContinuationPlan plan = planner.releaseItemizedParent(
+        parent, unit, aggregateStepIndex, children, payloadCodec.get());
     if (plan instanceof AwaitContinuationPlan.ReleaseItemizedParent release) {
       return releaseParent(release.release(), nowEpochMs);
     }
