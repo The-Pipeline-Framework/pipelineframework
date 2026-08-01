@@ -267,6 +267,40 @@ class QueueAsyncSegmentPipelineTest {
   }
 
   @Test
+  void terminalAwaitResumeLoadsCanonicalAwaitOutputBeforeWorkerDispatch() {
+    ExecutionRecord<Object, Object> claimed = withAwaitUnitId(
+        withCurrentStep(record("exec-terminal-await", ExecutionResultShape.SINGLE), 1, "stale-input"),
+        "unit-terminal-await");
+    ExecutionRecord<Object, Object> succeeded = withStatus(claimed, ExecutionStatus.SUCCEEDED, 1L);
+    AtomicReference<TransitionCommandEnvelope> commandRef = new AtomicReference<>();
+    when(executionStateStore.claimLease(eq("tenant-1"), eq("exec-terminal-await"), any(), anyLong(), eq(1000L)))
+        .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+    when(awaitCoordinator.loadResumePayload(eq("tenant-1"), eq("unit-terminal-await")))
+        .thenReturn(Uni.createFrom().item("canonical-await-output"));
+    when(executionStateStore.markSucceeded(
+            eq("tenant-1"),
+            eq("exec-terminal-await"),
+            eq(0L),
+            eq("exec-terminal-await:1:0"),
+            eq("canonical-await-output"),
+            anyLong()))
+        .thenReturn(Uni.createFrom().item(Optional.of(succeeded)));
+
+    pipeline(transitionWorkerExecutor, objectPublishCompletionService, () -> 1).process(
+            new ExecutionWorkItem("tenant-1", "exec-terminal-await"),
+            command -> {
+              commandRef.set(command);
+              return Uni.createFrom().item(
+                  TransitionResultEnvelope.completedInProcess(List.of("canonical-await-output")));
+            },
+            AwaitContinuations.NOOP_ITEM_CONTINUATION_HANDLER)
+        .await().indefinitely();
+
+    verify(awaitCoordinator).loadResumePayload("tenant-1", "unit-terminal-await");
+    assertEquals("canonical-await-output", commandRef.get().toCommand(payloadCodec).inputPayload());
+  }
+
+  @Test
   void awaitSuspensionImportsMarksWaitingAndReleasesCompletedWork() {
     ExecutionRecord<Object, Object> claimed = record("exec-await", ExecutionResultShape.MATERIALIZED_MULTI);
     ExecutionRecord<Object, Object> waiting = withStatus(claimed, ExecutionStatus.WAITING_EXTERNAL, 1L);
@@ -472,6 +506,38 @@ class QueueAsyncSegmentPipelineTest {
         source.lastTransitionKey(),
         inputPayload,
         source.awaitUnitId(),
+        source.resultPayload(),
+        source.errorCode(),
+        source.errorMessage(),
+        source.createdAtEpochMs(),
+        source.updatedAtEpochMs(),
+        source.ttlEpochS(),
+        source.firstCircuitDeferredAtEpochMs(),
+        source.circuitDeferralCount(),
+        source.circuitIdentity());
+  }
+
+  private static ExecutionRecord<Object, Object> withAwaitUnitId(
+      ExecutionRecord<Object, Object> source,
+      String awaitUnitId) {
+    return new ExecutionRecord<>(
+        source.tenantId(),
+        source.executionId(),
+        source.executionKey(),
+        source.pipelineId(),
+        source.contractVersion(),
+        source.releaseVersion(),
+        source.resultShape(),
+        source.status(),
+        source.version(),
+        source.currentStepIndex(),
+        source.attempt(),
+        source.leaseOwner(),
+        source.leaseExpiresEpochMs(),
+        source.nextDueEpochMs(),
+        source.lastTransitionKey(),
+        source.inputPayload(),
+        awaitUnitId,
         source.resultPayload(),
         source.errorCode(),
         source.errorMessage(),

@@ -16,6 +16,7 @@ import org.pipelineframework.orchestrator.ControlPlaneAdmissionPolicy;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionRequest;
 import org.pipelineframework.orchestrator.ControlPlaneTransitionAdmission;
 import org.pipelineframework.orchestrator.ExecutionRecord;
+import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
@@ -156,7 +157,7 @@ class QueueAsyncSegmentPipeline {
   private Uni<TransitionResultEnvelope> executeTransition(
       ClaimedSegment segment,
       PipelineTransitionWorker worker) {
-    if (segment.record().currentStepIndex() == pipelineStepCount.getAsInt()) {
+    if (isCoordinatorTerminalMaterialization(segment)) {
       // The terminal cursor has no business step left to invoke. Keep its materialized input at
       // the coordinator so SegmentCommitPlan can publish it without serializing a large result
       // through an otherwise no-op remote worker call.
@@ -164,6 +165,12 @@ class QueueAsyncSegmentPipeline {
     }
     return transitionCommand(segment)
         .onItem().transformToUni(command -> transitionWorkerExecutor.execute(worker, command));
+  }
+
+  private boolean isCoordinatorTerminalMaterialization(ClaimedSegment segment) {
+    return segment.record().currentStepIndex() == pipelineStepCount.getAsInt()
+        && segment.record().resultShape() == ExecutionResultShape.MATERIALIZED_MULTI
+        && !segment.resumesFromAwait();
   }
 
   private Uni<TransitionCommandEnvelope> transitionCommand(ClaimedSegment segment) {

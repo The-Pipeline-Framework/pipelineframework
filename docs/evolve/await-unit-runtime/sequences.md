@@ -328,8 +328,10 @@ sequenceDiagram
 ```
 
 The ordinary worker path still applies while `currentStepIndex` names a generated business step.
-Only the exact terminal cursor is coordinator-owned; it is not a shortcut around business
-execution, await admission, persistence, or terminal publication.
+Only a non-await `MATERIALIZED_MULTI` terminal cursor is coordinator-owned; it is not a shortcut
+around business execution, await admission, persistence, or terminal publication. A terminal
+cursor that resumes from an await still loads the canonical completion payload and enters the
+normal worker path before publication.
 
 ## Aggregate Unit
 
