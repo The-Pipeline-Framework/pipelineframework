@@ -78,4 +78,30 @@ class LocalPipelineReleaseActivationTest {
         assertEquals(contract, registered.get().contract());
         assertEquals(PipelineReleaseStatus.ACTIVE, registered.get().status());
     }
+
+    @Test
+    void activatesTheCurrentReleaseForTheSubmittingTenant() {
+        PipelineContractDescriptor contract = new PipelineContractDescriptor(
+            1, "restaurant-approval", "1", "contract-hash", null, null, null, false, null,
+            List.of(), PipelineBundleCapabilities.defaults());
+        PipelineReleaseIdentityResolver identity = mock(PipelineReleaseIdentityResolver.class);
+        PipelineOrchestratorConfig config = mock(PipelineOrchestratorConfig.class);
+        when(identity.contract()).thenReturn(contract);
+        when(identity.pipelineId(config)).thenReturn("restaurant-approval");
+        when(identity.contractVersion()).thenReturn("1");
+        when(identity.releaseVersion(config)).thenReturn("1");
+        InMemoryPipelineReleaseRegistry registry = new InMemoryPipelineReleaseRegistry();
+        LocalPipelineReleaseActivation activation = new LocalPipelineReleaseActivation();
+        activation.releaseRegistry = registry;
+        activation.releaseIdentity = identity;
+        activation.orchestratorConfig = config;
+
+        activation.activateForCurrentRelease("restaurant-demo", "restaurant-approval", "1", "1")
+            .await().indefinitely();
+
+        PipelineReleaseRecord restored = registry.get("restaurant-demo", "restaurant-approval", "1")
+            .await().indefinitely().orElseThrow();
+        assertEquals(PipelineReleaseStatus.ACTIVE, restored.status());
+        assertEquals(contract, restored.contract());
+    }
 }

@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
@@ -112,6 +114,44 @@ class AwaitDurablePayloadResolverTest {
         resolver.releaseRegistry = releases;
 
         assertFalse(resolver.supportsTypedPayloads(interaction()));
+    }
+
+    @Test
+    void reportsNoTypedPayloadCapabilityWhenTheWorkerDoesNotOwnTheExecution() {
+        ExecutionStateStore executionStore = mock(ExecutionStateStore.class);
+        AwaitInteractionRecord interaction = interaction();
+        when(executionStore.getExecution(interaction.tenantId(), interaction.executionId()))
+            .thenReturn(Uni.createFrom().item(Optional.empty()));
+        AwaitDurablePayloadResolver resolver = new AwaitDurablePayloadResolver();
+        resolver.executionStateStore = executionStore;
+
+        assertFalse(resolver.supportsTypedPayloads(interaction));
+    }
+
+    @Test
+    void cachesPinnedExecutionCoordinatesAcrossTypedPayloadCapabilityChecks() {
+        ExecutionStateStore executionStore = mock(ExecutionStateStore.class);
+        PipelineReleaseRegistry releases = mock(PipelineReleaseRegistry.class);
+        @SuppressWarnings("unchecked")
+        ExecutionRecord<Object, Object> execution = mock(ExecutionRecord.class);
+        when(execution.pipelineId()).thenReturn("payments");
+        when(execution.contractVersion()).thenReturn("3");
+        when(execution.releaseVersion()).thenReturn("release-7");
+        when(executionStore.getExecution("tenant", "execution")).thenReturn(Uni.createFrom().item(Optional.of(execution)));
+        PipelineReleaseRecord release = mock(PipelineReleaseRecord.class);
+        when(release.contract()).thenReturn(new PipelineContractDescriptor(
+            2, "payments", "3", "contract", null, null, null, false, null,
+            java.util.List.of(), PipelineBundleCapabilities.defaults(), Map.of(), "catalog"));
+        when(releases.get("tenant", "payments", "release-7")).thenReturn(Uni.createFrom().item(Optional.of(release)));
+        AwaitDurablePayloadResolver resolver = new AwaitDurablePayloadResolver();
+        resolver.executionStateStore = executionStore;
+        resolver.releaseRegistry = releases;
+
+        assertTrue(resolver.supportsTypedPayloads(interaction()));
+        assertTrue(resolver.supportsTypedPayloads(interaction()));
+
+        verify(executionStore, times(1)).getExecution("tenant", "execution");
+        verify(releases, times(1)).get("tenant", "payments", "release-7");
     }
 
     private static AwaitDurablePayloadResolver resolverForPinnedRelease() {

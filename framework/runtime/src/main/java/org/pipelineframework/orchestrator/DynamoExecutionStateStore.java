@@ -1355,7 +1355,16 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         Object originalInput,
         Object inputPayload
     ) {
-        String serialized = serializePayload(record, inputCanonicalTypeId, inputWriteSlot(record), inputPayload);
+        SerializedTransitionPayload legacyPayload = null;
+        String serialized;
+        if (writesTypedDurablePayloads(record)) {
+            serialized = serializePayload(record, inputCanonicalTypeId, inputWriteSlot(record), inputPayload);
+        } else {
+            // Schema-v1 releases still own the external input representation at their worker boundary.
+            // Preserve its concrete identity instead of collapsing it into an untyped JSON object.
+            legacyPayload = transitionPayloadCodec.encode(inputPayload);
+            serialized = legacyPayload.payload();
+        }
         StoredPayload storedInput = storeInputPayload(
             record.tenantId(),
             record.executionId(),
@@ -1365,7 +1374,10 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             record.updatedAtEpochMs(),
             record.ttlEpochS());
         putStoredPayload(item, INPUT_PAYLOAD_JSON, INPUT_PAYLOAD_REFERENCE, INPUT_PAYLOAD_DIGEST, storedInput);
-        if (isTypedDurablePayload(serialized)) {
+        if (legacyPayload != null) {
+            putIfPresent(item, INPUT_PAYLOAD_TYPE_ID, legacyPayload.payloadTypeId());
+            putIfPresent(item, INPUT_PAYLOAD_ENCODING, legacyPayload.payloadEncoding());
+        } else if (isTypedDurablePayload(serialized)) {
             putIfPresent(item, INPUT_PAYLOAD_TYPE_ID, "typed-durable");
             putIfPresent(item, INPUT_PAYLOAD_ENCODING, JsonDurablePayloadCodec.ENCODING);
         }
@@ -1688,7 +1700,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         String payloadEncoding = readString(item, INPUT_PAYLOAD_ENCODING);
         if (payloadTypeId == null || payloadTypeId.isBlank()
             || payloadEncoding == null || payloadEncoding.isBlank()) {
-            return durablePayloadResolver == null ? fromJson(payload)
+            return durablePayloadResolver == null || !durablePayloadResolver.supportsTypedPayloads(execution)
+                ? fromJson(payload)
                 : durablePayloadResolver.decodeLegacy(execution, legacyInputSlot(execution), payload);
         }
         if ("typed-durable".equals(payloadTypeId)) {
@@ -1874,13 +1887,17 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         ExecutionDurablePayloadResolver.Slot slot,
         Object value
     ) {
-        if (durablePayloadResolver == null) {
+        if (!writesTypedDurablePayloads(execution)) {
             return toJson(value);
         }
         if (inputCanonicalTypeId.isPresent()) {
             return durablePayloadResolver.encode(execution, inputCanonicalTypeId.get(), value);
         }
         return durablePayloadResolver.encode(execution, slot, value);
+    }
+
+    private boolean writesTypedDurablePayloads(ExecutionRecord<?, ?> execution) {
+        return durablePayloadResolver != null && durablePayloadResolver.supportsTypedPayloads(execution);
     }
 
     private String toJson(Object value) {

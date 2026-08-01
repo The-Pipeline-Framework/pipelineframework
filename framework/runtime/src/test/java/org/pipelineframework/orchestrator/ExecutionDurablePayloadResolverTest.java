@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -140,6 +141,23 @@ class ExecutionDurablePayloadResolverTest {
         fixture.resolver().encode(execution, ExecutionDurablePayloadResolver.Slot.INPUT, input);
 
         verify(fixture.registry(), times(1)).get("tenant", "payments", "release");
+    }
+
+    @Test
+    void leavesSchemaV1ExecutionsOnTheirLegacyPayloadFormat() {
+        PipelineReleaseRegistry registry = mock(PipelineReleaseRegistry.class);
+        PipelineReleaseRecord release = mock(PipelineReleaseRecord.class);
+        when(release.contract()).thenReturn(new PipelineContractDescriptor(
+            1, "payments", "2", "contract", null, null, null, false, null,
+            List.of(new PipelineBundleStepDescriptor(0, "input", "object", "ONE_TO_ONE",
+                PaymentRecord.class.getName(), PaymentOutput.class.getName(), null, null, null)),
+            PipelineBundleCapabilities.defaults()));
+        when(registry.get("tenant", "payments", "release")).thenReturn(Uni.createFrom().item(Optional.of(release)));
+        ExecutionDurablePayloadResolver resolver = new ExecutionDurablePayloadResolver();
+        resolver.releaseRegistry = registry;
+        resolver.codec = new JsonDurablePayloadCodec();
+
+        assertFalse(resolver.supportsTypedPayloads(execution(0)));
     }
 
     private static ExecutionDurablePayloadResolver resolver() {

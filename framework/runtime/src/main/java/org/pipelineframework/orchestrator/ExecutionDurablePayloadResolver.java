@@ -37,6 +37,11 @@ public class ExecutionDurablePayloadResolver {
         return encode(execution, slot, value, plan);
     }
 
+    /** Returns whether the execution's pinned release carries the v3 canonical binding catalog. */
+    public boolean supportsTypedPayloads(ExecutionRecord<?, ?> execution) {
+        return pinnedRelease(execution).contract().schemaVersion() >= 2;
+    }
+
     /** Encodes an explicitly declared boundary type through the execution's pinned release. */
     public String encode(ExecutionRecord<?, ?> execution, String canonicalTypeId, Object value) {
         CompiledDurablePayloadPlan plan = resolve(

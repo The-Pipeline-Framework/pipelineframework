@@ -58,6 +58,7 @@ class DynamoExecutionStateStoreTest {
         long now = System.currentTimeMillis();
         long ttl = now / 1000 + 3600;
         when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().build());
+        when(payloads.supportsTypedPayloads(any())).thenReturn(true);
         when(payloads.encode(any(), eq(ExecutionDurablePayloadResolver.Slot.INPUT), eq(input))).thenReturn(typedInput);
 
         store.createOrGetExecution(new ExecutionCreateCommand(
@@ -110,6 +111,7 @@ class DynamoExecutionStateStoreTest {
         long now = System.currentTimeMillis();
         long ttl = now / 1000 + 3600;
         when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().build());
+        when(payloads.supportsTypedPayloads(any())).thenReturn(true);
         when(payloads.encode(any(), eq(PaymentStatus.class.getName()), eq(continuation)))
             .thenReturn(typed("PaymentStatus"));
 
@@ -127,7 +129,7 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
-    void legacyInputWriteDoesNotClaimTypedDurableMetadata() {
+    void legacyInputWritePreservesExternalPayloadMetadata() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
         long now = System.currentTimeMillis();
@@ -140,8 +142,45 @@ class DynamoExecutionStateStoreTest {
         ArgumentCaptor<TransactWriteItemsRequest> created = ArgumentCaptor.forClass(TransactWriteItemsRequest.class);
         verify(client).transactWriteItems(created.capture());
         Map<String, AttributeValue> item = created.getValue().transactItems().getFirst().put().item();
-        assertFalse(item.containsKey("input_payload_type_id"));
-        assertFalse(item.containsKey("input_payload_encoding"));
+        assertEquals(PaymentRecord.class.getName(), item.get("input_payload_type_id").s());
+        assertEquals(JsonTransitionPayloadCodec.ENCODING, item.get("input_payload_encoding").s());
+    }
+
+    @Test
+    void schemaV1ReleasePreservesTheExternalInputRepresentation() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
+        ExecutionDurablePayloadResolver payloads = mock(ExecutionDurablePayloadResolver.class);
+        store.durablePayloadResolver = payloads;
+        when(payloads.supportsTypedPayloads(any())).thenReturn(false);
+        long now = System.currentTimeMillis();
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().build());
+
+        store.createOrGetExecution(new ExecutionCreateCommand(
+            "restaurant-demo", "legacy-release", "restaurant", "2", "2",
+            new PaymentRecord("payment-1"), ExecutionResultShape.SINGLE, now, now / 1000 + 3600))
+            .await().indefinitely();
+
+        ArgumentCaptor<TransactWriteItemsRequest> created = ArgumentCaptor.forClass(TransactWriteItemsRequest.class);
+        verify(client).transactWriteItems(created.capture());
+        Map<String, AttributeValue> createdItem = created.getValue().transactItems().getFirst().put().item();
+        String stored = createdItem.get("input_payload_json").s();
+        assertEquals(PaymentRecord.class.getName(), createdItem.get("input_payload_type_id").s());
+        assertEquals(JsonTransitionPayloadCodec.ENCODING, createdItem.get("input_payload_encoding").s());
+        verify(payloads, never()).encode(any(), any(ExecutionDurablePayloadResolver.Slot.class), any());
+
+        Map<String, AttributeValue> persisted = new HashMap<>(executionItem(
+            "restaurant-demo", "exec-v2", "legacy-release", now / 1000 + 3600, ExecutionStatus.RUNNING));
+        persisted.put("input_payload_json", AttributeValue.builder().s(stored).build());
+        persisted.put("input_payload_type_id", AttributeValue.builder()
+            .s(createdItem.get("input_payload_type_id").s()).build());
+        persisted.put("input_payload_encoding", AttributeValue.builder()
+            .s(createdItem.get("input_payload_encoding").s()).build());
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().item(persisted).build());
+
+        assertEquals(new PaymentRecord("payment-1"), store.getExecution("restaurant-demo", "exec-v2")
+            .await().indefinitely().orElseThrow().inputPayload());
+        verify(payloads, never()).decodeLegacy(any(), any(), any());
     }
 
     @Test

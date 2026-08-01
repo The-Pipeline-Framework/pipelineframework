@@ -40,8 +40,11 @@ public class AwaitDurablePayloadResolver {
     private final DurablePayloadPlanRegistry plans = new DurablePayloadPlanRegistry();
     private static final int RELEASE_CACHE_MAXIMUM_SIZE = 256;
     private static final Duration RELEASE_CACHE_EXPIRY = Duration.ofMinutes(15);
+    private static final int EXECUTION_CACHE_MAXIMUM_SIZE = 4_096;
     private final BoundedExpiringCache<ReleaseCacheKey, PipelineReleaseRecord> releases =
         new BoundedExpiringCache<>(RELEASE_CACHE_MAXIMUM_SIZE, RELEASE_CACHE_EXPIRY);
+    private final BoundedExpiringCache<ExecutionCacheKey, PinnedExecution> executions =
+        new BoundedExpiringCache<>(EXECUTION_CACHE_MAXIMUM_SIZE, RELEASE_CACHE_EXPIRY);
     private static final Duration RELEASE_LOOKUP_TIMEOUT = Duration.ofSeconds(10);
 
     public String encode(AwaitInteractionRecord interaction, Slot slot, Object value) {
@@ -55,8 +58,11 @@ public class AwaitDurablePayloadResolver {
 
     /** Returns whether the interaction's pinned release has the v3 canonical binding catalog. */
     public boolean supportsTypedPayloads(AwaitInteractionRecord interaction) {
-        ExecutionRecord<Object, Object> execution = owningExecution(interaction);
-        return pinnedRelease(interaction.tenantId(), execution).contract().schemaVersion() >= 2;
+        return findOwningExecution(interaction)
+            .map(execution -> pinnedRelease(interaction.tenantId(), execution).contract().schemaVersion() >= 2)
+            // Remote transition workers do not own coordinator execution state. They return a
+            // transport snapshot to the coordinator, which owns durable payload persistence.
+            .orElse(false);
     }
 
     public Object decode(AwaitInteractionRecord interaction, Slot slot, String stored) {
@@ -104,7 +110,7 @@ public class AwaitDurablePayloadResolver {
     }
 
     private CompiledDurablePayloadPlan resolve(AwaitInteractionRecord interaction, Slot slot) {
-        ExecutionRecord<Object, Object> execution = owningExecution(interaction);
+        PinnedExecution execution = owningExecution(interaction);
         PipelineReleaseRecord release = pinnedRelease(interaction.tenantId(), execution);
         AwaitStepDescriptor descriptor = descriptors.descriptorByStepIdNow(interaction.stepId());
         String requestedTypeId = slot == Slot.REQUEST ? descriptor.inputType() : interaction.outputType();
@@ -144,8 +150,7 @@ public class AwaitDurablePayloadResolver {
                     + " differs from rebuilt descriptor outputType=" + descriptorOutputType);
             }
         }
-        DurablePayloadReleaseCoordinate coordinate = new DurablePayloadReleaseCoordinate(
-            execution.pipelineId(), execution.contractVersion(), execution.releaseVersion());
+        DurablePayloadReleaseCoordinate coordinate = execution.coordinate();
         var cached = plans.find(coordinate, expression);
         if (cached.isPresent()) {
             return cached.get();
@@ -162,21 +167,49 @@ public class AwaitDurablePayloadResolver {
         return plans.plan(coordinate, expression);
     }
 
-    private PipelineReleaseRecord pinnedRelease(String tenantId, ExecutionRecord<?, ?> execution) {
-        DurablePayloadReleaseCoordinate coordinate = new DurablePayloadReleaseCoordinate(
-            execution.pipelineId(), execution.contractVersion(), execution.releaseVersion());
+    private PipelineReleaseRecord pinnedRelease(String tenantId, PinnedExecution execution) {
+        DurablePayloadReleaseCoordinate coordinate = execution.coordinate();
         return releases.getOrLoad(new ReleaseCacheKey(tenantId, coordinate), ignored ->
             releaseRegistry.get(tenantId, execution.pipelineId(), execution.releaseVersion())
                 .await().atMost(RELEASE_LOOKUP_TIMEOUT)
                 .orElseThrow(() -> new IllegalStateException("pinned release is unavailable")));
     }
 
-    private ExecutionRecord<Object, Object> owningExecution(AwaitInteractionRecord interaction) {
-        return executionStateStore().getExecution(interaction.tenantId(), interaction.executionId())
-            .await().indefinitely().orElseThrow(() -> new IllegalStateException("owning execution is unavailable"));
+    private PinnedExecution owningExecution(AwaitInteractionRecord interaction) {
+        return findOwningExecution(interaction)
+            .orElseThrow(() -> new IllegalStateException("owning execution is unavailable"));
+    }
+
+    private java.util.Optional<PinnedExecution> findOwningExecution(AwaitInteractionRecord interaction) {
+        ExecutionCacheKey key = new ExecutionCacheKey(interaction.tenantId(), interaction.executionId());
+        try {
+            return java.util.Optional.of(executions.getOrLoad(key, ignored -> executionStateStore()
+                .getExecution(interaction.tenantId(), interaction.executionId())
+                .await().atMost(RELEASE_LOOKUP_TIMEOUT)
+                .map(PinnedExecution::from)
+                .orElseThrow(() -> new OwningExecutionUnavailableException())));
+        } catch (OwningExecutionUnavailableException ignored) {
+            return java.util.Optional.empty();
+        }
     }
 
     private record ReleaseCacheKey(String tenantId, DurablePayloadReleaseCoordinate coordinate) {
+    }
+
+    private record ExecutionCacheKey(String tenantId, String executionId) {
+    }
+
+    private record PinnedExecution(String pipelineId, String contractVersion, String releaseVersion) {
+        private static PinnedExecution from(ExecutionRecord<?, ?> execution) {
+            return new PinnedExecution(execution.pipelineId(), execution.contractVersion(), execution.releaseVersion());
+        }
+
+        private DurablePayloadReleaseCoordinate coordinate() {
+            return new DurablePayloadReleaseCoordinate(pipelineId, contractVersion, releaseVersion);
+        }
+    }
+
+    private static final class OwningExecutionUnavailableException extends RuntimeException {
     }
 
     private static IllegalStateException failure(AwaitInteractionRecord interaction, Slot slot, String type, String action, Exception cause) {

@@ -95,6 +95,15 @@ case "${TPF_CSV_ADMISSION_PROFILE}" in
     ;;
 esac
 
+if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" && -n "${TPF_CSV_ADMISSION_PROFILE}" ]]; then
+  # The admission profiles deliberately bound outstanding awaits. Give the Kafka request and
+  # completion channels matching partitions/consumers so that bound is a window, not a single
+  # serialized consumer lane for a materialized CSV expansion.
+  export TPF_CSV_KAFKA_PARTITIONS="${TPF_CSV_KAFKA_PARTITIONS:-25}"
+  export TPF_CSV_KAFKA_PROVIDER_CONCURRENCY="${TPF_CSV_KAFKA_PROVIDER_CONCURRENCY:-25}"
+  export TPF_CSV_KAFKA_COMPLETION_CONCURRENCY="${TPF_CSV_KAFKA_COMPLETION_CONCURRENCY:-25}"
+fi
+
 CI_MODE=false
 PREPARE_IMAGES_ONLY=false
 for argument in "$@"; do

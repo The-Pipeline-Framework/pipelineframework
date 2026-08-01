@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import io.smallrye.mutiny.Uni;
@@ -36,6 +37,7 @@ class QueueAsyncSubmissionFlow {
   private final Supplier<String> contractVersion;
   private final Supplier<String> releaseVersion;
   private final Supplier<SegmentBoundaryLedger> segmentBoundaryLedger;
+  private final Function<PipelineRunSubmission, Uni<Void>> releaseActivation;
 
   QueueAsyncSubmissionFlow(
       PipelineOrchestratorConfig orchestratorConfig,
@@ -48,6 +50,32 @@ class QueueAsyncSubmissionFlow {
       Supplier<String> contractVersion,
       Supplier<String> releaseVersion,
       Supplier<SegmentBoundaryLedger> segmentBoundaryLedger) {
+    this(
+        orchestratorConfig,
+        executionInputPolicy,
+        executionResultShapeResolver,
+        executionStateStore,
+        workDispatcher,
+        admissionPolicy,
+        pipelineId,
+        contractVersion,
+        releaseVersion,
+        segmentBoundaryLedger,
+        ignored -> Uni.createFrom().voidItem());
+  }
+
+  QueueAsyncSubmissionFlow(
+      PipelineOrchestratorConfig orchestratorConfig,
+      ExecutionInputPolicy executionInputPolicy,
+      ExecutionResultShapeResolver executionResultShapeResolver,
+      ExecutionStateStore executionStateStore,
+      WorkDispatcher workDispatcher,
+      ControlPlaneAdmissionPolicy admissionPolicy,
+      Supplier<String> pipelineId,
+      Supplier<String> contractVersion,
+      Supplier<String> releaseVersion,
+      Supplier<SegmentBoundaryLedger> segmentBoundaryLedger,
+      Function<PipelineRunSubmission, Uni<Void>> releaseActivation) {
     this.orchestratorConfig = Objects.requireNonNull(orchestratorConfig, "orchestratorConfig must not be null");
     this.executionInputPolicy = Objects.requireNonNull(executionInputPolicy, "executionInputPolicy must not be null");
     this.executionResultShapeResolver =
@@ -60,6 +88,7 @@ class QueueAsyncSubmissionFlow {
     this.releaseVersion = Objects.requireNonNull(releaseVersion, "releaseVersion must not be null");
     this.segmentBoundaryLedger =
         Objects.requireNonNull(segmentBoundaryLedger, "segmentBoundaryLedger must not be null");
+    this.releaseActivation = Objects.requireNonNull(releaseActivation, "releaseActivation must not be null");
   }
 
   Uni<RunAsyncAcceptedDto> submit(
@@ -109,7 +138,8 @@ class QueueAsyncSubmissionFlow {
       }
       long now = System.currentTimeMillis();
       long ttlEpochS = ttlEpochS(now);
-      return executionInputPolicy.resolveExecutionInputPayload(executionInput)
+      return releaseActivation.apply(submission)
+          .chain(() -> executionInputPolicy.resolveExecutionInputPayload(executionInput))
           .onItem().transformToUni(snapshot -> createPlan(submission, snapshot, now, ttlEpochS))
           .onItem().transform(PipelineRunSubmissionPlan::createCommand)
           .onItem().transformToUni(command -> executionStateStore.createOrGetExecution(command)
