@@ -126,9 +126,11 @@ run_with_retries "CSV pipeline-runtime topology image build" \
   -Dquarkus.container-image.push=false
 
 echo "Rebuilding CSV coordinator image with the long-running service entrypoint..."
-KAFKA_AWAIT_BUILD_PROPS=()
+# Start with the shared properties rather than expanding an optionally empty array. Besides
+# avoiding an empty command argument, this remains safe with Bash 3.2 + `set -u` on macOS.
+COORDINATOR_BUILD_PROPS=("${COMMON_BUILD_PROPS[@]}")
 if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" ]]; then
-  KAFKA_AWAIT_BUILD_PROPS+=("-Dtpf.await.kafka.reactive-messaging.enabled=true")
+  COORDINATOR_BUILD_PROPS+=("-Dtpf.await.kafka.reactive-messaging.enabled=true")
 fi
 run_with_retries "CSV coordinator service image build" \
   env \
@@ -140,8 +142,7 @@ run_with_retries "CSV coordinator service image build" \
   "${EXAMPLE_DIR}/build-pipeline-runtime.sh" \
   "${EXTRA_MAVEN_ARGS[@]}" \
   -pl orchestrator-svc \
-  "${COMMON_BUILD_PROPS[@]}" \
-  "${KAFKA_AWAIT_BUILD_PROPS[@]}" \
+  "${COORDINATOR_BUILD_PROPS[@]}" \
   -DskipTests \
   -Dquarkus.container-image.build=true \
   -Dquarkus.container-image.push=false \

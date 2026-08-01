@@ -201,6 +201,50 @@ public class InMemoryAwaitUnitStore implements AwaitUnitStore {
     }
 
     @Override
+    public Uni<Optional<AwaitUnitRecord>> recordItemContinuationCompleted(
+        String tenantId,
+        String unitId,
+        String continuationCompletionKey,
+        long nowEpochMs) {
+        if (continuationCompletionKey == null || continuationCompletionKey.isBlank()) {
+            return Uni.createFrom().failure(new IllegalArgumentException("continuationCompletionKey must not be blank"));
+        }
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                purgeExpired(nowEpochMs);
+                String scopedId = scopedUnitId(tenantId, unitId);
+                AwaitUnitRecord current = unitsByScopedId.get(scopedId);
+                if (current == null || (current.status().terminal() && current.status() != AwaitUnitStatus.COMPLETED)) {
+                    return Optional.ofNullable(current);
+                }
+                Set<String> completedItems = completedItemsByScopedId.computeIfAbsent(scopedId, ignored -> new HashSet<>());
+                if (!completedItems.add(continuationCompletionKey)) {
+                    return Optional.of(current);
+                }
+                AwaitUnitRecord updated = new AwaitUnitRecord(
+                    current.tenantId(),
+                    current.unitId(),
+                    current.executionId(),
+                    current.stepId(),
+                    current.stepIndex(),
+                    current.cardinality(),
+                    current.version() + 1,
+                    current.status(),
+                    current.primaryInteractionId(),
+                    current.expectedItemCount(),
+                    current.completedItemCount(),
+                    Set.copyOf(completedItems),
+                    current.dispatchComplete(),
+                    current.createdAtEpochMs(),
+                    nowEpochMs,
+                    current.ttlEpochS());
+                unitsByScopedId.put(scopedId, updated);
+                return Optional.of(updated);
+            }
+        });
+    }
+
+    @Override
     public Uni<Optional<AwaitUnitRecord>> markCompleted(String tenantId, String unitId, long nowEpochMs) {
         return update(tenantId, unitId, nowEpochMs, current -> new AwaitUnitRecord(
             current.tenantId(),

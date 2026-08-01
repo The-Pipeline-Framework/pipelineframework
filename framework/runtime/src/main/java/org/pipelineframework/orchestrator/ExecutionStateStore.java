@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
+import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 
 /**
@@ -69,6 +70,30 @@ public interface ExecutionStateStore {
      * @return execution record when available
      */
     Uni<Optional<ExecutionRecord<Object, Object>>> getExecutionByKey(String tenantId, String executionKey);
+
+    /**
+     * Fetches executions by idempotency execution key in the input order.
+     *
+     * <p>Stores with a native batch-read operation should override this method. The default is
+     * deliberately sequential so an otherwise unsupported batch read cannot fan out an
+     * unbounded number of remote requests.</p>
+     *
+     * @param tenantId tenant identifier
+     * @param executionKeys execution keys to resolve
+     * @return one optional execution per requested key, in the same order
+     */
+    default Uni<List<Optional<ExecutionRecord<Object, Object>>>> getExecutionsByKey(
+        String tenantId,
+        List<String> executionKeys
+    ) {
+        List<String> requestedKeys = List.copyOf(executionKeys);
+        if (requestedKeys.isEmpty()) {
+            return Uni.createFrom().item(List.of());
+        }
+        return Multi.createFrom().iterable(requestedKeys)
+            .onItem().transformToUniAndConcatenate(executionKey -> getExecutionByKey(tenantId, executionKey))
+            .collect().asList();
+    }
 
     /**
      * Claims the lease and marks execution RUNNING.

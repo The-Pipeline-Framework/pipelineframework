@@ -4,11 +4,14 @@ import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.IntSupplier;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
@@ -17,6 +20,7 @@ import jakarta.inject.Inject;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.checkpoint.CheckpointPublicationService;
+import org.pipelineframework.config.pipeline.PipelineOrderResourceLoader;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCoordinator;
@@ -116,6 +120,7 @@ class QueueAsyncCoordinator {
   private volatile QueueAsyncSubmissionFlow submissionFlow;
   private volatile QueueAsyncRedriveFlow redriveFlow;
   private volatile QueueAsyncSweepFlow sweepFlow;
+  private final CachedIntSupplier pipelineStepCount = new CachedIntSupplier(this::loadPipelineStepCount);
 
   @Inject
   PipelineTelemetry telemetry;
@@ -616,10 +621,11 @@ class QueueAsyncCoordinator {
         awaitCoordinator,
         transitionWorkerExecutor,
         admissionPolicy(),
-        this::payloadCodec,
-        this::segmentBoundaryLedger,
-        this::saturatedDelay,
-        new SegmentCommitEffects(
+            this::payloadCodec,
+            this::segmentBoundaryLedger,
+            this::saturatedDelay,
+            pipelineStepCount,
+            new SegmentCommitEffects(
             executionStateStore,
             workDispatcher,
             deadLetterPublisher,
@@ -634,6 +640,49 @@ class QueueAsyncCoordinator {
                 this::segmentBoundaryLedger),
             this::recordAwaitLifecycle),
         queueWorkerId);
+  }
+
+  private int loadPipelineStepCount() {
+    return PipelineOrderResourceLoader.loadOrder()
+        .filter(order -> !order.isEmpty())
+        .map(List::size)
+        .orElseThrow(() -> new IllegalStateException(
+            "Pipeline order metadata is required to resolve a terminal queue segment"));
+  }
+
+  /**
+   * Caches generated pipeline metadata for this coordinator's active pipeline deployment.
+   * A queue coordinator is tied to one generated application artifact; a new deployment
+   * constructs a new coordinator and therefore a new cache.
+   */
+  static final class CachedIntSupplier implements IntSupplier {
+
+    private final IntSupplier resolver;
+    private volatile OptionalInt cached = OptionalInt.empty();
+
+    CachedIntSupplier(IntSupplier resolver) {
+      this.resolver = Objects.requireNonNull(resolver, "resolver must not be null");
+    }
+
+    @Override
+    public int getAsInt() {
+      OptionalInt current = cached;
+      if (current.isPresent()) {
+        return current.getAsInt();
+      }
+      synchronized (this) {
+        current = cached;
+        if (current.isPresent()) {
+          return current.getAsInt();
+        }
+        int resolved = resolver.getAsInt();
+        if (resolved <= 0) {
+          throw new IllegalStateException("Generated pipeline step count must be positive");
+        }
+        cached = OptionalInt.of(resolved);
+        return resolved;
+      }
+    }
   }
 
   private SegmentBoundaryLedger segmentBoundaryLedger() {

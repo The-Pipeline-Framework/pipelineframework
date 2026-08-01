@@ -110,6 +110,27 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
+    public Uni<List<Optional<ExecutionRecord<Object, Object>>>> getExecutionsByKey(
+        String tenantId,
+        List<String> executionKeys
+    ) {
+        List<String> requestedKeys = List.copyOf(executionKeys);
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                long nowEpochMs = System.currentTimeMillis();
+                List<Optional<ExecutionRecord<Object, Object>>> records = new ArrayList<>(requestedKeys.size());
+                for (String executionKey : requestedKeys) {
+                    String executionId = executionIdByScopedKey.get(scopedExecutionKey(tenantId, executionKey));
+                    records.add(executionId == null
+                        ? Optional.empty()
+                        : Optional.ofNullable(getActiveRecord(scopedExecutionId(tenantId, executionId), nowEpochMs)));
+                }
+                return List.copyOf(records);
+            }
+        });
+    }
+
+    @Override
     public Uni<Optional<ExecutionRecord<Object, Object>>> claimLease(
         String tenantId,
         String executionId,

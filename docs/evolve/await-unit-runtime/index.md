@@ -116,6 +116,59 @@ In that model, `PipelineRunner` still runs synchronous step segments. An await s
 
 That continuation is the future beginning of the suspended pipeline. `AwaitContinuationPlanner` decides whether a completion is still held, releases a scalar resume, dispatches item continuations, records item output, or releases an itemized parent. `ScalarAwaitContinuationFlow` and `ItemizedAwaitContinuationFlow` interpret those decisions through the existing projection stores and dispatcher. `ItemContinuationClaims` is only process-local duplicate suppression; durable truth remains in the stores and immutable ledger facts.
 
+## Durable Recovery Contract
+
+Every await transition must be reconstructable from durable state. A worker-local observation,
+claim, cache, live session, or scheduler entry may reduce duplicate work, but it cannot be needed
+to determine whether an interaction, child continuation, or parent execution may progress.
+
+| Durable precondition | Event | Durable mutation | Emitted action | Restart reconstruction |
+| --- | --- | --- | --- | --- |
+| pending interaction | request creation | interaction persists | dispatch request | reload interaction and redispatch by its delivery contract |
+| pending interaction | completion admission | response persists as completed | release evaluation | reload interaction and await unit |
+| completed scalar interaction | release evaluation | parent becomes queued | continuation work | reload parent state and deduplicate by transition identity |
+| completed item interaction | item continuation | child becomes succeeded | parent release evaluation | query the durable child execution |
+| all required children succeeded | parent release evaluation | parent becomes queued | aggregate continuation work | query every required durable child execution |
+| queued parent | transition admission | next execution state persists | business segment | reload the execution and lease/retry safely |
+
+The itemized parent release rule is deliberately strict: a parent remains held while any required
+durable child execution is missing, pending, failed, or otherwise non-successful. Local child
+claims never prove aggregate completion. More than one worker may physically attempt release or
+continuation work, but optimistic durable admission permits only one accepted semantic advance.
+
+### Provider completion and continuation completion
+
+Itemized await has two distinct durable progress facts. They answer different questions and must
+not be collapsed into one count:
+
+| Durable fact | Meaning | Produced by | Enables |
+| --- | --- | --- | --- |
+| provider completion | the external provider answered an interaction and TPF admitted that response | completion admission | item-continuation work for that response |
+| continuation completion | TPF durably incorporated the admitted response into its item child execution | successful child continuation | final aggregate readiness evaluation |
+
+An await unit may therefore have every provider response admitted while some child continuations
+are still pending. Each successful child writes an idempotent continuation-completion fact to the
+unit. Only when the required set of those facts is complete does the runtime read the ordered child
+executions, verify that each is successful, and attempt the parent release. This keeps the
+aggregate decision reconstructable after reassignment and avoids repeated all-sibling scans after
+each provider response.
+
+Older durable units that predate continuation-completion facts remain recoverable through their
+existing child-execution evidence. New units use the fact-based release gate. Process-local claims
+may suppress duplicate dispatch work, but they never establish either provider or continuation
+completion.
+
+The runtime verifies these durable guarantees across every lifecycle transition, supported await
+shape, defined completion race, and restart boundary. A recovered runtime rebuilds progress from
+the persisted execution, await-unit, and interaction state; it does not depend on a local claim,
+cache, session, or scheduler entry from the process that observed an earlier event.
+
+Kafka, SQS, and webhook completion ingress each admit a single durable completion before release
+evaluation. Terminal execution leaves no pending interaction, active await unit, orphaned child
+execution, or unresolved continuation state. Admission capacity and item claims are released by
+their owning boundaries, so duplicate physical work cannot produce additional accepted semantic
+progress.
+
 ## CSV Payments Applied Model
 
 `csv-payments` applies this model to a Kafka-backed payment-provider boundary:
