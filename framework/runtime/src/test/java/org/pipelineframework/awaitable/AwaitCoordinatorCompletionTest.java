@@ -569,7 +569,7 @@ class AwaitCoordinatorCompletionTest {
     }
 
     @Test
-    void rejectsInvalidCanonicalCompletionBeforeDurableWrite() {
+    void defersLegacySemanticPayloadConversionUntilResume() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
         AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
@@ -592,16 +592,19 @@ class AwaitCoordinatorCompletionTest {
             Map.of("orderId", "o-1"),
             null,
             null).await().indefinitely();
-        IllegalStateException error = assertThrows(IllegalStateException.class,
-            () -> coordinator.complete(new AwaitCompletionCommand(
-                "tenant-1",
-                created.record().interactionId(),
-                null,
-                "completion-1",
-                Map.of("orderId", "not-a-uuid"),
-                "alice",
-                11_000L)).await().indefinitely());
+        AwaitCompletionResult completed = coordinator.complete(new AwaitCompletionCommand(
+            "tenant-1",
+            created.record().interactionId(),
+            null,
+            "completion-1",
+            Map.of("orderId", "not-a-uuid"),
+            "alice",
+            11_000L)).await().indefinitely();
+        coordinator.recordCompletion(completed.record(), 11_000L).await().indefinitely();
 
+        assertTrue(completed.record().responsePayload() instanceof Map<?, ?>);
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> coordinator.loadResumePayload("tenant-1", created.record().unitId()).await().indefinitely());
         assertTrue(error.getMessage().contains("Failed converting await payload"));
     }
 

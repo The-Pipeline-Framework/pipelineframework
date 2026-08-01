@@ -129,6 +129,55 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
+    void writesLegacyAwaitItemContinuationWithLegacyPayloadMetadata() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        PaymentStatus continuation = new PaymentStatus("payment-1", "approved");
+        Map<String, AttributeValue> waiting = new HashMap<>(executionItem(
+            "tenant-a", "legacy-await-child", "legacy-key", ttl, ExecutionStatus.WAITING_EXTERNAL));
+        waiting.put("current_step_index", AttributeValue.builder().n("2").build());
+        waiting.put("await_unit_id", AttributeValue.builder().s("await-unit").build());
+        waiting.put("input_payload_json", AttributeValue.builder().s("\"previous\"").build());
+        waiting.put("input_shape", AttributeValue.builder().s(ExecutionInputShape.RAW.name()).build());
+        waiting.put("input_payload_type_id", AttributeValue.builder().s(String.class.getName()).build());
+        waiting.put("input_payload_encoding", AttributeValue.builder().s(JsonTransitionPayloadCodec.ENCODING).build());
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().item(waiting).build());
+        when(client.updateItem(any(UpdateItemRequest.class))).thenAnswer(invocation -> {
+            UpdateItemRequest request = invocation.getArgument(0);
+            Map<String, AttributeValue> values = request.expressionAttributeValues();
+            Map<String, AttributeValue> updated = new HashMap<>(waiting);
+            updated.put("status", values.get(":queued"));
+            updated.put("version", AttributeValue.builder().n("1").build());
+            updated.put("current_step_index", values.get(":step"));
+            updated.put("input_payload_json", values.get(":inputPayload"));
+            updated.put("input_payload_type_id", values.get(":inputPayloadTypeId"));
+            updated.put("input_payload_encoding", values.get(":inputPayloadEncoding"));
+            updated.put("input_shape", values.get(":inputShape"));
+            updated.remove("await_unit_id");
+            return UpdateItemResponse.builder().attributes(updated).build();
+        });
+
+        Optional<ExecutionRecord<Object, Object>> released = store.markAwaitItemContinuationsCompleted(
+            "tenant-a",
+            "legacy-await-child",
+            "await-unit",
+            3,
+            new ExecutionInputSnapshot(ExecutionInputShape.UNI, continuation),
+            now).await().indefinitely();
+
+        ExecutionRecord<Object, Object> record = released.orElseThrow();
+        ExecutionInputSnapshot restored = assertInstanceOf(ExecutionInputSnapshot.class, record.inputPayload());
+        assertEquals(continuation, restored.payload());
+        ArgumentCaptor<UpdateItemRequest> update = ArgumentCaptor.forClass(UpdateItemRequest.class);
+        verify(client).updateItem(update.capture());
+        assertEquals(PaymentStatus.class.getName(), update.getValue().expressionAttributeValues().get(":inputPayloadTypeId").s());
+        assertEquals(JsonTransitionPayloadCodec.ENCODING,
+            update.getValue().expressionAttributeValues().get(":inputPayloadEncoding").s());
+    }
+
+    @Test
     void legacyInputWritePreservesExternalPayloadMetadata() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));

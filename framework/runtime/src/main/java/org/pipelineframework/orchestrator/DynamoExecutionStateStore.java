@@ -854,7 +854,13 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             .orElseThrow(() -> new IllegalStateException("Execution is unavailable while persisting await continuation: " + executionId));
         ExecutionRecord<Object, Object> continuation = withCurrentStepIndex(execution, nextStepIndex);
         Object canonicalInput = inputPayload instanceof ExecutionInputSnapshot snapshot ? snapshot.payload() : inputPayload;
-        String serializedInput = serializePayload(continuation, ExecutionDurablePayloadResolver.Slot.CONTINUATION_INPUT, canonicalInput);
+        boolean typed = writesTypedDurablePayloads(continuation);
+        Optional<SerializedTransitionPayload> legacyInput = typed
+            ? Optional.empty()
+            : Optional.of(transitionPayloadCodec.encode(canonicalInput));
+        String serializedInput = typed
+            ? serializePayload(continuation, ExecutionDurablePayloadResolver.Slot.CONTINUATION_INPUT, canonicalInput)
+            : legacyInput.orElseThrow().payload();
         StoredPayload storedInput = storeInputPayload(
             tenantId,
             executionId,
@@ -871,8 +877,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         values.put(":inputShape", avS(inputPayload instanceof ExecutionInputSnapshot snapshot
             ? snapshot.shape().name()
             : ExecutionInputShape.RAW.name()));
-        values.put(":inputPayloadTypeId", avS("typed-durable"));
-        values.put(":inputPayloadEncoding", avS(JsonDurablePayloadCodec.ENCODING));
+        values.put(":inputPayloadTypeId", avS(typed ? "typed-durable" : legacyInput.orElseThrow().payloadTypeId()));
+        values.put(":inputPayloadEncoding", avS(typed ? JsonDurablePayloadCodec.ENCODING : legacyInput.orElseThrow().payloadEncoding()));
         values.put(":zero", avN(0));
         values.put(":now", avN(nowEpochMs));
         values.put(":one", avN(1));
