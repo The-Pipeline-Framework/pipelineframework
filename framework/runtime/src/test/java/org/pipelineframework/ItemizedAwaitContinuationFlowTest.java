@@ -186,6 +186,49 @@ class ItemizedAwaitContinuationFlowTest {
   }
 
   @Test
+  void childOutputRefreshesItsVersionAfterConcurrentChildMutation() {
+    ExecutionRecord<Object, Object> parent = record("exec-1", "parent-key", ExecutionStatus.WAITING_EXTERNAL, 7L);
+    AwaitUnitRecord unit = awaitUnit(parent.executionId(), AwaitUnitStatus.COMPLETED, 1, 1, true);
+    ExecutionRecord<Object, Object> staleChild = record(
+        "child-1", ItemContinuationKey.from(parent, unit, 0).childExecutionKey(), ExecutionStatus.QUEUED, 0L);
+    ExecutionRecord<Object, Object> refreshedChild = record(
+        "child-1", staleChild.executionKey(), ExecutionStatus.RUNNING, 1L);
+    ExecutionRecord<Object, Object> succeededChild = record(
+        "child-1", staleChild.executionKey(), ExecutionStatus.SUCCEEDED, 2L);
+    AwaitUnitRecord incompleteUnit = awaitUnit(parent.executionId(), AwaitUnitStatus.WAITING_EXTERNAL, 1, 0, true);
+    when(executionStateStore.getExecution("tenant-1", parent.executionId()))
+        .thenReturn(Uni.createFrom().item(Optional.of(parent)));
+    when(executionStateStore.getExecutionByKey("tenant-1", staleChild.executionKey()))
+        .thenReturn(Uni.createFrom().item(Optional.of(staleChild)))
+        .thenReturn(Uni.createFrom().item(Optional.of(refreshedChild)));
+    when(executionStateStore.createOrGetExecution(any(ExecutionCreateCommand.class)))
+        .thenReturn(Uni.createFrom().item(new CreateExecutionResult(staleChild, true)));
+    when(executionStateStore.markSucceeded(
+        eq("tenant-1"), eq("child-1"), any(Long.class), any(), any(), any(Long.class)))
+        .thenReturn(Uni.createFrom().item(Optional.empty()))
+        .thenReturn(Uni.createFrom().item(Optional.of(succeededChild)));
+    when(awaitCoordinator.recordItemContinuationCompleted(any(), eq(unit.unitId()), eq(0), any(Long.class)))
+        .thenReturn(Uni.createFrom().item(unit));
+    when(awaitCoordinator.getUnit("tenant-1", unit.unitId()))
+        .thenReturn(Uni.createFrom().item(incompleteUnit));
+
+    flow(executionStateStore, workDispatcher, awaitCoordinator)
+        .captureOutput(
+            itemAwaitRecord(parent.executionId(), 0, AwaitInteractionStatus.COMPLETED, "item"),
+            unit,
+            4,
+            new ExecutionInputSnapshot(ExecutionInputShape.UNI, "normalized"),
+            List.of("out-0"),
+            1234L)
+        .await().indefinitely();
+
+    verify(executionStateStore).markSucceeded(
+        "tenant-1", "child-1", 0L, "await-item-continuation:" + unit.unitId() + ":0", List.of("out-0"), 1234L);
+    verify(executionStateStore).markSucceeded(
+        "tenant-1", "child-1", 1L, "await-item-continuation:" + unit.unitId() + ":0", List.of("out-0"), 1234L);
+  }
+
+  @Test
   void durableChildCompletionReleasesParentAfterAWorkerRestart() {
     InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
     when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());

@@ -192,6 +192,109 @@ sequenceDiagram
     Queue->>Queue: commit execution success
 ```
 
+## Durable Item Continuation Recovery
+
+The durable fallback has two separate progress boundaries for every item: provider completion and
+child continuation completion. A provider response is not aggregate progress by itself. TPF first
+persists the admitted response, then records the child continuation result, then records the
+idempotent continuation-completion fact for that item. The parent is eligible for release only
+when every required continuation fact and every required child execution are durably successful.
+
+```mermaid
+sequenceDiagram
+    participant Provider as Await provider
+    participant Admission as Completion admission
+    participant Unit as AwaitUnitStore
+    participant Flow as ItemizedAwaitContinuationFlow
+    participant Child as ExecutionStateStore child
+    participant Parent as ExecutionStateStore parent
+    participant Dispatch as WorkDispatcher
+
+    Provider-->>Admission: response for item i
+    Admission->>Unit: persist provider completion
+    Admission->>Flow: dispatch item continuation
+    Flow->>Child: create-or-get child execution
+    Flow->>Child: CAS mark child SUCCEEDED with item output
+    Child-->>Flow: child success
+    Flow->>Unit: record continuation:i fact
+
+    alt not every provider completion and continuation fact exists
+        Flow-->>Parent: keep parent WAITING_EXTERNAL
+    else final durable continuation fact
+        Flow->>Child: bounded ordered sibling read
+        Child-->>Flow: every required child is SUCCEEDED
+        Flow->>Parent: CAS parent queued at aggregate boundary
+        Flow->>Dispatch: enqueue parent continuation
+    end
+```
+
+### Concurrent Child Mutation
+
+An item child is a durable materialization record. A queue worker can claim it between creation
+and the continuation flow's first compare-and-swap write. That changes the child version but does
+not mean the item failed. The continuation flow reloads the child from durable state and retries
+the success write using the refreshed version when the child is still `QUEUED` or `RUNNING`.
+
+```mermaid
+sequenceDiagram
+    participant Flow as ItemizedAwaitContinuationFlow
+    participant Child as Durable child execution
+    participant Worker as Concurrent queue worker
+
+    Flow->>Child: mark SUCCEEDED(version=0)
+    Worker->>Child: claim child, version 0 -> 1
+    Child-->>Flow: conditional write not accepted
+    Flow->>Child: strongly consistent reload
+    Child-->>Flow: RUNNING, version=1
+    Flow->>Child: mark SUCCEEDED(version=1)
+    Child-->>Flow: accepted
+    Flow->>Flow: record continuation fact and evaluate parent
+```
+
+The retry is deliberately limited to pending child materialization. A child that is already
+`SUCCEEDED` is idempotent. A failed, cancelled, or otherwise terminal child is not overwritten;
+the continuation remains a real failure. This keeps a version race from becoming a parent-fatal
+error without allowing a stale worker to rewrite a semantic terminal outcome.
+
+### Restart And Reassignment
+
+No worker-local claim or completion observation proves aggregate readiness. A fresh runtime uses
+the await unit and durable child executions to reconstruct progress. If a prior process made a
+child successful but stopped before writing its continuation fact, the next completion reconciles
+that missing fact from the child record. The reconciliation claim merely coalesces duplicate scans;
+it is never correctness state.
+
+```mermaid
+sequenceDiagram
+    participant A as Worker A
+    participant Store as Dynamo await and execution stores
+    participant B as Fresh worker B
+    participant Parent as Parent execution
+
+    A->>Store: child 0 is SUCCEEDED
+    Note over A: crashes before continuation:0 fact
+    B->>Store: admit completion for child 1
+    B->>Store: child 1 is SUCCEEDED + continuation:1
+    B->>Store: read required child executions
+    Store-->>B: child 0 succeeded, fact missing
+    B->>Store: record continuation:0 idempotently
+    B->>Store: verify all facts and children
+    B->>Parent: release once at aggregate boundary
+```
+
+### Edge-Case Rules
+
+| Situation | Durable rule | Result |
+| --- | --- | --- |
+| duplicate provider completion | interaction completion is idempotent | no additional semantic continuation progress |
+| conflicting completion | the admitted interaction contract remains authoritative | reject the conflicting completion |
+| provider completion before parent suspension | completion persists, but dispatch waits for `dispatchComplete` and parent `WAITING_EXTERNAL` | no premature continuation |
+| final provider completion with a missing child fact | read ordered durable children and repair only facts backed by `SUCCEEDED` children | parent remains held until every required child is successful |
+| concurrent child version mutation | reload durable child and retry only `QUEUED` or `RUNNING` materialization | recoverable CAS race does not fail the parent |
+| duplicate parent release | parent compare-and-swap is the semantic admission point | one accepted parent advance; duplicate physical attempts are harmless |
+| restart after child completion or parent release | reconstruct from the await unit, interactions, child executions, and parent record | no worker-local state is needed |
+| terminal parent path | release capacity, claims, interactions, continuation facts, and child work | no orphaned pending state |
+
 ## Aggregate Unit
 
 `ONE_TO_MANY`, `MANY_TO_ONE`, and `MANY_TO_MANY` are aggregate interaction units. The runtime materializes the relevant side of the boundary so replay has one stable unit to restart.

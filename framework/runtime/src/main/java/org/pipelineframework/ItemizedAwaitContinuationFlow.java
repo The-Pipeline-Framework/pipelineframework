@@ -436,10 +436,37 @@ class ItemizedAwaitContinuationFlow {
           if (current.isPresent() && current.get().status() == ExecutionStatus.SUCCEEDED) {
             return recordItemContinuationAndRelease(plan, nowEpochMs);
           }
-          return Uni.createFrom().failure(new IllegalStateException(
-              "Await item continuation child success was not admitted and child is not already SUCCEEDED: "
-                  + child.executionKey()));
+          if (current.isPresent() && isPendingChildMaterialization(current.get())) {
+            ExecutionRecord<Object, Object> refreshed = current.get();
+            return executionStateStore.markSucceeded(
+                    refreshed.tenantId(),
+                    refreshed.executionId(),
+                    refreshed.version(),
+                    "await-item-continuation:" + plan.unit().unitId() + ":" + plan.interaction().itemIndex(),
+                    plan.segmentOutputs(),
+                    nowEpochMs)
+                .onItem().transformToUni(retried -> retried.isPresent()
+                    ? recordItemContinuationAndRelease(plan, nowEpochMs)
+                    : executionStateStore.getExecutionByKey(plan.parent().tenantId(), child.executionKey())
+                        .onItem().transformToUni(latest -> {
+                          if (latest.isPresent() && latest.get().status() == ExecutionStatus.SUCCEEDED) {
+                            return recordItemContinuationAndRelease(plan, nowEpochMs);
+                          }
+                          return childSuccessNotAdmitted(child.executionKey());
+                        }));
+          }
+          return childSuccessNotAdmitted(child.executionKey());
         });
+  }
+
+  private static Uni<Void> childSuccessNotAdmitted(String childExecutionKey) {
+    return Uni.createFrom().failure(new IllegalStateException(
+        "Await item continuation child success was not admitted and child is not already SUCCEEDED: "
+            + childExecutionKey));
+  }
+
+  private static boolean isPendingChildMaterialization(ExecutionRecord<Object, Object> child) {
+    return child.status() == ExecutionStatus.QUEUED || child.status() == ExecutionStatus.RUNNING;
   }
 
   private Uni<Void> recordItemContinuationSegment(
