@@ -10,7 +10,10 @@ import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.Uni;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -87,6 +90,73 @@ class CommandStepSupportTest {
     assertTransitionCount("dispatching", 1);
     assertTransitionCount("succeeded", 1);
     assertDurationCount("succeeded", 1);
+  }
+
+  @Test
+  void preservesInvocationContextAcrossAsyncDescriptorResolution() {
+    AwaitExecutionContext expectedContext = new AwaitExecutionContext("async-tenant", "async-exec", 7);
+    AwaitExecutionContextHolder.set(expectedContext);
+    AtomicReference<String> descriptorThread = new AtomicReference<>();
+    ExecutorService descriptorExecutor = Executors.newSingleThreadExecutor(runnable -> {
+      Thread thread = new Thread(runnable, "async-descriptor-loader");
+      thread.setDaemon(true);
+      return thread;
+    });
+    try {
+      Uni<CommandDescriptor> asynchronouslyResolvedDescriptor = Uni.createFrom().item(() -> {
+        descriptorThread.set(Thread.currentThread().getName());
+        return descriptor;
+      }).runSubscriptionOn(descriptorExecutor);
+
+      CommandOutput output = support
+          .<CommandInput, CommandOutput>execute(
+              asynchronouslyResolvedDescriptor,
+              new StaticCommandIdGenerator(),
+              new CommandInput("async-context"))
+          .await().atMost(Duration.ofSeconds(5));
+
+      assertEquals("cmd-async-context", output.commandId);
+      assertEquals("async-descriptor-loader", descriptorThread.get());
+      AwaitExecutionContext connectorContext = connector.lastExecutionContext.get();
+      assertEquals(expectedContext.tenantId(), connectorContext.tenantId());
+      assertEquals(expectedContext.executionId(), connectorContext.executionId());
+      assertEquals(expectedContext.currentStepIndex(), connectorContext.currentStepIndex());
+    } finally {
+      descriptorExecutor.shutdownNow();
+    }
+  }
+
+  @Test
+  void rejectsNullCommandIdGeneratorBeforeAsyncDescriptorResolution() {
+    AtomicInteger descriptorResolutionCalls = new AtomicInteger();
+    Uni<CommandDescriptor> asynchronouslyResolvedDescriptor = Uni.createFrom().item(() -> {
+      descriptorResolutionCalls.incrementAndGet();
+      return descriptor;
+    });
+
+    IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+        () -> support.<CommandInput, CommandOutput>execute(
+                asynchronouslyResolvedDescriptor,
+                null,
+                new CommandInput("null-generator"))
+            .await().atMost(Duration.ofSeconds(5)));
+
+    assertEquals("commandIdGenerator must not be null", error.getMessage());
+    assertEquals(0, descriptorResolutionCalls.get());
+  }
+
+  @Test
+  void rejectsNullAsyncDescriptorItem() {
+    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+
+    IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+        () -> support.<CommandInput, CommandOutput>execute(
+                Uni.createFrom().nullItem(),
+                new StaticCommandIdGenerator(),
+                new CommandInput("null-descriptor"))
+            .await().atMost(Duration.ofSeconds(5)));
+
+    assertEquals("descriptor must not be null", error.getMessage());
   }
 
   @Test
@@ -228,6 +298,26 @@ class CommandStepSupportTest {
   }
 
   @Test
+  void failedRetryableEffectCannotCurrentlyBeRedispatchedWithSameCommandId() {
+    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    connector.failure = new IllegalStateException("opensearch unavailable");
+
+    assertThrows(IllegalStateException.class,
+        () -> support.<CommandInput, CommandOutput>execute(descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+
+    connector.failure = null;
+    IllegalStateException redispatchFailure = assertThrows(IllegalStateException.class,
+        () -> support.<CommandInput, CommandOutput>execute(descriptor, new StaticCommandIdGenerator(), new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+
+    assertEquals("Command effect record already exists for commandId cmd-doc-1", redispatchFailure.getMessage());
+    assertEquals(1, connector.calls.get());
+    CommandEffectRecord record = store.find("tenant", "cmd-doc-1").await().atMost(Duration.ofSeconds(5)).orElseThrow();
+    assertEquals(CommandEffectStatus.FAILED_RETRYABLE, record.status());
+  }
+
+  @Test
   void nonRetryableConnectorFailureRecordsDlq() {
     AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
     connector.failure = new NonRetryableException("invalid index document");
@@ -331,6 +421,7 @@ class CommandStepSupportTest {
 
   static class RecordingConnector implements CommandConnector<CommandInput, CommandOutput> {
     final AtomicInteger calls = new AtomicInteger();
+    final AtomicReference<AwaitExecutionContext> lastExecutionContext = new AtomicReference<>();
     RuntimeException failure;
 
     @Override
@@ -341,6 +432,7 @@ class CommandStepSupportTest {
     @Override
     public Uni<CommandOutput> execute(CommandRequest<CommandInput> request) {
       calls.incrementAndGet();
+      lastExecutionContext.set(request.executionContext());
       if (failure != null) {
         return Uni.createFrom().failure(failure);
       }

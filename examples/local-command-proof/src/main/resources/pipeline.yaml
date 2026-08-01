@@ -1,0 +1,30 @@
+version: 2
+appName: Local Command Proof
+basePackage: org.pipelineframework.localcommandproof
+transport: LOCAL
+platform: COMPUTE
+types:
+  ObservedOperationCommand:
+    fields:
+      - [operationId, string]
+      - [behavior, string]
+  ObservedOperationResult:
+    fields:
+      - [operationId, string]
+      - [confirmation, string]
+      - [workerThreadName, string]
+steps:
+  - name: Observed Operation
+    kind: command
+    command: observed-operation
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.localcommandproof.ObservedOperationCommand
+    inputTypeName: ObservedOperationCommand
+    output: org.pipelineframework.localcommandproof.ObservedOperationResult
+    outputTypeName: ObservedOperationResult
+    terminal: true
+    commandIdGenerator: org.pipelineframework.localcommandproof.ObservedOperationCommandIdGenerator
+    duplicatePolicy: RETURN_RECORDED
+    config:
+      observationLabel: local-command-proof
+      maxConcurrency: 1
