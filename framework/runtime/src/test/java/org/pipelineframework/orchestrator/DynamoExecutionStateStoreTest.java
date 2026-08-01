@@ -2,6 +2,7 @@ package org.pipelineframework.orchestrator;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
@@ -34,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -156,6 +158,22 @@ class DynamoExecutionStateStoreTest {
             .toList());
         assertEquals(3, calls.get());
         verify(client, never()).getItem(any(GetItemRequest.class));
+    }
+
+    @Test
+    void batchExecutionKeyLookupBoundsThrottledRetryDelay() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        when(client.batchGetItem(any(BatchGetItemRequest.class))).thenAnswer(invocation -> {
+            BatchGetItemRequest request = invocation.getArgument(0, BatchGetItemRequest.class);
+            return BatchGetItemResponse.builder().responses(Map.of()).unprocessedKeys(request.requestItems()).build();
+        });
+
+        assertTimeoutPreemptively(Duration.ofSeconds(2), () -> assertThrows(IllegalStateException.class,
+            () -> store.getExecutionsByKey("tenant-a", List.of("key-a")).await().indefinitely()));
+
+        verify(client, times(4)).batchGetItem(any(BatchGetItemRequest.class));
     }
 
     @Test

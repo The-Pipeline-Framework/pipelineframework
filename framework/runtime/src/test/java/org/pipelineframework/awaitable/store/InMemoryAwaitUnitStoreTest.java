@@ -69,6 +69,8 @@ class InMemoryAwaitUnitStoreTest {
         assertThrows(IllegalArgumentException.class, () -> store.recordItemContinuationCompleted(
             "tenant", "unit-1", null, 14_000L).await().indefinitely());
         assertThrows(IllegalArgumentException.class, () -> store.recordItemContinuationCompleted(
+            "tenant", "unit-1", "", 14_000L).await().indefinitely());
+        assertThrows(IllegalArgumentException.class, () -> store.recordItemContinuationCompleted(
             "tenant", "unit-1", "  ", 14_000L).await().indefinitely());
     }
 

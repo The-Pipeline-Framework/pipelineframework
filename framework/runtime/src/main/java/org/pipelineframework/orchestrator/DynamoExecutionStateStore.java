@@ -76,6 +76,9 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private static final String INPUT_PAYLOAD_REFERENCE = "input_payload_reference";
     private static final String INPUT_PAYLOAD_TYPE_ID = "input_payload_type_id";
     private static final String INPUT_PAYLOAD_ENCODING = "input_payload_encoding";
+    private static final int BATCH_GET_MAX_ATTEMPTS = 4;
+    private static final long BATCH_GET_RETRY_BUDGET_MS = 750L;
+    private static final long BATCH_GET_RETRY_INITIAL_DELAY_MS = 50L;
     private static final String AWAIT_UNIT_ID = "await_unit_id";
     private static final String RESULT_PAYLOAD_JSON = "result_payload_json";
     private static final String RESULT_PAYLOAD_REFERENCE = "result_payload_reference";
@@ -464,9 +467,10 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     ) {
         Map<String, KeysAndAttributes> remaining = requestItems;
         Map<String, List<Map<String, AttributeValue>>> responses = new HashMap<>();
-        for (int attempt = 0; !remaining.isEmpty() && attempt < 8; attempt++) {
+        long remainingRetryDelayMs = BATCH_GET_RETRY_BUDGET_MS;
+        for (int attempt = 0; !remaining.isEmpty() && attempt < BATCH_GET_MAX_ATTEMPTS; attempt++) {
             if (attempt > 0) {
-                sleepBeforeBatchRetry(attempt);
+                remainingRetryDelayMs -= sleepBeforeBatchRetry(attempt, remainingRetryDelayMs);
             }
             BatchGetItemResponse response = dynamoClient().batchGetItem(BatchGetItemRequest.builder()
                 .requestItems(remaining)
@@ -483,15 +487,17 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return responses;
     }
 
-    private static void sleepBeforeBatchRetry(int retryNumber) {
-        long baseDelayMs = 100L << Math.min(retryNumber - 1, 5);
-        long delayMs = baseDelayMs + java.util.concurrent.ThreadLocalRandom.current().nextLong(baseDelayMs + 1);
+    private static long sleepBeforeBatchRetry(int retryNumber, long remainingRetryDelayMs) {
+        long baseDelayMs = BATCH_GET_RETRY_INITIAL_DELAY_MS << Math.min(retryNumber - 1, 2);
+        long requestedDelayMs = baseDelayMs + java.util.concurrent.ThreadLocalRandom.current().nextLong(baseDelayMs + 1);
+        long delayMs = Math.min(requestedDelayMs, remainingRetryDelayMs);
         try {
             Thread.sleep(delayMs);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while retrying Dynamo batch read", interrupted);
         }
+        return delayMs;
     }
 
     private static <T> List<List<T>> batches(List<T> values) {
