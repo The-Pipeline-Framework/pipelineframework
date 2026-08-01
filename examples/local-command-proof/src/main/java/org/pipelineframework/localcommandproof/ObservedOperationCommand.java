@@ -5,8 +5,8 @@ package org.pipelineframework.localcommandproof;
  */
 public record ObservedOperationCommand(String operationId, Behavior behavior) {
     public ObservedOperationCommand {
-        if (operationId == null || operationId.isBlank()) {
-            throw new IllegalArgumentException("operationId must not be blank");
+        if (operationId == null || operationId.isBlank() || !operationId.equals(operationId.trim())) {
+            throw new IllegalArgumentException("operationId must not be blank or have leading/trailing whitespace");
         }
         behavior = behavior == null ? Behavior.SUCCESS : behavior;
     }

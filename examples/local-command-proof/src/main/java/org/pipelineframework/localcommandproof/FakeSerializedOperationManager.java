@@ -38,11 +38,11 @@ public class FakeSerializedOperationManager {
     @Inject
     ThreadContext threadContext;
 
-    public ExecutorService executor() {
+    ExecutorService executor() {
         return executor;
     }
 
-    public Executor workerExecutor() {
+    Executor workerExecutor() {
         return command -> executor.execute(threadContext.contextualRunnable(command));
     }
 

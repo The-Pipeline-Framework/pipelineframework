@@ -11,6 +11,8 @@ import jakarta.inject.Inject;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
@@ -127,18 +129,32 @@ class ObservedOperationCommandMonolithTest {
         ObservedOperationCommand secondCommand = blockingSuccess("serial-two");
         manager.prepareBlockingOperation();
 
-        Future<ObservedOperationResult> first = manager.executor().submit(
-            () -> manager.executeBlocking(firstCommand, Map.of("maxConcurrency", 1)));
-        assertTrue(manager.awaitBlockingOperationEntered(5, TimeUnit.SECONDS));
-        Future<ObservedOperationResult> second = manager.executor().submit(
-            () -> manager.executeBlocking(secondCommand, Map.of("maxConcurrency", 1)));
-        manager.releaseBlockingOperation();
+        ExecutorService probeExecutor = Executors.newFixedThreadPool(2);
+        try {
+            Future<ObservedOperationResult> first = probeExecutor.submit(
+                () -> manager.executeBlocking(firstCommand, Map.of("maxConcurrency", 1)));
+            assertTrue(manager.awaitBlockingOperationEntered(5, TimeUnit.SECONDS));
+            Future<ObservedOperationResult> second = probeExecutor.submit(
+                () -> manager.executeBlocking(secondCommand, Map.of("maxConcurrency", 1)));
+            manager.releaseBlockingOperation();
 
-        assertEquals(firstCommand.operationId(), getFutureResult(first).operationId());
-        assertEquals(secondCommand.operationId(), getFutureResult(second).operationId());
+            assertEquals(firstCommand.operationId(), getFutureResult(first).operationId());
+            assertEquals(secondCommand.operationId(), getFutureResult(second).operationId());
 
-        assertEquals(1, manager.maxActiveOperations());
-        assertEquals(2, manager.invocationCount());
+            assertEquals(1, manager.maxActiveOperations());
+            assertEquals(2, manager.invocationCount());
+        } finally {
+            manager.releaseBlockingOperation();
+            probeExecutor.shutdownNow();
+        }
+    }
+
+    @Test
+    void rejectsOperationIdsWithBoundaryWhitespace() {
+        assertThrows(IllegalArgumentException.class,
+            () -> new ObservedOperationCommand(" leading", ObservedOperationCommand.Behavior.SUCCESS));
+        assertThrows(IllegalArgumentException.class,
+            () -> new ObservedOperationCommand("trailing ", ObservedOperationCommand.Behavior.SUCCESS));
     }
 
     private RunAsyncAcceptedDto submit(ObservedOperationCommand command, String submissionName) {
