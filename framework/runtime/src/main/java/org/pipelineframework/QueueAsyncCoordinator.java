@@ -17,6 +17,7 @@ import jakarta.inject.Inject;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.checkpoint.CheckpointPublicationService;
+import org.pipelineframework.config.pipeline.PipelineOrderResourceLoader;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCoordinator;
@@ -616,10 +617,11 @@ class QueueAsyncCoordinator {
         awaitCoordinator,
         transitionWorkerExecutor,
         admissionPolicy(),
-        this::payloadCodec,
-        this::segmentBoundaryLedger,
-        this::saturatedDelay,
-        new SegmentCommitEffects(
+            this::payloadCodec,
+            this::segmentBoundaryLedger,
+            this::saturatedDelay,
+            this::pipelineStepCount,
+            new SegmentCommitEffects(
             executionStateStore,
             workDispatcher,
             deadLetterPublisher,
@@ -634,6 +636,14 @@ class QueueAsyncCoordinator {
                 this::segmentBoundaryLedger),
             this::recordAwaitLifecycle),
         queueWorkerId);
+  }
+
+  private int pipelineStepCount() {
+    return PipelineOrderResourceLoader.loadOrder()
+        .filter(order -> !order.isEmpty())
+        .map(List::size)
+        .orElseThrow(() -> new IllegalStateException(
+            "Pipeline order metadata is required to resolve a terminal queue segment"));
   }
 
   private SegmentBoundaryLedger segmentBoundaryLedger() {

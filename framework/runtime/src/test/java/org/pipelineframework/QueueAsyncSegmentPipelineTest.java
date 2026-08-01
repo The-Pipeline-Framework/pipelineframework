@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
 import io.smallrye.mutiny.Uni;
@@ -231,6 +232,41 @@ class QueueAsyncSegmentPipelineTest {
   }
 
   @Test
+  void terminalMaterializedSegmentStaysAtCoordinatorWithoutEncodingOrWorkerDispatch() {
+    ExecutionRecord<Object, Object> claimed = withCurrentStep(
+        record("exec-terminal-pass-through", ExecutionResultShape.MATERIALIZED_MULTI),
+        1,
+        List.of("out-1", "out-2"));
+    ExecutionRecord<Object, Object> succeeded = withStatus(claimed, ExecutionStatus.SUCCEEDED, 1L);
+    payloadCodec = org.mockito.Mockito.spy(payloadCodec);
+    when(executionStateStore.claimLease(eq("tenant-1"), eq("exec-terminal-pass-through"), any(), anyLong(), eq(1000L)))
+        .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+    when(executionStateStore.markSucceeded(
+            eq("tenant-1"),
+            eq("exec-terminal-pass-through"),
+            eq(0L),
+            eq("exec-terminal-pass-through:1:0"),
+            eq(List.of("out-1", "out-2")),
+            anyLong()))
+        .thenReturn(Uni.createFrom().item(Optional.of(succeeded)));
+
+    pipeline(transitionWorkerExecutor, objectPublishCompletionService, () -> 1).process(
+            new ExecutionWorkItem("tenant-1", "exec-terminal-pass-through"),
+            command -> Uni.createFrom().failure(new AssertionError("terminal segment must not call worker")),
+            AwaitContinuations.NOOP_ITEM_CONTINUATION_HANDLER)
+        .await().indefinitely();
+
+    verify(payloadCodec, never()).encode(any());
+    verify(executionStateStore).markSucceeded(
+        eq("tenant-1"),
+        eq("exec-terminal-pass-through"),
+        eq(0L),
+        eq("exec-terminal-pass-through:1:0"),
+        eq(List.of("out-1", "out-2")),
+        anyLong());
+  }
+
+  @Test
   void awaitSuspensionImportsMarksWaitingAndReleasesCompletedWork() {
     ExecutionRecord<Object, Object> claimed = record("exec-await", ExecutionResultShape.MATERIALIZED_MULTI);
     ExecutionRecord<Object, Object> waiting = withStatus(claimed, ExecutionStatus.WAITING_EXTERNAL, 1L);
@@ -378,6 +414,13 @@ class QueueAsyncSegmentPipelineTest {
   private QueueAsyncSegmentPipeline pipeline(
       TransitionWorkerExecutor executor,
       ObjectPublishCompletionService publishCompletionService) {
+    return pipeline(executor, publishCompletionService, () -> 1);
+  }
+
+  private QueueAsyncSegmentPipeline pipeline(
+      TransitionWorkerExecutor executor,
+      ObjectPublishCompletionService publishCompletionService,
+      IntSupplier pipelineStepCount) {
     return new QueueAsyncSegmentPipeline(
         orchestratorConfig,
         executionStateStore,
@@ -388,6 +431,7 @@ class QueueAsyncSegmentPipelineTest {
         () -> payloadCodec,
         () -> segmentBoundaryLedger,
         () -> Duration.ofMillis(25),
+        pipelineStepCount,
         new SegmentCommitEffects(
             executionStateStore,
             workDispatcher,
@@ -404,6 +448,39 @@ class QueueAsyncSegmentPipelineTest {
             ignored -> {
             }),
         "worker-test");
+  }
+
+  private static ExecutionRecord<Object, Object> withCurrentStep(
+      ExecutionRecord<Object, Object> source,
+      int currentStepIndex,
+      Object inputPayload) {
+    return new ExecutionRecord<>(
+        source.tenantId(),
+        source.executionId(),
+        source.executionKey(),
+        source.pipelineId(),
+        source.contractVersion(),
+        source.releaseVersion(),
+        source.resultShape(),
+        source.status(),
+        source.version(),
+        currentStepIndex,
+        source.attempt(),
+        source.leaseOwner(),
+        source.leaseExpiresEpochMs(),
+        source.nextDueEpochMs(),
+        source.lastTransitionKey(),
+        inputPayload,
+        source.awaitUnitId(),
+        source.resultPayload(),
+        source.errorCode(),
+        source.errorMessage(),
+        source.createdAtEpochMs(),
+        source.updatedAtEpochMs(),
+        source.ttlEpochS(),
+        source.firstCircuitDeferredAtEpochMs(),
+        source.circuitDeferralCount(),
+        source.circuitIdentity());
   }
 
   private static ExecutionRecord<Object, Object> record(String executionId, ExecutionResultShape resultShape) {

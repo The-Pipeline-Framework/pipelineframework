@@ -295,6 +295,42 @@ sequenceDiagram
 | restart after child completion or parent release | reconstruct from the await unit, interactions, child executions, and parent record | no worker-local state is needed |
 | terminal parent path | release capacity, claims, interactions, continuation facts, and child work | no orphaned pending state |
 
+## Terminal Materialization Boundary
+
+An itemized suffix can leave the final business step with a materialized terminal value. Queue
+async represents the required terminal commit as a synthetic cursor whose `currentStepIndex`
+equals the generated pipeline step count. That cursor is a coordinator boundary, not another
+business step: it must publish and commit the already materialized canonical value without
+encoding it for a remote transition-worker invocation.
+
+This distinction matters under burst load. Sending a 1,000-item terminal result through a
+no-op worker call adds a large, competing transport operation after all business work is done.
+It can delay publication even though the durable execution is otherwise ready to finish. The
+coordinator instead retains the materialized value, performs the normal terminal publication,
+and commits success.
+
+```mermaid
+sequenceDiagram
+    participant Queue as QueueAsync segment pipeline
+    participant Order as Generated pipeline order
+    participant Store as ExecutionStateStore
+    participant Publish as Terminal publisher
+    participant Worker as Remote transition worker
+
+    Queue->>Store: claim cursor(stepIndex = stepCount)
+    Queue->>Order: read generated step count
+    Order-->>Queue: terminal cursor confirmed
+    Note over Queue,Worker: No payload encoding or remote worker invocation
+    Queue->>Store: retain coordinator materialized input
+    Queue->>Publish: publish canonical terminal value
+    Publish-->>Queue: publication complete
+    Queue->>Store: mark execution SUCCEEDED
+```
+
+The ordinary worker path still applies while `currentStepIndex` names a generated business step.
+Only the exact terminal cursor is coordinator-owned; it is not a shortcut around business
+execution, await admission, persistence, or terminal publication.
+
 ## Aggregate Unit
 
 `ONE_TO_MANY`, `MANY_TO_ONE`, and `MANY_TO_MANY` are aggregate interaction units. The runtime materializes the relevant side of the boundary so replay has one stable unit to restart.
