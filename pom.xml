@@ -84,6 +84,7 @@
         <module>examples/csv-payments</module>
         <module>examples/search</module>
         <module>examples/stdio-object-demo</module>
+        <module>examples/local-command-proof</module>
         <!-- Plugins -->
         <module>plugins/foundational/persistence</module>
         <module>plugins/foundational/cache</module>
