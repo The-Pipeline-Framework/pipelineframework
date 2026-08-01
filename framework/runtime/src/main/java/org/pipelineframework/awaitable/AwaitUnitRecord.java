@@ -94,6 +94,10 @@ public record AwaitUnitRecord(
         return completedContinuationItemCount() > 0;
     }
 
+    public boolean hasContinuationCompletionFact(int itemIndex) {
+        return completedItemKeys.contains(continuationCompletionKey(itemIndex));
+    }
+
     public static String continuationCompletionKey(int itemIndex) {
         if (itemIndex < 0) {
             throw new IllegalArgumentException("itemIndex must not be negative");

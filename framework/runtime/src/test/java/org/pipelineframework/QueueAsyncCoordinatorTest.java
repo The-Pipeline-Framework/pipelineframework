@@ -1757,9 +1757,16 @@ class QueueAsyncCoordinatorTest {
                 now)
             .await().indefinitely();
         AwaitUnitRecord unit = awaitUnit("unit-1", AwaitUnitStatus.COMPLETED, 2, 2, true, null);
-        when(awaitCoordinator.getUnit("tenant-1", unit.unitId())).thenReturn(Uni.createFrom().item(unit));
+        AtomicReference<AwaitUnitRecord> durableUnit = new AtomicReference<>(unit);
+        when(awaitCoordinator.getUnit("tenant-1", unit.unitId()))
+            .thenAnswer(ignored -> Uni.createFrom().item(durableUnit.get()));
         when(awaitCoordinator.recordItemContinuationCompleted(any(), any(), any(Integer.class), any(Long.class)))
-            .thenReturn(Uni.createFrom().item(unit));
+            .thenAnswer(invocation -> {
+                AwaitUnitRecord updated = withContinuationFact(
+                    durableUnit.get(), invocation.getArgument(2, Integer.class));
+                durableUnit.set(updated);
+                return Uni.createFrom().item(updated);
+            });
 
         coordinator.recordAwaitItemContinuation(
                 itemAwaitRecord(parent.record().executionId(), 1, AwaitInteractionStatus.COMPLETED, "second"),
@@ -2138,11 +2145,23 @@ class QueueAsyncCoordinatorTest {
             primaryInteractionId,
             expectedItemCount,
             completedItemCount,
-            java.util.Set.of(),
+            primaryInteractionId != null || completedItemCount == 0
+                ? java.util.Set.of()
+                : completedItemCount == 1 ? java.util.Set.of("item:0") : java.util.Set.of("item:0", "item:1"),
             dispatchComplete,
             1L,
             1L,
             99999999L);
+    }
+
+    private AwaitUnitRecord withContinuationFact(AwaitUnitRecord unit, int itemIndex) {
+        java.util.Set<String> completedItemKeys = new java.util.HashSet<>(unit.completedItemKeys());
+        completedItemKeys.add(AwaitUnitRecord.continuationCompletionKey(itemIndex));
+        return new AwaitUnitRecord(
+            unit.tenantId(), unit.unitId(), unit.executionId(), unit.stepId(), unit.stepIndex(),
+            unit.cardinality(), unit.version() + 1, unit.status(), unit.primaryInteractionId(),
+            unit.expectedItemCount(), unit.completedItemCount(), completedItemKeys, unit.dispatchComplete(),
+            unit.createdAtEpochMs(), unit.updatedAtEpochMs(), unit.ttlEpochS());
     }
 
     private record Decision(String value) {

@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Message;
@@ -106,6 +107,55 @@ class DynamoExecutionStateStoreTest {
         assertTrue(resolved.stream().allMatch(Optional::isEmpty));
         verify(client, times(10)).batchGetItem((BatchGetItemRequest) any());
         verify(client, never()).getItem((GetItemRequest) any());
+    }
+
+    @Test
+    void batchExecutionKeyLookupRetriesUnprocessedKeysAndPreservesRequestedOrder() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        List<String> siblingKeys = List.of("key-a", "key-b", "key-c");
+        long ttl = System.currentTimeMillis() / 1000 + 3600;
+        AtomicInteger calls = new AtomicInteger();
+        when(client.batchGetItem(any(BatchGetItemRequest.class))).thenAnswer(invocation -> {
+            BatchGetItemRequest request = invocation.getArgument(0, BatchGetItemRequest.class);
+            int call = calls.getAndIncrement();
+            if (request.requestItems().containsKey("tpf_execution_key")) {
+                List<Map<String, AttributeValue>> keys = request.requestItems().get("tpf_execution_key").keys();
+                if (call == 0) {
+                    return BatchGetItemResponse.builder()
+                        .responses(Map.of("tpf_execution_key", List.of(
+                            executionKeyItem(keys.get(1), "exec-2"),
+                            executionKeyItem(keys.get(0), "exec-1"))))
+                        .unprocessedKeys(Map.of("tpf_execution_key", software.amazon.awssdk.services.dynamodb.model.KeysAndAttributes.builder()
+                            .keys(keys.get(2))
+                            .consistentRead(true)
+                            .build()))
+                        .build();
+                }
+                return BatchGetItemResponse.builder()
+                    .responses(Map.of("tpf_execution_key", List.of(executionKeyItem(keys.get(0), "exec-3"))))
+                    .unprocessedKeys(Map.of())
+                    .build();
+            }
+            return BatchGetItemResponse.builder()
+                .responses(Map.of("tpf_execution", List.of(
+                    executionItem("tenant-a", "exec-3", "key-c", ttl),
+                    executionItem("tenant-a", "exec-1", "key-a", ttl),
+                    executionItem("tenant-a", "exec-2", "key-b", ttl))))
+                .unprocessedKeys(Map.of())
+                .build();
+        });
+
+        List<Optional<ExecutionRecord<Object, Object>>> resolved = store
+            .getExecutionsByKey("tenant-a", siblingKeys)
+            .await().indefinitely();
+
+        assertEquals(List.of("exec-1", "exec-2", "exec-3"), resolved.stream()
+            .map(optional -> optional.orElseThrow().executionId())
+            .toList());
+        assertEquals(3, calls.get());
+        verify(client, never()).getItem(any(GetItemRequest.class));
     }
 
     @Test
@@ -272,6 +322,15 @@ class DynamoExecutionStateStoreTest {
         long ttl
     ) {
         return executionItem(tenantId, executionId, executionKey, ttl, ExecutionStatus.QUEUED);
+    }
+
+    private static Map<String, AttributeValue> executionKeyItem(
+        Map<String, AttributeValue> key,
+        String executionId
+    ) {
+        return Map.of(
+            "tenant_execution_key", key.get("tenant_execution_key"),
+            "execution_id", AttributeValue.builder().s(executionId).build());
     }
 
     private static Map<String, AttributeValue> executionItem(

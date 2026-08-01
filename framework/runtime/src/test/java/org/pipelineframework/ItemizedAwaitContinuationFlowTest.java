@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.AfterEach;
@@ -139,9 +140,15 @@ class ItemizedAwaitContinuationFlowTest {
             now)
         .await().indefinitely();
     AwaitUnitRecord unit = awaitUnit(parent.record().executionId(), AwaitUnitStatus.COMPLETED, 2, 2, true);
-    when(awaitCoordinator.getUnit("tenant-1", unit.unitId())).thenReturn(Uni.createFrom().item(unit));
+    AtomicReference<AwaitUnitRecord> durableUnit = new AtomicReference<>(unit);
+    when(awaitCoordinator.getUnit("tenant-1", unit.unitId()))
+        .thenAnswer(ignored -> Uni.createFrom().item(durableUnit.get()));
     when(awaitCoordinator.recordItemContinuationCompleted(any(), eq(unit.unitId()), any(Integer.class), any(Long.class)))
-        .thenReturn(Uni.createFrom().item(unit));
+        .thenAnswer(invocation -> {
+          AwaitUnitRecord updated = withContinuationFact(durableUnit.get(), invocation.getArgument(2, Integer.class));
+          durableUnit.set(updated);
+          return Uni.createFrom().item(updated);
+        });
 
     flow.captureOutput(
             itemAwaitRecord(parent.record().executionId(), 1, AwaitInteractionStatus.COMPLETED, "second"),
@@ -203,9 +210,15 @@ class ItemizedAwaitContinuationFlowTest {
     ExecutionRecord<Object, Object> waitingParent = store.getExecution("tenant-1", parent.record().executionId())
         .await().indefinitely().orElseThrow();
     AwaitUnitRecord unit = awaitUnit(waitingParent.executionId(), AwaitUnitStatus.COMPLETED, 2, 2, true);
-    when(awaitCoordinator.getUnit("tenant-1", unit.unitId())).thenReturn(Uni.createFrom().item(unit));
+    AtomicReference<AwaitUnitRecord> durableUnit = new AtomicReference<>(unit);
+    when(awaitCoordinator.getUnit("tenant-1", unit.unitId()))
+        .thenAnswer(ignored -> Uni.createFrom().item(durableUnit.get()));
     when(awaitCoordinator.recordItemContinuationCompleted(any(), eq(unit.unitId()), any(Integer.class), any(Long.class)))
-        .thenReturn(Uni.createFrom().item(unit));
+        .thenAnswer(invocation -> {
+          AwaitUnitRecord updated = withContinuationFact(durableUnit.get(), invocation.getArgument(2, Integer.class));
+          durableUnit.set(updated);
+          return Uni.createFrom().item(updated);
+        });
 
     // Item zero was completed by a previous worker. A restarted worker has no local claim for it.
     CreateExecutionResult completedChild = store.createOrGetExecution(new ExecutionCreateCommand(
@@ -242,6 +255,7 @@ class ItemizedAwaitContinuationFlowTest {
     ExecutionInputSnapshot snapshot = assertInstanceOf(ExecutionInputSnapshot.class, resumed.inputPayload());
     assertEquals(List.of("out-0", "out-1"), snapshot.payload());
     verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-1", waitingParent.executionId()));
+    assertEquals(2, durableUnit.get().completedContinuationItemCount());
   }
 
   @Test
@@ -357,6 +371,28 @@ class ItemizedAwaitContinuationFlowTest {
         1L,
         2L,
         999_999L);
+  }
+
+  private static AwaitUnitRecord withContinuationFact(AwaitUnitRecord unit, int itemIndex) {
+    Set<String> completedItemKeys = new java.util.HashSet<>(unit.completedItemKeys());
+    completedItemKeys.add(AwaitUnitRecord.continuationCompletionKey(itemIndex));
+    return new AwaitUnitRecord(
+        unit.tenantId(),
+        unit.unitId(),
+        unit.executionId(),
+        unit.stepId(),
+        unit.stepIndex(),
+        unit.cardinality(),
+        unit.version() + 1,
+        unit.status(),
+        unit.primaryInteractionId(),
+        unit.expectedItemCount(),
+        unit.completedItemCount(),
+        completedItemKeys,
+        unit.dispatchComplete(),
+        unit.createdAtEpochMs(),
+        unit.updatedAtEpochMs(),
+        unit.ttlEpochS());
   }
 
   private static ExecutionRecord<Object, Object> record(

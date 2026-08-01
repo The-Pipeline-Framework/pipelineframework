@@ -153,28 +153,88 @@ class ItemizedAwaitContinuationFlow {
     }
     return awaitCoordinator.getUnit(parent.tenantId(), unit.unitId())
         .onItem().transformToUni(currentUnit -> {
-          if (!allItemContinuationsDurablyCompleted(currentUnit)) {
+          if (!allExternalItemCompletionsDurablyCompleted(currentUnit)) {
             return Uni.createFrom().voidItem();
           }
-          return executionStateStore.getExecutionsByKey(
-              parent.tenantId(),
-              childExecutionKeys(parent, currentUnit))
-              .onItem().transformToUni(children -> {
-          AwaitContinuationPlan plan = planner.releaseItemizedParent(parent, currentUnit, aggregateStepIndex, children);
-          if (plan instanceof AwaitContinuationPlan.ReleaseItemizedParent release) {
-            return releaseParent(release.release(), nowEpochMs);
+          if (!currentUnit.hasContinuationCompletionFacts()
+              || allItemContinuationsDurablyCompleted(currentUnit)) {
+            return releaseParentFromDurableChildren(parent, currentUnit, aggregateStepIndex, nowEpochMs);
           }
-          return Uni.createFrom().voidItem();
-              });
+          if (!claims.claimReconciliation(parent, currentUnit)) {
+            return Uni.createFrom().voidItem();
+          }
+          return reconcileMissingContinuationFacts(parent, currentUnit, aggregateStepIndex, nowEpochMs)
+              .onTermination().invoke(() -> claims.releaseReconciliation(parent, currentUnit));
         });
   }
 
   private static boolean allItemContinuationsDurablyCompleted(AwaitUnitRecord unit) {
-    return unit.dispatchComplete()
+    return allExternalItemCompletionsDurablyCompleted(unit)
+        && unit.hasContinuationCompletionFacts()
+        && unit.completedContinuationItemCount() >= unit.expectedItemCount();
+  }
+
+  private static boolean allExternalItemCompletionsDurablyCompleted(AwaitUnitRecord unit) {
+    return unit != null
+        && unit.dispatchComplete()
         && unit.expectedItemCount() != null
-        && unit.completedItemCount() >= unit.expectedItemCount()
-        && (!unit.hasContinuationCompletionFacts()
-            || unit.completedContinuationItemCount() >= unit.expectedItemCount());
+        && unit.completedItemCount() >= unit.expectedItemCount();
+  }
+
+  private Uni<Void> reconcileMissingContinuationFacts(
+      ExecutionRecord<Object, Object> parent,
+      AwaitUnitRecord unit,
+      int aggregateStepIndex,
+      long nowEpochMs) {
+    return executionStateStore.getExecutionsByKey(parent.tenantId(), childExecutionKeys(parent, unit))
+        .onItem().transformToUni(children -> recordMissingContinuationFacts(
+            parent, unit, children, 0, nowEpochMs)
+            .onItem().transformToUni(reconciled -> allItemContinuationsDurablyCompleted(reconciled)
+                ? releaseParentFromChildren(parent, reconciled, aggregateStepIndex, children, nowEpochMs)
+                : Uni.createFrom().voidItem()));
+  }
+
+  private Uni<AwaitUnitRecord> recordMissingContinuationFacts(
+      ExecutionRecord<Object, Object> parent,
+      AwaitUnitRecord unit,
+      List<Optional<ExecutionRecord<Object, Object>>> children,
+      int itemIndex,
+      long nowEpochMs) {
+    if (itemIndex >= children.size()) {
+      return Uni.createFrom().item(unit);
+    }
+    Optional<ExecutionRecord<Object, Object>> child = children.get(itemIndex);
+    if (child.isPresent() && child.get().status() == ExecutionStatus.SUCCEEDED
+        && !unit.hasContinuationCompletionFact(itemIndex)) {
+      return awaitCoordinator.recordItemContinuationCompleted(
+              parent.tenantId(), unit.unitId(), itemIndex, nowEpochMs)
+          .onItem().transformToUni(updated -> recordMissingContinuationFacts(
+              parent, updated, children, itemIndex + 1, nowEpochMs));
+    }
+    return recordMissingContinuationFacts(parent, unit, children, itemIndex + 1, nowEpochMs);
+  }
+
+  private Uni<Void> releaseParentFromDurableChildren(
+      ExecutionRecord<Object, Object> parent,
+      AwaitUnitRecord unit,
+      int aggregateStepIndex,
+      long nowEpochMs) {
+    return executionStateStore.getExecutionsByKey(parent.tenantId(), childExecutionKeys(parent, unit))
+        .onItem().transformToUni(children -> releaseParentFromChildren(
+            parent, unit, aggregateStepIndex, children, nowEpochMs));
+  }
+
+  private Uni<Void> releaseParentFromChildren(
+      ExecutionRecord<Object, Object> parent,
+      AwaitUnitRecord unit,
+      int aggregateStepIndex,
+      List<Optional<ExecutionRecord<Object, Object>>> children,
+      long nowEpochMs) {
+    AwaitContinuationPlan plan = planner.releaseItemizedParent(parent, unit, aggregateStepIndex, children);
+    if (plan instanceof AwaitContinuationPlan.ReleaseItemizedParent release) {
+      return releaseParent(release.release(), nowEpochMs);
+    }
+    return Uni.createFrom().voidItem();
   }
 
   private static List<String> childExecutionKeys(
@@ -374,8 +434,7 @@ class ItemizedAwaitContinuationFlow {
     return executionStateStore.getExecutionByKey(plan.parent().tenantId(), child.executionKey())
         .onItem().transformToUni(current -> {
           if (current.isPresent() && current.get().status() == ExecutionStatus.SUCCEEDED) {
-            return recordItemContinuationSegment(plan, nowEpochMs)
-                .chain(() -> releaseParentIfReady(plan.parent(), plan.unit(), plan.aggregateStepIndex(), nowEpochMs));
+            return recordItemContinuationAndRelease(plan, nowEpochMs);
           }
           return Uni.createFrom().failure(new IllegalStateException(
               "Await item continuation child success was not admitted and child is not already SUCCEEDED: "

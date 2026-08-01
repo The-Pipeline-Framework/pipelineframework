@@ -465,6 +465,9 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         Map<String, KeysAndAttributes> remaining = requestItems;
         Map<String, List<Map<String, AttributeValue>>> responses = new HashMap<>();
         for (int attempt = 0; !remaining.isEmpty() && attempt < 8; attempt++) {
+            if (attempt > 0) {
+                sleepBeforeBatchRetry(attempt);
+            }
             BatchGetItemResponse response = dynamoClient().batchGetItem(BatchGetItemRequest.builder()
                 .requestItems(remaining)
                 .build());
@@ -478,6 +481,17 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
                 + remaining.keySet());
         }
         return responses;
+    }
+
+    private static void sleepBeforeBatchRetry(int retryNumber) {
+        long baseDelayMs = 100L << Math.min(retryNumber - 1, 5);
+        long delayMs = baseDelayMs + java.util.concurrent.ThreadLocalRandom.current().nextLong(baseDelayMs + 1);
+        try {
+            Thread.sleep(delayMs);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while retrying Dynamo batch read", interrupted);
+        }
     }
 
     private static <T> List<List<T>> batches(List<T> values) {

@@ -81,9 +81,19 @@ class AwaitContinuationsTest {
             any(), any(), any(Integer.class), any(Long.class)))
         .thenAnswer(invocation -> {
           AwaitUnitRecord unit = durableUnitsById.get(invocation.getArgument(1, String.class));
-          return unit == null
-              ? Uni.createFrom().failure(new IllegalStateException("No durable await unit registered for test"))
-              : Uni.createFrom().item(unit);
+          if (unit == null) {
+            return Uni.createFrom().failure(new IllegalStateException("No durable await unit registered for test"));
+          }
+          int itemIndex = invocation.getArgument(2, Integer.class);
+          java.util.Set<String> completedItemKeys = new java.util.HashSet<>(unit.completedItemKeys());
+          completedItemKeys.add(AwaitUnitRecord.continuationCompletionKey(itemIndex));
+          AwaitUnitRecord updated = new AwaitUnitRecord(
+              unit.tenantId(), unit.unitId(), unit.executionId(), unit.stepId(), unit.stepIndex(),
+              unit.cardinality(), unit.version() + 1, unit.status(), unit.primaryInteractionId(),
+              unit.expectedItemCount(), unit.completedItemCount(), completedItemKeys, unit.dispatchComplete(),
+              unit.createdAtEpochMs(), unit.updatedAtEpochMs(), unit.ttlEpochS());
+          durableUnitsById.put(updated.unitId(), updated);
+          return Uni.createFrom().item(updated);
         });
     continuations = continuations(executionStateStore, workDispatcher, awaitCoordinator);
   }
