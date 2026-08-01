@@ -40,6 +40,58 @@ class InMemoryAwaitUnitStoreTest {
     }
 
     @Test
+    void continuationCompletionFactsAreIdempotentAndDoNotChangeAdmittedCount() {
+        InMemoryAwaitUnitStore store = new InMemoryAwaitUnitStore();
+        store.createOrGet(createCommand()).await().indefinitely();
+        store.recordItemCompleted("tenant", "unit-1", "item:0", 11_000L).await().indefinitely();
+        store.recordItemCompleted("tenant", "unit-1", "item:1", 12_000L).await().indefinitely();
+        store.markDispatchComplete("tenant", "unit-1", 2, 13_000L).await().indefinitely();
+
+        var first = store.recordItemContinuationCompleted(
+            "tenant", "unit-1", AwaitUnitRecord.continuationCompletionKey(0), 14_000L).await().indefinitely().orElseThrow();
+        var duplicate = store.recordItemContinuationCompleted(
+            "tenant", "unit-1", AwaitUnitRecord.continuationCompletionKey(0), 15_000L).await().indefinitely().orElseThrow();
+        var completed = store.recordItemContinuationCompleted(
+            "tenant", "unit-1", AwaitUnitRecord.continuationCompletionKey(1), 16_000L).await().indefinitely().orElseThrow();
+
+        assertEquals(2, first.completedItemCount());
+        assertEquals(1, first.completedContinuationItemCount());
+        assertEquals(1, duplicate.completedContinuationItemCount());
+        assertEquals(2, completed.completedItemCount());
+        assertEquals(2, completed.completedContinuationItemCount());
+    }
+
+    @Test
+    void rejectsBlankContinuationCompletionKey() {
+        InMemoryAwaitUnitStore store = new InMemoryAwaitUnitStore();
+        store.createOrGet(createCommand()).await().indefinitely();
+
+        assertThrows(IllegalArgumentException.class, () -> store.recordItemContinuationCompleted(
+            "tenant", "unit-1", null, 14_000L).await().indefinitely());
+        assertThrows(IllegalArgumentException.class, () -> store.recordItemContinuationCompleted(
+            "tenant", "unit-1", "", 14_000L).await().indefinitely());
+        assertThrows(IllegalArgumentException.class, () -> store.recordItemContinuationCompleted(
+            "tenant", "unit-1", "  ", 14_000L).await().indefinitely());
+    }
+
+    @Test
+    void terminalNonCompletedUnitIgnoresContinuationCompletionFact() {
+        InMemoryAwaitUnitStore store = new InMemoryAwaitUnitStore();
+        AwaitUnitRecord failed = new AwaitUnitRecord(
+            "tenant", "unit-1", "execution-1", "AwaitPaymentProvider", 1, "ONE_TO_ONE", 1L,
+            AwaitUnitStatus.FAILED, null, 1, 1, java.util.Set.of("item:0"), true,
+            10_000L, 10_000L, 9_999_999_999L);
+        store.importRecord(failed).await().indefinitely();
+
+        AwaitUnitRecord unchanged = store.recordItemContinuationCompleted(
+            "tenant", "unit-1", AwaitUnitRecord.continuationCompletionKey(0), 14_000L)
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(failed, unchanged);
+        assertEquals(0, unchanged.completedContinuationItemCount());
+    }
+
+    @Test
     void importedCompletedItemKeysPreserveDuplicateProtection() {
         InMemoryAwaitUnitStore store = new InMemoryAwaitUnitStore();
         store.importRecord(new AwaitUnitRecord(

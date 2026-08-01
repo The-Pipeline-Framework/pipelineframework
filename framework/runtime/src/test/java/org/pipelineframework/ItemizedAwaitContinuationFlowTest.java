@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.AfterEach;
@@ -40,6 +41,7 @@ import org.pipelineframework.orchestrator.controlplane.InMemoryControlPlaneJourn
 import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -99,10 +101,26 @@ class ItemizedAwaitContinuationFlowTest {
   }
 
   @Test
+  void incompleteDurableUnitDoesNotReadSiblingsFromWorkerLocalCompletion() {
+    AwaitUnitRecord callerSnapshot = awaitUnit("exec-1", AwaitUnitStatus.COMPLETED, 2, 2, true);
+    AwaitUnitRecord durableUnit = awaitUnit("exec-1", AwaitUnitStatus.WAITING_EXTERNAL, 2, 1, true);
+    ExecutionRecord<Object, Object> parent = record("exec-1", "key-1", ExecutionStatus.WAITING_EXTERNAL, 7L);
+    when(awaitCoordinator.getUnit("tenant-1", "unit-1")).thenReturn(Uni.createFrom().item(durableUnit));
+
+    flow(executionStateStore, workDispatcher, awaitCoordinator)
+        .releaseParentIfReady(parent, callerSnapshot, 4, 1234L)
+        .await().indefinitely();
+
+    verify(executionStateStore, never()).getExecutionsByKey(any(), any());
+    verify(workDispatcher, never()).enqueueNow(any());
+  }
+
+  @Test
   void childOutputsReleaseParentOnceWithOrderedOutput() {
     InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
     when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
-    ItemizedAwaitContinuationFlow flow = flow(store, workDispatcher, awaitCoordinator);
+    ItemContinuationClaims claims = new ItemContinuationClaims();
+    ItemizedAwaitContinuationFlow flow = flow(store, workDispatcher, awaitCoordinator, claims);
     long now = 1234L;
     CreateExecutionResult parent = store.createOrGetExecution(new ExecutionCreateCommand(
             "tenant-1",
@@ -122,6 +140,15 @@ class ItemizedAwaitContinuationFlowTest {
             now)
         .await().indefinitely();
     AwaitUnitRecord unit = awaitUnit(parent.record().executionId(), AwaitUnitStatus.COMPLETED, 2, 2, true);
+    AtomicReference<AwaitUnitRecord> durableUnit = new AtomicReference<>(unit);
+    when(awaitCoordinator.getUnit("tenant-1", unit.unitId()))
+        .thenAnswer(ignored -> Uni.createFrom().item(durableUnit.get()));
+    when(awaitCoordinator.recordItemContinuationCompleted(any(), eq(unit.unitId()), any(Integer.class), any(Long.class)))
+        .thenAnswer(invocation -> {
+          AwaitUnitRecord updated = withContinuationFact(durableUnit.get(), invocation.getArgument(2, Integer.class));
+          durableUnit.set(updated);
+          return Uni.createFrom().item(updated);
+        });
 
     flow.captureOutput(
             itemAwaitRecord(parent.record().executionId(), 1, AwaitInteractionStatus.COMPLETED, "second"),
@@ -150,11 +177,128 @@ class ItemizedAwaitContinuationFlowTest {
     assertNull(resumed.awaitUnitId());
     ExecutionInputSnapshot snapshot = assertInstanceOf(ExecutionInputSnapshot.class, resumed.inputPayload());
     assertEquals(List.of("out-0", "out-1"), snapshot.payload());
+    assertFalse(claims.hasPendingClaims(resumed, unit));
     verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-1", parent.record().executionId()));
     ControlPlaneProjection projection = journal.projection("tenant-1", parent.record().executionId())
         .await().indefinitely();
     assertTrue(projection.factKeys().contains("continuation-segment-created:"
         + parent.record().executionId() + ":segment:4"));
+  }
+
+  @Test
+  void childOutputRefreshesItsVersionAfterConcurrentChildMutation() {
+    ExecutionRecord<Object, Object> parent = record("exec-1", "parent-key", ExecutionStatus.WAITING_EXTERNAL, 7L);
+    AwaitUnitRecord unit = awaitUnit(parent.executionId(), AwaitUnitStatus.COMPLETED, 1, 1, true);
+    ExecutionRecord<Object, Object> staleChild = record(
+        "child-1", ItemContinuationKey.from(parent, unit, 0).childExecutionKey(), ExecutionStatus.QUEUED, 0L);
+    ExecutionRecord<Object, Object> refreshedChild = record(
+        "child-1", staleChild.executionKey(), ExecutionStatus.RUNNING, 1L);
+    ExecutionRecord<Object, Object> succeededChild = record(
+        "child-1", staleChild.executionKey(), ExecutionStatus.SUCCEEDED, 2L);
+    AwaitUnitRecord incompleteUnit = awaitUnit(parent.executionId(), AwaitUnitStatus.WAITING_EXTERNAL, 1, 0, true);
+    when(executionStateStore.getExecution("tenant-1", parent.executionId()))
+        .thenReturn(Uni.createFrom().item(Optional.of(parent)));
+    when(executionStateStore.getExecutionByKey("tenant-1", staleChild.executionKey()))
+        .thenReturn(Uni.createFrom().item(Optional.of(staleChild)))
+        .thenReturn(Uni.createFrom().item(Optional.of(refreshedChild)));
+    when(executionStateStore.createOrGetExecution(any(ExecutionCreateCommand.class)))
+        .thenReturn(Uni.createFrom().item(new CreateExecutionResult(staleChild, true)));
+    when(executionStateStore.markSucceeded(
+        eq("tenant-1"), eq("child-1"), any(Long.class), any(), any(), any(Long.class)))
+        .thenReturn(Uni.createFrom().item(Optional.empty()))
+        .thenReturn(Uni.createFrom().item(Optional.of(succeededChild)));
+    when(awaitCoordinator.recordItemContinuationCompleted(any(), eq(unit.unitId()), eq(0), any(Long.class)))
+        .thenReturn(Uni.createFrom().item(unit));
+    when(awaitCoordinator.getUnit("tenant-1", unit.unitId()))
+        .thenReturn(Uni.createFrom().item(incompleteUnit));
+
+    flow(executionStateStore, workDispatcher, awaitCoordinator)
+        .captureOutput(
+            itemAwaitRecord(parent.executionId(), 0, AwaitInteractionStatus.COMPLETED, "item"),
+            unit,
+            4,
+            new ExecutionInputSnapshot(ExecutionInputShape.UNI, "normalized"),
+            List.of("out-0"),
+            1234L)
+        .await().indefinitely();
+
+    verify(executionStateStore).markSucceeded(
+        "tenant-1", "child-1", 0L, "await-item-continuation:" + unit.unitId() + ":0", List.of("out-0"), 1234L);
+    verify(executionStateStore).markSucceeded(
+        "tenant-1", "child-1", 1L, "await-item-continuation:" + unit.unitId() + ":0", List.of("out-0"), 1234L);
+  }
+
+  @Test
+  void durableChildCompletionReleasesParentAfterAWorkerRestart() {
+    InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+    when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
+    long now = 1234L;
+    CreateExecutionResult parent = store.createOrGetExecution(new ExecutionCreateCommand(
+            "tenant-1",
+            "parent-key",
+            new ExecutionInputSnapshot(ExecutionInputShape.UNI, "input"),
+            ExecutionResultShape.MATERIALIZED_MULTI,
+            now,
+            9_999_999_999L))
+        .await().indefinitely();
+    store.markWaitingExternal(
+            "tenant-1",
+            parent.record().executionId(),
+            parent.record().version(),
+            "transition",
+            "unit-1",
+            2,
+            now)
+        .await().indefinitely();
+    ExecutionRecord<Object, Object> waitingParent = store.getExecution("tenant-1", parent.record().executionId())
+        .await().indefinitely().orElseThrow();
+    AwaitUnitRecord unit = awaitUnit(waitingParent.executionId(), AwaitUnitStatus.COMPLETED, 2, 2, true);
+    AtomicReference<AwaitUnitRecord> durableUnit = new AtomicReference<>(unit);
+    when(awaitCoordinator.getUnit("tenant-1", unit.unitId()))
+        .thenAnswer(ignored -> Uni.createFrom().item(durableUnit.get()));
+    when(awaitCoordinator.recordItemContinuationCompleted(any(), eq(unit.unitId()), any(Integer.class), any(Long.class)))
+        .thenAnswer(invocation -> {
+          AwaitUnitRecord updated = withContinuationFact(durableUnit.get(), invocation.getArgument(2, Integer.class));
+          durableUnit.set(updated);
+          return Uni.createFrom().item(updated);
+        });
+
+    // Item zero was completed by a previous worker. A restarted worker has no local claim for it.
+    CreateExecutionResult completedChild = store.createOrGetExecution(new ExecutionCreateCommand(
+            "tenant-1",
+            ItemContinuationKey.from(waitingParent, unit, 0).childExecutionKey(),
+            new ExecutionInputSnapshot(ExecutionInputShape.UNI, "first-normalized"),
+            ExecutionResultShape.MATERIALIZED_MULTI,
+            now,
+            9_999_999_999L))
+        .await().indefinitely();
+    store.markSucceeded(
+            "tenant-1",
+            completedChild.record().executionId(),
+            completedChild.record().version(),
+            "previous-worker",
+            List.of("out-0"),
+            now)
+        .await().indefinitely();
+
+    ItemizedAwaitContinuationFlow restartedFlow = flow(store, workDispatcher, awaitCoordinator);
+    restartedFlow.captureOutput(
+            itemAwaitRecord(waitingParent.executionId(), 1, AwaitInteractionStatus.COMPLETED, "second"),
+            unit,
+            4,
+            new ExecutionInputSnapshot(ExecutionInputShape.UNI, "second-normalized"),
+            List.of("out-1"),
+            now)
+        .await().indefinitely();
+
+    ExecutionRecord<Object, Object> resumed = store.getExecution("tenant-1", waitingParent.executionId())
+        .await().indefinitely().orElseThrow();
+    assertEquals(ExecutionStatus.QUEUED, resumed.status());
+    assertEquals(4, resumed.currentStepIndex());
+    ExecutionInputSnapshot snapshot = assertInstanceOf(ExecutionInputSnapshot.class, resumed.inputPayload());
+    assertEquals(List.of("out-0", "out-1"), snapshot.payload());
+    verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-1", waitingParent.executionId()));
+    assertEquals(2, durableUnit.get().completedContinuationItemCount());
   }
 
   @Test
@@ -190,6 +334,14 @@ class ItemizedAwaitContinuationFlowTest {
       ExecutionStateStore stateStore,
       WorkDispatcher dispatcher,
       AwaitCoordinator coordinator) {
+    return flow(stateStore, dispatcher, coordinator, new ItemContinuationClaims());
+  }
+
+  private ItemizedAwaitContinuationFlow flow(
+      ExecutionStateStore stateStore,
+      WorkDispatcher dispatcher,
+      AwaitCoordinator coordinator,
+      ItemContinuationClaims claims) {
     AwaitContinuationPlanner planner = new AwaitContinuationPlanner();
     return new ItemizedAwaitContinuationFlow(
         stateStore,
@@ -202,7 +354,7 @@ class ItemizedAwaitContinuationFlowTest {
         ignored -> {
         },
         planner,
-        new ItemContinuationClaims());
+        claims);
   }
 
   private static AwaitInteractionRecord itemAwaitRecord(
@@ -262,6 +414,28 @@ class ItemizedAwaitContinuationFlowTest {
         1L,
         2L,
         999_999L);
+  }
+
+  private static AwaitUnitRecord withContinuationFact(AwaitUnitRecord unit, int itemIndex) {
+    Set<String> completedItemKeys = new java.util.HashSet<>(unit.completedItemKeys());
+    completedItemKeys.add(AwaitUnitRecord.continuationCompletionKey(itemIndex));
+    return new AwaitUnitRecord(
+        unit.tenantId(),
+        unit.unitId(),
+        unit.executionId(),
+        unit.stepId(),
+        unit.stepIndex(),
+        unit.cardinality(),
+        unit.version() + 1,
+        unit.status(),
+        unit.primaryInteractionId(),
+        unit.expectedItemCount(),
+        unit.completedItemCount(),
+        completedItemKeys,
+        unit.dispatchComplete(),
+        unit.createdAtEpochMs(),
+        unit.updatedAtEpochMs(),
+        unit.ttlEpochS());
   }
 
   private static ExecutionRecord<Object, Object> record(

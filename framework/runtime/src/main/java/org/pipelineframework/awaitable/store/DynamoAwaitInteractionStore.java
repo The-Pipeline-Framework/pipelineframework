@@ -590,7 +590,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             }
             throw new AwaitInteractionTerminalException("Await interaction timed out before completion");
         }
-        AwaitInteractionRecord completed = transitionStatus(
+        Optional<AwaitInteractionRecord> completed = transitionStatus(
             current.tenantId(),
             current.interactionId(),
             current.version(),
@@ -598,9 +598,19 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             command.responsePayload(),
             command.actor(),
             null,
-            command.nowEpochMs())
-            .orElseThrow(() -> new IllegalStateException("Await completion transition lost OCC race"));
-        return new AwaitCompletionResult(completed, false);
+            command.nowEpochMs());
+        if (completed.isPresent()) {
+            return new AwaitCompletionResult(completed.get(), false);
+        }
+        AwaitInteractionRecord refreshed = getBlocking(current.tenantId(), current.interactionId(), command.nowEpochMs())
+            .orElseThrow(() -> new IllegalStateException("Await completion transition lost OCC race and interaction disappeared"));
+        if (refreshed.status() == AwaitInteractionStatus.COMPLETED) {
+            return new AwaitCompletionResult(refreshed, true);
+        }
+        if (refreshed.status().terminal()) {
+            throw new AwaitInteractionTerminalException("Await interaction became terminal during completion: " + refreshed.status());
+        }
+        throw new IllegalStateException("Await completion transition lost OCC race");
     }
 
     private Optional<AwaitInteractionRecord> resolveForCompletion(AwaitCompletionCommand command) {

@@ -9,6 +9,7 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -31,9 +32,12 @@ import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.BatchGetItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.BatchGetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.KeysAndAttributes;
 import software.amazon.awssdk.services.dynamodb.model.Put;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
@@ -72,6 +76,9 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private static final String INPUT_PAYLOAD_REFERENCE = "input_payload_reference";
     private static final String INPUT_PAYLOAD_TYPE_ID = "input_payload_type_id";
     private static final String INPUT_PAYLOAD_ENCODING = "input_payload_encoding";
+    private static final int BATCH_GET_MAX_ATTEMPTS = 4;
+    private static final long BATCH_GET_RETRY_BUDGET_MS = 750L;
+    private static final long BATCH_GET_RETRY_INITIAL_DELAY_MS = 50L;
     private static final String AWAIT_UNIT_ID = "await_unit_id";
     private static final String RESULT_PAYLOAD_JSON = "result_payload_json";
     private static final String RESULT_PAYLOAD_REFERENCE = "result_payload_reference";
@@ -171,6 +178,15 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             tenantId,
             scopedExecutionKey(tenantId, executionKey),
             System.currentTimeMillis()));
+    }
+
+    @Override
+    public Uni<List<Optional<ExecutionRecord<Object, Object>>>> getExecutionsByKey(
+        String tenantId,
+        List<String> executionKeys
+    ) {
+        List<String> requestedKeys = List.copyOf(executionKeys);
+        return blocking(() -> getExecutionsByKeyBlocking(tenantId, requestedKeys, System.currentTimeMillis()));
     }
 
     @Override
@@ -386,6 +402,110 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
         deleteExpiredRecord(record);
         return Optional.empty();
+    }
+
+    private List<Optional<ExecutionRecord<Object, Object>>> getExecutionsByKeyBlocking(
+        String tenantId,
+        List<String> executionKeys,
+        long nowEpochMs
+    ) {
+        if (executionKeys.isEmpty()) {
+            return List.of();
+        }
+        Map<String, String> executionIdsByScopedKey = new HashMap<>();
+        List<String> uniqueExecutionKeys = List.copyOf(new LinkedHashSet<>(executionKeys));
+        for (List<String> keyBatch : batches(uniqueExecutionKeys)) {
+            List<Map<String, AttributeValue>> keys = keyBatch.stream()
+                .map(key -> Map.of(TENANT_EXECUTION_KEY, avS(scopedExecutionKey(tenantId, key))))
+                .toList();
+            Map<String, List<Map<String, AttributeValue>>> responses = batchGet(
+                Map.of(executionKeyTable(), KeysAndAttributes.builder().keys(keys).consistentRead(true).build()));
+            for (Map<String, AttributeValue> item : responses.getOrDefault(executionKeyTable(), List.of())) {
+                String scopedKey = readString(item, TENANT_EXECUTION_KEY);
+                String executionId = readString(item, EXECUTION_ID);
+                if (scopedKey != null && executionId != null && !executionId.isBlank()) {
+                    executionIdsByScopedKey.put(scopedKey, executionId);
+                }
+            }
+        }
+
+        Map<String, ExecutionRecord<Object, Object>> recordsByExecutionId = new HashMap<>();
+        List<String> uniqueExecutionIds = List.copyOf(new LinkedHashSet<>(executionIdsByScopedKey.values()));
+        for (List<String> idBatch : batches(uniqueExecutionIds)) {
+            List<Map<String, AttributeValue>> keys = idBatch.stream()
+                .map(executionId -> executionPrimaryKey(tenantId, executionId))
+                .toList();
+            Map<String, List<Map<String, AttributeValue>>> responses = batchGet(
+                Map.of(executionTable(), KeysAndAttributes.builder().keys(keys).consistentRead(true).build()));
+            for (Map<String, AttributeValue> item : responses.getOrDefault(executionTable(), List.of())) {
+                ExecutionRecord<Object, Object> record = toRecord(item);
+                if (isExpired(record, nowEpochMs)) {
+                    deleteExpiredRecord(record);
+                } else {
+                    recordsByExecutionId.put(record.executionId(), record);
+                }
+            }
+        }
+        executionIdsByScopedKey.forEach((scopedKey, executionId) -> {
+            if (!recordsByExecutionId.containsKey(executionId)) {
+                deleteExecutionKey(scopedKey);
+            }
+        });
+
+        List<Optional<ExecutionRecord<Object, Object>>> resolved = new ArrayList<>(executionKeys.size());
+        for (String executionKey : executionKeys) {
+            String executionId = executionIdsByScopedKey.get(scopedExecutionKey(tenantId, executionKey));
+            resolved.add(executionId == null
+                ? Optional.empty()
+                : Optional.ofNullable(recordsByExecutionId.get(executionId)));
+        }
+        return List.copyOf(resolved);
+    }
+
+    private Map<String, List<Map<String, AttributeValue>>> batchGet(
+        Map<String, KeysAndAttributes> requestItems
+    ) {
+        Map<String, KeysAndAttributes> remaining = requestItems;
+        Map<String, List<Map<String, AttributeValue>>> responses = new HashMap<>();
+        long remainingRetryDelayMs = BATCH_GET_RETRY_BUDGET_MS;
+        for (int attempt = 0; !remaining.isEmpty() && attempt < BATCH_GET_MAX_ATTEMPTS; attempt++) {
+            if (attempt > 0) {
+                remainingRetryDelayMs -= sleepBeforeBatchRetry(attempt, remainingRetryDelayMs);
+            }
+            BatchGetItemResponse response = dynamoClient().batchGetItem(BatchGetItemRequest.builder()
+                .requestItems(remaining)
+                .build());
+            response.responses().forEach((table, items) -> responses
+                .computeIfAbsent(table, ignored -> new ArrayList<>())
+                .addAll(items));
+            remaining = response.unprocessedKeys();
+        }
+        if (!remaining.isEmpty()) {
+            throw new IllegalStateException("Dynamo batch execution read left unprocessed keys for tables "
+                + remaining.keySet());
+        }
+        return responses;
+    }
+
+    private static long sleepBeforeBatchRetry(int retryNumber, long remainingRetryDelayMs) {
+        long baseDelayMs = BATCH_GET_RETRY_INITIAL_DELAY_MS << Math.min(retryNumber - 1, 2);
+        long requestedDelayMs = baseDelayMs + java.util.concurrent.ThreadLocalRandom.current().nextLong(baseDelayMs + 1);
+        long delayMs = Math.min(requestedDelayMs, remainingRetryDelayMs);
+        try {
+            Thread.sleep(delayMs);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while retrying Dynamo batch read", interrupted);
+        }
+        return delayMs;
+    }
+
+    private static <T> List<List<T>> batches(List<T> values) {
+        List<List<T>> batches = new ArrayList<>((values.size() + 99) / 100);
+        for (int start = 0; start < values.size(); start += 100) {
+            batches.add(values.subList(start, Math.min(start + 100, values.size())));
+        }
+        return List.copyOf(batches);
     }
 
     private Optional<ExecutionRecord<Object, Object>> claimLeaseBlocking(

@@ -16,7 +16,7 @@ import java.util.Set;
  * @param primaryInteractionId primary externally visible interaction identifier
  * @param expectedItemCount expected item count for multi-item units, when known
  * @param completedItemCount admitted completed item count
- * @param completedItemKeys idempotency keys for admitted item completions
+ * @param completedItemKeys idempotency keys for admitted item completions and durable item-continuation facts
  * @param dispatchComplete whether dispatch has finished for the unit
  * @param createdAtEpochMs creation time in epoch milliseconds
  * @param updatedAtEpochMs last update time in epoch milliseconds
@@ -40,6 +40,8 @@ public record AwaitUnitRecord(
     long updatedAtEpochMs,
     long ttlEpochS
 ) {
+    public static final String CONTINUATION_COMPLETION_KEY_PREFIX = "continuation:";
+
     public AwaitUnitRecord {
         if (tenantId == null || tenantId.isBlank()) {
             throw new IllegalArgumentException("tenantId must not be blank");
@@ -72,8 +74,34 @@ public record AwaitUnitRecord(
             throw new IllegalArgumentException("completedItemCount must not exceed expectedItemCount");
         }
         completedItemKeys = completedItemKeys == null ? Set.of() : Set.copyOf(completedItemKeys);
-        if (!completedItemKeys.isEmpty() && completedItemKeys.size() != completedItemCount) {
-            throw new IllegalArgumentException("completedItemKeys size must match completedItemCount");
+        long admittedCompletionKeyCount = completedItemKeys.stream()
+            .filter(key -> !key.startsWith(CONTINUATION_COMPLETION_KEY_PREFIX))
+            .count();
+        // Historical await-unit rows did not persist per-item completion keys. Keep
+        // those rows readable while validating every new row that carries keys.
+        if (!completedItemKeys.isEmpty() && admittedCompletionKeyCount != completedItemCount) {
+            throw new IllegalArgumentException("completedItemKeys must contain one non-continuation key per admitted item completion");
         }
+    }
+
+    public int completedContinuationItemCount() {
+        return (int) completedItemKeys.stream()
+            .filter(key -> key.startsWith(CONTINUATION_COMPLETION_KEY_PREFIX))
+            .count();
+    }
+
+    public boolean hasContinuationCompletionFacts() {
+        return completedContinuationItemCount() > 0;
+    }
+
+    public boolean hasContinuationCompletionFact(int itemIndex) {
+        return completedItemKeys.contains(continuationCompletionKey(itemIndex));
+    }
+
+    public static String continuationCompletionKey(int itemIndex) {
+        if (itemIndex < 0) {
+            throw new IllegalArgumentException("itemIndex must not be negative");
+        }
+        return CONTINUATION_COMPLETION_KEY_PREFIX + itemIndex;
     }
 }

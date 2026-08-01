@@ -290,6 +290,21 @@ public class AwaitCoordinator {
                 () -> new AwaitInteractionNotFoundException("No await unit matches id " + unitId)));
     }
 
+    public Uni<AwaitUnitRecord> recordItemContinuationCompleted(
+        String tenantId,
+        String unitId,
+        int itemIndex,
+        long nowEpochMs
+    ) {
+        return unitStore().recordItemContinuationCompleted(
+                tenantId,
+                unitId,
+                AwaitUnitRecord.continuationCompletionKey(itemIndex),
+                nowEpochMs)
+            .onItem().transform(optional -> optional.orElseThrow(
+                () -> new AwaitInteractionNotFoundException("No await unit matches id " + unitId)));
+    }
+
     public Uni<Object> loadResumePayload(String tenantId, String unitId) {
         return getUnit(tenantId, unitId).onItem().transformToUni(unit -> {
             if (unit.primaryInteractionId() != null) {

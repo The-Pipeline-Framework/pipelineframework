@@ -3,6 +3,7 @@ package org.pipelineframework;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
 import io.smallrye.mutiny.Uni;
@@ -15,12 +16,14 @@ import org.pipelineframework.orchestrator.ControlPlaneAdmissionPolicy;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionRequest;
 import org.pipelineframework.orchestrator.ControlPlaneTransitionAdmission;
 import org.pipelineframework.orchestrator.ExecutionRecord;
+import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.PipelineTransitionWorker;
 import org.pipelineframework.orchestrator.TransitionCommandEnvelope;
 import org.pipelineframework.orchestrator.TransitionPayloadCodec;
+import org.pipelineframework.orchestrator.TransitionResultEnvelope;
 import org.pipelineframework.orchestrator.TransitionWorkerExecutor;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
@@ -41,6 +44,7 @@ class QueueAsyncSegmentPipeline {
   private final Supplier<TransitionPayloadCodec> payloadCodec;
   private final Supplier<SegmentBoundaryLedger> segmentBoundaryLedger;
   private final Supplier<Duration> saturatedDelay;
+  private final IntSupplier pipelineStepCount;
   private final SegmentCommitEffects segmentCommitEffects;
   private final String queueWorkerId;
 
@@ -54,6 +58,7 @@ class QueueAsyncSegmentPipeline {
       Supplier<TransitionPayloadCodec> payloadCodec,
       Supplier<SegmentBoundaryLedger> segmentBoundaryLedger,
       Supplier<Duration> saturatedDelay,
+      IntSupplier pipelineStepCount,
       SegmentCommitEffects segmentCommitEffects,
       String queueWorkerId) {
     this.orchestratorConfig = Objects.requireNonNull(orchestratorConfig, "orchestratorConfig must not be null");
@@ -65,6 +70,7 @@ class QueueAsyncSegmentPipeline {
     this.payloadCodec = Objects.requireNonNull(payloadCodec, "payloadCodec must not be null");
     this.segmentBoundaryLedger = Objects.requireNonNull(segmentBoundaryLedger, "segmentBoundaryLedger must not be null");
     this.saturatedDelay = Objects.requireNonNull(saturatedDelay, "saturatedDelay must not be null");
+    this.pipelineStepCount = Objects.requireNonNull(pipelineStepCount, "pipelineStepCount must not be null");
     this.segmentCommitEffects = Objects.requireNonNull(segmentCommitEffects, "segmentCommitEffects must not be null");
     this.queueWorkerId = queueWorkerId == null || queueWorkerId.isBlank() ? "worker-local" : queueWorkerId;
   }
@@ -139,14 +145,32 @@ class QueueAsyncSegmentPipeline {
         record.awaitUnitId() == null ? "<none>" : record.awaitUnitId());
     return segmentBoundaryLedger.get()
         .recordSegmentAttemptStarted(record, segment.transitionKey(), claimedAtEpochMs)
-        .chain(() -> transitionCommand(segment))
-        .onItem().transformToUni(command -> transitionWorkerExecutor.execute(worker, command))
+        .chain(() -> executeTransition(segment, worker))
         .onItem().transform(result -> SegmentCommitPlan.from(segment, result, payloadCodec.get()))
         .onItem().transformToUni(plan -> segmentCommitEffects.commit(plan, itemContinuationHandler))
         .onFailure(AwaitThrowableSupport::containsAwaitSuspension)
         .recoverWithUni(failure -> suspendedPlan(segment, failure)
             .onItem().transformToUni(plan -> segmentCommitEffects.commit(plan, itemContinuationHandler)))
         .onFailure().recoverWithUni(failure -> segmentCommitEffects.fail(segment, failure));
+  }
+
+  private Uni<TransitionResultEnvelope> executeTransition(
+      ClaimedSegment segment,
+      PipelineTransitionWorker worker) {
+    if (isCoordinatorTerminalMaterialization(segment)) {
+      // The terminal cursor has no business step left to invoke. Keep its materialized input at
+      // the coordinator so SegmentCommitPlan can publish it without serializing a large result
+      // through an otherwise no-op remote worker call.
+      return Uni.createFrom().item(TransitionResultEnvelope.completedTerminalInputPassthrough());
+    }
+    return transitionCommand(segment)
+        .onItem().transformToUni(command -> transitionWorkerExecutor.execute(worker, command));
+  }
+
+  private boolean isCoordinatorTerminalMaterialization(ClaimedSegment segment) {
+    return segment.record().resultShape() == ExecutionResultShape.MATERIALIZED_MULTI
+        && !segment.resumesFromAwait()
+        && segment.record().currentStepIndex() == pipelineStepCount.getAsInt();
   }
 
   private Uni<TransitionCommandEnvelope> transitionCommand(ClaimedSegment segment) {

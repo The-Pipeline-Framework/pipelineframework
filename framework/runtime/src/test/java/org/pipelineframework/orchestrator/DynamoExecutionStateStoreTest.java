@@ -2,6 +2,7 @@ package org.pipelineframework.orchestrator;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
@@ -9,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Message;
@@ -19,6 +21,8 @@ import org.pipelineframework.cache.ProtobufMessageParser;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.BatchGetItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.BatchGetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
@@ -31,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -81,6 +86,94 @@ class DynamoExecutionStateStoreTest {
         var validationError = store.startupValidationError(config);
 
         assertTrue(validationError.isEmpty());
+    }
+
+    @Test
+    void batchExecutionKeyLookupBoundsOneThousandSiblingReads() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        List<String> siblingKeys = java.util.stream.IntStream.range(0, 1_000)
+            .mapToObj(index -> "parent:await-item:unit-1:" + index)
+            .toList();
+        when(client.batchGetItem((BatchGetItemRequest) any())).thenReturn(BatchGetItemResponse.builder()
+            .responses(Map.of())
+            .unprocessedKeys(Map.of())
+            .build());
+
+        List<Optional<ExecutionRecord<Object, Object>>> resolved = store
+            .getExecutionsByKey("tenant-a", siblingKeys)
+            .await().indefinitely();
+
+        assertEquals(1_000, resolved.size());
+        assertTrue(resolved.stream().allMatch(Optional::isEmpty));
+        verify(client, times(10)).batchGetItem((BatchGetItemRequest) any());
+        verify(client, never()).getItem((GetItemRequest) any());
+    }
+
+    @Test
+    void batchExecutionKeyLookupRetriesUnprocessedKeysAndPreservesRequestedOrder() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        List<String> siblingKeys = List.of("key-a", "key-b", "key-c");
+        long ttl = System.currentTimeMillis() / 1000 + 3600;
+        AtomicInteger calls = new AtomicInteger();
+        when(client.batchGetItem(any(BatchGetItemRequest.class))).thenAnswer(invocation -> {
+            BatchGetItemRequest request = invocation.getArgument(0, BatchGetItemRequest.class);
+            int call = calls.getAndIncrement();
+            if (request.requestItems().containsKey("tpf_execution_key")) {
+                List<Map<String, AttributeValue>> keys = request.requestItems().get("tpf_execution_key").keys();
+                if (call == 0) {
+                    return BatchGetItemResponse.builder()
+                        .responses(Map.of("tpf_execution_key", List.of(
+                            executionKeyItem(keys.get(1), "exec-2"),
+                            executionKeyItem(keys.get(0), "exec-1"))))
+                        .unprocessedKeys(Map.of("tpf_execution_key", software.amazon.awssdk.services.dynamodb.model.KeysAndAttributes.builder()
+                            .keys(keys.get(2))
+                            .consistentRead(true)
+                            .build()))
+                        .build();
+                }
+                return BatchGetItemResponse.builder()
+                    .responses(Map.of("tpf_execution_key", List.of(executionKeyItem(keys.get(0), "exec-3"))))
+                    .unprocessedKeys(Map.of())
+                    .build();
+            }
+            return BatchGetItemResponse.builder()
+                .responses(Map.of("tpf_execution", List.of(
+                    executionItem("tenant-a", "exec-3", "key-c", ttl),
+                    executionItem("tenant-a", "exec-1", "key-a", ttl),
+                    executionItem("tenant-a", "exec-2", "key-b", ttl))))
+                .unprocessedKeys(Map.of())
+                .build();
+        });
+
+        List<Optional<ExecutionRecord<Object, Object>>> resolved = store
+            .getExecutionsByKey("tenant-a", siblingKeys)
+            .await().indefinitely();
+
+        assertEquals(List.of("exec-1", "exec-2", "exec-3"), resolved.stream()
+            .map(optional -> optional.orElseThrow().executionId())
+            .toList());
+        assertEquals(3, calls.get());
+        verify(client, never()).getItem(any(GetItemRequest.class));
+    }
+
+    @Test
+    void batchExecutionKeyLookupBoundsThrottledRetryDelay() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        when(client.batchGetItem(any(BatchGetItemRequest.class))).thenAnswer(invocation -> {
+            BatchGetItemRequest request = invocation.getArgument(0, BatchGetItemRequest.class);
+            return BatchGetItemResponse.builder().responses(Map.of()).unprocessedKeys(request.requestItems()).build();
+        });
+
+        assertTimeoutPreemptively(Duration.ofSeconds(2), () -> assertThrows(IllegalStateException.class,
+            () -> store.getExecutionsByKey("tenant-a", List.of("key-a")).await().indefinitely()));
+
+        verify(client, times(4)).batchGetItem(any(BatchGetItemRequest.class));
     }
 
     @Test
@@ -247,6 +340,15 @@ class DynamoExecutionStateStoreTest {
         long ttl
     ) {
         return executionItem(tenantId, executionId, executionKey, ttl, ExecutionStatus.QUEUED);
+    }
+
+    private static Map<String, AttributeValue> executionKeyItem(
+        Map<String, AttributeValue> key,
+        String executionId
+    ) {
+        return Map.of(
+            "tenant_execution_key", key.get("tenant_execution_key"),
+            "execution_id", AttributeValue.builder().s(executionId).build());
     }
 
     private static Map<String, AttributeValue> executionItem(
