@@ -336,6 +336,65 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void rejectsInvalidAwaitIdempotencyConfigurations() throws IOException {
+        for (String idempotencyConfig : List.of(
+            """
+                idempotency:
+                  fields: [\"orderId\"]
+                idempotencyKeyFields: null
+                """,
+            "idempotency: orderId",
+            "idempotency: null",
+            """
+                idempotency:
+                  fields: orderId
+                """)) {
+            List<String> diagnostics = new ArrayList<>();
+            List<StepDefinition> steps = parse("""
+                version: 2
+                appName: "Test"
+                basePackage: "com.example"
+                steps:
+                  - name: "Invalid Idempotency"
+                    kind: "await"
+                    input: "com.example.Input"
+                    output: "com.example.Output"
+                    timeout: "PT5M"
+                    %s
+                    await:
+                      correlation:
+                        strategy: "interactionId"
+                      transport:
+                        type: "interaction-api"
+                """.formatted(idempotencyConfig.replace("\n", "\n    ")), diagnostics);
+
+            assertTrue(steps.isEmpty(), idempotencyConfig);
+            assertTrue(diagnostics.stream().anyMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+                diagnostics.toString());
+        }
+    }
+
+    @Test
+    void reportsIdempotencyAsUnsupportedForNonAwaitSteps() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Internal"
+                service: "com.example.InternalService"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                idempotency:
+                  fields: ["orderId"]
+            """, diagnostics);
+
+        assertEquals(1, steps.size(), diagnostics.toString());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("unsupported keys")
+            && message.contains("idempotency")), diagnostics.toString());
+    }
+
+    @Test
     void parsesAwaitOneToManyAsUnaryStreaming() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
