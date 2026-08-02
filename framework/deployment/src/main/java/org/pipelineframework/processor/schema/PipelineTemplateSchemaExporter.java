@@ -2093,6 +2093,14 @@ public final class PipelineTemplateSchemaExporter {
       },
       "allOf": [
         {
+          "not": {
+            "required": [
+              "idempotency",
+              "idempotencyKeyFields"
+            ]
+          }
+        },
+        {
           "anyOf": [
             {
               "required": [

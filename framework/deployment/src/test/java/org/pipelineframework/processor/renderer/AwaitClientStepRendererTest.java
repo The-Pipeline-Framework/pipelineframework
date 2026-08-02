@@ -148,12 +148,15 @@ class AwaitClientStepRendererTest {
             .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
             .build();
 
-        new AwaitClientStepRenderer().render(model, generationContextV3("LOCAL"));
+        new AwaitClientStepRenderer().render(model, generationContextV3(Map.of(
+            "pipeline.transport", "LOCAL",
+            "pipeline.config", pipelineConfig.toString())));
 
         String source = Files.readString(tempDir.resolve(
             "com/example/payment/pipeline/AwaitPaymentProviderAwaitClientStep.java"));
 
         assertTrue(source.contains("StepOneToOne<PaymentRecord, PaymentStatus>"));
+        assertTrue(source.contains("import com.example.payment.grpc.PipelineTypes;"));
         assertTrue(source.contains("PipelineTypes.PaymentRecord.class.getName(), PipelineTypes.PaymentStatus.class.getName()"));
         assertTrue(source.contains("PipelineDomainProtoAdapters.toProto"));
         assertTrue(source.contains("PipelineDomainProtoAdapters.fromProto"));
@@ -344,12 +347,12 @@ class AwaitClientStepRendererTest {
     }
 
     private GenerationContext generationContextV3() {
-        return generationContextV3("GRPC");
+        return generationContextV3(Map.of("pipeline.transport", "GRPC"));
     }
 
-    private GenerationContext generationContextV3(String transport) {
+    private GenerationContext generationContextV3(Map<String, String> options) {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.transport", transport));
+        when(processingEnv.getOptions()).thenReturn(options);
         return new GenerationContext(
             processingEnv,
             tempDir,
@@ -357,7 +360,7 @@ class AwaitClientStepRendererTest {
             Set.of(),
             null,
             null,
-            org.pipelineframework.processor.ir.PipelineTransport.fromString(transport),
+            org.pipelineframework.processor.ir.PipelineTransport.fromString(options.get("pipeline.transport")),
             "com.example.payment",
             null,
             true);

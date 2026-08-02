@@ -83,8 +83,6 @@ public class StepDefinitionParser {
         "kind",
         "await",
         "timeout",
-        "idempotency",
-        "idempotencyKeyFields",
         "command",
         "commandIdGenerator",
         "duplicatePolicy",
@@ -204,7 +202,6 @@ public class StepDefinitionParser {
             return null;
         }
         reportRejectedBranchPredicateKeys(name, stepData);
-        reportUnknownStepKeys(name, stepData);
         if (version < 2 && (stepData.containsKey("accepts") || Boolean.TRUE.equals(stepData.get("terminal")))) {
             String message = "Skipping step '" + name
                 + "': accepts/terminal branch routing requires version: 2";
@@ -228,6 +225,7 @@ public class StepDefinitionParser {
         boolean awaitStep = "await".equalsIgnoreCase(rawKind);
         boolean commandStep = "command".equalsIgnoreCase(rawKind);
         boolean queryStep = "query".equalsIgnoreCase(rawKind);
+        reportUnknownStepKeys(name, stepData, awaitStep);
         String delegatedClassName = null;
         Optional<String> delegatedMethodName = Optional.empty();
 
@@ -538,9 +536,6 @@ public class StepDefinitionParser {
                 return null;
             }
             List<String> idempotencyKeyFields = parseAwaitIdempotencyKeyFields(stepData, name);
-            if (idempotencyKeyFields == null) {
-                return null;
-            }
             return new StepDefinition(
                 name,
                 StepKind.AWAIT,
@@ -1205,25 +1200,37 @@ public class StepDefinitionParser {
     }
 
     private List<String> parseAwaitIdempotencyKeyFields(Map<String, Object> stepData, String stepName) {
-        Object structured = stepData.get("idempotency");
-        Object legacy = stepData.get("idempotencyKeyFields");
-        if (structured != null && legacy != null) {
+        boolean structuredPresent = stepData.containsKey("idempotency");
+        boolean legacyPresent = stepData.containsKey("idempotencyKeyFields");
+        if (structuredPresent && legacyPresent) {
             String message = "Skipping step '" + stepName
                 + "': 'idempotency' and 'idempotencyKeyFields' are aliases and are mutually exclusive";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
-            return null;
+            throw new StepSkippedException();
         }
-        if (structured == null) {
-            return parseStringList(legacy, stepName, "idempotencyKeyFields");
+        if (!structuredPresent) {
+            if (!legacyPresent) {
+                return List.of();
+            }
+            return requiredStringList(stepData.get("idempotencyKeyFields"), stepName, "idempotencyKeyFields");
         }
+        Object structured = stepData.get("idempotency");
         if (!(structured instanceof Map<?, ?> idempotency)) {
             String message = "Skipping step '" + stepName + "': idempotency must be a map";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
-            return null;
+            throw new StepSkippedException();
         }
-        return parseStringList(idempotency.get("fields"), stepName, "idempotency.fields");
+        return requiredStringList(idempotency.get("fields"), stepName, "idempotency.fields");
+    }
+
+    private List<String> requiredStringList(Object value, String stepName, String fieldName) {
+        List<String> values = parseStringList(value, stepName, fieldName);
+        if (values == null) {
+            throw new StepSkippedException();
+        }
+        return values;
     }
 
     private Map<String, Object> normalizeMap(Map<?, ?> map) {
@@ -1458,10 +1465,11 @@ public class StepDefinitionParser {
      * @param stepName human-readable name of the step (used in the warning message)
      * @param stepData map of key/value pairs from the step definition to inspect
      */
-    private void reportUnknownStepKeys(String stepName, Map<String, Object> stepData) {
+    private void reportUnknownStepKeys(String stepName, Map<String, Object> stepData, boolean awaitStep) {
         Set<String> unknownKeys = new HashSet<>();
         for (String key : stepData.keySet()) {
-            if (!SUPPORTED_STEP_KEYS.contains(key)) {
+            if (!SUPPORTED_STEP_KEYS.contains(key)
+                && !(awaitStep && ("idempotency".equals(key) || "idempotencyKeyFields".equals(key)))) {
                 unknownKeys.add(key);
             }
         }
