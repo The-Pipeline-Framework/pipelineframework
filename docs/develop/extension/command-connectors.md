@@ -2,6 +2,19 @@
 
 Command connectors adapt a typed pipeline command to an external system. Use one when the effect benefits from command semantics: command id, effect logging, duplicate policy, recorded-output replay, retry/DLQ handling, and telemetry.
 
+## Blocking Work And Connector-Owned Limits
+
+`CommandConnector` execution is reactive. A connector that calls a blocking client must explicitly offload that work to an application-owned worker or executor; generated command steps do not offload it automatically. Defer the blocking invocation until subscription, then offload it:
+
+```java
+return Uni.createFrom().item(() -> manager.callBlocking(request.input()))
+    .runSubscriptionOn(applicationManager.workerExecutor());
+```
+
+Do not call the blocking client while constructing the `Uni`; a connector test should assert the executing thread. `CommandStepSupport` captures the execution context before an asynchronously loaded descriptor resolves and supplies it in the `CommandRequest`. Long-lived clients, sessions, and provider-specific concurrency limits belong to the connector or its application-scoped manager.
+
+The command `config` map is immutable connector-visible application configuration. A value such as `maxConcurrency: 1` is not a framework-enforced named-command limit; the connector must implement any such limit itself.
+
 For YAML setup, see [Command Steps](/deploy/orchestrator-runtime/command). This page covers the Java code.
 
 ## What You Implement

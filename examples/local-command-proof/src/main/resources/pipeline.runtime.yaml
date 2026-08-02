@@ -1,0 +1,12 @@
+layout: monolith
+validation: auto
+defaults:
+  runtime: local-command-proof
+  module: local-command-proof
+  synthetic:
+    module: local-command-proof
+modules:
+  local-command-proof:
+    runtime: local-command-proof
+    steps:
+      - observed-operation
