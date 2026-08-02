@@ -52,7 +52,17 @@ public class CommandStepSupport {
         if (descriptor == null) {
             return Uni.createFrom().failure(new IllegalArgumentException("descriptor must not be null"));
         }
-        return descriptor.onItem().transformToUni(resolved -> execute(resolved, commandIdGenerator, input));
+        if (commandIdGenerator == null) {
+            return Uni.createFrom().failure(new IllegalArgumentException("commandIdGenerator must not be null"));
+        }
+        AwaitExecutionContext context;
+        try {
+            context = captureExecutionContext();
+        } catch (RuntimeException failure) {
+            return Uni.createFrom().failure(failure);
+        }
+        return descriptor.onItem().transformToUni(
+            resolved -> execute(resolved, commandIdGenerator, input, context));
     }
 
     public <I, O> Uni<O> execute(
@@ -71,6 +81,18 @@ public class CommandStepSupport {
             context = captureExecutionContext();
         } catch (RuntimeException e) {
             return Uni.createFrom().failure(e);
+        }
+        return execute(descriptor, commandIdGenerator, input, context);
+    }
+
+    private <I, O> Uni<O> execute(
+        CommandDescriptor descriptor,
+        CommandIdGenerator<? super I> commandIdGenerator,
+        I input,
+        AwaitExecutionContext context
+    ) {
+        if (descriptor == null) {
+            return Uni.createFrom().failure(new IllegalArgumentException("descriptor must not be null"));
         }
         String commandId;
         try {

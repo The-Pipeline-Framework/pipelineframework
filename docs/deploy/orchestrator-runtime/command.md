@@ -57,10 +57,14 @@ The generated command step calls these pieces. Application code does not call th
 | --- | --- |
 | Connector succeeds | Output is recorded and returned. |
 | Same command id already succeeded with `RETURN_RECORDED` | Stored output is returned; the connector is not called again. |
-| Connector throws a retryable failure | Effect is marked retryable and queue-async retry policy applies. |
+| Connector throws a retryable failure | Effect is marked `FAILED_RETRYABLE`. Redispatching that same command id is currently not supported. |
 | Connector throws a non-retryable failure | Effect is marked terminal/DLQ. |
 
 The external system still needs an idempotency key or deterministic external id. TPF can avoid repeat dispatch after success is recorded, but it cannot make a third-party system exactly-once.
+
+Command-step configuration is immutable application configuration passed to the connector. It does not configure framework-enforced per-command concurrency. Connectors own blocking offload and any provider-specific concurrency limit.
+
+Completed commands with `RETURN_RECORDED` replay their stored output without recalling the connector. Failed-effect redispatch/redrive with the same command id is not supported. Queue-Async does not perform an automatic retry for this case.
 
 ## Related Docs
 
