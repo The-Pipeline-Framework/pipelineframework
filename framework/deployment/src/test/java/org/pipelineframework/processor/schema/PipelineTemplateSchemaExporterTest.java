@@ -284,7 +284,16 @@ class PipelineTemplateSchemaExporterTest {
         assertContains(awaitStep.getAsJsonArray("required"), "kind");
         assertContains(awaitStep.getAsJsonArray("required"), "timeout");
         assertContains(awaitStep.getAsJsonArray("required"), "await");
+        assertTrue(awaitProperties.has("idempotency"));
         assertTrue(awaitProperties.has("idempotencyKeyFields"));
+        assertTrue(awaitStep.getAsJsonArray("allOf").asList().stream()
+            .map(JsonElement::getAsJsonObject)
+            .filter(constraint -> constraint.has("not"))
+            .map(constraint -> constraint.getAsJsonObject("not").getAsJsonArray("required"))
+            .anyMatch(required -> required.asList().stream()
+                .map(JsonElement::getAsString)
+                .collect(java.util.stream.Collectors.toSet())
+                .equals(java.util.Set.of("idempotency", "idempotencyKeyFields"))));
 
         JsonObject awaitConfig = definitions.getAsJsonObject("awaitConfig");
         assertContains(awaitConfig.getAsJsonArray("required"), "correlation");

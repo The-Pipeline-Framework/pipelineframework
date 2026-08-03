@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 import javax.annotation.processing.Filer;
 import javax.lang.model.element.Modifier;
 import javax.tools.StandardLocation;
@@ -28,7 +29,7 @@ public final class ObjectIngestInputAdapterRenderer {
         String basePackage,
         TypeName domainType,
         TypeName externalType,
-        TypeName mapperType,
+        Optional<TypeName> mapperType,
         GenerationContext ctx
     ) throws IOException {
         if (!(domainType instanceof ClassName domainClass)
@@ -36,10 +37,11 @@ public final class ObjectIngestInputAdapterRenderer {
             throw new IllegalArgumentException("Object Ingest input adapter requires class-backed domain and pipeline input types");
         }
         boolean directCanonical = ctx.v3GeneratedDomainTypes() && domainClass.equals(externalClass);
-        if (!directCanonical && !(mapperType instanceof ClassName)) {
+        if (!directCanonical && !(mapperType.orElseThrow(() -> new IllegalArgumentException(
+            "Object Ingest input adapter requires a mapper type for non-canonical input")) instanceof ClassName)) {
             throw new IllegalArgumentException("Object Ingest transport adapter requires a class-backed mapper type");
         }
-        ClassName mapperClass = mapperType instanceof ClassName className ? className : null;
+        ClassName mapperClass = mapperType.filter(ClassName.class::isInstance).map(ClassName.class::cast).orElse(null);
         String packageName = basePackage + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX;
         ClassName adapterClass = ClassName.get(packageName, CLASS_NAME);
         TypeSpec.Builder type = TypeSpec.classBuilder(CLASS_NAME)

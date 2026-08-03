@@ -312,7 +312,7 @@ public class AwaitCoordinator {
                     .onItem().transform(optional -> optional.orElseThrow(
                         () -> new IllegalStateException("Await interaction not found for primary interaction id "
                             + unit.primaryInteractionId())))
-                    .onItem().transform(record -> enforceAggregateOutputLimit(unit, coerceResumePayload(record)));
+                    .onItem().transform(record -> enforceAggregateOutputLimit(unit, resumePayload(record)));
             }
             return interactionStore().findByUnit(tenantId, unitId)
                 .onItem().transform(records -> {
@@ -329,7 +329,7 @@ public class AwaitCoordinator {
                                     .thenComparing(AwaitInteractionRecord::version))
                                 .orElseThrow();
                         })
-                        .map(this::coerceResumePayload)
+                                .map(this::resumePayload)
                         .toList();
                 });
         });
@@ -357,7 +357,13 @@ public class AwaitCoordinator {
                     suspended.unitId(),
                     suspended.stepIndex(),
                     unit,
-                    interactions)));
+                    interactions.stream().map(this::transportSafeSnapshot).toList())));
+    }
+
+    private AwaitInteractionRecord transportSafeSnapshot(AwaitInteractionRecord interaction) {
+        return interaction.withPayloadSnapshots(
+            AwaitPayloadSupport.normalize(interaction.requestPayload()),
+            AwaitPayloadSupport.normalize(interaction.responsePayload()));
     }
 
     public Uni<Void> importSuspension(TransitionAwaitSuspension suspension) {
@@ -776,7 +782,17 @@ public class AwaitCoordinator {
             command.nowEpochMs());
     }
 
-    private Object coerceResumePayload(AwaitInteractionRecord record) {
+    /**
+     * Decodes one durable await interaction's transport payload and returns its canonical pipeline value.
+     *
+     * <p>The durable record preserves the canonical contract separately from the transport representation.
+     * This method validates both identities against the rebuilt step descriptor before applying the generated
+     * transport-to-canonical adapter.</p>
+     *
+     * @param record completed durable interaction
+     * @return canonical pipeline payload
+     */
+    public Object resumePayload(AwaitInteractionRecord record) {
         try {
             AwaitStepDescriptor descriptor = descriptorFor(record);
             validateDurableOutputContract(record, descriptor);
@@ -799,7 +815,7 @@ public class AwaitCoordinator {
     ) {
         AwaitStepDescriptor descriptor = descriptorFor(record);
         validateDurableOutputContract(record, descriptor);
-        Object transportPayload = record.outputType().equals(record.transportOutputType())
+        Object transportPayload = sameTypeIdentity(record.outputType(), record.transportOutputType())
             ? command.responsePayload()
             : coerceTransportPayload(record, command.responsePayload());
         return new ValidatedCompletion(record, withResponsePayload(command, transportPayload));
@@ -821,7 +837,7 @@ public class AwaitCoordinator {
     }
 
     private void validateDurableOutputContract(AwaitInteractionRecord record, AwaitStepDescriptor descriptor) {
-        if (!descriptor.outputType().equals(record.outputType())) {
+        if (!sameTypeIdentity(descriptor.outputType(), record.outputType())) {
             throw new IllegalStateException(
                 "Await durable-contract compatibility failed for execution " + record.executionId()
                     + " interaction " + record.interactionId()
@@ -829,13 +845,31 @@ public class AwaitCoordinator {
                     + ": durable canonical outputType=" + record.outputType()
                     + " differs from rebuilt descriptor outputType=" + descriptor.outputType());
         }
-        if (!descriptor.transportOutputType().equals(record.transportOutputType())) {
+        if (!sameTypeIdentity(descriptor.transportOutputType(), record.transportOutputType())) {
             throw new IllegalStateException(
                 "Await durable transport-contract compatibility failed for execution " + record.executionId()
                     + " interaction " + record.interactionId()
                     + " stepId=" + record.stepId()
                     + ": durable transportOutputType=" + record.transportOutputType()
                     + " differs from rebuilt descriptor transportOutputType=" + descriptor.transportOutputType());
+        }
+    }
+
+    /**
+     * Compares durable type identities by their loadable class when source-form names differ from
+     * JVM binary names for nested types. This preserves v2's single protobuf identity while still
+     * rejecting a v3 protobuf transport type in place of its canonical domain contract.
+     */
+    private static boolean sameTypeIdentity(String left, String right) {
+        if (left.equals(right)) {
+            return true;
+        }
+        try {
+            ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+            return AwaitPayloadSupport.resolvePayloadClass(left, classLoader)
+                .equals(AwaitPayloadSupport.resolvePayloadClass(right, classLoader));
+        } catch (ClassNotFoundException ignored) {
+            return false;
         }
     }
 

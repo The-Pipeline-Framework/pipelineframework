@@ -40,7 +40,6 @@ import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
-import org.pipelineframework.awaitable.AwaitPayloadSupport;
 import org.pipelineframework.awaitable.AwaitCoordinator;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.awaitable.AwaitThrowableSupport;
@@ -285,7 +284,7 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
         List<Object> steps = loadStepsForExecution();
         List<Object> orderedSteps = stepOrderer.orderSteps(steps);
         int aggregateStepIndex = firstAggregateStepIndex(orderedSteps, nextStepIndex);
-        Object awaitPayload = coerceAwaitItemPayload(record);
+        Object awaitPayload = awaitCoordinator.resumePayload(record);
         ExecutionInputSnapshot continuationInput = new ExecutionInputSnapshot(ExecutionInputShape.UNI, awaitPayload);
         String transitionKey = "await-item-continuation:" + unit.unitId() + ":" + record.itemIndex();
         TransitionWorkerCommand workerCommand = new TransitionWorkerCommand(
@@ -676,24 +675,6 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
       }
     }
     return steps.size();
-  }
-
-  private Object coerceAwaitItemPayload(AwaitInteractionRecord record) {
-    try {
-      ClassLoader loader = Thread.currentThread().getContextClassLoader();
-      if (loader == null) {
-        loader = AwaitPayloadSupport.class.getClassLoader();
-      }
-      Class<?> outputType = AwaitPayloadSupport.resolvePayloadClass(
-          record.outputType(),
-          loader);
-      return AwaitPayloadSupport.coercePayload(record.responsePayload(), outputType);
-    } catch (ClassNotFoundException e) {
-      throw new IllegalStateException(
-          "Failed resolving await output type " + record.outputType()
-              + " for interaction " + record.interactionId(),
-          e);
-    }
   }
 
   private Uni<Void> releaseItemizedAwaitParentIfReady(

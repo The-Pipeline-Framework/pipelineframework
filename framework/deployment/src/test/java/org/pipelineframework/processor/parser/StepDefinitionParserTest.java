@@ -308,7 +308,8 @@ class StepDefinitionParserTest {
                 input: "com.example.FraudCheckRequest"
                 output: "com.example.FraudCheckDecision"
                 timeout: "PT10M"
-                idempotencyKeyFields: ["orderId"]
+                idempotency:
+                  fields: ["orderId"]
                 await:
                   correlation:
                     strategy: "interactionId"
@@ -331,6 +332,66 @@ class StepDefinitionParserTest {
         assertEquals("https://partner.example/check",
             ((java.util.Map<?, ?>) ((java.util.Map<?, ?>) step.awaitConfig().get("transport")).get("request")).get("url"));
         assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains("unsupported keys")), diagnostics.toString());
+    }
+
+    @Test
+    void rejectsInvalidAwaitIdempotencyConfigurations() throws IOException {
+        for (String idempotencyConfig : List.of(
+            """
+                idempotency:
+                  fields: [\"orderId\"]
+                idempotencyKeyFields: null
+                """,
+            "idempotency: orderId",
+            "idempotency: null",
+            """
+                idempotency:
+                  fields: orderId
+                """)) {
+            List<String> diagnostics = new ArrayList<>();
+            List<StepDefinition> steps = parse("""
+                version: 2
+                appName: "Test"
+                basePackage: "com.example"
+                steps:
+                  - name: "Invalid Idempotency"
+                    kind: "await"
+                    input: "com.example.Input"
+                    output: "com.example.Output"
+                    timeout: "PT5M"
+                    %s
+                    await:
+                      correlation:
+                        strategy: "interactionId"
+                      transport:
+                        type: "interaction-api"
+                """.formatted(idempotencyConfig.replace("\n", "\n    ")), diagnostics);
+
+            assertTrue(steps.isEmpty(), idempotencyConfig);
+            assertTrue(diagnostics.stream().anyMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+                diagnostics.toString());
+        }
+    }
+
+    @Test
+    void reportsIdempotencyAsUnsupportedForNonAwaitSteps() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Internal"
+                service: "com.example.InternalService"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                idempotency:
+                  fields: ["orderId"]
+            """, diagnostics);
+
+        assertEquals(1, steps.size(), diagnostics.toString());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("unsupported keys")
+            && message.contains("idempotency")), diagnostics.toString());
     }
 
     @Test

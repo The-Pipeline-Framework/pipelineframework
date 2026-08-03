@@ -59,6 +59,14 @@ public record PipelineStepModel(
         ServiceApiKind serviceApiKind,
         ReactiveReturnKind reactiveReturnKind
 ) {
+    /** Returns this immutable semantic model with a provider-generated canonical facade as its service implementation. */
+    public PipelineStepModel withServiceClassName(ClassName replacement) {
+        return new PipelineStepModel(serviceName, generatedName, servicePackage, replacement, inputMapping, outputMapping,
+            streamingShape, enabledTargets, executionMode, deploymentRole, sideEffect, cacheKeyGenerator,
+            orderingRequirement, threadSafety, delegateService, delegateMethodName, externalMapper, mapperFallbackMode,
+            remoteExecution, serviceApiKind, reactiveReturnKind);
+    }
+
     /**
          * Creates a new PipelineStepModel with the supplied service identity, type mappings and generation configuration.
          *
@@ -170,8 +178,8 @@ public record PipelineStepModel(
         this.generatedName = generatedName;
         this.servicePackage = servicePackage;
         this.serviceClassName = serviceClassName;
-        this.inputMapping = inputMapping != null ? inputMapping : new TypeMapping(null, null, false);
-        this.outputMapping = outputMapping != null ? outputMapping : new TypeMapping(null, null, false);
+        this.inputMapping = inputMapping != null ? inputMapping : TypeMapping.unresolved();
+        this.outputMapping = outputMapping != null ? outputMapping : TypeMapping.unresolved();
         this.streamingShape = streamingShape;
         this.enabledTargets = Set.copyOf(enabledTargets); // Defensive copy
         this.executionMode = executionMode;
@@ -418,8 +426,8 @@ public record PipelineStepModel(
         private String generatedName;
         private String servicePackage;
         private ClassName serviceClassName;
-        private TypeMapping inputMapping = new TypeMapping(null, null, false);
-        private TypeMapping outputMapping = new TypeMapping(null, null, false);
+        private TypeMapping inputMapping = TypeMapping.unresolved();
+        private TypeMapping outputMapping = TypeMapping.unresolved();
         private StreamingShape streamingShape;
         private Set<GenerationTarget> enabledTargets = new HashSet<>();
         private ExecutionMode executionMode;

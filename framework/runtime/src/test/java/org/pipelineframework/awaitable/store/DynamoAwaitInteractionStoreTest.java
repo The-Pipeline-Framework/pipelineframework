@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -15,12 +16,14 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCreateCommand;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
@@ -192,6 +195,36 @@ class DynamoAwaitInteractionStoreTest {
         assertTrue(updateExpression.contains("#deadlineKey"));
         assertTrue(updateExpression.contains("#deadlineSort"));
         verify(client, never()).scan(any(ScanRequest.class));
+    }
+
+    @Test
+    void completeTreatsCompletedRecordAfterOccRaceAsDuplicate() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoAwaitInteractionStore store = new DynamoAwaitInteractionStore(client, mockConfig());
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(
+            GetItemResponse.builder()
+                .item(item("tenant-a", "interaction-1", "unit-1", null, AwaitInteractionStatus.WAITING, 10_000L, "alice", "finance"))
+                .build(),
+            GetItemResponse.builder()
+                .item(item("tenant-a", "interaction-1", "unit-1", null, AwaitInteractionStatus.COMPLETED, 10_000L, "alice", "finance"))
+                .build());
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenThrow(ConditionalCheckFailedException.builder().message("conditional update failed").build());
+
+        var result = store.complete(new AwaitCompletionCommand(
+                "tenant-a",
+                "interaction-1",
+                null,
+                "completion-1",
+                Map.of("decision", "approved"),
+                "provider",
+                2_000L))
+            .await().indefinitely();
+
+        assertTrue(result.duplicate());
+        assertEquals(AwaitInteractionStatus.COMPLETED, result.record().status());
+        verify(client).updateItem(any(UpdateItemRequest.class));
+        verify(client, times(2)).getItem(any(GetItemRequest.class));
     }
 
     private static AwaitCreateCommand command(

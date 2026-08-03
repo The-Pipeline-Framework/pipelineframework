@@ -25,6 +25,7 @@ import javax.tools.JavaFileObject;
 import javax.tools.StandardLocation;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Set;
 
 import com.google.protobuf.DescriptorProtos;
@@ -133,6 +134,64 @@ class PipelineGenerationPhaseTest {
     }
 
     @Test
+    void selectsV3BoundaryRolesWithoutLegacyMapperMetadata() throws Exception {
+        PipelineGenerationPhase phase = new PipelineGenerationPhase();
+        org.pipelineframework.processor.PipelineCompilationContext context =
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+        org.pipelineframework.processor.ir.PipelineStepModel first = model("First", org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER, false);
+        org.pipelineframework.processor.ir.PipelineStepModel terminal = model("Terminal", org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER, false);
+        context.setStepModels(List.of(
+            model("Observer", org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER, true),
+            first,
+            terminal));
+
+        java.lang.reflect.Method firstBusinessStep = PipelineGenerationPhase.class.getDeclaredMethod(
+            "firstBusinessStepWithDeploymentRole",
+            org.pipelineframework.processor.PipelineCompilationContext.class);
+        java.lang.reflect.Method terminalBusinessStep = PipelineGenerationPhase.class.getDeclaredMethod(
+            "terminalBusinessStepWithDeploymentRole",
+            org.pipelineframework.processor.PipelineCompilationContext.class);
+        firstBusinessStep.setAccessible(true);
+        terminalBusinessStep.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        java.util.Optional<org.pipelineframework.processor.ir.PipelineStepModel> selectedFirst =
+            (java.util.Optional<org.pipelineframework.processor.ir.PipelineStepModel>) firstBusinessStep.invoke(phase, context);
+        @SuppressWarnings("unchecked")
+        java.util.Optional<org.pipelineframework.processor.ir.PipelineStepModel> selectedTerminal =
+            (java.util.Optional<org.pipelineframework.processor.ir.PipelineStepModel>) terminalBusinessStep.invoke(phase, context);
+
+        assertEquals(first, selectedFirst.orElseThrow());
+        assertEquals(terminal, selectedTerminal.orElseThrow());
+        assertTrue(selectedFirst.orElseThrow().inputMapping().mapperType().isEmpty());
+        assertTrue(selectedTerminal.orElseThrow().outputMapping().mapperType().isEmpty());
+    }
+
+    private static org.pipelineframework.processor.ir.PipelineStepModel model(
+        String serviceName,
+        org.pipelineframework.processor.ir.DeploymentRole deploymentRole,
+        boolean sideEffect
+    ) {
+        return new org.pipelineframework.processor.ir.PipelineStepModel.Builder()
+            .serviceName(serviceName)
+            .generatedName(serviceName)
+            .servicePackage("com.example")
+            .serviceClassName(com.squareup.javapoet.ClassName.get("com.example", serviceName))
+            .inputMapping(org.pipelineframework.processor.ir.TypeMapping.withoutMapper(
+                com.squareup.javapoet.ClassName.get("com.example", serviceName + "Input")))
+            .outputMapping(org.pipelineframework.processor.ir.TypeMapping.withoutMapper(
+                com.squareup.javapoet.ClassName.get("com.example", serviceName + "Output")))
+            .streamingShape(org.pipelineframework.processor.ir.StreamingShape.UNARY_UNARY)
+            .enabledTargets(Set.of(org.pipelineframework.processor.ir.GenerationTarget.CLIENT_STEP))
+            .executionMode(org.pipelineframework.processor.ir.ExecutionMode.DEFAULT)
+            .deploymentRole(deploymentRole)
+            .sideEffect(sideEffect)
+            .orderingRequirement(org.pipelineframework.parallelism.OrderingRequirement.RELAXED)
+            .threadSafety(org.pipelineframework.parallelism.ThreadSafety.SAFE)
+            .build();
+    }
+
+    @Test
     void skipsClientStepGenerationWhenGrpcBindingMissing() {
         PipelineGenerationPhase phase = new PipelineGenerationPhase();
         org.pipelineframework.processor.PipelineCompilationContext context =
@@ -144,16 +203,15 @@ class PipelineGenerationPhaseTest {
                 .generatedName("ProcessMissingBindingService")
                 .servicePackage("com.example")
                 .serviceClassName(com.squareup.javapoet.ClassName.get("com.example", "MissingBindingService"))
-                .inputMapping(new org.pipelineframework.processor.ir.TypeMapping(
-                    com.squareup.javapoet.ClassName.get("com.example", "In"), null, false))
-                .outputMapping(new org.pipelineframework.processor.ir.TypeMapping(
-                    com.squareup.javapoet.ClassName.get("com.example", "Out"), null, false))
+                .inputMapping(org.pipelineframework.processor.ir.TypeMapping.withoutMapper(
+                    com.squareup.javapoet.ClassName.get("com.example", "In")))
+                .outputMapping(org.pipelineframework.processor.ir.TypeMapping.withoutMapper(
+                    com.squareup.javapoet.ClassName.get("com.example", "Out")))
                 .streamingShape(org.pipelineframework.processor.ir.StreamingShape.UNARY_UNARY)
                 .enabledTargets(java.util.Set.of(org.pipelineframework.processor.ir.GenerationTarget.CLIENT_STEP))
                 .executionMode(org.pipelineframework.processor.ir.ExecutionMode.DEFAULT)
                 .deploymentRole(org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT)
                 .sideEffect(false)
-                .cacheKeyGenerator(null)
                 .orderingRequirement(org.pipelineframework.parallelism.OrderingRequirement.RELAXED)
                 .threadSafety(org.pipelineframework.parallelism.ThreadSafety.SAFE)
                 .build();

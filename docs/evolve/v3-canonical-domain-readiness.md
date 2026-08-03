@@ -4,7 +4,7 @@ This internal assessment defines the honest release boundary for the version 3 c
 
 ## Release decision
 
-Release v3 as an **experimental preview now**. Release Gate A is evidenced by a clean CSV Payments pipeline-runtime image build and end-to-end execution under `-Dcsv.v3.persistence=true`: OpenCSV input becomes a canonical `PaymentRecord`, persistence uses its explicit external representation, await sends protobuf and resumes a canonical `PaymentStatus`, canonical branches execute, and the terminal merge/publish path completes. The generated canonical model, generated protobuf contracts and adapters, explicit persistence mapping, OpenCSV boundary, and committed-IDL lifecycle are verified. Gate B items are not preview blockers. Gate C remains future platform work.
+Release v3 as an **experimental preview now**. Release Gate A is evidenced by a clean CSV Payments pipeline-runtime image build and end-to-end execution under `-Dcsv.v3.persistence=true`: OpenCSV input becomes a canonical `PaymentRecord`, persistence uses its explicit external representation, await sends protobuf and resumes a canonical `PaymentStatus`, canonical branches execute, and the terminal merge/publish path completes. The generated canonical model, generated protobuf contracts and adapters, explicit persistence mapping, OpenCSV provider boundary, and committed-IDL lifecycle are verified. Gate B items are not preview blockers. Gate C now has a provider-platform reference implementation; broader provider migration and non-Java targets remain future work.
 
 The preview contract is opt-in through `version: 3`. Version 2 remains frozen, and a generated v3 pipeline must not mix v2 business contracts with its generated canonical contracts.
 
@@ -23,7 +23,7 @@ The preview contract is opt-in through `version: 3`. Version 2 remains frozen, a
 | Branch planning and terminal merge | Union-aware canonical payload applicability and terminal union wrapping | Planner, runtime, and CSV proof | Yes | SUPPORTED | Type-based only; no discriminator predicates | No |
 | Await | Canonical step contract with generated protobuf transport metadata and adapters | Descriptor compatibility, transport, resume, and CSV Kafka await tests | Yes | SUPPORTED | Current proof covers the generated protobuf transport path | No |
 | Persistence mapping | Explicit record-to-representation conversion before write | Compiler and persistence tests | Yes | SUPPORTED | Record writes only; query/read support is deferred | No |
-| OpenCSV mapping | OpenCSV row conversion through `Mapper<Canonical, Row>` | CSV reader and mapper tests | Yes | SUPPORTED | Proven in CSV Payments; no generic OpenCSV provider yet | No |
+| OpenCSV mapping | Provider-generated canonical facade over an explicit row `Mapper<Canonical, Row>` | Provider, CSV reader, mapper, and E2E tests | Yes | SUPPORTED | The provider owns OpenCSV semantics; core remains unaware of row types, keys, conventions, and rendering | No |
 | JSON | Existing Jackson/protobuf JSON paths | Existing runtime tests | Partial | EXPERIMENTAL | No direct generated-domain JSON policy or union support | No |
 | Generated gRPC client execution | Canonical public step signatures with protobuf stub calls | Renderer tests and CSV pipeline-runtime proof | Yes | EXPERIMENTAL | CSV proof is unary; broader deployment paths remain to be qualified | No |
 | Non-unary gRPC cardinalities | Canonical public contracts around protobuf transport for all four shapes | Focused generated-source tests | Yes | EXPERIMENTAL | No assembled non-unary v3 application proof yet | No |
@@ -58,12 +58,12 @@ The rule is intentional: protobuf may appear in transport metadata and immediate
 | Await | Generated v3 payload | Canonical-to-protobuf dispatch and protobuf-to-canonical resume | Contract generation | Await transports | Supported generated transport path; durable descriptor stores both identities |
 | Checkpoint | Current checkpoint payload | JSON envelope / payload reference | Checkpoint renderers | Checkpoint runtime | Not a v3 representation consumer yet |
 | Persistence | Generated record | Explicit representation plus exact mapper | Side-effect generation | Persistence plugin | Supported record-write boundary |
-| OpenCSV | Generated `PaymentRecord` | Explicit CSV row plus generic mapper | CSV Payments profile | CSV reader | Supported proof; provider work is deferred |
+| OpenCSV | Generated `PaymentRecord` | Provider-generated facade plus explicit CSV row and generic mapper | Representation provider | Generated facade | Supported provider reference implementation; core has no OpenCSV-specific semantics |
 | Object publish | Terminal business value | Existing output mappers | Boundary generation | Publish target | Application-owned conversion remains |
 | Kafka | Await/connector payload | Existing transport envelope and protobuf JSON | Transport generation | Kafka adapters | Do not duplicate protobuf adapters |
 | Command/effect connectors | Future canonical contracts | No v3-specific representation path | N/A | N/A | Deferred |
 
-The present duplication is deliberate where protobuf adapters already preserve canonical semantics. The main duplicate remaining in the CSV proof was inline OpenCSV row construction; the reader now establishes the deterministic canonical identity on the parsed row and delegates the conversion to the declared generic mapper.
+The present duplication is deliberate where protobuf adapters already preserve canonical semantics. The OpenCSV provider owns facade generation and mapper injection; the reader remains responsible only for parsing external rows and establishing deterministic raw-row identity.
 
 ## Next vertical slice
 
@@ -73,7 +73,7 @@ The next material improvement is direct JSON for generated v3 records and wrappe
 
 ### Horizon 1 — releasable v3
 
-1. **Publish v3 preview readiness and diagnostics.** Deliver the support matrix, clean-regeneration proof, deterministic mapping diagnostics, and canonical-versus-external documentation. Exclude provider SPI and new targets. This blocks preview only when Gate A evidence fails.
+1. **Publish v3 preview readiness and diagnostics.** Deliver the support matrix, clean-regeneration proof, deterministic mapping diagnostics, and canonical-versus-external documentation. Exclude new provider capabilities and new targets. This blocks preview only when Gate A evidence fails.
 2. **Harden representation-mapping conformance.** Keep the normalized model generic across every named type kind; preserve persistence record-only capability diagnostics. Exclude generated entities and component-specific mapper SPIs. This blocks preview only for nondeterministic lookup or diagnostics.
 3. **Keep CSV Payments as the executable v3 proof.** Completed for the current v3 persistence profile: clean generated-source regeneration, the OpenCSV mapper boundary, persistence identity separation, protobuf await, canonical branches, and terminal merge are exercised without topology redesign. Keep the dedicated CI lane required for regression coverage.
 
@@ -86,9 +86,31 @@ The next material improvement is direct JSON for generated v3 records and wrappe
 
 ### Horizon 3 — representation provider platform
 
-1. **Feasibility prototype.** Prove dependency discovery, normalized-model access, one mapping resolution, one registered artifact/metadata item, and one consumer use—without migrating protobuf.
-2. **Provider lifecycle SPI.** Add registration, ordering, conflicts, cycle diagnostics, GLOBAL/TYPE scope, and artifact aggregation without making a renderer semantic.
-3. **Provider-owned schema and third-party proof.** Add configuration validation/composition and absent-provider diagnostics; preserve target-specific capability declarations.
+#### Active compiler-host bridge
+
+The public Representation Provider SPI is host-neutral: providers receive configuration, mapping, boundary, and generation
+requests, and return claims, resolved representations, schema fragments, and artifact descriptions. They do not receive
+JSR-269, Quarkus, Maven, renderer, or filesystem-writer types.
+
+TPF's current production build host is nevertheless the JSR-269 processor. That host owns source-symbol discovery,
+normalizes the YAML and Java source model into provider requests, discovers provider JARs through `META-INF/services`
+from its annotation-processor classloader, resolves ordered claims, and is the only process that writes generated
+sources or resources. Maven application dependencies make a provider available at runtime; annotation-processor-path
+dependencies make it available during generation. Those are deliberately separate concerns.
+
+OpenCSV is the reference boundary: its provider recognizes the provider marker, validates the explicit row type and
+`Mapper<Canonical, External>` pair, describes a canonical blocking-iterator facade, and owns the injected mapper and
+`fromExternal` conversion. Core never contains an OpenCSV key, row type, convention, or renderer. The authored CSV
+reader therefore remains an external-row reader with stable raw-row identity only; canonical values begin in the
+provider-generated facade.
+
+This bridge is not a new permanent compiler host. A future build host can supply the same neutral requests and consume
+the same artifact descriptions, while retaining the invariant that providers describe artifacts and the host writes
+them.
+
+1. **Completed reference implementation.** The host-neutral SPI now proves provider discovery and processor-host visibility, normalized-model access, mapping resolution, host-owned artifact writing, schema composition, and an OpenCSV consumer—without migrating protobuf.
+2. **Provider lifecycle migration.** Gradually move additional built-in boundaries only where provider ownership removes real duplication; preserve generated protobuf transport adapters.
+3. **Third-party and target expansion.** Extend provider-owned configuration/documentation proof and target-specific capability declarations without promising all-language parity.
 
 ## Existing issue disposition
 

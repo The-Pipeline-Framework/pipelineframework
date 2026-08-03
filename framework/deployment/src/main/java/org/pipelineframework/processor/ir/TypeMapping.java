@@ -2,19 +2,20 @@ package org.pipelineframework.processor.ir;
 
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
+import java.util.Optional;
 
 /**
  * Represents a semantic directional type mapping derived from annotations. Contains semantic information from the @PipelineStep
  * annotation, including domain types and inferred mapper information.
  *
  * @param domainType the domain type for this mapping
- * @param mapperType the inferred mapper type for this mapping, or null if not yet resolved
+ * @param mapperType the inferred mapper type for this mapping when one has been resolved
  * @param hasMapper whether a mapper has been inferred for this mapping
  * @param entityType the entity type used for mapper inference (the domain type that the mapper operates on)
  */
 public record TypeMapping(
         TypeName domainType,
-        TypeName mapperType,
+        Optional<TypeName> mapperType,
         boolean hasMapper,
         TypeName entityType
 ) {
@@ -22,6 +23,9 @@ public record TypeMapping(
      * Creates a new TypeMapping instance with entity type for inference.
      */
     public TypeMapping {
+        if (mapperType == null) {
+            throw new IllegalArgumentException("mapperType must not be null; use Optional.empty()");
+        }
         // entityType defaults to domainType if not specified
         if (entityType == null) {
             entityType = domainType;
@@ -32,11 +36,32 @@ public record TypeMapping(
      * Backward-compatible constructor that creates a TypeMapping and defaults the entityType to the provided domainType.
      *
      * @param domainType the domain type for this mapping; used as the entityType when none is provided
-     * @param mapperType the mapper type, or null if not specified
+     * @param mapperType the mapper type, or null if not specified by a legacy caller
      * @param hasMapper  true if a mapper has been inferred, false otherwise
      */
     public TypeMapping(TypeName domainType, TypeName mapperType, boolean hasMapper) {
-        this(domainType, mapperType, hasMapper, domainType);
+        this(domainType, Optional.ofNullable(mapperType), hasMapper, domainType);
+    }
+
+    /**
+     * Creates a mapping with a domain contract and no mapper metadata.
+     *
+     * <p>This is the explicit representation for boundaries whose contract is
+     * resolved without an application mapper.</p>
+     *
+     * @param domainType the domain type for the mapping
+     * @return a mapping with no inferred mapper
+     */
+    public static TypeMapping withoutMapper(TypeName domainType) {
+        if (domainType == null) {
+            throw new IllegalArgumentException("domainType must not be null; use unresolved() for an unavailable contract");
+        }
+        return new TypeMapping(domainType, Optional.empty(), false, domainType);
+    }
+
+    /** Creates an explicit mapping for a contract that is not available at extraction time. */
+    public static TypeMapping unresolved() {
+        return new TypeMapping(null, Optional.empty(), false, null);
     }
 
     /**
@@ -46,6 +71,6 @@ public record TypeMapping(
      * @return a TypeMapping with `mapperType` set to the provided `inferredMapperType` and `hasMapper` set to true
      */
     public TypeMapping withInferredMapper(ClassName inferredMapperType) {
-        return new TypeMapping(domainType, inferredMapperType, true, entityType);
+        return new TypeMapping(domainType, Optional.of(inferredMapperType), true, entityType);
     }
 }

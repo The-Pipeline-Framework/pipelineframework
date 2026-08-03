@@ -341,6 +341,7 @@ run_flow() {
     --tenant-id "${TPF_TENANT_ID}" \
     --pipeline-id "${TPF_PIPELINE_ID}" \
     --control-plane-token "${TPF_CONTROL_PLANE_TOKEN}" \
+    --release-descriptor-path "${TPF_RELEASE_DESCRIPTOR}" \
     --input-dir "${TPF_INPUT_DIR}" \
     --output-dir "${TPF_OUTPUT_DIR}" \
     --source-csv "${TPF_SOURCE_CSV}" \

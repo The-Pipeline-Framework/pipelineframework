@@ -183,4 +183,15 @@ public record AwaitInteractionRecord(
     public boolean itemInteraction() {
         return itemIndex != null;
     }
+
+    /**
+     * Returns a transport-safe snapshot for a portable transition envelope.
+     */
+    public AwaitInteractionRecord withPayloadSnapshots(Object requestSnapshot, Object responseSnapshot) {
+        return new AwaitInteractionRecord(
+            tenantId, executionId, stepId, stepIndex, outputType, interactionId, correlationId, causationId,
+            idempotencyKey, version, status, requestSnapshot, responseSnapshot, unitId, itemIndex, actor, assignee,
+            group, transportType, transportMetadata, deadlineEpochMs, createdAtEpochMs, updatedAtEpochMs,
+            ttlEpochS, transportOutputType);
+    }
 }

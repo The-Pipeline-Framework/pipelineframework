@@ -371,10 +371,10 @@ class ModelExtractionPhaseTest {
 
         assertNotNull(model);
         assertEquals(
-            ClassName.get("org.pipelineframework.search.crawl_source.mapper", "CrawlRequestMapper"),
+            java.util.Optional.of(ClassName.get("org.pipelineframework.search.crawl_source.mapper", "CrawlRequestMapper")),
             model.inputMapping().mapperType());
         assertEquals(
-            ClassName.get("org.pipelineframework.search.crawl_source.mapper", "RawDocumentMapper"),
+            java.util.Optional.of(ClassName.get("org.pipelineframework.search.crawl_source.mapper", "RawDocumentMapper")),
             model.outputMapping().mapperType());
         assertTrue(model.inputMapping().hasMapper());
         assertTrue(model.outputMapping().hasMapper());

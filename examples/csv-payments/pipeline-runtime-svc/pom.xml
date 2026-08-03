@@ -32,6 +32,11 @@
 
     <dependencies>
         <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>representation-provider-opencsv</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.pipelineframework.csv</groupId>
             <artifactId>common</artifactId>
             <version>${project.version}</version>
@@ -107,10 +112,6 @@
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>

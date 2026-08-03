@@ -28,6 +28,7 @@ import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.TransitionWorkerExecutor;
 import org.pipelineframework.orchestrator.WorkDispatcher;
+import org.pipelineframework.orchestrator.TransitionPayloadCodec;
 import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
 import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
 
@@ -47,6 +48,7 @@ class ItemizedAwaitContinuationFlow {
   private final Consumer<AwaitReplayLifecycleEvent> lifecycleRecorder;
   private final AwaitContinuationPlanner planner;
   private final ItemContinuationClaims claims;
+  private final Supplier<TransitionPayloadCodec> payloadCodec;
 
   ItemizedAwaitContinuationFlow(
       ExecutionStateStore executionStateStore,
@@ -59,6 +61,32 @@ class ItemizedAwaitContinuationFlow {
       Consumer<AwaitReplayLifecycleEvent> lifecycleRecorder,
       AwaitContinuationPlanner planner,
       ItemContinuationClaims claims) {
+    this(
+        executionStateStore,
+        workDispatcher,
+        awaitCoordinator,
+        transitionWorkerExecutor,
+        queueSweepExecutor,
+        saturatedDelay,
+        segmentBoundaryLedger,
+        lifecycleRecorder,
+        planner,
+        claims,
+        org.pipelineframework.orchestrator.JsonTransitionPayloadCodec::new);
+  }
+
+  ItemizedAwaitContinuationFlow(
+      ExecutionStateStore executionStateStore,
+      WorkDispatcher workDispatcher,
+      AwaitCoordinator awaitCoordinator,
+      TransitionWorkerExecutor transitionWorkerExecutor,
+      ScheduledExecutorService queueSweepExecutor,
+      Supplier<Duration> saturatedDelay,
+      Supplier<SegmentBoundaryLedger> segmentBoundaryLedger,
+      Consumer<AwaitReplayLifecycleEvent> lifecycleRecorder,
+      AwaitContinuationPlanner planner,
+      ItemContinuationClaims claims,
+      Supplier<TransitionPayloadCodec> payloadCodec) {
     this.executionStateStore = executionStateStore;
     this.workDispatcher = workDispatcher;
     this.awaitCoordinator = awaitCoordinator;
@@ -69,6 +97,7 @@ class ItemizedAwaitContinuationFlow {
     this.lifecycleRecorder = lifecycleRecorder;
     this.planner = planner;
     this.claims = claims;
+    this.payloadCodec = payloadCodec;
   }
 
   Uni<Void> afterRecordedCompletion(
@@ -230,7 +259,8 @@ class ItemizedAwaitContinuationFlow {
       int aggregateStepIndex,
       List<Optional<ExecutionRecord<Object, Object>>> children,
       long nowEpochMs) {
-    AwaitContinuationPlan plan = planner.releaseItemizedParent(parent, unit, aggregateStepIndex, children);
+    AwaitContinuationPlan plan = planner.releaseItemizedParent(
+        parent, unit, aggregateStepIndex, children, payloadCodec.get());
     if (plan instanceof AwaitContinuationPlan.ReleaseItemizedParent release) {
       return releaseParent(release.release(), nowEpochMs);
     }

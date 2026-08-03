@@ -30,7 +30,7 @@ class CsvPaymentsAwaitPersistenceScopeTest {
                 pipelineYaml.contains("- ProcessFolderService"),
                 "Default persistence should not target the legacy folder ingestion step");
         assertTrue(
-                pipelineYaml.contains("- ProcessCsvPaymentsInput"),
+                pipelineYaml.contains("targetSteps: [ProcessCsvPaymentsInput, FinalizePaymentOutput]"),
                 "Persistence should include the CSV parsing step");
         assertTrue(
                 pipelineYaml.contains("name: Process Approved Payment Status"),
@@ -38,9 +38,6 @@ class CsvPaymentsAwaitPersistenceScopeTest {
         assertTrue(
                 pipelineYaml.contains("name: Process Unapproved Payment Status"),
                 "Pipeline should declare the unapproved branch processing step");
-        assertTrue(
-                pipelineYaml.contains("- FinalizePaymentOutput"),
-                "Persistence should include the explicit terminal merge step before object publish");
         assertFalse(
                 pipelineYaml.contains("- ProcessApprovedPaymentStatus"),
                 "Persistence should not target the approved branch projection step");

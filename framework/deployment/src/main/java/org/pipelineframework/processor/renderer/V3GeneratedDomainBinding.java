@@ -50,19 +50,20 @@ final class V3GeneratedDomainBinding {
         PipelineStepModel model,
         TypeName transportInputType,
         TypeName transportOutputType,
-        GenerationContext context
+        String pipelineBasePackage,
+        boolean v3GeneratedDomainTypes
     ) {
-        if (!context.v3GeneratedDomainTypes() || context.pipelineBasePackage() == null) {
+        if (!v3GeneratedDomainTypes || pipelineBasePackage == null) {
             return RepresentationBoundary.transportOnly(transportInputType, transportOutputType);
         }
-        if (isExactPair(model.inboundDomainType(), transportInputType, context.pipelineBasePackage())
-            && isExactPair(model.outboundDomainType(), transportOutputType, context.pipelineBasePackage())) {
+        if (isExactPair(model.inboundDomainType(), transportInputType, pipelineBasePackage)
+            && isExactPair(model.outboundDomainType(), transportOutputType, pipelineBasePackage)) {
             return new RepresentationBoundary(
                 model.inboundDomainType(),
                 model.outboundDomainType(),
                 transportInputType,
                 transportOutputType,
-                Optional.of(ClassName.get(context.pipelineBasePackage() + ".domain", "PipelineDomainProtoAdapters")));
+                Optional.of(ClassName.get(pipelineBasePackage + ".domain", "PipelineDomainProtoAdapters")));
         }
         return RepresentationBoundary.transportOnly(transportInputType, transportOutputType);
     }

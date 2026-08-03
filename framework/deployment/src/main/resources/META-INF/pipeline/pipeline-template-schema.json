@@ -2005,6 +2005,19 @@
           "type": "string",
           "minLength": 1
         },
+        "idempotency": {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "additionalProperties": false
+        },
         "idempotencyKeyFields": {
           "type": "array",
           "items": {
@@ -2045,6 +2058,14 @@
         }
       },
       "allOf": [
+        {
+          "not": {
+            "required": [
+              "idempotency",
+              "idempotencyKeyFields"
+            ]
+          }
+        },
         {
           "anyOf": [
             {

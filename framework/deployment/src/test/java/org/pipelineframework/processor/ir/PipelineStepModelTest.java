@@ -194,12 +194,12 @@ class PipelineStepModelTest {
                 .serviceClassName(ClassName.get("com.example", "DelegatedService"))
                 .inputMapping(new TypeMapping(
                         ClassName.get("com.example.app", "AppInput"),
-                        TypeName.INT,
+                        java.util.Optional.of(TypeName.INT),
                         false,
                         ClassName.get("com.example.lib", "LibInput")))
                 .outputMapping(new TypeMapping(
                         ClassName.get("com.example.app", "AppOutput"),
-                        TypeName.INT,
+                        java.util.Optional.of(TypeName.INT),
                         false,
                         ClassName.get("com.example.lib", "LibOutput")))
                 .streamingShape(StreamingShape.UNARY_UNARY)
@@ -456,5 +456,14 @@ class PipelineStepModelTest {
                 null);
 
         assertEquals(ServiceApiKind.REACTIVE, model.serviceApiKind());
+    }
+
+    @Test
+    void distinguishesAnUnresolvedMappingFromAnAvailableDomainWithoutMapper() {
+        TypeMapping unresolved = TypeMapping.unresolved();
+
+        assertNull(unresolved.domainType());
+        assertTrue(unresolved.mapperType().isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> TypeMapping.withoutMapper(null));
     }
 }

@@ -1426,10 +1426,25 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             tenantId,
             executionId,
             "result:" + (transitionKey == null ? "terminal" : transitionKey),
-            toJson(resultPayload),
+            toJson(serializeResultPayload(resultPayload)),
             materializedMulti,
             nowEpochMs,
             ttlEpochS);
+    }
+
+    private Object serializeResultPayload(Object resultPayload) {
+        if (resultPayload instanceof Iterable<?> items) {
+            return java.util.stream.StreamSupport.stream(items.spliterator(), false)
+                .map(this::serializeResultItem)
+                .toList();
+        }
+        return serializeResultItem(resultPayload);
+    }
+
+    private SerializedTransitionPayload serializeResultItem(Object resultItem) {
+        return resultItem instanceof SerializedTransitionPayload serialized
+            ? serialized
+            : transitionPayloadCodec.encode(resultItem);
     }
 
     private StoredPayload storePayload(

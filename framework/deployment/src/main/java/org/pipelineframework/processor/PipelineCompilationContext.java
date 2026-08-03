@@ -13,6 +13,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.pipelineframework.config.PlatformMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
+import com.squareup.javapoet.ClassName;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineOrchestratorModel;
 import org.pipelineframework.processor.ir.PipelineStepModel;
@@ -21,6 +22,7 @@ import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution;
 import org.pipelineframework.processor.routing.PipelineBranchingPlan;
+import org.pipelineframework.processor.representation.ResolvedRepresentationRegistry;
 
 /**
  * Holds the compilation context for the pipeline annotation processing.
@@ -34,6 +36,9 @@ public class PipelineCompilationContext {
     // Getters
     private final ProcessingEnvironment processingEnv;
     private final RoundEnvironment roundEnv;
+    @Getter
+    @Setter
+    private ClassLoader representationProviderClassLoader;
 
     // Setters
     // Discovered semantic models
@@ -51,6 +56,12 @@ public class PipelineCompilationContext {
     private List<StepDefinition> stepDefinitions;
     @Setter
     private PipelineBranchingPlan branchingPlan;
+    @Setter
+    private ResolvedRepresentationRegistry resolvedRepresentationRegistry;
+    @Setter
+    private org.pipelineframework.processor.representation.RepresentationProviderRegistry representationProviderRegistry;
+    private final Map<String, org.pipelineframework.processor.representation.ResolvedProviderBoundary> resolvedProviderBoundaries
+        = new java.util.LinkedHashMap<>();
     
     // Resolved generation targets
     @Setter
@@ -106,6 +117,7 @@ public class PipelineCompilationContext {
         this.pipelineTemplateConfig = null;
         this.stepDefinitions = List.of();
         this.branchingPlan = null;
+        this.resolvedRepresentationRegistry = new ResolvedRepresentationRegistry();
         this.resolvedTargets = Set.of();
         this.rendererBindings = Map.of();
         this.pluginHost = false;
@@ -143,6 +155,25 @@ public class PipelineCompilationContext {
      */
     public Path getGeneratedSourcesRoot() {
         return generatedSourcesRoot;
+    }
+
+    public void registerResolvedProviderBoundary(
+            org.pipelineframework.processor.representation.ResolvedProviderBoundary boundary) {
+        var previous = resolvedProviderBoundaries.putIfAbsent(boundary.boundary().stepName(), boundary);
+        if (previous != null) {
+            throw new IllegalStateException("Representation provider boundary already resolved for step '"
+                + boundary.boundary().stepName() + "'.");
+        }
+    }
+
+    public java.util.Optional<org.pipelineframework.processor.representation.ResolvedProviderBoundary>
+            getResolvedProviderBoundary(String stepName) {
+        return java.util.Optional.ofNullable(resolvedProviderBoundaries.get(stepName));
+    }
+
+    public java.util.Collection<org.pipelineframework.processor.representation.ResolvedProviderBoundary>
+            getResolvedProviderBoundaries() {
+        return java.util.List.copyOf(resolvedProviderBoundaries.values());
     }
 
     /**

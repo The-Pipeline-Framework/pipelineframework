@@ -77,10 +77,10 @@ class TemplateModelBuilder {
 
     private TypeMapping buildMapping(String basePackage, String typeName) {
         if (typeName == null || typeName.isBlank()) {
-            return new TypeMapping(null, null, false);
+            return TypeMapping.unresolved();
         }
         ClassName domainType = ClassName.get(basePackage + ".common.domain", typeName);
-        return new TypeMapping(domainType, null, false);
+        return TypeMapping.withoutMapper(domainType);
     }
 
     private String toPackageSegment(String name) {

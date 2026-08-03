@@ -1813,4 +1813,25 @@ class PipelineTemplateConfigLoaderTest {
         assertInstanceOf(PipelineTemplateTypeReference.MapType.class, input.fields().getFirst().type());
         assertInstanceOf(PipelineTemplateTypeReference.Scalar.class, outcome.variants().get("accepted").payload());
     }
+
+    @Test
+    void rejectsRepresentationProviderConfigurationOutsideVersionThree() throws Exception {
+        Path configPath = tempDir.resolve("v2-representations.yaml");
+        Files.writeString(configPath, """
+            version: 2
+            appName: Legacy Types
+            basePackage: com.example.v2
+            transport: GRPC
+            representations:
+              opencsv: {}
+            messages:
+              Input: { fields: [] }
+            steps: []
+            """);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertEquals("Top-level representations require version: 3", exception.getMessage());
+    }
 }

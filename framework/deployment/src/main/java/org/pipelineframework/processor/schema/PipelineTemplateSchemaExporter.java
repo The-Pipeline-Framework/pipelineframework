@@ -2039,6 +2039,19 @@ public final class PipelineTemplateSchemaExporter {
           "type": "string",
           "minLength": 1
         },
+        "idempotency": {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "additionalProperties": false
+        },
         "idempotencyKeyFields": {
           "type": "array",
           "items": {
@@ -2079,6 +2092,14 @@ public final class PipelineTemplateSchemaExporter {
         }
       },
       "allOf": [
+        {
+          "not": {
+            "required": [
+              "idempotency",
+              "idempotencyKeyFields"
+            ]
+          }
+        },
         {
           "anyOf": [
             {
