@@ -126,12 +126,12 @@ class AwaitClientStepRendererTest {
     }
 
     @Test
-    void rendersV3AwaitWithProtobufTransportMetadataWhenPipelineIsLocal() throws IOException {
+    void rendersV3AwaitWithCanonicalTypesWhenPipelineIsLocal() throws IOException {
         Path pipelineConfig = tempDir.resolve("pipeline.v3.yaml");
         Files.writeString(pipelineConfig, """
             version: 3
             basePackage: com.example.payment
-            transport: GRPC
+            transport: LOCAL
             steps: []
             aspects: []
             """);
@@ -156,10 +156,9 @@ class AwaitClientStepRendererTest {
             "com/example/payment/pipeline/AwaitPaymentProviderAwaitClientStep.java"));
 
         assertTrue(source.contains("StepOneToOne<PaymentRecord, PaymentStatus>"));
-        assertTrue(source.contains("import com.example.payment.grpc.PipelineTypes;"));
-        assertTrue(source.contains("PipelineTypes.PaymentRecord.class.getName(), PipelineTypes.PaymentStatus.class.getName()"));
-        assertTrue(source.contains("PipelineDomainProtoAdapters.toProto"));
-        assertTrue(source.contains("PipelineDomainProtoAdapters.fromProto"));
+        assertTrue(source.contains("\"com.example.payment.domain.PaymentRecord\", \"com.example.payment.domain.PaymentStatus\""));
+        assertFalse(source.contains("PipelineTypes"));
+        assertFalse(source.contains("PipelineDomainProtoAdapters"));
     }
 
     @Test
