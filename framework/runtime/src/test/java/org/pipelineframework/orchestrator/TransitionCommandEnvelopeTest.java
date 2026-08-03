@@ -173,6 +173,30 @@ class TransitionCommandEnvelopeTest {
     }
 
     @Test
+    void restoresSerializedChildPayloadsToTheirCanonicalRuntimeTypeAcrossEnvelopeRoundTrip() {
+        SerializedTransitionPayload child = payloadCodec.encode(new SamplePayload("payment-1", 99));
+        TransitionWorkerCommand command = command(new ExecutionInputSnapshot(
+            ExecutionInputShape.MULTI,
+            List.of(child)));
+
+        TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
+            command,
+            "pipeline-1",
+            "contract-1",
+            "release-1",
+            "trace-1",
+            payloadCodec.encode(command.inputPayload()));
+
+        ExecutionInputSnapshot snapshot = assertInstanceOf(
+            ExecutionInputSnapshot.class,
+            envelope.toCommand(payloadCodec).inputPayload());
+        List<?> items = assertInstanceOf(List.class, snapshot.payload());
+        SamplePayload restored = assertInstanceOf(SamplePayload.class, items.getFirst());
+        assertEquals("payment-1", restored.id());
+        assertEquals(99, restored.amount());
+    }
+
+    @Test
     void preservesPathPayloadFieldsAcrossEnvelopeRoundTrip() {
         TransitionWorkerCommand command = command(new ExecutionInputSnapshot(
             ExecutionInputShape.UNI,

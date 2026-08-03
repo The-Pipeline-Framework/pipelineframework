@@ -8,6 +8,12 @@ COMPOSE_KAFKA_FILE="${SCRIPT_DIR}/compose.kafka.yaml"
 
 export TPF_REPO_ROOT="${TPF_REPO_ROOT:-${REPO_ROOT}}"
 export TPF_KAFKA_PORT="${TPF_KAFKA_PORT:-9093}"
+export TPF_CSV_KAFKA_PARTITIONS="${TPF_CSV_KAFKA_PARTITIONS:-1}"
+
+if ! [[ "${TPF_CSV_KAFKA_PARTITIONS}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: TPF_CSV_KAFKA_PARTITIONS must be a positive integer." >&2
+  exit 1
+fi
 
 compose() {
   docker compose -f "${COMPOSE_FILE}" -f "${COMPOSE_KAFKA_FILE}" "$@"
@@ -50,7 +56,7 @@ create_topic_if_missing() {
     --create \
     --if-not-exists \
     --topic "${topic}" \
-    --partitions 1 \
+    --partitions "${TPF_CSV_KAFKA_PARTITIONS}" \
     --replication-factor 1 >/dev/null
 }
 

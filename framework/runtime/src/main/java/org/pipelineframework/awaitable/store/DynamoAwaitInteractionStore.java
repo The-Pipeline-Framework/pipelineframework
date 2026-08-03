@@ -19,6 +19,7 @@ import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
+import org.pipelineframework.awaitable.AwaitDurablePayloadResolver;
 import org.pipelineframework.awaitable.AwaitCreateCommand;
 import org.pipelineframework.awaitable.AwaitCreateResult;
 import org.pipelineframework.awaitable.AwaitInteractionNotFoundException;
@@ -28,6 +29,7 @@ import org.pipelineframework.awaitable.AwaitInteractionTerminalException;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.TypedDurablePayload;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
@@ -106,6 +108,9 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
 
+    @Inject
+    AwaitDurablePayloadResolver durablePayloadResolver;
+
     private volatile DynamoDbClient client;
 
     /**
@@ -117,6 +122,15 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     DynamoAwaitInteractionStore(DynamoDbClient client, PipelineOrchestratorConfig orchestratorConfig) {
         this.client = client;
         this.orchestratorConfig = orchestratorConfig;
+    }
+
+    DynamoAwaitInteractionStore(
+        DynamoDbClient client,
+        PipelineOrchestratorConfig orchestratorConfig,
+        AwaitDurablePayloadResolver durablePayloadResolver) {
+        this.client = client;
+        this.orchestratorConfig = orchestratorConfig;
+        this.durablePayloadResolver = durablePayloadResolver;
     }
 
     @Override
@@ -595,7 +609,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             current.interactionId(),
             current.version(),
             AwaitInteractionStatus.COMPLETED,
-            command.responsePayload(),
+            serializePayload(current, AwaitDurablePayloadResolver.Slot.RESPONSE, command.responsePayload()),
             command.actor(),
             null,
             command.nowEpochMs());
@@ -631,7 +645,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         String interactionId,
         long expectedVersion,
         AwaitInteractionStatus status,
-        Object responsePayload,
+        String responsePayloadJson,
         String actor,
         Map<String, Object> transportMetadata,
         long nowEpochMs) {
@@ -641,7 +655,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             expectedVersion,
             null,
             status,
-            responsePayload,
+            responsePayloadJson,
             actor,
             transportMetadata,
             nowEpochMs);
@@ -653,7 +667,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         long expectedVersion,
         AwaitInteractionStatus requiredStatus,
         AwaitInteractionStatus status,
-        Object responsePayload,
+        String responsePayloadJson,
         String actor,
         Map<String, Object> transportMetadata,
         long nowEpochMs) {
@@ -671,9 +685,9 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         if (requiredStatus != null) {
             values.put(":requiredStatus", avS(requiredStatus.name()));
         }
-        if (responsePayload != null) {
+        if (responsePayloadJson != null) {
             names.put("#response", RESPONSE_PAYLOAD_JSON);
-            values.put(":response", avS(toJson(responsePayload)));
+            values.put(":response", avS(responsePayloadJson));
         }
         if (actor != null && !actor.isBlank()) {
             names.put("#actor", ACTOR);
@@ -693,7 +707,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             names.put("#deadlineSort", QUERY_DEADLINE_SORT);
         }
         StringBuilder update = new StringBuilder("SET #status = :status, #version = #version + :one, #updated = :now");
-        if (responsePayload != null) {
+        if (responsePayloadJson != null) {
             update.append(", #response = :response");
         }
         if (actor != null && !actor.isBlank()) {
@@ -784,7 +798,8 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         item.put(IDEMPOTENCY_KEY, avS(record.idempotencyKey()));
         item.put(VERSION, avN(record.version()));
         item.put(STATUS, avS(record.status().name()));
-        putIfPresent(item, REQUEST_PAYLOAD_JSON, toJson(record.requestPayload()));
+        putIfPresent(item, REQUEST_PAYLOAD_JSON,
+            serializePayload(record, AwaitDurablePayloadResolver.Slot.REQUEST, record.requestPayload()));
         item.put(TRANSPORT_TYPE, avS(record.transportType()));
         putIfPresent(item, TRANSPORT_METADATA_JSON, toJson(record.transportMetadata()));
         item.put(DEADLINE_EPOCH_MS, avN(record.deadlineEpochMs()));
@@ -792,7 +807,8 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         item.put(UPDATED_AT_EPOCH_MS, avN(record.updatedAtEpochMs()));
         item.put(TTL_EPOCH_S, avN(record.ttlEpochS()));
         putIfPresent(item, CAUSATION_ID, record.causationId());
-        putIfPresent(item, RESPONSE_PAYLOAD_JSON, toJson(record.responsePayload()));
+        putIfPresent(item, RESPONSE_PAYLOAD_JSON,
+            serializePayload(record, AwaitDurablePayloadResolver.Slot.RESPONSE, record.responsePayload()));
         putIfPresent(item, UNIT_ID, record.unitId());
         if (record.itemIndex() != null) {
             item.put(ITEM_INDEX, avN(record.itemIndex()));
@@ -806,7 +822,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
 
     @SuppressWarnings("unchecked")
     private AwaitInteractionRecord toRecord(Map<String, AttributeValue> item) {
-        return new AwaitInteractionRecord(
+        AwaitInteractionRecord stored = new AwaitInteractionRecord(
             readString(item, TENANT_ID),
             readString(item, EXECUTION_ID),
             readString(item, STEP_ID),
@@ -818,8 +834,8 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             readString(item, IDEMPOTENCY_KEY),
             readLong(item, VERSION),
             AwaitInteractionStatus.valueOf(readString(item, STATUS)),
-            fromJson(readString(item, REQUEST_PAYLOAD_JSON)),
-            fromJson(readString(item, RESPONSE_PAYLOAD_JSON)),
+            null,
+            null,
             readString(item, UNIT_ID),
             readInteger(item, ITEM_INDEX),
             readString(item, ACTOR),
@@ -832,6 +848,74 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             readLong(item, UPDATED_AT_EPOCH_MS),
             readLong(item, TTL_EPOCH_S),
             readString(item, TRANSPORT_OUTPUT_TYPE));
+        return withPayloads(
+            stored,
+            deserializePayload(stored, AwaitDurablePayloadResolver.Slot.REQUEST, readString(item, REQUEST_PAYLOAD_JSON)),
+            deserializePayload(stored, AwaitDurablePayloadResolver.Slot.RESPONSE, readString(item, RESPONSE_PAYLOAD_JSON)));
+    }
+
+    private AwaitInteractionRecord withPayloads(AwaitInteractionRecord stored, Object requestPayload, Object responsePayload) {
+        return new AwaitInteractionRecord(
+            stored.tenantId(), stored.executionId(), stored.stepId(), stored.stepIndex(), stored.outputType(),
+            stored.interactionId(), stored.correlationId(), stored.causationId(), stored.idempotencyKey(),
+            stored.version(), stored.status(), requestPayload, responsePayload, stored.unitId(), stored.itemIndex(),
+            stored.actor(), stored.assignee(), stored.group(), stored.transportType(), stored.transportMetadata(),
+            stored.deadlineEpochMs(), stored.createdAtEpochMs(), stored.updatedAtEpochMs(), stored.ttlEpochS(),
+            stored.transportOutputType());
+    }
+
+    private String serializePayload(AwaitInteractionRecord interaction, AwaitDurablePayloadResolver.Slot slot, Object payload) {
+        if (payload == null) {
+            return null;
+        }
+        if (durablePayloadResolver == null || !durablePayloadResolver.supportsTypedPayloads(interaction)) {
+            return toJson(payload);
+        }
+        return durablePayloadResolver.encode(interaction, slot, restoreTransitionTypedPayload(interaction, slot, payload));
+    }
+
+    private Object restoreTransitionTypedPayload(
+        AwaitInteractionRecord interaction,
+        AwaitDurablePayloadResolver.Slot slot,
+        Object payload
+    ) {
+        if (!(payload instanceof Map<?, ?> map)) {
+            return payload;
+        }
+        try {
+            var envelope = TypedDurablePayload.fromDurableValue(map);
+            if (envelope.isPresent()) {
+                return durablePayloadResolver.decodeEnvelope(interaction, slot, envelope.get());
+            }
+            // Transition records written before their payload field carried the typed envelope may
+            // still materialize as a JSON object. Bind that known legacy shape to the descriptor,
+            // never pass the map through to another durable write.
+            return durablePayloadResolver.decodeLegacy(interaction, slot,
+                PipelineJson.mapper().writeValueAsString(map));
+        } catch (Exception e) {
+            throw new IllegalStateException("Await transition carried an invalid typed durable payload: interactionId="
+                + interaction.interactionId() + ", slot=" + slot, e);
+        }
+    }
+
+    private Object deserializePayload(AwaitInteractionRecord interaction, AwaitDurablePayloadResolver.Slot slot, String payload) {
+        if (payload == null) {
+            return null;
+        }
+        if (!isTypedDurablePayload(payload)) {
+            return durablePayloadResolver == null || !durablePayloadResolver.supportsTypedPayloads(interaction)
+                ? fromJson(payload)
+                : durablePayloadResolver.decodeLegacy(interaction, slot, payload);
+        }
+        if (durablePayloadResolver == null) {
+            throw new IllegalStateException("Typed await payload requires the pinned-release durable payload resolver: interactionId="
+                + interaction.interactionId() + ", slot=" + slot);
+        }
+        return durablePayloadResolver.decode(interaction, slot, payload);
+    }
+
+    private static boolean isTypedDurablePayload(String payload) {
+        return TypedDurablePayload.fromSerializedBytes(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8)).isPresent();
     }
 
     private <T> Uni<T> blocking(Supplier<T> supplier) {

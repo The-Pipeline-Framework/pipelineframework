@@ -231,7 +231,7 @@ public class PaymentProviderSqsAwaitMock {
         dispatch.correlationId(),
         dispatch.resumeToken(),
         dispatch.interactionId(),
-        PipelineDomainProtoAdapters.toProto(status),
+        PaymentProviderAwaitTransportPayload.protobufJson(PipelineDomainProtoAdapters.toProto(status)),
         "csv-payments-sqs-mock-provider");
   }
 

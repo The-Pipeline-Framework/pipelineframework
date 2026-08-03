@@ -427,6 +427,8 @@ class ItemizedAwaitContinuationFlow {
               plan.parent().releaseVersion(),
               plan.continuationInput(),
               ExecutionResultShape.MATERIALIZED_MULTI,
+              Optional.of(plan.interaction().outputType()),
+              plan.parent().currentStepIndex() + 1,
               nowEpochMs,
               ttl);
           return executionStateStore.createOrGetExecution(create)

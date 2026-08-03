@@ -235,6 +235,26 @@ class QueueAsyncSubmissionFlowTest {
     assertFalse(request.explicitTenant());
   }
 
+  @Test
+  void activatesTheTenantReleaseBeforePersistingTheExecution() {
+    when(executionStateStore.createOrGetExecution(any()))
+        .thenReturn(Uni.createFrom().item(new CreateExecutionResult(record("exec-1", "key-1"), true)));
+    @SuppressWarnings("unchecked")
+    java.util.function.Function<PipelineRunSubmission, Uni<Void>> activation = mock(java.util.function.Function.class);
+    when(activation.apply(any())).thenReturn(Uni.createFrom().voidItem());
+    QueueAsyncSubmissionFlow activatedFlow = new QueueAsyncSubmissionFlow(
+        orchestratorConfig, inputPolicy, resultShapeResolver, executionStateStore, workDispatcher,
+        admissionPolicy, () -> "pipeline-a", () -> "contract-a", () -> "release-a",
+        () -> segmentBoundaryLedger, activation);
+
+    activatedFlow.submit("input", "restaurant-demo", "idem-1", false).await().indefinitely();
+
+    ArgumentCaptor<PipelineRunSubmission> submission = ArgumentCaptor.forClass(PipelineRunSubmission.class);
+    verify(activation).apply(submission.capture());
+    assertEquals("restaurant-demo", submission.getValue().tenantId());
+    verify(executionStateStore).createOrGetExecution(any());
+  }
+
   private QueueAsyncSubmissionFlow newFlow(
       ExecutionInputPolicy policy,
       Supplier<SegmentBoundaryLedger> ledger) {

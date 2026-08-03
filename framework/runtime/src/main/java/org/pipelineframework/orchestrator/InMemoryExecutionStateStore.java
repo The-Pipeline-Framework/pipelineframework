@@ -62,7 +62,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     command.resultShape(),
                     ExecutionStatus.QUEUED,
                     0L,
-                    0,
+                    command.initialStepIndex(),
                     0,
                     null,
                     0L,

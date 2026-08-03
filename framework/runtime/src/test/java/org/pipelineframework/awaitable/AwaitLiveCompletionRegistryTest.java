@@ -12,6 +12,7 @@ import io.smallrye.mutiny.helpers.test.AssertSubscriber;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -135,6 +136,27 @@ class AwaitLiveCompletionRegistryTest {
             () -> session.acquirePermit("item:2", 1).await().indefinitely());
     }
 
+    @Test
+    void deliversTheCanonicalCompletionWithoutApplyingTheTransportAdapterAgain() {
+        AwaitLiveCompletionRegistry registry = new AwaitLiveCompletionRegistry();
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+            "v3", CanonicalStatus.class.getName(), CanonicalStatus.class.getName(), "ONE_TO_ONE",
+            Duration.ofMinutes(5), "interactionId", "kafka", Map.of(), java.util.List.of(),
+            String.class.getName(), TransportStatus.class.getName(),
+            java.util.function.Function.identity(), ignored -> {
+                throw new AssertionError("the live registry must not convert an already canonical completion");
+            });
+        AwaitLiveCompletionRegistry.LiveAwaitSession<CanonicalStatus> session = registry.open(descriptor, "tenant", "unit");
+        AssertSubscriber<CanonicalStatus> subscriber = AssertSubscriber.create(1);
+        Multi.createFrom().publisher(session).subscribe().withSubscriber(subscriber);
+
+        CanonicalStatus expected = new CanonicalStatus("approved");
+        session.enqueue(canonicalCompletion(expected)).await().indefinitely();
+
+        subscriber.awaitItems(1, Duration.ofSeconds(5));
+        assertEquals(expected, subscriber.getItems().getFirst());
+    }
+
     private static AwaitStepDescriptor descriptor() {
         return new AwaitStepDescriptor(
             "review",
@@ -156,5 +178,21 @@ class AwaitLiveCompletionRegistryTest {
             0L, AwaitInteractionStatus.COMPLETED,
             "request-" + index, "response-" + index, "unit", index, null,
             null, null, "kafka", Map.of(), now + 300000, now, now, now + 86400);
+    }
+
+    private static AwaitInteractionRecord canonicalCompletion(CanonicalStatus value) {
+        long now = System.currentTimeMillis();
+        return new AwaitInteractionRecord(
+            "tenant", "execution", "v3", 1, CanonicalStatus.class.getName(),
+            "interaction-v3", "correlation-v3", "causation-v3", "idempotency-v3",
+            0L, AwaitInteractionStatus.COMPLETED,
+            "request", value, "unit", 0, null,
+            null, null, "kafka", Map.of(), now + 300000, now, now, now + 86400);
+    }
+
+    private record CanonicalStatus(String value) {
+    }
+
+    private record TransportStatus(String value) {
     }
 }

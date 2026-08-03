@@ -50,6 +50,7 @@ import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
 import org.pipelineframework.orchestrator.TransitionWorkerExecutor;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
+import org.pipelineframework.orchestrator.release.LocalPipelineReleaseActivation;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 import org.pipelineframework.objectpublish.ObjectPublishCompletionService;
@@ -105,6 +106,9 @@ class QueueAsyncCoordinator {
 
   @Inject
   PipelineReleaseIdentityResolver releaseIdentityResolver;
+
+  @Inject
+  LocalPipelineReleaseActivation localReleaseActivation;
 
   @Inject
   ControlPlaneAdmissionPolicy controlPlaneAdmissionPolicy;
@@ -539,11 +543,23 @@ class QueueAsyncCoordinator {
             this::pipelineId,
             this::contractVersion,
             this::releaseVersion,
-            this::segmentBoundaryLedger);
+            this::segmentBoundaryLedger,
+            this::activateLocalReleaseForSubmission);
         submissionFlow = current;
       }
       return current;
     }
+  }
+
+  private Uni<Void> activateLocalReleaseForSubmission(PipelineRunSubmission submission) {
+    if (localReleaseActivation == null) {
+      return Uni.createFrom().voidItem();
+    }
+    return localReleaseActivation.activateForCurrentRelease(
+        submission.tenantId(),
+        submission.pipelineId(),
+        submission.contractVersion(),
+        submission.releaseVersion());
   }
 
   private QueueAsyncRedriveFlow redriveFlow() {

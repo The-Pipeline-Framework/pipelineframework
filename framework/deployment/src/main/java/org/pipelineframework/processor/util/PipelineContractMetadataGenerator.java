@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,6 +26,9 @@ import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.pipeline.PipelineYamlStep;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
+import org.pipelineframework.config.template.PipelineTemplateTypeModel;
+import org.pipelineframework.config.template.PipelineTemplateTypeReference;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
@@ -70,7 +74,10 @@ public class PipelineContractMetadataGenerator {
 
         String pipelineId = resolvePipelineId(ctx);
         Map<String, Object> contractWithoutHash = new LinkedHashMap<>();
-        contractWithoutHash.put("schemaVersion", 1);
+        Map<String, Object> canonicalTypes = canonicalTypes(ctx);
+        int schemaVersion = canonicalTypes.isEmpty() ? 1 : 2;
+        String canonicalCatalogFingerprint = sha256(CANONICAL_GSON.toJson(canonicalTypes));
+        contractWithoutHash.put("schemaVersion", schemaVersion);
         contractWithoutHash.put("pipelineId", pipelineId);
         contractWithoutHash.put("platform", ctx.getPlatformMode() == null ? "COMPUTE" : ctx.getPlatformMode().name());
         contractWithoutHash.put("transport", ctx.getTransportMode() == null ? "GRPC" : ctx.getTransportMode().name());
@@ -78,11 +85,13 @@ public class PipelineContractMetadataGenerator {
         contractWithoutHash.put("pluginHost", ctx.isPluginHost());
         contractWithoutHash.put("runtimeLayout", ctx.getRuntimeMapping() == null ? null : ctx.getRuntimeMapping().layout().name());
         contractWithoutHash.put("steps", steps);
+        contractWithoutHash.put("canonicalTypes", canonicalTypes);
+        contractWithoutHash.put("canonicalCatalogFingerprint", canonicalCatalogFingerprint);
         contractWithoutHash.put("capabilities", capabilities());
 
         String contractHash = sha256(CANONICAL_GSON.toJson(contractWithoutHash));
         Map<String, Object> finalContract = new LinkedHashMap<>();
-        finalContract.put("schemaVersion", 1);
+        finalContract.put("schemaVersion", schemaVersion);
         finalContract.put("pipelineId", pipelineId);
         finalContract.put("contractVersion", "sha256:" + contractHash);
         finalContract.put("contractHash", contractHash);
@@ -92,6 +101,8 @@ public class PipelineContractMetadataGenerator {
         finalContract.put("pluginHost", contractWithoutHash.get("pluginHost"));
         finalContract.put("runtimeLayout", contractWithoutHash.get("runtimeLayout"));
         finalContract.put("steps", steps);
+        finalContract.put("canonicalTypes", canonicalTypes);
+        finalContract.put("canonicalCatalogFingerprint", canonicalCatalogFingerprint);
         finalContract.put("capabilities", contractWithoutHash.get("capabilities"));
 
         if (processingEnv != null) {
@@ -101,6 +112,67 @@ public class PipelineContractMetadataGenerator {
                 writer.write(PRETTY_GSON.toJson(finalContract));
             }
         }
+    }
+
+    private Map<String, Object> canonicalTypes(PipelineCompilationContext ctx) {
+        if (!(ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config)
+            || config.dialect() != org.pipelineframework.config.template.PipelineTemplateDialect.V3) {
+            return Map.of();
+        }
+        PipelineTemplateTypeModel model = config.typeModel();
+        Map<String, Object> types = new java.util.TreeMap<>();
+        for (Map.Entry<String, PipelineTemplateTypeDefinition> entry : model.definitions().entrySet()) {
+            Map<String, Object> definition = definition(entry.getValue());
+            String fingerprint = sha256(CANONICAL_GSON.toJson(definition));
+            Map<String, Object> binding = new LinkedHashMap<>();
+            binding.put("definition", definition);
+            binding.put("definitionFingerprint", fingerprint);
+            binding.put("runtimeClass", config.basePackage() + ".domain." + entry.getKey());
+            types.put(entry.getKey(), immutableSortedMap(binding));
+        }
+        return immutableSortedMap(types);
+    }
+
+    private Map<String, Object> definition(PipelineTemplateTypeDefinition definition) {
+        Map<String, Object> encoded = new LinkedHashMap<>();
+        encoded.put("id", definition.name());
+        if (definition instanceof PipelineTemplateTypeDefinition.RecordType record) {
+            encoded.put("kind", "record");
+            List<Map<String, Object>> fields = record.fields().stream()
+                .sorted(java.util.Comparator.comparing(PipelineTemplateTypeDefinition.Field::name))
+                .map(field -> immutableSortedMap(Map.of("name", field.name(), "type", typeExpression(field.type()))))
+                .toList();
+            encoded.put("fields", fields);
+        } else if (definition instanceof PipelineTemplateTypeDefinition.WrapperType wrapper) {
+            encoded.put("kind", "wrapper");
+            encoded.put("wraps", typeExpression(wrapper.wraps()));
+        } else if (definition instanceof PipelineTemplateTypeDefinition.AliasType alias) {
+            encoded.put("kind", "alias");
+            encoded.put("target", typeExpression(alias.target()));
+        } else if (definition instanceof PipelineTemplateTypeDefinition.UnionType union) {
+            encoded.put("kind", "union");
+            List<Map<String, Object>> variants = union.variants().values().stream()
+                .sorted(java.util.Comparator.comparing(PipelineTemplateTypeDefinition.Variant::discriminator))
+                .map(variant -> immutableSortedMap(Map.of(
+                    "discriminator", variant.discriminator(), "payload", typeExpression(variant.payload()))))
+                .toList();
+            encoded.put("variants", variants);
+        }
+        return immutableSortedMap(encoded);
+    }
+
+    private Map<String, Object> typeExpression(PipelineTemplateTypeReference reference) {
+        if (reference instanceof PipelineTemplateTypeReference.Named named) {
+            return immutableSortedMap(Map.of("kind", "named", "id", named.name()));
+        }
+        if (reference instanceof PipelineTemplateTypeReference.Scalar scalar) {
+            return immutableSortedMap(Map.of("kind", "scalar", "id", scalar.name()));
+        }
+        if (reference instanceof PipelineTemplateTypeReference.MapType map) {
+            return immutableSortedMap(Map.of(
+                "kind", "map", "key", typeExpression(map.keyType()), "value", typeExpression(map.valueType())));
+        }
+        throw new IllegalArgumentException("Unsupported canonical type expression: " + reference);
     }
 
     private List<Map<String, Object>> stepDescriptors(PipelineCompilationContext ctx) {
@@ -127,6 +199,14 @@ public class PipelineContractMetadataGenerator {
             descriptors.add(descriptor);
         }
         return descriptors;
+    }
+
+    private static Map<String, Object> immutableSortedMap(Map<String, ?> values) {
+        Map<String, Object> sorted = new LinkedHashMap<>();
+        values.entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
+            .forEach(entry -> sorted.put(entry.getKey(), entry.getValue()));
+        return Collections.unmodifiableMap(sorted);
     }
 
     private String resolvePipelineId(PipelineCompilationContext ctx) {

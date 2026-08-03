@@ -5,10 +5,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXAMPLE_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 REPO_ROOT="$(cd "${EXAMPLE_DIR}/../.." && pwd)"
 MVN_BIN="${MVN_BIN:-${REPO_ROOT}/mvnw}"
-EXTRA_MAVEN_ARGS=(-Dmaven.repo.local="${REPO_ROOT}/.m2/repository")
+EXTRA_MAVEN_ARGS=()
 if [[ -n "${TPF_MAVEN_ARGS:-}" ]]; then
   read -r -a configured_maven_args <<< "${TPF_MAVEN_ARGS}"
   EXTRA_MAVEN_ARGS+=("${configured_maven_args[@]}")
+fi
+if [[ " ${EXTRA_MAVEN_ARGS[*]-} " != *" -Dmaven.repo.local="* ]]; then
+  EXTRA_MAVEN_ARGS+=(-Dmaven.repo.local="${REPO_ROOT}/.m2/repository")
 fi
 
 if [[ ! -x "${MVN_BIN}" ]]; then

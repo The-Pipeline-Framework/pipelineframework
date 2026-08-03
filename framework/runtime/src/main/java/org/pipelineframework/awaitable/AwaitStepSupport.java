@@ -400,7 +400,7 @@ public class AwaitStepSupport {
         int stepIndex = context.currentStepIndex();
         String unitId = streamUnitId(descriptor, context, stepIndex);
         AtomicInteger itemIndex = new AtomicInteger();
-        Multi<AwaitInteractionRecord> dispatched = input.onItem().transformToUniAndConcatenate(item -> {
+        java.util.function.Function<I, Uni<? extends AwaitInteractionRecord>> itemDispatch = item -> {
             int index = itemIndex.getAndIncrement();
             return withAwaitExecutionContext(context, () -> awaitCoordinator.createOrGetItem(
                 descriptor,
@@ -419,7 +419,11 @@ public class AwaitStepSupport {
                         ? awaitCoordinator.dispatch(descriptor, record)
                         : Uni.createFrom().item(record);
                 }));
-        });
+        };
+        Multi<AwaitInteractionRecord> dispatched = pipelineConfig != null
+                && pipelineConfig.parallelism() == ParallelismPolicy.SEQUENTIAL
+            ? input.onItem().transformToUni(itemDispatch).concatenate()
+            : input.onItem().transformToUni(itemDispatch).merge(awaitMaxConcurrency());
         return dispatched
             .collect().in(() -> Boolean.TRUE, (ignored, record) -> {
             })

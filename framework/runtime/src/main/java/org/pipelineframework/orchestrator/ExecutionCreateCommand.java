@@ -2,6 +2,7 @@ package org.pipelineframework.orchestrator;
 
 import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Input command for creating or resolving an async execution.
@@ -20,9 +21,62 @@ public record ExecutionCreateCommand(
     String releaseVersion,
     Object inputPayload,
     ExecutionResultShape resultShape,
+    Optional<String> inputCanonicalTypeId,
+    int initialStepIndex,
     long nowEpochMs,
     long ttlEpochS
 ) {
+    public ExecutionCreateCommand(
+        String tenantId,
+        String executionKey,
+        String pipelineId,
+        String contractVersion,
+        String releaseVersion,
+        Object inputPayload,
+        ExecutionResultShape resultShape,
+        long nowEpochMs,
+        long ttlEpochS
+    ) {
+        this(
+            tenantId,
+            executionKey,
+            pipelineId,
+            contractVersion,
+            releaseVersion,
+            inputPayload,
+            resultShape,
+            Optional.empty(),
+            0,
+            nowEpochMs,
+            ttlEpochS);
+    }
+
+    public ExecutionCreateCommand(
+        String tenantId,
+        String executionKey,
+        String pipelineId,
+        String contractVersion,
+        String releaseVersion,
+        Object inputPayload,
+        ExecutionResultShape resultShape,
+        int initialStepIndex,
+        long nowEpochMs,
+        long ttlEpochS
+    ) {
+        this(
+            tenantId,
+            executionKey,
+            pipelineId,
+            contractVersion,
+            releaseVersion,
+            inputPayload,
+            resultShape,
+            Optional.empty(),
+            initialStepIndex,
+            nowEpochMs,
+            ttlEpochS);
+    }
+
     public ExecutionCreateCommand(
         String tenantId,
         String executionKey,
@@ -41,6 +95,8 @@ public record ExecutionCreateCommand(
             releaseVersion,
             inputPayload,
             resultShape,
+            Optional.empty(),
+            0,
             nowEpochMs,
             ttlEpochS);
     }
@@ -61,6 +117,8 @@ public record ExecutionCreateCommand(
             PipelineContractDescriptor.DEFAULT_CONTRACT_VERSION,
             inputPayload,
             resultShape,
+            Optional.empty(),
+            0,
             nowEpochMs,
             ttlEpochS);
     }
@@ -72,5 +130,11 @@ public record ExecutionCreateCommand(
         Objects.requireNonNull(contractVersion, "ExecutionCreateCommand.contractVersion must not be null");
         Objects.requireNonNull(releaseVersion, "ExecutionCreateCommand.releaseVersion must not be null");
         Objects.requireNonNull(resultShape, "ExecutionCreateCommand.resultShape must not be null");
+        inputCanonicalTypeId = Objects.requireNonNull(inputCanonicalTypeId,
+            "ExecutionCreateCommand.inputCanonicalTypeId must not be null");
+        inputCanonicalTypeId = inputCanonicalTypeId.filter(value -> !value.isBlank());
+        if (initialStepIndex < 0) {
+            throw new IllegalArgumentException("ExecutionCreateCommand.initialStepIndex must be >= 0");
+        }
     }
 }

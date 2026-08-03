@@ -45,6 +45,271 @@ import static org.mockito.Mockito.*;
 class DynamoExecutionStateStoreTest {
 
     @Test
+    void writesAndRestoresTypedExecutionInputAndMaterializedChildResults() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        ExecutionDurablePayloadResolver payloads = mock(ExecutionDurablePayloadResolver.class);
+        store.durablePayloadResolver = payloads;
+        String typedInput = typed("PaymentRecord");
+        String typedChildren = typed("List<PaymentOutput>");
+        PaymentRecord input = new PaymentRecord("payment-1");
+        List<PaymentOutput> outputs = List.of(new PaymentOutput("payment-1", "approved"));
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().build());
+        when(payloads.supportsTypedPayloads(any())).thenReturn(true);
+        when(payloads.encode(any(), eq(ExecutionDurablePayloadResolver.Slot.INPUT), eq(input))).thenReturn(typedInput);
+
+        store.createOrGetExecution(new ExecutionCreateCommand(
+            "tenant-a", "key-typed", "org.example.pipeline", "sha256:contract", "sha256:release", input,
+            ExecutionResultShape.SINGLE, now, ttl)).await().indefinitely();
+
+        ArgumentCaptor<TransactWriteItemsRequest> created = ArgumentCaptor.forClass(TransactWriteItemsRequest.class);
+        verify(client).transactWriteItems(created.capture());
+        assertEquals(typedInput, created.getValue().transactItems().getFirst().put().item().get("input_payload_json").s());
+
+        Map<String, AttributeValue> inputRecord = new java.util.HashMap<>(executionItem(
+            "tenant-a", "exec-typed", "key-typed", ttl, ExecutionStatus.RUNNING));
+        inputRecord.put("input_payload_json", AttributeValue.builder().s(typedInput).build());
+        inputRecord.put("input_payload_type_id", AttributeValue.builder().s("typed-durable").build());
+        inputRecord.put("input_payload_encoding", AttributeValue.builder().s("application/tpf-canonical+json").build());
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().item(inputRecord).build());
+        when(payloads.decode(any(), eq(ExecutionDurablePayloadResolver.Slot.INPUT), eq(typedInput))).thenReturn(input);
+        assertEquals(input, store.getExecution("tenant-a", "exec-typed").await().indefinitely().orElseThrow().inputPayload());
+
+        Map<String, AttributeValue> persisted = new java.util.HashMap<>(executionItem(
+            "tenant-a", "exec-typed", "key-typed", ttl, ExecutionStatus.RUNNING));
+        persisted.put("current_step_index", AttributeValue.builder().n("1").build());
+        Map<String, AttributeValue> completed = new java.util.HashMap<>(persisted);
+        completed.put("status", AttributeValue.builder().s(ExecutionStatus.SUCCEEDED.name()).build());
+        completed.put("result_payload_json", AttributeValue.builder().s(typedChildren).build());
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().item(persisted).build());
+        when(client.updateItem(any(UpdateItemRequest.class))).thenReturn(UpdateItemResponse.builder().attributes(completed).build());
+        when(payloads.encode(any(), eq(ExecutionDurablePayloadResolver.Slot.RESULT), eq(outputs))).thenReturn(typedChildren);
+        when(payloads.decode(any(), eq(ExecutionDurablePayloadResolver.Slot.RESULT), eq(typedChildren))).thenReturn(outputs);
+
+        Optional<ExecutionRecord<Object, Object>> restored = store.markSucceeded(
+            "tenant-a", "exec-typed", 0L, "typed-transition", outputs, now).await().indefinitely();
+
+        assertEquals(outputs, restored.orElseThrow().resultPayload());
+        assertInstanceOf(PaymentOutput.class, ((List<?>) restored.orElseThrow().resultPayload()).getFirst());
+        ArgumentCaptor<UpdateItemRequest> update = ArgumentCaptor.forClass(UpdateItemRequest.class);
+        verify(client).updateItem(update.capture());
+        assertEquals(typedChildren, update.getValue().expressionAttributeValues().get(":result").s());
+        verify(payloads).decode(any(), eq(ExecutionDurablePayloadResolver.Slot.RESULT), eq(typedChildren));
+    }
+
+    @Test
+    void writesAnAwaitItemChildInputUsingItsContinuationContract() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
+        ExecutionDurablePayloadResolver payloads = mock(ExecutionDurablePayloadResolver.class);
+        store.durablePayloadResolver = payloads;
+        PaymentStatus continuation = new PaymentStatus("payment-1", "approved");
+        ExecutionInputSnapshot input = new ExecutionInputSnapshot(ExecutionInputShape.UNI, continuation);
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().build());
+        when(payloads.supportsTypedPayloads(any())).thenReturn(true);
+        when(payloads.encode(any(), eq(PaymentStatus.class.getName()), eq(continuation)))
+            .thenReturn(typed("PaymentStatus"));
+
+        store.createOrGetExecution(new ExecutionCreateCommand(
+            "tenant-a", "await-item-child", "org.example.pipeline", "sha256:contract", "sha256:release", input,
+            ExecutionResultShape.MATERIALIZED_MULTI, Optional.of(PaymentStatus.class.getName()), 3, now, ttl)).await().indefinitely();
+
+        ArgumentCaptor<TransactWriteItemsRequest> created = ArgumentCaptor.forClass(TransactWriteItemsRequest.class);
+        verify(client).transactWriteItems(created.capture());
+        Map<String, AttributeValue> item = created.getValue().transactItems().getFirst().put().item();
+        assertEquals("3", item.get("current_step_index").n());
+        assertEquals(typed("PaymentStatus"), item.get("input_payload_json").s());
+        verify(payloads).encode(any(), eq(PaymentStatus.class.getName()), eq(continuation));
+        verify(payloads, never()).encode(any(), eq(ExecutionDurablePayloadResolver.Slot.INPUT), eq(continuation));
+    }
+
+    @Test
+    void writesLegacyAwaitItemContinuationWithLegacyPayloadMetadata() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        PaymentStatus continuation = new PaymentStatus("payment-1", "approved");
+        Map<String, AttributeValue> waiting = new HashMap<>(executionItem(
+            "tenant-a", "legacy-await-child", "legacy-key", ttl, ExecutionStatus.WAITING_EXTERNAL));
+        waiting.put("current_step_index", AttributeValue.builder().n("2").build());
+        waiting.put("await_unit_id", AttributeValue.builder().s("await-unit").build());
+        waiting.put("input_payload_json", AttributeValue.builder().s("\"previous\"").build());
+        waiting.put("input_shape", AttributeValue.builder().s(ExecutionInputShape.RAW.name()).build());
+        waiting.put("input_payload_type_id", AttributeValue.builder().s(String.class.getName()).build());
+        waiting.put("input_payload_encoding", AttributeValue.builder().s(JsonTransitionPayloadCodec.ENCODING).build());
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().item(waiting).build());
+        when(client.updateItem(any(UpdateItemRequest.class))).thenAnswer(invocation -> {
+            UpdateItemRequest request = invocation.getArgument(0);
+            Map<String, AttributeValue> values = request.expressionAttributeValues();
+            Map<String, AttributeValue> updated = new HashMap<>(waiting);
+            updated.put("status", values.get(":queued"));
+            updated.put("version", AttributeValue.builder().n("1").build());
+            updated.put("current_step_index", values.get(":step"));
+            updated.put("input_payload_json", values.get(":inputPayload"));
+            updated.put("input_payload_type_id", values.get(":inputPayloadTypeId"));
+            updated.put("input_payload_encoding", values.get(":inputPayloadEncoding"));
+            updated.put("input_shape", values.get(":inputShape"));
+            updated.remove("await_unit_id");
+            return UpdateItemResponse.builder().attributes(updated).build();
+        });
+
+        Optional<ExecutionRecord<Object, Object>> released = store.markAwaitItemContinuationsCompleted(
+            "tenant-a",
+            "legacy-await-child",
+            "await-unit",
+            3,
+            new ExecutionInputSnapshot(ExecutionInputShape.UNI, continuation),
+            now).await().indefinitely();
+
+        ExecutionRecord<Object, Object> record = released.orElseThrow();
+        ExecutionInputSnapshot restored = assertInstanceOf(ExecutionInputSnapshot.class, record.inputPayload());
+        assertEquals(continuation, restored.payload());
+        ArgumentCaptor<UpdateItemRequest> update = ArgumentCaptor.forClass(UpdateItemRequest.class);
+        verify(client).updateItem(update.capture());
+        assertEquals(PaymentStatus.class.getName(), update.getValue().expressionAttributeValues().get(":inputPayloadTypeId").s());
+        assertEquals(JsonTransitionPayloadCodec.ENCODING,
+            update.getValue().expressionAttributeValues().get(":inputPayloadEncoding").s());
+    }
+
+    @Test
+    void legacyInputWritePreservesExternalPayloadMetadata() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
+        long now = System.currentTimeMillis();
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().build());
+
+        store.createOrGetExecution(new ExecutionCreateCommand(
+            "tenant-a", "legacy-key", new PaymentRecord("payment-1"), ExecutionResultShape.SINGLE,
+            now, now / 1000 + 3600)).await().indefinitely();
+
+        ArgumentCaptor<TransactWriteItemsRequest> created = ArgumentCaptor.forClass(TransactWriteItemsRequest.class);
+        verify(client).transactWriteItems(created.capture());
+        Map<String, AttributeValue> item = created.getValue().transactItems().getFirst().put().item();
+        assertEquals(PaymentRecord.class.getName(), item.get("input_payload_type_id").s());
+        assertEquals(JsonTransitionPayloadCodec.ENCODING, item.get("input_payload_encoding").s());
+    }
+
+    @Test
+    void schemaV1ReleasePreservesTheExternalInputRepresentation() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
+        ExecutionDurablePayloadResolver payloads = mock(ExecutionDurablePayloadResolver.class);
+        store.durablePayloadResolver = payloads;
+        when(payloads.supportsTypedPayloads(any())).thenReturn(false);
+        long now = System.currentTimeMillis();
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().build());
+
+        store.createOrGetExecution(new ExecutionCreateCommand(
+            "restaurant-demo", "legacy-release", "restaurant", "2", "2",
+            new PaymentRecord("payment-1"), ExecutionResultShape.SINGLE, now, now / 1000 + 3600))
+            .await().indefinitely();
+
+        ArgumentCaptor<TransactWriteItemsRequest> created = ArgumentCaptor.forClass(TransactWriteItemsRequest.class);
+        verify(client).transactWriteItems(created.capture());
+        Map<String, AttributeValue> createdItem = created.getValue().transactItems().getFirst().put().item();
+        String stored = createdItem.get("input_payload_json").s();
+        assertEquals(PaymentRecord.class.getName(), createdItem.get("input_payload_type_id").s());
+        assertEquals(JsonTransitionPayloadCodec.ENCODING, createdItem.get("input_payload_encoding").s());
+        verify(payloads, never()).encode(any(), any(ExecutionDurablePayloadResolver.Slot.class), any());
+
+        Map<String, AttributeValue> persisted = new HashMap<>(executionItem(
+            "restaurant-demo", "exec-v2", "legacy-release", now / 1000 + 3600, ExecutionStatus.RUNNING));
+        persisted.put("input_payload_json", AttributeValue.builder().s(stored).build());
+        persisted.put("input_payload_type_id", AttributeValue.builder()
+            .s(createdItem.get("input_payload_type_id").s()).build());
+        persisted.put("input_payload_encoding", AttributeValue.builder()
+            .s(createdItem.get("input_payload_encoding").s()).build());
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().item(persisted).build());
+
+        assertEquals(new PaymentRecord("payment-1"), store.getExecution("restaurant-demo", "exec-v2")
+            .await().indefinitely().orElseThrow().inputPayload());
+        verify(payloads, never()).decodeLegacy(any(), any(), any());
+    }
+
+    @Test
+    void rejectsExternalTypedPayloadWhenItsEnvelopeDigestDoesNotMatch() throws Exception {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
+        store.durablePayloadResolver = mock(ExecutionDurablePayloadResolver.class);
+        long ttl = System.currentTimeMillis() / 1000 + 3600;
+        String payload = typed("PaymentOutput");
+        Map<String, AttributeValue> execution = new java.util.HashMap<>(executionItem(
+            "tenant-a", "exec-external", "key-external", ttl, ExecutionStatus.SUCCEEDED));
+        execution.put("result_payload_reference", AttributeValue.builder().s("payload-1").build());
+        execution.put("result_payload_digest", AttributeValue.builder().s("deliberately-wrong").build());
+        byte[] bytes = payload.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String hash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+        Map<String, AttributeValue> manifest = Map.of(
+            "payload_id", AttributeValue.builder().s("payload-1").build(),
+            "payload_part", AttributeValue.builder().s("MANIFEST").build(),
+            "payload_length_bytes", AttributeValue.builder().n(Integer.toString(bytes.length)).build(),
+            "chunk_count", AttributeValue.builder().n("1").build(),
+            "sha256", AttributeValue.builder().s(hash).build());
+        Map<String, AttributeValue> chunk = Map.of(
+            "payload_id", AttributeValue.builder().s("payload-1").build(),
+            "payload_part", AttributeValue.builder().s("CHUNK#00000000").build(),
+            "payload_bytes", AttributeValue.builder().b(software.amazon.awssdk.core.SdkBytes.fromByteArray(bytes)).build());
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(
+            GetItemResponse.builder().item(execution).build(), GetItemResponse.builder().item(manifest).build());
+        when(client.query(any(software.amazon.awssdk.services.dynamodb.model.QueryRequest.class))).thenReturn(
+            software.amazon.awssdk.services.dynamodb.model.QueryResponse.builder().items(chunk).build());
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+            () -> store.getExecution("tenant-a", "exec-external").await().indefinitely());
+
+        assertTrue(failure.getMessage().contains("digest mismatch"));
+        verify(store.durablePayloadResolver, never()).decode(any(), any(), any());
+    }
+
+    @Test
+    void rejectsExternalLegacyPayloadWhenItsDigestDoesNotMatch() throws Exception {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
+        long ttl = System.currentTimeMillis() / 1000 + 3600;
+        String payload = "{\\\"legacy\\\":true}";
+        Map<String, AttributeValue> execution = new java.util.HashMap<>(executionItem(
+            "tenant-a", "exec-legacy-external", "key-legacy-external", ttl, ExecutionStatus.SUCCEEDED));
+        execution.put("result_payload_reference", AttributeValue.builder().s("legacy-payload").build());
+        execution.put("result_payload_digest", AttributeValue.builder().s("deliberately-wrong").build());
+        byte[] bytes = payload.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String hash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+        Map<String, AttributeValue> manifest = Map.of(
+            "payload_id", AttributeValue.builder().s("legacy-payload").build(),
+            "payload_part", AttributeValue.builder().s("MANIFEST").build(),
+            "payload_length_bytes", AttributeValue.builder().n(Integer.toString(bytes.length)).build(),
+            "chunk_count", AttributeValue.builder().n("1").build(),
+            "sha256", AttributeValue.builder().s(hash).build());
+        Map<String, AttributeValue> chunk = Map.of(
+            "payload_id", AttributeValue.builder().s("legacy-payload").build(),
+            "payload_part", AttributeValue.builder().s("CHUNK#00000000").build(),
+            "payload_bytes", AttributeValue.builder().b(software.amazon.awssdk.core.SdkBytes.fromByteArray(bytes)).build());
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(
+            GetItemResponse.builder().item(execution).build(), GetItemResponse.builder().item(manifest).build());
+        when(client.query(any(software.amazon.awssdk.services.dynamodb.model.QueryRequest.class))).thenReturn(
+            software.amazon.awssdk.services.dynamodb.model.QueryResponse.builder().items(chunk).build());
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+            () -> store.getExecution("tenant-a", "exec-legacy-external").await().indefinitely());
+
+        assertTrue(failure.getMessage().contains("digest mismatch"));
+    }
+
+    private static String typed(String canonicalTypeId) {
+        return "{\"canonicalTypeId\":\"" + canonicalTypeId + "\",\"typeExpressionFingerprint\":\"fingerprint\","
+            + "\"catalogFingerprint\":\"catalog\",\"encoding\":\"application/tpf-canonical+json\",\"encodingVersion\":1,\"payload\":\"e30=\"}";
+    }
+
+    private record PaymentRecord(String id) { }
+    private record PaymentStatus(String id, String status) { }
+    private record PaymentOutput(String id, String status) { }
+
+    @Test
     void providerNameIsDynamo() {
         DynamoExecutionStateStore store = new DynamoExecutionStateStore();
         assertEquals("dynamo", store.providerName());

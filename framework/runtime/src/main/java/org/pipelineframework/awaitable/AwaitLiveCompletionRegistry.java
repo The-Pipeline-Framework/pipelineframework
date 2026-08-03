@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -48,12 +47,11 @@ public class AwaitLiveCompletionRegistry {
         Objects.requireNonNull(descriptor, "descriptor must not be null");
         Objects.requireNonNull(tenantId, "tenantId must not be null");
         Objects.requireNonNull(unitId, "unitId must not be null");
-        Class<?> transportOutputType = resolveTransportOutputType(descriptor);
+        Class<?> canonicalOutputType = resolveCanonicalOutputType(descriptor);
         Key key = new Key(tenantId, unitId);
         LiveAwaitSession<O> session = new LiveAwaitSession<>(
             key,
-            transportOutputType,
-            descriptor.outputFromTransport(),
+            canonicalOutputType,
             () -> sessions.remove(key));
         LiveAwaitSession<?> existing = sessions.putIfAbsent(key, session);
         if (existing != null) {
@@ -79,16 +77,16 @@ public class AwaitLiveCompletionRegistry {
         }
     }
 
-    private static Class<?> resolveTransportOutputType(AwaitStepDescriptor descriptor) {
+    private static Class<?> resolveCanonicalOutputType(AwaitStepDescriptor descriptor) {
         try {
             ClassLoader loader = Thread.currentThread().getContextClassLoader();
             if (loader == null) {
                 loader = AwaitPayloadSupport.class.getClassLoader();
             }
-            return AwaitPayloadSupport.resolvePayloadClass(descriptor.transportOutputType(), loader);
+            return AwaitPayloadSupport.resolvePayloadClass(descriptor.outputType(), loader);
         } catch (ClassNotFoundException e) {
             throw new IllegalStateException(
-                "Failed resolving await transport output type " + descriptor.transportOutputType()
+                "Failed resolving await canonical output type " + descriptor.outputType()
                     + " for live await stream " + descriptor.stepId(),
                 e);
         }
@@ -99,8 +97,7 @@ public class AwaitLiveCompletionRegistry {
 
     public static final class LiveAwaitSession<O> implements Flow.Publisher<O> {
         private final Key key;
-        private final Class<?> transportOutputType;
-        private final Function<Object, Object> outputFromTransport;
+        private final Class<?> canonicalOutputType;
         private final Runnable closeHook;
         private final Object lock = new Object();
         private final ArrayDeque<Pending<O>> pending = new ArrayDeque<>();
@@ -125,13 +122,11 @@ public class AwaitLiveCompletionRegistry {
 
         private LiveAwaitSession(
             Key key,
-            Class<?> transportOutputType,
-            Function<Object, Object> outputFromTransport,
+            Class<?> canonicalOutputType,
             Runnable closeHook
         ) {
             this.key = key;
-            this.transportOutputType = transportOutputType;
-            this.outputFromTransport = outputFromTransport;
+            this.canonicalOutputType = canonicalOutputType;
             this.closeHook = closeHook;
         }
 
@@ -175,10 +170,12 @@ public class AwaitLiveCompletionRegistry {
             String completionKey = completionKey(record);
             O payload;
             try {
+                // Completion admission has already applied descriptor.outputFromTransport() before
+                // persisting the interaction. The live bridge therefore delivers that canonical value
+                // directly; applying the transport adapter again corrupts v3 union payloads.
                 @SuppressWarnings("unchecked")
-                Object transportPayload = AwaitPayloadSupport.coercePayload(record.responsePayload(), transportOutputType);
-                O converted = (O) outputFromTransport.apply(transportPayload);
-                payload = converted;
+                O canonicalPayload = (O) AwaitPayloadSupport.coercePayload(record.responsePayload(), canonicalOutputType);
+                payload = canonicalPayload;
             } catch (Throwable failure) {
                 fail(failure);
                 return Uni.createFrom().failure(failure);

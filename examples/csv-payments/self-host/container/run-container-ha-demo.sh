@@ -95,6 +95,15 @@ case "${TPF_CSV_ADMISSION_PROFILE}" in
     ;;
 esac
 
+if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" && -n "${TPF_CSV_ADMISSION_PROFILE}" ]]; then
+  # The admission profiles deliberately bound outstanding awaits. Give the Kafka request and
+  # completion channels matching partitions/consumers so that bound is a window, not a single
+  # serialized consumer lane for a materialized CSV expansion.
+  export TPF_CSV_KAFKA_PARTITIONS="${TPF_CSV_KAFKA_PARTITIONS:-25}"
+  export TPF_CSV_KAFKA_PROVIDER_CONCURRENCY="${TPF_CSV_KAFKA_PROVIDER_CONCURRENCY:-25}"
+  export TPF_CSV_KAFKA_COMPLETION_CONCURRENCY="${TPF_CSV_KAFKA_COMPLETION_CONCURRENCY:-25}"
+fi
+
 CI_MODE=false
 PREPARE_IMAGES_ONLY=false
 for argument in "$@"; do
@@ -172,12 +181,16 @@ trap 'cleanup $?' EXIT
 
 generate_container_pipeline_config() {
   mkdir -p "${TPF_RUN_DIR}" "${TPF_INPUT_DIR}"
+  local source_pipeline_config
   if [[ -n "${TPF_CSV_PIPELINE_CONFIG_EXPLICIT}" ]]; then
-    export TPF_CSV_PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG_EXPLICIT}"
-    return
+    source_pipeline_config="${TPF_CSV_PIPELINE_CONFIG_EXPLICIT}"
+  else
+    source_pipeline_config="${TPF_CSV_PIPELINE_CONFIG_TEMPLATE}"
   fi
   export TPF_CSV_PIPELINE_CONFIG="${TPF_RUN_DIR}/pipeline.container-${TPF_CSV_AWAIT_TRANSPORT}.yaml"
-  cp "${TPF_CSV_PIPELINE_CONFIG_TEMPLATE}" "${TPF_CSV_PIPELINE_CONFIG}"
+  if [[ ! -e "${TPF_CSV_PIPELINE_CONFIG}" || ! "${source_pipeline_config}" -ef "${TPF_CSV_PIPELINE_CONFIG}" ]]; then
+    cp "${source_pipeline_config}" "${TPF_CSV_PIPELINE_CONFIG}"
+  fi
   TPF_CONTAINER_OBJECT_ROOT="${TPF_INPUT_DIR}" \
     perl -0pi -e 's#root: \.\./input-csv-file-processing-svc/csv#root: $ENV{TPF_CONTAINER_OBJECT_ROOT}#g' \
     "${TPF_CSV_PIPELINE_CONFIG}"

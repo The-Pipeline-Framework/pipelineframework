@@ -513,6 +513,67 @@ class AwaitStepSupportTest {
     }
 
     @Test
+    void durableAwaitDispatchBoundsConcurrentItemsBeforeSuspending() {
+        AwaitStepSupport support = support();
+        support.pipelineConfig.maxConcurrency(3);
+        support.pipelineConfig.parallelism(ParallelismPolicy.PARALLEL);
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2, true));
+
+        AwaitStepDescriptor testDescriptor = descriptor();
+        AtomicInteger inFlight = new AtomicInteger();
+        AtomicInteger peakInFlight = new AtomicInteger();
+        when(awaitCoordinator.createOrGetItem(
+            org.mockito.ArgumentMatchers.eq(testDescriptor),
+            org.mockito.ArgumentMatchers.eq("tenant1"),
+            org.mockito.ArgumentMatchers.eq("exec123"),
+            org.mockito.ArgumentMatchers.eq(2),
+            any(),
+            any(),
+            any(),
+            anyInt(),
+            org.mockito.ArgumentMatchers.isNull(),
+            org.mockito.ArgumentMatchers.isNull()))
+            .thenAnswer(invocation -> {
+                int index = invocation.getArgument(7, Integer.class);
+                return Uni.createFrom().item(new AwaitCreateResult(
+                    itemRecord(index, AwaitInteractionStatus.WAITING, invocation.getArgument(5), null), false));
+            });
+        when(awaitCoordinator.dispatch(org.mockito.ArgumentMatchers.eq(testDescriptor), any()))
+            .thenAnswer(invocation -> {
+                AwaitInteractionRecord record = invocation.getArgument(1, AwaitInteractionRecord.class);
+                return Uni.createFrom().deferred(() -> {
+                    int active = inFlight.incrementAndGet();
+                    peakInFlight.accumulateAndGet(active, Math::max);
+                    return Uni.createFrom().item(record)
+                        .onItem().delayIt().by(Duration.ofMillis(10))
+                        .onTermination().invoke(inFlight::decrementAndGet);
+                });
+            });
+        when(awaitCoordinator.markDispatchComplete(
+            org.mockito.ArgumentMatchers.eq("tenant1"),
+            org.mockito.ArgumentMatchers.anyString(),
+            anyInt(),
+            anyLong()))
+            .thenReturn(Uni.createFrom().item(awaitUnit(
+                streamUnitId(), AwaitUnitStatus.WAITING_EXTERNAL, 24, 0, true)));
+
+        assertThrows(AwaitSuspendedException.class, () -> support
+            .awaitOneToOneStream(testDescriptor, Multi.createFrom().range(0, 24))
+            .collect().asList()
+            .await().atMost(Duration.ofSeconds(5)));
+
+        assertEquals(3, peakInFlight.get());
+        org.mockito.Mockito.verify(awaitCoordinator, org.mockito.Mockito.times(24))
+            .dispatch(org.mockito.ArgumentMatchers.eq(testDescriptor), any());
+        org.mockito.Mockito.verify(awaitCoordinator).markDispatchComplete(
+            org.mockito.ArgumentMatchers.eq("tenant1"),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.eq(24),
+            anyLong());
+    }
+
+    @Test
     void sequentialOneToOneStreamUsesAnEffectiveWindowOfOne() {
         AwaitStepSupport support = support();
         support.pipelineConfig.maxConcurrency(2);

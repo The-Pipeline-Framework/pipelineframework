@@ -57,7 +57,7 @@ class AwaitCoordinatorCompletionTest {
             Function.identity());
         UUID id = UUID.fromString("8ee4c940-15a8-42a4-8f4e-af5a898c37a1");
 
-        coordinator.createOrGet(
+        AwaitCreateResult created = coordinator.createOrGet(
             descriptor,
             "tenant-1",
             "exec-1",
@@ -67,11 +67,30 @@ class AwaitCoordinatorCompletionTest {
             null,
             null).await().indefinitely();
 
+        assertEquals(new CanonicalRequest(id, Path.of("/app/test-e2e")), created.record().requestPayload());
+        assertTrue(adapterInput.get() == null);
+        AtomicReference<Object> dispatchedPayload = new AtomicReference<>();
+        coordinator.adapters = new SimpleInstance<>(List.of(new AwaitTransportAdapter<>() {
+            @Override
+            public String type() {
+                return "interaction-api";
+            }
+
+            @Override
+            public Uni<AwaitDispatchResult> dispatch(AwaitDispatchRequest<Object> request) {
+                dispatchedPayload.set(request.payload());
+                return Uni.createFrom().item(new AwaitDispatchResult(Map.of()));
+            }
+        }));
+
+        coordinator.dispatch(descriptor, created.record()).await().indefinitely();
+
         assertEquals(new CanonicalRequest(id, Path.of("/app/test-e2e")), adapterInput.get());
+        assertEquals(Map.of("id", id.toString(), "sourcePath", "/app/test-e2e"), dispatchedPayload.get());
     }
 
     @Test
-    void createOrGetNormalizesProtobufRequestPayload() {
+    void createOrGetRetainsProtobufRequestPayloadUntilDispatch() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
         DescriptorProtos.FileDescriptorProto payload = DescriptorProtos.FileDescriptorProto.newBuilder()
@@ -98,9 +117,7 @@ class AwaitCoordinatorCompletionTest {
             null,
             null).await().indefinitely();
 
-        assertTrue(result.record().requestPayload() instanceof Map<?, ?>);
-        Map<?, ?> requestPayload = (Map<?, ?>) result.record().requestPayload();
-        assertEquals("checkout.proto", requestPayload.get("name"));
+        assertEquals(payload, result.record().requestPayload());
         assertEquals("ProtoFraudCheck:name=checkout.proto", result.record().idempotencyKey());
     }
 
@@ -153,7 +170,7 @@ class AwaitCoordinatorCompletionTest {
     }
 
     @Test
-    void createOrGetDerivesIdentityFromCanonicalRequestAndPersistsTransportRequest() {
+    void createOrGetDerivesIdentityFromCanonicalRequestAndPersistsCanonicalRequest() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
         AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
@@ -182,8 +199,7 @@ class AwaitCoordinatorCompletionTest {
             null).await().indefinitely();
 
         assertEquals("V3PaymentProvider:id=canonical-payment-1", result.record().idempotencyKey());
-        assertEquals(Map.of("wireRequest", Map.of("id", "canonical-payment-1")),
-            result.record().requestPayload());
+        assertEquals(Map.of("id", "canonical-payment-1"), result.record().requestPayload());
     }
 
     @Test
@@ -520,6 +536,7 @@ class AwaitCoordinatorCompletionTest {
             "alice",
             11_000L)).await().indefinitely();
 
+        assertEquals(new CanonicalDecision("APPROVED"), completed.record().responsePayload());
         assertEquals(new CanonicalDecision("APPROVED"), coordinator.resumePayload(completed.record()));
     }
 
@@ -585,9 +602,9 @@ class AwaitCoordinatorCompletionTest {
             11_000L)).await().indefinitely();
         coordinator.recordCompletion(completed.record(), 11_000L).await().indefinitely();
 
+        assertTrue(completed.record().responsePayload() instanceof Map<?, ?>);
         IllegalStateException error = assertThrows(IllegalStateException.class,
             () -> coordinator.loadResumePayload("tenant-1", created.record().unitId()).await().indefinitely());
-
         assertTrue(error.getMessage().contains("Failed converting await payload"));
     }
 

@@ -29,6 +29,7 @@ import static org.mockito.Mockito.when;
 
 import io.smallrye.mutiny.Uni;
 import io.smallrye.reactive.messaging.MutinyEmitter;
+import io.smallrye.reactive.messaging.kafka.api.OutgoingKafkaRecordMetadata;
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -85,7 +86,7 @@ class PaymentProviderKafkaAwaitMockTest {
     PaymentStatus status = validPaymentStatus(paymentRecord);
     paymentRecord.setId(null);
     when(paymentProvider.processPayment(any(PaymentRecord.class))).thenReturn(status);
-    when(results.send(anyString())).thenReturn(Uni.createFrom().voidItem());
+    when(results.sendMessage(any())).thenReturn(Uni.createFrom().voidItem());
 
     mockProvider.consume(Message.of(dispatchJson(paymentRecord)))
         .toCompletableFuture()
@@ -97,10 +98,14 @@ class PaymentProviderKafkaAwaitMockTest {
     assertEquals(paymentRecord.getRecipient(), requestCaptor.getValue().getRecipient());
     assertEquals(paymentRecord.getCurrency(), requestCaptor.getValue().getCurrency());
 
-    ArgumentCaptor<String> completionCaptor = ArgumentCaptor.forClass(String.class);
-    verify(results).send(completionCaptor.capture());
+    ArgumentCaptor<Message<String>> completionCaptor = ArgumentCaptor.forClass(Message.class);
+    verify(results).sendMessage(completionCaptor.capture());
     KafkaAwaitCompletionEnvelope completion = PipelineJson.mapper()
-        .readValue(completionCaptor.getValue(), KafkaAwaitCompletionEnvelope.class);
+        .readValue(completionCaptor.getValue().getPayload(), KafkaAwaitCompletionEnvelope.class);
+    OutgoingKafkaRecordMetadata<?> metadata = completionCaptor.getValue()
+        .getMetadata(OutgoingKafkaRecordMetadata.class)
+        .orElseThrow();
+    assertEquals("corr-1", metadata.getKey());
     assertEquals("tenant-1", completion.tenantId());
     assertEquals("interaction-1", completion.interactionId());
     assertEquals("corr-1", completion.correlationId());
@@ -141,7 +146,7 @@ class PaymentProviderKafkaAwaitMockTest {
     second.get(5, TimeUnit.SECONDS);
     first.get(5, TimeUnit.SECONDS);
 
-    verify(results, times(2)).send(anyString());
+    verify(results, times(2)).sendMessage(any());
     mockProvider.flushPendingCompletions();
   }
 
@@ -151,7 +156,7 @@ class PaymentProviderKafkaAwaitMockTest {
         .toCompletableFuture()
         .get(5, TimeUnit.SECONDS));
 
-    verify(results, never()).send(anyString());
+    verify(results, never()).sendMessage(any());
   }
 
   @Test
@@ -163,7 +168,7 @@ class PaymentProviderKafkaAwaitMockTest {
         .toCompletableFuture()
         .get(5, TimeUnit.SECONDS));
 
-    verify(results, never()).send(anyString());
+    verify(results, never()).sendMessage(any());
   }
 
   @Test

@@ -74,6 +74,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private static final String INPUT_SHAPE = "input_shape";
     private static final String INPUT_PAYLOAD_JSON = "input_payload_json";
     private static final String INPUT_PAYLOAD_REFERENCE = "input_payload_reference";
+    private static final String INPUT_PAYLOAD_DIGEST = "input_payload_digest";
     private static final String INPUT_PAYLOAD_TYPE_ID = "input_payload_type_id";
     private static final String INPUT_PAYLOAD_ENCODING = "input_payload_encoding";
     private static final int BATCH_GET_MAX_ATTEMPTS = 4;
@@ -82,6 +83,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private static final String AWAIT_UNIT_ID = "await_unit_id";
     private static final String RESULT_PAYLOAD_JSON = "result_payload_json";
     private static final String RESULT_PAYLOAD_REFERENCE = "result_payload_reference";
+    private static final String RESULT_PAYLOAD_DIGEST = "result_payload_digest";
     private static final String ERROR_CODE = "error_code";
     private static final String ERROR_MESSAGE = "error_message";
     private static final String CREATED_AT_EPOCH_MS = "created_at_epoch_ms";
@@ -106,6 +108,9 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
 
     @Inject
     TransitionPayloadCodec transitionPayloadCodec;
+
+    @Inject
+    ExecutionDurablePayloadResolver durablePayloadResolver;
 
     private volatile Map<String, ProtobufMessageParser> protobufParserLookup;
     private volatile DynamoDbClient client;
@@ -356,7 +361,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             command.resultShape(),
             ExecutionStatus.QUEUED,
             0L,
-            0,
+            command.initialStepIndex(),
             0,
             null,
             0L,
@@ -372,7 +377,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             command.ttlEpochS());
 
         try {
-            writeNewExecution(scopedExecutionKey, created, command.nowEpochMs(), command.ttlEpochS());
+            writeNewExecution(scopedExecutionKey, created, command.inputCanonicalTypeId(), command.nowEpochMs(), command.ttlEpochS());
             return new CreateExecutionResult(created, false);
         } catch (TransactionCanceledException | ConditionalCheckFailedException ignored) {
             Optional<ExecutionRecord<Object, Object>> raced = findExistingByScopedExecutionKey(
@@ -579,6 +584,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         names.put("#transition", LAST_TRANSITION_KEY);
         names.put("#result", RESULT_PAYLOAD_JSON);
         names.put("#resultReference", RESULT_PAYLOAD_REFERENCE);
+        names.put("#resultDigest", RESULT_PAYLOAD_DIGEST);
         names.put("#awaitUnit", AWAIT_UNIT_ID);
         names.put("#errorCode", ERROR_CODE);
         names.put("#errorMessage", ERROR_MESSAGE);
@@ -592,16 +598,19 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         values.put(":expected", avN(expectedVersion));
         values.put(":succeeded", avS(ExecutionStatus.SUCCEEDED.name()));
         values.put(":transition", avS(transitionKey == null ? "" : transitionKey));
-        StoredPayload storedResult = storeResultPayload(
-            tenantId,
-            executionId,
-            transitionKey,
-            resultPayload,
-            nowEpochMs);
+        StoredPayload storedResult;
+        if (durablePayloadResolver == null) {
+            storedResult = storeResultPayload(tenantId, executionId, transitionKey, resultPayload, nowEpochMs);
+        } else {
+            ExecutionRecord<Object, Object> execution = getExecutionBlocking(tenantId, executionId, nowEpochMs)
+                .orElseThrow(() -> new IllegalStateException("Execution is unavailable while persisting terminal result: " + executionId));
+            storedResult = storeResultPayload(execution, resultPayload);
+        }
         if (storedResult.inlinePayload().isPresent()) {
             values.put(":result", avS(storedResult.inlinePayload().orElseThrow()));
         } else {
             values.put(":resultReference", avS(storedResult.reference().orElseThrow()));
+            values.put(":resultDigest", avS(storedResult.digest().orElseThrow()));
         }
         values.put(":zero", avN(0));
         values.put(":now", avN(nowEpochMs));
@@ -615,9 +624,9 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             .updateExpression(storedResult.inlinePayload().isPresent()
                 ? "SET #status = :succeeded, #version = #version + :one, #transition = :transition, " +
                     "#result = :result, #leaseExpires = :zero, #nextDue = :now, #updated = :now " +
-                    "REMOVE #resultReference, #errorCode, #errorMessage, #leaseOwner, #awaitUnit"
+                    "REMOVE #resultReference, #resultDigest, #errorCode, #errorMessage, #leaseOwner, #awaitUnit"
                 : "SET #status = :succeeded, #version = #version + :one, #transition = :transition, " +
-                    "#resultReference = :resultReference, #leaseExpires = :zero, #nextDue = :now, #updated = :now " +
+                    "#resultReference = :resultReference, #resultDigest = :resultDigest, #leaseExpires = :zero, #nextDue = :now, #updated = :now " +
                     "REMOVE #result, #errorCode, #errorMessage, #leaseOwner, #awaitUnit")
             .expressionAttributeNames(names)
             .expressionAttributeValues(values)
@@ -824,6 +833,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             Map.entry("#awaitUnit", AWAIT_UNIT_ID),
             Map.entry("#inputPayload", INPUT_PAYLOAD_JSON),
             Map.entry("#inputPayloadReference", INPUT_PAYLOAD_REFERENCE),
+            Map.entry("#inputPayloadDigest", INPUT_PAYLOAD_DIGEST),
             Map.entry("#inputShape", INPUT_SHAPE),
             Map.entry("#inputPayloadTypeId", INPUT_PAYLOAD_TYPE_ID),
             Map.entry("#inputPayloadEncoding", INPUT_PAYLOAD_ENCODING),
@@ -840,7 +850,17 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         values.put(":waitingExternal", avS(ExecutionStatus.WAITING_EXTERNAL.name()));
         values.put(":step", avN(nextStepIndex));
         values.put(":awaitUnit", avS(awaitUnitId));
-        SerializedTransitionPayload serializedInput = serializeInputPayload(inputPayload);
+        ExecutionRecord<Object, Object> execution = getExecutionBlocking(tenantId, executionId, nowEpochMs)
+            .orElseThrow(() -> new IllegalStateException("Execution is unavailable while persisting await continuation: " + executionId));
+        ExecutionRecord<Object, Object> continuation = withCurrentStepIndex(execution, nextStepIndex);
+        Object canonicalInput = inputPayload instanceof ExecutionInputSnapshot snapshot ? snapshot.payload() : inputPayload;
+        boolean typed = writesTypedDurablePayloads(continuation);
+        Optional<SerializedTransitionPayload> legacyInput = typed
+            ? Optional.empty()
+            : Optional.of(transitionPayloadCodec.encode(canonicalInput));
+        String serializedInput = typed
+            ? serializePayload(continuation, ExecutionDurablePayloadResolver.Slot.CONTINUATION_INPUT, canonicalInput)
+            : legacyInput.orElseThrow().payload();
         StoredPayload storedInput = storeInputPayload(
             tenantId,
             executionId,
@@ -852,12 +872,13 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             values.put(":inputPayload", avS(storedInput.inlinePayload().orElseThrow()));
         } else {
             values.put(":inputPayloadReference", avS(storedInput.reference().orElseThrow()));
+            values.put(":inputPayloadDigest", avS(storedInput.digest().orElseThrow()));
         }
         values.put(":inputShape", avS(inputPayload instanceof ExecutionInputSnapshot snapshot
             ? snapshot.shape().name()
             : ExecutionInputShape.RAW.name()));
-        values.put(":inputPayloadTypeId", avS(serializedInput.payloadTypeId()));
-        values.put(":inputPayloadEncoding", avS(serializedInput.payloadEncoding()));
+        values.put(":inputPayloadTypeId", avS(typed ? "typed-durable" : legacyInput.orElseThrow().payloadTypeId()));
+        values.put(":inputPayloadEncoding", avS(typed ? JsonDurablePayloadCodec.ENCODING : legacyInput.orElseThrow().payloadEncoding()));
         values.put(":zero", avN(0));
         values.put(":now", avN(nowEpochMs));
         values.put(":one", avN(1));
@@ -875,9 +896,9 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
                     + "#inputPayloadTypeId = :inputPayloadTypeId, "
                     + "#inputPayloadEncoding = :inputPayloadEncoding, "
                     + "#leaseExpires = :zero, #updated = :now "
-                    + "REMOVE #inputPayloadReference, #result, #resultReference, #errorCode, #errorMessage, #leaseOwner, #awaitUnit"
+                    + "REMOVE #inputPayloadReference, #inputPayloadDigest, #result, #resultReference, #errorCode, #errorMessage, #leaseOwner, #awaitUnit"
                 : "SET #status = :queued, #version = #version + :one, #step = :step, #nextDue = :now, " +
-                    "#inputPayloadReference = :inputPayloadReference, #inputShape = :inputShape, "
+                    "#inputPayloadReference = :inputPayloadReference, #inputPayloadDigest = :inputPayloadDigest, #inputShape = :inputShape, "
                     + "#inputPayloadTypeId = :inputPayloadTypeId, "
                     + "#inputPayloadEncoding = :inputPayloadEncoding, "
                     + "#leaseExpires = :zero, #updated = :now "
@@ -1216,10 +1237,11 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private void writeNewExecution(
         String scopedExecutionKey,
         ExecutionRecord<Object, Object> record,
+        Optional<String> inputCanonicalTypeId,
         long nowEpochMs,
         long ttlEpochS
     ) {
-        Map<String, AttributeValue> executionItem = toItem(record);
+        Map<String, AttributeValue> executionItem = toItem(record, inputCanonicalTypeId);
         Map<String, AttributeValue> keyItem = new HashMap<>();
         keyItem.put(TENANT_EXECUTION_KEY, avS(scopedExecutionKey));
         keyItem.put(TENANT_ID, avS(record.tenantId()));
@@ -1274,6 +1296,13 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     }
 
     private Map<String, AttributeValue> toItem(ExecutionRecord<Object, Object> record) {
+        return toItem(record, Optional.empty());
+    }
+
+    private Map<String, AttributeValue> toItem(
+        ExecutionRecord<Object, Object> record,
+        Optional<String> inputCanonicalTypeId
+    ) {
         Map<String, AttributeValue> item = new HashMap<>();
         item.put(TENANT_ID, avS(record.tenantId()));
         item.put(EXECUTION_ID, avS(record.executionId()));
@@ -1295,18 +1324,11 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         item.put(CIRCUIT_DEFERRAL_COUNT, avN(record.circuitDeferralCount()));
         putIfPresent(item, LEASE_OWNER, record.leaseOwner());
         putIfPresent(item, LAST_TRANSITION_KEY, record.lastTransitionKey());
-        putInputPayload(item, record);
+        putInputPayload(item, record, inputCanonicalTypeId);
         putIfPresent(item, AWAIT_UNIT_ID, record.awaitUnitId());
         if (record.resultPayload() != null) {
-            StoredPayload storedResult = storeResultPayload(
-                record.tenantId(),
-                record.executionId(),
-                record.lastTransitionKey(),
-                record.resultPayload(),
-                record.updatedAtEpochMs(),
-                record.resultShape() == ExecutionResultShape.MATERIALIZED_MULTI,
-                record.ttlEpochS());
-            putStoredPayload(item, RESULT_PAYLOAD_JSON, RESULT_PAYLOAD_REFERENCE, storedResult);
+            StoredPayload storedResult = storeResultPayload(record, record.resultPayload());
+            putStoredPayload(item, RESULT_PAYLOAD_JSON, RESULT_PAYLOAD_REFERENCE, RESULT_PAYLOAD_DIGEST, storedResult);
         }
         putIfPresent(item, ERROR_CODE, record.errorCode());
         putIfPresent(item, ERROR_MESSAGE, record.errorMessage());
@@ -1314,27 +1336,41 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return item;
     }
 
-    private void putInputPayload(Map<String, AttributeValue> item, ExecutionRecord<Object, Object> record) {
+    private void putInputPayload(
+        Map<String, AttributeValue> item,
+        ExecutionRecord<Object, Object> record,
+        Optional<String> inputCanonicalTypeId
+    ) {
         Object inputPayload = record.inputPayload();
         if (inputPayload == null) {
             return;
         }
         if (inputPayload instanceof ExecutionInputSnapshot snapshot) {
             item.put(INPUT_SHAPE, avS(snapshot.shape().name()));
-            putSerializedInputPayload(item, record, "create", inputPayload, snapshot.payload());
+            putSerializedInputPayload(item, record, inputCanonicalTypeId, "create", inputPayload, snapshot.payload());
             return;
         }
-        putSerializedInputPayload(item, record, "create", inputPayload, inputPayload);
+        putSerializedInputPayload(item, record, inputCanonicalTypeId, "create", inputPayload, inputPayload);
     }
 
     private void putSerializedInputPayload(
         Map<String, AttributeValue> item,
         ExecutionRecord<Object, Object> record,
+        Optional<String> inputCanonicalTypeId,
         String slot,
         Object originalInput,
         Object inputPayload
     ) {
-        SerializedTransitionPayload serialized = transitionPayloadCodec.encode(inputPayload);
+        SerializedTransitionPayload legacyPayload = null;
+        String serialized;
+        if (writesTypedDurablePayloads(record)) {
+            serialized = serializePayload(record, inputCanonicalTypeId, inputWriteSlot(record), inputPayload);
+        } else {
+            // Schema-v1 releases still own the external input representation at their worker boundary.
+            // Preserve its concrete identity instead of collapsing it into an untyped JSON object.
+            legacyPayload = transitionPayloadCodec.encode(inputPayload);
+            serialized = legacyPayload.payload();
+        }
         StoredPayload storedInput = storeInputPayload(
             record.tenantId(),
             record.executionId(),
@@ -1343,16 +1379,14 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             serialized,
             record.updatedAtEpochMs(),
             record.ttlEpochS());
-        putStoredPayload(item, INPUT_PAYLOAD_JSON, INPUT_PAYLOAD_REFERENCE, storedInput);
-        putIfPresent(item, INPUT_PAYLOAD_TYPE_ID, serialized.payloadTypeId());
-        putIfPresent(item, INPUT_PAYLOAD_ENCODING, serialized.payloadEncoding());
-    }
-
-    private SerializedTransitionPayload serializeInputPayload(Object inputPayload) {
-        Object payload = inputPayload instanceof ExecutionInputSnapshot snapshot
-            ? snapshot.payload()
-            : inputPayload;
-        return transitionPayloadCodec.encode(payload);
+        putStoredPayload(item, INPUT_PAYLOAD_JSON, INPUT_PAYLOAD_REFERENCE, INPUT_PAYLOAD_DIGEST, storedInput);
+        if (legacyPayload != null) {
+            putIfPresent(item, INPUT_PAYLOAD_TYPE_ID, legacyPayload.payloadTypeId());
+            putIfPresent(item, INPUT_PAYLOAD_ENCODING, legacyPayload.payloadEncoding());
+        } else if (isTypedDurablePayload(serialized)) {
+            putIfPresent(item, INPUT_PAYLOAD_TYPE_ID, "typed-durable");
+            putIfPresent(item, INPUT_PAYLOAD_ENCODING, JsonDurablePayloadCodec.ENCODING);
+        }
     }
 
     private StoredPayload storeInputPayload(
@@ -1360,7 +1394,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         String executionId,
         String slot,
         Object originalInput,
-        SerializedTransitionPayload serialized,
+        String serialized,
         long nowEpochMs
     ) {
         ExecutionPayloadContext context = executionPayloadContext(tenantId, executionId, nowEpochMs);
@@ -1379,7 +1413,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         String executionId,
         String slot,
         Object originalInput,
-        SerializedTransitionPayload serialized,
+        String serialized,
         long nowEpochMs,
         long ttlEpochS
     ) {
@@ -1389,10 +1423,28 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             tenantId,
             executionId,
             "input:" + slot,
-            serialized.payload(),
+            serialized,
             materializedMulti,
             nowEpochMs,
             ttlEpochS);
+    }
+
+    private StoredPayload storeResultPayload(
+        ExecutionRecord<?, ?> record,
+        Object resultPayload
+    ) {
+        if (durablePayloadResolver == null) {
+            return storeResultPayload(record.tenantId(), record.executionId(), record.lastTransitionKey(), resultPayload,
+                record.updatedAtEpochMs(), record.resultShape() == ExecutionResultShape.MATERIALIZED_MULTI, record.ttlEpochS());
+        }
+        return storePayload(
+            record.tenantId(),
+            record.executionId(),
+            "result:" + (record.lastTransitionKey() == null ? "terminal" : record.lastTransitionKey()),
+            serializePayload(record, ExecutionDurablePayloadResolver.Slot.RESULT, resultPayload),
+            record.resultShape() == ExecutionResultShape.MATERIALIZED_MULTI,
+            record.updatedAtEpochMs(),
+            record.ttlEpochS());
     }
 
     private StoredPayload storeResultPayload(
@@ -1456,22 +1508,25 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         long nowEpochMs,
         long ttlEpochS
     ) {
+        String digest = payloadDigest(serialized);
         if (!forceExternal && serialized.getBytes(java.nio.charset.StandardCharsets.UTF_8).length
             <= DynamoExecutionPayloadStore.MAX_CHUNK_BYTES) {
-            return StoredPayload.inline(serialized);
+            return StoredPayload.inline(serialized, digest);
         }
         String reference = payloadStore().write(tenantId, executionId, slot, serialized, ttlEpochS);
-        return StoredPayload.reference(reference);
+        return StoredPayload.reference(reference, digest);
     }
 
     private void putStoredPayload(
         Map<String, AttributeValue> item,
         String inlineAttribute,
         String referenceAttribute,
+        String digestAttribute,
         StoredPayload payload
     ) {
         payload.inlinePayload().ifPresent(value -> item.put(inlineAttribute, avS(value)));
         payload.reference().ifPresent(value -> item.put(referenceAttribute, avS(value)));
+        payload.digest().ifPresent(value -> item.put(digestAttribute, avS(value)));
     }
 
     private ExecutionPayloadContext executionPayloadContext(String tenantId, String executionId, long nowEpochMs) {
@@ -1504,13 +1559,13 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
-    private record StoredPayload(Optional<String> inlinePayload, Optional<String> reference) {
-        private static StoredPayload inline(String payload) {
-            return new StoredPayload(Optional.of(payload), Optional.empty());
+    private record StoredPayload(Optional<String> inlinePayload, Optional<String> reference, Optional<String> digest) {
+        private static StoredPayload inline(String payload, String digest) {
+            return new StoredPayload(Optional.of(payload), Optional.empty(), Optional.of(digest));
         }
 
-        private static StoredPayload reference(String payloadReference) {
-            return new StoredPayload(Optional.empty(), Optional.of(payloadReference));
+        private static StoredPayload reference(String payloadReference, String digest) {
+            return new StoredPayload(Optional.empty(), Optional.of(payloadReference), Optional.of(digest));
         }
     }
 
@@ -1552,9 +1607,9 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         long leaseExpires = readLong(item, LEASE_EXPIRES_EPOCH_MS);
         long nextDue = readLong(item, NEXT_DUE_EPOCH_MS);
         String transitionKey = readString(item, LAST_TRANSITION_KEY);
-        Object inputPayload = readInputPayload(item);
+        Object inputPayload = null;
         String awaitUnitId = readString(item, AWAIT_UNIT_ID);
-        Object resultPayload = readResultPayload(item);
+        Object resultPayload = null;
         String errorCode = readString(item, ERROR_CODE);
         String errorMessage = readString(item, ERROR_MESSAGE);
         long createdAt = readLong(item, CREATED_AT_EPOCH_MS);
@@ -1563,7 +1618,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         long firstCircuitDeferredAt = readLong(item, FIRST_CIRCUIT_DEFERRED_AT_EPOCH_MS);
         int circuitDeferralCount = (int) readLong(item, CIRCUIT_DEFERRAL_COUNT);
         String circuitIdentity = readString(item, CIRCUIT_IDENTITY);
-        return new ExecutionRecord<>(
+        ExecutionRecord<Object, Object> stored = new ExecutionRecord<>(
             tenantId,
             executionId,
             executionKey,
@@ -1596,21 +1651,44 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             firstCircuitDeferredAt,
             circuitDeferralCount,
             circuitIdentity == null ? "" : circuitIdentity);
+        return withPayloads(stored, readInputPayload(stored, item), readResultPayload(stored, item));
     }
 
-    private Object readInputPayload(Map<String, AttributeValue> item) {
+    private ExecutionRecord<Object, Object> withPayloads(ExecutionRecord<Object, Object> stored, Object inputPayload, Object resultPayload) {
+        return new ExecutionRecord<>(stored.tenantId(), stored.executionId(), stored.executionKey(), stored.pipelineId(),
+            stored.contractVersion(), stored.releaseVersion(), stored.resultShape(), stored.status(), stored.version(),
+            stored.currentStepIndex(), stored.attempt(), stored.leaseOwner(), stored.leaseExpiresEpochMs(), stored.nextDueEpochMs(),
+            stored.lastTransitionKey(), inputPayload, stored.awaitUnitId(), resultPayload, stored.errorCode(), stored.errorMessage(),
+            stored.createdAtEpochMs(), stored.updatedAtEpochMs(), stored.ttlEpochS(), stored.firstCircuitDeferredAtEpochMs(),
+            stored.circuitDeferralCount(), stored.circuitIdentity());
+    }
+
+    private ExecutionRecord<Object, Object> withCurrentStepIndex(ExecutionRecord<Object, Object> stored, int currentStepIndex) {
+        return new ExecutionRecord<>(stored.tenantId(), stored.executionId(), stored.executionKey(), stored.pipelineId(),
+            stored.contractVersion(), stored.releaseVersion(), stored.resultShape(), stored.status(), stored.version(),
+            currentStepIndex, stored.attempt(), stored.leaseOwner(), stored.leaseExpiresEpochMs(), stored.nextDueEpochMs(),
+            stored.lastTransitionKey(), stored.inputPayload(), stored.awaitUnitId(), stored.resultPayload(), stored.errorCode(),
+            stored.errorMessage(), stored.createdAtEpochMs(), stored.updatedAtEpochMs(), stored.ttlEpochS(),
+            stored.firstCircuitDeferredAtEpochMs(), stored.circuitDeferralCount(), stored.circuitIdentity());
+    }
+
+    private Object readInputPayload(ExecutionRecord<Object, Object> execution, Map<String, AttributeValue> item) {
         AttributeValue payloadValue = item.get(INPUT_PAYLOAD_JSON);
         String payload = payloadValue == null ? null : payloadValue.s();
         if (payload == null || payload.isBlank()) {
             String payloadReference = readString(item, INPUT_PAYLOAD_REFERENCE);
             if (payloadReference != null && !payloadReference.isBlank()) {
                 payload = payloadStore().read(payloadReference);
+                String digest = readString(item, INPUT_PAYLOAD_DIGEST);
+                if (digest != null && !digest.isBlank()) {
+                    verifyPayloadDigest(payload, digest, "input", execution.executionId());
+                }
             }
         }
         if (payload == null || payload.isBlank()) {
             return null;
         }
-        Object decodedPayload = readSerializedInputPayload(item, payload);
+        Object decodedPayload = readSerializedInputPayload(execution, item, payload);
         String shapeValue = readString(item, INPUT_SHAPE);
         if (shapeValue == null || shapeValue.isBlank()) {
             return decodedPayload;
@@ -1623,17 +1701,38 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
-    private Object readSerializedInputPayload(Map<String, AttributeValue> item, String payload) {
+    private Object readSerializedInputPayload(ExecutionRecord<Object, Object> execution, Map<String, AttributeValue> item, String payload) {
         String payloadTypeId = readString(item, INPUT_PAYLOAD_TYPE_ID);
         String payloadEncoding = readString(item, INPUT_PAYLOAD_ENCODING);
         if (payloadTypeId == null || payloadTypeId.isBlank()
             || payloadEncoding == null || payloadEncoding.isBlank()) {
-            return fromJson(payload);
+            return durablePayloadResolver == null || !durablePayloadResolver.supportsTypedPayloads(execution)
+                ? fromJson(payload)
+                : durablePayloadResolver.decodeLegacy(execution, legacyInputSlot(execution), payload);
+        }
+        if ("typed-durable".equals(payloadTypeId)) {
+            if (durablePayloadResolver == null) {
+                throw new IllegalStateException("Typed execution input requires the pinned-release durable payload resolver: executionId="
+                    + execution.executionId());
+            }
+            return durablePayloadResolver.decode(execution, ExecutionDurablePayloadResolver.Slot.INPUT, payload);
         }
         return transitionPayloadCodec.decode(new SerializedTransitionPayload(
             payloadTypeId,
             payloadEncoding,
             payload));
+    }
+
+    private static ExecutionDurablePayloadResolver.Slot legacyInputSlot(ExecutionRecord<?, ?> execution) {
+        return execution.currentStepIndex() == 0
+            ? ExecutionDurablePayloadResolver.Slot.INPUT
+            : ExecutionDurablePayloadResolver.Slot.CONTINUATION_INPUT;
+    }
+
+    private static ExecutionDurablePayloadResolver.Slot inputWriteSlot(ExecutionRecord<?, ?> execution) {
+        return execution.currentStepIndex() == 0
+            ? ExecutionDurablePayloadResolver.Slot.INPUT
+            : ExecutionDurablePayloadResolver.Slot.CONTINUATION_INPUT;
     }
 
     private Object readPayload(AttributeValue value) {
@@ -1643,15 +1742,29 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return fromJson(value.s());
     }
 
-    private Object readResultPayload(Map<String, AttributeValue> item) {
-        AttributeValue value = item.get(RESULT_PAYLOAD_JSON);
-        Object payload = readPayload(value);
-        if (payload == null) {
+    private Object readResultPayload(ExecutionRecord<Object, Object> execution, Map<String, AttributeValue> item) {
+        String serialized = readString(item, RESULT_PAYLOAD_JSON);
+        if (serialized == null || serialized.isBlank()) {
             String payloadReference = readString(item, RESULT_PAYLOAD_REFERENCE);
             if (payloadReference != null && !payloadReference.isBlank()) {
-                payload = fromJson(payloadStore().read(payloadReference));
+                serialized = payloadStore().read(payloadReference);
+                String digest = readString(item, RESULT_PAYLOAD_DIGEST);
+                if (digest != null && !digest.isBlank()) {
+                    verifyPayloadDigest(serialized, digest, "result", execution.executionId());
+                }
             }
         }
+        if (serialized == null || serialized.isBlank()) {
+            return null;
+        }
+        if (isTypedDurablePayload(serialized)) {
+            if (durablePayloadResolver == null) {
+                throw new IllegalStateException("Typed execution result requires the pinned-release durable payload resolver: executionId="
+                    + execution.executionId());
+            }
+            return durablePayloadResolver.decode(execution, ExecutionDurablePayloadResolver.Slot.RESULT, serialized);
+        }
+        Object payload = fromJson(serialized);
         Optional<Object> serializedPayload = readSerializedResultPayload(payload);
         if (serializedPayload.isPresent()) {
             return serializedPayload.get();
@@ -1664,6 +1777,28 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             hydrated.add(readSerializedResultPayload(resultItem).orElse(resultItem));
         }
         return Collections.unmodifiableList(hydrated);
+    }
+
+    private static boolean isTypedDurablePayload(String payload) {
+        return TypedDurablePayload.fromSerializedBytes(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8)).isPresent();
+    }
+
+    private static String payloadDigest(String payload) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                .digest(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 is unavailable for durable payload integrity", error);
+        }
+    }
+
+    private static void verifyPayloadDigest(String payload, String expectedDigest, String slot, String executionId) {
+        if (expectedDigest == null || expectedDigest.isBlank()) {
+            throw new IllegalStateException("External durable payload has no digest: executionId=" + executionId + ", slot=" + slot);
+        }
+        if (!expectedDigest.equals(payloadDigest(payload))) {
+            throw new IllegalStateException("External durable payload digest mismatch: executionId=" + executionId + ", slot=" + slot);
+        }
     }
 
     private Optional<Object> readSerializedResultPayload(Object item) {
@@ -1746,6 +1881,29 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             return value;
         }
         return value.substring(0, 512);
+    }
+
+    private String serializePayload(ExecutionRecord<?, ?> execution, ExecutionDurablePayloadResolver.Slot slot, Object value) {
+        return serializePayload(execution, Optional.empty(), slot, value);
+    }
+
+    private String serializePayload(
+        ExecutionRecord<?, ?> execution,
+        Optional<String> inputCanonicalTypeId,
+        ExecutionDurablePayloadResolver.Slot slot,
+        Object value
+    ) {
+        if (!writesTypedDurablePayloads(execution)) {
+            return toJson(value);
+        }
+        if (inputCanonicalTypeId.isPresent()) {
+            return durablePayloadResolver.encode(execution, inputCanonicalTypeId.get(), value);
+        }
+        return durablePayloadResolver.encode(execution, slot, value);
+    }
+
+    private boolean writesTypedDurablePayloads(ExecutionRecord<?, ?> execution) {
+        return durablePayloadResolver != null && durablePayloadResolver.supportsTypedPayloads(execution);
     }
 
     private String toJson(Object value) {

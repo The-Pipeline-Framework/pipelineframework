@@ -18,9 +18,9 @@ package org.pipelineframework.csv.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -38,10 +38,13 @@ import java.util.concurrent.CompletionException;
 import org.junit.jupiter.api.Test;
 import org.eclipse.microprofile.reactive.messaging.Message;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitDispatchEnvelope;
+import org.pipelineframework.awaitable.kafka.KafkaAwaitCompletionEnvelope;
+import org.pipelineframework.awaitable.AwaitPayloadSupport;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.csv.domain.PaymentRecord;
 import org.pipelineframework.csv.domain.PaymentStatus;
 import org.pipelineframework.csv.domain.PipelineDomainProtoAdapters;
+import org.pipelineframework.csv.grpc.PipelineTypes;
 import io.smallrye.reactive.messaging.MutinyEmitter;
 
 class V3PaymentProviderAwaitContractTest {
@@ -68,14 +71,35 @@ class V3PaymentProviderAwaitContractTest {
             UUID.randomUUID(), "csv-1", "Ada", new BigDecimal("12.34"),
             Currency.getInstance("EUR"), Path.of("/tmp/payments.csv"));
         MutinyEmitter<String> results = mock(MutinyEmitter.class);
-        when(results.send(anyString())).thenReturn(Uni.createFrom().voidItem());
+        when(results.sendMessage(any())).thenReturn(Uni.createFrom().voidItem());
         PaymentProviderKafkaAwaitMock awaitMock = configuredKafkaAwaitMock(results);
         Message<String> message = acknowledgedMessage(dispatchJson(protobufJsonPayload(record)));
 
         awaitMock.consume(message).toCompletableFuture().join();
 
         verify(message).ack();
-        verify(results).send(anyString());
+        verify(results).sendMessage(any());
+    }
+
+    @Test
+    void kafkaAwaitCompletionPreservesTheV3PaymentStatusUnionArm() throws Exception {
+        PaymentRecord record = new PaymentRecord(
+            UUID.randomUUID(), "csv-1", "Ada", new BigDecimal("12.34"),
+            Currency.getInstance("EUR"), Path.of("/tmp/payments.csv"));
+        MutinyEmitter<String> results = mock(MutinyEmitter.class);
+        when(results.sendMessage(any())).thenReturn(Uni.createFrom().voidItem());
+        PaymentProviderKafkaAwaitMock awaitMock = configuredKafkaAwaitMock(results);
+
+        awaitMock.consume(acknowledgedMessage(dispatchJson(protobufJsonPayload(record)))).toCompletableFuture().join();
+
+        org.mockito.ArgumentCaptor<Message> completion = org.mockito.ArgumentCaptor.forClass(Message.class);
+        verify(results).sendMessage(completion.capture());
+        KafkaAwaitCompletionEnvelope envelope = PipelineJson.mapper().readValue(
+            (String) completion.getValue().getPayload(), KafkaAwaitCompletionEnvelope.class);
+        PipelineTypes.PaymentStatus transport = assertInstanceOf(PipelineTypes.PaymentStatus.class,
+            AwaitPayloadSupport.coercePayload(envelope.responsePayload(), PipelineTypes.PaymentStatus.class));
+        assertTrue(transport.hasApproved());
+        assertInstanceOf(PaymentStatus.Approved.class, PipelineDomainProtoAdapters.fromProto(transport));
     }
 
     @Test
@@ -89,7 +113,7 @@ class V3PaymentProviderAwaitContractTest {
         assertThrows(CompletionException.class, () -> awaitMock.consume(message).toCompletableFuture().join());
 
         verify(message).nack(any());
-        verify(results, never()).send(anyString());
+        verify(results, never()).sendMessage(any());
     }
 
     private static PaymentProviderKafkaAwaitMock configuredKafkaAwaitMock(MutinyEmitter<String> results) {

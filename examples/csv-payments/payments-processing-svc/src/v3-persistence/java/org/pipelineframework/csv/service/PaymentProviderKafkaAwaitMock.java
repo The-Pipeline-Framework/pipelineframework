@@ -26,6 +26,7 @@ import io.quarkus.arc.properties.IfBuildProperty;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import io.smallrye.reactive.messaging.MutinyEmitter;
+import io.smallrye.reactive.messaging.kafka.api.OutgoingKafkaRecordMetadata;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.eclipse.microprofile.reactive.messaging.Message;
@@ -67,7 +68,7 @@ public class PaymentProviderKafkaAwaitMock {
         .runSubscriptionOn(Infrastructure.getDefaultExecutor())
         .onItem().transform(this::handle)
         .onItem().transformToUni(this::delayCompletion)
-        .onItem().transformToUni(completion -> results.send(serialize(completion)))
+        .onItem().transformToUni(this::publish)
         .replaceWithVoid()
         .subscribeAsCompletionStage()
         .thenCompose(ignored -> message.ack())
@@ -87,8 +88,15 @@ public class PaymentProviderKafkaAwaitMock {
         dispatch.correlationId(),
         dispatch.resumeToken(),
         dispatch.interactionId(),
-        PipelineDomainProtoAdapters.toProto(status),
+        PaymentProviderAwaitTransportPayload.protobufJson(PipelineDomainProtoAdapters.toProto(status)),
         "csv-payments-mock-provider");
+  }
+
+  private Uni<Void> publish(KafkaAwaitCompletionEnvelope completion) {
+    OutgoingKafkaRecordMetadata<String> metadata = OutgoingKafkaRecordMetadata.<String>builder()
+        .withKey(completion.correlationId())
+        .build();
+    return results.sendMessage(Message.of(serialize(completion)).addMetadata(metadata));
   }
 
   private Uni<KafkaAwaitCompletionEnvelope> delayCompletion(KafkaAwaitCompletionEnvelope completion) {
