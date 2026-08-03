@@ -209,8 +209,9 @@ publishes the existing `-SNAPSHOT` version with the `central-publishing` profile
 create a tag or GitHub release.
 
 Sonatype Central snapshots are mutable development artifacts and are currently cleaned up after 90 days.
-Consumers must explicitly enable the Central snapshots repository and should depend on the
-active framework `-SNAPSHOT` version:
+Before the first snapshot deployment, enable SNAPSHOT publishing for the project namespace in
+the Central Portal. Consumers must explicitly enable the Central snapshots repository and should
+depend on the active framework `-SNAPSHOT` version:
 
 ```xml
 <repositories>
