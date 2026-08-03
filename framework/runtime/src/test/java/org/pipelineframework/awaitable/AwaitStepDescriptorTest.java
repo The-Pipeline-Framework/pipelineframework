@@ -1,5 +1,7 @@
 package org.pipelineframework.awaitable;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -7,11 +9,72 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.pipelineframework.awaitable.v3fixture.domain.AwaitInput;
+import org.pipelineframework.awaitable.v3fixture.domain.AwaitOutput;
+import org.pipelineframework.awaitable.v3fixture.grpc.PipelineTypes;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class AwaitStepDescriptorTest {
+
+    @TempDir
+    Path tempDir;
+
+    @Test
+    void legacyGeneratedV3ClientCallRebuildsTheCanonicalProtobufBoundary() throws Exception {
+        Path config = tempDir.resolve("pipeline.yaml");
+        Files.writeString(config, """
+            version: 3
+            appName: await-fixture
+            basePackage: org.pipelineframework.awaitable.v3fixture
+            transport: LOCAL
+            types:
+              AwaitInput:
+                fields:
+                  - [value, string]
+              AwaitOutput:
+                variants:
+                  approved: AwaitInput
+            steps:
+              - name: Await Output
+                kind: await
+                input: AwaitInput
+                output: AwaitOutput
+                cardinality: ONE_TO_ONE
+                timeout: PT1M
+                await:
+                  correlation:
+                    strategy: generated
+                  transport:
+                    type: interaction-api
+                    config: {}
+            """);
+        String previous = System.getProperty("pipeline.config");
+        System.setProperty("pipeline.config", config.toString());
+        AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
+        try {
+            AwaitStepDescriptor descriptor = factory.descriptor(
+                "ProcessAwaitOutputService",
+                AwaitInput.class.getName(),
+                AwaitOutput.class.getName()).await().indefinitely();
+
+            assertEquals(PipelineTypes.AwaitInput.class.getName(), descriptor.transportInputType());
+            assertEquals(PipelineTypes.AwaitOutput.class.getName(), descriptor.transportOutputType());
+            assertInstanceOf(
+                AwaitOutput.Approved.class,
+                descriptor.outputFromTransport().apply(new PipelineTypes.AwaitOutput("approved")));
+        } finally {
+            factory.shutdown();
+            if (previous == null) {
+                System.clearProperty("pipeline.config");
+            } else {
+                System.setProperty("pipeline.config", previous);
+            }
+        }
+    }
 
     @Test
     void constructsWithAllFields() {

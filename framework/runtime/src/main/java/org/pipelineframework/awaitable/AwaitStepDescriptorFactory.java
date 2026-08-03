@@ -59,7 +59,19 @@ public class AwaitStepDescriptorFactory {
      * Resolves the descriptor for a generated await step.
      */
     public Uni<AwaitStepDescriptor> descriptor(String serviceName, String inputType, String outputType) {
-        return descriptor(serviceName, inputType, outputType, inputType, outputType);
+        AwaitStepDescriptor cached = descriptors.get(serviceName);
+        if (cached != null) {
+            return Uni.createFrom().item(cached)
+                .onItem().invoke(resolved -> ensureCompatible(
+                    resolved, inputType, outputType, resolved.transportInputType(), resolved.transportOutputType()));
+        }
+        return Uni.createFrom()
+            .item(() -> descriptors.computeIfAbsent(
+                serviceName,
+                key -> loadCanonicalDescriptor(key, inputType, outputType)))
+            .onItem().invoke(resolved -> ensureCompatible(
+                resolved, inputType, outputType, resolved.transportInputType(), resolved.transportOutputType()))
+            .runSubscriptionOn(blockingExecutor);
     }
 
     public Uni<AwaitStepDescriptor> descriptor(
@@ -196,6 +208,55 @@ public class AwaitStepDescriptorFactory {
             transportOutputType,
             inputToTransport,
             outputFromTransport);
+    }
+
+    /**
+     * Rebuilds the generated representation boundary for the historical three-argument generated
+     * client call. Version 3 clients use canonical domain types at the step boundary, so assuming
+     * the transport types are identical loses a protobuf union arm before durable completion can
+     * be admitted.
+     */
+    private AwaitStepDescriptor loadCanonicalDescriptor(String serviceName, String inputType, String outputType) {
+        Path configPath = resolveConfigPath(serviceName);
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath);
+        PipelineYamlStep step = awaitStep(config, serviceName);
+        Optional<V3AwaitTypeBinding> v3Binding = generatedV3TypeBinding(configPath, serviceName);
+        if (v3Binding.isPresent()) {
+            V3AwaitTypeBinding binding = v3Binding.get();
+            validateCanonicalTypes(serviceName, inputType, outputType, binding);
+            return descriptorForStep(
+                serviceName,
+                step,
+                binding.inputType(),
+                binding.outputType(),
+                binding.transportInputType(),
+                binding.transportOutputType(),
+                binding.inputToTransport(),
+                binding.outputFromTransport());
+        }
+        return descriptorForStep(
+            serviceName,
+            step,
+            inputType,
+            outputType,
+            inputType,
+            outputType,
+            Function.identity(),
+            Function.identity());
+    }
+
+    private static void validateCanonicalTypes(
+        String serviceName,
+        String inputType,
+        String outputType,
+        V3AwaitTypeBinding binding
+    ) {
+        if (!binding.inputType().equals(inputType) || !binding.outputType().equals(outputType)) {
+            throw new IllegalStateException(
+                "Version 3 await step " + serviceName + " must use its generated canonical types "
+                    + binding.inputType() + " -> " + binding.outputType() + " but received "
+                    + inputType + " -> " + outputType);
+        }
     }
 
     private AwaitStepDescriptor loadLegacyDescriptor(String serviceName) {
