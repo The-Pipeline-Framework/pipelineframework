@@ -55,15 +55,16 @@ sequenceDiagram
     Adapter-->>Coord: complete item 1
     Coord->>UnitStore: recordItemCompleted
     Coord->>Queue: signal completion
-    Queue->>Live: accept item 1 after durable record
-    Live->>Suffix: emit item 1 when downstream requests
     Adapter-->>Coord: complete item 0
     Coord->>UnitStore: recordItemCompleted -> COMPLETED
     Coord->>Queue: signal completion
-    Queue->>Live: accept item 0 after durable record
-    Live->>Suffix: emit item 0 when downstream requests
     Step->>UnitStore: markDispatchComplete(expectedItemCount=2)
-    alt live session unavailable
+    alt in-process worker and live-capable adapter
+      Queue->>Live: accept admitted item 1
+      Live->>Suffix: emit item 1 when downstream requests
+      Queue->>Live: accept admitted item 0
+      Live->>Suffix: emit item 0 when downstream requests
+    else portable worker or adapter requires suspension
       Step-->>ExecStore: park execution with awaitUnitId
       Queue->>UnitStore: require dispatchComplete
       Queue->>ExecStore: require parent WAITING_EXTERNAL(awaitUnitId)

@@ -190,11 +190,11 @@ sequenceDiagram
     Admission->>AwaitStore: "record completion"
     AwaitStore-->>Admission: "AwaitUnitRecord"
     Admission->>Ledger: "append BoundaryCompletionAdmitted"
-    alt local live session accepts
+    alt in-process worker and live-capable adapter
       Admission->>Live: "signal admitted completion"
       Live-->>Consumer: "emit item by demand"
-    else no local live session
-      Admission->>Continue: "durable fallback"
+    else portable worker or adapter requires suspension
+      Admission->>Continue: "coordinator-owned durable handoff"
       Continue->>Planner: "plan future beginning"
       alt scalar await
         Continue->>Scalar: "release scalar continuation"
