@@ -6,6 +6,37 @@ This guide is implementation-facing. Application-facing design guidance lives in
 
 For the longer-term orchestration boundary that can move await units out of each app-hosted orchestrator, see [Durable Coordinator](/evolve/durable-coordinator/). For the immutable queue-async model that treats await completion and checkpoint handoff as the same boundary-admission shape, see [Immutable Segment And Boundary Model](/evolve/await-unit-runtime/immutable-boundaries).
 
+## Transition boundary, not pipeline transport
+
+`pipeline.transport` selects the generated pipeline contract. It does not select how an await
+continues. The transition-worker boundary owns that choice:
+
+| Transition-worker boundary | Await continuation | Terminal output ownership |
+| --- | --- | --- |
+| in-process worker | retain a live window only when the adapter supports it; otherwise suspend through the await unit | the worker keeps the existing local terminal-output path |
+| portable REST, gRPC, or SQS worker | durably hand the completed interaction back to the coordinator | the coordinator publishes the terminal output |
+
+`interaction-api` and webhook awaits always use the interaction/unit suspension path. Kafka and
+SQS itemized adapters may optimize an in-process worker with a live completion window, but their
+completion remains admissible through the same unit path when that window is unavailable.
+
+The word *durable* has two scopes here. An await unit always gives the running runtime a canonical
+interaction and continuation protocol. Crash recovery additionally requires durable execution,
+await, command-effect, lease, and admission stores. The memory/event providers implement the
+first scope for one running process; they intentionally lose orchestration state on restart.
+
+## Canonical and transport completion values
+
+An await interaction carries both its canonical output type and its transport output type. A v3
+completion is first coerced to the transport representation, then passed through the generated
+canonical adapter before the continuation resumes. For example, a protobuf union is converted to
+its generated sealed domain union before canonical validation; Jackson must not be asked to
+construct the abstract union directly.
+
+The generated v3 await client supplies this boundary explicitly. The runtime also rebuilds it from
+`pipeline.yaml` for older generated three-argument descriptor calls, so persisted/transport
+completion handling retains the same typed contract during an upgrade.
+
 ## Guide Pages
 
 1. [Model](/evolve/await-unit-runtime/) explains the durable records and cardinality semantics.

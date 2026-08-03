@@ -10,6 +10,19 @@ The memory execution, await, and event-dispatch providers support this behavior 
 
 For modeling guidance, start with [Await Boundaries](/design/await-boundaries). For production operation, see [Await Boundary Operations](/operate/await-boundaries). Internally, await is backed by durable await units; for implementation diagrams and the state model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
 
+## Version 3 completion representation
+
+Version 3 generated await steps keep business code on canonical domain types while their adapter
+boundary can use protobuf. At completion, TPF validates the transport value first and invokes the
+generated domain/protobuf adapter before it resumes the canonical pipeline. This preserves a
+concrete union arm across a durable handoff instead of asking JSON conversion to instantiate an
+abstract domain union.
+
+This is generated wiring, not a transport-mode exception: LOCAL, REST, and GRPC pipeline
+contracts all use the same canonical/transport distinction when a v3 await has a representation
+boundary. Runtime compatibility also reconstructs the boundary from `pipeline.yaml` for older
+generated await clients.
+
 ## Supported Runtime Shapes
 
 | Cardinality | Interaction unit | Replay shape | App guidance |

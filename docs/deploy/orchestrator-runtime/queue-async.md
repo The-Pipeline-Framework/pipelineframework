@@ -10,6 +10,13 @@ For boundary-cost and runtime-mode tradeoffs, see [Runtime Boundaries And Perfor
 
 Durable execution means accepted work is recorded outside the current JVM or process before the runtime depends on it. If a worker crashes or the application restarts, another worker can recover the stored execution and run it again after the lease expires.
 
+The in-memory execution, await, and event providers are also supported for a single-process,
+attended `QUEUE_ASYNC` application. They preserve the queue-async and await lifecycle while that
+process remains alive, but they are not durable execution providers: a restart loses execution,
+await, command-effect, lease, and admission state. A future local durable profile needs an
+embedded implementation of that complete coordination-store suite, not a product registry or
+persistence-plugin adapter.
+
 This is lease-based recovery, not mid-pipeline checkpoint resume. TPF persists execution state, lease ownership, retry timing, and terminal outcomes, but it does not currently persist a resumable "restart from step N" checkpoint inside one pipeline run.
 
 Durability protects TPF execution state and dispatch/retry flow. External systems called by your business code still need idempotency, because a retry or takeover can call the same operator or downstream system again.
