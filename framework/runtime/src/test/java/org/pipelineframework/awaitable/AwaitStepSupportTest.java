@@ -68,7 +68,7 @@ class AwaitStepSupportTest {
     }
 
     @Test
-    void awaitOneToOneDelegatesInQueueAsyncMode() {
+    void interactionApiAwaitSuspendsThroughTheQueueAsyncContinuationPath() {
         AwaitStepSupport support = support();
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitExecutionContext context = new AwaitExecutionContext("tenant1", "exec123", 0);
@@ -110,6 +110,7 @@ class AwaitStepSupportTest {
             org.mockito.ArgumentMatchers.isNull(),
             org.mockito.ArgumentMatchers.isNull());
         org.mockito.Mockito.verify(awaitCoordinator).dispatch(testDescriptor, mockRecord);
+        org.mockito.Mockito.verify(awaitCoordinator, never()).supportsLiveAwaitWindow(testDescriptor);
     }
 
     @Test
@@ -467,10 +468,15 @@ class AwaitStepSupportTest {
     }
 
     @Test
-    void durableAwaitBoundarySuspendsInsteadOfRetainingTheLiveWorkerSession() {
+    void durableHandoffSuspendsInsteadOfRetainingTheLiveWorkerSession() {
         AwaitStepSupport support = support();
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2, true));
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext(
+            "tenant1",
+            "exec123",
+            2,
+            AwaitContinuationMode.DURABLE_HANDOFF,
+            TerminalOutputOwnership.COORDINATOR));
         AwaitStepDescriptor testDescriptor = kafkaDescriptor();
         when(awaitCoordinator.createOrGetItem(
             org.mockito.ArgumentMatchers.eq(testDescriptor),
@@ -518,7 +524,12 @@ class AwaitStepSupportTest {
         support.pipelineConfig.maxConcurrency(3);
         support.pipelineConfig.parallelism(ParallelismPolicy.PARALLEL);
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant1", "exec123", 2, true));
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext(
+            "tenant1",
+            "exec123",
+            2,
+            AwaitContinuationMode.DURABLE_HANDOFF,
+            TerminalOutputOwnership.COORDINATOR));
 
         AwaitStepDescriptor testDescriptor = descriptor();
         AtomicInteger inFlight = new AtomicInteger();

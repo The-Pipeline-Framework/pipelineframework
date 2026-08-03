@@ -232,7 +232,8 @@ public class CommandStepSupport {
             context.tenantId(),
             context.executionId(),
             context.currentStepIndex(),
-            context.durableAwaitBoundary());
+            context.continuationMode(),
+            context.terminalOutputOwnership());
     }
 
     @SuppressWarnings("unchecked")

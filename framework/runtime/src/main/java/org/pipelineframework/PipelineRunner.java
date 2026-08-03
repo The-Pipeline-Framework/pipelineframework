@@ -35,6 +35,7 @@ import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.awaitable.TerminalOutputOwnership;
 import org.pipelineframework.objectpublish.ObjectPublishRunner;
 import org.pipelineframework.objectpublish.ObjectPublishTelemetry;
 import org.pipelineframework.runtime.core.PipelineRunnerCore;
@@ -166,7 +167,8 @@ public class PipelineRunner implements AutoCloseable {
                         awaitContext.tenantId(),
                         awaitContext.executionId(),
                         index,
-                        awaitContext.durableAwaitBoundary());
+                        awaitContext.continuationMode(),
+                        awaitContext.terminalOutputOwnership());
 
                 if (step instanceof Configurable configurable) {
                     configurable.initialiseWithConfig(configFactory.buildConfig(step.getClass(), pipelineConfig));
@@ -195,7 +197,8 @@ public class PipelineRunner implements AutoCloseable {
         Object terminal = current;
         boolean terminalOutputPublished = false;
         if (stopBeforeStepIndex == orderedSteps.size()
-            && (awaitContext == null || !awaitContext.durableAwaitBoundary())) {
+            && (awaitContext == null
+                || awaitContext.terminalOutputOwnership() == TerminalOutputOwnership.TRANSITION_WORKER)) {
             ObjectPublishRunner publishRunner = objectPublishRunner();
             if (publishRunner.enabled()) {
                 terminal = publishRunner.publish(current);

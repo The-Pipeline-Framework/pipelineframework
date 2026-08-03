@@ -164,7 +164,12 @@ class PipelineRunnerTest {
 
     @Test
     void runBindsAwaitContextPerStepInsteadOfLeakingFinalLoopIndex() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant-1", "exec-1", 0, true));
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext(
+            "tenant-1",
+            "exec-1",
+            0,
+            org.pipelineframework.awaitable.AwaitContinuationMode.DURABLE_HANDOFF,
+            org.pipelineframework.awaitable.TerminalOutputOwnership.COORDINATOR));
 
         @SuppressWarnings("unchecked")
         Multi<Object> result = (Multi<Object>) runner.run(
@@ -176,7 +181,7 @@ class PipelineRunnerTest {
 
         AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(1));
         subscriber.awaitItems(1, Duration.ofSeconds(5)).assertCompleted();
-        subscriber.assertItems("last:await-step-index=1,durable=true,first:input");
+        subscriber.assertItems("last:await-step-index=1,mode=DURABLE_HANDOFF,first:input");
     }
 
     @Test
@@ -337,9 +342,9 @@ class PipelineRunnerTest {
         public Uni<String> applyOneToOne(String in) {
             AwaitExecutionContext context = AwaitExecutionContextHolder.get();
             int index = context == null ? -1 : context.currentStepIndex();
-            boolean durableAwaitBoundary = context != null && context.durableAwaitBoundary();
+            String continuationMode = context == null ? "none" : context.continuationMode().name();
             return Uni.createFrom().item(
-                "await-step-index=" + index + ",durable=" + durableAwaitBoundary + "," + in);
+                "await-step-index=" + index + ",mode=" + continuationMode + "," + in);
         }
     }
 

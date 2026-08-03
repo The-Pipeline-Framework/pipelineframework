@@ -14,6 +14,8 @@ class AwaitExecutionContextTest {
         assertEquals("tenant1", context.tenantId());
         assertEquals("exec-123", context.executionId());
         assertEquals(2, context.currentStepIndex());
+        assertEquals(AwaitContinuationMode.LIVE_IF_SUPPORTED, context.continuationMode());
+        assertEquals(TerminalOutputOwnership.TRANSITION_WORKER, context.terminalOutputOwnership());
     }
 
     @Test

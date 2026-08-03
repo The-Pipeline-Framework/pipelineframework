@@ -94,7 +94,12 @@ class CommandStepSupportTest {
 
   @Test
   void preservesInvocationContextAcrossAsyncDescriptorResolution() {
-    AwaitExecutionContext expectedContext = new AwaitExecutionContext("async-tenant", "async-exec", 7, true);
+    AwaitExecutionContext expectedContext = new AwaitExecutionContext(
+        "async-tenant",
+        "async-exec",
+        7,
+        org.pipelineframework.awaitable.AwaitContinuationMode.DURABLE_HANDOFF,
+        org.pipelineframework.awaitable.TerminalOutputOwnership.COORDINATOR);
     AwaitExecutionContextHolder.set(expectedContext);
     AtomicReference<String> descriptorThread = new AtomicReference<>();
     ExecutorService descriptorExecutor = Executors.newSingleThreadExecutor(runnable -> {
@@ -121,7 +126,8 @@ class CommandStepSupportTest {
       assertEquals(expectedContext.tenantId(), connectorContext.tenantId());
       assertEquals(expectedContext.executionId(), connectorContext.executionId());
       assertEquals(expectedContext.currentStepIndex(), connectorContext.currentStepIndex());
-      assertEquals(expectedContext.durableAwaitBoundary(), connectorContext.durableAwaitBoundary());
+      assertEquals(expectedContext.continuationMode(), connectorContext.continuationMode());
+      assertEquals(expectedContext.terminalOutputOwnership(), connectorContext.terminalOutputOwnership());
     } finally {
       descriptorExecutor.shutdownNow();
     }

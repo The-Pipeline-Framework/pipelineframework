@@ -175,8 +175,13 @@ class PipelineRunnerObjectPublishTest {
     }
 
     @Test
-    void durableWorkerBoundaryDoesNotPublishTerminalOutput() {
-        AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant-1", "exec-1", 0, true));
+    void coordinatorOwnedTerminalOutputIsNotPublishedByTheWorker() {
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext(
+            "tenant-1",
+            "exec-1",
+            0,
+            org.pipelineframework.awaitable.AwaitContinuationMode.DURABLE_HANDOFF,
+            org.pipelineframework.awaitable.TerminalOutputOwnership.COORDINATOR));
 
         PipelineRunner.ExecutionResult execution = runner.runFromStepUntilWithContext(
             Multi.createFrom().item(new TestTerminalOutput("file-a", "line-1")),

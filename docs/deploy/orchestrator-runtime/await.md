@@ -2,6 +2,12 @@
 
 Await steps model external boundaries inside `QUEUE_ASYNC` execution. TPF persists the interaction, dispatches through the configured adapter, and admits correlated completions back into the owning execution. Scalar and recovery paths suspend as `WAITING_EXTERNAL`; brokered itemized streams can also flow through a live await session while the transition is active.
 
+## Single-process LOCAL execution
+
+`LOCAL` selects generated in-process pipeline contracts; it does not select a different await model. In-process queue-async execution may retain a live session only when the await adapter supports one. `interaction-api` and webhook awaits suspend through the normal await interaction and continuation path, while Kafka and SQS itemized streams may use a live completion window with durable fallback. A portable REST, gRPC, or SQS transition-worker boundary always hands the await back to coordinator-owned continuation.
+
+The memory execution, await, and event-dispatch providers support this behavior for a single running process. They preserve the typed interaction, completion, and continuation lifecycle while the process is alive, but lose all orchestration state on process exit. They are suitable for local development and attended single-process applications; they do not provide restart recovery, multi-replica coordination, or high availability. Those require a complete durable coordination-store suite, not an application registry adapter.
+
 For modeling guidance, start with [Await Boundaries](/design/await-boundaries). For production operation, see [Await Boundary Operations](/operate/await-boundaries). Internally, await is backed by durable await units; for implementation diagrams and the state model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
 
 ## Supported Runtime Shapes

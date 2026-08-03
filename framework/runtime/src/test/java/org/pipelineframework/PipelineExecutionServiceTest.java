@@ -38,7 +38,9 @@ import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
 import org.pipelineframework.awaitable.AwaitCoordinator;
+import org.pipelineframework.awaitable.AwaitContinuationMode;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
+import org.pipelineframework.awaitable.TerminalOutputOwnership;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 import org.pipelineframework.objectpublish.ObjectPayloadChunk;
 import org.pipelineframework.objectpublish.ObjectPublishGroupRenderer;
@@ -263,32 +265,36 @@ class PipelineExecutionServiceTest {
     }
 
     @Test
-    void executePortableTransitionForcesDurableAwaitHandoff() throws Exception {
+    void transitionBoundarySelectsAwaitContinuationAndTerminalOutputOwnership() throws Exception {
         markStartupHealthy(service);
         JsonTransitionPayloadCodec codec = new JsonTransitionPayloadCodec();
         service.transitionPayloadCodec = codec;
         List<Object> steps = List.of(new Object());
-        AtomicReference<Boolean> durableAwaitBoundary = new AtomicReference<>();
+        AtomicReference<AwaitContinuationMode> continuationMode = new AtomicReference<>();
+        AtomicReference<TerminalOutputOwnership> terminalOutputOwnership = new AtomicReference<>();
         when(releaseIdentityResolver.validateCommandIdentity(any(), isNull())).thenReturn(Optional.empty());
         when(pipelineStepResolver.loadPipelineSteps()).thenReturn(steps);
         when(pipelineRunner.runFromStepUntilWithContext(any(), eq(steps), eq(0), eq(1)))
             .thenAnswer(invocation -> {
-                durableAwaitBoundary.set(
-                    org.pipelineframework.awaitable.AwaitExecutionContextHolder.get().durableAwaitBoundary());
+                var context = org.pipelineframework.awaitable.AwaitExecutionContextHolder.get();
+                continuationMode.set(context.continuationMode());
+                terminalOutputOwnership.set(context.terminalOutputOwnership());
                 return new PipelineRunner.ExecutionResult(Multi.createFrom().empty(), telemetryContext);
             });
-
-        TransitionResultEnvelope envelope = service.executePortableTransition(transitionCommand(codec, 0, -1))
-            .await().indefinitely();
-
-        assertEquals(TransitionWorkerOutcome.COMPLETED, envelope.outcome());
-        assertTrue(durableAwaitBoundary.get());
 
         TransitionResultEnvelope inProcessEnvelope = service.executeTransition(transitionCommand(codec, 0, -1))
             .await().indefinitely();
 
         assertEquals(TransitionWorkerOutcome.COMPLETED, inProcessEnvelope.outcome());
-        assertFalse(durableAwaitBoundary.get());
+        assertEquals(AwaitContinuationMode.LIVE_IF_SUPPORTED, continuationMode.get());
+        assertEquals(TerminalOutputOwnership.TRANSITION_WORKER, terminalOutputOwnership.get());
+
+        TransitionResultEnvelope portableEnvelope = service.executePortableTransition(transitionCommand(codec, 0, -1))
+            .await().indefinitely();
+
+        assertEquals(TransitionWorkerOutcome.COMPLETED, portableEnvelope.outcome());
+        assertEquals(AwaitContinuationMode.DURABLE_HANDOFF, continuationMode.get());
+        assertEquals(TerminalOutputOwnership.COORDINATOR, terminalOutputOwnership.get());
     }
 
     @Test
