@@ -8,7 +8,7 @@ This is the long-form Maven Central and release reference. Start with [Publishin
 This repository publishes the Java framework artifacts. The MCP bridge and Node template generator are coordinated but released from [`tpf-mcp-bridge`](https://github.com/The-Pipeline-Framework/tpf-mcp-bridge); see the coordinated bridge section before cutting releases that depend on schema changes.
 :::
 
-This document explains how to publish The Pipeline Framework to Maven Central and how to manage the project's versioning and release process properly.
+This document explains how to publish immutable The Pipeline Framework releases to Maven Central, refresh the current development snapshot, and manage the project's versioning and release process properly.
 
 ## TL;DR: Guarded Release Process
 
@@ -49,6 +49,7 @@ the deployment, verify Maven Central metadata and create the skipped GitHub rele
 - [Maven Central Publishing Setup](#maven-central-publishing-setup)
 - [settings.xml Configuration](#local-settingsxml-configuration)
 - [GitHub Actions Workflow](#github-actions-workflow)
+- [Nightly Snapshot Publishing](#nightly-snapshot-publishing)
 - [Safe Release Process](#safe-release-process)
 - [Coordinated tpf-mcp-bridge Release](#coordinated-tpf-mcp-bridge-release)
 - [Troubleshooting](#troubleshooting)
@@ -197,6 +198,38 @@ These secrets must exist in the GitHub repository:
 2. `CENTRAL_PASSWORD` - Your Sonatype password
 3. `GPG_PRIVATE_KEY` - Your GPG private key exported with `gpg --export-secret-keys --armor <your-key-id>`
 4. `GPG_PASSPHRASE` - The passphrase for your GPG key
+
+## Nightly Snapshot Publishing
+
+The current `main` development version is scheduled for publication daily at 02:00 UTC by
+`.github/workflows/publish-snapshots.yml`. Publication depends on a successful workflow run
+and may be delayed. The workflow can also be dispatched manually, but its publish job runs only
+from `main`. It verifies the same framework reactor that the release workflow deploys, then
+publishes the existing `-SNAPSHOT` version with the `central-publishing` profile. It does not
+create a tag or GitHub release.
+
+Sonatype Central snapshots are mutable development artifacts and are currently cleaned up after 90 days.
+Consumers must explicitly enable the Central snapshots repository and should depend on the
+active framework `-SNAPSHOT` version:
+
+```xml
+<repositories>
+  <repository>
+    <id>central-portal-snapshots</id>
+    <name>Central Portal Snapshots</name>
+    <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+    <releases>
+      <enabled>false</enabled>
+    </releases>
+    <snapshots>
+      <enabled>true</enabled>
+    </snapshots>
+  </repository>
+</repositories>
+```
+
+Snapshots do not have the immutability guarantees of tagged Maven Central releases. Use a
+released version for production dependencies that require a stable, permanent artifact.
 
 ## Safe Release Process
 
