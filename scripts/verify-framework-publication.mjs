@@ -20,6 +20,22 @@ if (manifest.internalArtifacts.length !== 4) failures.push(`expected fixture plu
 if (manifest.reactorProjectCount !== manifest.artifacts.length + manifest.internalArtifacts.length) {
   failures.push('R must equal M union F, with M and F disjoint');
 }
+const declaredArtifactIds = new Set([
+  ...manifest.artifacts.map(({ artifactId }) => artifactId),
+  ...manifest.internalArtifacts
+]);
+const groupDirectory = path.join(repository, ...manifest.groupId.split('.'));
+if (fs.existsSync(groupDirectory)) {
+  for (const entry of fs.readdirSync(groupDirectory, { withFileTypes: true })) {
+    if (
+      entry.isDirectory() &&
+      !declaredArtifactIds.has(entry.name) &&
+      fs.existsSync(path.join(groupDirectory, entry.name, version))
+    ) {
+      failures.push(`undeclared artifact deployed: ${entry.name}`);
+    }
+  }
+}
 for (const artifact of manifest.artifacts) {
   const artifactDirectory = path.join(repository, ...manifest.groupId.split('.'), artifact.artifactId, version);
   const required = [`${artifact.artifactId}-${version}.pom`, `${artifact.artifactId}-${version}.pom.asc`];
