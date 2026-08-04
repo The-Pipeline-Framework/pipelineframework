@@ -25,6 +25,60 @@ class AwaitStepDescriptorTest {
 
     @Test
     void legacyGeneratedV3ClientCallRebuildsTheCanonicalProtobufBoundary() throws Exception {
+        Path config = writeVersion3FixtureConfig();
+        String previous = System.getProperty("pipeline.config");
+        System.setProperty("pipeline.config", config.toString());
+        AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
+        try {
+            AwaitStepDescriptor descriptor = factory.descriptor(
+                "ProcessAwaitOutputService",
+                AwaitInput.class.getName(),
+                AwaitOutput.class.getName()).await().indefinitely();
+
+            assertEquals(PipelineTypes.AwaitInput.class.getName(), descriptor.transportInputType());
+            assertEquals(PipelineTypes.AwaitOutput.class.getName(), descriptor.transportOutputType());
+            assertInstanceOf(
+                AwaitOutput.Approved.class,
+                descriptor.outputFromTransport().apply(new PipelineTypes.AwaitOutput("approved")));
+        } finally {
+            factory.shutdown();
+            if (previous == null) {
+                System.clearProperty("pipeline.config");
+            } else {
+                System.setProperty("pipeline.config", previous);
+            }
+        }
+    }
+
+    @Test
+    void version3TransportOnlyClientRetainsItsIdentityRepresentationBoundary() throws Exception {
+        Path config = writeVersion3FixtureConfig();
+        String previous = System.getProperty("pipeline.config");
+        System.setProperty("pipeline.config", config.toString());
+        AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
+        try {
+            AwaitStepDescriptor descriptor = factory.descriptor(
+                "ProcessAwaitOutputService",
+                PipelineTypes.AwaitInput.class.getName(),
+                PipelineTypes.AwaitOutput.class.getName()).await().indefinitely();
+
+            assertEquals(PipelineTypes.AwaitInput.class.getName(), descriptor.inputType());
+            assertEquals(PipelineTypes.AwaitOutput.class.getName(), descriptor.outputType());
+            assertEquals(PipelineTypes.AwaitInput.class.getName(), descriptor.transportInputType());
+            assertEquals(PipelineTypes.AwaitOutput.class.getName(), descriptor.transportOutputType());
+            PipelineTypes.AwaitOutput transportOutput = new PipelineTypes.AwaitOutput("approved");
+            assertEquals(transportOutput, descriptor.outputFromTransport().apply(transportOutput));
+        } finally {
+            factory.shutdown();
+            if (previous == null) {
+                System.clearProperty("pipeline.config");
+            } else {
+                System.setProperty("pipeline.config", previous);
+            }
+        }
+    }
+
+    private Path writeVersion3FixtureConfig() throws Exception {
         Path config = tempDir.resolve("pipeline.yaml");
         Files.writeString(config, """
             version: 3
@@ -52,28 +106,7 @@ class AwaitStepDescriptorTest {
                     type: interaction-api
                     config: {}
             """);
-        String previous = System.getProperty("pipeline.config");
-        System.setProperty("pipeline.config", config.toString());
-        AwaitStepDescriptorFactory factory = new AwaitStepDescriptorFactory();
-        try {
-            AwaitStepDescriptor descriptor = factory.descriptor(
-                "ProcessAwaitOutputService",
-                AwaitInput.class.getName(),
-                AwaitOutput.class.getName()).await().indefinitely();
-
-            assertEquals(PipelineTypes.AwaitInput.class.getName(), descriptor.transportInputType());
-            assertEquals(PipelineTypes.AwaitOutput.class.getName(), descriptor.transportOutputType());
-            assertInstanceOf(
-                AwaitOutput.Approved.class,
-                descriptor.outputFromTransport().apply(new PipelineTypes.AwaitOutput("approved")));
-        } finally {
-            factory.shutdown();
-            if (previous == null) {
-                System.clearProperty("pipeline.config");
-            } else {
-                System.setProperty("pipeline.config", previous);
-            }
-        }
+        return config;
     }
 
     @Test

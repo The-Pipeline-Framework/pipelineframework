@@ -220,7 +220,11 @@ public class AwaitStepDescriptorFactory {
         Path configPath = resolveConfigPath(serviceName);
         PipelineYamlConfig config = new PipelineYamlConfigLoader().load(configPath);
         PipelineYamlStep step = awaitStep(config, serviceName);
-        Optional<V3AwaitTypeBinding> v3Binding = generatedV3TypeBinding(configPath, serviceName);
+        Optional<V3AwaitTypeBinding> v3Binding = generatedV3TypeBinding(
+            configPath,
+            serviceName,
+            inputType,
+            outputType);
         if (v3Binding.isPresent()) {
             V3AwaitTypeBinding binding = v3Binding.get();
             validateCanonicalTypes(serviceName, inputType, outputType, binding);
@@ -291,7 +295,33 @@ public class AwaitStepDescriptorFactory {
             Function.identity());
     }
 
-    private static Optional<V3AwaitTypeBinding> generatedV3TypeBinding(Path configPath, String serviceName) {
+    private static Optional<V3AwaitTypeBinding> generatedV3TypeBinding(
+        Path configPath,
+        String serviceName
+    ) {
+        if (!isVersion3(configPath)) {
+            return Optional.empty();
+        }
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+        PipelineTemplateStep step = config.steps().stream()
+            .filter(candidate -> serviceName.equals(toServiceName(candidate.name())))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException(
+                "No version 3 await step found for generated service " + serviceName));
+        String domainPackage = config.basePackage() + ".domain.";
+        return generatedV3TypeBinding(
+            configPath,
+            serviceName,
+            domainPackage + requiredType(step.inputTypeName(), serviceName, "input"),
+            domainPackage + requiredType(step.outputTypeName(), serviceName, "output"));
+    }
+
+    private static Optional<V3AwaitTypeBinding> generatedV3TypeBinding(
+        Path configPath,
+        String serviceName,
+        String requestedInputType,
+        String requestedOutputType
+    ) {
         if (!isVersion3(configPath)) {
             return Optional.empty();
         }
@@ -304,6 +334,10 @@ public class AwaitStepDescriptorFactory {
         String inputLogicalType = requiredType(step.inputTypeName(), serviceName, "input");
         String outputLogicalType = requiredType(step.outputTypeName(), serviceName, "output");
         String domainPackage = config.basePackage() + ".domain.";
+        if (!requestedInputType.equals(domainPackage + inputLogicalType)
+            || !requestedOutputType.equals(domainPackage + outputLogicalType)) {
+            return Optional.empty();
+        }
         String protoTypes = config.basePackage() + ".grpc.PipelineTypes";
         Class<?> canonicalInput = requiredGeneratedClass(domainPackage + inputLogicalType, serviceName, "canonical input");
         Class<?> canonicalOutput = requiredGeneratedClass(domainPackage + outputLogicalType, serviceName, "canonical output");
