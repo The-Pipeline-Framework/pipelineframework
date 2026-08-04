@@ -48,7 +48,7 @@ public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
     /**
      * Initializes the provider and resolves an injectable EntityManager via Arc.
      *
-     * Stores the resolved InjectableInstance<EntityManager> for the provider's persistence operations.
+     * Stores the resolved {@code InjectableInstance<EntityManager>} for the provider's persistence operations.
      */
     public VThreadPersistenceProvider() {
         // Look up the EntityManager bean instance via Arc
@@ -59,7 +59,7 @@ public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
      * Persist the provided entity within a JPA transaction.
      *
      * @return the persisted entity instance
-     * @throws IllegalStateException if no EntityManager is resolvable for this provider
+     * @throws IllegalStateException if no {@link EntityManager} is resolvable for this provider
      */
     @Override
     @Transactional
@@ -85,7 +85,7 @@ public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
      * @param entity the entity instance to merge; must not be null
      * @return the merged (managed) entity instance
      * @throws IllegalArgumentException if {@code entity} is null
-     * @throws IllegalStateException if no {@link javax.persistence.EntityManager} is available
+     * @throws IllegalStateException if no {@link EntityManager} is available
      */
     @Override
     @Transactional
