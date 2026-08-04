@@ -37,10 +37,6 @@ target/
 .m2/
 *.out
 
-# Generated files
-dependency-reduced-pom.xml
-*SUMMARY.md
-
 # Local configuration and logs
 *.log
 *.pid
@@ -62,18 +58,8 @@ ui-dashboard/node_modules/
 # Vite cache
 web-ui/node_modules/.vite/
 
-# AI Agents
-QWEN.md
-GEMINI.md
-CLAUDE.md
-
 # Local notes (kept out of Git)
 .local-notes/
-
-# Template generator
-/template-generator-node/test-output/
-/template-generator-node/node_modules/
-/template-generator-node/dist/
 
 # Maven Release Plugin backup files
 pom.xml.releaseBackup
@@ -100,3 +86,6 @@ __pycache__/
 
 # MCP
 /.mcp.json
+
+# Codex
+.codex/
