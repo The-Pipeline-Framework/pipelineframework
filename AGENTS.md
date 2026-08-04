@@ -1,7 +1,7 @@
 # The Pipeline Framework
 
 The Pipeline Framework (TPF) is a Java framework for strongly typed application flows.
-Keep the core pure. Connect to reality.
+Keep the core pure, connect to reality.
 
 Core modules:
 - `framework/pom.xml`: Parent POM of the mult-module Maven project
@@ -11,12 +11,19 @@ Core modules:
 - `framework/runtime-spring`: runtime APIs, execution engine, telemetry, config loading (Springboot))
 - `framework/runtime-api`: framework-neutral API contracts for generated pipeline applications
 
+Plugins:
+- `framework/plugins`: cross-cutting side-effect capabilities (persistence, caching, materialisation)
+
+Connectors:
+- `framework/connectors`: Admit files, object-store entries, or external payloads (Object ingest/publish). Or record 
+  and replay-safe external effects such as indexing, tickets, emails, or provisioning (Query JPA).
+
 Supporting repo surfaces:
 
 - `examples`: reference applications, topology smoke paths, and end-to-end compatibility surfaces
 - `ai-sdk`: standalone Java SDK used for delegation/operator stress testing and mapper/transport exercises
 - `docs`: VitePress documentation site
-- `web-ui`: SvelteKit Canvas/web UI (un-maintained)
+- `web-ui`: SvelteKit Canvas/web UI (unmaintained)
 
 tpf-mcp-bridge lives in a separate repo now. It holds the MCP bridge and the template generator.
 
@@ -114,6 +121,7 @@ Coding guardrails:
 - New code should not use `return null`; use `Optional`, empty collections, explicit result records, or exceptions. Existing legacy/null-heavy code is not a precedent for new work.
 - Prefer explicit result types and immutable records for new internal state. Avoid hidden mutable globals, broad static utility accretion, and "God classes".
 - New semantic step kinds (`kind: await`, `kind: command`, query steps, object I/O, or future DSL-owned I/O shells) must update compiler/runtime support, validation tests, user docs, telemetry/replay metadata, replay-viewer rendering/legend, and affected examples or generator paths together.
+- When troubleshooting, provide a focused regression coverage along with the fix.
 
 ## Persistence Plugin Notes
 
@@ -195,7 +203,7 @@ Prefer Repowise MCP context over broad grep, but do not call every Repowise tool
 
 This repository is indexed by Repowise. Use the Repowise MCP tools for codebase orientation, discovery, implementation context, modification risk, design rationale, and cleanup planning. MCP data reflects the last index run; verify against source files before editing.
 
-Last indexed: 2026-07-15 (commit f35a51ea2). Confidence: 100%.
+Last indexed: 2026-08-04 (commit 67890e1c4). Confidence: 100%.
 ### Architecture
 Using tpf-technical-writer for repository-facing documentation language, and I’ll rely on the provided repo summary plus available repo context rather than editing files. I’m pulling the repository overview from the local Repowise index now so the page reflects the indexed architecture rather than only the prompt summary. The Pipeline Framework consumes YAML runtime mappings plus annotated Java pipeline steps, operators, mappers, and configuration, compiles them through build-time validation and code-generation phases, and produces reactive Quarkus runtime artifacts for local, REST, gRPC, and function-oriented pipeline execution. This repository is a Java-first monorepo for building transport-neutral reactive pipeline systems.
 ### Key Modules
@@ -208,11 +216,11 @@ Using tpf-technical-writer for repository-facing documentation language, and I�
 ### Risk Hotspots
 | File | Churn | 90d Commits | Owner |
 |------|-------|-------------|-------|
-| `framework/runtime/src/main/java/org/pipelineframework/QueueAsyncCoordinator.java` | 100.0th percentile | 33 | mariano.barcia |
-| `framework/runtime/src/test/java/org/pipelineframework/QueueAsyncCoordinatorTest.java` | 99.9th percentile | 23 | mariano.barcia |
-| `tools/replay-viewer/app.js` | 99.9th percentile | 22 | mariano.barcia |
-| `framework/deployment/src/test/java/org/pipelineframework/processor/parser/StepDefinitionParserTest.java` | 99.8th percentile | 18 | mariano.barcia |
-| `examples/csv-payments/orchestrator-svc/src/test/java/org/pipelineframework/csv/orchestrator/service/AbstractCsvPaymentsEndToEnd.java` | 99.8th percentile | 32 | mariano.barcia |
+| `framework/runtime/src/main/java/org/pipelineframework/QueueAsyncCoordinator.java` | 100.0th percentile | 36 | mariano.barcia |
+| `tools/replay-viewer/app.js` | 99.9th percentile | 23 | mariano.barcia |
+| `framework/runtime/src/test/java/org/pipelineframework/QueueAsyncCoordinatorTest.java` | 99.9th percentile | 24 | mariano.barcia |
+| `framework/runtime/src/test/java/org/pipelineframework/config/template/PipelineTemplateConfigLoaderTest.java` | 99.8th percentile | 13 | Mariano Barcia |
+| `framework/runtime/src/main/java/org/pipelineframework/config/template/PipelineTemplateConfigLoader.java` | 99.8th percentile | 13 | mariano.barcia |
 
 ### Repowise MCP Workflow
 
