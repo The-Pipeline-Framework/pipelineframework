@@ -28,13 +28,13 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: GPG_PASSPHRASE
 
-      - name: Build framework for release
-        run: ./mvnw -B -pl framework,framework/runtime,framework/deployment -am clean install -Pcentral-publishing -DskipTests --no-transfer-progress -Dtpf.flatten.skip=false
-        env:
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-
       - name: Deploy to Maven Central
-        run: ./mvnw -B -pl framework,framework/runtime,framework/deployment -am deploy -Pcentral-publishing -DskipTests -U -Dtpf.flatten.skip=false
+        run: |
+          test "$(git rev-parse --show-toplevel)" = "$GITHUB_WORKSPACE"
+          VERSION="$(./mvnw -q -f framework/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)"
+          test "${GITHUB_REF_NAME#v}" = "$VERSION"
+          case "$VERSION" in *-SNAPSHOT) exit 1;; esac
+          ./mvnw -B -f framework/pom.xml clean deploy -Pcentral-publishing -DskipTests --no-transfer-progress -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
         env:
           CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
           CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}

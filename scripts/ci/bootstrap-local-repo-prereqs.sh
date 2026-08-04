@@ -26,9 +26,6 @@ mvn() {
 install_framework_plugins_and_connectors() {
   mvn -N install
   mvn -f "$ROOT_DIR/framework/pom.xml" clean install -DskipTests
-  mvn -f "$ROOT_DIR/plugins/foundational/persistence/pom.xml" clean install -DskipTests
-  mvn -f "$ROOT_DIR/plugins/foundational/cache/pom.xml" clean install -DskipTests
-  mvn -f "$ROOT_DIR/connectors/object-ingest/pom.xml" clean install -DskipTests
 }
 
 install_csv_prereqs() {
@@ -36,14 +33,11 @@ install_csv_prereqs() {
   mvn -f "$ROOT_DIR/framework/pom.xml" clean install -DskipTests
   mvn -f "$ROOT_DIR/examples/csv-payments/pom.xml" -N install
   mvn -f "$ROOT_DIR/examples/csv-payments/pom.xml" -pl common -DskipTests install
-  mvn -f "$ROOT_DIR/plugins/foundational/persistence/pom.xml" -DskipTests install
-  mvn -f "$ROOT_DIR/connectors/object-ingest/pom.xml" -DskipTests install
 }
 
 install_search_prereqs() {
   mvn -N install
   mvn -f "$ROOT_DIR/examples/search/pom.xml" -N install
-  mvn -f "$ROOT_DIR/plugins/foundational/cache/pom.xml" -DskipTests install
 }
 
 case "$SCOPE" in

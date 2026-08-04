@@ -1,5 +1,18 @@
 # Publishing
 
+## Public reactor
+
+`framework/pom.xml` is the Maven reactor for the supported TPF distribution.
+Its explicit public coordinate set, including artifact packaging, lives in
+`framework/public-artifacts.json`. The representation-provider fixture and
+structural connector/plugin POMs retain local coordinates but are deliberately
+excluded from Maven Central.
+
+The quality lane runs `clean verify`; publication then uses one separate
+`clean deploy -Pcentral-publishing` invocation rooted at `framework/pom.xml`.
+Use `publication-verification` with a temporary file repository to inspect the
+exact deployed set before Central publication.
+
 Publishing TPF has four related but separate responsibilities:
 
 1. publish immutable Java framework releases to Maven Central,
