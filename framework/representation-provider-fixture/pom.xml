@@ -21,10 +21,6 @@
     <build>
         <plugins>
             <plugin>
-                <artifactId>maven-deploy-plugin</artifactId>
-                <configuration><skip>true</skip></configuration>
-            </plugin>
-            <plugin>
                 <artifactId>maven-jar-plugin</artifactId>
                 <version>3.4.2</version>
                 <executions>
@@ -38,19 +34,4 @@
             </plugin>
         </plugins>
     </build>
-    <profiles>
-        <profile>
-            <id>central-publishing</id>
-            <properties><maven.deploy.skip>true</maven.deploy.skip></properties>
-            <build><plugins>
-                <plugin><artifactId>maven-deploy-plugin</artifactId><configuration><skip>true</skip></configuration></plugin>
-                <plugin><groupId>org.sonatype.central</groupId><artifactId>central-publishing-maven-plugin</artifactId><configuration><skipPublishing>true</skipPublishing></configuration></plugin>
-            </plugins></build>
-        </profile>
-        <profile>
-            <id>publication-verification</id>
-            <properties><maven.deploy.skip>true</maven.deploy.skip></properties>
-            <build><plugins><plugin><artifactId>maven-deploy-plugin</artifactId><configuration><skip>true</skip></configuration></plugin></plugins></build>
-        </profile>
-    </profiles>
 </project>

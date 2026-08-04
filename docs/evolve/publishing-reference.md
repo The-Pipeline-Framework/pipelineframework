@@ -1,13 +1,5 @@
 # Publishing Reference
 
-## Public reactor verification
-
-Publish the framework reactor with `./mvnw -f framework/pom.xml`. Before a
-Central release, deploy with `-Ppublication-verification` to a temporary file
-repository and run `scripts/verify-framework-publication.mjs`. The verifier is
-packaging-aware: public `pom` artifacts require their POM and signature, while
-public `jar` artifacts also require main, sources, Javadoc, and signature files.
-
 ::: tip Reference Appendix
 This is the long-form Maven Central and release reference. Start with [Publishing](/evolve/publishing), [Framework Release Process](/evolve/framework-release-process), [Docs Snapshot Process](/evolve/docs-snapshot-process), or [Bridge Release Coordination](/evolve/bridge-release-coordination) for the canonical path.
 :::

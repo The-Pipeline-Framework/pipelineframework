@@ -20,15 +20,15 @@
 
     <parent>
         <groupId>org.pipelineframework</groupId>
-        <artifactId>framework-parent</artifactId>
+        <artifactId>pipeline-framework-root</artifactId>
         <version>27.7.2-SNAPSHOT</version>
         <relativePath>../../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>cache-plugin</artifactId>
+    <artifactId>persistence-plugin</artifactId>
 
-    <name>The Pipeline Framework - Cache Plugin</name>
-    <description>Cache plugin implementation for The Pipeline Framework Plugin System</description>
+    <name>The Pipeline Framework - Persistence Plugin</name>
+    <description>Persistence plugin implementation for The Pipeline Framework Plugin System</description>
 
     <dependencies>
         <dependency>
@@ -36,21 +36,25 @@
             <artifactId>pipelineframework</artifactId>
             <version>${project.version}</version>
         </dependency>
+
+        <!-- Hibernate Reactive w/PostgreSQL -->
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-cache</artifactId>
+            <artifactId>quarkus-hibernate-reactive-panache</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-redis-client</artifactId>
+            <artifactId>quarkus-reactive-pg-client</artifactId>
         </dependency>
+
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-jsonb</artifactId>
+            <artifactId>quarkus-agroal</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-arc</artifactId>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.36</version>
         </dependency>
         <dependency>
             <groupId>jakarta.enterprise</groupId>
@@ -86,6 +90,7 @@
                 <groupId>io.smallrye</groupId>
                 <artifactId>jandex-maven-plugin</artifactId>
             </plugin>
+            <!-- Versions Maven Plugin for consistent version management across modules -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>versions-maven-plugin</artifactId>
