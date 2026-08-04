@@ -37,6 +37,7 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
+import org.pipelineframework.awaitable.AwaitContinuationMode;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
@@ -44,6 +45,7 @@ import org.pipelineframework.awaitable.AwaitCoordinator;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.awaitable.AwaitThrowableSupport;
 import org.pipelineframework.awaitable.AwaitUnitRecord;
+import org.pipelineframework.awaitable.TerminalOutputOwnership;
 import org.pipelineframework.orchestrator.ExecutionInputShape;
 import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRecord;
@@ -387,7 +389,7 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
    */
   @Override
   public Uni<TransitionResultEnvelope> executeTransition(TransitionCommandEnvelope command) {
-    return executeTransition(command, false);
+    return executeTransition(command, TransitionExecutionPolicy.IN_PROCESS);
   }
 
   /**
@@ -397,11 +399,13 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
    * @return encoded worker result
    */
   public Uni<TransitionResultEnvelope> executePortableTransition(TransitionCommandEnvelope command) {
-    return executeTransition(command, true);
+    return executeTransition(command, TransitionExecutionPolicy.PORTABLE);
   }
 
-  private Uni<TransitionResultEnvelope> executeTransition(TransitionCommandEnvelope command, boolean encodeOutputs) {
-    var identityMismatch = validateCommandIdentity(command, !encodeOutputs);
+  private Uni<TransitionResultEnvelope> executeTransition(
+      TransitionCommandEnvelope command,
+      TransitionExecutionPolicy policy) {
+    var identityMismatch = validateCommandIdentity(command, policy.allowLocalFallbackIdentity());
     if (identityMismatch.isPresent()) {
       return Uni.createFrom().item(TransitionResultEnvelope.failed(new IllegalArgumentException(identityMismatch.get())));
     }
@@ -417,14 +421,15 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
             decodedCommand,
             terminalOutputPublished,
             terminalInputPassthrough,
-            encodeOutputs)
+            policy.continuationMode(),
+            policy.terminalOutputOwnership())
         .collect().asList()
         .onItem().transform(items -> {
           if (terminalInputPassthrough.get()) {
             return TransitionResultEnvelope.completedTerminalInputPassthrough();
           }
           boolean published = terminalOutputPublished.get();
-          return encodeOutputs
+          return policy.encodeOutputs()
               ? TransitionResultEnvelope.completed(payloadCodec(), published ? List.of() : items, published)
               : TransitionResultEnvelope.completedInProcess(items, published);
         })
@@ -512,7 +517,8 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
       TransitionWorkerCommand command,
       AtomicBoolean terminalOutputPublished,
       AtomicBoolean terminalInputPassthrough,
-      boolean durableAwaitBoundary) {
+      AwaitContinuationMode continuationMode,
+      TerminalOutputOwnership terminalOutputOwnership) {
     return Multi.createFrom().deferred(() -> {
       Uni<Object> sourcePayload = Uni.createFrom().item(command.inputPayload());
       return sourcePayload.onItem().transformToMulti(payload -> {
@@ -522,7 +528,8 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
             command.tenantId(),
             command.executionId(),
             command.currentStepIndex(),
-            durableAwaitBoundary));
+            continuationMode,
+            terminalOutputOwnership));
         try {
           RuntimeException healthFailure = healthCheckFailure();
           if (healthFailure != null) {
@@ -546,7 +553,8 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
               ? steps.size()
               : requestedStopBeforeStepIndex;
           if (stopBeforeStepIndex == command.currentStepIndex()) {
-            if (durableAwaitBoundary && command.currentStepIndex() == steps.size()) {
+            if (terminalOutputOwnership == TerminalOutputOwnership.COORDINATOR
+                && command.currentStepIndex() == steps.size()) {
               terminalInputPassthrough.set(true);
               restoreAwaitContext(previous);
               return Multi.createFrom().empty();
@@ -578,6 +586,54 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
         }
       });
     });
+  }
+
+  /**
+   * Separates portable transition encoding from live-await eligibility and terminal output ownership.
+   */
+  private enum TransitionExecutionPolicy {
+    IN_PROCESS(
+        false,
+        true,
+        AwaitContinuationMode.LIVE_IF_SUPPORTED,
+        TerminalOutputOwnership.TRANSITION_WORKER),
+    PORTABLE(
+        true,
+        false,
+        AwaitContinuationMode.DURABLE_HANDOFF,
+        TerminalOutputOwnership.COORDINATOR);
+
+    private final boolean encodeOutputs;
+    private final boolean allowLocalFallbackIdentity;
+    private final AwaitContinuationMode continuationMode;
+    private final TerminalOutputOwnership terminalOutputOwnership;
+
+    TransitionExecutionPolicy(
+        boolean encodeOutputs,
+        boolean allowLocalFallbackIdentity,
+        AwaitContinuationMode continuationMode,
+        TerminalOutputOwnership terminalOutputOwnership) {
+      this.encodeOutputs = encodeOutputs;
+      this.allowLocalFallbackIdentity = allowLocalFallbackIdentity;
+      this.continuationMode = continuationMode;
+      this.terminalOutputOwnership = terminalOutputOwnership;
+    }
+
+    boolean encodeOutputs() {
+      return encodeOutputs;
+    }
+
+    boolean allowLocalFallbackIdentity() {
+      return allowLocalFallbackIdentity;
+    }
+
+    AwaitContinuationMode continuationMode() {
+      return continuationMode;
+    }
+
+    TerminalOutputOwnership terminalOutputOwnership() {
+      return terminalOutputOwnership;
+    }
   }
 
   private TransitionPayloadCodec payloadCodec() {

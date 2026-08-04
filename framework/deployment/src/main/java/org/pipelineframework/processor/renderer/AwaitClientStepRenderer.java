@@ -48,9 +48,7 @@ public class AwaitClientStepRenderer {
         PipelineConfigHints configHints = resolveConfigHints(ctx);
         PipelineTransport transportMode = configHints.transportMode();
         boolean generatedV3DomainTypes = ctx.v3GeneratedDomainTypes();
-        ClientRepresentation transportRepresentation = generatedV3DomainTypes
-            ? ClientRepresentation.PROTOBUF
-            : ClientRepresentation.forPipelineTransport(transportMode);
+        ClientRepresentation transportRepresentation = ClientRepresentation.forPipelineTransport(transportMode);
         TypeName transportInputType = clientStepType(
             model.inboundDomainType(), transportRepresentation, configHints.basePackage());
         TypeName transportOutputType = clientStepType(

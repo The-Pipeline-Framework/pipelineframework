@@ -6,11 +6,17 @@ package org.pipelineframework.awaitable;
 public final class AwaitExecutionContext {
     private final String tenantId;
     private final String executionId;
-    private final boolean durableAwaitBoundary;
+    private final AwaitContinuationMode continuationMode;
+    private final TerminalOutputOwnership terminalOutputOwnership;
     private int currentStepIndex;
 
     public AwaitExecutionContext(String tenantId, String executionId, int currentStepIndex) {
-        this(tenantId, executionId, currentStepIndex, false);
+        this(
+            tenantId,
+            executionId,
+            currentStepIndex,
+            AwaitContinuationMode.LIVE_IF_SUPPORTED,
+            TerminalOutputOwnership.TRANSITION_WORKER);
     }
 
     /**
@@ -19,13 +25,15 @@ public final class AwaitExecutionContext {
      * @param tenantId tenant identifier
      * @param executionId execution identifier
      * @param currentStepIndex current pipeline step index
-     * @param durableAwaitBoundary whether awaits must hand off to durable continuation handling
+     * @param continuationMode whether an await may use a live completion window
+     * @param terminalOutputOwnership side of the transition boundary that publishes terminal output
      */
     public AwaitExecutionContext(
         String tenantId,
         String executionId,
         int currentStepIndex,
-        boolean durableAwaitBoundary
+        AwaitContinuationMode continuationMode,
+        TerminalOutputOwnership terminalOutputOwnership
     ) {
         if (tenantId == null || tenantId.isBlank()) {
             throw new IllegalArgumentException("tenantId must not be blank");
@@ -39,7 +47,10 @@ public final class AwaitExecutionContext {
         this.tenantId = tenantId;
         this.executionId = executionId;
         this.currentStepIndex = currentStepIndex;
-        this.durableAwaitBoundary = durableAwaitBoundary;
+        this.continuationMode = java.util.Objects.requireNonNull(continuationMode, "continuationMode must not be null");
+        this.terminalOutputOwnership = java.util.Objects.requireNonNull(
+            terminalOutputOwnership,
+            "terminalOutputOwnership must not be null");
     }
 
     public String tenantId() {
@@ -55,12 +66,21 @@ public final class AwaitExecutionContext {
     }
 
     /**
-     * Whether this execution must suspend at an await boundary instead of retaining a live worker session.
+     * Returns the await continuation mode for this transition.
      *
-     * @return true for durable await handoff
+     * @return continuation mode
      */
-    public boolean durableAwaitBoundary() {
-        return durableAwaitBoundary;
+    public AwaitContinuationMode continuationMode() {
+        return continuationMode;
+    }
+
+    /**
+     * Returns which side of the boundary owns terminal object publication.
+     *
+     * @return terminal output owner
+     */
+    public TerminalOutputOwnership terminalOutputOwnership() {
+        return terminalOutputOwnership;
     }
 
     public void currentStepIndex(int currentStepIndex) {

@@ -85,6 +85,7 @@ sequenceDiagram
     participant Unit as "Await unit"
     participant Live as "Live await session"
     participant External as "External actor"
+    participant Coordinator as "Coordinator"
     participant Continue as "Continuation segment"
     participant Publish as "Object Publish"
     participant Store as "Execution store"
@@ -93,14 +94,16 @@ sequenceDiagram
     Await->>Unit: create item or aggregate interactions
     Await->>External: dispatch request(s)
     External-->>Unit: admit correlated completion(s)
-    Unit-->>Live: signal completion after durable record
-    Live-->>Continue: emit typed output when downstream requests
-    Continue-->>Publish: terminal domain output
-    Publish-->>Store: publish before markSucceeded
-    alt live session unavailable
+    alt in-process worker and live-capable adapter
+      Unit-->>Live: signal admitted completion
+      Live-->>Continue: emit typed output when downstream requests
+      Continue-->>Publish: terminal domain output
+      Publish-->>Store: worker publishes before markSucceeded
+    else interaction/webhook, portable worker, or no live window
       Await-->>Store: suspend parent execution
       Store->>Store: persist WAITING_EXTERNAL(awaitUnitId)
-      Unit-->>Continue: resume from durable item continuation
+      Unit-->>Coordinator: completion is admitted
+      Coordinator-->>Continue: schedule canonical continuation
     end
 ```
 

@@ -266,7 +266,8 @@ public class AwaitStepSupport {
             context.tenantId(),
             context.executionId(),
             context.currentStepIndex(),
-            context.durableAwaitBoundary());
+            context.continuationMode(),
+            context.terminalOutputOwnership());
     }
 
     @SuppressWarnings("unchecked")
@@ -275,7 +276,8 @@ public class AwaitStepSupport {
         Multi<I> input,
         AwaitExecutionContext context
     ) {
-        if (!context.durableAwaitBoundary() && awaitCoordinator.supportsLiveAwaitWindow(descriptor)) {
+        if (context.continuationMode() == AwaitContinuationMode.LIVE_IF_SUPPORTED
+            && awaitCoordinator.supportsLiveAwaitWindow(descriptor)) {
             return awaitOneToOneLiveStream(descriptor, input, context);
         }
         return awaitOneToOneStreamSuspending(descriptor, input, context);
