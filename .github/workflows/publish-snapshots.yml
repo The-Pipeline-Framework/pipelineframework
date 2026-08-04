@@ -35,7 +35,7 @@ jobs:
           server-password: CENTRAL_PASSWORD
 
       - name: Verify framework
-        run: ./mvnw -B -pl framework,framework/runtime,framework/deployment -am clean verify --no-transfer-progress -Dtpf.flatten.skip=false -Dmaven.repo.local="$PWD/.m2/repository"
+        run: ./mvnw -B -f framework/pom.xml clean verify --no-transfer-progress -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
 
       - name: Setup GPG signing key
         uses: actions/setup-java@v5
@@ -49,7 +49,11 @@ jobs:
           gpg-passphrase: GPG_PASSPHRASE
 
       - name: Deploy snapshot to Maven Central
-        run: ./mvnw -B -pl framework,framework/runtime,framework/deployment -am deploy -Pcentral-publishing -DskipTests -U --no-transfer-progress -Dtpf.flatten.skip=false -Dmaven.repo.local="$PWD/.m2/repository"
+        run: |
+          test "$(git rev-parse --show-toplevel)" = "$GITHUB_WORKSPACE"
+          VERSION="$(./mvnw -q -f framework/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)"
+          case "$VERSION" in *-SNAPSHOT) ;; *) exit 1;; esac
+          ./mvnw -B -f framework/pom.xml clean deploy -Pcentral-publishing -DskipTests -U --no-transfer-progress -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
         env:
           CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
           CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
