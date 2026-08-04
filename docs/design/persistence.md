@@ -22,7 +22,7 @@ Persistence pairs well with the [JPA Query Connector](/design/jpa-query-connecto
 
 The plugin is split into two parts:
 
-1. **Plugin library**: `framework/plugins/foundational/persistence`
+1. **Plugin library**: `plugins/foundational/persistence`
 2. **Service host module**: e.g. `examples/.../persistence-svc`
 
 The host module provides a concrete module that knows your domain types and enables runtime discovery.
@@ -34,7 +34,7 @@ In the current Quarkus runtime, `PersistenceManager` and `PersistenceService` ar
 The service host module should depend on:
 
 - `common` (domain types and mappers)
-- `framework/plugins/foundational/persistence`
+- `plugins/foundational/persistence`
 - One or more persistence providers (reactive or blocking)
 
 ## Provider selection
