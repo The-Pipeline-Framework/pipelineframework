@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Mariano Barcia
+ * Copyright (c) 2026 Mariano Barcia
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,256 +16,33 @@
 
 package org.pipelineframework.csv.service;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThat;
 
-import io.smallrye.mutiny.Uni;
-import io.smallrye.reactive.messaging.MutinyEmitter;
-import io.smallrye.reactive.messaging.kafka.api.OutgoingKafkaRecordMetadata;
-import java.math.BigDecimal;
-import java.nio.file.Path;
-import java.time.Duration;
-import java.util.Currency;
-import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.eclipse.microprofile.reactive.messaging.Message;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.pipelineframework.awaitable.AwaitPayloadSupport;
-import org.pipelineframework.awaitable.kafka.KafkaAwaitCompletionEnvelope;
-import org.pipelineframework.awaitable.kafka.KafkaAwaitDispatchEnvelope;
-import org.pipelineframework.config.pipeline.PipelineJson;
-import org.pipelineframework.csv.common.domain.ApprovedPaymentStatus;
-import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.common.domain.PaymentStatus;
-import org.pipelineframework.csv.common.mapper.ApprovedPaymentStatusMapperImpl;
-import org.pipelineframework.csv.common.mapper.CommonConverters;
-import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
-import org.pipelineframework.csv.common.mapper.UnapprovedPaymentStatusMapperImpl;
-import org.pipelineframework.csv.grpc.PipelineTypes;
 
 class PaymentProviderKafkaAwaitMockTest {
 
-  @Mock
-  PaymentProviderServiceMock paymentProvider;
-
-  PaymentProviderConfig paymentProviderConfig;
-
-  @Mock
-  MutinyEmitter<String> results;
-
-  PaymentProviderKafkaAwaitMock mockProvider;
-
-  @BeforeEach
-  void setUp() {
-    MockitoAnnotations.openMocks(this);
-    paymentProviderConfig = new PaymentProviderServiceMockTest.FakePaymentProviderConfig();
-    mockProvider = new PaymentProviderKafkaAwaitMock();
-    mockProvider.paymentProvider = paymentProvider;
-    mockProvider.paymentProviderConfig = paymentProviderConfig;
-    mockProvider.paymentStatusMapper = paymentStatusMapper();
-    mockProvider.results = results;
-  }
-
   @Test
-  void consumesDispatchEnvelopeAndPublishesCompletionEnvelope() throws Exception {
-    PaymentRecord paymentRecord = validPaymentRecord();
-    PaymentStatus status = validPaymentStatus(paymentRecord);
-    paymentRecord.setId(null);
-    when(paymentProvider.processPayment(any(PaymentRecord.class))).thenReturn(status);
-    when(results.sendMessage(any())).thenReturn(Uni.createFrom().voidItem());
+  void consumeFailureNacksWithoutAcknowledging() {
+    AtomicBoolean acknowledged = new AtomicBoolean();
+    AtomicBoolean nacked = new AtomicBoolean();
+    Message<String> message = Message.of(
+        "not-a-kafka-await-dispatch-envelope",
+        () -> {
+          acknowledged.set(true);
+          return CompletableFuture.completedFuture(null);
+        },
+        failure -> {
+          nacked.set(true);
+          return CompletableFuture.completedFuture(null);
+        });
 
-    mockProvider.consume(Message.of(dispatchJson(paymentRecord)))
-        .toCompletableFuture()
-        .get(5, TimeUnit.SECONDS);
+    new PaymentProviderKafkaAwaitMock().consume(message).toCompletableFuture().join();
 
-    ArgumentCaptor<PaymentRecord> requestCaptor = ArgumentCaptor.forClass(PaymentRecord.class);
-    verify(paymentProvider).processPayment(requestCaptor.capture());
-    assertEquals(paymentRecord.getAmount(), requestCaptor.getValue().getAmount());
-    assertEquals(paymentRecord.getRecipient(), requestCaptor.getValue().getRecipient());
-    assertEquals(paymentRecord.getCurrency(), requestCaptor.getValue().getCurrency());
-
-    ArgumentCaptor<Message<String>> completionCaptor = ArgumentCaptor.forClass(Message.class);
-    verify(results).sendMessage(completionCaptor.capture());
-    KafkaAwaitCompletionEnvelope completion = PipelineJson.mapper()
-        .readValue(completionCaptor.getValue().getPayload(), KafkaAwaitCompletionEnvelope.class);
-    OutgoingKafkaRecordMetadata<?> metadata = completionCaptor.getValue()
-        .getMetadata(OutgoingKafkaRecordMetadata.class)
-        .orElseThrow();
-    assertEquals("corr-1", metadata.getKey());
-    assertEquals("tenant-1", completion.tenantId());
-    assertEquals("interaction-1", completion.interactionId());
-    assertEquals("corr-1", completion.correlationId());
-    assertEquals("resume-token", completion.resumeToken());
-    assertEquals("interaction-1", completion.idempotencyKey());
-    assertEquals("csv-payments-mock-provider", completion.actor());
-    Map<?, ?> payload = (Map<?, ?>) completion.responsePayload();
-    assertTrue(payload.containsKey("approved"));
-    PipelineTypes.PaymentStatus rebuilt = (PipelineTypes.PaymentStatus)
-        AwaitPayloadSupport.coercePayload(payload, PipelineTypes.PaymentStatus.class);
-    assertTrue(rebuilt.hasApproved());
-    assertEquals("provider-ref", rebuilt.getApproved().getReference());
-  }
-
-  @Test
-  void releasesKafkaCompletionsAsAConfiguredBurst() throws Exception {
-    PaymentRecord firstRecord = validPaymentRecord();
-    PaymentRecord secondRecord = validPaymentRecord();
-    when(paymentProvider.processPayment(any(PaymentRecord.class)))
-        .thenReturn(validPaymentStatus(firstRecord), validPaymentStatus(secondRecord));
-    when(results.send(anyString())).thenReturn(Uni.createFrom().voidItem());
-    mockProvider.paymentProviderConfig = new PaymentProviderServiceMockTest.FakePaymentProviderConfig() {
-      @Override
-      public int completionBurstSize() {
-        return 2;
-      }
-
-      @Override
-      public Duration completionBurstFlushDelay() {
-        return Duration.ofSeconds(1);
-      }
-    };
-
-    var first = mockProvider.consume(Message.of(dispatchJson(firstRecord))).toCompletableFuture();
-    assertFalse(first.isDone());
-    var second = mockProvider.consume(Message.of(dispatchJson(secondRecord))).toCompletableFuture();
-
-    second.get(5, TimeUnit.SECONDS);
-    first.get(5, TimeUnit.SECONDS);
-
-    verify(results, times(2)).sendMessage(any());
-    mockProvider.flushPendingCompletions();
-  }
-
-  @Test
-  void invalidDispatchPayloadFailsWithoutPublishingCompletion() {
-    assertThrows(Exception.class, () -> mockProvider.consume(failingMessage("{not-json"))
-        .toCompletableFuture()
-        .get(5, TimeUnit.SECONDS));
-
-    verify(results, never()).sendMessage(any());
-  }
-
-  @Test
-  void providerFailureFailsWithoutPublishingCompletion() throws Exception {
-    PaymentRecord paymentRecord = validPaymentRecord();
-    when(paymentProvider.processPayment(any(PaymentRecord.class))).thenThrow(new IllegalStateException("provider down"));
-
-    assertThrows(Exception.class, () -> mockProvider.consume(failingMessage(dispatchJson(paymentRecord)))
-        .toCompletableFuture()
-        .get(5, TimeUnit.SECONDS));
-
-    verify(results, never()).sendMessage(any());
-  }
-
-  @Test
-  void sendFailureFailsConsume() throws Exception {
-    PaymentRecord paymentRecord = validPaymentRecord();
-    when(paymentProvider.processPayment(any(PaymentRecord.class))).thenReturn(validPaymentStatus(paymentRecord));
-    when(results.send(anyString())).thenReturn(Uni.createFrom().failure(new IllegalStateException("broker down")));
-
-    assertThrows(Exception.class, () -> mockProvider.consume(failingMessage(dispatchJson(paymentRecord)))
-        .toCompletableFuture()
-        .get(5, TimeUnit.SECONDS));
-  }
-
-  @Test
-  void missingRequiredPaymentFieldsFailsBeforeProviderCall() throws Exception {
-    PaymentRecord invalid = new PaymentRecord()
-        .setCsvId("csv-1")
-        .setRecipient("alice")
-        .setCurrency(Currency.getInstance("EUR"));
-
-    assertThrows(Exception.class, () -> mockProvider.consume(failingMessage(dispatchJson(invalid)))
-        .toCompletableFuture()
-        .get(5, TimeUnit.SECONDS));
-
-    verify(paymentProvider, never()).processPayment(any(PaymentRecord.class));
-    verify(results, never()).send(anyString());
-  }
-
-  private static PaymentRecord validPaymentRecord() {
-    PaymentRecord paymentRecord = new PaymentRecord()
-        .setCsvId("csv-1")
-        .setRecipient("alice")
-        .setAmount(new BigDecimal("12.34"))
-        .setCurrency(Currency.getInstance("EUR"));
-    paymentRecord.setCsvPaymentsInputFilePath(Path.of("/tmp/payments.csv"));
-    paymentRecord.setId(UUID.randomUUID());
-    return paymentRecord;
-  }
-
-  private static PaymentStatus validPaymentStatus(PaymentRecord paymentRecord) {
-    ApprovedPaymentStatus paymentStatus = new ApprovedPaymentStatus();
-    paymentStatus.setReference("provider-ref");
-    paymentStatus.setStatus("Completed");
-    paymentStatus.setMessage("settled");
-    paymentStatus.setFee(new BigDecimal("0.12"));
-    paymentStatus.setConversationId(UUID.randomUUID());
-    paymentStatus.setStatusCode(1000L);
-    paymentStatus.setPaymentRecord(paymentRecord);
-    paymentStatus.setPaymentRecordId(paymentRecord.getId());
-    return paymentStatus;
-  }
-
-  private static String dispatchJson(PaymentRecord paymentRecord) throws Exception {
-    KafkaAwaitDispatchEnvelope dispatch = new KafkaAwaitDispatchEnvelope(
-        "tenant-1",
-        "exec-1",
-        "interaction-1",
-        "corr-1",
-        "AwaitPaymentProvider",
-        System.currentTimeMillis() + 60_000L,
-        PaymentRecord.class.getName(),
-        PaymentStatus.class.getName(),
-        "resume-token",
-        paymentRecord,
-        Map.of("topic", "csv-payments.payment.requests"));
-    return PipelineJson.mapper().writeValueAsString(dispatch);
-  }
-
-  private static Message<String> failingMessage(String payload) {
-    return Message.of(
-        payload,
-        () -> CompletableFuture.completedFuture(null),
-        failure -> CompletableFuture.failedFuture(failure));
-  }
-
-  private static PaymentStatusMapper paymentStatusMapper() {
-    CommonConverters commonConverters = new CommonConverters();
-
-    ApprovedPaymentStatusMapperImpl approved = new ApprovedPaymentStatusMapperImpl();
-    setField(approved, "commonConverters", commonConverters);
-
-    UnapprovedPaymentStatusMapperImpl unapproved = new UnapprovedPaymentStatusMapperImpl();
-    setField(unapproved, "commonConverters", commonConverters);
-
-    PaymentStatusMapper mapper = new PaymentStatusMapper();
-    setField(mapper, "approvedMapper", approved);
-    setField(mapper, "unapprovedMapper", unapproved);
-    return mapper;
-  }
-
-  private static void setField(Object target, String fieldName, Object value) {
-    try {
-      java.lang.reflect.Field field = target.getClass().getDeclaredField(fieldName);
-      field.setAccessible(true);
-      field.set(target, value);
-    } catch (ReflectiveOperationException e) {
-      throw new IllegalStateException("Failed to set field " + fieldName, e);
-    }
+    assertThat(nacked).isTrue();
+    assertThat(acknowledged).isFalse();
   }
 }

@@ -92,8 +92,8 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
-    void loadsCsvPaymentsV3PersistenceVariation() throws Exception {
-        Path configPath = Path.of("..", "..", "examples", "csv-payments", "config", "pipeline.v3-persistence.yaml")
+    void loadsCanonicalCsvPaymentsConfiguration() throws Exception {
+        Path configPath = Path.of("..", "..", "examples", "csv-payments", "config", "pipeline.yaml")
             .toRealPath();
 
         PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);

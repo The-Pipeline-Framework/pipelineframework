@@ -21,9 +21,9 @@ This eliminates the need for manual configuration and ensures consistency across
 Before annotation processing, pipeline protobuf contracts are generated from the pipeline template. For version 3 Java applications, the Java domain target is generated in the same lifecycle. The authoritative generators are:
 
 - `framework/runtime/src/main/java/org/pipelineframework/proto/PipelineProtoGenerator.java`
-- `framework/runtime/src/main/java/org/pipelineframework/proto/PipelineV3JavaDomainGenerator.java`
+- `framework/runtime/src/main/java/org/pipelineframework/proto/PipelineJavaDomainGenerator.java`
 
-`PipelineV3ContractGenerator` is the convenience lifecycle command that invokes both independent target generators. It does not make the project scaffolder responsible for DSL-derived domain code.
+`PipelineContractGenerator` is the convenience lifecycle command that invokes both independent target generators. It does not make the project scaffolder responsible for DSL-derived domain code.
 
 ### Build Timeline (gRPC)
 
@@ -31,7 +31,7 @@ Before annotation processing, pipeline protobuf contracts are generated from the
 Pipeline template
       |
       v
-PipelineV3ContractGenerator
+PipelineContractGenerator
       |                    \
       v                     v
 protobuf contracts -> protoc -> descriptor set (.desc)    Java domain records + adapters

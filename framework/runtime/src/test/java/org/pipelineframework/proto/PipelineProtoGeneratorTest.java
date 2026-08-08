@@ -206,7 +206,7 @@ class PipelineProtoGeneratorTest {
         System.setProperty("pipeline.idl.bootstrap", "true");
         try {
             new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
-            new PipelineV3JavaDomainGenerator().generate(tempDir, configPath, outputDir);
+            new PipelineJavaDomainGenerator().generate(tempDir, configPath, outputDir);
         } finally {
             System.clearProperty("pipeline.idl.bootstrap");
         }
@@ -253,7 +253,7 @@ class PipelineProtoGeneratorTest {
                 output: CurrencyCode
             """);
         var config = new org.pipelineframework.config.template.PipelineTemplateConfigLoader().load(configPath);
-        var plan = new PipelineV3GenerationPlan(config.basePackage(), config.typeModel(),
+        var plan = new PipelineGenerationPlan(config.basePackage(), config.typeModel(),
             org.pipelineframework.config.template.PipelineIdlSnapshot.from(config));
         List<PipelineJavaDomainRenderer.RenderedSource> sources = new PipelineJavaDomainRenderer().render(plan);
         String currency = sources.stream().filter(source -> source.relativePath().getFileName().toString().equals("CurrencyCode.java"))
@@ -369,7 +369,7 @@ class PipelineProtoGeneratorTest {
         System.setProperty("pipeline.idl.bootstrap", "true");
         try {
             new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
-            new PipelineV3JavaDomainGenerator().generate(tempDir, configPath, outputDir);
+            new PipelineJavaDomainGenerator().generate(tempDir, configPath, outputDir);
         } finally {
             System.clearProperty("pipeline.idl.bootstrap");
         }
@@ -413,7 +413,7 @@ class PipelineProtoGeneratorTest {
         System.setProperty("pipeline.idl.bootstrap", "true");
         try {
             new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
-            new PipelineV3JavaDomainGenerator().generate(tempDir, configPath, outputDir);
+            new PipelineJavaDomainGenerator().generate(tempDir, configPath, outputDir);
         } finally {
             System.clearProperty("pipeline.idl.bootstrap");
         }
@@ -451,7 +451,7 @@ class PipelineProtoGeneratorTest {
         try {
             new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
             IllegalStateException error = assertThrows(IllegalStateException.class,
-                () -> new PipelineV3JavaDomainGenerator().generate(tempDir, configPath, outputDir));
+                () -> new PipelineJavaDomainGenerator().generate(tempDir, configPath, outputDir));
             assertTrue(error.getMessage().contains("cannot represent field 'PaymentRecord.class'"));
         } finally {
             System.clearProperty("pipeline.idl.bootstrap");
@@ -481,7 +481,7 @@ class PipelineProtoGeneratorTest {
         try {
             new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
             IllegalStateException error = assertThrows(IllegalStateException.class,
-                () -> new PipelineV3JavaDomainGenerator().generate(tempDir, configPath, outputDir));
+                () -> new PipelineJavaDomainGenerator().generate(tempDir, configPath, outputDir));
             assertTrue(error.getMessage().contains("cannot represent type 'record'"));
         } finally {
             System.clearProperty("pipeline.idl.bootstrap");
@@ -516,7 +516,7 @@ class PipelineProtoGeneratorTest {
         System.setProperty("pipeline.idl.bootstrap", "true");
         try {
             new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
-            new PipelineV3JavaDomainGenerator().generate(tempDir, configPath, outputDir);
+            new PipelineJavaDomainGenerator().generate(tempDir, configPath, outputDir);
         } finally {
             System.clearProperty("pipeline.idl.bootstrap");
         }
@@ -2303,7 +2303,7 @@ class PipelineProtoGeneratorTest {
 
     @Test
     void parsesV3ContractGeneratorArgumentsStrictly() {
-        PipelineV3ContractGenerator.Arguments arguments = PipelineV3ContractGenerator.Arguments.parse(new String[] {
+        PipelineContractGenerator.Arguments arguments = PipelineContractGenerator.Arguments.parse(new String[] {
             "--module-dir", "module", "--config=config/pipeline.yaml", "--output-dir", "generated"
         });
 
@@ -2311,13 +2311,13 @@ class PipelineProtoGeneratorTest {
         assertEquals(Path.of("config/pipeline.yaml"), arguments.configPath());
         assertEquals(Path.of("generated"), arguments.outputDir());
         assertFalse(arguments.help());
-        assertTrue(PipelineV3ContractGenerator.Arguments.parse(new String[] { "--help" }).help());
+        assertTrue(PipelineContractGenerator.Arguments.parse(new String[] { "--help" }).help());
         assertThrows(IllegalArgumentException.class,
-            () -> PipelineV3ContractGenerator.Arguments.parse(new String[] { "--config", "--output-dir" }));
+            () -> PipelineContractGenerator.Arguments.parse(new String[] { "--config", "--output-dir" }));
         assertThrows(IllegalArgumentException.class,
-            () -> PipelineV3ContractGenerator.Arguments.parse(new String[] { "--output-dir=" }));
+            () -> PipelineContractGenerator.Arguments.parse(new String[] { "--output-dir=" }));
         assertThrows(IllegalArgumentException.class,
-            () -> PipelineV3ContractGenerator.Arguments.parse(new String[] { "--unknown" }));
+            () -> PipelineContractGenerator.Arguments.parse(new String[] { "--unknown" }));
     }
 
     private void assertWrapperConstructionFails(Class<?> wrapper, Object... arguments) throws Exception {
