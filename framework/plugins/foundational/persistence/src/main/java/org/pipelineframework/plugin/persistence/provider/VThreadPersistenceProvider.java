@@ -51,8 +51,11 @@ public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
      * Stores the resolved {@code InjectableInstance<EntityManager>} for the provider's persistence operations.
      */
     public VThreadPersistenceProvider() {
-        // Look up the EntityManager bean instance via Arc
-        entityManagerInstance = Arc.container().select(EntityManager.class);
+        this(Arc.container().select(EntityManager.class));
+    }
+
+    VThreadPersistenceProvider(InjectableInstance<EntityManager> entityManagerInstance) {
+        this.entityManagerInstance = entityManagerInstance;
     }
 
     /**

@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 import jakarta.inject.Inject;
 
 import io.quarkus.vertx.core.runtime.context.VertxContextSafetyToggle;
@@ -97,12 +98,17 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
         if (persistenceManager == null) {
             return Uni.createFrom().failure(new IllegalStateException("PersistenceManager is not available"));
         }
-        boolean useVertx = shouldUseVertxContext();
-        Uni<R> persistUni = !useVertx
-            ? persistenceManager.persist(representation)
-            : (hasManagedReactiveContext()
+        Uni<R> persistUni;
+        try {
+            boolean useVertx = shouldUseVertxContext();
+            persistUni = !useVertx
                 ? persistenceManager.persist(representation)
-                : persistOnVertxContext(representation));
+                : (hasManagedReactiveContext()
+                    ? persistenceManager.persist(representation)
+                    : persistOnVertxContext(representation));
+        } catch (IllegalStateException failure) {
+            persistUni = Uni.createFrom().failure(failure);
+        }
         return persistUni
             .onFailure(this::isDuplicateKeyError)
             .recoverWithUni(failure -> handleDuplicateKey(representation, failure))
@@ -176,7 +182,9 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
         VertxContextSafetyToggle.setContextSafe(context, true);
         return Uni.createFrom().<R>emitter(emitter -> {
             AtomicReference<Cancellable> subscriptionRef = new AtomicReference<>();
+            AtomicBoolean terminated = new AtomicBoolean();
             emitter.onTermination(() -> {
+                terminated.set(true);
                 context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
                 Cancellable subscription = subscriptionRef.getAndSet(null);
                 if (subscription != null) {
@@ -184,6 +192,9 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
                 }
             });
             context.runOnContext(ignored -> {
+                if (terminated.get()) {
+                    return;
+                }
                 context.putLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY, Boolean.TRUE);
                 try {
                     Cancellable subscription = persistenceManager.persist(item)
@@ -194,7 +205,11 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
                             context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
                             emitter.fail(failure);
                         });
-                    subscriptionRef.set(subscription);
+                    if (terminated.get()) {
+                        subscription.cancel();
+                    } else if (!subscriptionRef.compareAndSet(null, subscription)) {
+                        subscription.cancel();
+                    }
                 } catch (Throwable t) {
                     context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
                     emitter.fail(t);

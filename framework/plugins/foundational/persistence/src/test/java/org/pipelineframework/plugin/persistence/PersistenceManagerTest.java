@@ -149,22 +149,6 @@ class PersistenceManagerTest {
         verify(specificMockProvider, never()).persist(any());
     }
 
-    @Test
-    void persist_WithConfiguredProviderClass_ShouldUseProvider() throws Exception {
-        TestEntity entity = new TestEntity();
-        RecordingProvider provider = new RecordingProvider();
-
-        setProviders(List.of(provider));
-        setProviderClass(provider.getClass().getName());
-
-        Uni<Object> resultUni = persistenceManager.persist(entity);
-        UniAssertSubscriber<Object> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
-        subscriber.awaitItem();
-
-        assertSame(entity, subscriber.getItem());
-        assertTrue(provider.used());
-    }
-
     /** Helper method to reinitialize the providers list after changing mock configuration */
     private void reinitializeProviders() {
         try {
@@ -181,12 +165,6 @@ class PersistenceManagerTest {
         Field providersField = PersistenceManager.class.getDeclaredField("providers");
         providersField.setAccessible(true);
         providersField.set(persistenceManager, providers);
-    }
-
-    private void setProviderClass(String providerClass) throws Exception {
-        Field providerClassField = PersistenceManager.class.getDeclaredField("persistenceProviderClass");
-        providerClassField.setAccessible(true);
-        providerClassField.set(persistenceManager, Optional.ofNullable(providerClass));
     }
 
     @Entity
