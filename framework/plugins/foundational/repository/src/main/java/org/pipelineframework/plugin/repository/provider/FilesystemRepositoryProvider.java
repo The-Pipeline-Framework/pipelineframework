@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import io.quarkus.arc.Unremovable;
@@ -58,11 +59,22 @@ public class FilesystemRepositoryProvider implements RepositoryProvider {
     public Uni<PayloadReference> store(RepositoryWriteRequest request) {
         return Uni.createFrom().item(() -> {
             Path path = pathFor(request.container(), request.key());
+            Path temporary = null;
             try {
                 Files.createDirectories(path.getParent());
-                Files.write(path, request.payload());
+                temporary = Files.createTempFile(path.getParent(), path.getFileName().toString(), ".tmp");
+                Files.write(temporary, request.payload());
+                Files.move(temporary, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             } catch (IOException e) {
                 throw new IllegalStateException("Failed writing repository payload " + path, e);
+            } finally {
+                if (temporary != null) {
+                    try {
+                        Files.deleteIfExists(temporary);
+                    } catch (IOException ignored) {
+                        // The completed move has already removed the temporary file; a failed cleanup must not hide the write failure.
+                    }
+                }
             }
             return new PayloadReference(
                 providerName(),

@@ -20,7 +20,6 @@ import java.net.URI;
 import java.util.Optional;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 
 import io.quarkus.arc.Unremovable;
 import io.quarkus.arc.properties.IfBuildProperty;
@@ -41,6 +40,7 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -51,9 +51,6 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
 @IfBuildProperty(name = "pipeline.repository.provider", stringValue = "s3")
 @ParallelismHint(ordering = OrderingRequirement.RELAXED, threadSafety = ThreadSafety.SAFE)
 public class S3RepositoryProvider implements RepositoryProvider {
-
-    @Inject
-    S3Client injectedClient;
 
     @ConfigProperty(name = "pipeline.repository.s3.bucket")
     String bucket;
@@ -79,10 +76,6 @@ public class S3RepositoryProvider implements RepositoryProvider {
     void init() {
         if (bucket == null || bucket.isBlank()) {
             throw new IllegalStateException("pipeline.repository.s3.bucket must be configured when using S3 repository provider");
-        }
-        if (injectedClient != null) {
-            client = injectedClient;
-            return;
         }
         var builder = S3Client.builder();
         region.map(Region::of).ifPresent(builder::region);
@@ -165,6 +158,31 @@ public class S3RepositoryProvider implements RepositoryProvider {
                 }
                 throw e;
             }
+        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
+    }
+
+    @Override
+    public Uni<Boolean> delete(PayloadReference reference) {
+        return Uni.createFrom().item(() -> {
+            String targetBucket = resolveBucket(reference);
+            try {
+                client.headObject(HeadObjectRequest.builder()
+                    .bucket(targetBucket)
+                    .key(reference.key())
+                    .build());
+            } catch (NoSuchKeyException e) {
+                return false;
+            } catch (S3Exception e) {
+                if (e.statusCode() == 404) {
+                    return false;
+                }
+                throw e;
+            }
+            client.deleteObject(DeleteObjectRequest.builder()
+                .bucket(targetBucket)
+                .key(reference.key())
+                .build());
+            return true;
         }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
     }
 
