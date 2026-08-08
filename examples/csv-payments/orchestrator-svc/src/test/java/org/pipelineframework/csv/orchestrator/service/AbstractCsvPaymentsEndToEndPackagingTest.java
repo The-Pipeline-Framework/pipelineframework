@@ -44,24 +44,4 @@ class AbstractCsvPaymentsEndToEndPackagingTest {
         assertFalse(AbstractCsvPaymentsEndToEnd.runtimeMappingsMatch(active, desired));
     }
 
-    @Test
-    void packagedV3PersistenceProfileMustMatchTheRequestedProfile() throws Exception {
-        Path jar = tempDir.resolve("quarkus-run.jar");
-        Path marker = AbstractCsvPaymentsEndToEnd.packagedV3PersistenceProfileMarker(jar);
-        String original = System.getProperty("csv.v3.persistence");
-        try {
-            System.setProperty("csv.v3.persistence", "true");
-            assertFalse(AbstractCsvPaymentsEndToEnd.packagedV3PersistenceProfileMatches(jar));
-            Files.writeString(marker, "true");
-            assertTrue(AbstractCsvPaymentsEndToEnd.packagedV3PersistenceProfileMatches(jar));
-            System.setProperty("csv.v3.persistence", "false");
-            assertFalse(AbstractCsvPaymentsEndToEnd.packagedV3PersistenceProfileMatches(jar));
-        } finally {
-            if (original == null) {
-                System.clearProperty("csv.v3.persistence");
-            } else {
-                System.setProperty("csv.v3.persistence", original);
-            }
-        }
-    }
 }

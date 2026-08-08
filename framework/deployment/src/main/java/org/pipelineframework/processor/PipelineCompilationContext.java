@@ -68,16 +68,12 @@ public class PipelineCompilationContext {
     private Set<GenerationTarget> resolvedTargets;
     
     // Renderer-specific bindings (keyed by transport or target)
-    @Setter
     private Map<String, Object> rendererBindings;
 
-    @Setter
     private String rendererProfile;
     
     // Output paths and module information
-    @Setter
     private Path generatedSourcesRoot;
-    @Setter
     private Path moduleDir;
     private String moduleName;
 
@@ -85,9 +81,7 @@ public class PipelineCompilationContext {
     private PipelineRuntimeMappingResolution runtimeMappingResolution;
     
     // Additional compilation flags and state
-    @Setter
     private boolean pluginHost;
-    @Setter
     private boolean orchestratorGenerated;
     @Setter
     @Getter(AccessLevel.NONE)
@@ -95,7 +89,6 @@ public class PipelineCompilationContext {
     private PipelineTransport transportMode;
     private PlatformMode platformMode;
 
-    @Setter
     private DescriptorProtos.FileDescriptorSet descriptorSet;
     
     /**

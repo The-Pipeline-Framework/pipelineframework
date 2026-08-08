@@ -33,7 +33,7 @@ final class PipelineJavaDomainRenderer {
     private static final String VALIDATION_NAME = "PipelineDomainValidation";
     private static final String PAYLOAD_REFERENCE = "org.pipelineframework.repository.PayloadReference";
 
-    List<RenderedSource> render(PipelineV3GenerationPlan plan) {
+    List<RenderedSource> render(PipelineGenerationPlan plan) {
         validate(plan);
         String domainPackage = plan.basePackage() + ".domain";
         List<String> names = new ArrayList<>(plan.typeModel().definitions().keySet());
@@ -60,7 +60,7 @@ final class PipelineJavaDomainRenderer {
         return new RenderedSource(Path.of(domainPackage.replace('.', '/')).resolve(simpleName + ".java"), content);
     }
 
-    private void validate(PipelineV3GenerationPlan plan) {
+    private void validate(PipelineGenerationPlan plan) {
         if (plan.typeModel().definitions().containsKey(ADAPTER_NAME)) {
             throw new IllegalStateException("Version 3 type '" + ADAPTER_NAME + "' conflicts with generated Java adapter code.");
         }
@@ -115,7 +115,7 @@ final class PipelineJavaDomainRenderer {
     private String renderRecord(
         String domainPackage,
         PipelineTemplateTypeDefinition.RecordType record,
-        PipelineV3GenerationPlan plan
+        PipelineGenerationPlan plan
     ) {
         StringBuilder builder = header(domainPackage);
         builder.append("/** Generated from the version 3 pipeline type '").append(record.name()).append("'. */\n");
@@ -131,7 +131,7 @@ final class PipelineJavaDomainRenderer {
     private String renderWrapper(
         String domainPackage,
         PipelineTemplateTypeDefinition.WrapperType wrapper,
-        PipelineV3GenerationPlan plan
+        PipelineGenerationPlan plan
     ) {
         StringBuilder builder = header(domainPackage);
         builder.append("/** Nominal wrapper generated from the version 3 pipeline type '").append(wrapper.name()).append("'. */\n");
@@ -152,7 +152,7 @@ final class PipelineJavaDomainRenderer {
     private String renderUnion(
         String domainPackage,
         PipelineTemplateTypeDefinition.UnionType union,
-        PipelineV3GenerationPlan plan
+        PipelineGenerationPlan plan
     ) {
         StringBuilder builder = header(domainPackage);
         List<PipelineTemplateTypeDefinition.Variant> variants = union.variants().values().stream()
@@ -178,7 +178,7 @@ final class PipelineJavaDomainRenderer {
         return builder.append("}\n").toString();
     }
 
-    private String renderAdapters(String domainPackage, PipelineV3GenerationPlan plan) {
+    private String renderAdapters(String domainPackage, PipelineGenerationPlan plan) {
         String protoTypes = plan.basePackage() + ".grpc.PipelineTypes";
         StringBuilder builder = header(domainPackage);
         builder.append("/**\n")
@@ -208,7 +208,7 @@ final class PipelineJavaDomainRenderer {
     private void renderRecordAdapters(
         StringBuilder builder,
         PipelineTemplateTypeDefinition.RecordType record,
-        PipelineV3GenerationPlan plan,
+        PipelineGenerationPlan plan,
         String protoTypes
     ) {
         Map<String, PipelineIdlSnapshot.TypeFieldSnapshot> state = fieldsByName(record.name(), plan.idlState());
@@ -243,7 +243,7 @@ final class PipelineJavaDomainRenderer {
     private void renderWrapperAdapters(
         StringBuilder builder,
         PipelineTemplateTypeDefinition.WrapperType wrapper,
-        PipelineV3GenerationPlan plan,
+        PipelineGenerationPlan plan,
         String protoTypes
     ) {
         builder.append("    public static ").append(protoTypes).append('.').append(wrapper.name()).append(" toProto(")
@@ -260,7 +260,7 @@ final class PipelineJavaDomainRenderer {
             .append(fromProtoExpression(wrapper.wraps(), "value.getValue()", plan.typeModel())).append(" : null);\n    }\n\n");
     }
 
-    private boolean hasConstrainedWrappers(PipelineV3GenerationPlan plan) {
+    private boolean hasConstrainedWrappers(PipelineGenerationPlan plan) {
         return plan.typeModel().definitions().values().stream()
             .anyMatch(definition -> definition instanceof PipelineTemplateTypeDefinition.WrapperType wrapper
                 && !wrapper.constraints().isEmpty());
@@ -353,7 +353,7 @@ final class PipelineJavaDomainRenderer {
     private void renderUnionAdapters(
         StringBuilder builder,
         PipelineTemplateTypeDefinition.UnionType union,
-        PipelineV3GenerationPlan plan,
+        PipelineGenerationPlan plan,
         String protoTypes
     ) {
         Map<String, PipelineIdlSnapshot.TypeVariantSnapshot> state = variantsByDiscriminator(union.name(), plan.idlState());
@@ -410,7 +410,7 @@ final class PipelineJavaDomainRenderer {
             .append("            value.getMetadataMap());\n    }\n\n");
     }
 
-    private boolean usesPayloadReference(PipelineV3GenerationPlan plan) {
+    private boolean usesPayloadReference(PipelineGenerationPlan plan) {
         return plan.typeModel().definitions().values().stream().anyMatch(definition ->
             definition instanceof PipelineTemplateTypeDefinition.RecordType record
                 && record.fields().stream().anyMatch(field -> isPayloadReference(field.type(), plan.typeModel()))

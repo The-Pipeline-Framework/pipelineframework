@@ -146,7 +146,7 @@ steps:
     java:
       input: org.pipelineframework.csv.domain.CsvPaymentsInputFile
       output: org.pipelineframework.csv.domain.PaymentRecord
-    inboundMapper: org.pipelineframework.csv.common.mapper.V3CsvPaymentsInputFileGrpcMapper
+    inboundMapper: org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileGrpcMapper
   - name: Await Payment Provider
     kind: await
     cardinality: ONE_TO_ONE
@@ -157,7 +157,7 @@ steps:
       output: org.pipelineframework.csv.domain.PaymentStatus
     timeout: PT5M
     idempotency:
-      fields: [id]
+      fields: [csvPaymentsInputFilePath, csvId, recipient, amount, currency]
     await:
       correlation:
         strategy: signedResumeToken
@@ -194,7 +194,7 @@ steps:
     java:
       input: org.pipelineframework.csv.domain.PaymentOutputBranch
       output: org.pipelineframework.csv.domain.PaymentOutput
-    outboundMapper: org.pipelineframework.csv.common.mapper.V3PaymentOutputGrpcMapper
+    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputGrpcMapper
     terminal: true
 
 aspects:

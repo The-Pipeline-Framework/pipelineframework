@@ -1,4 +1,4 @@
-version: 2
+version: 3
 appName: csv-payments
 basePackage: org.pipelineframework.csv
 transport: GRPC
@@ -155,10 +155,9 @@ steps:
     cardinality: EXPANSION
     input: org.pipelineframework.csv.common.domain.CsvPaymentsInputFile
     inputTypeName: CsvPaymentsInputFile
-    inboundMapper: org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileMapper
+    inboundMapper: org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileGrpcMapper
     output: org.pipelineframework.csv.common.domain.PaymentRecord
     outputTypeName: PaymentRecord
-    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentRecordMapper
   - name: Await Payment Provider
     kind: await
     cardinality: ONE_TO_ONE
@@ -167,7 +166,7 @@ steps:
     output: org.pipelineframework.csv.common.domain.PaymentStatus
     outputTypeName: PaymentStatus
     timeout: PT5M
-    idempotencyKeyFields: ["csvId", "recipient", "amount", "currency"]
+    idempotencyKeyFields: ["csvPaymentsInputFilePath", "csvId", "recipient", "amount", "currency"]
     await:
       correlation:
         strategy: signedResumeToken
@@ -185,29 +184,24 @@ steps:
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.csv.common.domain.ApprovedPaymentStatus
     inputTypeName: ApprovedPaymentStatus
-    inboundMapper: org.pipelineframework.csv.common.mapper.ApprovedPaymentStatusMapper
     output: org.pipelineframework.csv.common.domain.ApprovedPaymentOutput
     outputTypeName: ApprovedPaymentOutput
-    outboundMapper: org.pipelineframework.csv.common.mapper.ApprovedPaymentOutputMapper
   - name: Process Unapproved Payment Status
     service: org.pipelineframework.csv.service.ProcessUnapprovedPaymentStatusService
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus
     inputTypeName: UnapprovedPaymentStatus
-    inboundMapper: org.pipelineframework.csv.common.mapper.UnapprovedPaymentStatusMapper
     output: org.pipelineframework.csv.common.domain.UnapprovedPaymentOutput
     outputTypeName: UnapprovedPaymentOutput
-    outboundMapper: org.pipelineframework.csv.common.mapper.UnapprovedPaymentOutputMapper
   - name: Finalize Payment Output
     service: org.pipelineframework.csv.service.ProcessFinalizePaymentOutputService
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.csv.common.domain.PaymentOutputBranch
     inputTypeName: PaymentOutputBranch
-    inboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputBranchMapper
     accepts:
       - ApprovedPaymentOutput
       - UnapprovedPaymentOutput
     output: org.pipelineframework.csv.common.domain.PaymentOutput
     outputTypeName: PaymentOutput
-    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputMapper
+    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputGrpcMapper
     terminal: true

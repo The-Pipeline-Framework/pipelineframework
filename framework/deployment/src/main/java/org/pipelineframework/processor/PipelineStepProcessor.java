@@ -39,7 +39,6 @@ import javax.lang.model.element.TypeElement;
     "pipeline.codegen.rendererProfile" // Optional: renderer profile selection (quarkus|spring)
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
-@Deprecated(forRemoval = true)
 public class PipelineStepProcessor extends AbstractProcessingTool {
 
     private PipelineCompiler compiler;

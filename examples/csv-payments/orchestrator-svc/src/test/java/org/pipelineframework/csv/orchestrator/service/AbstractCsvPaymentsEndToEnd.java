@@ -36,8 +36,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -141,6 +145,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final String CSV_E2E_INPUT_FILE = System.getProperty("csv.e2e.input.file", "").trim();
     private static final boolean CUSTOM_INPUT_FILE = !CSV_E2E_INPUT_FILE.isBlank();
     private static volatile boolean orchestratorPackagingVerified;
+    private static volatile boolean modularServiceImagesVerified;
+    private static final Pattern TERMINAL_GRPC_FAILURE = Pattern.compile(
+            "(?:Status\\{code=|StatusRuntimeException:\\s*)(UNIMPLEMENTED|NOT_FOUND|INVALID_ARGUMENT|PERMISSION_DENIED|UNAUTHENTICATED)");
 
     // Containers are lazily created so monolith mode does not require service cert binds.
     static PostgreSQLContainer<?> postgresContainer;
@@ -244,6 +251,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         Path dir = Paths.get(TEST_E2E_DIR);
         Files.createDirectories(dir);
         ensureWritable(dir);
+        rebuildModularServiceImages();
         ensurePackagedOrchestratorFresh();
         prepareObservabilityHarness();
         ensureDevCerts();
@@ -743,7 +751,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
             if (needsPackagedRefresh(jar)) {
                 LOG.infof("Packaged orchestrator at %s is stale or missing; rebuilding executable jar.", jar);
                 rebuildPackagedOrchestrator();
-                recordPackagedV3PersistenceProfile(jar);
             }
             orchestratorPackagingVerified = true;
         }
@@ -765,9 +772,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
         if (!runtimeMappingMatchesActiveLayout()) {
             return true;
         }
-        if (!packagedV3PersistenceProfileMatches(jar)) {
-            return true;
-        }
         long packagedAt = Files.getLastModifiedTime(jar).toMillis();
         long classesAt = latestModifiedUnder(Paths.get(System.getProperty("user.dir")).resolve("target/classes"));
         long mainSourcesAt = latestModifiedUnder(Paths.get(System.getProperty("user.dir")).resolve("src/main"));
@@ -777,24 +781,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
         long latestDependencyAt = Math.max(Math.max(runtimeAt, pomAt), runtimeMappingAt);
         long latestLocalAt = Math.max(classesAt, mainSourcesAt);
         return packagedAt < latestDependencyAt || packagedAt < latestLocalAt;
-    }
-
-    static boolean packagedV3PersistenceProfileMatches(Path jar) throws IOException {
-        Path marker = packagedV3PersistenceProfileMarker(jar);
-        return Files.isRegularFile(marker)
-                && Files.readString(marker, StandardCharsets.UTF_8).trim()
-                        .equals(Boolean.toString(Boolean.getBoolean("csv.v3.persistence")));
-    }
-
-    static Path packagedV3PersistenceProfileMarker(Path jar) {
-        return jar.resolveSibling("csv-v3-persistence.profile");
-    }
-
-    private static void recordPackagedV3PersistenceProfile(Path jar) throws IOException {
-        Files.writeString(
-                packagedV3PersistenceProfileMarker(jar),
-                Boolean.toString(Boolean.getBoolean("csv.v3.persistence")),
-                StandardCharsets.UTF_8);
     }
 
     private static boolean runtimeMappingMatchesActiveLayout() throws IOException {
@@ -876,7 +862,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
         Path processDir = moduleDir;
         List<String> command = new ArrayList<>();
         String mavenRepoLocal = System.getProperty("maven.repo.local", "").trim();
-        boolean v3PersistenceProfile = Boolean.getBoolean("csv.v3.persistence");
         Path activeRuntimeMapping = activeRuntimeMappingPath();
         Path desiredRuntimeMapping = desiredRuntimeMappingPath();
         Path runtimeMappingBackup = null;
@@ -888,9 +873,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
             command.add("-DskipTests");
             command.add("-Dquarkus.container-image.build=false");
             command.add("-Dquarkus.container-image.push=false");
-            if (v3PersistenceProfile) {
-                command.add("-Dcsv.v3.persistence=true");
-            }
             if (!mavenRepoLocal.isBlank()) {
                 command.add("-Dmaven.repo.local=" + mavenRepoLocal);
             }
@@ -904,9 +886,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
             command.add("-DskipTests");
             command.add("-Dquarkus.container-image.build=false");
             command.add("-Dquarkus.container-image.push=false");
-            if (v3PersistenceProfile) {
-                command.add("-Dcsv.v3.persistence=true");
-            }
             if (!mavenRepoLocal.isBlank()) {
                 command.add("-Dmaven.repo.local=" + mavenRepoLocal);
             }
@@ -958,6 +937,93 @@ abstract class AbstractCsvPaymentsEndToEnd {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IOException("Interrupted while rebuilding packaged orchestrator.", e);
+            }
+        } finally {
+            if (runtimeMappingBackup != null) {
+                Files.copy(runtimeMappingBackup, activeRuntimeMapping, StandardCopyOption.REPLACE_EXISTING);
+                Files.deleteIfExists(runtimeMappingBackup);
+            } else if (runtimeMappingCreated) {
+                Files.deleteIfExists(activeRuntimeMapping);
+            }
+        }
+    }
+
+    private static synchronized void rebuildModularServiceImages() throws IOException {
+        if (MONOLITH_LAYOUT || PIPELINE_RUNTIME_LAYOUT) {
+            return;
+        }
+        if (modularServiceImagesVerified) {
+            return;
+        }
+
+        Path moduleDir = Paths.get(System.getProperty("user.dir")).toAbsolutePath().normalize();
+        Path activeRuntimeMapping = activeRuntimeMappingPath();
+        Path desiredRuntimeMapping = desiredRuntimeMappingPath();
+        Path runtimeMappingBackup = null;
+        boolean runtimeMappingCreated = false;
+        String mavenRepoLocal = System.getProperty("maven.repo.local", "").trim();
+        List<String> command = new ArrayList<>(List.of(
+                "../../../mvnw",
+                "-f",
+                "../pom.xml",
+                "-pl",
+                "input-csv-file-processing-svc,payments-processing-svc,payment-status-svc,persistence-svc",
+                "-am",
+                "clean",
+                "package",
+                "-DskipTests",
+                "-Dquarkus.container-image.build=true",
+                "-Dquarkus.container-image.push=false"));
+        if (!mavenRepoLocal.isBlank()) {
+            command.add("-Dmaven.repo.local=" + mavenRepoLocal);
+        }
+
+        try {
+            if (!runtimeMappingsMatch(activeRuntimeMapping, desiredRuntimeMapping)) {
+                if (Files.isRegularFile(activeRuntimeMapping)) {
+                    Path backup = Files.createTempFile("pipeline-runtime", ".yaml");
+                    try {
+                        Files.copy(activeRuntimeMapping, backup, StandardCopyOption.REPLACE_EXISTING);
+                    } catch (IOException e) {
+                        Files.deleteIfExists(backup);
+                        throw e;
+                    }
+                    runtimeMappingBackup = backup;
+                } else {
+                    runtimeMappingCreated = true;
+                }
+                Files.copy(desiredRuntimeMapping, activeRuntimeMapping, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.directory(moduleDir.toFile());
+            pb.environment().put("CSV_RUNTIME_LAYOUT", RUNTIME_LAYOUT);
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                    return reader.lines().collect(java.util.stream.Collectors.joining(System.lineSeparator()));
+                } catch (IOException e) {
+                    throw new java.io.UncheckedIOException(e);
+                }
+            });
+            try {
+                boolean completed = process.waitFor(10, TimeUnit.MINUTES);
+                if (!completed) {
+                    process.destroyForcibly();
+                    process.waitFor();
+                }
+                String output = outputFuture.get(30, TimeUnit.SECONDS);
+                assertEquals(
+                        0,
+                        process.exitValue(),
+                        "Failed to rebuild modular CSV service images. Output tail:\n" + tailLines(output, 120));
+                modularServiceImagesVerified = completed;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Interrupted while rebuilding modular CSV service images.", e);
+            } catch (ExecutionException | TimeoutException e) {
+                throw new IOException("Unable to collect modular CSV service image build output.", e);
             }
         } finally {
             if (runtimeMappingBackup != null) {
@@ -1062,10 +1128,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
         // Create test CSV files as the shell script does
         createTestCsvFiles();
 
-        orchestratorTriggerRun();
+        ProcessRunResult runResult = orchestratorTriggerRun();
 
         // Wait for the pipeline to complete
-        waitForPipelineComplete();
+        waitForPipelineComplete(expectedOutputRecordCount(), runResult.output());
 
         // Verify the output files are generated with expected content
         verifyOutputFiles(TEST_E2E_DIR);
@@ -1101,7 +1167,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "PIPELINE_DEFAULTS_RETRY_WAIT_MS", "10",
                 "PIPELINE_ITEM_REJECT_PROVIDER", "memory"));
 
-        waitForPipelineComplete(MALFORMED_REJECT_EXPECTED_OUTPUT_RECORDS);
+        waitForPipelineComplete(MALFORMED_REJECT_EXPECTED_OUTPUT_RECORDS, runResult.output());
 
         Set<String> expectedRecipients = Set.of("Valid Recipient One", "Valid Recipient Two");
         verifyOutputFilesForRecipients(TEST_E2E_DIR, expectedRecipients, "Malformed Recipient", 2);
@@ -1444,9 +1510,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static Path writeE2ePipelineConfig() throws IOException {
         Path config = Paths.get(TEST_E2E_DIR, "pipeline-e2e.yaml");
         Path canonical = Paths.get(System.getProperty("user.dir"))
-                .resolve(Boolean.getBoolean("csv.v3.persistence")
-                    ? "../config/pipeline.v3-persistence.yaml"
-                    : "../config/pipeline.yaml")
+                .resolve("../config/pipeline.yaml")
                 .normalize()
                 .toAbsolutePath();
         String root = Paths.get(TEST_E2E_DIR).toAbsolutePath().normalize().toString();
@@ -1757,10 +1821,16 @@ abstract class AbstractCsvPaymentsEndToEnd {
      */
     @SuppressWarnings("BusyWait")
     private void waitForPipelineComplete() throws InterruptedException, IOException {
-        waitForPipelineComplete(expectedOutputRecordCount());
+        waitForPipelineComplete(expectedOutputRecordCount(), "");
     }
 
     private void waitForPipelineComplete(long expectedRecords) throws InterruptedException, IOException {
+        waitForPipelineComplete(expectedRecords, "");
+    }
+
+    private void waitForPipelineComplete(long expectedRecords, String orchestratorOutput)
+            throws InterruptedException, IOException {
+        assertNoTerminalGrpcFailure(orchestratorOutput);
         LOG.info("Waiting for pipeline to complete processing...");
 
         // Check for output files to be created before continuing
@@ -1802,6 +1872,17 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         + " after "
                         + PIPELINE_WAIT_TIMEOUT_SECONDS
                         + "s");
+    }
+
+    private static void assertNoTerminalGrpcFailure(String orchestratorOutput) {
+        if (orchestratorOutput == null || orchestratorOutput.isBlank()) {
+            return;
+        }
+        Matcher matcher = TERMINAL_GRPC_FAILURE.matcher(orchestratorOutput);
+        if (matcher.find()) {
+            fail("Pipeline invocation failed with terminal gRPC status " + matcher.group(1) + ". Output tail:\n"
+                        + tailLines(orchestratorOutput, 120));
+        }
     }
 
     private boolean outputRecordCountReady(long expectedRecords) throws IOException {
@@ -2774,6 +2855,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         }
         if (postgresContainer != null && postgresContainer.isRunning()) {
             postgresContainer.stop();
+        }
+        if (kafkaContainer != null && kafkaContainer.isRunning()) {
+            kafkaContainer.stop();
         }
         if (lgtmStack != null && lgtmStack.isRunning()) {
             lgtmStack.stop();
