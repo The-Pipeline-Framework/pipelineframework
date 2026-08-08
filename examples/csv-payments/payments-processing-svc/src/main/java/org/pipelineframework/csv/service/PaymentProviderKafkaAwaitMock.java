@@ -68,14 +68,14 @@ public class PaymentProviderKafkaAwaitMock {
         .runSubscriptionOn(Infrastructure.getDefaultExecutor())
         .onItem().transform(this::handle)
         .onItem().transformToUni(this::delayCompletion)
-        .onItem().transformToUni(this::publish)
-        .replaceWithVoid()
-        .subscribeAsCompletionStage()
-        .exceptionallyCompose(failure -> {
-          LOG.error("Failed processing Kafka await payment request", failure);
-          return message.nack(failure);
-        })
-        .thenCompose(ignored -> message.ack());
+         .onItem().transformToUni(this::publish)
+         .replaceWithVoid()
+         .subscribeAsCompletionStage()
+         .thenCompose(ignored -> message.ack())
+         .exceptionallyCompose(failure -> {
+           LOG.error("Failed processing Kafka await payment request", failure);
+           return message.nack(failure);
+         });
   }
 
   private KafkaAwaitCompletionEnvelope handle(KafkaAwaitDispatchEnvelope dispatch) {

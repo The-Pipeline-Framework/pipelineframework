@@ -31,7 +31,7 @@ public class ProcessUnapprovedPaymentStatusService
 
   @Override
   public Uni<UnapprovedPaymentOutput> process(UnapprovedPaymentStatus status) {
-    if (status.paymentRecord() == null || status.paymentRecord().csvPaymentsInputFilePath() == null) {
+    if (status == null || status.paymentRecord() == null || status.paymentRecord().csvPaymentsInputFilePath() == null) {
       return Uni.createFrom().failure(new NonRetryableException(
           "UnapprovedPaymentStatus must include paymentRecord and csvPaymentsInputFilePath"));
     }

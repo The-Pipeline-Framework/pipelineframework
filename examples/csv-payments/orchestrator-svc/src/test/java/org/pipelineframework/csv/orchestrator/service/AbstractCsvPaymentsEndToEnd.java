@@ -1208,9 +1208,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         resetDatabasePersistence();
         createTestCsvFiles();
 
-        orchestratorTriggerRun();
+        ProcessRunResult runResult = orchestratorTriggerRun();
 
-        waitForPipelineComplete();
+        waitForPipelineComplete(expectedOutputRecordCount(), runResult.output());
 
         PipelineReplayDocument replayDocument = mergeReplayDocuments(REPLAY_CAPTURE_DIR, REPLAY_FILE);
         assertReplayCoverage(replayDocument, true);
@@ -1820,14 +1820,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
      * @throws IOException if an I/O error occurs when listing the test directory
      */
     @SuppressWarnings("BusyWait")
-    private void waitForPipelineComplete() throws InterruptedException, IOException {
-        waitForPipelineComplete(expectedOutputRecordCount(), "");
-    }
-
-    private void waitForPipelineComplete(long expectedRecords) throws InterruptedException, IOException {
-        waitForPipelineComplete(expectedRecords, "");
-    }
-
     private void waitForPipelineComplete(long expectedRecords, String orchestratorOutput)
             throws InterruptedException, IOException {
         assertNoTerminalGrpcFailure(orchestratorOutput);

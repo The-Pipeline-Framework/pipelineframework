@@ -101,10 +101,23 @@ public final class CsvPaymentOutputPublishMapper
 
         private static String sanitizeCell(String value) {
             Objects.requireNonNull(value, "value must not be null");
-            if (value.isEmpty() || "=+-@".indexOf(value.charAt(0)) < 0) {
+            int firstContentIndex = firstContentIndex(value);
+            if (firstContentIndex < 0 || "=+-@".indexOf(value.charAt(firstContentIndex)) < 0) {
                 return value;
             }
             return "'" + value;
+        }
+
+        private static int firstContentIndex(String value) {
+            for (int index = 0; index < value.length(); index++) {
+                char character = value.charAt(index);
+                if (!Character.isWhitespace(character)
+                        && !Character.isSpaceChar(character)
+                        && !Character.isISOControl(character)) {
+                    return index;
+                }
+            }
+            return -1;
         }
     }
 }

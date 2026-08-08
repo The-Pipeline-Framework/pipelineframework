@@ -83,9 +83,9 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
 
     LOG.debug("Rate limiter permit acquired successfully");
 
-    UUID conversationId = UUID.nameUUIDFromBytes(
-        ("conversation|" + simulationKey(paymentRecord)).getBytes(StandardCharsets.UTF_8));
     UUID paymentRecordId = paymentRecord.id() != null ? paymentRecord.id() : stableFallbackPaymentRecordId(paymentRecord);
+    UUID conversationId = UUID.nameUUIDFromBytes(
+        ("conversation|" + paymentRecordId).getBytes(StandardCharsets.UTF_8));
     if (shouldSimulate(rejectProbability, simulationKey(paymentRecord), "provider-reject")) {
       return new PaymentStatus.Unapproved(new UnapprovedPaymentStatus(
           "101", "Rejected", "Mock payment provider rejected the payment.", new BigDecimal("1.01"),

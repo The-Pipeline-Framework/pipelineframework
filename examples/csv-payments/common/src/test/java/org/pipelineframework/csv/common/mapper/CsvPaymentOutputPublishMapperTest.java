@@ -70,6 +70,18 @@ class CsvPaymentOutputPublishMapperTest {
         assertTrue(csv.contains("'=csv"));
         assertTrue(csv.contains("'+recipient"));
         assertTrue(csv.contains("'@message"));
+
+        PaymentOutput whitespacePrefixed = new PaymentOutput(
+            "payments.csv", tempDir.resolve("payments.csv"), "-1+1", " \t=recipient",
+            new BigDecimal("100.00"), Currency.getInstance("USD"), UUID.randomUUID(),
+            1000L, "\t@message", BigDecimal.ZERO);
+        String whitespacePrefixedCsv = new String(
+            mapper.openGroup("payments.csv", whitespacePrefixed).onItem(whitespacePrefixed).bytes(),
+            StandardCharsets.UTF_8);
+
+        assertTrue(whitespacePrefixedCsv.contains("'-1+1"));
+        assertTrue(whitespacePrefixedCsv.contains("' \t=recipient"));
+        assertTrue(whitespacePrefixedCsv.contains("'\t@message"));
     }
 
     private PaymentOutput paymentOutput(Path inputFile, String csvId, String recipient, String amount) {

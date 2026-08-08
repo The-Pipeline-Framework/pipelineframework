@@ -191,10 +191,18 @@ public class PipelineProtoGenerator {
 
     private Path resolveIdlStatePath(Path configPath) {
         String configFileName = configPath.getFileName().toString();
-        String stateFileName = configFileName.endsWith(".yaml")
-            ? configFileName.substring(0, configFileName.length() - ".yaml".length()) + ".idl.json"
-            : "pipeline.idl.json";
+        String stateFileName = stateFileName(configFileName);
         return configPath.getParent().resolve(stateFileName);
+    }
+
+    private static String stateFileName(String configFileName) {
+        if (configFileName.endsWith(".yaml")) {
+            return configFileName.substring(0, configFileName.length() - ".yaml".length()) + ".idl.json";
+        }
+        if (configFileName.endsWith(".yml")) {
+            return configFileName.substring(0, configFileName.length() - ".yml".length()) + ".idl.json";
+        }
+        return "pipeline.idl.json";
     }
 
     /**

@@ -52,8 +52,12 @@ class PaymentStatusBranchingServicesTest {
     assertEquals(Path.of("/tmp/payments.csv"), output.csvPaymentsInputFilePath());
     assertEquals("csv-1", output.csvId());
     assertEquals("alice", output.recipient());
+    assertEquals(status.paymentRecord().amount(), output.amount());
+    assertEquals(status.paymentRecord().currency(), output.currency());
+    assertEquals(status.conversationId(), output.conversationId());
     assertEquals(202L, output.status());
     assertEquals("settled", output.message());
+    assertEquals(status.fee(), output.fee());
   }
 
   @Test
@@ -66,8 +70,12 @@ class PaymentStatusBranchingServicesTest {
     assertEquals(Path.of("/tmp/payments.csv"), output.csvPaymentsInputFilePath());
     assertEquals("csv-1", output.csvId());
     assertEquals("alice", output.recipient());
+    assertEquals(status.paymentRecord().amount(), output.amount());
+    assertEquals(status.paymentRecord().currency(), output.currency());
+    assertEquals(status.conversationId(), output.conversationId());
     assertEquals(400L, output.status());
     assertEquals("declined", output.message());
+    assertEquals(status.fee(), output.fee());
   }
 
   @Test

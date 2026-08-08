@@ -58,6 +58,23 @@ class PaymentProviderServiceMockTest {
   }
 
   @Test
+  void processPayment_sameCsvIdFromDifferentFiles_usesDistinctConversationIds() {
+    PaymentProviderServiceMock paymentProvider = new PaymentProviderServiceMock(new FakePaymentProviderConfig());
+    String csvId = "shared-csv-id";
+    PaymentRecord first = new PaymentRecord(
+        UUID.randomUUID(), csvId, "John Doe", BigDecimal.valueOf(100.00),
+        Currency.getInstance("USD"), Path.of("/tmp/first-payments.csv"));
+    PaymentRecord second = new PaymentRecord(
+        UUID.randomUUID(), csvId, "Jane Doe", BigDecimal.valueOf(200.00),
+        Currency.getInstance("USD"), Path.of("/tmp/second-payments.csv"));
+
+    var firstStatus = ((PaymentStatus.Approved) paymentProvider.processPayment(first)).value();
+    var secondStatus = ((PaymentStatus.Approved) paymentProvider.processPayment(second)).value();
+
+    assertThat(firstStatus.conversationId()).isNotEqualTo(secondStatus.conversationId());
+  }
+
+  @Test
   @DisplayName("Should throw RESOURCE_EXHAUSTED when permit acquisition is disabled")
   void processPayment_acquireDisabled_shouldThrowResourceExhausted() {
     PaymentProviderServiceMock paymentProvider = new PaymentProviderServiceMock(new NegativeTimeoutPaymentProviderConfig());

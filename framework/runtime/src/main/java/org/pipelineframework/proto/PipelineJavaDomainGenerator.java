@@ -19,7 +19,9 @@ package org.pipelineframework.proto;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.pipelineframework.config.pipeline.PipelineJson;
@@ -72,6 +74,7 @@ public final class PipelineJavaDomainGenerator {
         Path resolvedOutputDirectory = java.util.Objects.requireNonNull(outputDirectory, "outputDirectory");
         PipelineGenerationPlan resolvedPlan = java.util.Objects.requireNonNull(plan, "plan");
         PipelineJavaDomainRenderer renderer = new PipelineJavaDomainRenderer();
+        removeStaleJavaSources(resolvedOutputDirectory);
         for (PipelineJavaDomainRenderer.RenderedSource source : renderer.render(resolvedPlan)) {
             Path outputPath = resolvedOutputDirectory.resolve(source.relativePath());
             try {
@@ -98,10 +101,35 @@ public final class PipelineJavaDomainGenerator {
 
     private Path resolveIdlStatePath(Path configPath) {
         String configFileName = configPath.getFileName().toString();
-        String stateFileName = configFileName.endsWith(".yaml")
-            ? configFileName.substring(0, configFileName.length() - ".yaml".length()) + ".idl.json"
-            : "pipeline.idl.json";
+        String stateFileName = stateFileName(configFileName);
         return configPath.getParent().resolve(stateFileName);
+    }
+
+    private void removeStaleJavaSources(Path outputDirectory) {
+        if (!Files.isDirectory(outputDirectory)) {
+            return;
+        }
+        try (Stream<Path> paths = Files.walk(outputDirectory)) {
+            List<Path> staleSources = paths
+                .filter(Files::isRegularFile)
+                .filter(path -> path.getFileName().toString().endsWith(".java"))
+                .toList();
+            for (Path staleSource : staleSources) {
+                Files.delete(staleSource);
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to remove stale generated Java domain sources from " + outputDirectory, e);
+        }
+    }
+
+    private static String stateFileName(String configFileName) {
+        if (configFileName.endsWith(".yaml")) {
+            return configFileName.substring(0, configFileName.length() - ".yaml".length()) + ".idl.json";
+        }
+        if (configFileName.endsWith(".yml")) {
+            return configFileName.substring(0, configFileName.length() - ".yml".length()) + ".idl.json";
+        }
+        return "pipeline.idl.json";
     }
 
     private record Arguments(Optional<Path> moduleDir, Optional<Path> configPath, Optional<Path> outputDir) {
