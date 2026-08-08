@@ -105,7 +105,7 @@ class RedisCacheProviderCodecTest {
             try {
                 return StringValue.parseFrom(bytes);
             } catch (Exception e) {
-                return null;
+                throw new IllegalArgumentException("Failed to parse StringValue", e);
             }
         }
     }

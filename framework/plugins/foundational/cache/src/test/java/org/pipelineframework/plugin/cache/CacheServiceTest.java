@@ -21,9 +21,11 @@ import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.UniAssertSubscriber;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.cache.CacheMissException;
 import org.pipelineframework.context.PipelineContext;
+import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.context.PipelineContextHolder;
 
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -31,6 +33,11 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.Mockito.*;
 
 class CacheServiceTest {
+
+    @AfterEach
+    void clearCacheStatus() {
+        PipelineCacheStatusHolder.clear();
+    }
 
     @Test
     void process_WithNullItem_ShouldReturnNull() {
