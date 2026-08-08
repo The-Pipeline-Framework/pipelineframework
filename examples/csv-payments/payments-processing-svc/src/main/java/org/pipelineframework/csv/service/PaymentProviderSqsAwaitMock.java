@@ -157,12 +157,13 @@ public class PaymentProviderSqsAwaitMock {
     return true;
   }
 
-  private int visibilityTimeoutSeconds(SqsProviderConfig config) {
-    Duration processingWindow = Duration.ofMillis(Math.max(0L, paymentProviderConfig.timeoutMillis()))
+  int visibilityTimeoutSeconds(SqsProviderConfig config) {
+    Duration perMessageProcessingWindow = Duration.ofMillis(Math.max(0L, paymentProviderConfig.timeoutMillis()))
         .plusMillis(Math.max(0L, paymentProviderConfig.responseDelayMillis()));
-    Duration visibilityWindow = config.visibilityTimeout().compareTo(processingWindow) >= 0
+    Duration batchProcessingWindow = perMessageProcessingWindow.multipliedBy(config.maxMessages());
+    Duration visibilityWindow = config.visibilityTimeout().compareTo(batchProcessingWindow) >= 0
         ? config.visibilityTimeout()
-        : processingWindow;
+        : batchProcessingWindow;
     long visibilityMillis = visibilityWindow.toMillis();
     long seconds = visibilityMillis / 1_000L + (visibilityMillis % 1_000L == 0 ? 0L : 1L);
     if (seconds < 0 || seconds > 43_200) {

@@ -136,14 +136,14 @@ types:
       - [id, uuid]
       - [filepath, path]
       - [csvFolderPath, path]
-   PaymentStatus:
-     variants:
-       approved: ApprovedPaymentStatus
-       unapproved: UnapprovedPaymentStatus
-   PaymentOutputBranch:
-     variants:
-       approved: ApprovedPaymentOutput
-       unapproved: UnapprovedPaymentOutput
+  PaymentStatus:
+    variants:
+      approved: ApprovedPaymentStatus
+      unapproved: UnapprovedPaymentStatus
+  PaymentOutputBranch:
+    variants:
+      approved: ApprovedPaymentOutput
+      unapproved: UnapprovedPaymentOutput
 steps:
   - name: Process Csv Payments Input
     service: org.pipelineframework.csv.service.ProcessCsvPaymentsInputService
