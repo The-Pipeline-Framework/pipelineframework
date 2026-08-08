@@ -96,6 +96,7 @@ class PaymentProviderAwaitContractTest {
         verify(results).sendMessage(completion.capture());
         KafkaAwaitCompletionEnvelope envelope = PipelineJson.mapper().readValue(
             (String) completion.getValue().getPayload(), KafkaAwaitCompletionEnvelope.class);
+        assertEquals("interaction-1", envelope.interactionId());
         PipelineTypes.PaymentStatus transport = assertInstanceOf(PipelineTypes.PaymentStatus.class,
             AwaitPayloadSupport.coercePayload(envelope.responsePayload(), PipelineTypes.PaymentStatus.class));
         assertTrue(transport.hasApproved());

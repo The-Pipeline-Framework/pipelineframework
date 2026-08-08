@@ -84,7 +84,7 @@ public class PaymentProviderKafkaAwaitMock {
     PaymentStatus status = paymentProvider.processPayment(paymentRecord);
     return new KafkaAwaitCompletionEnvelope(
         dispatch.tenantId(),
-        dispatch.executionId(),
+        dispatch.interactionId(),
         dispatch.correlationId(),
         dispatch.resumeToken(),
         dispatch.interactionId(),
