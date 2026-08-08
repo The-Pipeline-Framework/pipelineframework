@@ -1,6 +1,7 @@
 package org.pipelineframework.connector.query.jpa;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.Map;
@@ -41,16 +42,56 @@ class JpaQueryProjectionTest {
             JpaQueryProjection.project(entity, CustomerRiskBean.class, Map.of()));
     }
 
+    @Test
+    void readsInheritedFieldsAndRejectsMissingProperties() {
+        InheritedFieldEntity entity = new InheritedFieldEntity("customer-1");
+
+        assertEquals("customer-1", JpaQueryReflection.readProperty(entity, "customerId"));
+        assertThrows(IllegalArgumentException.class, () -> JpaQueryReflection.readProperty(entity, "missing"));
+    }
+
+    @Test
+    void readsNullFieldValues() {
+        NullFieldEntity entity = new NullFieldEntity();
+
+        assertNull(JpaQueryReflection.readProperty(entity, "customerId"));
+        assertEquals(new NullCustomerRiskFacts(null), JpaQueryProjection.project(
+            entity,
+            NullCustomerRiskFacts.class,
+            Map.of()));
+    }
+
     record CustomerRiskFacts(String customerId, String riskBand, int score) {
     }
 
     record CustomerRiskWithAccount(String customerId, String accountStatus) {
     }
 
+    record NullCustomerRiskFacts(String customerId) {
+    }
+
     record Account(String status) {
     }
 
     static final class CustomerRiskBean {
+    }
+
+    static class BaseEntity {
+        private final String customerId;
+
+        BaseEntity(String customerId) {
+            this.customerId = customerId;
+        }
+    }
+
+    static final class InheritedFieldEntity extends BaseEntity {
+        InheritedFieldEntity(String customerId) {
+            super(customerId);
+        }
+    }
+
+    static final class NullFieldEntity {
+        private final String customerId = null;
     }
 
     static final class CustomerRiskEntity {
