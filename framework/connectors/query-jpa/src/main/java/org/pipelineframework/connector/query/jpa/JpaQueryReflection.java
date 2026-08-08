@@ -2,6 +2,7 @@ package org.pipelineframework.connector.query.jpa;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Optional;
 
 final class JpaQueryReflection {
     private JpaQueryReflection() {
@@ -11,25 +12,16 @@ final class JpaQueryReflection {
         if (property != null && property.contains(".")) {
             return readPath(target, property);
         }
-        Method accessor = findAccessor(target.getClass(), property);
-        if (accessor != null) {
-            try {
-                accessor.setAccessible(true);
-                return accessor.invoke(target);
-            } catch (ReflectiveOperationException ex) {
-                throw new IllegalStateException("Failed to read property '" + property + "' from " + target.getClass().getName(), ex);
-            }
+        Optional<Method> accessor = findAccessor(target.getClass(), property);
+        if (accessor.isPresent()) {
+            return invokeAccessor(accessor.get(), target, property);
         }
-        Field field = findField(target.getClass(), property);
-        if (field != null) {
-            try {
-                field.setAccessible(true);
-                return field.get(target);
-            } catch (ReflectiveOperationException ex) {
-                throw new IllegalStateException("Failed to read field '" + property + "' from " + target.getClass().getName(), ex);
-            }
+        Optional<Field> field = findField(target.getClass(), property);
+        if (field.isPresent()) {
+            return readField(field.get(), target, property);
         }
-        throw new IllegalArgumentException("Property '" + property + "' not found on " + target.getClass().getName());
+        throw new IllegalArgumentException(
+            "Property '" + property + "' not found on " + target.getClass().getName());
     }
 
     private static Object readPath(Object target, String path) {
@@ -43,15 +35,15 @@ final class JpaQueryReflection {
         return current;
     }
 
-    private static Method findAccessor(Class<?> type, String property) {
+    private static Optional<Method> findAccessor(Class<?> type, String property) {
         for (String candidate : accessorNames(property)) {
             try {
-                return type.getMethod(candidate);
+                return Optional.of(type.getMethod(candidate));
             } catch (NoSuchMethodException ignored) {
                 // try the next JavaBean or record-style accessor name
             }
         }
-        return null;
+        return Optional.empty();
     }
 
     private static String[] accessorNames(String property) {
@@ -59,15 +51,33 @@ final class JpaQueryReflection {
         return new String[] { property, "get" + capitalized, "is" + capitalized };
     }
 
-    private static Field findField(Class<?> type, String property) {
+    private static Optional<Field> findField(Class<?> type, String property) {
         Class<?> current = type;
         while (current != null && current != Object.class) {
             try {
-                return current.getDeclaredField(property);
+                return Optional.of(current.getDeclaredField(property));
             } catch (NoSuchFieldException ignored) {
                 current = current.getSuperclass();
             }
         }
-        return null;
+        return Optional.empty();
+    }
+
+    private static Object invokeAccessor(Method accessor, Object target, String property) {
+        try {
+            accessor.setAccessible(true);
+            return accessor.invoke(target);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("Failed to read property '" + property + "' from " + target.getClass().getName(), ex);
+        }
+    }
+
+    private static Object readField(Field field, Object target, String property) {
+        try {
+            field.setAccessible(true);
+            return field.get(target);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("Failed to read field '" + property + "' from " + target.getClass().getName(), ex);
+        }
     }
 }
