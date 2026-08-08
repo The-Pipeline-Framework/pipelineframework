@@ -249,6 +249,8 @@ V1 object source and target connectors:
 | `filesystem` | Local folders, tests, CSV-style batch inputs and output files. |
 | `s3` | AWS S3-compatible object listing, text/reference payload admission, and object publication. |
 
+S3 `location` values select the bucket, prefix, and region; they cannot override the S3 endpoint. This prevents a pipeline mapping or runtime request from redirecting framework credentials. Applications that use an S3-compatible endpoint configure an `S3Client` at application bootstrap and register the corresponding source or target provider directly.
+
 The YAML field remains `provider` in v1 because it selects the Java `ObjectSourceProvider`
 or `ObjectTargetProvider` implementation behind the connector. `ObjectTargetProvider` uses JDK
 `CompletionStage`, not Mutiny or Quarkus types. The user-facing category is connectors because these

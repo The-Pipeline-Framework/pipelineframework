@@ -1,12 +1,13 @@
 package org.pipelineframework.connector.objectingest;
 
-import java.net.URI;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
 import org.pipelineframework.objectingest.ObjectSourceItem;
@@ -32,14 +33,14 @@ public class S3ObjectSourceProvider implements ObjectSourceProvider, AutoCloseab
 
     private final S3Client client;
     private final boolean ownsClient;
-    private volatile S3Client resolvedClient;
+    private final ConcurrentMap<String, S3Client> resolvedClients = new ConcurrentHashMap<>();
 
     public S3ObjectSourceProvider() {
         this.client = null;
         this.ownsClient = true;
     }
 
-    S3ObjectSourceProvider(S3Client client) {
+    public S3ObjectSourceProvider(S3Client client) {
         this.client = client;
         this.ownsClient = false;
     }
@@ -104,8 +105,9 @@ public class S3ObjectSourceProvider implements ObjectSourceProvider, AutoCloseab
 
     @Override
     public void close() {
-        if (ownsClient && resolvedClient != null) {
-            resolvedClient.close();
+        if (ownsClient) {
+            resolvedClients.values().forEach(S3Client::close);
+            resolvedClients.clear();
         }
     }
 
@@ -148,20 +150,20 @@ public class S3ObjectSourceProvider implements ObjectSourceProvider, AutoCloseab
         if (client != null) {
             return client;
         }
-        S3Client local = resolvedClient;
-        if (local != null) {
-            return local;
-        }
-        synchronized (this) {
-            local = resolvedClient;
-            if (local != null) {
-                return local;
-            }
+        rejectEndpointOverride(source);
+        String region = optional(source, "region").orElse("");
+        return resolvedClients.computeIfAbsent(region, configuredRegion -> {
             S3ClientBuilder builder = S3Client.builder().httpClientBuilder(UrlConnectionHttpClient.builder());
-            optional(source, "region").ifPresent(region -> builder.region(Region.of(region)));
-            optional(source, "endpoint").map(URI::create).ifPresent(builder::endpointOverride);
-            resolvedClient = builder.build();
-            return resolvedClient;
+            if (!configuredRegion.isBlank()) {
+                builder.region(Region.of(configuredRegion));
+            }
+            return builder.build();
+        });
+    }
+
+    private void rejectEndpointOverride(PipelineObjectSourceConfig source) {
+        if (optional(source, "endpoint").isPresent() || optional(source, "endpointOverride").isPresent()) {
+            throw new IllegalArgumentException("S3 endpoint overrides must be configured through an application-provided S3Client");
         }
     }
 

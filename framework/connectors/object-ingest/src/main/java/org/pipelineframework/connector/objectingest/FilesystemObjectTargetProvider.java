@@ -107,10 +107,15 @@ public class FilesystemObjectTargetProvider implements ObjectTargetProvider {
         public CompletionStage<Void> write(ByteBuffer chunk) {
             byte[] bytes = copy(chunk);
             return CompletableFuture.runAsync(() -> {
-                try {
-                    output.write(bytes);
-                } catch (IOException e) {
-                    throw new CompletionException(e);
+                synchronized (this) {
+                    if (closed) {
+                        throw new IllegalStateException("filesystem write session is closed");
+                    }
+                    try {
+                        output.write(bytes);
+                    } catch (IOException e) {
+                        throw new CompletionException(e);
+                    }
                 }
             }, executor);
         }
@@ -118,29 +123,31 @@ public class FilesystemObjectTargetProvider implements ObjectTargetProvider {
         @Override
         public CompletionStage<ObjectWriteResult> close(ObjectWriteCloseRequest closeRequest) {
             return CompletableFuture.supplyAsync(() -> {
-                try {
-                    if (!closed) {
-                        output.flush();
-                        output.close();
-                        closed = true;
+                synchronized (this) {
+                    try {
+                        if (!closed) {
+                            output.flush();
+                            output.close();
+                            closed = true;
+                        }
+                        Files.move(tempPath, finalPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                        Map<String, String> metadata = new LinkedHashMap<>(request.metadata());
+                        metadata.putAll(closeRequest.metadata());
+                        metadata.put("target", request.targetName());
+                        PayloadReference reference = new PayloadReference(
+                            "filesystem",
+                            root.toString(),
+                            request.objectKey(),
+                            request.contentType(),
+                            "raw",
+                            closeRequest.checksum(),
+                            closeRequest.bytes(),
+                            null,
+                            metadata);
+                        return new ObjectWriteResult(reference, closeRequest.bytes(), closeRequest.checksum(), Instant.now());
+                    } catch (IOException e) {
+                        throw new CompletionException(e);
                     }
-                    Files.move(tempPath, finalPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-                    Map<String, String> metadata = new LinkedHashMap<>(request.metadata());
-                    metadata.putAll(closeRequest.metadata());
-                    metadata.put("target", request.targetName());
-                    PayloadReference reference = new PayloadReference(
-                        "filesystem",
-                        root.toString(),
-                        request.objectKey(),
-                        request.contentType(),
-                        "raw",
-                        closeRequest.checksum(),
-                        closeRequest.bytes(),
-                        null,
-                        metadata);
-                    return new ObjectWriteResult(reference, closeRequest.bytes(), closeRequest.checksum(), Instant.now());
-                } catch (IOException e) {
-                    throw new CompletionException(e);
                 }
             }, executor);
         }
@@ -148,14 +155,16 @@ public class FilesystemObjectTargetProvider implements ObjectTargetProvider {
         @Override
         public CompletionStage<Void> abort(Throwable cause) {
             return CompletableFuture.runAsync(() -> {
-                try {
-                    if (!closed) {
-                        output.close();
-                        closed = true;
+                synchronized (this) {
+                    try {
+                        if (!closed) {
+                            output.close();
+                            closed = true;
+                        }
+                        Files.deleteIfExists(tempPath);
+                    } catch (IOException e) {
+                        throw new CompletionException(e);
                     }
-                    Files.deleteIfExists(tempPath);
-                } catch (IOException e) {
-                    throw new CompletionException(e);
                 }
             }, executor);
         }

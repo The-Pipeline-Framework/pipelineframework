@@ -42,9 +42,9 @@ public final class StdioObjectSourceProvider implements ObjectSourceProvider {
         if (listed || limit <= 0) {
             return List.of();
         }
-        listed = true;
         CapturedInput input = capture(source);
         captured = Optional.of(input);
+        listed = true;
         return List.of(input.item(source.name()));
     }
 
