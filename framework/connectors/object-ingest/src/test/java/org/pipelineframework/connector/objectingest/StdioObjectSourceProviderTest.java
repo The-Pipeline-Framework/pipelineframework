@@ -2,6 +2,7 @@ package org.pipelineframework.connector.objectingest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.ByteArrayInputStream;
@@ -57,6 +58,18 @@ class StdioObjectSourceProviderTest {
             source(Map.of("endpoint", "stdin"), PipelineObjectPayloadConfig.reference()), 1));
         assertThrows(IllegalArgumentException.class, () -> provider.list(
             source(Map.of("endpoint", "stdin", "root", "/tmp"), textPayload()), 1));
+    }
+
+    @Test
+    void preservesCaptureFailureAfterOversizedInput() {
+        StdioObjectSourceProvider provider = provider("too large");
+        PipelineObjectSourceConfig source = source(
+            Map.of("endpoint", "stdin"),
+            new PipelineObjectPayloadConfig("text", "", 2L, StandardCharsets.UTF_8));
+
+        RuntimeException first = assertThrows(RuntimeException.class, () -> provider.list(source, 1));
+
+        assertSame(first, assertThrows(RuntimeException.class, () -> provider.list(source, 1)));
     }
 
     private StdioObjectSourceProvider provider(String input) {

@@ -65,6 +65,20 @@ class FilesystemRepositoryProviderTest {
     }
 
     @Test
+    void atomicallyReplacesAnExistingPayload() {
+        FilesystemRepositoryProvider provider = new FilesystemRepositoryProvider();
+        provider.root = tempDir.toString();
+        provider.verifyChecksum = false;
+        RepositoryWriteRequest first = request("first");
+        RepositoryWriteRequest replacement = request("replacement");
+
+        provider.store(first).await().indefinitely();
+        PayloadReference reference = provider.store(replacement).await().indefinitely();
+
+        assertArrayEquals(replacement.payload(), provider.load(reference).await().indefinitely().payload());
+    }
+
+    @Test
     void rejectsKeysThatEscapeTheRepositoryRoot() {
         FilesystemRepositoryProvider provider = new FilesystemRepositoryProvider();
         provider.root = tempDir.toString();
@@ -109,5 +123,17 @@ class FilesystemRepositoryProviderTest {
             () -> provider.load(reference).await().indefinitely());
 
         assertTrue(exception.getMessage().contains("checksum mismatch"));
+    }
+
+    private RepositoryWriteRequest request(String payload) {
+        return new RepositoryWriteRequest(
+            "documents",
+            "payload",
+            payload.getBytes(StandardCharsets.UTF_8),
+            "text/plain; charset=utf-8",
+            "string",
+            null,
+            null,
+            Map.of());
     }
 }

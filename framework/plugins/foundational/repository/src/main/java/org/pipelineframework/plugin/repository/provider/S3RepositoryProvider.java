@@ -153,7 +153,7 @@ public class S3RepositoryProvider implements RepositoryProvider {
             } catch (NoSuchKeyException e) {
                 return false;
             } catch (S3Exception e) {
-                if (e.statusCode() == 404) {
+                if (isMissingObject(e)) {
                     return false;
                 }
                 throw e;
@@ -173,7 +173,7 @@ public class S3RepositoryProvider implements RepositoryProvider {
             } catch (NoSuchKeyException e) {
                 return false;
             } catch (S3Exception e) {
-                if (e.statusCode() == 404) {
+                if (isMissingObject(e)) {
                     return false;
                 }
                 throw e;
@@ -188,6 +188,19 @@ public class S3RepositoryProvider implements RepositoryProvider {
 
     private String resolveBucket(PayloadReference reference) {
         return reference.container() == null ? bucket : reference.container();
+    }
+
+    static boolean isMissingObject(S3Exception exception) {
+        if (exception instanceof NoSuchKeyException) {
+            return true;
+        }
+        if (exception.statusCode() != 404) {
+            return false;
+        }
+        return Optional.ofNullable(exception.awsErrorDetails())
+            .map(details -> details.errorCode())
+            .map("NoSuchKey"::equals)
+            .orElse(true);
     }
 
     private String s3Key(String key) {

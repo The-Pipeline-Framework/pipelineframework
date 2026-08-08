@@ -17,6 +17,7 @@
 package org.pipelineframework.plugin.repository.provider;
 
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -65,6 +66,9 @@ public class FilesystemRepositoryProvider implements RepositoryProvider {
                 temporary = Files.createTempFile(path.getParent(), path.getFileName().toString(), ".tmp");
                 Files.write(temporary, request.payload());
                 Files.move(temporary, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                throw new IllegalStateException(
+                    "Filesystem repository requires atomic replacement support for " + path.getParent(), e);
             } catch (IOException e) {
                 throw new IllegalStateException("Failed writing repository payload " + path, e);
             } finally {
