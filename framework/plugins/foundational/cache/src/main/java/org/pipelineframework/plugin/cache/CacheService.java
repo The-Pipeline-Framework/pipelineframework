@@ -16,6 +16,7 @@
 
 package org.pipelineframework.plugin.cache;
 
+import java.util.Optional;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
@@ -86,21 +87,21 @@ public class CacheService<T> implements ReactiveSideEffectService<T>, Parallelis
             item.getClass().getName());
 
         assert cacheManager != null;
-        String key = cacheKeyResolver.resolveKey(item, context, item.getClass()).orElse(null);
-        if (key == null || key.isBlank()) {
+        Optional<String> resolvedKey = cacheKeyResolver.resolveKey(item, context, item.getClass());
+        if (resolvedKey.isEmpty() || resolvedKey.get().isBlank()) {
             PipelineCacheStatusHolder.set(CacheStatus.MISS);
             logger.warnf("No cache key strategy matched for item type %s, skipping cache", item.getClass().getName());
             return Uni.createFrom().item(item);
         }
         String versionTag = context != null ? context.versionTag() : null;
-        return handler.handle(item, key, rawKey -> withVersionPrefix(rawKey, versionTag));
+        return handler.handle(item, resolvedKey.get(), rawKey -> withVersionPrefix(rawKey, versionTag));
     }
 
     private String withVersionPrefix(String key, String versionTag) {
         if (versionTag == null || versionTag.isBlank()) {
             return key;
         }
-        return versionTag + ":" + key;
+        return versionTag.length() + ":" + versionTag + ":" + key;
     }
 
     @Override

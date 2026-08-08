@@ -105,10 +105,11 @@ public class CacheManager {
             return Uni.createFrom().item(item);
         }
 
-        CacheProvider<?> provider = resolveProvider();
-        if (provider == null) {
+        Optional<CacheProvider<?>> resolvedProvider = resolveProvider();
+        if (resolvedProvider.isEmpty()) {
             return Uni.createFrom().item(item);
         }
+        CacheProvider<?> provider = resolvedProvider.get();
         if (!provider.supports(item)) {
             LOG.warnf("Cache provider %s does not support %s",
                 provider.getClass().getName(), item.getClass().getName());
@@ -141,11 +142,11 @@ public class CacheManager {
             return Uni.createFrom().item(false);
         }
 
-        CacheProvider<?> provider = resolveProvider();
-        if (provider == null) {
+        Optional<CacheProvider<?>> resolvedProvider = resolveProvider();
+        if (resolvedProvider.isEmpty()) {
             return Uni.createFrom().item(false);
         }
-        return provider.exists(key);
+        return resolvedProvider.get().exists(key);
     }
 
     /**
@@ -159,12 +160,12 @@ public class CacheManager {
             return Uni.createFrom().item(Optional.empty());
         }
 
-        CacheProvider<?> provider = resolveProvider();
-        if (provider == null) {
+        Optional<CacheProvider<?>> resolvedProvider = resolveProvider();
+        if (resolvedProvider.isEmpty()) {
             return Uni.createFrom().item(Optional.empty());
         }
         @SuppressWarnings("unchecked")
-        CacheProvider<T> p = (CacheProvider<T>) provider;
+        CacheProvider<T> p = (CacheProvider<T>) resolvedProvider.get();
         return p.get(key);
     }
 
@@ -179,11 +180,11 @@ public class CacheManager {
             return Uni.createFrom().item(false);
         }
 
-        CacheProvider<?> provider = resolveProvider();
-        if (provider == null) {
+        Optional<CacheProvider<?>> resolvedProvider = resolveProvider();
+        if (resolvedProvider.isEmpty()) {
             return Uni.createFrom().item(false);
         }
-        return provider.invalidate(key);
+        return resolvedProvider.get().invalidate(key);
     }
 
     /**
@@ -197,17 +198,17 @@ public class CacheManager {
             return Uni.createFrom().item(false);
         }
 
-        CacheProvider<?> provider = resolveProvider();
-        if (provider == null) {
+        Optional<CacheProvider<?>> resolvedProvider = resolveProvider();
+        if (resolvedProvider.isEmpty()) {
             return Uni.createFrom().item(false);
         }
-        return provider.invalidateByPrefix(prefix);
+        return resolvedProvider.get().invalidateByPrefix(prefix);
     }
 
-    private CacheProvider<?> resolveProvider() {
+    private Optional<CacheProvider<?>> resolveProvider() {
         if (providers == null || providers.isEmpty()) {
             LOG.warn("No cache providers available");
-            return null;
+            return Optional.empty();
         }
         if (cacheProviderClass != null && cacheProviderClass.isPresent() && !cacheProviderClass.get().isBlank()) {
             String configuredClass = cacheProviderClass.get().trim();
@@ -215,7 +216,7 @@ public class CacheManager {
                 Class<?> providerClass = provider.getClass();
                 if (providerClass.getName().equals(configuredClass) ||
                     providerClass.getSimpleName().equals(configuredClass)) {
-                    return provider;
+                    return Optional.of(provider);
                 }
             }
             throw new IllegalStateException(
@@ -226,20 +227,20 @@ public class CacheManager {
             for (CacheProvider<?> provider : providers) {
                 String backend = provider.backend();
                 if (backend != null && configuredProvider.equalsIgnoreCase(backend)) {
-                    return provider;
+                    return Optional.of(provider);
                 }
             }
             LOG.warnf("No cache provider matches pipeline.cache.provider=%s", configuredProvider);
-            return null;
+            return Optional.empty();
         }
         if (providers.size() == 1) {
-            return providers.get(0);
+            return Optional.of(providers.get(0));
         }
         if (isNonProdProfile()) {
             CacheProvider<?> provider = providers.get(0);
             LOG.warnf("Multiple cache providers found (%s). No pipeline.cache.provider configured; using %s for profile=%s.",
                 providerBackends(), provider.getClass().getName(), profile);
-            return provider;
+            return Optional.of(provider);
         }
         throw new IllegalStateException(
             "Multiple cache providers found (" + providerBackends() + "). " +
@@ -252,10 +253,11 @@ public class CacheManager {
      * @return {@code SAFE} if all providers declare SAFE, otherwise {@code UNSAFE}
      */
     public ThreadSafety threadSafety() {
-        CacheProvider<?> provider = resolveProvider();
-        if (provider == null) {
+        Optional<CacheProvider<?>> resolvedProvider = resolveProvider();
+        if (resolvedProvider.isEmpty()) {
             return ThreadSafety.SAFE;
         }
+        CacheProvider<?> provider = resolvedProvider.get();
         warnIfThreadSafetyDefault(provider);
         return provider.threadSafety();
     }
@@ -266,10 +268,11 @@ public class CacheManager {
      * @return the provider's ordering requirement, or {@code RELAXED} if unspecified
      */
     public OrderingRequirement orderingRequirement() {
-        CacheProvider<?> provider = resolveProvider();
-        if (provider == null) {
+        Optional<CacheProvider<?>> resolvedProvider = resolveProvider();
+        if (resolvedProvider.isEmpty()) {
             return OrderingRequirement.RELAXED;
         }
+        CacheProvider<?> provider = resolvedProvider.get();
         ParallelismHint hint = provider.getClass().getAnnotation(ParallelismHint.class);
         if (hint == null) {
             warnIfOrderingDefault(provider);

@@ -52,7 +52,17 @@ class RedisCacheProviderCodecTest {
     void protobufEnvelopeWithoutParserReturnsEmpty() throws Exception {
         RedisCacheProvider provider = new RedisCacheProvider();
         provider.objectMapper = new ObjectMapper();
-        setParserRegistry(provider, "missing.Parser", bytes -> StringValue.of("ignored"));
+        setParserRegistry(provider, "missing.Parser", new ProtobufMessageParser() {
+            @Override
+            public String type() {
+                return "missing.Parser";
+            }
+
+            @Override
+            public com.google.protobuf.Message parseFrom(byte[] bytes) {
+                return StringValue.of("ignored");
+            }
+        });
 
         StringValue input = StringValue.of("hello");
         String serialized = provider.serialize(input);

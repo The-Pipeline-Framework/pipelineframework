@@ -32,6 +32,7 @@ import io.quarkus.arc.Unremovable;
 import io.quarkus.arc.properties.IfBuildProperty;
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 import io.quarkus.redis.datasource.keys.ReactiveKeyCommands;
+import io.quarkus.redis.datasource.keys.KeyScanArgs;
 import io.quarkus.redis.datasource.value.ReactiveValueCommands;
 import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -172,7 +173,9 @@ public class RedisCacheProvider implements CacheProvider<Object> {
         }
         ReactiveKeyCommands<String> keys = redis.key();
         String pattern = keyPrefix + prefix + "*";
-        return keys.keys(pattern)
+        return keys.scan(new KeyScanArgs().match(pattern).count(100))
+            .toMulti()
+            .collect().asList()
             .onItem().transformToUni(found -> {
                 if (found == null || found.isEmpty()) {
                     return Uni.createFrom().item(false);

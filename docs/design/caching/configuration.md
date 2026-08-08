@@ -42,6 +42,8 @@ pipeline.cache.caffeine.maximum-size=10000
 pipeline.cache.caffeine.expire-after-write=PT30M
 ```
 
+The Caffeine provider applies expiry at cache scope. `pipeline.cache.caffeine.expire-after-write` controls that shared policy; a per-operation TTL cannot change it.
+
 `pipeline.cache.provider` is a **build-time** switch: the provider bean is only included in the application
 when this property is set during build (for example in `application.properties`). Setting it only as a
 runtime environment variable is not sufficient.
