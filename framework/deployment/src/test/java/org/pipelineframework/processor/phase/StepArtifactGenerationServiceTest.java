@@ -222,7 +222,7 @@ class StepArtifactGenerationServiceTest {
         when(types.getDeclaredType(eq(mapperContract), any(TypeMirror[].class))).thenReturn(expectedMapperContract);
         when(types.isAssignable(mapperMirror, expectedMapperContract)).thenReturn(true);
 
-        Path configPath = tempDir.resolve("pipeline-v3-persistence.yaml");
+        Path configPath = tempDir.resolve("pipeline.yaml");
         Files.writeString(configPath, """
             version: 3
             appName: Persistence mapping test

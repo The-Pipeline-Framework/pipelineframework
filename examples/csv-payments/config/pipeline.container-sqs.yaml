@@ -1,4 +1,4 @@
-version: 2
+version: 3
 appName: csv-payments
 basePackage: org.pipelineframework.csv
 transport: GRPC
@@ -22,7 +22,7 @@ sources:
 input:
   from: csv-payment-files
   emits:
-    type: org.pipelineframework.csv.common.domain.CsvPaymentsInputFile
+    type: org.pipelineframework.csv.domain.CsvPaymentsInputFile
     typeName: CsvPaymentsInputFile
     mapper: org.pipelineframework.csv.common.mapper.CsvPaymentFileObjectMapper
 publish:
@@ -40,7 +40,7 @@ publish:
 output:
   to: csv-payment-output-files
   consumes:
-    type: org.pipelineframework.csv.common.domain.PaymentOutput
+    type: org.pipelineframework.csv.domain.PaymentOutput
     typeName: PaymentOutput
     mapper: org.pipelineframework.csv.common.mapper.CsvPaymentOutputPublishMapper
 aspects:
@@ -59,7 +59,6 @@ aspects:
 types:
   CsvPaymentsInputFile:
     fields:
-      - [id, uuid]
       - [filepath, path]
       - [csvFolderPath, path]
   PaymentRecord:
@@ -70,9 +69,15 @@ types:
       - [amount, decimal]
       - [currency, currency]
       - [csvPaymentsInputFilePath, path]
+    mappings:
+      persistence:
+        type: org.pipelineframework.csv.common.domain.PaymentRecord
+        mapper: org.pipelineframework.csv.common.mapper.PaymentRecordRepresentationMapper
+      opencsv:
+        type: org.pipelineframework.csv.common.domain.PaymentRecord
+        mapper: org.pipelineframework.csv.common.mapper.PaymentRecordRepresentationMapper
   ApprovedPaymentStatus:
     fields:
-      - [id, uuid]
       - [reference, string]
       - [status, string]
       - [message, string]
@@ -83,7 +88,6 @@ types:
       - [paymentRecord, PaymentRecord]
   UnapprovedPaymentStatus:
     fields:
-      - [id, uuid]
       - [reference, string]
       - [status, string]
       - [message, string]
@@ -94,7 +98,6 @@ types:
       - [paymentRecord, PaymentRecord]
   ApprovedPaymentOutput:
     fields:
-      - [id, uuid]
       - [csvPaymentsOutputFilename, string]
       - [csvPaymentsInputFilePath, path]
       - [csvId, string]
@@ -107,7 +110,6 @@ types:
       - [fee, decimal]
   UnapprovedPaymentOutput:
     fields:
-      - [id, uuid]
       - [csvPaymentsOutputFilename, string]
       - [csvPaymentsInputFilePath, path]
       - [csvId, string]
@@ -120,7 +122,6 @@ types:
       - [fee, decimal]
   PaymentOutput:
     fields:
-      - [id, uuid]
       - [csvPaymentsOutputFilename, string]
       - [csvPaymentsInputFilePath, path]
       - [csvId, string]
@@ -131,43 +132,39 @@ types:
       - [status, int64]
       - [message, string]
       - [fee, decimal]
-  CsvPaymentsOutputFile:
-    fields:
-      - [id, uuid]
-      - [filepath, path]
-      - [csvFolderPath, path]
-unions:
+    mappings:
+      persistence:
+        type: org.pipelineframework.csv.common.domain.PaymentOutput
+        mapper: org.pipelineframework.csv.common.mapper.PaymentOutputPersistenceMapper
   PaymentStatus:
     variants:
-      approved:
-        type: ApprovedPaymentStatus
-      unapproved:
-        type: UnapprovedPaymentStatus
+      approved: ApprovedPaymentStatus
+      unapproved: UnapprovedPaymentStatus
   PaymentOutputBranch:
     variants:
-      approved:
-        type: ApprovedPaymentOutput
-      unapproved:
-        type: UnapprovedPaymentOutput
+      approved: ApprovedPaymentOutput
+      unapproved: UnapprovedPaymentOutput
 steps:
   - name: Process Csv Payments Input
     service: org.pipelineframework.csv.service.ProcessCsvPaymentsInputService
     cardinality: EXPANSION
-    input: org.pipelineframework.csv.common.domain.CsvPaymentsInputFile
-    inputTypeName: CsvPaymentsInputFile
-    inboundMapper: org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileMapper
-    output: org.pipelineframework.csv.common.domain.PaymentRecord
-    outputTypeName: PaymentRecord
-    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentRecordMapper
+    input: CsvPaymentsInputFile
+    output: PaymentRecord
+    java:
+      input: org.pipelineframework.csv.domain.CsvPaymentsInputFile
+      output: org.pipelineframework.csv.domain.PaymentRecord
+    inboundMapper: org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileGrpcMapper
   - name: Await Payment Provider
     kind: await
     cardinality: ONE_TO_ONE
-    input: org.pipelineframework.csv.common.domain.PaymentRecord
-    inputTypeName: PaymentRecord
-    output: org.pipelineframework.csv.common.domain.PaymentStatus
-    outputTypeName: PaymentStatus
+    input: PaymentRecord
+    output: PaymentStatus
+    java:
+      input: org.pipelineframework.csv.domain.PaymentRecord
+      output: org.pipelineframework.csv.domain.PaymentStatus
     timeout: PT5M
-    idempotencyKeyFields: ["csvId", "recipient", "amount", "currency"]
+    idempotency:
+      fields: [csvPaymentsInputFilePath, csvId, recipient, amount, currency]
     await:
       correlation:
         strategy: signedResumeToken
@@ -180,31 +177,26 @@ steps:
   - name: Process Approved Payment Status
     service: org.pipelineframework.csv.service.ProcessApprovedPaymentStatusService
     cardinality: ONE_TO_ONE
-    input: org.pipelineframework.csv.common.domain.ApprovedPaymentStatus
-    inputTypeName: ApprovedPaymentStatus
-    inboundMapper: org.pipelineframework.csv.common.mapper.ApprovedPaymentStatusMapper
-    output: org.pipelineframework.csv.common.domain.ApprovedPaymentOutput
-    outputTypeName: ApprovedPaymentOutput
-    outboundMapper: org.pipelineframework.csv.common.mapper.ApprovedPaymentOutputMapper
+    input: ApprovedPaymentStatus
+    output: ApprovedPaymentOutput
+    java:
+      input: org.pipelineframework.csv.domain.ApprovedPaymentStatus
+      output: org.pipelineframework.csv.domain.ApprovedPaymentOutput
   - name: Process Unapproved Payment Status
     service: org.pipelineframework.csv.service.ProcessUnapprovedPaymentStatusService
     cardinality: ONE_TO_ONE
-    input: org.pipelineframework.csv.common.domain.UnapprovedPaymentStatus
-    inputTypeName: UnapprovedPaymentStatus
-    inboundMapper: org.pipelineframework.csv.common.mapper.UnapprovedPaymentStatusMapper
-    output: org.pipelineframework.csv.common.domain.UnapprovedPaymentOutput
-    outputTypeName: UnapprovedPaymentOutput
-    outboundMapper: org.pipelineframework.csv.common.mapper.UnapprovedPaymentOutputMapper
+    input: UnapprovedPaymentStatus
+    output: UnapprovedPaymentOutput
+    java:
+      input: org.pipelineframework.csv.domain.UnapprovedPaymentStatus
+      output: org.pipelineframework.csv.domain.UnapprovedPaymentOutput
   - name: Finalize Payment Output
     service: org.pipelineframework.csv.service.ProcessFinalizePaymentOutputService
     cardinality: ONE_TO_ONE
-    input: org.pipelineframework.csv.common.domain.PaymentOutputBranch
-    inputTypeName: PaymentOutputBranch
-    inboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputBranchMapper
-    accepts:
-      - ApprovedPaymentOutput
-      - UnapprovedPaymentOutput
-    output: org.pipelineframework.csv.common.domain.PaymentOutput
-    outputTypeName: PaymentOutput
-    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputMapper
+    input: PaymentOutputBranch
+    output: PaymentOutput
+    java:
+      input: org.pipelineframework.csv.domain.PaymentOutputBranch
+      output: org.pipelineframework.csv.domain.PaymentOutput
+    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputGrpcMapper
     terminal: true

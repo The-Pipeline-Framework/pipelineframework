@@ -120,7 +120,6 @@ jobs:
           read -r -a maven_args <<< "$MAVEN_ARGS"
           # Search transport/topology-specific tests stay in their dedicated smoke or E2E lanes, not in the generic unit lane.
           ./mvnw "${maven_args[@]}" clean test \
-            -Dcsv.v3.persistence=true \
             "-Dtest=${{ env.UNIT_TEST_PATTERN }}" \
             -Dsurefire.failIfNoSpecifiedTests=false \
             -DskipITs=true \
@@ -162,15 +161,14 @@ jobs:
           read -r -a maven_args <<< "$MAVEN_ARGS"
           # Dedicated E2E or topology-specific tests stay in their reusable jobs, not in generic verify.
           ./mvnw "${maven_args[@]}" clean verify \
-            -Dcsv.v3.persistence=true \
             -DskipUnitTests=true \
             -Dfailsafe.failIfNoSpecifiedTests=false \
             -DskipNative=true \
             "-Dit.test=${{ env.GENERIC_VERIFY_IT_PATTERN }}" \
             -Dquarkus.container-image.build=false
 
-  csv-v3-profile-verify:
-    name: CSV Payments V3 Profile Verify
+  csv-payments-canonical-verify:
+    name: CSV Payments Canonical Verify
     needs: bootstrap
     runs-on: ubuntu-latest
     permissions:
@@ -205,14 +203,51 @@ jobs:
           mkdir -p ~/.m2/repository
           tar -xzf "/tmp/m2-artifacts/${FRAMEWORK_ARTIFACT_NAME}.tar.gz" -C ~/.m2/repository
 
-      - name: Run CSV Payments v3 profile verification
+      - name: Run CSV Payments canonical verification
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.xml clean test \
-            -Dcsv.v3.persistence=true \
             -DskipITs=true \
             -DskipNative=true \
             -Dquarkus.container-image.build=false
+
+  canonical-fresh-checkout:
+    name: Canonical Fresh Checkout Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Reject source-selection migration machinery
+        run: ./scripts/verify-canonical-maven-build.sh
+
+      - name: Build from a fresh Maven repository
+        run: |
+          build_log="$RUNNER_TEMP/canonical-fresh-checkout.log"
+          if ! ./mvnw -B -ntp clean install -DskipITs=true -Dmaven.repo.local="$RUNNER_TEMP/tpf-canonical-m2" > "$build_log" 2>&1; then
+            grep -E '\[ERROR\]|BUILD FAILURE|Failed to execute|Tests run:' "$build_log" | tail -200 || true
+            exit 1
+          fi
+          tail -40 "$build_log"
+
+      - name: Upload canonical build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-fresh-checkout-log
+          path: ${{ runner.temp }}/canonical-fresh-checkout.log
+          retention-days: 7
 
   e2e-csv-monolith:
     name: CSV Monolith E2E

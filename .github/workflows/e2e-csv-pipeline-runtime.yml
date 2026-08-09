@@ -188,7 +188,6 @@ jobs:
           local_maven_args="${MAVEN_ARGS/-T 1C/-T 1}"
           MAVEN_ARGS="$local_maven_args" \
             ./examples/csv-payments/build-pipeline-runtime.sh \
-            -Dcsv.v3.persistence=true \
             -DskipTests \
             -Dquarkus.container-image.build=true
 
@@ -198,7 +197,6 @@ jobs:
           ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.pipeline-runtime.xml \
             -pl orchestrator-svc \
             -Dcsv.runtime.layout=pipeline-runtime \
-            -Dcsv.v3.persistence=true \
             -Dcsv.e2e.pipeline.wait.seconds=240 \
             -Dtest=PipelineRuntimeTopologyTest \
             -Dit.test=CsvPaymentsPipelineRuntimeEndToEndIT \

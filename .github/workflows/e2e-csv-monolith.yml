@@ -89,7 +89,6 @@ jobs:
           read -r -a maven_args <<< "$local_maven_args"
           MAVEN_ARGS="$local_maven_args" \
             ./examples/csv-payments/build-monolith.sh \
-            -Dcsv.v3.persistence=true \
             -DskipTests \
             -Dquarkus.container-image.build=true
 
@@ -98,7 +97,6 @@ jobs:
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.xml \
             -pl orchestrator-svc \
-            -Dcsv.v3.persistence=true \
             -Dcsv.runtime.layout=monolith \
             -Dcsv.e2e.pipeline.wait.seconds=120 \
             -Dit.test=CsvPaymentsEndToEndIT \

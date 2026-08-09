@@ -97,8 +97,6 @@ Version 3 representation support is experimental and intentionally narrow. Gener
 
 JSON, REST, checkpoint, object-publish, and broker boundaries retain their current application-owned or transport-owned conversion paths. They do not yet infer or generate a `json` representation from `mappings`. A declared mapping is therefore not a user-selectable conversion mode and does not promise support from every component.
 
-See [v3 canonical-domain readiness](/evolve/v3-canonical-domain-readiness) for the experimental support matrix, known limits, and the representation-consumer inventory.
-
 ### Nominal wrappers
 
 Use `wraps` when the underlying representation has a distinct business identity. `OrderId` and `CustomerId` can both wrap `uuid` without becoming interchangeable.
@@ -219,7 +217,7 @@ The generator reserves removed protobuf names and tags from the committed IDL st
 
 ### Generated Java domain types
 
-Run `PipelineV3ContractGenerator` in the same `generate-sources` lifecycle as protobuf generation. It invokes the independent protobuf and Java target generators from the same resolved v3 type model and committed IDL state.
+Run `PipelineContractGenerator` in the same `generate-sources` lifecycle as protobuf generation. It invokes the independent protobuf and Java target generators from the same resolved v3 type model and committed IDL state.
 
 Generated Java sources live under `<basePackage>.domain`. A record field keeps its YAML declaration order in the generated Java record constructor. A wrapper is a distinct one-component record, so two wrappers over the same scalar cannot be exchanged accidentally. Aliases generate no class and use their resolved target type.
 

@@ -18,19 +18,6 @@ if [[ ! -f "$PIPELINE_RUNTIME_MAPPING" ]]; then
   exit 1
 fi
 
-csv_v3_persistence=false
-for argument in "$@"; do
-  if [[ "$argument" == "-Dcsv.v3.persistence=true" ]]; then
-    csv_v3_persistence=true
-  fi
-done
-if [[ " ${MAVEN_ARGS:-} " == *" -Dcsv.v3.persistence=true "* ]]; then
-  csv_v3_persistence=true
-fi
-if [[ "$csv_v3_persistence" == true && -z "${PIPELINE_CONFIG:-}" ]]; then
-  export PIPELINE_CONFIG="$CSV_DIR/config/pipeline.v3-persistence.yaml"
-fi
-
 mkdir -p "$(dirname "$ACTIVE_MAPPING")"
 
 backup_file=""
@@ -39,8 +26,6 @@ if [[ -f "$ACTIVE_MAPPING" ]]; then
   cp "$ACTIVE_MAPPING" "$backup_file"
 fi
 pipeline_config_backup_file=""
-pipeline_idl_backup_file=""
-selected_pipeline_idl=""
 if [[ -n "${PIPELINE_CONFIG:-}" ]]; then
   if [[ ! -f "${PIPELINE_CONFIG}" ]]; then
     echo "Pipeline config file not found: ${PIPELINE_CONFIG}" >&2
@@ -53,22 +38,6 @@ if [[ -n "${PIPELINE_CONFIG:-}" ]]; then
       pipeline_config_backup_file="$(mktemp "${TMPDIR:-/tmp}/pipeline-config.XXXXXX")"
       cp "$ACTIVE_PIPELINE_CONFIG" "$pipeline_config_backup_file"
     fi
-    config_name="$(basename "$PIPELINE_CONFIG")"
-    if [[ "$config_name" == "pipeline.yaml" ]]; then
-      selected_pipeline_idl="$(dirname "$PIPELINE_CONFIG")/pipeline.idl.json"
-    else
-      selected_pipeline_idl="$(dirname "$PIPELINE_CONFIG")/${config_name%.yaml}.idl.json"
-    fi
-    if [[ ! -f "$selected_pipeline_idl" ]]; then
-      echo "Pipeline IDL snapshot not found for config: $selected_pipeline_idl" >&2
-      exit 1
-    fi
-    pipeline_idl_backup_candidate="$(mktemp "${TMPDIR:-/tmp}/pipeline-idl.XXXXXX")"
-    if ! cp "$ACTIVE_PIPELINE_IDL" "$pipeline_idl_backup_candidate"; then
-      rm -f "$pipeline_idl_backup_candidate"
-      exit 1
-    fi
-    pipeline_idl_backup_file="$pipeline_idl_backup_candidate"
   fi
 fi
 
@@ -81,10 +50,6 @@ cleanup() {
     cp "$pipeline_config_backup_file" "$ACTIVE_PIPELINE_CONFIG"
     rm -f "$pipeline_config_backup_file"
   fi
-  if [[ -n "$pipeline_idl_backup_file" ]]; then
-    cp "$pipeline_idl_backup_file" "$ACTIVE_PIPELINE_IDL"
-    rm -f "$pipeline_idl_backup_file"
-  fi
 }
 trap cleanup EXIT
 
@@ -94,7 +59,6 @@ if [[ -n "${PIPELINE_CONFIG:-}" ]]; then
   pipeline_config_real="$(cd "$(dirname "$PIPELINE_CONFIG")" && pwd -P)/$(basename "$PIPELINE_CONFIG")"
   if [[ "$pipeline_config_real" != "$active_pipeline_config_real" ]]; then
     cp "$PIPELINE_CONFIG" "$ACTIVE_PIPELINE_CONFIG"
-    cp "$selected_pipeline_idl" "$ACTIVE_PIPELINE_IDL"
   fi
   export PIPELINE_CONFIG="$ACTIVE_PIPELINE_CONFIG"
 fi
@@ -105,10 +69,6 @@ if [[ " ${MAVEN_ARGS:-} " != *" -Dmaven.repo.local="* ]]; then
   export MAVEN_ARGS="${MAVEN_ARGS:-} -Dmaven.repo.local=$ROOT_DIR/.m2/repository"
 fi
 read -r -a maven_args <<< "${MAVEN_ARGS}"
-if [[ "$csv_v3_persistence" == true && " ${MAVEN_ARGS:-} " != *" -Dcsv.v3.persistence=true "* ]]; then
-  export MAVEN_ARGS="${MAVEN_ARGS} -Dcsv.v3.persistence=true"
-  maven_args+=("-Dcsv.v3.persistence=true")
-fi
 (
   cd "$ROOT_DIR"
   "$ROOT_DIR/scripts/ci/bootstrap-local-repo-prereqs.sh" csv
