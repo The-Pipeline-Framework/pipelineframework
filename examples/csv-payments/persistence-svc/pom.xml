@@ -41,6 +41,11 @@
             <artifactId>common</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>representation-provider-opencsv</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <!-- Plugin module -->
         <dependency>
             <groupId>org.pipelineframework</groupId>

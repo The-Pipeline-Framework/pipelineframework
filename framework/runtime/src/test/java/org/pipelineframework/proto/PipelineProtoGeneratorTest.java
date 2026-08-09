@@ -22,6 +22,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 import javax.tools.ToolProvider;
@@ -206,7 +207,7 @@ class PipelineProtoGeneratorTest {
         System.setProperty("pipeline.idl.bootstrap", "true");
         try {
             new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
-            new PipelineJavaDomainGenerator().generate(tempDir, configPath, outputDir);
+            new PipelineJavaDomainGenerator().generate(tempDir, Optional.of(configPath), Optional.of(outputDir));
         } finally {
             System.clearProperty("pipeline.idl.bootstrap");
         }
@@ -369,7 +370,7 @@ class PipelineProtoGeneratorTest {
         System.setProperty("pipeline.idl.bootstrap", "true");
         try {
             new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
-            new PipelineJavaDomainGenerator().generate(tempDir, configPath, outputDir);
+            new PipelineJavaDomainGenerator().generate(tempDir, Optional.of(configPath), Optional.of(outputDir));
         } finally {
             System.clearProperty("pipeline.idl.bootstrap");
         }
@@ -413,7 +414,7 @@ class PipelineProtoGeneratorTest {
         System.setProperty("pipeline.idl.bootstrap", "true");
         try {
             new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
-            new PipelineJavaDomainGenerator().generate(tempDir, configPath, outputDir);
+            new PipelineJavaDomainGenerator().generate(tempDir, Optional.of(configPath), Optional.of(outputDir));
         } finally {
             System.clearProperty("pipeline.idl.bootstrap");
         }
@@ -451,7 +452,7 @@ class PipelineProtoGeneratorTest {
         try {
             new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
             IllegalStateException error = assertThrows(IllegalStateException.class,
-                () -> new PipelineJavaDomainGenerator().generate(tempDir, configPath, outputDir));
+                () -> new PipelineJavaDomainGenerator().generate(tempDir, Optional.of(configPath), Optional.of(outputDir)));
             assertTrue(error.getMessage().contains("cannot represent field 'PaymentRecord.class'"));
         } finally {
             System.clearProperty("pipeline.idl.bootstrap");
@@ -481,7 +482,7 @@ class PipelineProtoGeneratorTest {
         try {
             new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
             IllegalStateException error = assertThrows(IllegalStateException.class,
-                () -> new PipelineJavaDomainGenerator().generate(tempDir, configPath, outputDir));
+                () -> new PipelineJavaDomainGenerator().generate(tempDir, Optional.of(configPath), Optional.of(outputDir)));
             assertTrue(error.getMessage().contains("cannot represent type 'record'"));
         } finally {
             System.clearProperty("pipeline.idl.bootstrap");
@@ -516,7 +517,7 @@ class PipelineProtoGeneratorTest {
         System.setProperty("pipeline.idl.bootstrap", "true");
         try {
             new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
-            new PipelineJavaDomainGenerator().generate(tempDir, configPath, outputDir);
+            new PipelineJavaDomainGenerator().generate(tempDir, Optional.of(configPath), Optional.of(outputDir));
         } finally {
             System.clearProperty("pipeline.idl.bootstrap");
         }

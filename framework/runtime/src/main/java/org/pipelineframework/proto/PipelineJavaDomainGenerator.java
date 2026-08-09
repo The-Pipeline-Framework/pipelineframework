@@ -46,11 +46,6 @@ public final class PipelineJavaDomainGenerator {
             arguments.moduleDir().orElse(Path.of("")), arguments.configPath(), arguments.outputDir());
     }
 
-    /** Generate domain records, wrappers, unions, and adapters from a committed v3 IDL state. */
-    public void generate(Path moduleDir, Path configPath, Path outputDir) {
-        generate(moduleDir, Optional.ofNullable(configPath), Optional.ofNullable(outputDir));
-    }
-
     /** Generate domain records, wrappers, unions, and adapters from explicit optional build arguments. */
     public void generate(Path moduleDir, Optional<Path> configPath, Optional<Path> outputDir) {
         Path resolvedModuleDir = java.util.Objects.requireNonNull(moduleDir, "moduleDir must not be null");

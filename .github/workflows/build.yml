@@ -233,7 +233,21 @@ jobs:
         run: ./scripts/verify-canonical-maven-build.sh
 
       - name: Build from a fresh Maven repository
-        run: ./mvnw -B clean install -Dmaven.repo.local="$RUNNER_TEMP/tpf-canonical-m2"
+        run: |
+          build_log="$RUNNER_TEMP/canonical-fresh-checkout.log"
+          if ! ./mvnw -B -ntp clean install -Dmaven.repo.local="$RUNNER_TEMP/tpf-canonical-m2" > "$build_log" 2>&1; then
+            grep -E '\[ERROR\]|BUILD FAILURE|Failed to execute|Tests run:' "$build_log" | tail -200 || true
+            exit 1
+          fi
+          tail -40 "$build_log"
+
+      - name: Upload canonical build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-fresh-checkout-log
+          path: ${{ runner.temp }}/canonical-fresh-checkout.log
+          retention-days: 7
 
   e2e-csv-monolith:
     name: CSV Monolith E2E
