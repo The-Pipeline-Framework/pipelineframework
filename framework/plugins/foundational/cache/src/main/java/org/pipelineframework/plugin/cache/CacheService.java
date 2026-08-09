@@ -22,6 +22,7 @@ import jakarta.inject.Inject;
 import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
+import org.pipelineframework.cache.PipelineCacheKeyFormat;
 import org.pipelineframework.cache.CacheStatus;
 import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.context.PipelineContext;
@@ -93,15 +94,8 @@ public class CacheService<T> implements ReactiveSideEffectService<T>, Parallelis
             logger.warnf("No cache key strategy matched for item type %s, skipping cache", item.getClass().getName());
             return Uni.createFrom().item(item);
         }
-        String versionTag = context != null ? context.versionTag() : null;
-        return handler.handle(item, resolvedKey.get(), rawKey -> withVersionPrefix(rawKey, versionTag));
-    }
-
-    private String withVersionPrefix(String key, String versionTag) {
-        if (versionTag == null || versionTag.isBlank()) {
-            return key;
-        }
-        return versionTag.length() + ":" + versionTag + ":" + key;
+        String versionTag = context != null && context.versionTag() != null ? context.versionTag() : "";
+        return handler.handle(item, resolvedKey.get(), rawKey -> PipelineCacheKeyFormat.applyVersionTag(rawKey, versionTag));
     }
 
     @Override

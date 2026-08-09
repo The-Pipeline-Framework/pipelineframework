@@ -24,7 +24,7 @@ class CacheKeyResolverTest {
             new TargetedStrategy()
         ));
 
-        Optional<String> resolved = resolver.resolveKey("input", new PipelineContext("v1", null, null), String.class);
+        Optional<String> resolved = resolver.resolveKey("input", new PipelineContext("v1", "", ""), String.class);
 
         assertTrue(resolved.isPresent());
         assertEquals("target", resolved.get());
@@ -38,7 +38,7 @@ class CacheKeyResolverTest {
             new NonTargetedStrategy()
         ));
 
-        Optional<String> resolved = resolver.resolveKey("input", new PipelineContext("v1", null, null), Integer.class);
+        Optional<String> resolved = resolver.resolveKey("input", new PipelineContext("v1", "", ""), Integer.class);
 
         assertTrue(resolved.isPresent());
         assertEquals("fallback", resolved.get());
@@ -52,7 +52,7 @@ class CacheKeyResolverTest {
             new EmptyTargetedStrategy()
         ));
 
-        Optional<String> resolved = resolver.resolveKey("input", new PipelineContext("v1", null, null), String.class);
+        Optional<String> resolved = resolver.resolveKey("input", new PipelineContext("v1", "", ""), String.class);
 
         assertTrue(resolved.isEmpty());
     }
@@ -148,7 +148,10 @@ class CacheKeyResolverTest {
 
         @Override
         public Handle<T> getHandle() {
-            return new FixedHandle<>(values.isEmpty() ? null : values.get(0));
+            if (values.isEmpty()) {
+                throw new IllegalStateException("No value is available in this fixed CDI instance");
+            }
+            return new FixedHandle<>(values.get(0));
         }
 
         @Override
@@ -191,7 +194,7 @@ class CacheKeyResolverTest {
 
         @Override
         public jakarta.enterprise.inject.spi.Bean<T> getBean() {
-            return null;
+            throw new UnsupportedOperationException("Fixed handle does not provide CDI bean metadata");
         }
 
         @Override

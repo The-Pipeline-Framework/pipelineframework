@@ -31,7 +31,7 @@ class InMemoryCacheProviderTest {
         InMemoryCacheProvider provider = new InMemoryCacheProvider();
         TestItem item = new TestItem("id-1");
 
-        provider.cache(item.id, item, Duration.ofMillis(10))
+        provider.cache(item.id, item, Duration.ofMillis(250))
             .subscribe().withSubscriber(UniAssertSubscriber.create()).awaitItem();
 
         Optional<Object> cached = provider.get(item.id)
@@ -40,7 +40,7 @@ class InMemoryCacheProviderTest {
             .getItem();
         assertTrue(cached.isPresent());
 
-        Thread.sleep(20);
+        Thread.sleep(350);
 
         Optional<Object> expired = provider.get(item.id)
             .subscribe().withSubscriber(UniAssertSubscriber.create())

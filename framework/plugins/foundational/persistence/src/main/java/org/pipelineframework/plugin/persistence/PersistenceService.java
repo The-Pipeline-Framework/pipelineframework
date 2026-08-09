@@ -22,7 +22,6 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.atomic.AtomicBoolean;
 import jakarta.inject.Inject;
 
 import io.quarkus.vertx.core.runtime.context.VertxContextSafetyToggle;
@@ -182,37 +181,45 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
         VertxContextSafetyToggle.setContextSafe(context, true);
         return Uni.createFrom().<R>emitter(emitter -> {
             AtomicReference<Cancellable> subscriptionRef = new AtomicReference<>();
-            AtomicBoolean terminated = new AtomicBoolean();
+            Object lifecycleLock = new Object();
+            boolean[] terminated = { false };
             emitter.onTermination(() -> {
-                terminated.set(true);
-                context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
-                Cancellable subscription = subscriptionRef.getAndSet(null);
-                if (subscription != null) {
-                    subscription.cancel();
+                synchronized (lifecycleLock) {
+                    if (terminated[0]) {
+                        return;
+                    }
+                    terminated[0] = true;
+                    context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
+                    Cancellable subscription = subscriptionRef.getAndSet(null);
+                    if (subscription != null) {
+                        subscription.cancel();
+                    }
                 }
             });
             context.runOnContext(ignored -> {
-                if (terminated.get()) {
-                    return;
-                }
-                context.putLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY, Boolean.TRUE);
-                try {
-                    Cancellable subscription = persistenceManager.persist(item)
-                        .subscribe().with(result -> {
-                            context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
-                            emitter.complete(result);
-                        }, failure -> {
-                            context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
-                            emitter.fail(failure);
-                        });
-                    if (terminated.get()) {
-                        subscription.cancel();
-                    } else if (!subscriptionRef.compareAndSet(null, subscription)) {
-                        subscription.cancel();
+                synchronized (lifecycleLock) {
+                    if (terminated[0]) {
+                        return;
                     }
-                } catch (Throwable t) {
-                    context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
-                    emitter.fail(t);
+                    context.putLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY, Boolean.TRUE);
+                    try {
+                        Cancellable subscription = persistenceManager.persist(item)
+                            .subscribe().with(result -> {
+                                context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
+                                emitter.complete(result);
+                            }, failure -> {
+                                context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
+                                emitter.fail(failure);
+                            });
+                        if (terminated[0]) {
+                            subscription.cancel();
+                        } else {
+                            subscriptionRef.set(subscription);
+                        }
+                    } catch (Throwable t) {
+                        context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
+                        emitter.fail(t);
+                    }
                 }
             });
         }).ifNoItem().after(Duration.ofSeconds(timeoutSeconds)).fail();

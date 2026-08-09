@@ -26,11 +26,11 @@ class CacheInvalidationServiceTest {
         service.cacheManager = cacheManager;
         service.cacheKeyResolver = resolverWith(new FixedStrategy());
 
-        PipelineContextHolder.set(new PipelineContext("v1", "true", null));
+        PipelineContextHolder.set(new PipelineContext("v1", "true", ""));
         try {
             String result = service.process("item").await().indefinitely();
             assertEquals("item", result);
-            assertEquals("v1:key", cacheManager.invalidatedKey);
+            assertEquals("2:v1:key", cacheManager.invalidatedKey);
         } finally {
             PipelineContextHolder.clear();
         }
@@ -43,7 +43,7 @@ class CacheInvalidationServiceTest {
         service.cacheManager = cacheManager;
         service.cacheKeyResolver = resolverWith(new FixedStrategy());
 
-        PipelineContextHolder.set(new PipelineContext("v1", "false", null));
+        PipelineContextHolder.set(new PipelineContext("v1", "false", ""));
         try {
             service.process("item").await().indefinitely();
             assertNull(cacheManager.invalidatedKey);
@@ -59,7 +59,7 @@ class CacheInvalidationServiceTest {
         service.cacheManager = cacheManager;
         service.cacheKeyResolver = resolverWith(new EmptyStrategy());
 
-        PipelineContextHolder.set(new PipelineContext("v1", "true", null));
+        PipelineContextHolder.set(new PipelineContext("v1", "true", ""));
         try {
             service.process("item").await().indefinitely();
             assertNull(cacheManager.invalidatedKey);
@@ -141,7 +141,10 @@ class CacheInvalidationServiceTest {
 
         @Override
         public Handle<T> getHandle() {
-            return new FixedHandle<>(values.isEmpty() ? null : values.get(0));
+            if (values.isEmpty()) {
+                throw new IllegalStateException("No value is available in this fixed CDI instance");
+            }
+            return new FixedHandle<>(values.get(0));
         }
 
         @Override
@@ -184,7 +187,7 @@ class CacheInvalidationServiceTest {
 
         @Override
         public jakarta.enterprise.inject.spi.Bean<T> getBean() {
-            return null;
+            throw new UnsupportedOperationException("Fixed handle does not provide CDI bean metadata");
         }
 
         @Override
