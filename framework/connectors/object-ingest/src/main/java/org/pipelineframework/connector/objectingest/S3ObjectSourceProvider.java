@@ -35,6 +35,8 @@ public class S3ObjectSourceProvider implements ObjectSourceProvider, AutoCloseab
     private final Optional<S3Client> client;
     private final boolean ownsClient;
     private final ConcurrentMap<String, S3Client> resolvedClients = new ConcurrentHashMap<>();
+    private final Object lifecycleLock = new Object();
+    private boolean closed;
 
     public S3ObjectSourceProvider() {
         this(Optional.empty(), true);
@@ -109,9 +111,15 @@ public class S3ObjectSourceProvider implements ObjectSourceProvider, AutoCloseab
 
     @Override
     public void close() {
-        if (ownsClient) {
-            resolvedClients.values().forEach(S3Client::close);
-            resolvedClients.clear();
+        synchronized (lifecycleLock) {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            if (ownsClient) {
+                resolvedClients.values().forEach(S3Client::close);
+                resolvedClients.clear();
+            }
         }
     }
 
@@ -152,17 +160,22 @@ public class S3ObjectSourceProvider implements ObjectSourceProvider, AutoCloseab
 
     private S3Client client(PipelineObjectSourceConfig source) {
         rejectEndpointOverride(source);
-        if (client.isPresent()) {
-            return client.get();
-        }
-        String region = optional(source, "region").orElse("");
-        return resolvedClients.computeIfAbsent(region, configuredRegion -> {
-            S3ClientBuilder builder = S3Client.builder().httpClientBuilder(UrlConnectionHttpClient.builder());
-            if (!configuredRegion.isBlank()) {
-                builder.region(Region.of(configuredRegion));
+        synchronized (lifecycleLock) {
+            if (closed) {
+                throw new IllegalStateException("S3 object source provider is closed");
             }
-            return builder.build();
-        });
+            if (client.isPresent()) {
+                return client.get();
+            }
+            String region = optional(source, "region").orElse("");
+            return resolvedClients.computeIfAbsent(region, configuredRegion -> {
+                S3ClientBuilder builder = S3Client.builder().httpClientBuilder(UrlConnectionHttpClient.builder());
+                if (!configuredRegion.isBlank()) {
+                    builder.region(Region.of(configuredRegion));
+                }
+                return builder.build();
+            });
+        }
     }
 
     private void rejectEndpointOverride(PipelineObjectSourceConfig source) {

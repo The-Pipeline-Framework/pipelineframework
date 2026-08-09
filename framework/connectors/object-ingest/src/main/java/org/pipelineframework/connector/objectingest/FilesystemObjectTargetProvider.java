@@ -4,6 +4,8 @@ import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -130,7 +132,7 @@ public class FilesystemObjectTargetProvider implements ObjectTargetProvider {
                             output.close();
                             closed = true;
                         }
-                        Files.move(tempPath, finalPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                        moveAtomicallyReplacingExistingTarget();
                         Map<String, String> metadata = new LinkedHashMap<>(request.metadata());
                         metadata.putAll(closeRequest.metadata());
                         metadata.put("target", request.targetName());
@@ -145,7 +147,8 @@ public class FilesystemObjectTargetProvider implements ObjectTargetProvider {
                             null,
                             metadata);
                         return new ObjectWriteResult(reference, closeRequest.bytes(), closeRequest.checksum(), Instant.now());
-                    } catch (IOException e) {
+                    } catch (IOException | IllegalStateException e) {
+                        cleanupTemporaryFile(e);
                         throw new CompletionException(e);
                     }
                 }
@@ -177,6 +180,23 @@ public class FilesystemObjectTargetProvider implements ObjectTargetProvider {
             byte[] bytes = new byte[duplicate.remaining()];
             duplicate.get(bytes);
             return bytes;
+        }
+
+        private void moveAtomicallyReplacingExistingTarget() throws IOException {
+            try {
+                Files.move(tempPath, finalPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException | FileAlreadyExistsException e) {
+                throw new IllegalStateException(
+                    "Configured filesystem does not support atomic replacement for " + finalPath, e);
+            }
+        }
+
+        private void cleanupTemporaryFile(Throwable publishFailure) {
+            try {
+                Files.deleteIfExists(tempPath);
+            } catch (IOException cleanupFailure) {
+                publishFailure.addSuppressed(cleanupFailure);
+            }
         }
     }
 }

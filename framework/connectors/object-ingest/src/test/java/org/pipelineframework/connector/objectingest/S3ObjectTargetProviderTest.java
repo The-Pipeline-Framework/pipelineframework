@@ -1,6 +1,7 @@
 package org.pipelineframework.connector.objectingest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -8,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import java.nio.ByteBuffer;
 import java.util.Map;
+import java.util.concurrent.CompletionException;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -68,6 +70,17 @@ class S3ObjectTargetProviderTest {
         session.abort(new RuntimeException("failed")).toCompletableFuture().join();
 
         verify(client).abortMultipartUpload(any(AbortMultipartUploadRequest.class));
+    }
+
+    @Test
+    void rejectsClientResolutionAfterClose() {
+        S3ObjectTargetProvider provider = new S3ObjectTargetProvider(mock(S3Client.class), Runnable::run, 5 * 1024 * 1024);
+        provider.close();
+
+        CompletionException exception = assertThrows(CompletionException.class,
+            () -> provider.open(openRequest()).toCompletableFuture().join());
+
+        assertEquals("S3 object target provider is closed", exception.getCause().getMessage());
     }
 
     private ObjectWriteOpenRequest openRequest() {

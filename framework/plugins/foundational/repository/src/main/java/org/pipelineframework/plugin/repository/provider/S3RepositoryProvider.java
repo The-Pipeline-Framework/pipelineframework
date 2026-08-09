@@ -19,6 +19,7 @@ package org.pipelineframework.plugin.repository.provider;
 import java.net.URI;
 import java.util.Optional;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import io.quarkus.arc.Unremovable;
@@ -82,6 +83,13 @@ public class S3RepositoryProvider implements RepositoryProvider {
         endpointOverride.map(URI::create).ifPresent(builder::endpointOverride);
         builder.forcePathStyle(pathStyle);
         client = builder.build();
+    }
+
+    @PreDestroy
+    void close() {
+        if (client != null) {
+            client.close();
+        }
     }
 
     @Override

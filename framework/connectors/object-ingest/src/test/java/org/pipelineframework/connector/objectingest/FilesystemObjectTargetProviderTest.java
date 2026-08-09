@@ -64,6 +64,16 @@ class FilesystemObjectTargetProviderTest {
     }
 
     @Test
+    void atomicallyReplacesAnExistingTarget() throws Exception {
+        FilesystemObjectTargetProvider provider = new FilesystemObjectTargetProvider(Runnable::run);
+        write(provider, "first");
+
+        write(provider, "replacement");
+
+        assertEquals("replacement", Files.readString(tempDir.resolve("results/payments.csv")));
+    }
+
+    @Test
     void rejectsEscapedOutputPath() {
         PipelineObjectPublishConfig target = target(tempDir);
 
@@ -91,5 +101,12 @@ class FilesystemObjectTargetProviderTest {
             "text/csv",
             Map.of("kind", "test"),
             "idempotency");
+    }
+
+    private void write(FilesystemObjectTargetProvider provider, String payload) {
+        ObjectWriteSession session = provider.open(openRequest(target(tempDir), "results/payments.csv"))
+            .toCompletableFuture().join();
+        session.write(ByteBuffer.wrap(payload.getBytes(StandardCharsets.UTF_8))).toCompletableFuture().join();
+        session.close(new ObjectWriteCloseRequest(payload.length(), "checksum", Map.of())).toCompletableFuture().join();
     }
 }

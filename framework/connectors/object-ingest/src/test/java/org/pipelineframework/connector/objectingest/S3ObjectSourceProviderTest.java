@@ -112,6 +112,17 @@ class S3ObjectSourceProviderTest {
         verify(client, never()).getObjectAsBytes(any(GetObjectRequest.class));
     }
 
+    @Test
+    void rejectsClientResolutionAfterClose() {
+        S3ObjectSourceProvider provider = new S3ObjectSourceProvider(mock(S3Client.class));
+        PipelineObjectSourceConfig source = new PipelineObjectSourceConfig(
+            "search-documents", "object", "s3", Map.of("bucket", "docs"), null, null, null, null);
+
+        provider.close();
+
+        assertThrows(IllegalStateException.class, () -> provider.list(source, 1));
+    }
+
     private ObjectSourceItem item(String key) {
         return new ObjectSourceItem(
             "s3",

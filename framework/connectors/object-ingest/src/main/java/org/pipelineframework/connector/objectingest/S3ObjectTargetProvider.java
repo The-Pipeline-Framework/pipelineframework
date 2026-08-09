@@ -53,6 +53,8 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
     private final boolean ownsExecutor;
     private final int partSizeBytes;
     private final ConcurrentMap<ClientConfiguration, S3Client> resolvedClients = new ConcurrentHashMap<>();
+    private final Object lifecycleLock = new Object();
+    private boolean closed;
 
     public S3ObjectTargetProvider() {
         this(Optional.empty(), true, Executors.newVirtualThreadPerTaskExecutor(), true, DEFAULT_PART_SIZE_BYTES);
@@ -104,9 +106,15 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
 
     @Override
     public void close() {
-        if (ownsClient) {
-            resolvedClients.values().forEach(S3Client::close);
-            resolvedClients.clear();
+        synchronized (lifecycleLock) {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            if (ownsClient) {
+                resolvedClients.values().forEach(S3Client::close);
+                resolvedClients.clear();
+            }
         }
         if (ownsExecutor && executor instanceof ExecutorService executorService) {
             executorService.close();
@@ -115,7 +123,12 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
 
     private S3Client client(ObjectWriteOpenRequest request) {
         rejectEndpointOverride(request);
-        return client.orElseGet(() -> resolvedClient(request));
+        synchronized (lifecycleLock) {
+            if (closed) {
+                throw new IllegalStateException("S3 object target provider is closed");
+            }
+            return client.orElseGet(() -> resolvedClient(request));
+        }
     }
 
     private S3Client resolvedClient(ObjectWriteOpenRequest request) {

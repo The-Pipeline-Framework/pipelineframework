@@ -89,8 +89,8 @@ class FilesystemRepositoryProviderTest {
             "x".getBytes(StandardCharsets.UTF_8),
             "text/plain",
             "string",
-            null,
-            null,
+            "",
+            "",
             Map.of());
 
         IllegalArgumentException exception = assertThrows(
@@ -132,8 +132,8 @@ class FilesystemRepositoryProviderTest {
             payload.getBytes(StandardCharsets.UTF_8),
             "text/plain; charset=utf-8",
             "string",
-            null,
-            null,
+            "",
+            "",
             Map.of());
     }
 }
