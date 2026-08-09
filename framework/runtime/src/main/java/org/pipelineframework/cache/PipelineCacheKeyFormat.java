@@ -70,7 +70,7 @@ public final class PipelineCacheKeyFormat {
         if (versionTag == null || versionTag.isBlank()) {
             return baseKey;
         }
-        return versionTag + ":" + baseKey;
+        return versionTag.length() + ":" + versionTag + ":" + baseKey;
     }
 
     /**

@@ -21,9 +21,11 @@ import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.UniAssertSubscriber;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.cache.CacheMissException;
 import org.pipelineframework.context.PipelineContext;
+import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.context.PipelineContextHolder;
 
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -31,6 +33,11 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.Mockito.*;
 
 class CacheServiceTest {
+
+    @AfterEach
+    void clearCacheStatus() {
+        PipelineCacheStatusHolder.clear();
+    }
 
     @Test
     void process_WithNullItem_ShouldReturnNull() {
@@ -52,7 +59,7 @@ class CacheServiceTest {
         CacheService<Object> service = new CacheService<>(cacheManager, cacheKeyResolver);
 
         Object item = new Object();
-        when(cacheKeyResolver.resolveKey(eq(item), any())).thenReturn(Optional.empty());
+        when(cacheKeyResolver.resolveKey(eq(item), any(), any())).thenReturn(Optional.empty());
         Uni<Object> resultUni = service.process(item);
         UniAssertSubscriber<Object> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
@@ -232,7 +239,8 @@ class CacheServiceTest {
         CacheService<TestItem> service = new CacheService<>(cacheManager, cacheKeyResolver);
         setPolicy(service, "return-cached");
         PipelineContextHolder.set(new PipelineContext("v1", null, null));
-        when(cacheManager.get("v1:" + keyFor(item))).thenReturn(Uni.createFrom().item(Optional.of(item)));
+        String versionedKey = "2:v1:" + keyFor(item);
+        when(cacheManager.get(versionedKey)).thenReturn(Uni.createFrom().item(Optional.of(item)));
 
         try {
             Uni<TestItem> resultUni = service.process(item);
@@ -240,7 +248,7 @@ class CacheServiceTest {
             subscriber.awaitItem();
 
             assertSame(item, subscriber.getItem());
-            verify(cacheManager).get("v1:" + keyFor(item));
+            verify(cacheManager).get(versionedKey);
         } finally {
             PipelineContextHolder.clear();
         }
@@ -258,7 +266,7 @@ class CacheServiceTest {
 
     private CacheKeyResolver resolverFor(TestItem item) {
         CacheKeyResolver resolver = mock(CacheKeyResolver.class);
-        when(resolver.resolveKey(eq(item), any())).thenReturn(Optional.of(keyFor(item)));
+        when(resolver.resolveKey(eq(item), any(), any())).thenReturn(Optional.of(keyFor(item)));
         return resolver;
     }
 

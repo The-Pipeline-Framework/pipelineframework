@@ -23,6 +23,9 @@ import jakarta.persistence.PersistenceException;
 import io.quarkus.arc.Unremovable;
 import io.quarkus.hibernate.reactive.panache.Panache;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.common.vertx.VertxContext;
+import io.vertx.core.Context;
+import io.vertx.core.Vertx;
 import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.ParallelismHint;
 import org.pipelineframework.parallelism.OrderingRequirement;
@@ -119,11 +122,11 @@ public class ReactivePanachePersistenceProvider implements PersistenceProvider<O
     /**
      * Indicate whether this persistence provider supports the current thread context.
      *
-     * @return `true` if the current thread is not a virtual thread, `false` otherwise.
+     * @return `true` if the current execution has a duplicated Vert.x context, `false` otherwise.
      */
     @Override
     public boolean supportsThreadContext() {
-        // This provider is designed for reactive (non-virtual) threads
-        return !Thread.currentThread().isVirtual();
+        Context context = Vertx.currentContext();
+        return context != null && VertxContext.isDuplicatedContext(context);
     }
 }

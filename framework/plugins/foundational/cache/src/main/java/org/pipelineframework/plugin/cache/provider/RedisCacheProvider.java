@@ -32,6 +32,7 @@ import io.quarkus.arc.Unremovable;
 import io.quarkus.arc.properties.IfBuildProperty;
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 import io.quarkus.redis.datasource.keys.ReactiveKeyCommands;
+import io.quarkus.redis.datasource.keys.KeyScanArgs;
 import io.quarkus.redis.datasource.value.ReactiveValueCommands;
 import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -52,6 +53,7 @@ import org.pipelineframework.cache.ProtobufMessageParser;
 public class RedisCacheProvider implements CacheProvider<Object> {
 
     private static final Logger LOG = Logger.getLogger(RedisCacheProvider.class);
+    private static final int DELETE_BATCH_SIZE = 100;
 
     @ConfigProperty(name = "pipeline.cache.redis.prefix", defaultValue = "pipeline-cache:")
     String keyPrefix;
@@ -127,13 +129,16 @@ public class RedisCacheProvider implements CacheProvider<Object> {
         }
 
         String fullKey = keyPrefix + key;
+        Optional<String> serialized = serialize(value);
+        if (serialized.isEmpty()) {
+            return Uni.createFrom().item(value);
+        }
         ReactiveValueCommands<String, String> values = redis.value(String.class);
-        String serialized = serialize(value);
 
         if (ttl == null || ttl.isZero() || ttl.isNegative()) {
-            return values.set(fullKey, serialized).replaceWith(value);
+            return values.set(fullKey, serialized.get()).replaceWith(value);
         } else {
-            return values.setex(fullKey, ttl.getSeconds(), serialized).replaceWith(value);
+            return values.setex(fullKey, ttl.getSeconds(), serialized.get()).replaceWith(value);
         }
     }
 
@@ -172,14 +177,12 @@ public class RedisCacheProvider implements CacheProvider<Object> {
         }
         ReactiveKeyCommands<String> keys = redis.key();
         String pattern = keyPrefix + prefix + "*";
-        return keys.keys(pattern)
-            .onItem().transformToUni(found -> {
-                if (found == null || found.isEmpty()) {
-                    return Uni.createFrom().item(false);
-                }
-                String[] keyArray = found.toArray(new String[0]);
-                return keys.del(keyArray).map(count -> count != null && count > 0);
-            });
+        return keys.scan(new KeyScanArgs().match(pattern).count(DELETE_BATCH_SIZE))
+            .toMulti()
+            .group().intoLists().of(DELETE_BATCH_SIZE)
+            .onItem().transformToUniAndConcatenate(batch -> keys.del(batch.toArray(new String[0]))
+                .map(count -> count != null && count > 0))
+            .collect().with(Collectors.reducing(false, Boolean::logicalOr));
     }
 
     @Override
@@ -248,19 +251,21 @@ public class RedisCacheProvider implements CacheProvider<Object> {
      * Otherwise the value is serialized to a JSON payload and the envelope's `encoding` is `"json"`.
      *
      * @param value the object to serialize (may be a Protobuf `Message` or any POJO)
-     * @return a JSON string representing the CacheEnvelope (contains `type`, `payload`, and `encoding`), or {@code null} if serialization fails
+     * @return an envelope when serialization succeeds, or an empty result when it fails
      */
-    String serialize(Object value) {
+    Optional<String> serialize(Object value) {
         try {
             if (value instanceof com.google.protobuf.Message message) {
                 String payload = Base64.getEncoder().encodeToString(message.toByteArray());
-                return objectMapper.writeValueAsString(new CacheEnvelope(value.getClass().getName(), payload, "protobuf"));
+                return Optional.of(objectMapper.writeValueAsString(
+                    new CacheEnvelope(value.getClass().getName(), payload, "protobuf")));
             }
             String payload = objectMapper.writeValueAsString(value);
-            return objectMapper.writeValueAsString(new CacheEnvelope(value.getClass().getName(), payload, "json"));
+            return Optional.of(objectMapper.writeValueAsString(
+                new CacheEnvelope(value.getClass().getName(), payload, "json")));
         } catch (Exception e) {
             LOG.warnf("Failed to serialize cache entry for type %s: %s", value.getClass().getName(), e.getMessage());
-            return null;
+            return Optional.empty();
         }
     }
 

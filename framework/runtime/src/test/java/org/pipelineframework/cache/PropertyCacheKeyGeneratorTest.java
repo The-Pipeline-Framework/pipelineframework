@@ -35,7 +35,7 @@ class PropertyCacheKeyGeneratorTest {
         PipelineContextHolder.set(new PipelineContext("v3", null, null));
         try {
             Object key = generator.generate(method, input);
-            assertEquals("v3:" + DocItem.class.getName() + ":doc-9", key);
+            assertEquals("2:v3:" + DocItem.class.getName() + ":doc-9", key);
         } finally {
             PipelineContextHolder.clear();
         }

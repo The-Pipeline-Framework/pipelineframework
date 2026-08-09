@@ -34,7 +34,7 @@ public class TestPersistenceProvider implements PersistenceProvider<TestEntity> 
     @Override
     public Uni<TestEntity> persist(TestEntity entity) {
         if (entity == null) {
-            return Uni.createFrom().nullItem();
+            return Uni.createFrom().failure(new IllegalArgumentException("Persistence entity must not be null"));
         }
 
         // In a test scenario, just return the entity as-is

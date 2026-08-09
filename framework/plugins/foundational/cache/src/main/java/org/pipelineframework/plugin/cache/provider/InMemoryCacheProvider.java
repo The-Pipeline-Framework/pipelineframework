@@ -78,8 +78,11 @@ public class InMemoryCacheProvider implements CacheProvider<Object> {
             return Uni.createFrom().item(Optional.empty());
         }
         CacheEntry entry = cache.get(key);
-        if (entry == null || entry.isExpired()) {
-            cache.remove(key);
+        if (entry == null) {
+            return Uni.createFrom().item(Optional.empty());
+        }
+        if (entry.isExpired()) {
+            cache.remove(key, entry);
             return Uni.createFrom().item(Optional.empty());
         }
         return Uni.createFrom().item(Optional.of(entry.value()));

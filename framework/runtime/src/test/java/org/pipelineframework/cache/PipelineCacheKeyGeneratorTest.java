@@ -35,7 +35,7 @@ class PipelineCacheKeyGeneratorTest {
         PipelineContextHolder.set(new PipelineContext("v9", null, null));
         try {
             Object key = generator.generate(method, input);
-            assertEquals("v9:" + TestKey.class.getName() + ":doc-123", key);
+            assertEquals("2:v9:" + TestKey.class.getName() + ":doc-123", key);
         } finally {
             PipelineContextHolder.clear();
         }

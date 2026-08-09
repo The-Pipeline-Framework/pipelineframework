@@ -45,13 +45,13 @@ class PipelineCacheKeyFormatTest {
     @Test
     void applyVersionTag_PrefixesWhenPresent() {
         String tagged = PipelineCacheKeyFormat.applyVersionTag("key", "v1");
-        assertEquals("v1:key", tagged);
+        assertEquals("2:v1:key", tagged);
     }
 
     @Test
     void typePrefix_IncludesTypeAndVersion() {
         String prefix = PipelineCacheKeyFormat.typePrefix(TestKey.class, "v2");
-        assertEquals("v2:" + TestKey.class.getName() + ":", prefix);
+        assertEquals("2:v2:" + TestKey.class.getName() + ":", prefix);
     }
 
     private static final class TestKey implements CacheKey {

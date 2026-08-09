@@ -97,12 +97,17 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
         if (persistenceManager == null) {
             return Uni.createFrom().failure(new IllegalStateException("PersistenceManager is not available"));
         }
-        boolean useVertx = shouldUseVertxContext();
-        Uni<R> persistUni = !useVertx
-            ? persistenceManager.persist(representation)
-            : (hasManagedReactiveContext()
+        Uni<R> persistUni;
+        try {
+            boolean useVertx = shouldUseVertxContext();
+            persistUni = !useVertx
                 ? persistenceManager.persist(representation)
-                : persistOnVertxContext(representation));
+                : (hasManagedReactiveContext()
+                    ? persistenceManager.persist(representation)
+                    : persistOnVertxContext(representation));
+        } catch (IllegalStateException failure) {
+            persistUni = Uni.createFrom().failure(failure);
+        }
         return persistUni
             .onFailure(this::isDuplicateKeyError)
             .recoverWithUni(failure -> handleDuplicateKey(representation, failure))
@@ -176,28 +181,45 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
         VertxContextSafetyToggle.setContextSafe(context, true);
         return Uni.createFrom().<R>emitter(emitter -> {
             AtomicReference<Cancellable> subscriptionRef = new AtomicReference<>();
+            Object lifecycleLock = new Object();
+            boolean[] terminated = { false };
             emitter.onTermination(() -> {
-                context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
-                Cancellable subscription = subscriptionRef.getAndSet(null);
-                if (subscription != null) {
-                    subscription.cancel();
+                synchronized (lifecycleLock) {
+                    if (terminated[0]) {
+                        return;
+                    }
+                    terminated[0] = true;
+                    context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
+                    Cancellable subscription = subscriptionRef.getAndSet(null);
+                    if (subscription != null) {
+                        subscription.cancel();
+                    }
                 }
             });
             context.runOnContext(ignored -> {
-                context.putLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY, Boolean.TRUE);
-                try {
-                    Cancellable subscription = persistenceManager.persist(item)
-                        .subscribe().with(result -> {
-                            context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
-                            emitter.complete(result);
-                        }, failure -> {
-                            context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
-                            emitter.fail(failure);
-                        });
-                    subscriptionRef.set(subscription);
-                } catch (Throwable t) {
-                    context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
-                    emitter.fail(t);
+                synchronized (lifecycleLock) {
+                    if (terminated[0]) {
+                        return;
+                    }
+                    context.putLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY, Boolean.TRUE);
+                    try {
+                        Cancellable subscription = persistenceManager.persist(item)
+                            .subscribe().with(result -> {
+                                context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
+                                emitter.complete(result);
+                            }, failure -> {
+                                context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
+                                emitter.fail(failure);
+                            });
+                        if (terminated[0]) {
+                            subscription.cancel();
+                        } else {
+                            subscriptionRef.set(subscription);
+                        }
+                    } catch (Throwable t) {
+                        context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
+                        emitter.fail(t);
+                    }
                 }
             });
         }).ifNoItem().after(Duration.ofSeconds(timeoutSeconds)).fail();

@@ -100,7 +100,7 @@ public class CaffeineCacheProvider implements CacheProvider<Object> {
     @Override
     public Uni<Object> cache(String key, Object value, Duration ttl) {
         if (ttl != null && !ttl.isZero() && !ttl.isNegative()) {
-            caffeineCache.setExpireAfterWrite(ttl);
+            LOG.debugf("Caffeine cache '%s' does not support per-entry TTL; using the configured expiry", cacheName);
         }
         return cache(key, value);
     }

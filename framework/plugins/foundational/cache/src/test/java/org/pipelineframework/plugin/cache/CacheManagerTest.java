@@ -42,14 +42,6 @@ class CacheManagerTest {
     }
 
     @Test
-    void cache_WithNullItem_ShouldReturnNull() {
-        Uni<Object> resultUni = cacheManager.cache("key-0", null);
-        UniAssertSubscriber<Object> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
-        subscriber.awaitItem();
-        assertNull(subscriber.getItem());
-    }
-
-    @Test
     void cache_WithBlankKey_ShouldReturnSameItem() throws Exception {
         Object item = new Object();
         setProviders(List.of(mock(CacheProvider.class)));

@@ -3,17 +3,23 @@ package org.pipelineframework.plugin.cache.provider;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Field;
 import java.util.Base64;
 import java.util.Optional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import com.google.protobuf.StringValue;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.cache.ProtobufMessageParser;
+
+import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 
 class RedisCacheProviderCodecTest {
 
@@ -27,7 +33,7 @@ class RedisCacheProviderCodecTest {
             .count(7)
             .build();
 
-        String serialized = provider.serialize(input);
+        String serialized = provider.serialize(input).orElseThrow();
         Optional<Object> decoded = provider.deserialize(serialized, "cache-key");
 
         assertTrue(decoded.isPresent());
@@ -41,7 +47,7 @@ class RedisCacheProviderCodecTest {
         setParserRegistry(provider, StringValue.class.getName(), new StringValueParser());
 
         StringValue input = StringValue.of("hello");
-        String serialized = provider.serialize(input);
+        String serialized = provider.serialize(input).orElseThrow();
         Optional<Object> decoded = provider.deserialize(serialized, "proto-key");
 
         assertTrue(decoded.isPresent());
@@ -52,10 +58,20 @@ class RedisCacheProviderCodecTest {
     void protobufEnvelopeWithoutParserReturnsEmpty() throws Exception {
         RedisCacheProvider provider = new RedisCacheProvider();
         provider.objectMapper = new ObjectMapper();
-        setParserRegistry(provider, "missing.Parser", bytes -> StringValue.of("ignored"));
+        setParserRegistry(provider, "missing.Parser", new ProtobufMessageParser() {
+            @Override
+            public String type() {
+                return "missing.Parser";
+            }
+
+            @Override
+            public com.google.protobuf.Message parseFrom(byte[] bytes) {
+                return StringValue.of("ignored");
+            }
+        });
 
         StringValue input = StringValue.of("hello");
-        String serialized = provider.serialize(input);
+        String serialized = provider.serialize(input).orElseThrow();
         Optional<Object> decoded = provider.deserialize(serialized, "proto-key");
 
         assertFalse(decoded.isPresent());
@@ -73,6 +89,22 @@ class RedisCacheProviderCodecTest {
         Optional<Object> decoded = provider.deserialize(serialized, "proto-key");
 
         assertFalse(decoded.isPresent());
+    }
+
+    @Test
+    void skipsRedisWriteWhenSerializationFails() throws Exception {
+        RedisCacheProvider provider = new RedisCacheProvider();
+        provider.keyPrefix = "cache:";
+        provider.redis = mock(ReactiveRedisDataSource.class);
+        ObjectMapper mapper = mock(ObjectMapper.class);
+        provider.objectMapper = mapper;
+        when(mapper.writeValueAsString(org.mockito.ArgumentMatchers.any()))
+            .thenThrow(new JsonProcessingException("cannot serialize") { });
+
+        Object value = new Object();
+        assertEquals(value, provider.cache("key", value).await().indefinitely());
+
+        verifyNoInteractions(provider.redis);
     }
 
     private void setParserRegistry(
@@ -95,7 +127,7 @@ class RedisCacheProviderCodecTest {
             try {
                 return StringValue.parseFrom(bytes);
             } catch (Exception e) {
-                return null;
+                throw new IllegalArgumentException("Failed to parse StringValue", e);
             }
         }
     }
