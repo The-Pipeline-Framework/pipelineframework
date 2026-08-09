@@ -4,6 +4,8 @@ import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -107,10 +109,15 @@ public class FilesystemObjectTargetProvider implements ObjectTargetProvider {
         public CompletionStage<Void> write(ByteBuffer chunk) {
             byte[] bytes = copy(chunk);
             return CompletableFuture.runAsync(() -> {
-                try {
-                    output.write(bytes);
-                } catch (IOException e) {
-                    throw new CompletionException(e);
+                synchronized (this) {
+                    if (closed) {
+                        throw new IllegalStateException("filesystem write session is closed");
+                    }
+                    try {
+                        output.write(bytes);
+                    } catch (IOException e) {
+                        throw new CompletionException(e);
+                    }
                 }
             }, executor);
         }
@@ -118,29 +125,32 @@ public class FilesystemObjectTargetProvider implements ObjectTargetProvider {
         @Override
         public CompletionStage<ObjectWriteResult> close(ObjectWriteCloseRequest closeRequest) {
             return CompletableFuture.supplyAsync(() -> {
-                try {
-                    if (!closed) {
-                        output.flush();
-                        output.close();
-                        closed = true;
+                synchronized (this) {
+                    try {
+                        if (!closed) {
+                            output.flush();
+                            output.close();
+                            closed = true;
+                        }
+                        moveAtomicallyReplacingExistingTarget();
+                        Map<String, String> metadata = new LinkedHashMap<>(request.metadata());
+                        metadata.putAll(closeRequest.metadata());
+                        metadata.put("target", request.targetName());
+                        PayloadReference reference = new PayloadReference(
+                            "filesystem",
+                            root.toString(),
+                            request.objectKey(),
+                            request.contentType(),
+                            "raw",
+                            closeRequest.checksum(),
+                            closeRequest.bytes(),
+                            null,
+                            metadata);
+                        return new ObjectWriteResult(reference, closeRequest.bytes(), closeRequest.checksum(), Instant.now());
+                    } catch (IOException | IllegalStateException e) {
+                        cleanupTemporaryFile(e);
+                        throw new CompletionException(e);
                     }
-                    Files.move(tempPath, finalPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-                    Map<String, String> metadata = new LinkedHashMap<>(request.metadata());
-                    metadata.putAll(closeRequest.metadata());
-                    metadata.put("target", request.targetName());
-                    PayloadReference reference = new PayloadReference(
-                        "filesystem",
-                        root.toString(),
-                        request.objectKey(),
-                        request.contentType(),
-                        "raw",
-                        closeRequest.checksum(),
-                        closeRequest.bytes(),
-                        null,
-                        metadata);
-                    return new ObjectWriteResult(reference, closeRequest.bytes(), closeRequest.checksum(), Instant.now());
-                } catch (IOException e) {
-                    throw new CompletionException(e);
                 }
             }, executor);
         }
@@ -148,14 +158,16 @@ public class FilesystemObjectTargetProvider implements ObjectTargetProvider {
         @Override
         public CompletionStage<Void> abort(Throwable cause) {
             return CompletableFuture.runAsync(() -> {
-                try {
-                    if (!closed) {
-                        output.close();
-                        closed = true;
+                synchronized (this) {
+                    try {
+                        if (!closed) {
+                            output.close();
+                            closed = true;
+                        }
+                        Files.deleteIfExists(tempPath);
+                    } catch (IOException e) {
+                        throw new CompletionException(e);
                     }
-                    Files.deleteIfExists(tempPath);
-                } catch (IOException e) {
-                    throw new CompletionException(e);
                 }
             }, executor);
         }
@@ -168,6 +180,23 @@ public class FilesystemObjectTargetProvider implements ObjectTargetProvider {
             byte[] bytes = new byte[duplicate.remaining()];
             duplicate.get(bytes);
             return bytes;
+        }
+
+        private void moveAtomicallyReplacingExistingTarget() throws IOException {
+            try {
+                Files.move(tempPath, finalPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException | FileAlreadyExistsException e) {
+                throw new IllegalStateException(
+                    "Configured filesystem does not support atomic replacement for " + finalPath, e);
+            }
+        }
+
+        private void cleanupTemporaryFile(Throwable publishFailure) {
+            try {
+                Files.deleteIfExists(tempPath);
+            } catch (IOException cleanupFailure) {
+                publishFailure.addSuppressed(cleanupFailure);
+            }
         }
     }
 }

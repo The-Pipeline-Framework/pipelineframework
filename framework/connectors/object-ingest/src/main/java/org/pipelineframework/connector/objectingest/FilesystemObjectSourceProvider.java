@@ -1,6 +1,8 @@
 package org.pipelineframework.connector.objectingest;
 
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.io.InputStream;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -30,6 +32,9 @@ public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
 
     @Override
     public List<ObjectSourceItem> list(PipelineObjectSourceConfig source, int limit) {
+        if (limit <= 0) {
+            return List.of();
+        }
         Path root = root(source);
         Path prefix = prefix(source);
         Path listRoot = requireUnderRoot(root, root.resolve(prefix).normalize());
@@ -44,7 +49,7 @@ public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
                 .map(path -> path.toString().replace('\\', '/'))
                 .filter(key -> matches(source, key))
                 .sorted()
-                .limit(Math.max(1, limit))
+                .limit(limit)
                 .map(key -> item(source, root, key))
                 .toList();
         } catch (IOException e) {
@@ -57,13 +62,24 @@ public class FilesystemObjectSourceProvider implements ObjectSourceProvider {
         Path root = root(source);
         Path path = requireUnderRoot(root, root.resolve(item.key()).normalize());
         try {
-            if (maxBytes > 0 && Files.size(path) > maxBytes) {
-                throw new IllegalStateException("Object exceeds configured maxBytes: " + item.key());
-            }
-            byte[] bytes = Files.readAllBytes(path);
+            byte[] bytes = readBounded(path, maxBytes, item.key());
             return Optional.of(new String(bytes, source.payload().charset()));
         } catch (IOException e) {
             throw new IllegalStateException("Failed reading filesystem object: " + item.key(), e);
+        }
+    }
+
+    private byte[] readBounded(Path path, long maxBytes, String key) throws IOException {
+        try (InputStream input = Files.newInputStream(path); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                if (maxBytes > 0 && (long) output.size() + read > maxBytes) {
+                    throw new IllegalStateException("Object exceeds configured maxBytes: " + key);
+                }
+                output.write(buffer, 0, read);
+            }
+            return output.toByteArray();
         }
     }
 

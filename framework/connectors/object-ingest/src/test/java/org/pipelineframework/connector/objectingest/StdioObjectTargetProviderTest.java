@@ -53,6 +53,23 @@ class StdioObjectTargetProviderTest {
         assertTrue(abortFailure.getCause().getMessage().contains("cannot be aborted"));
     }
 
+    @Test
+    void writesRemainingBytesWithoutMutatingHeapOrReadOnlyBuffers() {
+        TrackingOutputStream output = new TrackingOutputStream();
+        ObjectWriteSession session = provider(output).open(request(target(Map.of("endpoint", "stdout"))))
+            .toCompletableFuture().join();
+        ByteBuffer heap = ByteBuffer.wrap("skip-keep".getBytes(StandardCharsets.UTF_8));
+        heap.position("skip-".length());
+        ByteBuffer readOnly = ByteBuffer.wrap("-read-only".getBytes(StandardCharsets.UTF_8)).asReadOnlyBuffer();
+
+        session.write(heap).toCompletableFuture().join();
+        session.write(readOnly).toCompletableFuture().join();
+
+        assertEquals("keep-read-only", output.toString(StandardCharsets.UTF_8));
+        assertEquals("skip-".length(), heap.position());
+        assertEquals(0, readOnly.position());
+    }
+
     private StdioObjectTargetProvider provider(TrackingOutputStream output) {
         return new StdioObjectTargetProvider(new StandardStreams(new ByteArrayInputStream(new byte[0]), output));
     }

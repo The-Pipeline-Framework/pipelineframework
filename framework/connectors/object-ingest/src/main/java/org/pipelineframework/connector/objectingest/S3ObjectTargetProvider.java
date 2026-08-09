@@ -1,18 +1,21 @@
 package org.pipelineframework.connector.objectingest;
 
 import java.io.ByteArrayOutputStream;
-import java.net.URI;
 import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.pipelineframework.objectpublish.ObjectTargetProvider;
 import org.pipelineframework.objectpublish.ObjectWriteCloseRequest;
@@ -44,28 +47,39 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
     static final int DEFAULT_PART_SIZE_BYTES = 8 * 1024 * 1024;
     private static final int MIN_PART_SIZE_BYTES = 5 * 1024 * 1024;
 
-    private final S3Client client;
+    private final Optional<S3Client> client;
     private final boolean ownsClient;
     private final Executor executor;
+    private final boolean ownsExecutor;
     private final int partSizeBytes;
-    private volatile S3Client resolvedClient;
+    private final ConcurrentMap<ClientConfiguration, S3Client> resolvedClients = new ConcurrentHashMap<>();
+    private final Object lifecycleLock = new Object();
+    private boolean closed;
 
     public S3ObjectTargetProvider() {
-        this(null, true, ForkJoinPool.commonPool(), DEFAULT_PART_SIZE_BYTES);
+        this(Optional.empty(), true, Executors.newVirtualThreadPerTaskExecutor(), true, DEFAULT_PART_SIZE_BYTES);
     }
 
-    S3ObjectTargetProvider(S3Client client) {
-        this(client, false, ForkJoinPool.commonPool(), DEFAULT_PART_SIZE_BYTES);
+    public S3ObjectTargetProvider(S3Client client) {
+        this(Optional.of(Objects.requireNonNull(client, "client")), false, Executors.newVirtualThreadPerTaskExecutor(), true,
+            DEFAULT_PART_SIZE_BYTES);
     }
 
     S3ObjectTargetProvider(S3Client client, Executor executor, int partSizeBytes) {
-        this(client, false, executor, partSizeBytes);
+        this(Optional.of(Objects.requireNonNull(client, "client")), false, executor, false, partSizeBytes);
     }
 
-    private S3ObjectTargetProvider(S3Client client, boolean ownsClient, Executor executor, int partSizeBytes) {
+    private S3ObjectTargetProvider(
+        Optional<S3Client> client,
+        boolean ownsClient,
+        Executor executor,
+        boolean ownsExecutor,
+        int partSizeBytes
+    ) {
         this.client = client;
         this.ownsClient = ownsClient;
         this.executor = executor;
+        this.ownsExecutor = ownsExecutor;
         this.partSizeBytes = Math.max(partSizeBytes, MIN_PART_SIZE_BYTES);
     }
 
@@ -92,35 +106,50 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
 
     @Override
     public void close() {
-        if (ownsClient && resolvedClient != null) {
-            resolvedClient.close();
+        synchronized (lifecycleLock) {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            if (ownsClient) {
+                resolvedClients.values().forEach(S3Client::close);
+                resolvedClients.clear();
+            }
+        }
+        if (ownsExecutor && executor instanceof ExecutorService executorService) {
+            executorService.close();
         }
     }
 
     private S3Client client(ObjectWriteOpenRequest request) {
-        if (client != null) {
-            return client;
-        }
-        S3Client local = resolvedClient;
-        if (local != null) {
-            return local;
-        }
-        synchronized (this) {
-            local = resolvedClient;
-            if (local != null) {
-                return local;
+        rejectEndpointOverride(request);
+        synchronized (lifecycleLock) {
+            if (closed) {
+                throw new IllegalStateException("S3 object target provider is closed");
             }
+            return client.orElseGet(() -> resolvedClient(request));
+        }
+    }
+
+    private S3Client resolvedClient(ObjectWriteOpenRequest request) {
+        ClientConfiguration configuration = new ClientConfiguration(
+            optional(request, "region").orElse(""),
+            Boolean.parseBoolean(optional(request, "pathStyleAccess").orElse("false")));
+        return resolvedClients.computeIfAbsent(configuration, configured -> {
             S3ClientBuilder builder = S3Client.builder().httpClientBuilder(UrlConnectionHttpClient.builder());
-            optional(request, "region").ifPresent(region -> builder.region(Region.of(region)));
-            optional(request, "endpoint").or(() -> optional(request, "endpointOverride"))
-                .map(URI::create)
-                .ifPresent(builder::endpointOverride);
-            boolean pathStyle = Boolean.parseBoolean(optional(request, "pathStyleAccess").orElse("false"));
-            if (pathStyle) {
+            if (!configured.region().isBlank()) {
+                builder.region(Region.of(configured.region()));
+            }
+            if (configured.pathStyleAccess()) {
                 builder.serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build());
             }
-            resolvedClient = builder.build();
-            return resolvedClient;
+            return builder.build();
+        });
+    }
+
+    private void rejectEndpointOverride(ObjectWriteOpenRequest request) {
+        if (optional(request, "endpoint").isPresent() || optional(request, "endpointOverride").isPresent()) {
+            throw new IllegalArgumentException("S3 endpoint overrides must be configured through an application-provided S3Client");
         }
     }
 
@@ -145,6 +174,9 @@ public class S3ObjectTargetProvider implements ObjectTargetProvider, AutoCloseab
         return value == null || value.toString().isBlank()
             ? Optional.empty()
             : Optional.of(value.toString().trim());
+    }
+
+    private record ClientConfiguration(String region, boolean pathStyleAccess) {
     }
 
     private static final class S3WriteSession implements ObjectWriteSession {

@@ -21,6 +21,7 @@ public final class StdioObjectSourceProvider implements ObjectSourceProvider {
     private static final String ENDPOINT = "stdin";
     private final StandardStreams streams;
     private Optional<CapturedInput> captured = Optional.empty();
+    private Optional<RuntimeException> captureFailure = Optional.empty();
     private boolean listed;
 
     public StdioObjectSourceProvider() {
@@ -39,12 +40,21 @@ public final class StdioObjectSourceProvider implements ObjectSourceProvider {
     @Override
     public synchronized List<ObjectSourceItem> list(PipelineObjectSourceConfig source, int limit) {
         validate(source);
+        captureFailure.ifPresent(failure -> {
+            throw failure;
+        });
         if (listed || limit <= 0) {
             return List.of();
         }
-        listed = true;
-        CapturedInput input = capture(source);
+        CapturedInput input;
+        try {
+            input = capture(source);
+        } catch (RuntimeException failure) {
+            captureFailure = Optional.of(failure);
+            throw failure;
+        }
         captured = Optional.of(input);
+        listed = true;
         return List.of(input.item(source.name()));
     }
 

@@ -17,15 +17,20 @@
 package org.pipelineframework.plugin.repository.provider;
 
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import io.quarkus.arc.Unremovable;
 import io.quarkus.arc.properties.IfBuildProperty;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
+import org.jboss.logging.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.pipelineframework.annotation.ParallelismHint;
 import org.pipelineframework.parallelism.OrderingRequirement;
@@ -42,6 +47,9 @@ import org.pipelineframework.repository.RepositoryWriteRequest;
 @IfBuildProperty(name = "pipeline.repository.provider", stringValue = "filesystem")
 @ParallelismHint(ordering = OrderingRequirement.RELAXED, threadSafety = ThreadSafety.SAFE)
 public class FilesystemRepositoryProvider implements RepositoryProvider {
+    private static final Logger LOG = Logger.getLogger(FilesystemRepositoryProvider.class);
+    private static final long CLEANUP_WARNING_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
+    private static final AtomicLong LAST_CLEANUP_WARNING_NANOS = new AtomicLong();
 
     @ConfigProperty(name = "pipeline.repository.filesystem.root", defaultValue = "target/tpf-repository")
     String root;
@@ -58,11 +66,25 @@ public class FilesystemRepositoryProvider implements RepositoryProvider {
     public Uni<PayloadReference> store(RepositoryWriteRequest request) {
         return Uni.createFrom().item(() -> {
             Path path = pathFor(request.container(), request.key());
+            Path temporary = null;
             try {
                 Files.createDirectories(path.getParent());
-                Files.write(path, request.payload());
+                temporary = Files.createTempFile(path.getParent(), path.getFileName().toString(), ".tmp");
+                Files.write(temporary, request.payload());
+                Files.move(temporary, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                throw new IllegalStateException(
+                    "Filesystem repository requires atomic replacement support for " + path.getParent(), e);
             } catch (IOException e) {
                 throw new IllegalStateException("Failed writing repository payload " + path, e);
+            } finally {
+                if (temporary != null) {
+                    try {
+                        Files.deleteIfExists(temporary);
+                    } catch (IOException cleanupFailure) {
+                        logCleanupFailure(temporary, cleanupFailure);
+                    }
+                }
             }
             return new PayloadReference(
                 providerName(),
@@ -123,5 +145,14 @@ public class FilesystemRepositoryProvider implements RepositoryProvider {
             throw new IllegalArgumentException("Repository key escapes filesystem root: " + key);
         }
         return resolved;
+    }
+
+    private static void logCleanupFailure(Path temporary, IOException cleanupFailure) {
+        long now = System.nanoTime();
+        long previous = LAST_CLEANUP_WARNING_NANOS.get();
+        if (now - previous >= CLEANUP_WARNING_INTERVAL_NANOS
+            && LAST_CLEANUP_WARNING_NANOS.compareAndSet(previous, now)) {
+            LOG.warnf(cleanupFailure, "Failed to remove repository temporary payload %s", temporary);
+        }
     }
 }
