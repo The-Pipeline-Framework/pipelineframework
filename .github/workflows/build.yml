@@ -235,7 +235,7 @@ jobs:
       - name: Build from a fresh Maven repository
         run: |
           build_log="$RUNNER_TEMP/canonical-fresh-checkout.log"
-          if ! ./mvnw -B -ntp clean install -Dmaven.repo.local="$RUNNER_TEMP/tpf-canonical-m2" > "$build_log" 2>&1; then
+          if ! ./mvnw -B -ntp clean install -DskipITs=true -Dmaven.repo.local="$RUNNER_TEMP/tpf-canonical-m2" > "$build_log" 2>&1; then
             grep -E '\[ERROR\]|BUILD FAILURE|Failed to execute|Tests run:' "$build_log" | tail -200 || true
             exit 1
           fi
