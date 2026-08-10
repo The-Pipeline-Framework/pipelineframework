@@ -9,6 +9,8 @@ import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCreateCommand;
 import org.pipelineframework.awaitable.AwaitCreateResult;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
+import org.pipelineframework.orchestrator.stream.StreamRegionPageCommit;
+import org.pipelineframework.orchestrator.stream.StreamRegionRecord;
 
 /**
  * Control-plane persistence SPI for await interactions.
@@ -109,6 +111,76 @@ public interface AwaitInteractionStore {
      * @return completion result
      */
     Uni<AwaitCompletionResult> complete(AwaitCompletionCommand command);
+
+    /**
+     * Makes an admitted item completion independently schedulable. This is idempotent: an
+     * already-ready, claimed, retried, or applied continuation is returned unchanged.
+     */
+    Uni<Optional<AwaitInteractionRecord>> activateContinuationIfEligible(
+        String tenantId,
+        String interactionId,
+        long expectedVersion,
+        long nowEpochMs);
+
+    /**
+     * Claims one due continuation by interaction identity. Recovery and duplicate delivery use
+     * the same conditional claim; no process-local claim is authoritative.
+     */
+    Uni<Optional<AwaitInteractionRecord>> claimDueContinuation(
+        String tenantId,
+        String interactionId,
+        String leaseOwner,
+        long nowEpochMs,
+        long leaseMs);
+
+    /** Returns bounded due continuation candidates for coordinator recovery sweeps. */
+    Uni<List<AwaitInteractionRecord>> findDueContinuations(long nowEpochMs, int limit);
+
+    /**
+     * Returns bounded stream-linked interactions whose atomically committed source page has not
+     * yet reached provider dispatch. This is the durable recovery authority for a coordinator
+     * loss between page commit and dispatch; it deliberately excludes ordinary await rows.
+     */
+    Uni<List<AwaitInteractionRecord>> findDueStreamInteractionDispatches(long nowEpochMs, int limit);
+
+    /** Persists a retry due time after a failed claimed continuation attempt. */
+    Uni<Optional<AwaitInteractionRecord>> rescheduleContinuation(
+        String tenantId,
+        String interactionId,
+        long expectedVersion,
+        long nextDueEpochMs,
+        long nowEpochMs);
+
+    /** Records the scalar suffix result exactly once and makes the continuation applied. */
+    Uni<Optional<AwaitInteractionRecord>> completeContinuation(
+        String tenantId,
+        String interactionId,
+        long expectedVersion,
+        Object outputPayload,
+        long nowEpochMs);
+
+    /**
+     * Applies a claimed item continuation and returns exactly one credit to its linked producer
+     * region. Durable implementations must make the two mutations one atomic operation; the
+     * CLAIMED-to-APPLIED interaction transition is the sole idempotency token.
+     */
+    default Uni<Optional<AwaitInteractionRecord>> completeContinuationAndReleaseStreamCredit(
+        String tenantId,
+        String interactionId,
+        long expectedVersion,
+        String leaseOwner,
+        Object outputPayload,
+        long nowEpochMs
+    ) {
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "Atomic stream-credit release is not supported by this await interaction store"));
+    }
+
+    /** Atomically persists a bounded source page and advances its producer-owned stream region. */
+    default Uni<Optional<StreamRegionRecord>> materializeStreamRegionPage(StreamRegionPageCommit commit) {
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "Atomic stream-page materialisation is not supported by this await interaction store"));
+    }
 
     /**
      * Marks an interaction as failed.

@@ -404,6 +404,12 @@ class QueueAsyncCoordinatorTest {
         when(orchestratorConfig.sweepLimit()).thenReturn(100);
         when(awaitCoordinator.findTimedOut(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.eq(100)))
             .thenReturn(Uni.createFrom().item(java.util.List.of()));
+        when(awaitCoordinator.findDueItemContinuations(
+            org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.eq(100)))
+            .thenReturn(Uni.createFrom().item(java.util.List.of()));
+        when(executionStateStore.findDueStreamRegions(
+            org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyInt()))
+            .thenReturn(Uni.createFrom().item(java.util.List.of()));
         when(executionStateStore.findDueExecutions(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyInt()))
             .thenReturn(Uni.createFrom().item(java.util.List.of(
                 createRecord("tenant-a", "exec-5", "key-5"),
@@ -1860,6 +1866,9 @@ class QueueAsyncCoordinatorTest {
             99999999L);
         when(awaitCoordinator.findTimedOut(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.eq(100)))
             .thenReturn(Uni.createFrom().item(java.util.List.of(interaction)));
+        when(awaitCoordinator.findDueItemContinuations(
+            org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.eq(100)))
+            .thenReturn(Uni.createFrom().item(java.util.List.of()));
         when(awaitCoordinator.markTimedOut(org.mockito.ArgumentMatchers.eq(interaction), org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(Uni.createFrom().item(Optional.of(interaction)));
         when(executionStateStore.getExecution("tenant-1", "exec-1"))
@@ -1875,6 +1884,9 @@ class QueueAsyncCoordinatorTest {
                 org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(Uni.createFrom().item(Optional.of(waiting)));
         when(executionStateStore.findDueExecutions(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.eq(100)))
+            .thenReturn(Uni.createFrom().item(java.util.List.of()));
+        when(executionStateStore.findDueStreamRegions(
+            org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.eq(100)))
             .thenReturn(Uni.createFrom().item(java.util.List.of()));
 
         coordinator.sweepDueExecutions();

@@ -31,6 +31,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
+import org.pipelineframework.csv.common.domain.CsvPaymentsStableIdSupport;
+import org.pipelineframework.csv.common.mapper.PaymentRecordRepresentationMapper;
 import org.pipelineframework.csv.domain.CsvPaymentsInputFile;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -159,6 +161,29 @@ class ProcessCsvPaymentsInputServiceTest {
             .indefinitely();
 
         assertEquals(2, records.size());
+    }
+
+    @Test
+    void providerFacadePreservesOpenCsvMultilineMappingSourcePathAndStableIdentity() throws Exception {
+        UUID csvId = UUID.randomUUID();
+        Files.writeString(tempCsvFile,
+            "ID,Recipient,Amount,Currency\n"
+                + csvId + ",\"Jane\nSmith\",200.50,EUR\n");
+        CsvPaymentsInputFile input = inputFile(tempCsvFile);
+        var facade = new ProcessCsvPaymentsInputServicePipelineFacade();
+        facade.delegate = service;
+        facade.mapper = new PaymentRecordRepresentationMapper();
+
+        try (CloseableIterator<org.pipelineframework.csv.domain.PaymentRecord> iterator = facade.iterateBlocking(input)) {
+            assertTrue(iterator.hasNext());
+            var record = iterator.next();
+            assertEquals("Jane\nSmith", record.recipient());
+            assertEquals(input.filepath(), record.csvPaymentsInputFilePath());
+            assertEquals(CsvPaymentsStableIdSupport.paymentRecordId(
+                input.filepath(), csvId.toString(), "Jane\nSmith", new BigDecimal("200.50"), Currency.getInstance("EUR")),
+                record.id());
+            assertTrue(!iterator.hasNext());
+        }
     }
 
     private CsvPaymentsInputFile inputFile(Path path) {

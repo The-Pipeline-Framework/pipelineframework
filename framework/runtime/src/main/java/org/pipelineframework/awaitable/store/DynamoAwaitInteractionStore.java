@@ -25,11 +25,16 @@ import org.pipelineframework.awaitable.AwaitCreateResult;
 import org.pipelineframework.awaitable.AwaitInteractionNotFoundException;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
+import org.pipelineframework.awaitable.AwaitContinuationStatus;
 import org.pipelineframework.awaitable.AwaitInteractionTerminalException;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.TypedDurablePayload;
+import org.pipelineframework.orchestrator.stream.StreamRegionPageCommit;
+import org.pipelineframework.orchestrator.stream.StreamRegionRecord;
+import org.pipelineframework.orchestrator.stream.StreamRegionStatus;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
@@ -37,12 +42,14 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.Put;
+import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
 import software.amazon.awssdk.services.dynamodb.model.TransactWriteItem;
 import software.amazon.awssdk.services.dynamodb.model.TransactWriteItemsRequest;
 import software.amazon.awssdk.services.dynamodb.model.TransactionCanceledException;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.Update;
 
 /**
  * DynamoDB-backed await interaction store.
@@ -64,6 +71,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     private static final String PENDING_GROUP_INDEX = "await-interaction-pending-by-group";
     private static final String PENDING_STEP_INDEX = "await-interaction-pending-by-step";
     private static final String PENDING_DEADLINE_INDEX = "await-interaction-pending-by-deadline";
+    private static final String CONTINUATION_DUE_INDEX = "await-interaction-continuation-by-due";
     private static final String ACTIVE_DEADLINE_PARTITION = "active";
 
     private static final String TENANT_ID = "tenant_id";
@@ -84,6 +92,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     private static final String RESPONSE_PAYLOAD_JSON = "response_payload_json";
     private static final String UNIT_ID = "unit_id";
     private static final String ITEM_INDEX = "item_index";
+    private static final String STREAM_REGION_ID = "stream_region_id";
     private static final String ACTOR = "actor";
     private static final String ASSIGNEE = "assignee";
     private static final String GROUP = "group_name";
@@ -93,6 +102,14 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     private static final String CREATED_AT_EPOCH_MS = "created_at_epoch_ms";
     private static final String UPDATED_AT_EPOCH_MS = "updated_at_epoch_ms";
     private static final String TTL_EPOCH_S = "ttl_epoch_s";
+    private static final String CONTINUATION_STATUS = "continuation_status";
+    private static final String CONTINUATION_ATTEMPT = "continuation_attempt";
+    private static final String CONTINUATION_NEXT_DUE_EPOCH_MS = "continuation_next_due_epoch_ms";
+    private static final String CONTINUATION_LEASE_OWNER = "continuation_lease_owner";
+    private static final String CONTINUATION_LEASE_EXPIRES_EPOCH_MS = "continuation_lease_expires_epoch_ms";
+    private static final String CONTINUATION_OUTPUT_PAYLOAD_JSON = "continuation_output_payload_json";
+    private static final String QUERY_CONTINUATION_DUE_KEY = "query_continuation_due_key";
+    private static final String QUERY_CONTINUATION_DUE_SORT = "query_continuation_due_sort";
     private static final String QUERY_UNIT_KEY = "query_unit_key";
     private static final String QUERY_UNIT_SORT = "query_unit_sort";
     private static final String QUERY_PENDING_TENANT_KEY = "query_pending_tenant_key";
@@ -104,6 +121,26 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     private static final String QUERY_DEADLINE_SORT = "query_deadline_sort";
     private static final String ENCODED_JAVA_CLASS = "_tpf_java_class";
     private static final String ENCODED_PAYLOAD = "_tpf_payload";
+    private static final String STREAM_REGION_KIND = "stream_region";
+    private static final String STREAM_OUTSTANDING_CREDITS = "stream_outstanding_credits";
+    private static final String STREAM_FINAL_ORDINAL = "stream_final_ordinal";
+    private static final String STREAM_PROVIDER_KEY = "stream_provider_key";
+    private static final String STREAM_SOURCE_ID = "stream_source_id";
+    private static final String STREAM_SOURCE_FINGERPRINT = "stream_source_fingerprint";
+    private static final String STREAM_CHECKPOINT = "stream_checkpoint";
+    private static final String STREAM_NEXT_ORDINAL = "stream_next_ordinal";
+    private static final String STREAM_MAX_CREDITS = "stream_max_credits";
+    private static final String STREAM_TERMINAL_SCALAR_SUFFIX = "stream_terminal_scalar_suffix";
+    private static final String RECORD_KIND = "record_kind";
+    private static final String LEASE_OWNER = "lease_owner";
+    private static final String LEASE_EXPIRES_EPOCH_MS = "lease_expires_epoch_ms";
+    private static final String NEXT_DUE_EPOCH_MS = "next_due_epoch_ms";
+    private static final String AWAIT_UNIT_ID = "await_unit_id";
+    private static final String LAST_TRANSITION_KEY = "last_transition_key";
+    private static final String RESULT_PAYLOAD_JSON = "result_payload_json";
+    private static final String RESULT_PAYLOAD_REFERENCE = "result_payload_reference";
+    private static final String ERROR_CODE = "error_code";
+    private static final String ERROR_MESSAGE = "error_message";
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
@@ -281,8 +318,93 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     }
 
     @Override
+    public Uni<List<AwaitInteractionRecord>> findDueStreamInteractionDispatches(long nowEpochMs, int limit) {
+        return blocking(() -> findDueStreamInteractionDispatchesBlocking(nowEpochMs, limit));
+    }
+
+    @Override
     public Uni<AwaitCompletionResult> complete(AwaitCompletionCommand command) {
         return blocking(() -> completeBlocking(command));
+    }
+
+    @Override
+    public Uni<Optional<AwaitInteractionRecord>> activateContinuationIfEligible(
+        String tenantId, String interactionId, long expectedVersion, long nowEpochMs) {
+        return blocking(() -> transitionContinuation(tenantId, interactionId, expectedVersion, nowEpochMs, current -> {
+            if (!current.itemInteraction() || current.status() != AwaitInteractionStatus.COMPLETED
+                || current.continuationStatus() != AwaitContinuationStatus.HELD) {
+                return Optional.empty();
+            }
+            return Optional.of(withContinuation(current, AwaitContinuationStatus.READY, current.continuationAttempt(),
+                nowEpochMs, "", 0L, current.continuationOutputPayload(), nowEpochMs));
+        }));
+    }
+
+    @Override
+    public Uni<Optional<AwaitInteractionRecord>> claimDueContinuation(
+        String tenantId, String interactionId, String leaseOwner, long nowEpochMs, long leaseMs) {
+        if (leaseOwner == null || leaseOwner.isBlank() || leaseMs <= 0) {
+            return Uni.createFrom().failure(new IllegalArgumentException("continuation lease owner and duration are required"));
+        }
+        return blocking(() -> transitionContinuation(tenantId, interactionId, -1L, nowEpochMs, current -> {
+            if (!current.continuationDue(nowEpochMs)) {
+                return Optional.empty();
+            }
+            return Optional.of(withContinuation(current, AwaitContinuationStatus.CLAIMED, current.continuationAttempt() + 1,
+                current.continuationNextDueEpochMs(), leaseOwner, nowEpochMs + leaseMs,
+                current.continuationOutputPayload(), nowEpochMs));
+        }));
+    }
+
+    @Override
+    public Uni<List<AwaitInteractionRecord>> findDueContinuations(long nowEpochMs, int limit) {
+        return blocking(() -> findDueContinuationsBlocking(nowEpochMs, limit));
+    }
+
+    @Override
+    public Uni<Optional<AwaitInteractionRecord>> rescheduleContinuation(
+        String tenantId, String interactionId, long expectedVersion, long nextDueEpochMs, long nowEpochMs) {
+        return blocking(() -> transitionContinuation(tenantId, interactionId, expectedVersion, nowEpochMs, current -> {
+            if (current.continuationStatus() != AwaitContinuationStatus.CLAIMED) {
+                return Optional.empty();
+            }
+            return Optional.of(withContinuation(current, AwaitContinuationStatus.RETRY_DUE, current.continuationAttempt(),
+                Math.max(nowEpochMs, nextDueEpochMs), "", 0L, current.continuationOutputPayload(), nowEpochMs));
+        }));
+    }
+
+    @Override
+    public Uni<Optional<AwaitInteractionRecord>> completeContinuation(
+        String tenantId, String interactionId, long expectedVersion, Object outputPayload, long nowEpochMs) {
+        return blocking(() -> transitionContinuation(tenantId, interactionId, expectedVersion, nowEpochMs, current -> {
+            if (current.continuationStatus() != AwaitContinuationStatus.CLAIMED) {
+                return Optional.empty();
+            }
+            return Optional.of(withContinuation(current, AwaitContinuationStatus.APPLIED, current.continuationAttempt(),
+                0L, "", 0L, outputPayload, nowEpochMs));
+        }));
+    }
+
+    @Override
+    public Uni<Optional<AwaitInteractionRecord>> completeContinuationAndReleaseStreamCredit(
+        String tenantId,
+        String interactionId,
+        long expectedVersion,
+        String leaseOwner,
+        Object outputPayload,
+        long nowEpochMs
+    ) {
+        if (leaseOwner == null || leaseOwner.isBlank()) {
+            return Uni.createFrom().failure(new IllegalArgumentException("continuation lease owner must not be blank"));
+        }
+        return blocking(() -> completeContinuationAndReleaseStreamCreditBlocking(
+            tenantId, interactionId, expectedVersion, leaseOwner, outputPayload, nowEpochMs));
+    }
+
+    @Override
+    public Uni<Optional<StreamRegionRecord>> materializeStreamRegionPage(StreamRegionPageCommit commit) {
+        Objects.requireNonNull(commit, "stream page commit must not be null");
+        return blocking(() -> materializeStreamRegionPageBlocking(commit));
     }
 
     @Override
@@ -697,6 +819,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             names.put("#metadata", TRANSPORT_METADATA_JSON);
             values.put(":metadata", avS(toJson(transportMetadata)));
         }
+        List<String> removeNames = new ArrayList<>();
         if (status.terminal()) {
             names.put("#pendingTenantKey", QUERY_PENDING_TENANT_KEY);
             names.put("#pendingAssigneeKey", QUERY_PENDING_ASSIGNEE_KEY);
@@ -705,6 +828,19 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             names.put("#pendingDeadlineSort", QUERY_PENDING_DEADLINE_SORT);
             names.put("#deadlineKey", QUERY_DEADLINE_KEY);
             names.put("#deadlineSort", QUERY_DEADLINE_SORT);
+            removeNames.add("#pendingTenantKey");
+            removeNames.add("#pendingAssigneeKey");
+            removeNames.add("#pendingGroupKey");
+            removeNames.add("#pendingStepKey");
+            removeNames.add("#pendingDeadlineSort");
+            removeNames.add("#deadlineKey");
+            removeNames.add("#deadlineSort");
+        }
+        if (requiredStatus == AwaitInteractionStatus.WAITING && status == AwaitInteractionStatus.DISPATCHING) {
+            names.put("#continuationDueKey", QUERY_CONTINUATION_DUE_KEY);
+            names.put("#continuationDueSort", QUERY_CONTINUATION_DUE_SORT);
+            removeNames.add("#continuationDueKey");
+            removeNames.add("#continuationDueSort");
         }
         StringBuilder update = new StringBuilder("SET #status = :status, #version = #version + :one, #updated = :now");
         if (responsePayloadJson != null) {
@@ -716,9 +852,8 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         if (transportMetadata != null) {
             update.append(", #metadata = :metadata");
         }
-        if (status.terminal()) {
-            update.append(" REMOVE #pendingTenantKey, #pendingAssigneeKey, #pendingGroupKey, #pendingStepKey, ")
-                .append("#pendingDeadlineSort, #deadlineKey, #deadlineSort");
+        if (!removeNames.isEmpty()) {
+            update.append(" REMOVE ").append(String.join(", ", removeNames));
         }
         String condition = "#version = :expected AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)";
         if (requiredStatus != null) {
@@ -753,6 +888,316 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         return record.ttlEpochS() > 0 && record.ttlEpochS() <= Instant.ofEpochMilli(nowEpochMs).getEpochSecond()
             ? Optional.empty()
             : Optional.of(record);
+    }
+
+    private Optional<AwaitInteractionRecord> transitionContinuation(
+        String tenantId,
+        String interactionId,
+        long expectedVersion,
+        long nowEpochMs,
+        java.util.function.Function<AwaitInteractionRecord, Optional<AwaitInteractionRecord>> transition) {
+        Optional<AwaitInteractionRecord> current = getBlocking(tenantId, interactionId, nowEpochMs);
+        if (current.isEmpty() || (expectedVersion >= 0 && current.get().version() != expectedVersion)) {
+            return Optional.empty();
+        }
+        Optional<AwaitInteractionRecord> updated = transition.apply(current.get());
+        return updated.flatMap(this::replaceContinuationVersion);
+    }
+
+    private Optional<AwaitInteractionRecord> completeContinuationAndReleaseStreamCreditBlocking(
+        String tenantId,
+        String interactionId,
+        long expectedVersion,
+        String leaseOwner,
+        Object outputPayload,
+        long nowEpochMs
+    ) {
+        Optional<AwaitInteractionRecord> current = getBlocking(tenantId, interactionId, nowEpochMs);
+        if (current.isEmpty()) {
+            return Optional.empty();
+        }
+        AwaitInteractionRecord interaction = current.get();
+        if (interaction.version() != expectedVersion
+            || interaction.continuationStatus() != AwaitContinuationStatus.CLAIMED
+            || !leaseOwner.equals(interaction.continuationLeaseOwner())
+            || interaction.streamRegionId().isBlank()) {
+            return Optional.empty();
+        }
+        AwaitInteractionRecord applied = withContinuation(
+            interaction, AwaitContinuationStatus.APPLIED, interaction.continuationAttempt(),
+            0L, "", 0L, outputPayload, nowEpochMs);
+        Map<String, AttributeValue> region = dynamoClient().getItem(GetItemRequest.builder()
+            .tableName(executionTable())
+            .key(streamRegionPrimaryKey(tenantId, interaction.executionId(), interaction.streamRegionId()))
+            .consistentRead(true)
+            .build()).item();
+        if (region == null || region.isEmpty()
+            || !STREAM_REGION_KIND.equals(readString(region, RECORD_KIND))
+            || readLong(region, STREAM_OUTSTANDING_CREDITS) <= 0L) {
+            return Optional.empty();
+        }
+        long regionVersion = readLong(region, VERSION);
+        Map<String, AttributeValue> releasedRegion = releaseOneStreamCredit(region, nowEpochMs);
+        boolean terminalParentCompletion = releasedRegion.get(STATUS) != null
+            && StreamRegionStatus.COMPLETED.name().equals(readString(releasedRegion, STATUS))
+            && releasedRegion.get(STREAM_TERMINAL_SCALAR_SUFFIX) != null
+            && readLong(releasedRegion, STREAM_TERMINAL_SCALAR_SUFFIX) != 0L;
+        List<TransactWriteItem> writes = new ArrayList<>(terminalParentCompletion ? 3 : 2);
+        writes.add(TransactWriteItem.builder().put(Put.builder()
+            .tableName(interactionTable())
+            .item(toItem(applied))
+            .conditionExpression("#version = :expected AND #continuation = :claimed AND #lease = :owner AND #status = :completed")
+            .expressionAttributeNames(Map.of(
+                "#version", VERSION, "#continuation", CONTINUATION_STATUS,
+                "#lease", CONTINUATION_LEASE_OWNER, "#status", STATUS))
+            .expressionAttributeValues(Map.of(
+                ":expected", avN(interaction.version()), ":claimed", avS(AwaitContinuationStatus.CLAIMED.name()),
+                ":owner", avS(leaseOwner), ":completed", avS(AwaitInteractionStatus.COMPLETED.name())))
+            .build()).build());
+        writes.add(TransactWriteItem.builder().put(Put.builder()
+                        .tableName(executionTable())
+                        .item(releasedRegion)
+                        .conditionExpression("#kind = :kind AND #version = :expected AND #credits > :zero")
+                        .expressionAttributeNames(Map.of(
+                            "#kind", RECORD_KIND,
+                            "#version", VERSION,
+                            "#credits", STREAM_OUTSTANDING_CREDITS))
+                        .expressionAttributeValues(Map.of(
+                            ":kind", avS(STREAM_REGION_KIND),
+                            ":expected", avN(regionVersion),
+                            ":zero", avN(0L)))
+                        .build()).build());
+        if (terminalParentCompletion) {
+            writes.add(TransactWriteItem.builder().update(Update.builder()
+                .tableName(executionTable())
+                .key(executionPrimaryKey(tenantId, interaction.executionId()))
+                .conditionExpression("#status = :waiting AND #awaitUnit = :awaitUnit")
+                .updateExpression("SET #status = :succeeded, #version = #version + :one, #nextDue = :now, "
+                    + "#transition = :transition, #leaseExpires = :zero, #updated = :now "
+                    + "REMOVE #awaitUnit, #result, #resultReference, #errorCode, #errorMessage, #leaseOwner")
+                .expressionAttributeNames(Map.ofEntries(
+                    Map.entry("#status", STATUS), Map.entry("#awaitUnit", AWAIT_UNIT_ID),
+                    Map.entry("#version", VERSION), Map.entry("#nextDue", NEXT_DUE_EPOCH_MS),
+                    Map.entry("#transition", LAST_TRANSITION_KEY), Map.entry("#leaseExpires", LEASE_EXPIRES_EPOCH_MS),
+                    Map.entry("#updated", UPDATED_AT_EPOCH_MS), Map.entry("#result", RESULT_PAYLOAD_JSON),
+                    Map.entry("#resultReference", RESULT_PAYLOAD_REFERENCE), Map.entry("#errorCode", ERROR_CODE),
+                    Map.entry("#errorMessage", ERROR_MESSAGE), Map.entry("#leaseOwner", LEASE_OWNER)))
+                .expressionAttributeValues(Map.of(
+                    ":waiting", avS(ExecutionStatus.WAITING_EXTERNAL.name()),
+                    ":awaitUnit", avS(interaction.unitId()), ":succeeded", avS(ExecutionStatus.SUCCEEDED.name()),
+                    ":one", avN(1L), ":now", avN(nowEpochMs), ":transition",
+                    avS("stream-region-complete:" + interaction.streamRegionId()), ":zero", avN(0L)))
+                .build()).build());
+        }
+        try {
+            dynamoClient().transactWriteItems(TransactWriteItemsRequest.builder().transactItems(writes).build());
+            return Optional.of(applied);
+        } catch (TransactionCanceledException | ConditionalCheckFailedException ignored) {
+            Optional<AwaitInteractionRecord> refreshed = getBlocking(tenantId, interactionId, nowEpochMs);
+            return refreshed.filter(record -> record.continuationStatus() == AwaitContinuationStatus.APPLIED);
+        }
+    }
+
+    private Optional<StreamRegionRecord> materializeStreamRegionPageBlocking(StreamRegionPageCommit commit) {
+        StreamRegionRecord claimed = commit.claimedRegion();
+        StreamRegionRecord updated = claimed.recordPage(
+            commit.nextCheckpoint(), commit.interactions().size(), commit.endOfSource(), commit.nowEpochMs());
+        int actionCount = 1 + (commit.interactions().size() * 3);
+        if (actionCount > 100) {
+            throw new IllegalArgumentException("stream page exceeds Dynamo transaction action limit: " + actionCount);
+        }
+        List<TransactWriteItem> writes = new ArrayList<>(actionCount);
+        writes.add(TransactWriteItem.builder().put(Put.builder()
+            .tableName(executionTable())
+            .item(toStreamRegionItem(updated))
+            .conditionExpression(streamPageCondition(claimed))
+            .expressionAttributeNames(Map.of(
+                "#kind", RECORD_KIND,
+                "#version", VERSION,
+                "#checkpoint", STREAM_CHECKPOINT,
+                "#lease", LEASE_OWNER,
+                "#leaseExpires", LEASE_EXPIRES_EPOCH_MS))
+            .expressionAttributeValues(streamPageConditionValues(claimed, commit.nowEpochMs()))
+            .build()).build());
+        for (AwaitInteractionRecord interaction : commit.interactions()) {
+            writes.add(TransactWriteItem.builder().put(Put.builder()
+                .tableName(interactionTable())
+                .item(toItem(interaction))
+                .conditionExpression("attribute_not_exists(#tenant) AND attribute_not_exists(#interaction)")
+                .expressionAttributeNames(Map.of("#tenant", TENANT_ID, "#interaction", INTERACTION_ID))
+                .build()).build());
+            writes.add(TransactWriteItem.builder().put(lookupPut(
+                "idempotency", interaction.tenantId(), interaction.stepId() + ":" + interaction.idempotencyKey(),
+                interaction.interactionId(), interaction.ttlEpochS())).build());
+            writes.add(TransactWriteItem.builder().put(lookupPut(
+                "correlation", interaction.tenantId(), interaction.correlationId(), interaction.interactionId(),
+                interaction.ttlEpochS())).build());
+        }
+        try {
+            dynamoClient().transactWriteItems(TransactWriteItemsRequest.builder().transactItems(writes).build());
+            return Optional.of(updated);
+        } catch (TransactionCanceledException | ConditionalCheckFailedException ignored) {
+            return pageCommitRecovered(updated, commit.interactions(), commit.nowEpochMs())
+                ? Optional.of(updated)
+                : Optional.empty();
+        }
+    }
+
+    private boolean pageCommitRecovered(
+        StreamRegionRecord expected,
+        List<AwaitInteractionRecord> interactions,
+        long nowEpochMs
+    ) {
+        Map<String, AttributeValue> region = dynamoClient().getItem(GetItemRequest.builder()
+            .tableName(executionTable())
+            .key(streamRegionPrimaryKey(expected.tenantId(), expected.executionId(), expected.regionId()))
+            .consistentRead(true)
+            .build()).item();
+        if (region == null || region.isEmpty()
+            || readLong(region, VERSION) != expected.version()
+            || readLong(region, STREAM_NEXT_ORDINAL) != expected.nextLogicalOrdinal()
+            || !checkpointMatches(region, expected)) {
+            return false;
+        }
+        return interactions.stream().allMatch(interaction -> getBlocking(
+            interaction.tenantId(), interaction.interactionId(), nowEpochMs)
+            .filter(stored -> stored.streamRegionId().equals(expected.regionId())
+                && stored.itemIndex().equals(interaction.itemIndex())
+                && stored.idempotencyKey().equals(interaction.idempotencyKey()))
+            .isPresent());
+    }
+
+    private static boolean checkpointMatches(Map<String, AttributeValue> item, StreamRegionRecord expected) {
+        return expected.checkpoint().value()
+            .map(value -> value.equals(readString(item, STREAM_CHECKPOINT)))
+            .orElse(!item.containsKey(STREAM_CHECKPOINT));
+    }
+
+    private static String streamPageCondition(StreamRegionRecord claimed) {
+        String claim = "#kind = :kind AND #version = :expected AND #lease = :lease AND #leaseExpires > :now";
+        return claimed.checkpoint().value().isPresent()
+            ? claim + " AND #checkpoint = :checkpoint"
+            : claim + " AND attribute_not_exists(#checkpoint)";
+    }
+
+    private static Map<String, AttributeValue> streamPageConditionValues(StreamRegionRecord claimed, long nowEpochMs) {
+        Map<String, AttributeValue> values = new HashMap<>();
+        values.put(":kind", avS(STREAM_REGION_KIND));
+        values.put(":expected", avN(claimed.version()));
+        values.put(":lease", avS(claimed.leaseOwner()));
+        values.put(":now", avN(nowEpochMs));
+        claimed.checkpoint().value().ifPresent(value -> values.put(":checkpoint", avS(value)));
+        return values;
+    }
+
+    private static Map<String, AttributeValue> toStreamRegionItem(StreamRegionRecord region) {
+        Map<String, AttributeValue> item = new HashMap<>();
+        item.put(TENANT_ID, avS(region.tenantId()));
+        item.put(EXECUTION_ID, avS(region.executionId() + "#stream-region#" + region.regionId()));
+        item.put(RECORD_KIND, avS(STREAM_REGION_KIND));
+        item.put(STREAM_REGION_ID, avS(region.regionId()));
+        item.put(STREAM_PROVIDER_KEY, avS(region.source().providerKey()));
+        item.put(STREAM_SOURCE_ID, avS(region.source().sourceId()));
+        item.put(STREAM_SOURCE_FINGERPRINT, avS(region.source().fingerprint()));
+        region.checkpoint().value().ifPresent(value -> item.put(STREAM_CHECKPOINT, avS(value)));
+        item.put(STREAM_NEXT_ORDINAL, avN(region.nextLogicalOrdinal()));
+        item.put(STREAM_OUTSTANDING_CREDITS, avN(region.outstandingCredits()));
+        item.put(STREAM_MAX_CREDITS, avN(region.maxOutstandingCredits()));
+        item.put(STREAM_TERMINAL_SCALAR_SUFFIX, avN(region.terminalScalarSuffix() ? 1 : 0));
+        item.put(STATUS, avS(region.status().name()));
+        region.finalOrdinal().ifPresent(value -> item.put(STREAM_FINAL_ORDINAL, avN(value)));
+        item.put(VERSION, avN(region.version()));
+        putIfPresent(item, LEASE_OWNER, region.leaseOwner());
+        item.put(LEASE_EXPIRES_EPOCH_MS, avN(region.leaseExpiresEpochMs()));
+        item.put(NEXT_DUE_EPOCH_MS, avN(region.nextDueEpochMs()));
+        item.put(CREATED_AT_EPOCH_MS, avN(region.createdAtEpochMs()));
+        item.put(UPDATED_AT_EPOCH_MS, avN(region.updatedAtEpochMs()));
+        item.put(TTL_EPOCH_S, avN(region.ttlEpochS()));
+        return item;
+    }
+
+    private static Map<String, AttributeValue> releaseOneStreamCredit(
+        Map<String, AttributeValue> current,
+        long nowEpochMs
+    ) {
+        long credits = readLong(current, STREAM_OUTSTANDING_CREDITS);
+        if (credits <= 0L) {
+            throw new IllegalStateException("Cannot release stream credit below zero");
+        }
+        Map<String, AttributeValue> updated = new HashMap<>(current);
+        boolean completing = credits == 1L && current.containsKey(STREAM_FINAL_ORDINAL);
+        updated.put(STREAM_OUTSTANDING_CREDITS, avN(credits - 1L));
+        updated.put(VERSION, avN(readLong(current, VERSION) + 1L));
+        updated.put(UPDATED_AT_EPOCH_MS, avN(nowEpochMs));
+        updated.put(LEASE_EXPIRES_EPOCH_MS, avN(0L));
+        updated.put(NEXT_DUE_EPOCH_MS, avN(completing ? Long.MAX_VALUE : nowEpochMs));
+        updated.remove(LEASE_OWNER);
+        if (completing) {
+            updated.put(STATUS, avS("COMPLETED"));
+        }
+        return updated;
+    }
+
+    private Optional<AwaitInteractionRecord> replaceContinuationVersion(AwaitInteractionRecord updated) {
+        try {
+            dynamoClient().putItem(PutItemRequest.builder()
+                .tableName(interactionTable())
+                .item(toItem(updated))
+                .conditionExpression("#version = :expected")
+                .expressionAttributeNames(Map.of("#version", VERSION))
+                .expressionAttributeValues(Map.of(":expected", avN(updated.version() - 1)))
+                .build());
+            return Optional.of(updated);
+        } catch (ConditionalCheckFailedException ignored) {
+            return Optional.empty();
+        }
+    }
+
+    private List<AwaitInteractionRecord> findDueContinuationsBlocking(long nowEpochMs, int limit) {
+        int boundedLimit = Math.max(0, limit);
+        if (boundedLimit == 0) {
+            return List.of();
+        }
+        var response = dynamoClient().query(QueryRequest.builder()
+            .tableName(interactionTable())
+            .indexName(CONTINUATION_DUE_INDEX)
+            .keyConditionExpression("#key = :key AND #sort <= :sort")
+            .expressionAttributeNames(Map.of("#key", QUERY_CONTINUATION_DUE_KEY, "#sort", QUERY_CONTINUATION_DUE_SORT))
+            .expressionAttributeValues(Map.of(
+                ":key", avS(ACTIVE_DEADLINE_PARTITION),
+                ":sort", avS(continuationDueSortKey(nowEpochMs, "~", "~"))))
+            .limit(boundedLimit)
+            .build());
+        return response.items().stream()
+            .map(this::toRecord)
+            .filter(record -> record.continuationDue(nowEpochMs))
+            .limit(boundedLimit)
+            .toList();
+    }
+
+    private List<AwaitInteractionRecord> findDueStreamInteractionDispatchesBlocking(long nowEpochMs, int limit) {
+        int boundedLimit = Math.max(0, limit);
+        if (boundedLimit == 0) {
+            return List.of();
+        }
+        var response = dynamoClient().query(QueryRequest.builder()
+            .tableName(interactionTable())
+            .indexName(CONTINUATION_DUE_INDEX)
+            .keyConditionExpression("#key = :key AND #sort BETWEEN :from AND :to")
+            .expressionAttributeNames(Map.of("#key", QUERY_CONTINUATION_DUE_KEY, "#sort", QUERY_CONTINUATION_DUE_SORT))
+            .expressionAttributeValues(Map.of(
+                ":key", avS(ACTIVE_DEADLINE_PARTITION),
+                ":from", avS(dispatchDueSortKey(0L, "", "")),
+                ":to", avS(dispatchDueSortKey(nowEpochMs, "~", "~"))))
+            .limit(boundedLimit)
+            .build());
+        return response.items().stream()
+            .map(this::toRecord)
+            .filter(record -> record.status() == AwaitInteractionStatus.WAITING)
+            .filter(record -> !record.streamRegionId().isBlank())
+            .filter(record -> record.createdAtEpochMs() <= nowEpochMs)
+            .limit(boundedLimit)
+            .toList();
     }
 
     private Optional<AwaitInteractionRecord> findByLookup(String lookupKey, String tenantId, long nowEpochMs) {
@@ -813,9 +1258,16 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         if (record.itemIndex() != null) {
             item.put(ITEM_INDEX, avN(record.itemIndex()));
         }
+        putIfPresent(item, STREAM_REGION_ID, record.streamRegionId());
         putIfPresent(item, ACTOR, record.actor());
         putIfPresent(item, ASSIGNEE, record.assignee());
         putIfPresent(item, GROUP, record.group());
+        item.put(CONTINUATION_STATUS, avS(record.continuationStatus().name()));
+        item.put(CONTINUATION_ATTEMPT, avN(record.continuationAttempt()));
+        item.put(CONTINUATION_NEXT_DUE_EPOCH_MS, avN(record.continuationNextDueEpochMs()));
+        putIfPresent(item, CONTINUATION_LEASE_OWNER, record.continuationLeaseOwner());
+        item.put(CONTINUATION_LEASE_EXPIRES_EPOCH_MS, avN(record.continuationLeaseExpiresEpochMs()));
+        putIfPresent(item, CONTINUATION_OUTPUT_PAYLOAD_JSON, toJson(record.continuationOutputPayload()));
         putQueryKeys(item, record);
         return item;
     }
@@ -847,7 +1299,14 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             readLong(item, CREATED_AT_EPOCH_MS),
             readLong(item, UPDATED_AT_EPOCH_MS),
             readLong(item, TTL_EPOCH_S),
-            readString(item, TRANSPORT_OUTPUT_TYPE));
+            readString(item, TRANSPORT_OUTPUT_TYPE),
+            readContinuationStatus(item),
+            readInteger(item, CONTINUATION_ATTEMPT) == null ? 0 : readInteger(item, CONTINUATION_ATTEMPT),
+            readLongOrDefault(item, CONTINUATION_NEXT_DUE_EPOCH_MS, 0L),
+            Optional.ofNullable(readString(item, CONTINUATION_LEASE_OWNER)).orElse(""),
+            readLongOrDefault(item, CONTINUATION_LEASE_EXPIRES_EPOCH_MS, 0L),
+            fromJson(readString(item, CONTINUATION_OUTPUT_PAYLOAD_JSON)),
+            Optional.ofNullable(readString(item, STREAM_REGION_ID)).orElse(""));
         return withPayloads(
             stored,
             deserializePayload(stored, AwaitDurablePayloadResolver.Slot.REQUEST, readString(item, REQUEST_PAYLOAD_JSON)),
@@ -861,7 +1320,24 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             stored.version(), stored.status(), requestPayload, responsePayload, stored.unitId(), stored.itemIndex(),
             stored.actor(), stored.assignee(), stored.group(), stored.transportType(), stored.transportMetadata(),
             stored.deadlineEpochMs(), stored.createdAtEpochMs(), stored.updatedAtEpochMs(), stored.ttlEpochS(),
-            stored.transportOutputType());
+            stored.transportOutputType(), stored.continuationStatus(), stored.continuationAttempt(),
+            stored.continuationNextDueEpochMs(), stored.continuationLeaseOwner(),
+            stored.continuationLeaseExpiresEpochMs(), stored.continuationOutputPayload(), stored.streamRegionId());
+    }
+
+    private static AwaitInteractionRecord withContinuation(
+        AwaitInteractionRecord current, AwaitContinuationStatus continuationStatus, int continuationAttempt,
+        long continuationNextDueEpochMs, String continuationLeaseOwner, long continuationLeaseExpiresEpochMs,
+        Object continuationOutputPayload, long nowEpochMs) {
+        return new AwaitInteractionRecord(
+            current.tenantId(), current.executionId(), current.stepId(), current.stepIndex(), current.outputType(),
+            current.interactionId(), current.correlationId(), current.causationId(), current.idempotencyKey(),
+            current.version() + 1, current.status(), current.requestPayload(), current.responsePayload(), current.unitId(),
+            current.itemIndex(), current.actor(), current.assignee(), current.group(), current.transportType(),
+            current.transportMetadata(), current.deadlineEpochMs(), current.createdAtEpochMs(), nowEpochMs,
+            current.ttlEpochS(), current.transportOutputType(), continuationStatus, continuationAttempt,
+            continuationNextDueEpochMs, continuationLeaseOwner, continuationLeaseExpiresEpochMs,
+            continuationOutputPayload, current.streamRegionId());
     }
 
     private String serializePayload(AwaitInteractionRecord interaction, AwaitDurablePayloadResolver.Slot slot, Object payload) {
@@ -950,6 +1426,10 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         return orchestratorConfig.dynamo().awaitInteractionTable();
     }
 
+    private String executionTable() {
+        return orchestratorConfig.dynamo().executionTable();
+    }
+
     private String lookupTable() {
         return orchestratorConfig.dynamo().awaitInteractionKeyTable();
     }
@@ -1004,6 +1484,20 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         return Map.of(TENANT_ID, avS(tenantId), INTERACTION_ID, avS(interactionId));
     }
 
+    private static Map<String, AttributeValue> streamRegionPrimaryKey(
+        String tenantId,
+        String executionId,
+        String regionId
+    ) {
+        return Map.of(
+            TENANT_ID, avS(tenantId),
+            EXECUTION_ID, avS(executionId + "#stream-region#" + regionId));
+    }
+
+    private static Map<String, AttributeValue> executionPrimaryKey(String tenantId, String executionId) {
+        return Map.of(TENANT_ID, avS(tenantId), EXECUTION_ID, avS(executionId));
+    }
+
     private static AttributeValue avS(String value) {
         return value == null ? null : AttributeValue.builder().s(value).build();
     }
@@ -1024,6 +1518,18 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         if (record.unitId() != null && !record.unitId().isBlank()) {
             item.put(QUERY_UNIT_KEY, avS(scopedKey(record.tenantId(), record.unitId())));
             item.put(QUERY_UNIT_SORT, avS(itemSortKey(record.itemIndex(), record.causationId(), record.interactionId())));
+        }
+        if (streamInteractionDispatchDue(record)) {
+            item.put(QUERY_CONTINUATION_DUE_KEY, avS(ACTIVE_DEADLINE_PARTITION));
+            item.put(QUERY_CONTINUATION_DUE_SORT,
+                avS(dispatchDueSortKey(record.createdAtEpochMs(), record.tenantId(), record.interactionId())));
+        } else if (record.continuationEligible()) {
+            long dueEpochMs = record.continuationStatus() == AwaitContinuationStatus.CLAIMED
+                ? record.continuationLeaseExpiresEpochMs()
+                : record.continuationNextDueEpochMs();
+            item.put(QUERY_CONTINUATION_DUE_KEY, avS(ACTIVE_DEADLINE_PARTITION));
+            item.put(QUERY_CONTINUATION_DUE_SORT,
+                avS(continuationDueSortKey(dueEpochMs, record.tenantId(), record.interactionId())));
         }
         if (record.status().terminal()) {
             return;
@@ -1119,6 +1625,28 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
 
     private static String deadlineSortKey(long deadlineEpochMs, String... suffixParts) {
         return String.format("%019d#%s", deadlineEpochMs, String.join("#", suffixParts));
+    }
+
+    private static String continuationDueSortKey(long dueEpochMs, String... suffixParts) {
+        return deadlineSortKey(dueEpochMs, suffixParts);
+    }
+
+    private static String dispatchDueSortKey(long dueEpochMs, String... suffixParts) {
+        return "dispatch#" + deadlineSortKey(dueEpochMs, suffixParts);
+    }
+
+    private static boolean streamInteractionDispatchDue(AwaitInteractionRecord record) {
+        return record.status() == AwaitInteractionStatus.WAITING && !record.streamRegionId().isBlank();
+    }
+
+    private static AwaitContinuationStatus readContinuationStatus(Map<String, AttributeValue> item) {
+        String value = readString(item, CONTINUATION_STATUS);
+        return value == null || value.isBlank() ? AwaitContinuationStatus.HELD : AwaitContinuationStatus.valueOf(value);
+    }
+
+    private static long readLongOrDefault(Map<String, AttributeValue> item, String key, long defaultValue) {
+        AttributeValue value = item.get(key);
+        return value == null || value.n() == null || value.n().isBlank() ? defaultValue : Long.parseLong(value.n());
     }
 
     private static String deadlineUpperBound(long deadlineEpochMs) {

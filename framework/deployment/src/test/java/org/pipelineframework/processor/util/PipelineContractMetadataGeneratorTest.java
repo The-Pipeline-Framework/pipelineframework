@@ -40,8 +40,16 @@ import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
+import org.pipelineframework.processor.representation.ResolvedProviderBoundary;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
+import org.pipelineframework.representation.spi.BoundaryClaim;
+import org.pipelineframework.representation.spi.BoundaryRequest;
+import org.pipelineframework.representation.spi.CanonicalType;
+import org.pipelineframework.representation.spi.CanonicalTypeShape;
+import org.pipelineframework.representation.spi.ProviderCapability;
+import org.pipelineframework.representation.spi.ProviderExecutionStyle;
+import org.pipelineframework.representation.spi.ProviderStepContract;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -172,6 +180,64 @@ class PipelineContractMetadataGeneratorTest {
         assertEquals(
             "org.example.restaurant.pipeline.ProcessAwaitRestaurantDecisionAwaitClientStep",
             contractSteps.get(1).getAsJsonObject().get("clientClass").getAsString());
+    }
+
+    @Test
+    void resumableCapabilityIsReleasePinnedAndIndependentOfProviderDiscoveryOrder() throws IOException {
+        Path firstOutput = tempDir.resolve("resumable-first");
+        Path secondOutput = tempDir.resolve("resumable-second");
+        Path withoutCapabilityOutput = tempDir.resolve("resumable-without-capability");
+
+        writeResumableMetadata(firstOutput, false, true);
+        writeResumableMetadata(secondOutput, true, true);
+        writeResumableMetadata(withoutCapabilityOutput, false, false);
+
+        JsonObject first = readContract(firstOutput);
+        JsonObject second = readContract(secondOutput);
+        JsonObject withoutCapability = readContract(withoutCapabilityOutput);
+        assertEquals(first.get("contractHash").getAsString(), second.get("contractHash").getAsString());
+        assertFalse(first.get("contractHash").getAsString().equals(withoutCapability.get("contractHash").getAsString()));
+        JsonArray continuations = first.getAsJsonArray("resumableSourceContinuations");
+        assertEquals(2, continuations.size());
+        assertEquals("RESUMABLE_SOURCE", continuations.get(0).getAsJsonObject()
+            .getAsJsonArray("capabilities").get(0).getAsString());
+        assertEquals("ReadFirstService", continuations.get(0).getAsJsonObject().get("producerStepName").getAsString());
+        assertEquals("ReadSecondService", continuations.get(1).getAsJsonObject().get("producerStepName").getAsString());
+        assertFalse(withoutCapability.has("resumableSourceContinuations"));
+    }
+
+    private void writeResumableMetadata(Path outputDir, boolean reverseRegistration, boolean resumable) throws IOException {
+        ProcessingEnvironment processingEnv = processingEnv(outputDir, Map.of());
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        PipelineStepModel first = step("ReadFirstService", "Source", "Item", StreamingShape.UNARY_STREAMING,
+            Set.of(GenerationTarget.LOCAL_CLIENT_STEP));
+        PipelineStepModel firstAwait = step("AwaitFirstService", "Item", "Item", StreamingShape.UNARY_UNARY,
+            Set.of(GenerationTarget.AWAIT_CLIENT_STEP)).withServiceClassName(
+                ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"));
+        PipelineStepModel second = step("ReadSecondService", "Source", "Item", StreamingShape.UNARY_STREAMING,
+            Set.of(GenerationTarget.LOCAL_CLIENT_STEP));
+        PipelineStepModel secondAwait = step("AwaitSecondService", "Item", "Item", StreamingShape.UNARY_UNARY,
+            Set.of(GenerationTarget.AWAIT_CLIENT_STEP)).withServiceClassName(
+                ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"));
+        ctx.setStepModels(List.of(first, firstAwait, second, secondAwait));
+        List<String> registrationOrder = reverseRegistration
+            ? List.of("ReadSecondService", "ReadFirstService") : List.of("ReadFirstService", "ReadSecondService");
+        for (String stepName : registrationOrder) {
+            ctx.registerResolvedProviderBoundary(resumableBoundary(stepName, resumable));
+        }
+        new PipelineContractMetadataGenerator(processingEnv).writePipelineContract(ctx);
+    }
+
+    private static ResolvedProviderBoundary resumableBoundary(String stepName, boolean resumable) {
+        CanonicalType source = new CanonicalType("Source", "org.example.restaurant.domain.Source", CanonicalTypeShape.RECORD);
+        CanonicalType item = new CanonicalType("Item", "org.example.restaurant.domain.Item", CanonicalTypeShape.RECORD);
+        ProviderStepContract contract = new ProviderStepContract(ProviderExecutionStyle.BLOCKING_ITERATOR,
+            "UNARY_STREAMING", resumable ? Set.of(ProviderCapability.RESUMABLE_SOURCE) : Set.of());
+        return new ResolvedProviderBoundary(new BoundaryRequest(stepName,
+            "org.example.restaurant.service." + stepName, source, item, "UNARY_STREAMING", Set.of(), Map.of()),
+            new BoundaryClaim("deterministic", stepName + ":binding",
+                "org.example.restaurant.pipeline." + stepName + "Facade", java.util.Optional.of(contract)),
+            List.of(), Map.of());
     }
 
     private void writeMetadata(Path pipelineYaml, Path outputDir) throws IOException {

@@ -45,20 +45,8 @@ public class AwaitClientStepRenderer {
             ? model.generatedName().substring(0, model.generatedName().length() - "Service".length())
             : model.generatedName();
         String className = baseName + "AwaitClientStep";
-        PipelineConfigHints configHints = resolveConfigHints(ctx);
-        PipelineTransport transportMode = configHints.transportMode();
-        boolean generatedV3DomainTypes = ctx.v3GeneratedDomainTypes();
-        ClientRepresentation transportRepresentation = ClientRepresentation.forPipelineTransport(transportMode);
-        TypeName transportInputType = clientStepType(
-            model.inboundDomainType(), transportRepresentation, configHints.basePackage());
-        TypeName transportOutputType = clientStepType(
-            model.outboundDomainType(), transportRepresentation, configHints.basePackage());
-        V3GeneratedDomainBinding.RepresentationBoundary boundary = V3GeneratedDomainBinding.resolveAwait(
-            model,
-            transportInputType,
-            transportOutputType,
-            configHints.basePackage(),
-            generatedV3DomainTypes);
+        AwaitDescriptorCodegen.Binding descriptorBinding = AwaitDescriptorCodegen.resolve(model, ctx);
+        V3GeneratedDomainBinding.RepresentationBoundary boundary = descriptorBinding.boundary();
         TypeName inputType = boundary.stepInputType();
         TypeName outputType = boundary.stepOutputType();
 
@@ -71,7 +59,7 @@ public class AwaitClientStepRenderer {
             .addAnnotation(ClassName.get("jakarta.inject", "Inject"))
             .build();
 
-        MethodSpec apply = renderApplyMethod(model, boundary);
+        MethodSpec apply = renderApplyMethod(model, descriptorBinding);
         TypeName stepInterface = stepInterface(model.streamingShape(), inputType, outputType);
 
         MethodSpec cacheKeyTargetType = MethodSpec.methodBuilder("cacheKeyTargetType")
@@ -116,7 +104,7 @@ public class AwaitClientStepRenderer {
                     .returns(ParameterizedTypeName.get(ClassName.get(Multi.class), outputType))
                     .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class), inputType), "input")
                     .addStatement("return support.awaitOneToOneStream($L, $L)",
-                        descriptorInvocation(model, boundary),
+                        descriptorBinding.descriptorInvocation(),
                         CodeBlock.of("input"))
                     .build())
                 .build();
@@ -127,10 +115,8 @@ public class AwaitClientStepRenderer {
             .writeTo(ctx.outputDir());
     }
 
-    private MethodSpec renderApplyMethod(
-        PipelineStepModel model,
-        V3GeneratedDomainBinding.RepresentationBoundary boundary
-    ) {
+    private MethodSpec renderApplyMethod(PipelineStepModel model, AwaitDescriptorCodegen.Binding descriptorBinding) {
+        V3GeneratedDomainBinding.RepresentationBoundary boundary = descriptorBinding.boundary();
         TypeName inputType = boundary.stepInputType();
         TypeName outputType = boundary.stepOutputType();
         return switch (model.streamingShape()) {
@@ -140,7 +126,7 @@ public class AwaitClientStepRenderer {
             .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputType))
             .addParameter(inputType, "input")
             .addStatement("return support.awaitOneToOne($L, $L)",
-                descriptorInvocation(model, boundary),
+                descriptorBinding.descriptorInvocation(),
                 CodeBlock.of("input"))
             .build();
             case UNARY_STREAMING -> MethodSpec.methodBuilder("applyOneToMany")
@@ -149,7 +135,7 @@ public class AwaitClientStepRenderer {
             .returns(ParameterizedTypeName.get(ClassName.get(Multi.class), outputType))
             .addParameter(inputType, "input")
             .addStatement("return support.awaitOneToMany($L, $L)",
-                descriptorInvocation(model, boundary),
+                descriptorBinding.descriptorInvocation(),
                 CodeBlock.of("input"))
             .build();
             case STREAMING_UNARY -> MethodSpec.methodBuilder("apply")
@@ -158,7 +144,7 @@ public class AwaitClientStepRenderer {
             .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputType))
             .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class), inputType), "input")
             .addStatement("return support.awaitManyToOne($L, $L)",
-                descriptorInvocation(model, boundary),
+                descriptorBinding.descriptorInvocation(),
                 CodeBlock.of("input"))
             .build();
             case STREAMING_STREAMING -> MethodSpec.methodBuilder("applyTransform")
@@ -167,34 +153,10 @@ public class AwaitClientStepRenderer {
             .returns(ParameterizedTypeName.get(ClassName.get(Multi.class), outputType))
             .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class), inputType), "input")
             .addStatement("return support.awaitManyToMany($L, $L)",
-                descriptorInvocation(model, boundary),
+                descriptorBinding.descriptorInvocation(),
                 CodeBlock.of("input"))
             .build();
         };
-    }
-
-    private static CodeBlock descriptorInvocation(
-        PipelineStepModel model,
-        V3GeneratedDomainBinding.RepresentationBoundary boundary
-    ) {
-        if (!boundary.convertsAtBoundary()) {
-            return CodeBlock.of(
-                "descriptorFactory.descriptor($S, $S, $S)",
-                model.serviceName(),
-                boundary.stepInputType().toString(),
-                boundary.stepOutputType().toString());
-        }
-        return CodeBlock.of(
-            "descriptorFactory.descriptor($S, $T.class.getName(), $T.class.getName(), $T.class.getName(), $T.class.getName(), value -> $T.toProto(($T) value), value -> $T.fromProto(($T) value))",
-            model.serviceName(),
-            boundary.stepInputType(),
-            boundary.stepOutputType(),
-            boundary.transportInputType(),
-            boundary.transportOutputType(),
-            boundary.adaptersOrThrow(),
-            boundary.stepInputType(),
-            boundary.adaptersOrThrow(),
-            boundary.transportOutputType());
     }
 
     private TypeName stepInterface(StreamingShape shape, TypeName inputType, TypeName outputType) {

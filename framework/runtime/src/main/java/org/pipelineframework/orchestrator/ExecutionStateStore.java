@@ -6,11 +6,85 @@ import java.util.concurrent.CompletableFuture;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import org.pipelineframework.orchestrator.stream.StreamRegionRecord;
 
 /**
  * SPI for async execution state persistence.
  */
 public interface ExecutionStateStore {
+
+    /**
+     * Creates or returns a bounded execution-owned stream-region projection.
+     *
+     * <p>This is deliberately part of the active execution projection surface rather than an await
+     * aggregate or a separate scheduler store.
+     */
+    default Uni<Optional<StreamRegionRecord>> createStreamRegion(StreamRegionRecord region) {
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "Execution state store does not support stream-region projections"));
+    }
+
+    /**
+     * Atomically transfers a claimed producer execution into a producer-owned stream region.
+     *
+     * <p>The parent {@code WAITING_EXTERNAL} state is a generic durable-boundary suspension here:
+     * it does <em>not</em> assert that an Await unit has dispatched or even materialised all of
+     * its interactions. The newly created region may correctly own zero interactions.
+     */
+    default Uni<Optional<StreamRegionRecord>> activateStreamRegion(
+        StreamRegionRecord region,
+        long expectedExecutionVersion,
+        String transitionKey,
+        String awaitUnitId,
+        int awaitStepIndex,
+        long nowEpochMs
+    ) {
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "Execution state store does not support atomic stream-region activation"));
+    }
+
+    /** Reads one execution-owned stream region. */
+    default Uni<Optional<StreamRegionRecord>> getStreamRegion(String tenantId, String executionId, String regionId) {
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "Execution state store does not support stream-region projections"));
+    }
+
+    /** Claims a due stream region independently of its waiting parent execution. */
+    default Uni<Optional<StreamRegionRecord>> claimStreamRegion(
+        String tenantId, String executionId, String regionId, String leaseOwner, long nowEpochMs, long leaseMs) {
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "Execution state store does not support stream-region projections"));
+    }
+
+    /** Applies one bounded materialisation page with optimistic concurrency. */
+    default Uni<Optional<StreamRegionRecord>> recordStreamRegionPage(
+        String tenantId,
+        String executionId,
+        String regionId,
+        long expectedVersion,
+        org.pipelineframework.stream.OpaqueSourceCheckpoint nextCheckpoint,
+        int itemCount,
+        boolean endOfSource,
+        long nowEpochMs) {
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "Execution state store does not support stream-region projections"));
+    }
+
+    /** Releases one bounded credit after a scalar continuation commits. */
+    default Uni<Optional<StreamRegionRecord>> releaseStreamRegionCredit(
+        String tenantId, String executionId, String regionId, long expectedVersion, long nowEpochMs) {
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "Execution state store does not support stream-region projections"));
+    }
+
+    /**
+     * Returns bounded producer regions whose durable due time or expired lease makes them eligible
+     * for another ordinary coordinator work delivery.
+     */
+    default Uni<List<StreamRegionRecord>> findDueStreamRegions(long nowEpochMs, int limit) {
+        return Uni.createFrom().failure(new UnsupportedOperationException(
+            "Execution state store does not support stream-region projections"));
+    }
 
     /**
      * Provider name used for configuration-based selection.

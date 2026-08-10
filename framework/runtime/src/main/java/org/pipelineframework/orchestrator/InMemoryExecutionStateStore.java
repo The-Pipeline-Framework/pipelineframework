@@ -10,8 +10,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
+import org.pipelineframework.orchestrator.stream.StreamRegionPageCommit;
+import org.pipelineframework.orchestrator.stream.StreamRegionRecord;
+import org.pipelineframework.stream.OpaqueSourceCheckpoint;
 
 /**
  * In-memory execution state store intended for development and tests.
@@ -19,9 +23,237 @@ import io.smallrye.mutiny.Uni;
 @ApplicationScoped
 public class InMemoryExecutionStateStore implements ExecutionStateStore {
 
-    private final Object lock = new Object();
+    private Object lock = new Object();
     private final Map<String, ExecutionRecord<Object, Object>> executionsByScopedId = new HashMap<>();
     private final Map<String, String> executionIdByScopedKey = new HashMap<>();
+    private final Map<String, StreamRegionRecord> streamRegionsByScopedId = new HashMap<>();
+
+    public InMemoryExecutionStateStore() {
+    }
+
+    public InMemoryExecutionStateStore(InMemoryControlPlaneTransactionLock transactionLock) {
+        bindTransactionLock(transactionLock);
+    }
+
+    @Inject
+    void bindTransactionLock(InMemoryControlPlaneTransactionLock transactionLock) {
+        lock = Objects.requireNonNull(transactionLock, "transactionLock must not be null").monitor();
+    }
+
+    @Override
+    public Uni<Optional<StreamRegionRecord>> createStreamRegion(StreamRegionRecord region) {
+        Objects.requireNonNull(region, "region must not be null");
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                String key = scopedStreamRegionId(region.tenantId(), region.executionId(), region.regionId());
+                StreamRegionRecord existing = streamRegionsByScopedId.putIfAbsent(key, region);
+                return Optional.of(existing == null ? region : existing);
+            }
+        });
+    }
+
+    @Override
+    public Uni<Optional<StreamRegionRecord>> activateStreamRegion(
+        StreamRegionRecord region,
+        long expectedExecutionVersion,
+        String transitionKey,
+        String awaitUnitId,
+        int awaitStepIndex,
+        long nowEpochMs
+    ) {
+        Objects.requireNonNull(region, "region must not be null");
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                String executionKey = scopedExecutionId(region.tenantId(), region.executionId());
+                String regionKey = scopedStreamRegionId(region.tenantId(), region.executionId(), region.regionId());
+                StreamRegionRecord existing = streamRegionsByScopedId.get(regionKey);
+                ExecutionRecord<Object, Object> current = executionsByScopedId.get(executionKey);
+                if (existing != null) {
+                    return current != null && current.status() == ExecutionStatus.WAITING_EXTERNAL
+                        && awaitUnitId.equals(current.awaitUnitId()) ? Optional.of(existing) : Optional.empty();
+                }
+                if (current == null || current.version() != expectedExecutionVersion
+                    || current.status() != ExecutionStatus.RUNNING) {
+                    return Optional.empty();
+                }
+                ExecutionRecord<Object, Object> waiting = new ExecutionRecord<>(
+                    current.tenantId(), current.executionId(), current.executionKey(), current.pipelineId(),
+                    current.contractVersion(), current.releaseVersion(), current.resultShape(),
+                    ExecutionStatus.WAITING_EXTERNAL, current.version() + 1, awaitStepIndex, current.attempt(),
+                    "", 0L, Long.MAX_VALUE, transitionKey, current.inputPayload(), awaitUnitId, null,
+                    null, null, current.createdAtEpochMs(), nowEpochMs, current.ttlEpochS(),
+                    current.firstCircuitDeferredAtEpochMs(), current.circuitDeferralCount(), current.circuitIdentity());
+                executionsByScopedId.put(executionKey, waiting);
+                streamRegionsByScopedId.put(regionKey, region);
+                return Optional.of(region);
+            }
+        });
+    }
+
+    @Override
+    public Uni<Optional<StreamRegionRecord>> getStreamRegion(String tenantId, String executionId, String regionId) {
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                return Optional.ofNullable(streamRegionsByScopedId.get(scopedStreamRegionId(tenantId, executionId, regionId)));
+            }
+        });
+    }
+
+    @Override
+    public Uni<Optional<StreamRegionRecord>> claimStreamRegion(
+        String tenantId, String executionId, String regionId, String leaseOwner, long nowEpochMs, long leaseMs) {
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                String key = scopedStreamRegionId(tenantId, executionId, regionId);
+                StreamRegionRecord current = streamRegionsByScopedId.get(key);
+                if (current == null || current.status().terminal() || current.nextDueEpochMs() > nowEpochMs
+                    || (!current.leaseOwner().isBlank() && current.leaseExpiresEpochMs() > nowEpochMs)) {
+                    return Optional.empty();
+                }
+                StreamRegionRecord claimed = current.claimed(leaseOwner, nowEpochMs, leaseMs);
+                streamRegionsByScopedId.put(key, claimed);
+                return Optional.of(claimed);
+            }
+        });
+    }
+
+    @Override
+    public Uni<Optional<StreamRegionRecord>> recordStreamRegionPage(
+        String tenantId,
+        String executionId,
+        String regionId,
+        long expectedVersion,
+        OpaqueSourceCheckpoint nextCheckpoint,
+        int itemCount,
+        boolean endOfSource,
+        long nowEpochMs) {
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                String key = scopedStreamRegionId(tenantId, executionId, regionId);
+                StreamRegionRecord current = streamRegionsByScopedId.get(key);
+                if (current == null || current.version() != expectedVersion) {
+                    return Optional.empty();
+                }
+                StreamRegionRecord updated = current.recordPage(nextCheckpoint, itemCount, endOfSource, nowEpochMs);
+                streamRegionsByScopedId.put(key, updated);
+                return Optional.of(updated);
+            }
+        });
+    }
+
+    @Override
+    public Uni<Optional<StreamRegionRecord>> releaseStreamRegionCredit(
+        String tenantId, String executionId, String regionId, long expectedVersion, long nowEpochMs) {
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                String key = scopedStreamRegionId(tenantId, executionId, regionId);
+                StreamRegionRecord current = streamRegionsByScopedId.get(key);
+                if (current == null || current.version() != expectedVersion) {
+                    return Optional.empty();
+                }
+                StreamRegionRecord updated = current.releaseCredit(nowEpochMs);
+                streamRegionsByScopedId.put(key, updated);
+                return Optional.of(updated);
+            }
+        });
+    }
+
+    /**
+     * Internal half of a local cross-projection transaction. Callers must hold the shared
+     * {@link InMemoryControlPlaneTransactionLock} monitor.
+     */
+    public Optional<StreamRegionRecord> recordStreamRegionPageInTransaction(StreamRegionPageCommit commit) {
+        requireTransactionLock();
+        StreamRegionRecord claimed = commit.claimedRegion();
+        String key = scopedStreamRegionId(claimed.tenantId(), claimed.executionId(), claimed.regionId());
+        StreamRegionRecord current = streamRegionsByScopedId.get(key);
+        if (current == null
+            || current.version() != claimed.version()
+            || !current.checkpoint().equals(claimed.checkpoint())
+            || current.status() != claimed.status()
+            || !current.leaseOwner().equals(claimed.leaseOwner())
+            || current.leaseExpiresEpochMs() <= commit.nowEpochMs()) {
+            return Optional.empty();
+        }
+        StreamRegionRecord updated = current.recordPage(
+            commit.nextCheckpoint(), commit.interactions().size(), commit.endOfSource(), commit.nowEpochMs());
+        streamRegionsByScopedId.put(key, updated);
+        return Optional.of(updated);
+    }
+
+    /** Returns one local stream region while the shared control-plane transaction monitor is held. */
+    public Optional<StreamRegionRecord> getStreamRegionInTransaction(
+        String tenantId,
+        String executionId,
+        String regionId
+    ) {
+        requireTransactionLock();
+        return Optional.ofNullable(streamRegionsByScopedId.get(scopedStreamRegionId(tenantId, executionId, regionId)));
+    }
+
+    /**
+     * Internal half of a local cross-projection transaction. Callers must hold the shared
+     * {@link InMemoryControlPlaneTransactionLock} monitor.
+     */
+    public Optional<StreamRegionRecord> releaseStreamRegionCreditInTransaction(
+        String tenantId,
+        String executionId,
+        String regionId,
+        long nowEpochMs
+    ) {
+        requireTransactionLock();
+        String key = scopedStreamRegionId(tenantId, executionId, regionId);
+        StreamRegionRecord current = streamRegionsByScopedId.get(key);
+        if (current == null || current.outstandingCredits() == 0) {
+            return Optional.empty();
+        }
+        StreamRegionRecord updated = current.releaseCredit(nowEpochMs);
+        streamRegionsByScopedId.put(key, updated);
+        return Optional.of(updated);
+    }
+
+    /** Completes the parent only for a compiler-proven terminal scalar stream suffix. */
+    public boolean completeStreamRegionParentInTransaction(
+        String tenantId, String executionId, String awaitUnitId, String transitionKey, long nowEpochMs
+    ) {
+        requireTransactionLock();
+        String key = scopedExecutionId(tenantId, executionId);
+        ExecutionRecord<Object, Object> current = executionsByScopedId.get(key);
+        if (current == null || current.status() != ExecutionStatus.WAITING_EXTERNAL
+            || !awaitUnitId.equals(current.awaitUnitId())) {
+            return false;
+        }
+        executionsByScopedId.put(key, new ExecutionRecord<>(
+            current.tenantId(), current.executionId(), current.executionKey(), current.pipelineId(),
+            current.contractVersion(), current.releaseVersion(), current.resultShape(), ExecutionStatus.SUCCEEDED,
+            current.version() + 1, current.currentStepIndex(), current.attempt(), "", 0L, nowEpochMs,
+            transitionKey, current.inputPayload(), null, null, null, null, current.createdAtEpochMs(), nowEpochMs,
+            current.ttlEpochS(), current.firstCircuitDeferredAtEpochMs(), current.circuitDeferralCount(),
+            current.circuitIdentity()));
+        return true;
+    }
+
+    @Override
+    public Uni<List<StreamRegionRecord>> findDueStreamRegions(long nowEpochMs, int limit) {
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                if (limit <= 0) {
+                    return List.of();
+                }
+                return streamRegionsByScopedId.values().stream()
+                    .filter(region -> !region.status().terminal())
+                    .filter(region -> region.nextDueEpochMs() <= nowEpochMs)
+                    .filter(region -> region.leaseOwner().isBlank()
+                        || region.leaseExpiresEpochMs() <= nowEpochMs)
+                    .sorted(Comparator.comparingLong(StreamRegionRecord::nextDueEpochMs)
+                        .thenComparing(StreamRegionRecord::tenantId)
+                        .thenComparing(StreamRegionRecord::executionId)
+                        .thenComparing(StreamRegionRecord::regionId))
+                    .limit(limit)
+                    .toList();
+            }
+        });
+    }
 
     @Override
     public String providerName() {
@@ -631,6 +863,12 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         return ttl <= nowEpochS;
     }
 
+    private void requireTransactionLock() {
+        if (!Thread.holdsLock(lock)) {
+            throw new IllegalStateException("In-memory stream-region transaction requires the shared control-plane lock");
+        }
+    }
+
     private static boolean redrivable(ExecutionStatus status, boolean allowFailed) {
         return status == ExecutionStatus.DLQ || (allowFailed && status == ExecutionStatus.FAILED);
     }
@@ -654,6 +892,11 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
 
     private static String scopedExecutionKey(String tenantId, String executionKey) {
         return compositeScopedKey("tenantId", tenantId, "executionKey", executionKey);
+    }
+
+    private static String scopedStreamRegionId(String tenantId, String executionId, String regionId) {
+        String execution = compositeScopedKey("tenantId", tenantId, "executionId", executionId);
+        return compositeScopedKey("execution", execution, "regionId", regionId);
     }
 
     private static String compositeScopedKey(String leftName, String left, String rightName, String right) {

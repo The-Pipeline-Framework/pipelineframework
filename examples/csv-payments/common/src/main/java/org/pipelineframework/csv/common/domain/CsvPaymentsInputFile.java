@@ -21,25 +21,39 @@ import com.opencsv.bean.HeaderColumnNameMappingStrategy;
 import jakarta.persistence.Entity;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.channels.SeekableByteChannel;
+import java.nio.file.Files;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import org.pipelineframework.opencsv.ResumableOpenCsvSource;
 
 @Entity
 @Getter
 @Setter
 @Accessors(chain = true)
 @NoArgsConstructor
-public class CsvPaymentsInputFile extends BaseCsvPaymentsFile {
+public class CsvPaymentsInputFile extends BaseCsvPaymentsFile implements ResumableOpenCsvSource<PaymentRecord> {
 
   public CsvPaymentsInputFile(@NonNull File csvFile) {
     super(csvFile);
   }
 
+  @Override
   public Reader openReader() throws IOException {
     return new BufferedReader(new FileReader(filepath.toFile(), StandardCharsets.UTF_8));
+  }
+
+  @Override
+  public SeekableByteChannel openSeekableChannel() throws IOException {
+    return Files.newByteChannel(filepath);
+  }
+
+  @Override
+  public String resumableSourceId() {
+    return filepath.toAbsolutePath().normalize().toString();
   }
 
   @JsonIgnore
@@ -47,11 +61,28 @@ public class CsvPaymentsInputFile extends BaseCsvPaymentsFile {
     return filepath.toString();
   }
 
-  public HeaderColumnNameMappingStrategy<PaymentRecord> veryOwnStrategy() {
+  @Override
+  public HeaderColumnNameMappingStrategy<PaymentRecord> mappingStrategy() {
     var strategy = new FilePathAwareMappingStrategy<PaymentRecord>(this.filepath);
     strategy.setType(PaymentRecord.class);
 
     return strategy;
+  }
+
+  @Override
+  public Class<PaymentRecord> rowType() {
+    return PaymentRecord.class;
+  }
+
+  @Override
+  public void enrichParsedRow(PaymentRecord row) {
+    row.setId(CsvPaymentsStableIdSupport.paymentRecordId(
+        row.getCsvPaymentsInputFilePath(), row.getCsvId(), row.getRecipient(), row.getAmount(), row.getCurrency()));
+  }
+
+  @Override
+  public String sourceName() {
+    return getSourceName();
   }
 
   @Override

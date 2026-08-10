@@ -1,8 +1,10 @@
 package org.pipelineframework;
 
 import java.time.Duration;
+import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
@@ -27,6 +29,11 @@ import org.pipelineframework.orchestrator.TransitionResultEnvelope;
 import org.pipelineframework.orchestrator.TransitionWorkerExecutor;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
+import org.pipelineframework.orchestrator.stream.StreamRegionRecord;
+import org.pipelineframework.orchestrator.stream.StreamRegionStatus;
+import org.pipelineframework.stream.OpaqueSourceCheckpoint;
+import org.pipelineframework.stream.StreamRegionContinuation;
+import org.pipelineframework.stream.StreamRegionContinuationRegistry;
 
 /**
  * Reactive queue-async segment flow: claim, run, plan, and commit one synchronous segment.
@@ -39,6 +46,7 @@ class QueueAsyncSegmentPipeline {
   private final ExecutionStateStore executionStateStore;
   private final WorkDispatcher workDispatcher;
   private final AwaitCoordinator awaitCoordinator;
+  private final StreamRegionContinuationRegistry streamRegionContinuations;
   private final TransitionWorkerExecutor transitionWorkerExecutor;
   private final ControlPlaneAdmissionPolicy admissionPolicy;
   private final Supplier<TransitionPayloadCodec> payloadCodec;
@@ -53,6 +61,7 @@ class QueueAsyncSegmentPipeline {
       ExecutionStateStore executionStateStore,
       WorkDispatcher workDispatcher,
       AwaitCoordinator awaitCoordinator,
+      StreamRegionContinuationRegistry streamRegionContinuations,
       TransitionWorkerExecutor transitionWorkerExecutor,
       ControlPlaneAdmissionPolicy admissionPolicy,
       Supplier<TransitionPayloadCodec> payloadCodec,
@@ -65,6 +74,8 @@ class QueueAsyncSegmentPipeline {
     this.executionStateStore = Objects.requireNonNull(executionStateStore, "executionStateStore must not be null");
     this.workDispatcher = Objects.requireNonNull(workDispatcher, "workDispatcher must not be null");
     this.awaitCoordinator = Objects.requireNonNull(awaitCoordinator, "awaitCoordinator must not be null");
+    this.streamRegionContinuations = Objects.requireNonNull(streamRegionContinuations,
+        "streamRegionContinuations must not be null");
     this.transitionWorkerExecutor = Objects.requireNonNull(transitionWorkerExecutor, "transitionWorkerExecutor must not be null");
     this.admissionPolicy = Objects.requireNonNull(admissionPolicy, "admissionPolicy must not be null");
     this.payloadCodec = Objects.requireNonNull(payloadCodec, "payloadCodec must not be null");
@@ -145,13 +156,57 @@ class QueueAsyncSegmentPipeline {
         record.awaitUnitId() == null ? "<none>" : record.awaitUnitId());
     return segmentBoundaryLedger.get()
         .recordSegmentAttemptStarted(record, segment.transitionKey(), claimedAtEpochMs)
-        .chain(() -> executeTransition(segment, worker))
-        .onItem().transform(result -> SegmentCommitPlan.from(segment, result, payloadCodec.get()))
-        .onItem().transformToUni(plan -> segmentCommitEffects.commit(plan, itemContinuationHandler))
+        .chain(() -> activateStreamRegionIfEligible(segment, claimedAtEpochMs))
+        .onItem().transformToUni(activated -> activated
+            ? Uni.createFrom().voidItem()
+            : executeTransition(segment, worker)
+                .onItem().transform(result -> SegmentCommitPlan.from(segment, result, payloadCodec.get()))
+                .onItem().transformToUni(plan -> segmentCommitEffects.commit(plan, itemContinuationHandler)))
         .onFailure(AwaitThrowableSupport::containsAwaitSuspension)
         .recoverWithUni(failure -> suspendedPlan(segment, failure)
             .onItem().transformToUni(plan -> segmentCommitEffects.commit(plan, itemContinuationHandler)))
         .onFailure().recoverWithUni(failure -> segmentCommitEffects.fail(segment, failure));
+  }
+
+  /**
+   * Transfers an eligible producer cursor to its execution-owned stream region before the normal
+   * producer transition can start. The parent wait is deliberately a generic durable boundary:
+   * no interaction has necessarily been materialised, and the legacy await continuation flow is
+   * never invoked for this path.
+   */
+  private Uni<Boolean> activateStreamRegionIfEligible(ClaimedSegment segment, long nowEpochMs) {
+    if (segment.resumesFromAwait()) {
+      return Uni.createFrom().item(false);
+    }
+    return streamRegionContinuations.findForProducerStep(segment.record().currentStepIndex())
+        .map(continuation -> activateStreamRegion(segment, continuation, nowEpochMs).replaceWith(true))
+        .orElseGet(() -> Uni.createFrom().item(false));
+  }
+
+  private Uni<Void> activateStreamRegion(
+      ClaimedSegment segment, StreamRegionContinuation continuation, long nowEpochMs) {
+    var record = segment.record();
+    var binding = continuation.awaitBinding();
+    String regionId = streamRegionId(record, continuation);
+    StreamRegionRecord region = new StreamRegionRecord(
+        record.tenantId(), record.executionId(), regionId, continuation.descriptor(), OpaqueSourceCheckpoint.initial(),
+        0L, 0, StreamRegionFlow.DYNAMO_PAGE_ITEM_LAYOUT_LIMIT, continuation.terminalScalarSuffix(),
+        StreamRegionStatus.ACTIVE, Optional.empty(), 0L, "", 0L, nowEpochMs,
+        nowEpochMs, nowEpochMs, record.ttlEpochS());
+    return awaitCoordinator.ensureStreamRegionUnit(
+            binding.descriptor(), record.tenantId(), record.executionId(), binding.stepIndex())
+        .onItem().transformToUni(unit -> executionStateStore.activateStreamRegion(
+            region, record.version(), "stream-region-activate:" + regionId, unit.unitId(), binding.stepIndex(), nowEpochMs))
+        .onItem().transformToUni(activated -> activated
+            .map(ignored -> workDispatcher.enqueueNow(ExecutionWorkItem.streamRegion(
+                record.tenantId(), record.executionId(), regionId)))
+            .orElseGet(() -> Uni.createFrom().voidItem()));
+  }
+
+  private static String streamRegionId(ExecutionRecord<Object, Object> record, StreamRegionContinuation continuation) {
+    String identity = record.tenantId() + "\n" + record.executionId() + "\n"
+        + continuation.producerStepIndex() + "\n" + continuation.descriptor().fingerprint();
+    return "stream-region:" + UUID.nameUUIDFromBytes(identity.getBytes(StandardCharsets.UTF_8));
   }
 
   private Uni<TransitionResultEnvelope> executeTransition(

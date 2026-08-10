@@ -16,9 +16,109 @@ import org.pipelineframework.awaitable.AwaitCreateCommand;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitInteractionNotFoundException;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
+import org.pipelineframework.awaitable.AwaitContinuationStatus;
 import org.pipelineframework.awaitable.AwaitInteractionTerminalException;
+import org.pipelineframework.orchestrator.InMemoryControlPlaneTransactionLock;
+import org.pipelineframework.orchestrator.InMemoryExecutionStateStore;
+import org.pipelineframework.orchestrator.stream.StreamRegionPageCommit;
+import org.pipelineframework.orchestrator.stream.StreamRegionRecord;
+import org.pipelineframework.orchestrator.stream.StreamRegionStatus;
+import org.pipelineframework.stream.OpaqueSourceCheckpoint;
+import org.pipelineframework.stream.ResumableSourceDescriptor;
 
 class InMemoryAwaitInteractionStoreTest {
+
+    @Test
+    void linkedContinuationAppliesAndReturnsItsCreditUnderOneLocalControlPlaneLock() {
+        InMemoryControlPlaneTransactionLock transactionLock = new InMemoryControlPlaneTransactionLock();
+        InMemoryExecutionStateStore executionStore = new InMemoryExecutionStateStore(transactionLock);
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore(transactionLock, executionStore);
+        StreamRegionRecord region = streamRegion();
+        executionStore.createStreamRegion(region).await().indefinitely();
+        StreamRegionRecord claimedRegion = executionStore.claimStreamRegion(
+            region.tenantId(), region.executionId(), region.regionId(), "region-worker", 1_000L, 10_000L)
+            .await().indefinitely().orElseThrow();
+        AwaitInteractionRecord interaction = streamInteraction(claimedRegion, 0);
+
+        StreamRegionRecord materialized = store.materializeStreamRegionPage(new StreamRegionPageCommit(
+            claimedRegion,
+            new OpaqueSourceCheckpoint(java.util.Optional.of("checkpoint-1")),
+            true,
+            List.of(interaction),
+            1_100L)).await().indefinitely().orElseThrow();
+        AwaitInteractionRecord completed = store.complete(new AwaitCompletionCommand(
+            interaction.tenantId(), interaction.interactionId(), null, "completion-1", "approved", "operator", 1_200L))
+            .await().indefinitely().record();
+        AwaitInteractionRecord ready = store.activateContinuationIfEligible(
+            completed.tenantId(), completed.interactionId(), completed.version(), 1_200L)
+            .await().indefinitely().orElseThrow();
+        AwaitInteractionRecord claimed = store.claimDueContinuation(
+            ready.tenantId(), ready.interactionId(), "continuation-worker", 1_200L, 1_000L)
+            .await().indefinitely().orElseThrow();
+
+        AwaitInteractionRecord applied = store.completeContinuationAndReleaseStreamCredit(
+            claimed.tenantId(), claimed.interactionId(), claimed.version(), "continuation-worker", "suffix", 1_300L)
+            .await().indefinitely().orElseThrow();
+        var replay = store.completeContinuationAndReleaseStreamCredit(
+            claimed.tenantId(), claimed.interactionId(), claimed.version(), "continuation-worker", "suffix", 1_301L)
+            .await().indefinitely();
+        StreamRegionRecord released = executionStore.getStreamRegion(
+            region.tenantId(), region.executionId(), region.regionId()).await().indefinitely().orElseThrow();
+
+        assertEquals(StreamRegionStatus.SOURCE_SEALED, materialized.status());
+        assertEquals(AwaitContinuationStatus.APPLIED, applied.continuationStatus());
+        assertEquals("suffix", applied.continuationOutputPayload());
+        assertTrue(replay.isEmpty());
+        assertEquals(0, released.outstandingCredits());
+        assertEquals(StreamRegionStatus.COMPLETED, released.status());
+    }
+
+    @Test
+    void findsOnlyWaitingInteractionsLinkedToAStreamRegionForDispatchRecovery() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        StreamRegionRecord region = streamRegion();
+        store.importRecord(streamInteraction(region, 0)).await().indefinitely();
+        AwaitInteractionRecord ordinary = new AwaitInteractionRecord(
+            "tenant", "execution-1", "await-payment-provider", 3, String.class.getName(),
+            "ordinary", "ordinary", "cause", "ordinary", 0L, AwaitInteractionStatus.WAITING,
+            Map.of(), null, "unit-1", 1, null, null, null, "kafka", Map.of(), 70_000L,
+            1_000L, 1_000L, Long.MAX_VALUE, String.class.getName(), AwaitContinuationStatus.HELD,
+            0, 0L, "", 0L, null, "");
+        store.importRecord(ordinary).await().indefinitely();
+
+        List<AwaitInteractionRecord> recovered = store.findDueStreamInteractionDispatches(2_000L, 10)
+            .await().indefinitely();
+
+        assertEquals(List.of(StreamRegionPageCommit.interactionId(region, 0)), recovered.stream()
+            .map(AwaitInteractionRecord::interactionId).toList());
+    }
+
+    @Test
+    void itemContinuationIsClaimedAppliedAndNeverReclaimed() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        var created = store.createOrGet(itemCommand("continuation", "continuation-correlation", 0))
+            .await().indefinitely();
+        var completed = store.complete(new AwaitCompletionCommand(
+            "tenant", created.record().interactionId(), null, "completion", "approved", "operator", 12_000L))
+            .await().indefinitely().record();
+
+        var ready = store.activateContinuationIfEligible(
+            "tenant", completed.interactionId(), completed.version(), 12_000L).await().indefinitely().orElseThrow();
+        var claimed = store.claimDueContinuation(
+            "tenant", ready.interactionId(), "worker-a", 12_000L, 1_000L).await().indefinitely().orElseThrow();
+        var duplicateClaim = store.claimDueContinuation(
+            "tenant", ready.interactionId(), "worker-b", 12_001L, 1_000L).await().indefinitely();
+        var applied = store.completeContinuation(
+            "tenant", claimed.interactionId(), claimed.version(), List.of("suffix"), 12_100L)
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(AwaitContinuationStatus.READY, ready.continuationStatus());
+        assertEquals(AwaitContinuationStatus.CLAIMED, claimed.continuationStatus());
+        assertTrue(duplicateClaim.isEmpty());
+        assertEquals(AwaitContinuationStatus.APPLIED, applied.continuationStatus());
+        assertEquals(List.of("suffix"), applied.continuationOutputPayload());
+        assertTrue(store.findDueContinuations(20_000L, 10).await().indefinitely().isEmpty());
+    }
 
     @Test
     void createOrGetDeduplicatesActiveInteractionByIdempotencyKey() {
@@ -498,5 +598,23 @@ class InMemoryAwaitInteractionStoreTest {
             10_000L,
             70_000L,
             Long.MAX_VALUE);
+    }
+
+    private static StreamRegionRecord streamRegion() {
+        return new StreamRegionRecord(
+            "tenant", "execution-1", "resumable-source",
+            new ResumableSourceDescriptor("test", "deterministic", "sha256:source"),
+            OpaqueSourceCheckpoint.initial(), 0L, 0, 2, StreamRegionStatus.ACTIVE, java.util.Optional.empty(),
+            0L, "", 0L, 1_000L, 1L, 1L, Long.MAX_VALUE);
+    }
+
+    private static AwaitInteractionRecord streamInteraction(StreamRegionRecord region, int ordinal) {
+        return new AwaitInteractionRecord(
+            region.tenantId(), region.executionId(), "await-payment-provider", 3, String.class.getName(),
+            StreamRegionPageCommit.interactionId(region, ordinal), "stream-correlation-" + ordinal,
+            region.executionId() + ":3:" + ordinal, "stream-idempotency-" + ordinal, 0L,
+            AwaitInteractionStatus.WAITING, Map.of("ordinal", ordinal), null, "unit-1", ordinal,
+            null, null, null, "kafka", Map.of(), 70_000L, 1_000L, 1_000L, Long.MAX_VALUE,
+            String.class.getName(), AwaitContinuationStatus.HELD, 0, 0L, "", 0L, null, region.regionId());
     }
 }

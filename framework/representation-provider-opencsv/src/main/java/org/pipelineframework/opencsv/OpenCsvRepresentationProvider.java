@@ -11,6 +11,7 @@ import org.pipelineframework.representation.spi.BoundaryClaim;
 import org.pipelineframework.representation.spi.BoundaryRequest;
 import org.pipelineframework.representation.spi.CanonicalTypeShape;
 import org.pipelineframework.representation.spi.ProviderConfiguration;
+import org.pipelineframework.representation.spi.ProviderCapability;
 import org.pipelineframework.representation.spi.ProviderDiagnostic;
 import org.pipelineframework.representation.spi.ProviderGenerationRequest;
 import org.pipelineframework.representation.spi.ProviderMetadata;
@@ -25,6 +26,7 @@ import org.pipelineframework.representation.spi.ResolvedRepresentation;
 public final class OpenCsvRepresentationProvider implements RepresentationProvider {
     public static final String KEY = "opencsv";
     private static final String BOUNDARY = OpenCsvInputBoundary.class.getName();
+    private static final String RESUMABLE_BOUNDARY = ResumableOpenCsvInputBoundary.class.getName();
 
     @Override
     public ProviderMetadata metadata() {
@@ -57,12 +59,16 @@ public final class OpenCsvRepresentationProvider implements RepresentationProvid
 
     @Override
     public Optional<BoundaryClaim> claim(BoundaryRequest boundary) {
-        if (!boundary.declaredBoundaryContracts().contains(BOUNDARY)) {
+        if (!boundary.declaredBoundaryContracts().contains(BOUNDARY)
+            && !boundary.declaredBoundaryContracts().contains(RESUMABLE_BOUNDARY)) {
             return Optional.empty();
         }
         String facade = boundary.serviceTypeName() + "PipelineFacade";
+        Set<ProviderCapability> capabilities = boundary.declaredBoundaryContracts().contains(RESUMABLE_BOUNDARY)
+            ? Set.of(ProviderCapability.RESUMABLE_SOURCE) : Set.of();
         return Optional.of(new BoundaryClaim(KEY, boundary.stepName() + ":opencsv", facade,
-            Optional.of(new ProviderStepContract(ProviderExecutionStyle.BLOCKING_ITERATOR, "UNARY_STREAMING"))));
+            Optional.of(new ProviderStepContract(
+                ProviderExecutionStyle.BLOCKING_ITERATOR, "UNARY_STREAMING", capabilities))));
     }
 
     @Override
@@ -90,18 +96,37 @@ public final class OpenCsvRepresentationProvider implements RepresentationProvid
     private static String facadeSource(ProviderGenerationRequest request, ResolvedRepresentation mapping) {
         String canonicalInput = request.boundary().inputType().targetTypeName();
         String canonicalOutput = request.boundary().outputType().targetTypeName();
-        String external = mapping.representationType().orElseThrow();
         String mapper = mapping.mapperType().orElseThrow();
         String facade = request.claim().generatedFacadeTypeName();
         int separator = facade.lastIndexOf('.');
         String packageName = facade.substring(0, separator);
         String simpleName = facade.substring(separator + 1);
+        boolean resumable = request.boundary().declaredBoundaryContracts().contains(RESUMABLE_BOUNDARY);
+        String resumableContract = resumable
+            ? ", org.pipelineframework.stream.ResumableSourceCapability<%s, %s>".formatted(canonicalInput, canonicalOutput)
+            : "";
+        String resumableMethods = resumable ? """
+
+                @Override
+                public org.pipelineframework.stream.ResumableSourceDescriptor descriptor() {
+                    return org.pipelineframework.opencsv.OpenCsvResumableSourceSupport.descriptor(%s.class.getName());
+                }
+
+                @Override
+                public io.smallrye.mutiny.Uni<org.pipelineframework.stream.ResumableSourcePage<%s>> readPage(
+                    %s input,
+                    org.pipelineframework.stream.OpaqueSourceCheckpoint checkpoint,
+                    int limit) {
+                    return org.pipelineframework.opencsv.OpenCsvResumableSourceSupport.readPage(
+                        delegate.source(input), mapper, checkpoint, limit);
+                }
+            """.formatted(simpleName, canonicalOutput, canonicalInput) : "";
         return """
             package %s;
 
             @jakarta.enterprise.context.ApplicationScoped
             @org.pipelineframework.annotation.PipelineStep
-            public final class %s implements org.pipelineframework.service.blocking.BlockingIteratorService<%s, %s> {
+            public final class %s implements org.pipelineframework.service.blocking.BlockingIteratorService<%s, %s>%s {
                 @jakarta.inject.Inject
                 %s delegate;
 
@@ -110,27 +135,13 @@ public final class OpenCsvRepresentationProvider implements RepresentationProvid
 
                 @Override
                 public org.pipelineframework.blocking.CloseableIterator<%s> iterateBlocking(%s input) {
-                    return new MappingIterator(delegate.iterateBlocking(input), mapper);
+                    return org.pipelineframework.opencsv.OpenCsvInputBoundarySupport
+                        .iterateAndMap(delegate.source(input), mapper);
                 }
-
-                private static final class MappingIterator implements org.pipelineframework.blocking.CloseableIterator<%s> {
-                    private final org.pipelineframework.blocking.CloseableIterator<%s> delegate;
-                    private final org.pipelineframework.mapper.Mapper<%s, %s> mapper;
-
-                    private MappingIterator(org.pipelineframework.blocking.CloseableIterator<%s> delegate,
-                                            org.pipelineframework.mapper.Mapper<%s, %s> mapper) {
-                        this.delegate = delegate;
-                        this.mapper = mapper;
-                    }
-
-                    @Override public boolean hasNext() { return delegate.hasNext(); }
-                    @Override public %s next() { return mapper.fromExternal(delegate.next()); }
-                    @Override public void close() throws Exception { delegate.close(); }
-                }
+            %s
             }
-            """.formatted(packageName, simpleName, canonicalInput, canonicalOutput,
+            """.formatted(packageName, simpleName, canonicalInput, canonicalOutput, resumableContract,
                 request.boundary().serviceTypeName(), mapper, canonicalOutput, canonicalInput,
-                canonicalOutput, external, canonicalOutput, external, external, canonicalOutput, external,
-                canonicalOutput);
+                resumableMethods);
     }
 }

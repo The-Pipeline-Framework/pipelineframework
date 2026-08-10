@@ -10,6 +10,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
@@ -19,8 +21,14 @@ import org.pipelineframework.awaitable.AwaitCreateResult;
 import org.pipelineframework.awaitable.AwaitInteractionNotFoundException;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.awaitable.AwaitInteractionStatus;
+import org.pipelineframework.awaitable.AwaitContinuationStatus;
 import org.pipelineframework.awaitable.AwaitInteractionTerminalException;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
+import org.pipelineframework.orchestrator.ExecutionStateStore;
+import org.pipelineframework.orchestrator.InMemoryControlPlaneTransactionLock;
+import org.pipelineframework.orchestrator.InMemoryExecutionStateStore;
+import org.pipelineframework.orchestrator.stream.StreamRegionPageCommit;
+import org.pipelineframework.orchestrator.stream.StreamRegionRecord;
 
 /**
  * In-memory await store intended for local development and tests.
@@ -33,10 +41,31 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
             .thenComparingLong(AwaitInteractionRecord::createdAtEpochMs)
             .thenComparing(AwaitInteractionRecord::interactionId);
 
-    private final Object lock = new Object();
+    private Object lock = new Object();
     private final Map<String, AwaitInteractionRecord> interactionsByScopedId = new HashMap<>();
     private final Map<String, String> interactionIdByScopedIdempotencyKey = new HashMap<>();
     private final Map<String, String> interactionIdByScopedCorrelation = new HashMap<>();
+
+    @Inject
+    Instance<ExecutionStateStore> executionStateStores;
+
+    private InMemoryExecutionStateStore explicitExecutionStateStore;
+
+    public InMemoryAwaitInteractionStore() {
+    }
+
+    public InMemoryAwaitInteractionStore(
+        InMemoryControlPlaneTransactionLock transactionLock,
+        InMemoryExecutionStateStore executionStateStore
+    ) {
+        bindTransactionLock(transactionLock);
+        explicitExecutionStateStore = Objects.requireNonNull(executionStateStore, "executionStateStore must not be null");
+    }
+
+    @Inject
+    void bindTransactionLock(InMemoryControlPlaneTransactionLock transactionLock) {
+        lock = Objects.requireNonNull(transactionLock, "transactionLock must not be null").monitor();
+    }
 
     @Override
     public String providerName() {
@@ -212,7 +241,9 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
             current.createdAtEpochMs(),
             nowEpochMs,
             current.ttlEpochS(),
-            current.transportOutputType()));
+            current.transportOutputType(), current.continuationStatus(), current.continuationAttempt(),
+            current.continuationNextDueEpochMs(), current.continuationLeaseOwner(),
+            current.continuationLeaseExpiresEpochMs(), current.continuationOutputPayload(), current.streamRegionId()));
     }
 
     @Override
@@ -258,9 +289,179 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
             current.createdAtEpochMs(),
             command.nowEpochMs(),
             current.ttlEpochS(),
-            current.transportOutputType());
+            current.transportOutputType(), current.continuationStatus(), current.continuationAttempt(),
+            current.continuationNextDueEpochMs(), current.continuationLeaseOwner(),
+            current.continuationLeaseExpiresEpochMs(), current.continuationOutputPayload(), current.streamRegionId());
                 interactionsByScopedId.put(scopedInteractionId(completed.tenantId(), completed.interactionId()), completed);
                 return new AwaitCompletionResult(completed, false);
+            }
+        });
+    }
+
+    @Override
+    public Uni<Optional<AwaitInteractionRecord>> activateContinuationIfEligible(
+        String tenantId, String interactionId, long expectedVersion, long nowEpochMs) {
+        return continuationTransition(tenantId, interactionId, expectedVersion, nowEpochMs, current -> {
+            if (!current.itemInteraction() || current.status() != AwaitInteractionStatus.COMPLETED
+                || current.continuationStatus() != AwaitContinuationStatus.HELD) {
+                return Optional.empty();
+            }
+            return Optional.of(withContinuation(current, AwaitContinuationStatus.READY,
+                current.continuationAttempt(), nowEpochMs, "", 0L, current.continuationOutputPayload(), nowEpochMs));
+        });
+    }
+
+    @Override
+    public Uni<Optional<AwaitInteractionRecord>> claimDueContinuation(
+        String tenantId, String interactionId, String leaseOwner, long nowEpochMs, long leaseMs) {
+        if (leaseOwner == null || leaseOwner.isBlank() || leaseMs <= 0) {
+            return Uni.createFrom().failure(new IllegalArgumentException("continuation lease owner and duration are required"));
+        }
+        return continuationTransition(tenantId, interactionId, -1L, nowEpochMs, current -> {
+            if (!current.continuationDue(nowEpochMs)) {
+                return Optional.empty();
+            }
+            return Optional.of(withContinuation(current, AwaitContinuationStatus.CLAIMED,
+                current.continuationAttempt() + 1, current.continuationNextDueEpochMs(), leaseOwner,
+                nowEpochMs + leaseMs, current.continuationOutputPayload(), nowEpochMs));
+        });
+    }
+
+    @Override
+    public Uni<List<AwaitInteractionRecord>> findDueContinuations(long nowEpochMs, int limit) {
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                purgeExpired(nowEpochMs);
+                return interactionsByScopedId.values().stream()
+                    .filter(record -> record.continuationDue(nowEpochMs))
+                    .sorted(Comparator.comparingLong(AwaitInteractionRecord::continuationNextDueEpochMs)
+                        .thenComparing(AwaitInteractionRecord::interactionId))
+                    .limit(Math.max(0, limit))
+                    .toList();
+            }
+        });
+    }
+
+    @Override
+    public Uni<List<AwaitInteractionRecord>> findDueStreamInteractionDispatches(long nowEpochMs, int limit) {
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                purgeExpired(nowEpochMs);
+                return interactionsByScopedId.values().stream()
+                    .filter(record -> record.status() == AwaitInteractionStatus.WAITING)
+                    .filter(record -> !record.streamRegionId().isBlank())
+                    .filter(record -> record.createdAtEpochMs() <= nowEpochMs)
+                    .sorted(Comparator.comparingLong(AwaitInteractionRecord::createdAtEpochMs)
+                        .thenComparing(AwaitInteractionRecord::tenantId)
+                        .thenComparing(AwaitInteractionRecord::interactionId))
+                    .limit(Math.max(0, limit))
+                    .toList();
+            }
+        });
+    }
+
+    @Override
+    public Uni<Optional<AwaitInteractionRecord>> rescheduleContinuation(
+        String tenantId, String interactionId, long expectedVersion, long nextDueEpochMs, long nowEpochMs) {
+        return continuationTransition(tenantId, interactionId, expectedVersion, nowEpochMs, current -> {
+            if (current.continuationStatus() != AwaitContinuationStatus.CLAIMED) {
+                return Optional.empty();
+            }
+            return Optional.of(withContinuation(current, AwaitContinuationStatus.RETRY_DUE,
+                current.continuationAttempt(), Math.max(nowEpochMs, nextDueEpochMs), "", 0L,
+                current.continuationOutputPayload(), nowEpochMs));
+        });
+    }
+
+    @Override
+    public Uni<Optional<AwaitInteractionRecord>> completeContinuation(
+        String tenantId, String interactionId, long expectedVersion, Object outputPayload, long nowEpochMs) {
+        return continuationTransition(tenantId, interactionId, expectedVersion, nowEpochMs, current -> {
+            if (current.continuationStatus() != AwaitContinuationStatus.CLAIMED) {
+                return Optional.empty();
+            }
+            return Optional.of(withContinuation(current, AwaitContinuationStatus.APPLIED,
+                current.continuationAttempt(), 0L, "", 0L, outputPayload, nowEpochMs));
+        });
+    }
+
+    @Override
+    public Uni<Optional<AwaitInteractionRecord>> completeContinuationAndReleaseStreamCredit(
+        String tenantId,
+        String interactionId,
+        long expectedVersion,
+        String leaseOwner,
+        Object outputPayload,
+        long nowEpochMs
+    ) {
+        if (leaseOwner == null || leaseOwner.isBlank()) {
+            return Uni.createFrom().failure(new IllegalArgumentException("continuation lease owner must not be blank"));
+        }
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                purgeExpired(nowEpochMs);
+                AwaitInteractionRecord current = interactionsByScopedId.get(scopedInteractionId(tenantId, interactionId));
+                if (current == null
+                    || current.version() != expectedVersion
+                    || current.status() != AwaitInteractionStatus.COMPLETED
+                    || current.continuationStatus() != AwaitContinuationStatus.CLAIMED
+                    || !leaseOwner.equals(current.continuationLeaseOwner())
+                    || current.streamRegionId().isBlank()) {
+                    return Optional.empty();
+                }
+                AwaitInteractionRecord applied = withContinuation(
+                    current, AwaitContinuationStatus.APPLIED, current.continuationAttempt(),
+                    0L, "", 0L, outputPayload, nowEpochMs);
+                Optional<StreamRegionRecord> released = inMemoryExecutionStateStore()
+                    .releaseStreamRegionCreditInTransaction(
+                        current.tenantId(), current.executionId(), current.streamRegionId(), nowEpochMs);
+                if (released.isEmpty()) {
+                    return Optional.empty();
+                }
+                if (released.get().status().terminal() && released.get().terminalScalarSuffix()
+                    && !inMemoryExecutionStateStore().completeStreamRegionParentInTransaction(
+                        current.tenantId(), current.executionId(), current.unitId(),
+                        "stream-region-complete:" + current.streamRegionId(), nowEpochMs)) {
+                    return Optional.empty();
+                }
+                interactionsByScopedId.put(scopedInteractionId(tenantId, interactionId), applied);
+                return Optional.of(applied);
+            }
+        });
+    }
+
+    @Override
+    public Uni<Optional<StreamRegionRecord>> materializeStreamRegionPage(StreamRegionPageCommit commit) {
+        Objects.requireNonNull(commit, "commit must not be null");
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                purgeExpired(commit.nowEpochMs());
+                StreamRegionRecord expected = commit.claimedRegion().recordPage(
+                    commit.nextCheckpoint(), commit.interactions().size(), commit.endOfSource(), commit.nowEpochMs());
+                Optional<StreamRegionRecord> existing = inMemoryExecutionStateStore()
+                    .getStreamRegionInTransaction(commit.claimedRegion().tenantId(), commit.claimedRegion().executionId(),
+                        commit.claimedRegion().regionId());
+                if (existing.filter(region -> pageCommitRecovered(region, expected, commit.interactions())).isPresent()) {
+                    return Optional.of(expected);
+                }
+                if (commit.interactions().stream().anyMatch(interaction -> interactionAlreadyExists(interaction)
+                    || interactionLookupExists(interaction))) {
+                    return Optional.empty();
+                }
+                Optional<StreamRegionRecord> updated = inMemoryExecutionStateStore()
+                    .recordStreamRegionPageInTransaction(commit);
+                if (updated.isEmpty()) {
+                    return Optional.empty();
+                }
+                for (AwaitInteractionRecord interaction : commit.interactions()) {
+                    interactionsByScopedId.put(scopedInteractionId(interaction.tenantId(), interaction.interactionId()), interaction);
+                    interactionIdByScopedIdempotencyKey.put(
+                        scopedIdempotencyKey(interaction.tenantId(), interaction.stepId(), interaction.idempotencyKey()),
+                        interaction.interactionId());
+                    interactionIdByScopedCorrelation.put(
+                        scopedCorrelation(interaction.tenantId(), interaction.correlationId()), interaction.interactionId());
+                }
+                return updated;
             }
         });
     }
@@ -384,6 +585,24 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
             : Optional.ofNullable(interactionsByScopedId.get(scopedInteractionId(command.tenantId(), interactionId)));
     }
 
+    private Uni<Optional<AwaitInteractionRecord>> continuationTransition(
+        String tenantId, String interactionId, long expectedVersion, long nowEpochMs,
+        java.util.function.Function<AwaitInteractionRecord, Optional<AwaitInteractionRecord>> transition) {
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                purgeExpired(nowEpochMs);
+                String scopedId = scopedInteractionId(tenantId, interactionId);
+                AwaitInteractionRecord current = interactionsByScopedId.get(scopedId);
+                if (current == null || (expectedVersion >= 0 && current.version() != expectedVersion)) {
+                    return Optional.empty();
+                }
+                Optional<AwaitInteractionRecord> updated = transition.apply(current);
+                updated.ifPresent(record -> interactionsByScopedId.put(scopedId, record));
+                return updated;
+            }
+        });
+    }
+
     private AwaitInteractionRecord updateStatus(
         AwaitInteractionRecord current,
         AwaitInteractionStatus status,
@@ -415,7 +634,24 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
             current.createdAtEpochMs(),
             nowEpochMs,
             current.ttlEpochS(),
-            current.transportOutputType());
+            current.transportOutputType(), current.continuationStatus(), current.continuationAttempt(),
+            current.continuationNextDueEpochMs(), current.continuationLeaseOwner(),
+            current.continuationLeaseExpiresEpochMs(), current.continuationOutputPayload(), current.streamRegionId());
+    }
+
+    private static AwaitInteractionRecord withContinuation(
+        AwaitInteractionRecord current, AwaitContinuationStatus continuationStatus, int continuationAttempt,
+        long continuationNextDueEpochMs, String continuationLeaseOwner, long continuationLeaseExpiresEpochMs,
+        Object continuationOutputPayload, long nowEpochMs) {
+        return new AwaitInteractionRecord(
+            current.tenantId(), current.executionId(), current.stepId(), current.stepIndex(), current.outputType(),
+            current.interactionId(), current.correlationId(), current.causationId(), current.idempotencyKey(),
+            current.version() + 1, current.status(), current.requestPayload(), current.responsePayload(), current.unitId(),
+            current.itemIndex(), current.actor(), current.assignee(), current.group(), current.transportType(),
+            current.transportMetadata(), current.deadlineEpochMs(), current.createdAtEpochMs(), nowEpochMs,
+            current.ttlEpochS(), current.transportOutputType(), continuationStatus, continuationAttempt,
+            continuationNextDueEpochMs, continuationLeaseOwner, continuationLeaseExpiresEpochMs,
+            continuationOutputPayload, current.streamRegionId());
     }
 
     private void purgeExpired(long nowEpochMs) {
@@ -430,6 +666,45 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
                 interactionIdByScopedCorrelation.remove(scopedCorrelation(record.tenantId(), record.correlationId()));
             }
         }
+    }
+
+    private InMemoryExecutionStateStore inMemoryExecutionStateStore() {
+        if (explicitExecutionStateStore != null) {
+            return explicitExecutionStateStore;
+        }
+        if (executionStateStores == null) {
+            throw new IllegalStateException(
+                "In-memory stream-linked await work requires the selectable in-memory execution state store");
+        }
+        return executionStateStores.stream()
+            .filter(InMemoryExecutionStateStore.class::isInstance)
+            .map(InMemoryExecutionStateStore.class::cast)
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException(
+                "In-memory stream-linked await work requires InMemoryExecutionStateStore"));
+    }
+
+    private boolean interactionAlreadyExists(AwaitInteractionRecord interaction) {
+        return interactionsByScopedId.containsKey(scopedInteractionId(interaction.tenantId(), interaction.interactionId()));
+    }
+
+    private boolean interactionLookupExists(AwaitInteractionRecord interaction) {
+        return interactionIdByScopedIdempotencyKey.containsKey(
+                scopedIdempotencyKey(interaction.tenantId(), interaction.stepId(), interaction.idempotencyKey()))
+            || interactionIdByScopedCorrelation.containsKey(
+                scopedCorrelation(interaction.tenantId(), interaction.correlationId()));
+    }
+
+    private boolean pageCommitRecovered(
+        StreamRegionRecord stored,
+        StreamRegionRecord expected,
+        List<AwaitInteractionRecord> interactions
+    ) {
+        return stored.version() == expected.version()
+            && stored.nextLogicalOrdinal() == expected.nextLogicalOrdinal()
+            && stored.checkpoint().equals(expected.checkpoint())
+            && interactions.stream().allMatch(interaction -> interaction.equals(
+                interactionsByScopedId.get(scopedInteractionId(interaction.tenantId(), interaction.interactionId()))));
     }
 
     private static String scopedInteractionId(String tenantId, String interactionId) {

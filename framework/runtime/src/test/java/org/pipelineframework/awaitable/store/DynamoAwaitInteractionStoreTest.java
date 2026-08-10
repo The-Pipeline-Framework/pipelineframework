@@ -18,6 +18,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
+import org.pipelineframework.awaitable.AwaitContinuationStatus;
 import org.pipelineframework.awaitable.AwaitCreateCommand;
 import org.pipelineframework.awaitable.AwaitDurablePayloadResolver;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
@@ -273,6 +274,107 @@ class DynamoAwaitInteractionStoreTest {
         verify(client, times(2)).getItem(any(GetItemRequest.class));
     }
 
+    @Test
+    void appliesClaimedContinuationAndReleasesItsStreamCreditInOneTransaction() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoAwaitInteractionStore store = new DynamoAwaitInteractionStore(client, mockConfig());
+        Map<String, AttributeValue> interaction = item(
+            "tenant-a", "interaction-1", "unit-1", 0, AwaitInteractionStatus.COMPLETED,
+            10_000L, "alice", "finance");
+        interaction.put("continuation_status", avS("CLAIMED"));
+        interaction.put("continuation_attempt", avN(1));
+        interaction.put("continuation_next_due_epoch_ms", avN(2_000L));
+        interaction.put("continuation_lease_owner", avS("lease-a"));
+        interaction.put("continuation_lease_expires_epoch_ms", avN(10_000L));
+        interaction.put("stream_region_id", avS("csv-input"));
+        Map<String, AttributeValue> region = new java.util.HashMap<>();
+        region.put("tenant_id", avS("tenant-a"));
+        region.put("execution_id", avS("execution-interaction-1#stream-region#csv-input"));
+        region.put("record_kind", avS("stream_region"));
+        region.put("version", avN(7));
+        region.put("status", avS("ACTIVE"));
+        region.put("stream_outstanding_credits", avN(2));
+        region.put("next_due_epoch_ms", avN(Long.MAX_VALUE));
+        region.put("lease_expires_epoch_ms", avN(9_000L));
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(
+            GetItemResponse.builder().item(interaction).build(),
+            GetItemResponse.builder().item(region).build());
+
+        var applied = store.completeContinuationAndReleaseStreamCredit(
+            "tenant-a", "interaction-1", 0L, "lease-a", Map.of("approved", true), 3_000L)
+            .await().indefinitely();
+
+        assertTrue(applied.isPresent());
+        assertEquals(AwaitContinuationStatus.APPLIED, applied.orElseThrow().continuationStatus());
+        ArgumentCaptor<TransactWriteItemsRequest> transaction = ArgumentCaptor.forClass(TransactWriteItemsRequest.class);
+        verify(client).transactWriteItems(transaction.capture());
+        assertEquals(2, transaction.getValue().transactItems().size());
+        var interactionPut = transaction.getValue().transactItems().get(0).put();
+        assertEquals("tpf_await_interaction", interactionPut.tableName());
+        assertEquals("APPLIED", interactionPut.item().get("continuation_status").s());
+        assertTrue(interactionPut.conditionExpression().contains("#continuation"));
+        var regionPut = transaction.getValue().transactItems().get(1).put();
+        assertEquals("tpf_execution", regionPut.tableName());
+        assertEquals("1", regionPut.item().get("stream_outstanding_credits").n());
+        assertEquals("8", regionPut.item().get("version").n());
+        assertTrue(regionPut.conditionExpression().contains("#credits > :zero"));
+    }
+
+    @Test
+    void findsOnlyPersistedWaitingStreamInteractionsThroughTheExistingDueIndex() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoAwaitInteractionStore store = new DynamoAwaitInteractionStore(client, mockConfig());
+        Map<String, AttributeValue> waiting = item(
+            "tenant-a", "interaction-waiting", "unit-1", 0, AwaitInteractionStatus.WAITING,
+            10_000L, "alice", "finance");
+        waiting.put("stream_region_id", avS("source-a"));
+        waiting.put("created_at_epoch_ms", avN(1_000L));
+        Map<String, AttributeValue> ordinary = item(
+            "tenant-a", "interaction-ordinary", "unit-1", 1, AwaitInteractionStatus.WAITING,
+            10_000L, "alice", "finance");
+        Map<String, AttributeValue> dispatched = item(
+            "tenant-a", "interaction-dispatched", "unit-1", 2, AwaitInteractionStatus.DISPATCHED,
+            10_000L, "alice", "finance");
+        dispatched.put("stream_region_id", avS("source-a"));
+        when(client.query(any(QueryRequest.class))).thenReturn(QueryResponse.builder()
+            .items(List.of(waiting, ordinary, dispatched))
+            .build());
+
+        List<AwaitInteractionRecord> records = store.findDueStreamInteractionDispatches(2_000L, 10)
+            .await().indefinitely();
+
+        assertEquals(List.of("interaction-waiting"), records.stream()
+            .map(AwaitInteractionRecord::interactionId).toList());
+        ArgumentCaptor<QueryRequest> captor = ArgumentCaptor.forClass(QueryRequest.class);
+        verify(client).query(captor.capture());
+        QueryRequest request = captor.getValue();
+        assertEquals("await-interaction-continuation-by-due", request.indexName());
+        assertEquals("#key = :key AND #sort BETWEEN :from AND :to", request.keyConditionExpression());
+        assertEquals("active", request.expressionAttributeValues().get(":key").s());
+        assertTrue(request.expressionAttributeValues().get(":from").s().startsWith("dispatch#"));
+        assertTrue(request.expressionAttributeValues().get(":to").s().startsWith("dispatch#"));
+        verify(client, never()).scan(any(ScanRequest.class));
+    }
+
+    @Test
+    void dispatchClaimRemovesTheStreamDispatchDueKey() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoAwaitInteractionStore store = new DynamoAwaitInteractionStore(client, mockConfig());
+        Map<String, AttributeValue> dispatched = item(
+            "tenant-a", "interaction-1", "unit-1", 0, AwaitInteractionStatus.DISPATCHING,
+            10_000L, "alice", "finance");
+        dispatched.put("stream_region_id", avS("source-a"));
+        when(client.updateItem(any(UpdateItemRequest.class))).thenReturn(
+            UpdateItemResponse.builder().attributes(dispatched).build());
+
+        store.markDispatching("tenant-a", "interaction-1", 0L, 2_000L).await().indefinitely();
+
+        ArgumentCaptor<UpdateItemRequest> captor = ArgumentCaptor.forClass(UpdateItemRequest.class);
+        verify(client).updateItem(captor.capture());
+        assertTrue(captor.getValue().updateExpression().contains("#continuationDueKey"));
+        assertTrue(captor.getValue().updateExpression().contains("#continuationDueSort"));
+    }
+
     private static AwaitCreateCommand command(
         String tenantId,
         String executionId,
@@ -345,6 +447,7 @@ class DynamoAwaitInteractionStoreTest {
         when(config.dynamo()).thenReturn(dynamo);
         when(dynamo.awaitInteractionTable()).thenReturn("tpf_await_interaction");
         when(dynamo.awaitInteractionKeyTable()).thenReturn("tpf_await_interaction_key");
+        when(dynamo.executionTable()).thenReturn("tpf_execution");
         when(dynamo.region()).thenReturn(Optional.empty());
         when(dynamo.endpointOverride()).thenReturn(Optional.empty());
         return config;

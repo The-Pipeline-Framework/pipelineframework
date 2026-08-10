@@ -66,6 +66,9 @@ import org.pipelineframework.orchestrator.TransitionWorkerCommand;
 import org.pipelineframework.orchestrator.TransitionWorkerExecutor;
 import org.pipelineframework.orchestrator.TransitionWorkerOutcome;
 import org.pipelineframework.orchestrator.release.PipelineContractDescriptor;
+import org.pipelineframework.stream.StreamRegionContinuation;
+import org.pipelineframework.stream.StreamRegionContinuationInput;
+import org.pipelineframework.stream.StreamRegionContinuationRegistry;
 import org.pipelineframework.step.ConfigFactory;
 import org.pipelineframework.step.Configurable;
 import org.pipelineframework.step.StepManyToMany;
@@ -91,6 +94,9 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
 
   @Inject
   PipelineStepOrderer stepOrderer;
+
+  @Inject
+  StreamRegionContinuationRegistry streamRegionContinuationRegistry;
 
   /** Health check service to verify dependent services. */
   @Inject
@@ -323,6 +329,42 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
       }
 
       @Override
+      public Uni<Object> continueDurableAwaitItem(
+          AwaitInteractionRecord record,
+          AwaitUnitRecord unit,
+          int nextStepIndex,
+          java.util.Optional<ExecutionRecord<Object, Object>> parent,
+          long nowEpochMs) {
+        if (parent.isEmpty()) {
+          return Uni.createFrom().item(List.of());
+        }
+        List<Object> orderedSteps = stepOrderer.orderSteps(loadStepsForExecution());
+        int aggregateStepIndex = firstAggregateStepIndex(orderedSteps, nextStepIndex);
+        ExecutionInputSnapshot continuationInput = new ExecutionInputSnapshot(
+            ExecutionInputShape.UNI, awaitCoordinator.resumePayload(record));
+        String transitionKey = "await-item-continuation:" + unit.unitId() + ":" + record.itemIndex();
+        TransitionWorkerCommand workerCommand = new TransitionWorkerCommand(
+            parent.get().tenantId(), parent.get().executionId(), nextStepIndex, aggregateStepIndex,
+            parent.get().attempt(), ExecutionResultShape.MATERIALIZED_MULTI, parent.get().version(),
+            transitionKey, continuationInput);
+        TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
+            workerCommand, parent.get().pipelineId(), parent.get().contractVersion(), parent.get().releaseVersion(),
+            transitionKey, payloadCodec().encode(continuationInput));
+        return transitionWorkerExecutor().execute(selectedWorker, envelope)
+            .onItem().transform(result -> {
+              if (result.outcome() != TransitionWorkerOutcome.COMPLETED) {
+                throw new IllegalStateException("Await item continuation transition did not complete: " + result.outcome());
+              }
+              List<?> outputs = result.decodeOutputItems(payloadCodec());
+              if (outputs.size() != 1) {
+                throw new IllegalStateException(
+                    "Durable scalar await continuation must produce exactly one output, got " + outputs.size());
+              }
+              return outputs.getFirst();
+            });
+      }
+
+      @Override
       public Uni<Void> releaseAwaitParentIfReady(
           ExecutionRecord<Object, Object> parent,
           AwaitUnitRecord unit,
@@ -522,6 +564,11 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     return Multi.createFrom().deferred(() -> {
       Uni<Object> sourcePayload = Uni.createFrom().item(command.inputPayload());
       return sourcePayload.onItem().transformToMulti(payload -> {
+        Object streamContinuationPayload = payload instanceof ExecutionInputSnapshot snapshot
+            ? snapshot.payload() : payload;
+        if (streamContinuationPayload instanceof StreamRegionContinuationInput continuationInput) {
+          return executeStreamRegionContinuation(continuationInput);
+        }
         Object reactiveInput = executionInputPolicy.toReplayInput(payload);
         AwaitExecutionContext previous = AwaitExecutionContextHolder.get();
         AwaitExecutionContextHolder.set(new AwaitExecutionContext(
@@ -586,6 +633,33 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
         }
       });
     });
+  }
+
+  /**
+   * Runs one compiler-generated producer continuation through the same PipelineRunner execution
+   * path as every other transition. The command payload carries only provider execution input;
+   * stream-region claim and credit state remain entirely with the coordinator.
+   */
+  private Multi<?> executeStreamRegionContinuation(StreamRegionContinuationInput input) {
+    if (input.limit() <= 0) {
+      return Multi.createFrom().failure(new IllegalArgumentException(
+          "stream-region continuation limit must be positive"));
+    }
+    StreamRegionContinuation continuation = streamRegionContinuationRegistry.find(input.descriptor())
+        .orElseThrow(() -> new IllegalStateException(
+            "No generated stream continuation matches " + input.descriptor()));
+    PipelineRunner.ExecutionResult executionResult = executePipelineStreamingInternalFromStep(
+        Uni.createFrom().item(input), List.of(continuation.transitionStep()), 0, 1);
+    Object result = executionResult.result();
+    if (result instanceof Multi<?> multi) {
+      return multi;
+    }
+    if (result instanceof Uni<?> uni) {
+      return uni.toMulti();
+    }
+    return Multi.createFrom().failure(new IllegalStateException(
+        "Generated stream continuation returned unsupported result type "
+            + (result == null ? "null" : result.getClass().getName())));
   }
 
   /**

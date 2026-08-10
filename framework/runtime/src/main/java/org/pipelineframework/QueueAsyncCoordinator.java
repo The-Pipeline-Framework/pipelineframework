@@ -54,6 +54,7 @@ import org.pipelineframework.orchestrator.release.LocalPipelineReleaseActivation
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 import org.pipelineframework.objectpublish.ObjectPublishCompletionService;
+import org.pipelineframework.stream.StreamRegionContinuationRegistry;
 
 /**
  * Coordinates queue-mode orchestration lifecycle and provider interactions.
@@ -94,6 +95,9 @@ class QueueAsyncCoordinator {
 
   @Inject
   AwaitCoordinator awaitCoordinator;
+
+  @Inject
+  StreamRegionContinuationRegistry streamRegionContinuations;
 
   @Inject
   AwaitLiveCompletionRegistry awaitLiveCompletionRegistry;
@@ -283,6 +287,19 @@ class QueueAsyncCoordinator {
     }
     if (worker == null) {
       return Uni.createFrom().failure(new IllegalArgumentException("PipelineTransitionWorker must not be null"));
+    }
+    if (workItem.awaitContinuation()) {
+      return new DurableAwaitItemContinuationFlow(awaitCoordinator, workDispatcher, executionStateStore)
+          .process(workItem, itemContinuationHandler);
+    }
+    if (workItem.streamRegion()) {
+      return new StreamRegionFlow(
+          executionStateStore,
+          awaitCoordinator,
+          streamRegionContinuations,
+          transitionWorkerExecutor,
+          payloadCodec(),
+          orchestratorConfig).process(workItem, worker);
     }
     return segmentPipeline().process(workItem, worker, itemContinuationHandler);
   }
@@ -494,7 +511,8 @@ class QueueAsyncCoordinator {
         this::pipelineId,
         this::releaseVersion,
         this::segmentBoundaryLedger,
-        awaitContinuations());
+        awaitContinuations(),
+        workDispatcher);
   }
 
   private ExecutionReadModel executionReadModel() {
@@ -599,7 +617,9 @@ class QueueAsyncCoordinator {
             orchestratorConfig,
             executionStateStore,
             workDispatcher,
-            new AwaitTimeoutFlow(awaitCoordinator, executionStateStore, this::segmentBoundaryLedger));
+            new AwaitTimeoutFlow(awaitCoordinator, executionStateStore, this::segmentBoundaryLedger),
+            awaitCoordinator,
+            streamRegionContinuations);
         sweepFlow = current;
       }
       return current;
@@ -636,6 +656,7 @@ class QueueAsyncCoordinator {
         executionStateStore,
         workDispatcher,
         awaitCoordinator,
+        streamRegionContinuations,
         transitionWorkerExecutor,
         admissionPolicy(),
             this::payloadCodec,

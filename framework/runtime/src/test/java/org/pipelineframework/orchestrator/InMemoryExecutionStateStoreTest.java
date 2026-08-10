@@ -4,10 +4,29 @@ import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.orchestrator.stream.StreamRegionRecord;
+import org.pipelineframework.orchestrator.stream.StreamRegionStatus;
+import org.pipelineframework.stream.OpaqueSourceCheckpoint;
+import org.pipelineframework.stream.ResumableSourceDescriptor;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class InMemoryExecutionStateStoreTest {
+
+    @Test
+    void findsDueStreamRegionsWithoutReturningAnActiveLease() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        StreamRegionRecord due = streamRegion("due", 1_000L);
+        StreamRegionRecord leased = streamRegion("leased", 1_000L);
+        store.createStreamRegion(due).await().indefinitely();
+        store.createStreamRegion(leased).await().indefinitely();
+        store.claimStreamRegion("tenant-a", "execution-a", "leased", "other-worker", 1_000L, 10_000L)
+            .await().indefinitely();
+
+        List<StreamRegionRecord> regions = store.findDueStreamRegions(1_000L, 10).await().indefinitely();
+
+        assertEquals(List.of(due), regions);
+    }
 
     @Test
     void createOrGetReturnsDuplicateForSameKey() {
@@ -515,5 +534,13 @@ class InMemoryExecutionStateStoreTest {
         assertEquals(ExecutionStatus.FAILED, firstRead.get().status());
         assertTrue(firstRead.get().status().terminal());
         assertFalse(secondRead.get().status().terminal());
+    }
+
+    private static StreamRegionRecord streamRegion(String regionId, long nextDueEpochMs) {
+        return new StreamRegionRecord(
+            "tenant-a", "execution-a", regionId,
+            new ResumableSourceDescriptor("test", "deterministic", "sha256:source"),
+            OpaqueSourceCheckpoint.initial(), 0L, 0, 4, StreamRegionStatus.ACTIVE, Optional.empty(),
+            0L, "", 0L, nextDueEpochMs, 1L, 1L, Long.MAX_VALUE);
     }
 }

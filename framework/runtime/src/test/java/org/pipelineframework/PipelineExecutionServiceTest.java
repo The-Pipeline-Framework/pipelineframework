@@ -25,6 +25,8 @@ import org.pipelineframework.config.boundary.PipelineObjectPublishGroupingConfig
 import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
+import org.pipelineframework.orchestrator.ExecutionInputShape;
+import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
 import org.pipelineframework.orchestrator.PipelineReleaseIdentityResolver;
@@ -32,6 +34,7 @@ import org.pipelineframework.orchestrator.PipelineControlPlane;
 import org.pipelineframework.orchestrator.PipelineTransitionWorker;
 import org.pipelineframework.orchestrator.PipelineTransitionWorkerSelector;
 import org.pipelineframework.orchestrator.TransitionCommandEnvelope;
+import org.pipelineframework.orchestrator.TransitionWorkerCommand;
 import org.pipelineframework.orchestrator.TransitionResultEnvelope;
 import org.pipelineframework.orchestrator.TransitionWorkerOutcome;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
@@ -41,6 +44,11 @@ import org.pipelineframework.awaitable.AwaitCoordinator;
 import org.pipelineframework.awaitable.AwaitContinuationMode;
 import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.awaitable.TerminalOutputOwnership;
+import org.pipelineframework.stream.OpaqueSourceCheckpoint;
+import org.pipelineframework.stream.ResumableSourceDescriptor;
+import org.pipelineframework.stream.StreamRegionContinuation;
+import org.pipelineframework.stream.StreamRegionContinuationInput;
+import org.pipelineframework.stream.StreamRegionContinuationRegistry;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 import org.pipelineframework.objectpublish.ObjectPayloadChunk;
 import org.pipelineframework.objectpublish.ObjectPublishGroupRenderer;
@@ -62,6 +70,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -262,6 +271,51 @@ class PipelineExecutionServiceTest {
 
         assertEquals(TransitionWorkerOutcome.FAILED, result.outcome());
         assertTrue(result.failure().message().contains("identity mismatch sentinel"));
+    }
+
+    @Test
+    void portableStreamRegionCommandRunsTheRegistrySelectedOneStepSegment() throws Exception {
+        markStartupHealthy(service);
+        JsonTransitionPayloadCodec codec = new JsonTransitionPayloadCodec();
+        service.transitionPayloadCodec = codec;
+        ResumableSourceDescriptor descriptor = new ResumableSourceDescriptor("deterministic", "source", "v1");
+        StreamInput input = new StreamInput("source-a", descriptor, OpaqueSourceCheckpoint.initial(), 2);
+        StreamRegionContinuation continuation = mock(StreamRegionContinuation.class);
+        org.pipelineframework.step.StepOneToOne<?, ?> step = mock(org.pipelineframework.step.StepOneToOne.class);
+        when(continuation.descriptor()).thenReturn(descriptor);
+        when(continuation.transitionStep()).thenAnswer(ignored -> step);
+        StreamRegionContinuationRegistry registry = registryWith(continuation);
+        service.streamRegionContinuationRegistry = registry;
+        when(releaseIdentityResolver.validateCommandIdentity(any(), isNull())).thenReturn(Optional.empty());
+        when(pipelineRunner.runFromStepUntilWithContext(any(), eq(List.of(step)), eq(0), eq(1)))
+            .thenReturn(new PipelineRunner.ExecutionResult(Multi.createFrom().item("page"), telemetryContext));
+        ExecutionInputSnapshot payload = new ExecutionInputSnapshot(ExecutionInputShape.UNI, input);
+        TransitionWorkerCommand command = new TransitionWorkerCommand("tenant", "execution", 0, 1, 1,
+            ExecutionResultShape.SINGLE, 3, "stream-region-page", payload);
+        TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(command, "pipeline", "contract", "release",
+            "stream-region-page", codec.encode(payload));
+
+        TransitionResultEnvelope result = service.executePortableTransition(envelope).await().indefinitely();
+
+        assertEquals(TransitionWorkerOutcome.COMPLETED, result.outcome());
+        assertEquals(List.of("page"), result.decodeOutputItems(codec));
+        verify(pipelineRunner).runFromStepUntilWithContext(any(), eq(List.of(step)), eq(0), eq(1));
+    }
+
+    private static StreamRegionContinuationRegistry registryWith(StreamRegionContinuation continuation) throws Exception {
+        StreamRegionContinuationRegistry registry = new StreamRegionContinuationRegistry();
+        @SuppressWarnings("unchecked")
+        jakarta.enterprise.inject.Instance<StreamRegionContinuation> candidates = mock(jakarta.enterprise.inject.Instance.class);
+        when(candidates.iterator()).thenReturn(List.of(continuation).iterator());
+        Field field = StreamRegionContinuationRegistry.class.getDeclaredField("continuations");
+        field.setAccessible(true);
+        field.set(registry, candidates);
+        return registry;
+    }
+
+    private record StreamInput(String source, ResumableSourceDescriptor descriptor,
+                               OpaqueSourceCheckpoint checkpoint, int limit)
+        implements StreamRegionContinuationInput {
     }
 
     @Test

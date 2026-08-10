@@ -20,6 +20,10 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.pipelineframework.cache.ProtobufMessageParser;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.orchestrator.stream.StreamRegionRecord;
+import org.pipelineframework.orchestrator.stream.StreamRegionStatus;
+import org.pipelineframework.stream.OpaqueSourceCheckpoint;
+import org.pipelineframework.stream.ResumableSourceDescriptor;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.BatchGetItemRequest;
@@ -28,6 +32,8 @@ import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedExce
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
 import software.amazon.awssdk.services.dynamodb.model.TransactWriteItemsRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
@@ -43,6 +49,52 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 class DynamoExecutionStateStoreTest {
+
+    @Test
+    void findsDueStreamRegionsWithBoundedExecutionProjectionScan() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
+        when(client.scan(any(ScanRequest.class))).thenReturn(ScanResponse.builder().items(List.of()).build());
+
+        assertTrue(store.findDueStreamRegions(1_000L, 5).await().indefinitely().isEmpty());
+
+        ArgumentCaptor<ScanRequest> scan = ArgumentCaptor.forClass(ScanRequest.class);
+        verify(client).scan(scan.capture());
+        assertEquals("tpf_execution", scan.getValue().tableName());
+        assertEquals(15, scan.getValue().limit());
+        assertTrue(scan.getValue().filterExpression().contains("#kind = :kind"));
+        assertTrue(scan.getValue().filterExpression().contains("#status = :active"));
+        assertFalse(scan.getValue().filterExpression().contains("index"));
+    }
+
+    @Test
+    void persistsBoundedStreamRegionInExecutionProjectionTableWithoutExecutionKeyOrAwaitState() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
+        StreamRegionRecord region = new StreamRegionRecord(
+            "tenant-a", "execution-a", "csv-source",
+            new ResumableSourceDescriptor("opencsv", "csv-source", "sha256:source"),
+            OpaqueSourceCheckpoint.initial(), 0L, 0, 25, StreamRegionStatus.ACTIVE, Optional.empty(),
+            0L, "", 0L, 100L, 10L, 10L, 1_000L);
+
+        StreamRegionRecord created = store.createStreamRegion(region).await().indefinitely().orElseThrow();
+
+        assertEquals(region, created);
+        ArgumentCaptor<PutItemRequest> createdPut = ArgumentCaptor.forClass(PutItemRequest.class);
+        verify(client).putItem(createdPut.capture());
+        Map<String, AttributeValue> item = createdPut.getValue().item();
+        assertEquals("stream_region", item.get("record_kind").s());
+        assertEquals("execution-a#stream-region#csv-source", item.get("execution_id").s());
+        assertFalse(item.containsKey("execution_key"));
+        assertFalse(item.containsKey("await_unit_id"));
+        assertFalse(item.containsKey("stream_completed_item_keys"));
+
+        when(client.getItem(any(GetItemRequest.class))).thenReturn(GetItemResponse.builder().item(item).build());
+        StreamRegionRecord restored = store.getStreamRegion("tenant-a", "execution-a", "csv-source")
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(region, restored);
+    }
 
     @Test
     void writesAndRestoresTypedExecutionInputAndMaterializedChildResults() {

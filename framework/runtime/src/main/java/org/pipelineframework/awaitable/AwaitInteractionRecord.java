@@ -55,8 +55,51 @@ public record AwaitInteractionRecord(
     long createdAtEpochMs,
     long updatedAtEpochMs,
     long ttlEpochS,
-    String transportOutputType
+    String transportOutputType,
+    AwaitContinuationStatus continuationStatus,
+    int continuationAttempt,
+    long continuationNextDueEpochMs,
+    String continuationLeaseOwner,
+    long continuationLeaseExpiresEpochMs,
+    Object continuationOutputPayload,
+    String streamRegionId
 ) {
+    /**
+     * Compatibility constructor for rows written before item continuations were linked to a
+     * producer-owned stream region.
+     */
+    public AwaitInteractionRecord(
+        String tenantId, String executionId, String stepId, int stepIndex, String outputType,
+        String interactionId, String correlationId, String causationId, String idempotencyKey, long version,
+        AwaitInteractionStatus status, Object requestPayload, Object responsePayload, String unitId,
+        Integer itemIndex, String actor, String assignee, String group, String transportType,
+        Map<String, Object> transportMetadata, long deadlineEpochMs, long createdAtEpochMs,
+        long updatedAtEpochMs, long ttlEpochS, String transportOutputType,
+        AwaitContinuationStatus continuationStatus, int continuationAttempt, long continuationNextDueEpochMs,
+        String continuationLeaseOwner, long continuationLeaseExpiresEpochMs, Object continuationOutputPayload
+    ) {
+        this(tenantId, executionId, stepId, stepIndex, outputType, interactionId, correlationId, causationId,
+            idempotencyKey, version, status, requestPayload, responsePayload, unitId, itemIndex, actor, assignee,
+            group, transportType, transportMetadata, deadlineEpochMs, createdAtEpochMs, updatedAtEpochMs,
+            ttlEpochS, transportOutputType, continuationStatus, continuationAttempt, continuationNextDueEpochMs,
+            continuationLeaseOwner, continuationLeaseExpiresEpochMs, continuationOutputPayload, "");
+    }
+    /** Compatibility constructor for interaction rows created before durable continuation work. */
+    public AwaitInteractionRecord(
+        String tenantId, String executionId, String stepId, int stepIndex, String outputType,
+        String interactionId, String correlationId, String causationId, String idempotencyKey, long version,
+        AwaitInteractionStatus status, Object requestPayload, Object responsePayload, String unitId,
+        Integer itemIndex, String actor, String assignee, String group, String transportType,
+        Map<String, Object> transportMetadata, long deadlineEpochMs, long createdAtEpochMs,
+        long updatedAtEpochMs, long ttlEpochS, String transportOutputType
+    ) {
+        this(tenantId, executionId, stepId, stepIndex, outputType, interactionId, correlationId, causationId,
+            idempotencyKey, version, status, requestPayload, responsePayload, unitId, itemIndex, actor, assignee,
+            group, transportType, transportMetadata, deadlineEpochMs, createdAtEpochMs, updatedAtEpochMs,
+            ttlEpochS, transportOutputType,
+            itemIndex == null ? AwaitContinuationStatus.HELD : AwaitContinuationStatus.HELD,
+            0, 0L, "", 0L, null);
+    }
     public AwaitInteractionRecord(
         String tenantId,
         String executionId,
@@ -178,10 +221,38 @@ public record AwaitInteractionRecord(
         transportOutputType = transportOutputType == null || transportOutputType.isBlank()
             ? outputType
             : transportOutputType;
+        continuationStatus = continuationStatus == null ? AwaitContinuationStatus.HELD : continuationStatus;
+        if (continuationAttempt < 0) {
+            throw new IllegalArgumentException("continuationAttempt must not be negative");
+        }
+        continuationLeaseOwner = continuationLeaseOwner == null ? "" : continuationLeaseOwner;
+        streamRegionId = streamRegionId == null ? "" : streamRegionId;
     }
 
     public boolean itemInteraction() {
         return itemIndex != null;
+    }
+
+    /**
+     * Returns a copy linked to the bounded producer region that created this item. The linkage is
+     * immutable once assigned: an item continuation may return credit only to its own producer.
+     */
+    public AwaitInteractionRecord linkedToStreamRegion(String regionId) {
+        if (regionId == null || regionId.isBlank()) {
+            throw new IllegalArgumentException("stream region id must not be blank");
+        }
+        if (!streamRegionId.isBlank() && !streamRegionId.equals(regionId)) {
+            throw new IllegalStateException("Await interaction is already linked to another stream region");
+        }
+        if (streamRegionId.equals(regionId)) {
+            return this;
+        }
+        return new AwaitInteractionRecord(
+            tenantId, executionId, stepId, stepIndex, outputType, interactionId, correlationId, causationId,
+            idempotencyKey, version, status, requestPayload, responsePayload, unitId, itemIndex, actor, assignee,
+            group, transportType, transportMetadata, deadlineEpochMs, createdAtEpochMs, updatedAtEpochMs,
+            ttlEpochS, transportOutputType, continuationStatus, continuationAttempt, continuationNextDueEpochMs,
+            continuationLeaseOwner, continuationLeaseExpiresEpochMs, continuationOutputPayload, regionId);
     }
 
     /**
@@ -192,6 +263,25 @@ public record AwaitInteractionRecord(
             tenantId, executionId, stepId, stepIndex, outputType, interactionId, correlationId, causationId,
             idempotencyKey, version, status, requestSnapshot, responseSnapshot, unitId, itemIndex, actor, assignee,
             group, transportType, transportMetadata, deadlineEpochMs, createdAtEpochMs, updatedAtEpochMs,
-            ttlEpochS, transportOutputType);
+            ttlEpochS, transportOutputType, continuationStatus, continuationAttempt,
+            continuationNextDueEpochMs, continuationLeaseOwner, continuationLeaseExpiresEpochMs,
+            continuationOutputPayload, streamRegionId);
+    }
+
+    public boolean continuationEligible() {
+        return itemInteraction() && status == AwaitInteractionStatus.COMPLETED
+            && !continuationStatus.terminal();
+    }
+
+    public boolean continuationDue(long nowEpochMs) {
+        if (!continuationEligible()) {
+            return false;
+        }
+        if (continuationStatus == AwaitContinuationStatus.CLAIMED) {
+            return continuationLeaseExpiresEpochMs <= nowEpochMs;
+        }
+        return continuationStatus.due(nowEpochMs)
+            && continuationNextDueEpochMs <= nowEpochMs
+            && (continuationLeaseOwner.isBlank() || continuationLeaseExpiresEpochMs <= nowEpochMs);
     }
 }

@@ -19,6 +19,7 @@ import io.smallrye.mutiny.infrastructure.Infrastructure;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
+import org.pipelineframework.orchestrator.stream.StreamRegionPageCommit;
 import org.pipelineframework.awaitable.spi.AwaitTransportAdapter;
 import org.pipelineframework.awaitable.spi.AwaitUnitStore;
 import org.pipelineframework.awaitable.admission.AwaitAdmissionReservation;
@@ -132,11 +133,65 @@ public class AwaitCoordinator {
             });
     }
 
+    /**
+     * Ensures the static await unit exists for producer-owned incremental materialisation. It does
+     * not mark dispatch complete and does not create an interaction.
+     */
+    public Uni<AwaitUnitRecord> ensureStreamRegionUnit(
+        AwaitStepDescriptor descriptor,
+        String tenantId,
+        String executionId,
+        int stepIndex
+    ) {
+        String unitId = deriveUnitId(tenantId, executionId, descriptor.stepId(), stepIndex);
+        return registerDescriptor(descriptor)
+            .chain(() -> createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex));
+    }
+
+    /**
+     * Builds, but does not persist or dispatch, one deterministic stream-region interaction. The
+     * caller commits it atomically with its producer page.
+     */
+    public AwaitInteractionRecord streamRegionInteraction(
+        AwaitStepDescriptor descriptor,
+        AwaitUnitRecord unit,
+        String interactionId,
+        Object requestPayload,
+        int itemIndex,
+        long nowEpochMs
+    ) {
+        if (itemIndex < 0) {
+            throw new IllegalArgumentException("itemIndex must not be negative");
+        }
+        Object canonicalRequestPayload = restoreCanonicalRequestPayload(descriptor, requestPayload);
+        long deadline = nowEpochMs + descriptor.timeout().toMillis();
+        long ttl = Instant.ofEpochMilli(deadline).plusSeconds(86_400).getEpochSecond();
+        String idempotencyKey = deriveIdempotencyKey(descriptor, unit.executionId(), canonicalRequestPayload)
+            + ":item=" + itemIndex;
+        String correlationId = deriveCorrelationId(descriptor, unit.tenantId(), unit.executionId(), idempotencyKey);
+        return new AwaitInteractionRecord(
+            unit.tenantId(), unit.executionId(), descriptor.stepId(), unit.stepIndex(), descriptor.outputType(),
+            interactionId, correlationId, interactionId, idempotencyKey, 0L, AwaitInteractionStatus.WAITING,
+            canonicalRequestPayload, null, unit.unitId(), itemIndex, null, "", "", descriptor.transportType(),
+            Map.of(), deadline, nowEpochMs, nowEpochMs, ttl, descriptor.transportOutputType(),
+            AwaitContinuationStatus.HELD, 0, 0L, "", 0L, null, "");
+    }
+
+    /** Atomically makes one bounded producer page and its item interactions visible. */
+    public Uni<org.pipelineframework.orchestrator.stream.StreamRegionRecord> materializeStreamRegionPage(
+        StreamRegionPageCommit commit
+    ) {
+        return interactionStore().materializeStreamRegionPage(commit)
+            .onItem().transform(updated -> updated.orElseThrow(() -> new IllegalStateException(
+                "Stream-region page commit lost its optimistic-concurrency race")));
+    }
+
     @SuppressWarnings("unchecked")
     public Uni<AwaitInteractionRecord> dispatch(AwaitStepDescriptor descriptor, AwaitInteractionRecord interaction) {
         AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(descriptor.transportType());
         long nowEpochMs = System.currentTimeMillis();
-        return interactionStore().markDispatching(
+        return registerDescriptor(descriptor)
+            .onItem().transformToUni(ignored -> interactionStore().markDispatching(
                 interaction.tenantId(),
                 interaction.interactionId(),
                 interaction.version(),
@@ -167,7 +222,7 @@ public class AwaitCoordinator {
                 .onItem().transformToUni(optional -> optional
                     .map(Uni.createFrom()::item)
                     .orElseGet(() -> resolvedAfterDispatchMetadataRace(claimedInteraction)))
-                .onItem().invoke(this::recordInteractionDispatched));
+                .onItem().invoke(this::recordInteractionDispatched)));
     }
 
     private Map<String, Object> dispatchMetadata(AwaitInteractionRecord interaction, Map<String, Object> metadata) {
@@ -309,6 +364,51 @@ public class AwaitCoordinator {
                 nowEpochMs)
             .onItem().transform(optional -> optional.orElseThrow(
                 () -> new AwaitInteractionNotFoundException("No await unit matches id " + unitId)));
+    }
+
+    /** Activates independently schedulable item continuation work after durable completion admission. */
+    public Uni<Optional<AwaitInteractionRecord>> activateItemContinuation(
+        AwaitInteractionRecord interaction,
+        long nowEpochMs) {
+        return interactionStore().activateContinuationIfEligible(
+            interaction.tenantId(), interaction.interactionId(), interaction.version(), nowEpochMs);
+    }
+
+    public Uni<Optional<AwaitInteractionRecord>> claimItemContinuation(
+        String tenantId, String interactionId, String leaseOwner, long nowEpochMs, long leaseMs) {
+        return interactionStore().claimDueContinuation(tenantId, interactionId, leaseOwner, nowEpochMs, leaseMs);
+    }
+
+    public Uni<Optional<AwaitInteractionRecord>> retryItemContinuation(
+        AwaitInteractionRecord interaction, long nextDueEpochMs, long nowEpochMs) {
+        return interactionStore().rescheduleContinuation(
+            interaction.tenantId(), interaction.interactionId(), interaction.version(), nextDueEpochMs, nowEpochMs);
+    }
+
+    public Uni<Optional<AwaitInteractionRecord>> completeItemContinuation(
+        AwaitInteractionRecord interaction, Object outputPayload, long nowEpochMs) {
+        return interactionStore().completeContinuation(
+            interaction.tenantId(), interaction.interactionId(), interaction.version(), outputPayload, nowEpochMs);
+    }
+
+    public Uni<Optional<AwaitInteractionRecord>> completeItemContinuationAndReleaseStreamCredit(
+        AwaitInteractionRecord interaction,
+        String leaseOwner,
+        Object outputPayload,
+        long nowEpochMs
+    ) {
+        return interactionStore().completeContinuationAndReleaseStreamCredit(
+            interaction.tenantId(), interaction.interactionId(), interaction.version(), leaseOwner,
+            outputPayload, nowEpochMs);
+    }
+
+    public Uni<List<AwaitInteractionRecord>> findDueItemContinuations(long nowEpochMs, int limit) {
+        return interactionStore().findDueContinuations(nowEpochMs, limit);
+    }
+
+    /** Finds page-committed stream interactions which must be redriven to provider dispatch. */
+    public Uni<List<AwaitInteractionRecord>> findDueStreamInteractionDispatches(long nowEpochMs, int limit) {
+        return interactionStore().findDueStreamInteractionDispatches(nowEpochMs, limit);
     }
 
     public Uni<Object> loadResumePayload(String tenantId, String unitId) {

@@ -19,6 +19,8 @@ import org.pipelineframework.orchestrator.ControlPlaneAdmissionPolicy;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionRequest;
 import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.ExecutionWorkItem;
+import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
 
 /**
@@ -35,6 +37,7 @@ class AwaitBoundaryAdmission {
   private final Supplier<String> releaseVersion;
   private final Supplier<SegmentBoundaryLedger> segmentBoundaryLedger;
   private final AwaitContinuations continuations;
+  private final WorkDispatcher workDispatcher;
 
   AwaitBoundaryAdmission(
       PipelineOrchestratorConfig orchestratorConfig,
@@ -46,6 +49,32 @@ class AwaitBoundaryAdmission {
       Supplier<String> releaseVersion,
       Supplier<SegmentBoundaryLedger> segmentBoundaryLedger,
       AwaitContinuations continuations) {
+    this(orchestratorConfig, executionInputPolicy, admissionPolicy, awaitCoordinator,
+        awaitLiveCompletionRegistry, pipelineId, releaseVersion, segmentBoundaryLedger, continuations,
+        new WorkDispatcher() {
+          @Override
+          public Uni<Void> enqueueNow(ExecutionWorkItem item) {
+            return Uni.createFrom().voidItem();
+          }
+
+          @Override
+          public Uni<Void> enqueueDelayed(ExecutionWorkItem item, java.time.Duration delay) {
+            return Uni.createFrom().voidItem();
+          }
+        });
+  }
+
+  AwaitBoundaryAdmission(
+      PipelineOrchestratorConfig orchestratorConfig,
+      ExecutionInputPolicy executionInputPolicy,
+      ControlPlaneAdmissionPolicy admissionPolicy,
+      AwaitCoordinator awaitCoordinator,
+      AwaitLiveCompletionRegistry awaitLiveCompletionRegistry,
+      Supplier<String> pipelineId,
+      Supplier<String> releaseVersion,
+      Supplier<SegmentBoundaryLedger> segmentBoundaryLedger,
+      AwaitContinuations continuations,
+      WorkDispatcher workDispatcher) {
     this.orchestratorConfig = orchestratorConfig;
     this.executionInputPolicy = executionInputPolicy;
     this.admissionPolicy = admissionPolicy;
@@ -55,6 +84,7 @@ class AwaitBoundaryAdmission {
     this.releaseVersion = releaseVersion;
     this.segmentBoundaryLedger = segmentBoundaryLedger;
     this.continuations = continuations;
+    this.workDispatcher = workDispatcher;
   }
 
   Uni<AwaitCompletionResult> complete(
@@ -86,6 +116,9 @@ class AwaitBoundaryAdmission {
       AwaitCompletionResult validated,
       AwaitCompletionCommand normalized,
       AwaitItemContinuationHandler itemContinuationHandler) {
+    if (!validated.record().streamRegionId().isBlank()) {
+      return routeStreamRegionCompletion(validated, normalized.nowEpochMs());
+    }
     return awaitCoordinator.recordCompletion(validated.record(), normalized.nowEpochMs())
         .onItem().transformToUni(unit -> segmentBoundaryLedger.get()
             .recordBoundaryCompletionAdmitted(validated.record(), unit, normalized.nowEpochMs())
@@ -93,17 +126,39 @@ class AwaitBoundaryAdmission {
             .onItem().transformToUni(plan -> {
               Uni<AwaitCompletionResult> handoff = plan.liveSession()
                   ? Uni.createFrom().item(plan.result())
-                  : continuations.afterRecordedCompletion(
-                      plan.result(),
-                      plan.unit(),
-                      itemContinuationHandler,
-                      normalized.nowEpochMs());
+                  : routeDurableCompletion(plan, itemContinuationHandler, normalized.nowEpochMs());
         if (!awaitCoordinator.admissionEnabled()) {
             return handoff;
         }
         return awaitCoordinator.releaseAdmission(validated.record())
             .chain(() -> handoff);
             }));
+  }
+
+  private Uni<AwaitCompletionResult> routeStreamRegionCompletion(
+      AwaitCompletionResult completed,
+      long nowEpochMs
+  ) {
+    AwaitInteractionRecord interaction = completed.record();
+    return awaitCoordinator.getUnit(interaction.tenantId(), interaction.unitId())
+        .onItem().transformToUni(unit -> segmentBoundaryLedger.get()
+            .recordBoundaryCompletionAdmitted(interaction, unit, nowEpochMs)
+            .chain(() -> awaitCoordinator.activateItemContinuation(interaction, nowEpochMs))
+            .onItem().transformToUni(activated -> activated
+                .map(record -> workDispatcher.enqueueNow(ExecutionWorkItem.awaitContinuation(
+                    record.tenantId(), record.executionId(), record.interactionId()))
+                    .replaceWith(completed))
+                .orElseGet(() -> Uni.createFrom().item(completed))));
+  }
+
+  private Uni<AwaitCompletionResult> routeDurableCompletion(
+      AwaitCompletionAdmissionPlan plan,
+      AwaitItemContinuationHandler itemContinuationHandler,
+      long nowEpochMs) {
+    // An interaction cannot enter the incremental route until it carries a durable stream-region
+    // identity and the credit release can be committed idempotently with APPLIED. Existing
+    // itemized units therefore retain their legacy compatibility path.
+    return continuations.afterRecordedCompletion(plan.result(), plan.unit(), itemContinuationHandler, nowEpochMs);
   }
 
   private AwaitCompletionCommand normalize(AwaitCompletionCommand command) {

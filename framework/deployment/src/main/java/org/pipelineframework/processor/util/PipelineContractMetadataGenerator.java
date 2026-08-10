@@ -35,6 +35,7 @@ import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineTransport;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
+import org.pipelineframework.processor.representation.ResolvedProviderBoundary;
 
 /**
  * Generates deterministic semantic pipeline contract metadata for coordinator/worker validation.
@@ -88,6 +89,10 @@ public class PipelineContractMetadataGenerator {
         contractWithoutHash.put("canonicalTypes", canonicalTypes);
         contractWithoutHash.put("canonicalCatalogFingerprint", canonicalCatalogFingerprint);
         contractWithoutHash.put("capabilities", capabilities());
+        List<Map<String, Object>> resumableSourceContinuations = resumableSourceContinuations(ctx);
+        if (!resumableSourceContinuations.isEmpty()) {
+            contractWithoutHash.put("resumableSourceContinuations", resumableSourceContinuations);
+        }
 
         String contractHash = sha256(CANONICAL_GSON.toJson(contractWithoutHash));
         Map<String, Object> finalContract = new LinkedHashMap<>();
@@ -104,6 +109,9 @@ public class PipelineContractMetadataGenerator {
         finalContract.put("canonicalTypes", canonicalTypes);
         finalContract.put("canonicalCatalogFingerprint", canonicalCatalogFingerprint);
         finalContract.put("capabilities", contractWithoutHash.get("capabilities"));
+        if (!resumableSourceContinuations.isEmpty()) {
+            finalContract.put("resumableSourceContinuations", resumableSourceContinuations);
+        }
 
         if (processingEnv != null) {
             javax.tools.FileObject resourceFile = processingEnv.getFiler()
@@ -112,6 +120,38 @@ public class PipelineContractMetadataGenerator {
                 writer.write(PRETTY_GSON.toJson(finalContract));
             }
         }
+    }
+
+    private List<Map<String, Object>> resumableSourceContinuations(PipelineCompilationContext ctx) {
+        List<PipelineStepModel> orderedModels = orderModels(ctx.getStepModels(), loadPipelineConfig(ctx));
+        List<Map<String, Object>> entries = new ArrayList<>();
+        for (int index = 0; index + 1 < orderedModels.size(); index++) {
+            PipelineStepModel producerCandidate = orderedModels.get(index);
+            var boundary = ResumableSourceContinuationEligibility.providerBoundary(
+                producerCandidate, ctx.getResolvedProviderBoundaries());
+            var candidate = ResumableSourceContinuationEligibility.candidate(orderedModels, index, boundary);
+            if (candidate.isEmpty()) {
+                continue;
+            }
+            PipelineStepModel producer = candidate.get().producer();
+            PipelineStepModel await = candidate.get().await();
+            ResolvedProviderBoundary resolved = boundary.orElseThrow();
+            var providerContract = resolved.claim().stepContract().orElseThrow();
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("producerStepIndex", index);
+            entry.put("producerStepName", producer.serviceName());
+            entry.put("awaitStepIndex", index + 1);
+            entry.put("awaitStepName", await.serviceName());
+            entry.put("terminalScalarSuffix", candidate.get().terminalScalarSuffix());
+            entry.put("providerKey", resolved.claim().providerKey());
+            entry.put("bindingId", resolved.claim().bindingId());
+            entry.put("generatedFacadeTypeName", resolved.claim().generatedFacadeTypeName());
+            entry.put("executionStyle", providerContract.executionStyle().name());
+            entry.put("cardinality", providerContract.cardinality());
+            entry.put("capabilities", providerContract.capabilities().stream().map(Enum::name).sorted().toList());
+            entries.add(immutableSortedMap(entry));
+        }
+        return List.copyOf(entries);
     }
 
     private Map<String, Object> canonicalTypes(PipelineCompilationContext ctx) {

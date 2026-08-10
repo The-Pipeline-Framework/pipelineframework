@@ -23,7 +23,8 @@ public record PipelineContractDescriptor(
     List<PipelineBundleStepDescriptor> steps,
     PipelineBundleCapabilities capabilities,
     Map<String, Map<String, Object>> canonicalTypes,
-    String canonicalCatalogFingerprint
+    String canonicalCatalogFingerprint,
+    List<Map<String, Object>> resumableSourceContinuations
 ) {
     public static final int CURRENT_SCHEMA_VERSION = 2;
     public static final String RESOURCE_PATH = "META-INF/pipeline/pipeline-contract.json";
@@ -45,6 +46,28 @@ public record PipelineContractDescriptor(
                 Map.Entry::getKey,
                 entry -> Map.copyOf(entry.getValue())));
         canonicalCatalogFingerprint = canonicalCatalogFingerprint == null ? "" : canonicalCatalogFingerprint;
+        resumableSourceContinuations = resumableSourceContinuations == null ? List.of()
+            : resumableSourceContinuations.stream().map(Map::copyOf).toList();
+    }
+
+    /** Schema-v2 source compatibility before resumable continuation metadata was emitted. */
+    public PipelineContractDescriptor(
+        int schemaVersion,
+        String pipelineId,
+        String contractVersion,
+        String contractHash,
+        String platform,
+        String transport,
+        String module,
+        boolean pluginHost,
+        String runtimeLayout,
+        List<PipelineBundleStepDescriptor> steps,
+        PipelineBundleCapabilities capabilities,
+        Map<String, Map<String, Object>> canonicalTypes,
+        String canonicalCatalogFingerprint
+    ) {
+        this(schemaVersion, pipelineId, contractVersion, contractHash, platform, transport, module, pluginHost,
+            runtimeLayout, steps, capabilities, canonicalTypes, canonicalCatalogFingerprint, List.of());
     }
 
     /** Schema-v1 source compatibility; v1 contracts have no canonical binding catalog. */
@@ -62,7 +85,7 @@ public record PipelineContractDescriptor(
         PipelineBundleCapabilities capabilities
     ) {
         this(schemaVersion, pipelineId, contractVersion, contractHash, platform, transport, module, pluginHost,
-            runtimeLayout, steps, capabilities, Map.of(), "");
+            runtimeLayout, steps, capabilities, Map.of(), "", List.of());
     }
 
     public static PipelineContractDescriptor localFallback() {
@@ -79,6 +102,7 @@ public record PipelineContractDescriptor(
             List.of(),
             PipelineBundleCapabilities.defaults(),
             Map.of(),
-            "");
+            "",
+            List.of());
     }
 }

@@ -16,6 +16,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.function.Function;
 import java.util.stream.StreamSupport;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -28,6 +29,10 @@ import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
 import org.pipelineframework.cache.ProtobufMessageParser;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.orchestrator.stream.StreamRegionRecord;
+import org.pipelineframework.orchestrator.stream.StreamRegionStatus;
+import org.pipelineframework.stream.OpaqueSourceCheckpoint;
+import org.pipelineframework.stream.ResumableSourceDescriptor;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
@@ -46,6 +51,7 @@ import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
 import software.amazon.awssdk.services.dynamodb.model.TransactWriteItem;
 import software.amazon.awssdk.services.dynamodb.model.TransactWriteItemsRequest;
 import software.amazon.awssdk.services.dynamodb.model.TransactionCanceledException;
+import software.amazon.awssdk.services.dynamodb.model.Update;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 
 /**
@@ -92,6 +98,18 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private static final String FIRST_CIRCUIT_DEFERRED_AT_EPOCH_MS = "first_circuit_deferred_at_epoch_ms";
     private static final String CIRCUIT_DEFERRAL_COUNT = "circuit_deferral_count";
     private static final String CIRCUIT_IDENTITY = "circuit_identity";
+    private static final String RECORD_KIND = "record_kind";
+    private static final String STREAM_REGION_KIND = "stream_region";
+    private static final String STREAM_REGION_ID = "stream_region_id";
+    private static final String STREAM_PROVIDER_KEY = "stream_provider_key";
+    private static final String STREAM_SOURCE_ID = "stream_source_id";
+    private static final String STREAM_SOURCE_FINGERPRINT = "stream_source_fingerprint";
+    private static final String STREAM_CHECKPOINT = "stream_checkpoint";
+    private static final String STREAM_NEXT_ORDINAL = "stream_next_ordinal";
+    private static final String STREAM_OUTSTANDING_CREDITS = "stream_outstanding_credits";
+    private static final String STREAM_MAX_CREDITS = "stream_max_credits";
+    private static final String STREAM_TERMINAL_SCALAR_SUFFIX = "stream_terminal_scalar_suffix";
+    private static final String STREAM_FINAL_ORDINAL = "stream_final_ordinal";
     private static final String ENCODED_TYPE = "_tpf_type";
     private static final String ENCODED_MESSAGE_CLASS = "protobuf";
     private static final String ENCODED_MESSAGE_NAME = "_tpf_message";
@@ -315,6 +333,75 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             return Uni.createFrom().item(List.of());
         }
         return blocking(() -> findDueExecutionsBlocking(nowEpochMs, limit));
+    }
+
+    @Override
+    public Uni<List<StreamRegionRecord>> findDueStreamRegions(long nowEpochMs, int limit) {
+        if (limit <= 0) {
+            return Uni.createFrom().item(List.of());
+        }
+        return blocking(() -> findDueStreamRegionsBlocking(nowEpochMs, limit));
+    }
+
+    @Override
+    public Uni<Optional<StreamRegionRecord>> createStreamRegion(StreamRegionRecord region) {
+        Objects.requireNonNull(region, "region must not be null");
+        return blocking(() -> createStreamRegionBlocking(region));
+    }
+
+    @Override
+    public Uni<Optional<StreamRegionRecord>> activateStreamRegion(
+        StreamRegionRecord region,
+        long expectedExecutionVersion,
+        String transitionKey,
+        String awaitUnitId,
+        int awaitStepIndex,
+        long nowEpochMs
+    ) {
+        Objects.requireNonNull(region, "region must not be null");
+        return blocking(() -> activateStreamRegionBlocking(
+            region, expectedExecutionVersion, transitionKey, awaitUnitId, awaitStepIndex, nowEpochMs));
+    }
+
+    @Override
+    public Uni<Optional<StreamRegionRecord>> getStreamRegion(String tenantId, String executionId, String regionId) {
+        return blocking(() -> getStreamRegionBlocking(tenantId, executionId, regionId));
+    }
+
+    @Override
+    public Uni<Optional<StreamRegionRecord>> claimStreamRegion(
+        String tenantId, String executionId, String regionId, String leaseOwner, long nowEpochMs, long leaseMs) {
+        return blocking(() -> updateStreamRegionBlocking(tenantId, executionId, regionId, current -> {
+            if (current.status().terminal() || current.status() != StreamRegionStatus.ACTIVE
+                || current.nextDueEpochMs() > nowEpochMs
+                || (!current.leaseOwner().isBlank() && current.leaseExpiresEpochMs() > nowEpochMs)) {
+                return Optional.empty();
+            }
+            return Optional.of(current.claimed(leaseOwner, nowEpochMs, leaseMs));
+        }));
+    }
+
+    @Override
+    public Uni<Optional<StreamRegionRecord>> recordStreamRegionPage(
+        String tenantId,
+        String executionId,
+        String regionId,
+        long expectedVersion,
+        OpaqueSourceCheckpoint nextCheckpoint,
+        int itemCount,
+        boolean endOfSource,
+        long nowEpochMs) {
+        return blocking(() -> updateStreamRegionBlocking(tenantId, executionId, regionId, current ->
+            current.version() != expectedVersion ? Optional.empty()
+                : Optional.of(current.recordPage(nextCheckpoint, itemCount, endOfSource, nowEpochMs))));
+    }
+
+    @Override
+    public Uni<Optional<StreamRegionRecord>> releaseStreamRegionCredit(
+        String tenantId, String executionId, String regionId, long expectedVersion, long nowEpochMs) {
+        return blocking(() -> updateStreamRegionBlocking(tenantId, executionId, regionId, current ->
+            current.version() != expectedVersion ? Optional.empty()
+                : Optional.of(current.releaseCredit(nowEpochMs))));
     }
 
     @PreDestroy
@@ -1154,7 +1241,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             "#nextDue", NEXT_DUE_EPOCH_MS,
             "#leaseOwner", LEASE_OWNER,
             "#leaseExpires", LEASE_EXPIRES_EPOCH_MS,
-            "#ttl", TTL_EPOCH_S);
+            "#ttl", TTL_EPOCH_S,
+            "#executionKey", EXECUTION_KEY);
         Map<String, AttributeValue> values = Map.of(
             ":now", avN(nowEpochMs),
             ":succeeded", avS(ExecutionStatus.SUCCEEDED.name()),
@@ -1174,7 +1262,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
                     "#nextDue <= :now " +
                         "AND (attribute_not_exists(#leaseOwner) OR #leaseExpires <= :now) " +
                         "AND #status <> :succeeded AND #status <> :waitingExternal AND #status <> :failed AND #status <> :dlq " +
-                        "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
+                    "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec) " +
+                    "AND attribute_exists(#executionKey)")
                 .expressionAttributeNames(names)
                 .expressionAttributeValues(values)
                 .limit(candidateLimit);
@@ -1206,6 +1295,221 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             return List.copyOf(due.subList(0, limit));
         }
         return List.copyOf(due);
+    }
+
+    private List<StreamRegionRecord> findDueStreamRegionsBlocking(long nowEpochMs, int limit) {
+        Map<String, String> names = Map.of(
+            "#kind", RECORD_KIND,
+            "#status", STATUS,
+            "#nextDue", NEXT_DUE_EPOCH_MS,
+            "#leaseOwner", LEASE_OWNER,
+            "#leaseExpires", LEASE_EXPIRES_EPOCH_MS,
+            "#ttl", TTL_EPOCH_S);
+        Map<String, AttributeValue> values = Map.of(
+            ":kind", avS(STREAM_REGION_KIND),
+            ":active", avS(StreamRegionStatus.ACTIVE.name()),
+            ":now", avN(nowEpochMs),
+            ":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond()));
+        int candidateLimit = Math.max(limit * 3, limit);
+        List<StreamRegionRecord> due = new ArrayList<>();
+        Map<String, AttributeValue> exclusiveStartKey = null;
+        while (true) {
+            ScanRequest.Builder request = ScanRequest.builder()
+                .tableName(executionTable())
+                .filterExpression("#kind = :kind AND #status = :active AND #nextDue <= :now "
+                    + "AND (attribute_not_exists(#leaseOwner) OR #leaseExpires <= :now) "
+                    + "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
+                .expressionAttributeNames(names)
+                .expressionAttributeValues(values)
+                .limit(candidateLimit);
+            if (exclusiveStartKey != null && !exclusiveStartKey.isEmpty()) {
+                request.exclusiveStartKey(exclusiveStartKey);
+            }
+            ScanResponse response = dynamoClient().scan(request.build());
+            if (response.items() != null) {
+                response.items().stream()
+                    .map(this::toStreamRegionRecord)
+                    .filter(region -> region.nextDueEpochMs() <= nowEpochMs)
+                    .filter(region -> region.leaseOwner().isBlank() || region.leaseExpiresEpochMs() <= nowEpochMs)
+                    .forEach(due::add);
+            }
+            if (due.size() >= candidateLimit || response.lastEvaluatedKey() == null || response.lastEvaluatedKey().isEmpty()) {
+                break;
+            }
+            exclusiveStartKey = response.lastEvaluatedKey();
+        }
+        due.sort(Comparator.comparingLong(StreamRegionRecord::nextDueEpochMs)
+            .thenComparing(StreamRegionRecord::tenantId)
+            .thenComparing(StreamRegionRecord::executionId)
+            .thenComparing(StreamRegionRecord::regionId));
+        return due.size() > limit ? List.copyOf(due.subList(0, limit)) : List.copyOf(due);
+    }
+
+    private Optional<StreamRegionRecord> createStreamRegionBlocking(StreamRegionRecord region) {
+        try {
+            dynamoClient().putItem(PutItemRequest.builder()
+                .tableName(executionTable())
+                .item(toStreamRegionItem(region))
+                .conditionExpression("attribute_not_exists(#tenant) AND attribute_not_exists(#execution)")
+                .expressionAttributeNames(Map.of("#tenant", TENANT_ID, "#execution", EXECUTION_ID))
+                .build());
+            return Optional.of(region);
+        } catch (ConditionalCheckFailedException ignored) {
+            return getStreamRegionBlocking(region.tenantId(), region.executionId(), region.regionId());
+        }
+    }
+
+    private Optional<StreamRegionRecord> activateStreamRegionBlocking(
+        StreamRegionRecord region,
+        long expectedExecutionVersion,
+        String transitionKey,
+        String awaitUnitId,
+        int awaitStepIndex,
+        long nowEpochMs
+    ) {
+        if (awaitUnitId == null || awaitUnitId.isBlank() || awaitStepIndex < 0) {
+            throw new IllegalArgumentException("stream-region activation requires an await unit and step index");
+        }
+        Map<String, String> names = Map.ofEntries(
+            Map.entry("#status", STATUS), Map.entry("#version", VERSION),
+            Map.entry("#step", CURRENT_STEP_INDEX), Map.entry("#nextDue", NEXT_DUE_EPOCH_MS),
+            Map.entry("#transition", LAST_TRANSITION_KEY), Map.entry("#awaitUnit", AWAIT_UNIT_ID),
+            Map.entry("#result", RESULT_PAYLOAD_JSON), Map.entry("#resultReference", RESULT_PAYLOAD_REFERENCE),
+            Map.entry("#errorCode", ERROR_CODE), Map.entry("#errorMessage", ERROR_MESSAGE),
+            Map.entry("#leaseOwner", LEASE_OWNER), Map.entry("#leaseExpires", LEASE_EXPIRES_EPOCH_MS),
+            Map.entry("#ttl", TTL_EPOCH_S), Map.entry("#updated", UPDATED_AT_EPOCH_MS),
+            Map.entry("#tenant", TENANT_ID), Map.entry("#execution", EXECUTION_ID));
+        Map<String, AttributeValue> values = Map.ofEntries(
+            Map.entry(":expected", avN(expectedExecutionVersion)),
+            Map.entry(":running", avS(ExecutionStatus.RUNNING.name())),
+            Map.entry(":waiting", avS(ExecutionStatus.WAITING_EXTERNAL.name())),
+            Map.entry(":step", avN(awaitStepIndex)), Map.entry(":awaitUnit", avS(awaitUnitId)),
+            Map.entry(":nextDue", avN(Long.MAX_VALUE)),
+            Map.entry(":transition", avS(transitionKey == null ? "" : transitionKey)),
+            Map.entry(":zero", avN(0L)), Map.entry(":one", avN(1L)), Map.entry(":now", avN(nowEpochMs)),
+            Map.entry(":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond())));
+        try {
+            dynamoClient().transactWriteItems(TransactWriteItemsRequest.builder().transactItems(
+                TransactWriteItem.builder().update(Update.builder().tableName(executionTable())
+                    .key(executionPrimaryKey(region.tenantId(), region.executionId()))
+                    .conditionExpression("#version = :expected AND #status = :running AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
+                    .updateExpression("SET #status = :waiting, #version = #version + :one, #step = :step, "
+                        + "#nextDue = :nextDue, #transition = :transition, #awaitUnit = :awaitUnit, "
+                        + "#leaseExpires = :zero, #updated = :now REMOVE #result, #resultReference, "
+                        + "#errorCode, #errorMessage, #leaseOwner")
+                    .expressionAttributeNames(names).expressionAttributeValues(values).build()).build(),
+                TransactWriteItem.builder().put(Put.builder().tableName(executionTable()).item(toStreamRegionItem(region))
+                    .conditionExpression("attribute_not_exists(#tenant) AND attribute_not_exists(#execution)")
+                    .expressionAttributeNames(Map.of("#tenant", TENANT_ID, "#execution", EXECUTION_ID)).build()).build()
+            ).build());
+            return Optional.of(region);
+        } catch (TransactionCanceledException | ConditionalCheckFailedException ignored) {
+            Optional<StreamRegionRecord> existing = getStreamRegionBlocking(
+                region.tenantId(), region.executionId(), region.regionId());
+            Optional<ExecutionRecord<Object, Object>> parent = getExecutionBlocking(
+                region.tenantId(), region.executionId(), nowEpochMs);
+            return existing.filter(ignoredRegion -> parent.filter(record ->
+                record.status() == ExecutionStatus.WAITING_EXTERNAL && awaitUnitId.equals(record.awaitUnitId())).isPresent());
+        }
+    }
+
+    private Optional<StreamRegionRecord> getStreamRegionBlocking(String tenantId, String executionId, String regionId) {
+        Map<String, AttributeValue> item = dynamoClient().getItem(GetItemRequest.builder()
+            .tableName(executionTable())
+            .key(streamRegionPrimaryKey(tenantId, executionId, regionId))
+            .consistentRead(true)
+            .build()).item();
+        if (item == null || item.isEmpty() || !STREAM_REGION_KIND.equals(readString(item, RECORD_KIND))) {
+            return Optional.empty();
+        }
+        return Optional.of(toStreamRegionRecord(item));
+    }
+
+    private Optional<StreamRegionRecord> updateStreamRegionBlocking(
+        String tenantId,
+        String executionId,
+        String regionId,
+        Function<StreamRegionRecord, Optional<StreamRegionRecord>> transition
+    ) {
+        Optional<StreamRegionRecord> current = getStreamRegionBlocking(tenantId, executionId, regionId);
+        if (current.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<StreamRegionRecord> next = transition.apply(current.get());
+        if (next.isEmpty()) {
+            return Optional.empty();
+        }
+        StreamRegionRecord updated = next.get();
+        try {
+            dynamoClient().putItem(PutItemRequest.builder()
+                .tableName(executionTable())
+                .item(toStreamRegionItem(updated))
+                .conditionExpression("#kind = :kind AND #version = :expected")
+                .expressionAttributeNames(Map.of("#kind", RECORD_KIND, "#version", VERSION))
+                .expressionAttributeValues(Map.of(
+                    ":kind", avS(STREAM_REGION_KIND),
+                    ":expected", avN(current.get().version())))
+                .build());
+            return Optional.of(updated);
+        } catch (ConditionalCheckFailedException ignored) {
+            return Optional.empty();
+        }
+    }
+
+    private Map<String, AttributeValue> toStreamRegionItem(StreamRegionRecord region) {
+        Map<String, AttributeValue> item = new HashMap<>();
+        item.put(TENANT_ID, avS(region.tenantId()));
+        item.put(EXECUTION_ID, avS(streamRegionStorageId(region.executionId(), region.regionId())));
+        item.put(RECORD_KIND, avS(STREAM_REGION_KIND));
+        item.put(STREAM_REGION_ID, avS(region.regionId()));
+        item.put(STREAM_PROVIDER_KEY, avS(region.source().providerKey()));
+        item.put(STREAM_SOURCE_ID, avS(region.source().sourceId()));
+        item.put(STREAM_SOURCE_FINGERPRINT, avS(region.source().fingerprint()));
+        region.checkpoint().value().ifPresent(value -> item.put(STREAM_CHECKPOINT, avS(value)));
+        item.put(STREAM_NEXT_ORDINAL, avN(region.nextLogicalOrdinal()));
+        item.put(STREAM_OUTSTANDING_CREDITS, avN(region.outstandingCredits()));
+        item.put(STREAM_MAX_CREDITS, avN(region.maxOutstandingCredits()));
+        item.put(STREAM_TERMINAL_SCALAR_SUFFIX, avN(region.terminalScalarSuffix() ? 1 : 0));
+        item.put(STATUS, avS(region.status().name()));
+        region.finalOrdinal().ifPresent(value -> item.put(STREAM_FINAL_ORDINAL, avN(value)));
+        item.put(VERSION, avN(region.version()));
+        putIfPresent(item, LEASE_OWNER, region.leaseOwner());
+        item.put(LEASE_EXPIRES_EPOCH_MS, avN(region.leaseExpiresEpochMs()));
+        item.put(NEXT_DUE_EPOCH_MS, avN(region.nextDueEpochMs()));
+        item.put(CREATED_AT_EPOCH_MS, avN(region.createdAtEpochMs()));
+        item.put(UPDATED_AT_EPOCH_MS, avN(region.updatedAtEpochMs()));
+        item.put(TTL_EPOCH_S, avN(region.ttlEpochS()));
+        return item;
+    }
+
+    private StreamRegionRecord toStreamRegionRecord(Map<String, AttributeValue> item) {
+        String storageId = readString(item, EXECUTION_ID);
+        String regionId = readString(item, STREAM_REGION_ID);
+        String executionId = parentExecutionId(storageId, regionId);
+        long finalOrdinal = readLong(item, STREAM_FINAL_ORDINAL);
+        Optional<Long> sealedAt = item.containsKey(STREAM_FINAL_ORDINAL) ? Optional.of(finalOrdinal) : Optional.empty();
+        return new StreamRegionRecord(
+            readString(item, TENANT_ID),
+            executionId,
+            regionId,
+            new ResumableSourceDescriptor(
+                readString(item, STREAM_PROVIDER_KEY),
+                readString(item, STREAM_SOURCE_ID),
+                readString(item, STREAM_SOURCE_FINGERPRINT)),
+            new OpaqueSourceCheckpoint(Optional.ofNullable(readString(item, STREAM_CHECKPOINT))),
+            readLong(item, STREAM_NEXT_ORDINAL),
+            (int) readLong(item, STREAM_OUTSTANDING_CREDITS),
+            (int) readLong(item, STREAM_MAX_CREDITS),
+            readLong(item, STREAM_TERMINAL_SCALAR_SUFFIX) != 0L,
+            StreamRegionStatus.valueOf(readString(item, STATUS)),
+            sealedAt,
+            readLong(item, VERSION),
+            readString(item, LEASE_OWNER),
+            readLong(item, LEASE_EXPIRES_EPOCH_MS),
+            readLong(item, NEXT_DUE_EPOCH_MS),
+            readLong(item, CREATED_AT_EPOCH_MS),
+            readLong(item, UPDATED_AT_EPOCH_MS),
+            readLong(item, TTL_EPOCH_S));
     }
 
     private Optional<ExecutionRecord<Object, Object>> findExistingByScopedExecutionKey(
@@ -1833,6 +2137,27 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return Map.of(
             TENANT_ID, avS(tenantId),
             EXECUTION_ID, avS(executionId));
+    }
+
+    private static Map<String, AttributeValue> streamRegionPrimaryKey(String tenantId, String executionId, String regionId) {
+        return executionPrimaryKey(tenantId, streamRegionStorageId(executionId, regionId));
+    }
+
+    private static String streamRegionStorageId(String executionId, String regionId) {
+        Objects.requireNonNull(executionId, "executionId must not be null");
+        Objects.requireNonNull(regionId, "regionId must not be null");
+        if (executionId.isBlank() || regionId.isBlank()) {
+            throw new IllegalArgumentException("executionId and regionId must not be blank");
+        }
+        return executionId + "#stream-region#" + regionId;
+    }
+
+    private static String parentExecutionId(String storageId, String regionId) {
+        String suffix = "#stream-region#" + regionId;
+        if (storageId == null || regionId == null || !storageId.endsWith(suffix)) {
+            throw new IllegalStateException("Invalid stream-region storage identity");
+        }
+        return storageId.substring(0, storageId.length() - suffix.length());
     }
 
     private static boolean isExpired(ExecutionRecord<Object, Object> record, long nowEpochMs) {

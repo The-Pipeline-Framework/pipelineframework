@@ -16,6 +16,9 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.pipelineframework.awaitable.AwaitCoordinator;
+import org.pipelineframework.awaitable.AwaitStepDescriptor;
+import org.pipelineframework.awaitable.AwaitUnitRecord;
+import org.pipelineframework.awaitable.AwaitUnitStatus;
 import org.pipelineframework.checkpoint.CheckpointPublicationService;
 import org.pipelineframework.invocation.PipelineInvocationRuntime;
 import org.pipelineframework.objectpublish.ObjectPublishCompletionService;
@@ -39,6 +42,11 @@ import org.pipelineframework.orchestrator.TransitionWorkerExecutionMode;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.controlplane.SegmentBoundaryLedger;
 import org.pipelineframework.orchestrator.controlplane.TerminalPublicationClaim;
+import org.pipelineframework.stream.StreamRegionContinuationRegistry;
+import org.pipelineframework.stream.StreamRegionContinuation;
+import org.pipelineframework.stream.StreamRegionAwaitBinding;
+import org.pipelineframework.stream.ResumableSourceDescriptor;
+import org.pipelineframework.orchestrator.stream.StreamRegionRecord;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -72,6 +80,9 @@ class QueueAsyncSegmentPipelineTest {
 
   @Mock
   private AwaitCoordinator awaitCoordinator;
+
+  @Mock
+  private StreamRegionContinuationRegistry streamRegionContinuations;
 
   @Mock
   private ExecutionFailureHandler executionFailureHandler;
@@ -203,6 +214,42 @@ class QueueAsyncSegmentPipelineTest {
         eq(List.of("out-1", "out-2")),
         anyLong());
     order.verify(segmentBoundaryLedger).recordRunSucceeded(same(succeeded), eq(List.of("out-1", "out-2")), anyLong());
+  }
+
+  @Test
+  void eligibleProducerTransfersToGenericStreamBoundaryBeforeAnyAwaitInteractionExists() {
+    ExecutionRecord<Object, Object> claimed = record("exec-stream", ExecutionResultShape.SINGLE);
+    StreamRegionContinuation continuation = org.mockito.Mockito.mock(StreamRegionContinuation.class);
+    AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
+        "await-payment", String.class.getName(), String.class.getName(), Duration.ofSeconds(30),
+        "interactionId", "local", java.util.Map.of(), List.of());
+    AwaitUnitRecord unit = new AwaitUnitRecord("tenant-1", "unit-stream", "exec-stream", "await-payment", 1,
+        "ONE_TO_ONE", 0L, AwaitUnitStatus.WAITING_EXTERNAL, null, null, 0, java.util.Set.of(), false, 1L, 1L, 99L);
+    when(executionStateStore.claimLease(eq("tenant-1"), eq("exec-stream"), any(), anyLong(), eq(1000L)))
+        .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+    when(streamRegionContinuations.findForProducerStep(0)).thenReturn(Optional.of(continuation));
+    when(continuation.descriptor()).thenReturn(new ResumableSourceDescriptor("deterministic", "fixture", "v1"));
+    when(continuation.awaitBinding()).thenReturn(new StreamRegionAwaitBinding(descriptor, 1));
+    when(continuation.terminalScalarSuffix()).thenReturn(true);
+    when(awaitCoordinator.ensureStreamRegionUnit(descriptor, "tenant-1", "exec-stream", 1))
+        .thenReturn(Uni.createFrom().item(unit));
+    when(executionStateStore.activateStreamRegion(any(), eq(0L), any(), eq("unit-stream"), eq(1), anyLong()))
+        .thenAnswer(invocation -> Uni.createFrom().item(Optional.of(invocation.getArgument(0))));
+    when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
+
+    pipeline().process(new ExecutionWorkItem("tenant-1", "exec-stream"),
+            ignored -> Uni.createFrom().failure(new AssertionError("producer worker must not run before region activation")),
+            AwaitContinuations.NOOP_ITEM_CONTINUATION_HANDLER)
+        .await().indefinitely();
+
+    ArgumentCaptor<StreamRegionRecord> region = ArgumentCaptor.forClass(StreamRegionRecord.class);
+    verify(executionStateStore).activateStreamRegion(region.capture(), eq(0L), any(), eq("unit-stream"), eq(1), anyLong());
+    assertEquals(0, region.getValue().outstandingCredits());
+    assertEquals(StreamRegionFlow.DYNAMO_PAGE_ITEM_LAYOUT_LIMIT, region.getValue().maxOutstandingCredits());
+    assertTrue(region.getValue().terminalScalarSuffix());
+    verify(awaitContinuations, never()).afterParentWaiting(any(), any(), anyLong(), any());
+    verify(workDispatcher).enqueueNow(ExecutionWorkItem.streamRegion(
+        "tenant-1", "exec-stream", region.getValue().regionId()));
   }
 
   @Test
@@ -488,6 +535,7 @@ class QueueAsyncSegmentPipelineTest {
         executionStateStore,
         workDispatcher,
         awaitCoordinator,
+        streamRegionContinuations,
         executor,
         admissionPolicy,
         () -> payloadCodec,

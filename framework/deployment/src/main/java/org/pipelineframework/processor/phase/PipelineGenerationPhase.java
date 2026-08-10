@@ -24,7 +24,9 @@ import org.pipelineframework.processor.util.PipelineOrderMetadataGenerator;
 import org.pipelineframework.processor.util.PipelinePlatformMetadataGenerator;
 import org.pipelineframework.processor.util.PipelineTelemetryMetadataGenerator;
 import org.pipelineframework.processor.util.ResourceNameUtils;
+import org.pipelineframework.processor.util.ResumableSourceContinuationEligibility;
 import org.pipelineframework.processor.util.RoleMetadataGenerator;
+import org.pipelineframework.representation.spi.ProviderCapability;
 
 /**
  * Generates artifacts by iterating over GenerationTargets and delegating to PipelineRenderer implementations.
@@ -100,6 +102,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer = new BlockingReactiveBridgeRenderer();
         RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer = new RemoteOperatorAdapterRenderer();
         AwaitClientStepRenderer awaitClientStepRenderer = new AwaitClientStepRenderer();
+        ResumableSourceContinuationRenderer resumableSourceContinuationRenderer = new ResumableSourceContinuationRenderer();
         CommandClientStepRenderer commandClientStepRenderer = new CommandClientStepRenderer();
         QueryClientStepRenderer queryClientStepRenderer = new QueryClientStepRenderer();
         OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
@@ -263,8 +266,12 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     remoteOperatorAdapterRenderer,
                     awaitClientStepRenderer,
                     commandClientStepRenderer,
-                    queryClientStepRenderer);
+                queryClientStepRenderer);
         }
+
+        generateResumableSourceContinuations(
+            ctx, resumableSourceContinuationRenderer, enabledAspects, cacheKeyGenerator, descriptorSet,
+            roleMetadataGenerator);
 
         if (ctx.isTransportModeGrpc() && descriptorSet != null) {
             protobufParserService.generateProtobufParsers(ctx, descriptorSet);
@@ -356,6 +363,39 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.WARNING,
                 "Failed to write step definitions: " + e.getMessage());
+        }
+    }
+
+    private void generateResumableSourceContinuations(
+        PipelineCompilationContext ctx,
+        ResumableSourceContinuationRenderer renderer,
+        Set<String> enabledAspects,
+        ClassName cacheKeyGenerator,
+        DescriptorProtos.FileDescriptorSet descriptorSet,
+        RoleMetadataGenerator roleMetadataGenerator
+    ) throws IOException {
+        List<PipelineStepModel> models = ctx.getStepModels();
+        boolean v3 = ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig config
+            && config.dialect() == org.pipelineframework.config.template.PipelineTemplateDialect.V3;
+        String basePackage = ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig config
+            ? config.basePackage() : null;
+        for (int producerIndex = 0; producerIndex + 1 < models.size(); producerIndex++) {
+            PipelineStepModel producerCandidate = models.get(producerIndex);
+            var providerBoundary = ResumableSourceContinuationEligibility.providerBoundary(
+                producerCandidate, ctx.getResolvedProviderBoundaries());
+            var candidate = ResumableSourceContinuationEligibility.candidate(models, producerIndex, providerBoundary);
+            if (candidate.isEmpty()) {
+                continue;
+            }
+            PipelineStepModel producer = candidate.get().producer();
+            PipelineStepModel await = candidate.get().await();
+            DeploymentRole role = await.deploymentRole();
+            GenerationContext generationContext = new GenerationContext(
+                ctx.getProcessingEnv(), generationPathResolver.resolveRoleOutputDir(ctx, role), role,
+                enabledAspects, cacheKeyGenerator, descriptorSet, ctx.getTransportMode(), basePackage, null, v3);
+            String generated = renderer.render(producer, await, producerIndex, producerIndex + 1,
+                candidate.get().terminalScalarSuffix(), providerBoundary.get(), generationContext);
+            roleMetadataGenerator.recordClassWithRole(generated, role.name());
         }
     }
 

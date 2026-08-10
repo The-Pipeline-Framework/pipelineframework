@@ -20,4 +20,12 @@ class ExecutionWorkItemTest {
             assertThrows(NullPointerException.class, () -> new ExecutionWorkItem("tenant-a", null));
         assertEquals("ExecutionWorkItem.executionId must not be null", failure.getMessage());
     }
+
+    @Test
+    void streamRegionTargetUsesTheExistingTypedWorkEnvelope() {
+        ExecutionWorkItem item = ExecutionWorkItem.streamRegion("tenant-a", "exec-1", "region-1");
+
+        assertEquals(CoordinatorWorkTarget.Kind.STREAM_REGION, item.target().kind());
+        assertEquals("region-1", item.streamRegionId());
+    }
 }
