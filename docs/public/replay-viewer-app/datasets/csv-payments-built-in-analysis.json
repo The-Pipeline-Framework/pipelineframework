@@ -4,11 +4,12 @@
   "inputFile": "examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv",
   "artifactRun": {
     "executionMaxConcurrency": 250,
+    "providerRejectProbability": 0.08,
     "itemCount": 1000,
     "outputRecords": 1000,
     "databaseRecords": 1000,
     "replayEventCount": 17006,
-    "replayDurationMs": 18305,
+    "replayDurationMs": 17047,
     "replayEventCounts": {
       "object_ingest_listed": 1,
       "object_ingest_submitted": 1,
@@ -22,6 +23,10 @@
       "object_publish_grouped": 1,
       "object_publish_published": 1
     },
+    "branchStarts": {
+      "approved": 907,
+      "unapproved": 93
+    },
     "liveAwait": {
       "firstStatusBeforeSourceExhaustion": true,
       "awaitUnitDispatchCompleteEvents": 0,
@@ -31,15 +36,15 @@
       "awaitResumeReleasedEvents": 0
     },
     "timing": {
-      "firstInputSeconds": 0.367,
-      "lastInputSeconds": 11.76,
-      "firstAwaitAdmissionSeconds": 1.217,
-      "firstAwaitDispatchSeconds": 1.707,
-      "firstStatusSeconds": 2.17,
-      "lastStatusSeconds": 16.427,
-      "lastAwaitAdmissionReleaseSeconds": 16.425,
-      "firstPublishSeconds": 18.305,
-      "lastPublishSeconds": 18.305
+      "firstInputSeconds": 0.355,
+      "lastInputSeconds": 9.962,
+      "firstAwaitAdmissionSeconds": 0.994,
+      "firstAwaitDispatchSeconds": 1.487,
+      "firstStatusSeconds": 1.635,
+      "lastStatusSeconds": 15.151,
+      "lastAwaitAdmissionReleaseSeconds": 15.149,
+      "firstPublishSeconds": 17.047,
+      "lastPublishSeconds": 17.047
     }
   }
 }

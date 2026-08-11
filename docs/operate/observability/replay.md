@@ -129,18 +129,19 @@ Branch-aware replay also uses the normal event stream:
 
 The built-in CSV Payments replay is a captured proof run, not a benchmark promise. It is useful because it shows the intended connector-first shape and the timing relationship between parser dispatch, await completions, status processing, and Object Publish.
 
-The current dataset was captured from the healthy 1k replay lane. Its concurrent provider mock
-approved all 1,000 items, so it shows the live approved path rather than a synthetic mixture of
-branches:
+The current dataset was captured from the healthy 1k provider-reject replay lane. Its concurrent
+provider mock uses the deterministic `0.08` rejection rule, so both live status paths appear in
+the proof:
 
 | Field | Value |
 | --- | --- |
 | Input records | `1000` |
 | Execution max concurrency | `250` |
-| Replay duration | `18.305s` |
-| Effective replay throughput | `54.6 records/s` |
+| Provider reject probability | `0.08` |
+| Replay duration | `17.047s` |
+| Effective replay throughput | `58.7 records/s` |
 | Replay events | `17006` |
-| Approved branch items | `1000` |
+| Approved / unapproved branch items | `907` / `93` |
 
 Treat the replay timing as boundary timing, not pure provider CPU time: it includes permit wait, Kafka transit, completion admission, and downstream branch processing overlap.
 
@@ -148,10 +149,10 @@ Key timing checks:
 
 | Signal | Time from start |
 | --- | --- |
-| First `Process Approved Payment Status` event | `2.170s` |
-| Last input parser event | `11.760s` |
-| Last live admission release | `16.425s` |
-| Object Publish | `18.305s` |
+| First status event | `1.635s` |
+| Last input parser event | `9.962s` |
+| Last live admission release | `15.149s` |
+| Object Publish | `17.047s` |
 
 The important operational signal is the overlap: status processing starts before the parser has
 finished. The capture contains live admission acquire/release and interaction-dispatch events,

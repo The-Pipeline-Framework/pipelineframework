@@ -317,9 +317,9 @@ Use replay to answer per-run questions:
 4. Which output object key was published?
 
 The built-in CSV Payments replay is the reference connector-first proof. In the captured 1k run,
-Object Ingest admitted one source object, the approved status path started before parser emission
-finished, `Finalize Payment Output` carried that path forward, and Object Publish wrote the
-terminal output object before success. See [Replay And Live Topology](/operate/observability/replay#csv-payments-built-in-proof) for the measured timings.
+Object Ingest admitted one source object, the approved and unapproved status paths started before
+parser emission finished, `Finalize Payment Output` carried both paths forward, and Object Publish
+wrote the terminal output object before success. See [Replay And Live Topology](/operate/observability/replay#csv-payments-built-in-proof) for the measured timings.
 
 See [Metrics](/operate/observability/metrics), [Await Boundary Operations](/operate/await-boundaries), and [Replay And Live Topology](/operate/observability/replay).
 

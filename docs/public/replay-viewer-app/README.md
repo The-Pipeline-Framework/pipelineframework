@@ -70,8 +70,9 @@ These are curated viewer datasets. They are not the source of truth for replay s
 ## Refreshing CSV Payments built-in replay
 
 The CSV Payments fixture is a captured 1k live-path execution, not hand-authored viewer data.
-Refreshing it changes several checked-in derived surfaces. Use JDK 21 and a Docker-capable
-environment.
+It deliberately includes the deterministic `907` approved / `93` unapproved provider split so
+the viewer exercises both status branches. Refreshing it changes several checked-in derived
+surfaces. Use JDK 21 and a Docker-capable environment.
 
 Run the capture from `orchestrator-svc`: the E2E harness derives mounted test paths from its
 working directory. Point Maven at the worktree-local repository explicitly.
@@ -81,15 +82,18 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT/examples/csv-payments/orchestrator-svc"
 
 ../../../mvnw \
-  -Dit.test=CsvPaymentsEndToEndIT \
+  -Dit.test=CsvPaymentsProviderRejectEndToEndIT \
   -Dcsv.e2e.telemetry.enabled=true \
+  -Dcsv.e2e.telemetry.happy-path-only=false \
   -Dcsv.e2e.input.file=../input-csv-file-processing-svc/csv/payments_1k.csv \
+  -Dcsv-payments.payment-provider.provider-reject-probability=0.08 \
   -Dmaven.repo.local="$REPO_ROOT/.m2/repository" \
   verify
 ```
 
 The test rebuilds the telemetry-tagged modular service images, captures replay fragments, merges
-them, and verifies 1,000 output and database records. Its merged capture is written to:
+them, and verifies 1,000 output and database records plus the deterministic branch split. Its
+merged capture is written to:
 
 ```text
 examples/csv-payments/orchestrator-svc/target/test-e2e/replay/csv-payments-replay.json
@@ -104,9 +108,15 @@ following:
 
 - 1,000 `await_interaction_dispatched`, `await_admission_acquired`, and
   `await_admission_released` events;
-- downstream status processing starts before the final `ProcessCsvPaymentsInput` `emit`;
+- exactly 907 `ProcessApprovedPaymentStatus` and 93 `ProcessUnapprovedPaymentStatus` starts,
+  with downstream status processing beginning before the final `ProcessCsvPaymentsInput` `emit`;
 - no `await_unit_dispatch_complete`, `await_execution_waiting`,
   `await_unit_item_completed`, `await_unit_completed`, or `await_resume_released` events.
+
+This branch split is an enforced built-in-dataset contract, not just a visual preference. A
+healthy-path capture produces `1000` / `0` and will be rejected by
+`npm --prefix docs run check-replay-datasets`; use the provider-reject command above rather than
+the ordinary happy-path E2E. Run that check both before and after the docs sync.
 
 Then update the current replay facts in
 `docs/operate/observability/replay.md`,
