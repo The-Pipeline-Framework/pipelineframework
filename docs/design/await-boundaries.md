@@ -76,6 +76,8 @@ The durable await model still matters. If the process restarts, the worker lease
 5. release the parent execution when the itemized unit is complete,
 6. publish terminal output before the execution is marked successful.
 
+This fallback reconstructs an immutable completed MANY result for the parent continuation. It is intentionally more conservative than the healthy live segment; TPF does not claim to resume the same in-memory `Multi` at its prior demand position after owner loss.
+
 That is why `ONE_TO_ONE` await over a stream is not a hidden batch mode. It is a stream of item interactions owned by one durable await unit. The external provider is not a pipeline step; it is external reality behind a framework-owned I/O shell.
 
 ```mermaid

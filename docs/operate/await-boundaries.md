@@ -57,6 +57,8 @@ In `QUEUE_ASYNC`, itemized await has a live path and a durable fallback path.
 
 In the live path, a brokered `ONE_TO_ONE` stream keeps an in-memory await session open while the parent transition is alive. A completion is still recorded durably first, then the live session emits it to the resumed segment when downstream requests it. This is the normal connector-first CSV Payments path.
 
+For the eligible portable shape (stream producer, immediate scalar await, scalar-only suffix), the transition worker is the live owner. Durable interaction admission and retry state remain framework-owned; the coordinator does not need to take ownership of the live `Multi` simply because the await transport is remote.
+
 The durable fallback path is used when the live session is unavailable, after worker loss, or when a later claim must resume from stored state. In that path, the runtime uses durable coordination gates:
 
 1. **Interaction dispatched**: TPF created await interactions and handed requests to the configured await transport.
@@ -66,6 +68,8 @@ The durable fallback path is used when the live session is unavailable, after wo
 5. **Early completion held**: a completion arrived when no live session could accept it and before the fallback release gates were true, so it was recorded but not used to start continuation yet.
 6. **Resume released**: dispatch is complete, the parent wait is durable, and enough completions exist to resume the next segment from stored state.
 7. **Unit terminal**: the await unit completed, timed out, or failed.
+
+The unit dispatch and parent-wait gates are durable-recovery gates. They are not prerequisites for a live item handoff and should not appear as a per-item critical path while a live owner is healthy.
 
 The matching metrics are:
 
