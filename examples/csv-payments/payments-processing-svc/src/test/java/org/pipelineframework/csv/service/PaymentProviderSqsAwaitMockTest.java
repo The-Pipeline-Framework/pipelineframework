@@ -25,7 +25,12 @@ import org.junit.jupiter.api.Test;
 class PaymentProviderSqsAwaitMockTest {
 
   @Test
-  void visibilityTimeoutCoversSerialProcessingForTheWholeReceivedBatch() {
+  void providerUsesBoundedConcurrentReceiveLoopsForTheBurstHarness() {
+    assertEquals(8, PaymentProviderSqsAwaitMock.RECEIVE_LOOP_CONCURRENCY);
+  }
+
+  @Test
+  void visibilityTimeoutCoversConcurrentProcessingForOneReceivedBatch() {
     PaymentProviderConfig providerConfig = new PaymentProviderServiceMockTest.FakePaymentProviderConfig() {
       @Override
       public long timeoutMillis() {
@@ -50,6 +55,6 @@ class PaymentProviderSqsAwaitMockTest {
             1,
             10);
 
-    assertEquals(18, mock.visibilityTimeoutSeconds(sqsConfig));
+    assertEquals(2, mock.visibilityTimeoutSeconds(sqsConfig));
   }
 }
