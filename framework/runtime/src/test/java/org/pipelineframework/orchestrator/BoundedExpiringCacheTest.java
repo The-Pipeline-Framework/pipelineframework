@@ -49,17 +49,25 @@ class BoundedExpiringCacheTest {
         AtomicInteger loads = new AtomicInteger();
         CountDownLatch loaderStarted = new CountDownLatch(1);
         CountDownLatch releaseLoader = new CountDownLatch(1);
+        CountDownLatch callersArrived = new CountDownLatch(32);
+        CountDownLatch startCallers = new CountDownLatch(1);
         ExecutorService callers = Executors.newFixedThreadPool(32);
         try {
             List<Future<Integer>> results = java.util.stream.IntStream.range(0, 32)
-                .mapToObj(ignored -> callers.submit(() -> cache.getOrLoad("release", key -> {
-                    loads.incrementAndGet();
-                    loaderStarted.countDown();
-                    await(releaseLoader);
-                    return 42;
-                })))
+                .mapToObj(ignored -> callers.submit(() -> {
+                    callersArrived.countDown();
+                    await(startCallers);
+                    return cache.getOrLoad("release", key -> {
+                        loads.incrementAndGet();
+                        loaderStarted.countDown();
+                        await(releaseLoader);
+                        return 42;
+                    });
+                }))
                 .toList();
 
+            assertTrue(callersArrived.await(1, TimeUnit.SECONDS));
+            startCallers.countDown();
             assertTrue(loaderStarted.await(1, TimeUnit.SECONDS));
             assertEquals(1, loads.get());
             assertTrue(results.stream().noneMatch(Future::isDone));

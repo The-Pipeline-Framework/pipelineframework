@@ -12,7 +12,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.lang.reflect.Proxy;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -455,23 +454,17 @@ class SqsAwaitCompletionPollerTest {
         CountDownLatch receivesStarted,
         CountDownLatch releaseReceives
     ) {
-        return (SqsClient) Proxy.newProxyInstance(
-            SqsClient.class.getClassLoader(),
-            new Class<?>[] { SqsClient.class },
-            (proxy, method, arguments) -> {
-                if (method.getName().equals("receiveMessage")) {
-                    receivesStarted.countDown();
-                    try {
-                        releaseReceives.await(5, TimeUnit.SECONDS);
-                    } catch (InterruptedException interrupted) {
-                        Thread.currentThread().interrupt();
-                    }
-                    return ReceiveMessageResponse.builder().messages(List.of()).build();
-                }
-                if (method.getName().equals("serviceName")) {
-                    return "sqs";
-                }
-                return null;
-            });
+        SqsClient client = mock(SqsClient.class);
+        when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenAnswer(ignored -> {
+            receivesStarted.countDown();
+            try {
+                releaseReceives.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            return ReceiveMessageResponse.builder().messages(List.of()).build();
+        });
+        when(client.serviceName()).thenReturn("sqs");
+        return client;
     }
 }

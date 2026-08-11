@@ -85,19 +85,14 @@ public interface AwaitInteractionStore {
         long expectedVersion,
         long nowEpochMs);
 
-    /**
-     * Persists a durable dispatch intent together with metadata required to recover that intent.
-     * Implementations that do not persist dispatch metadata may retain the legacy transition.
-     */
-    default Uni<Optional<AwaitInteractionRecord>> markDispatching(
+    /** Persists a durable dispatch intent together with metadata required to recover that intent. */
+    Uni<Optional<AwaitInteractionRecord>> markDispatching(
         String tenantId,
         String interactionId,
         long expectedVersion,
         Map<String, Object> transportMetadata,
         long nowEpochMs
-    ) {
-        return markDispatching(tenantId, interactionId, expectedVersion, nowEpochMs);
-    }
+    );
 
     /**
      * Marks a claimed interaction as dispatched and stores adapter metadata.

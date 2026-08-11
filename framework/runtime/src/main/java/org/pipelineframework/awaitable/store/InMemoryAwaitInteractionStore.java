@@ -178,6 +178,20 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
     }
 
     @Override
+    public Uni<Optional<AwaitInteractionRecord>> markDispatching(
+        String tenantId,
+        String interactionId,
+        long expectedVersion,
+        Map<String, Object> transportMetadata,
+        long nowEpochMs) {
+        Map<String, Object> safeMetadata = transportMetadata == null ? Map.of() : Map.copyOf(transportMetadata);
+        return transition(tenantId, interactionId, expectedVersion, nowEpochMs,
+            AwaitInteractionStatus.WAITING,
+            current -> updateStatus(
+                current, AwaitInteractionStatus.DISPATCHING, nowEpochMs, null, null, safeMetadata));
+    }
+
+    @Override
     public Uni<Optional<AwaitInteractionRecord>> markDispatched(
         String tenantId,
         String interactionId,
@@ -397,6 +411,16 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
         long nowEpochMs,
         Object responsePayload,
         String actor) {
+        return updateStatus(current, status, nowEpochMs, responsePayload, actor, current.transportMetadata());
+    }
+
+    private AwaitInteractionRecord updateStatus(
+        AwaitInteractionRecord current,
+        AwaitInteractionStatus status,
+        long nowEpochMs,
+        Object responsePayload,
+        String actor,
+        Map<String, Object> transportMetadata) {
         return new AwaitInteractionRecord(
             current.tenantId(),
             current.executionId(),
@@ -417,7 +441,7 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
             current.assignee(),
             current.group(),
             current.transportType(),
-            current.transportMetadata(),
+            transportMetadata,
             current.deadlineEpochMs(),
             current.createdAtEpochMs(),
             nowEpochMs,
