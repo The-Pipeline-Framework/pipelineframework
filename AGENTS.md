@@ -171,6 +171,7 @@ TPF-specific scoping rules:
 - Examples are compatibility surfaces, not disposable demos.
 - Docs should be updated with semantic changes, but do not scan all docs unless the affected concept is unclear.
 - Replay/web-ui is relevant when execution semantics, telemetry, step lifecycle, or visual replay state changes.
+- When changing Await/replay lifecycle semantics or refreshing the CSV Payments built-in replay, update the canonical dataset, its docs copy and analysis sidecar, the canonical replay docs, and homepage replay-video assets together. Read `tools/replay-viewer/README.md` before regenerating; validate the live-path event invariants and regenerate `tools/homepage-replay-video` outputs.
 - `tpf-mcp-bridge` is separate; only involve it when template generation, schema export, scaffold generation, or generated project behavior changes.
 - Treat `examples/` and `ai-sdk/` as compatibility/reference surfaces, not disposable demos, when framework semantics change.
 - Keep user-facing docs (`design`/`develop`/`deploy`/`operate`/`value`) free of internal planning terminology unless the topic is explicitly implementation-internal (`docs/evolve/`).
