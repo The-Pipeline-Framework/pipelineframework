@@ -25,9 +25,9 @@ pipeline.orchestrator.dlq-provider=sqs
 
 The state transition that parks or resumes the execution is guarded by the orchestrator store. External dispatch and external side effects remain at-least-once.
 
-## Transport Responsibilities
+## Await Adapter Responsibilities
 
-| Transport | Operational responsibility |
+| Await adapter | Operational responsibility |
 | --- | --- |
 | `interaction-api` | A UI or client must list pending interactions and call the generated completion API. |
 | `webhook` | Configure a stable resume-token secret, reachable callback URLs, and partner retry/idempotency handling. |
@@ -62,7 +62,7 @@ For the eligible portable shape (stream producer, immediate scalar await, scalar
 The durable fallback path is used when the live session is unavailable, after worker loss, or when a later claim must resume from stored state. In that path, the runtime uses durable coordination gates:
 
 1. **Interaction dispatched**: TPF created await interactions and handed requests to the configured await transport.
-2. **Unit dispatch complete**: the await unit has finished dispatching the known item set for that live segment.
+2. **Unit dispatch complete**: the durable-fallback await unit has finished dispatching its known item set.
 3. **Parent wait durable**: the parent execution is stored as `WAITING_EXTERNAL` for that await unit when the transition suspends.
 4. **Completion admitted**: a provider completion matched an interaction and was recorded idempotently.
 5. **Early completion held**: a completion arrived when no live session could accept it and before the fallback release gates were true, so it was recorded but not used to start continuation yet.
@@ -78,7 +78,7 @@ The matching metrics are:
 | Interaction dispatched | `tpf.await.interaction.dispatched.total` |
 | Unit dispatch complete | `tpf.await.unit.dispatch_complete.total` |
 | Completion admitted | `tpf.await.completion.admitted.total` |
-| Item completed | `tpf.await.item.completed.total` |
+| Item completed (fallback aggregate) | `tpf.await.item.completed.total` |
 | Early completion held | `tpf.await.completion.early_held.total` |
 | Resume released | `tpf.await.resume.released.total` |
 | Unit terminal | `tpf.await.unit.terminal.total` |
@@ -95,7 +95,7 @@ Operational interpretation:
 
 ## Replay And Tracing
 
-Replay and trace events expose the lifecycle of the await unit:
+Replay and trace events expose the durable-fallback lifecycle of the await unit:
 
 - `await_interaction_dispatched`
 - `await_unit_dispatch_complete`
@@ -105,7 +105,7 @@ Replay and trace events expose the lifecycle of the await unit:
 - `await_resume_released`
 - `await_unit_terminal`
 
-Use these events to separate runtime behavior from viewer interpretation. For example, in `csv-payments`, `Await Payment Provider` is `ONE_TO_ONE` over a stream, so item completions should appear as provider responses are admitted. The replay viewer should show those real lifecycle events rather than inventing smoothed timing.
+Use these events to separate durable fallback from viewer interpretation. A healthy live itemized handoff is instead visible through interaction completion and downstream step events; it does not synthesize await-unit item-completion or resume-release events. For example, in `csv-payments`, `Await Payment Provider` is `ONE_TO_ONE` over a stream, so downstream progress should begin as provider responses are admitted. The replay viewer should show those real lifecycle events rather than inventing smoothed timing.
 
 ## Troubleshooting Runbook
 

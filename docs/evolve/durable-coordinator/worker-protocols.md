@@ -14,7 +14,7 @@ sequenceDiagram
 
     Coord->>Worker: TransitionCommandEnvelope
     Worker->>Steps: execute bounded continuation
-    alt next durable boundary is await
+    alt await requires durable fallback
         Worker-->>Coord: WAITING_EXTERNAL
     else transition completed
         Worker-->>Coord: COMPLETED
@@ -38,6 +38,8 @@ The worker returns a `TransitionResultEnvelope`:
 1. `COMPLETED` with serialized output payloads,
 2. `WAITING_EXTERNAL` with await suspension metadata,
 3. `FAILED` with classified failure details.
+
+An eligible live itemized await remains inside the active worker with its live session and terminal stream. It therefore returns `COMPLETED` when that bounded transition finishes; it does not return `WAITING_EXTERNAL` merely because its await adapter is remote.
 
 ## Selection
 

@@ -88,13 +88,13 @@ flowchart LR
     A["Object Ingest<br/>source object"] --> B["CSV parser<br/>demand-driven iterator"]
     B --> C["Await Payment Provider<br/>max in-flight interactions"]
     C --> D["Kafka/provider<br/>external latency"]
-    D -. "in-process worker + live-capable adapter" .-> E["Live await session<br/>completion admitted first"]
+    D -. "active eligible live owner<br/>in-process or portable REST/gRPC worker" .-> E["Live await session<br/>completion admitted first"]
     E --> F["Process Approved Payment Status"]
     E --> G["Process Unapproved Payment Status"]
     F --> H["Finalize Payment Output"]
     G --> H
     H --> I["Object Publish<br/>streaming target session"]
-    D -. "portable worker, interaction API, or no live window" .-> J["WAITING_EXTERNAL<br/>coordinator continuation"]
+    D -. "no live session, ineligible portable shape,<br/>interaction API, or webhook" .-> J["WAITING_EXTERNAL<br/>coordinator continuation"]
     J -. "durable continuation" .-> F
     J -. "durable continuation" .-> G
 ```

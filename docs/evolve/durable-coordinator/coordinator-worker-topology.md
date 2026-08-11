@@ -15,7 +15,7 @@ The code and config names still use `orchestrator` in places, for example `orche
 | --- | --- |
 | `orchestrator` | Historical/generated runtime namespace. It still appears in module names, config keys, generated metadata, and Maven topology docs. |
 | Coordinator | Durable control-plane role. It owns execution records, await units, leases, retry/DLQ, re-drive, release activation, release pinning, worker lifecycle checks, and status/result APIs. |
-| Transition worker | Data-plane role. It receives a pinned transition command, executes from the current continuation point to the next durable boundary, and returns `COMPLETED`, `WAITING_EXTERNAL`, or `FAILED`. |
+| Transition worker | Data-plane role. It receives a pinned transition command, executes from the current continuation point to a terminal result or an await requiring durable fallback, and returns `COMPLETED`, `WAITING_EXTERNAL`, or `FAILED`. |
 | Step/runtime service | Generated business-step runtime that a transition worker may call through REST, gRPC, or local transport. |
 | Durable substrate | External state/queue/blob systems such as DynamoDB, SQS, S3-compatible storage, Postgres, or Kafka. |
 
@@ -138,8 +138,8 @@ flowchart LR
     Runtime --> Persistence["persistence-svc<br/>Postgres-backed side effects"]
     Runtime --> AwaitProvider["Payment provider mock"]
     AwaitProvider --> AwaitSubstrate["SQS response queue<br/>or Kafka topic"]
-    AwaitSubstrate --> Coord
-    AwaitSubstrate --> TWorker
+    AwaitSubstrate -->|fallback admission| Coord
+    AwaitSubstrate -->|live completion poller| TWorker
 ```
 
 The default lane uses SQS await request/completion queues so the whole stack can run against the LocalStack-backed AWS-shaped substrate. The Kafka lane runs the same coordinator and worker topology with Kafka as the await provider substrate. In that lane, the transition worker consumes Kafka completions for the live await session while using the same Dynamo await tables as the coordinator. That proves the await abstraction is not tied to one broker without forcing Kafka completions through the coordinator before downstream steps can proceed.
@@ -162,11 +162,11 @@ sequenceDiagram
     Coord->>Queue: enqueue execution work
     Coord->>Queue: claim work + lease execution
     Coord->>Worker: TransitionCommandEnvelope
-    alt reaches await boundary
+    alt await requires durable fallback
         Worker-->>Coord: WAITING_EXTERNAL
         Coord->>Await: persist await unit + pending interaction
         Client->>Coord: complete await interaction
-        Coord->>Await: record completion against unit
+        Coord->>Await: complete durable interaction and record fallback unit completion
         Coord->>Queue: enqueue resume only after unit/parent gates pass
         Coord->>Worker: TransitionCommandEnvelope with resume payload
     else completes transition

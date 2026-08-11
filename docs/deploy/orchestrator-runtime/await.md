@@ -63,7 +63,8 @@ For `csv-payments`, `Process Csv Payments Input` emits `PaymentRecord` rows incr
 sequenceDiagram
     participant Input as "Input stream"
     participant Await as "AwaitStepSupport"
-    participant Unit as "Await unit store"
+    participant Interaction as "Await interaction store"
+    participant Unit as "Await unit / fallback state"
     participant Kafka as "Kafka/provider"
     participant Queue as "QueueAsyncCoordinator"
     participant Live as "Live await session"
@@ -71,10 +72,10 @@ sequenceDiagram
     participant Exec as "Execution store"
 
     Input->>Await: item 0
-    Await->>Unit: create interaction itemIndex=0
+    Await->>Interaction: create durable interaction itemIndex=0
     Await-->>Kafka: dispatch request 0
     Kafka-->>Queue: completion item 0
-    Queue->>Unit: record item 0 completed
+    Queue->>Interaction: complete durable interaction 0
     Queue->>Live: signal item 0
     Live-->>Status: emit when downstream requests
 
@@ -106,10 +107,9 @@ Set either value to `0` only when the application has its own upstream size cont
 
 ### Durable admission budget
 
-Durable provider admission is disabled by default. Enable it only for `QUEUE_ASYNC` deployments:
+Durable provider admission is enabled by default for endpoint-capable `ONE_TO_ONE` awaits in `QUEUE_ASYNC`. Use Dynamo for a multi-replica deployment:
 
 ```properties
-pipeline.await-admission.enabled=true
 pipeline.await-admission.store=dynamo
 pipeline.orchestrator.dynamo.await-admission-table=tpf_await_admission
 # Configure pipeline.orchestrator.dynamo.region and endpoint-override for the deployment.

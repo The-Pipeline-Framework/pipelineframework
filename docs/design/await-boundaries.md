@@ -86,7 +86,8 @@ That is why `ONE_TO_ONE` await over a stream is not a hidden batch mode. It is a
 sequenceDiagram
     participant Source as "Live source segment"
     participant Await as "Await step"
-    participant Unit as "Await unit"
+    participant Interaction as "Await interaction"
+    participant Unit as "Await unit / fallback state"
     participant Live as "Live await session"
     participant External as "External actor"
     participant Coordinator as "Coordinator"
@@ -95,15 +96,15 @@ sequenceDiagram
     participant Store as "Execution store"
 
     Source->>Await: emit typed item(s)
-    Await->>Unit: create item or aggregate interactions
+    Await->>Interaction: create durable item interaction(s)
     Await->>External: dispatch request(s)
-    External-->>Unit: admit correlated completion(s)
-    alt in-process worker and live-capable adapter
-      Unit-->>Live: signal admitted completion
+    External-->>Interaction: admit correlated completion(s)
+    alt active eligible live owner (in-process or portable)
+      Interaction-->>Live: signal admitted completion
       Live-->>Continue: emit typed output when downstream requests
       Continue-->>Publish: terminal domain output
       Publish-->>Store: worker publishes before markSucceeded
-    else interaction/webhook, portable worker, or no live window
+    else interaction/webhook, no live session, or ineligible portable shape
       Await-->>Store: suspend parent execution
       Store->>Store: persist WAITING_EXTERNAL(awaitUnitId)
       Unit-->>Coordinator: completion is admitted

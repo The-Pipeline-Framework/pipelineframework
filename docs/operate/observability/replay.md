@@ -39,6 +39,8 @@ It is emitted by the framework replay exporter and contains:
 
 Replay JSON is the supported offline input for the TPF replay viewer.
 
+Await-unit events describe durable fallback. A healthy live itemized handoff is represented by durable interaction completion together with downstream step events; it does not add `await_unit_item_completed` or `await_resume_released` merely to visualize the live path.
+
 Command steps are included in the topology as authored pipeline nodes with `renderRole: "command"` and `actorKind` set to the command name. This keeps managed external effects visible in playback even when the connector hides provider details such as endpoint, credentials, index name, or SDK configuration.
 
 ## Live versus offline
@@ -153,7 +155,7 @@ Key timing checks:
 
 The important operational signal is the overlap: status processing starts before the parser has finished and before all await completions have arrived. That means the parser is being paced by reactive demand and the await in-flight window, not by a forced sleep. Object Publish runs at the terminal boundary after status output exists and before success is committed.
 
-The repo proof also runs a 10k monolith lane with the same connector-first path. In the captured run, 10k records completed in `80s` of pipeline time with 10k output records and output checksum `cf8996e7d593202dd6f9f9405b82e95e69d48544c3edec830f64afabc703a023`.
+The repository also keeps a 10k self-host acceptance with the unchanged 180-second worker deadline. It is a scale acceptance, not evidence supplied by this 1k replay capture: the current live-first implementation has a known throughput limitation tracked by #541 and does not yet satisfy that 10k deadline. Do not extrapolate the replay timing into a large-workload SLA.
 
 Command telemetry has two layers:
 

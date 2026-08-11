@@ -195,7 +195,7 @@ Step-level reject signal:
 
 - `tpf.step.reject.total` (counter): rejected step items published to item reject sinks.
 
-Await execution logs include the parked await unit when a `QUEUE_ASYNC` execution waits or resumes. Replay and trace events expose await unit lifecycle transitions, including dispatch, waiting, item completion, unit completion, resume release, and terminal timeout/failure states. Metrics expose aggregate await-boundary health without high-cardinality ids.
+Await execution logs include a parked await unit when a `QUEUE_ASYNC` execution uses durable fallback to wait or resume. Replay and trace events expose those durable await-unit transitions, including dispatch, waiting, item completion, unit completion, resume release, and terminal timeout/failure states. A healthy live itemized handoff is observed through durable interaction completion and downstream step telemetry; it does not emit unit item-completion or resume-release events. Metrics expose aggregate await-boundary health without high-cardinality ids.
 
 Command signal:
 
