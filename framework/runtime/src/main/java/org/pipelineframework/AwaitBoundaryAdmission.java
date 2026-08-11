@@ -6,6 +6,7 @@ import java.util.function.Supplier;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.awaitable.AwaitCompletionAdmissionFailures;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
+import org.pipelineframework.awaitable.AwaitCompletionMetrics;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCompletionTenantMismatchException;
 import org.pipelineframework.awaitable.AwaitCoordinator;
@@ -92,9 +93,11 @@ class AwaitBoundaryAdmission {
     return signalLiveAwaitCompletion(validated.record())
         .onItem().transformToUni(liveAccepted -> {
           Uni<AwaitCompletionResult> handoff = liveAccepted
-              ? segmentBoundaryLedger.get()
+              ? Uni.createFrom().item(validated)
+                  .invoke(result -> AwaitCompletionMetrics.recordCompletionAdmitted(result.record()))
+                  .chain(result -> segmentBoundaryLedger.get()
                   .recordBoundaryCompletionAdmitted(validated.record(), normalized.nowEpochMs())
-                  .replaceWith(validated)
+                  .replaceWith(result))
               : awaitCoordinator.recordCompletion(validated.record(), normalized.nowEpochMs())
                   .onItem().transformToUni(unit -> segmentBoundaryLedger.get()
                       .recordBoundaryCompletionAdmitted(validated.record(), normalized.nowEpochMs())

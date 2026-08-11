@@ -2,6 +2,7 @@ package org.pipelineframework.awaitable.sqs;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -327,11 +328,41 @@ class SqsAwaitCompletionPollerTest {
             Duration.ofSeconds(45),
             Duration.ofSeconds(5),
             2,
-            1));
+            2));
         try {
             assertTrue(replacementReceiveStarted.await(1, TimeUnit.SECONDS));
         } finally {
             releaseReplacementReceive.countDown();
+        }
+    }
+
+    @Test
+    void boundsReceivedMessagesWhilePreviousBatchAdmissionIsStillRunning() throws Exception {
+        AtomicInteger receiveCalls = new AtomicInteger();
+        CountDownLatch initialReceives = new CountDownLatch(SqsAwaitCompletionPoller.RECEIVE_LOOP_CONCURRENCY);
+        when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenAnswer(ignored -> {
+            receiveCalls.incrementAndGet();
+            initialReceives.countDown();
+            return ReceiveMessageResponse.builder().messages(message("receipt", completionJson())).build();
+        });
+        when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class))).thenReturn(
+            Uni.createFrom().emitter(ignored -> {
+            }));
+
+        poller.startPolling(new SqsAwaitCompletionPoller.SqsAwaitPollerConfig(
+            true,
+            Optional.of("http://sqs.local/responses"),
+            Duration.ZERO,
+            Duration.ofSeconds(45),
+            Duration.ofSeconds(5),
+            1,
+            1));
+        try {
+            assertTrue(initialReceives.await(1, TimeUnit.SECONDS));
+            Thread.sleep(100L);
+            assertEquals(SqsAwaitCompletionPoller.RECEIVE_LOOP_CONCURRENCY, receiveCalls.get());
+        } finally {
+            poller.shutdown();
         }
     }
 

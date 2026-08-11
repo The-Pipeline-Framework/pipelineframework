@@ -327,6 +327,33 @@ class PipelineExecutionServiceTest {
     }
 
     @Test
+    void portableItemizedAwaitWithoutAScalarSuffixKeepsDurableHandoff() throws Exception {
+        markStartupHealthy(service);
+        JsonTransitionPayloadCodec codec = new JsonTransitionPayloadCodec();
+        service.transitionPayloadCodec = codec;
+        List<Object> steps = List.of(new Object(), new Object());
+        AtomicReference<AwaitContinuationMode> continuationMode = new AtomicReference<>();
+        AtomicReference<TerminalOutputOwnership> terminalOutputOwnership = new AtomicReference<>();
+        when(releaseIdentityResolver.validateCommandIdentity(any(), isNull())).thenReturn(Optional.empty());
+        when(releaseIdentityResolver.contract()).thenReturn(portableLiveItemizedContractWithoutSuffix());
+        when(pipelineStepResolver.loadPipelineSteps()).thenReturn(steps);
+        when(pipelineRunner.runFromStepUntilWithContext(any(), eq(steps), eq(0), eq(2)))
+            .thenAnswer(invocation -> {
+                var context = org.pipelineframework.awaitable.AwaitExecutionContextHolder.get();
+                continuationMode.set(context.continuationMode());
+                terminalOutputOwnership.set(context.terminalOutputOwnership());
+                return new PipelineRunner.ExecutionResult(Multi.createFrom().empty(), telemetryContext);
+            });
+
+        TransitionResultEnvelope envelope = service.executePortableTransition(transitionCommand(codec, 0, -1))
+            .await().indefinitely();
+
+        assertEquals(TransitionWorkerOutcome.COMPLETED, envelope.outcome());
+        assertEquals(AwaitContinuationMode.DURABLE_HANDOFF, continuationMode.get());
+        assertEquals(TerminalOutputOwnership.COORDINATOR, terminalOutputOwnership.get());
+    }
+
+    @Test
     void nonEligiblePortableItemizedAwaitKeepsDurableHandoff() throws Exception {
         markStartupHealthy(service);
         JsonTransitionPayloadCodec codec = new JsonTransitionPayloadCodec();
@@ -520,6 +547,27 @@ class PipelineExecutionServiceTest {
                     "PaymentRecord", "PaymentStatus", null, null, "SQS"),
                 new PipelineBundleStepDescriptor(2, "suffix", "service", "ONE_TO_ONE",
                     "PaymentStatus", "PaymentOutput", null, null, null)),
+            PipelineBundleCapabilities.defaults(),
+            Map.of(),
+            "");
+    }
+
+    private static PipelineContractDescriptor portableLiveItemizedContractWithoutSuffix() {
+        return new PipelineContractDescriptor(
+            2,
+            "payments",
+            "1",
+            "contract",
+            null,
+            null,
+            null,
+            false,
+            null,
+            List.of(
+                new PipelineBundleStepDescriptor(0, "source", "service", "ONE_TO_MANY",
+                    "CsvInput", "PaymentRecord", null, null, null),
+                new PipelineBundleStepDescriptor(1, "await", "await", "ONE_TO_ONE",
+                    "PaymentRecord", "PaymentStatus", null, null, "SQS")),
             PipelineBundleCapabilities.defaults(),
             Map.of(),
             "");

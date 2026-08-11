@@ -78,7 +78,8 @@ public class AwaitDurablePayloadResolver {
                     return Uni.createFrom().voidItem();
                 }
                 return preloadRelease(key, PinnedExecution.from(optional.get()), tenantId).replaceWithVoid();
-            });
+            })
+            .onFailure(OwningExecutionUnavailableException.class).recoverWithUni(Uni.createFrom().voidItem());
     }
 
     public Object decode(AwaitInteractionRecord interaction, Slot slot, String stored) {

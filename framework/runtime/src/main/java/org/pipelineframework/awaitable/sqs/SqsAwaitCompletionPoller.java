@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -62,6 +63,7 @@ public class SqsAwaitCompletionPoller {
     private volatile ExecutorService receiveExecutor;
     private volatile ExecutorService deleteExecutor;
     private volatile Future<?> pollFuture;
+    private volatile Semaphore receivedMessagePermits;
     private volatile boolean running;
     private final AtomicInteger consecutivePollFailures = new AtomicInteger();
 
@@ -87,6 +89,7 @@ public class SqsAwaitCompletionPoller {
             return;
         }
         ensureExecutors(config.maxMessages());
+        receivedMessagePermits = new Semaphore(RECEIVE_LOOP_CONCURRENCY * config.maxMessages());
         running = true;
         for (int loop = 0; loop < RECEIVE_LOOP_CONCURRENCY; loop++) {
             schedulePoll(config, config.pollStartDelay());
@@ -107,6 +110,7 @@ public class SqsAwaitCompletionPoller {
         receiveExecutor = null;
         shutdownExecutor(deleteExecutor);
         deleteExecutor = null;
+        receivedMessagePermits = null;
         SqsClient activeClient = client;
         if (activeClient == null) {
             return;
@@ -165,17 +169,30 @@ public class SqsAwaitCompletionPoller {
         if (!running || Thread.currentThread().isInterrupted()) {
             return;
         }
+        Semaphore permits = receivedMessagePermits;
+        int reservedPermits = config.maxMessages();
+        if (permits == null || !permits.tryAcquire(reservedPermits)) {
+            schedulePoll(config, Duration.ofMillis(1));
+            return;
+        }
         receiveMessages(config).subscribe().with(
             received -> {
                 consecutivePollFailures.set(0);
+                int receivedCount = Math.min(received.messages().size(), reservedPermits);
+                permits.release(reservedPermits - receivedCount);
                 schedulePoll(config, Duration.ZERO);
                 handleReceivedMessages(received.queueUrl(), received.messages(), config)
                     .subscribe().with(
-                        ignored -> {
-                        },
-                        failure -> LOG.error("Failed handling received SQS await completions.", failure));
+                        ignored -> permits.release(receivedCount),
+                        failure -> {
+                            permits.release(receivedCount);
+                            LOG.error("Failed handling received SQS await completions.", failure);
+                        });
             },
-            failure -> schedulePoll(config, failureBackoff()));
+            failure -> {
+                permits.release(reservedPermits);
+                schedulePoll(config, failureBackoff());
+            });
     }
 
     private Uni<Void> handleMessage(String queueUrl, Message message, SqsAwaitPollerConfig config) {

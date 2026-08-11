@@ -14,8 +14,8 @@ import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
-import io.smallrye.mutiny.infrastructure.Infrastructure;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
@@ -355,12 +355,11 @@ public class AwaitCoordinator {
      */
     public Uni<Void> reconcileCompletedItemInteractions(String tenantId, String unitId, long nowEpochMs) {
         return findByUnit(tenantId, unitId)
-            .onItem().transformToUni(records -> records.stream()
-                .filter(record -> record.itemInteraction() && record.status() == AwaitInteractionStatus.COMPLETED)
-                .reduce(
-                    Uni.createFrom().voidItem(),
-                    (previous, record) -> previous.chain(() -> recordCompletion(record, nowEpochMs).replaceWithVoid()),
-                    (left, right) -> left.chain(() -> right)));
+            .onItem().transformToMulti(records -> Multi.createFrom().iterable(records))
+            .select().where(record -> record.itemInteraction() && record.status() == AwaitInteractionStatus.COMPLETED)
+            .onItem().transformToUniAndConcatenate(record -> recordCompletion(record, nowEpochMs).replaceWithVoid())
+            .collect().last()
+            .replaceWithVoid();
     }
 
     private static String itemCompletionKey(AwaitInteractionRecord record) {

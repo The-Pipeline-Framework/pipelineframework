@@ -381,8 +381,7 @@ public class AwaitStepSupport {
                             + " and cannot be accepted by the live await stream."));
                 }
                 if (record.status() == AwaitInteractionStatus.WAITING
-                    || record.status() == AwaitInteractionStatus.DISPATCHING
-                    || record.status() == AwaitInteractionStatus.DISPATCHED) {
+                    || record.status() == AwaitInteractionStatus.DISPATCHING) {
                     return awaitCoordinator.dispatchLive(descriptor, record);
                 }
                 return Uni.createFrom().item(record);

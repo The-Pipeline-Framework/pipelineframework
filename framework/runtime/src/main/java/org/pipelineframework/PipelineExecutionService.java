@@ -432,7 +432,7 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
     int stopBeforeStepIndex = command.stopBeforeStepIndex() < 0 ? steps.size() : command.stopBeforeStepIndex();
     if (producerIndex < 0
         || stopBeforeStepIndex != steps.size()
-        || producerIndex + 1 >= stopBeforeStepIndex) {
+        || producerIndex + 2 >= stopBeforeStepIndex) {
       return false;
     }
 
