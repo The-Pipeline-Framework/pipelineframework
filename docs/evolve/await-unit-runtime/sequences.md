@@ -64,7 +64,7 @@ sequenceDiagram
       Live->>Suffix: emit item 1 when downstream requests
       Queue->>Live: accept admitted item 0
       Live->>Suffix: emit item 0 when downstream requests
-    else no live session or ineligible portable shape
+    else fallback execution or retry path (no live owner / ineligible shape)
       Step->>UnitStore: markDispatchComplete(expectedItemCount=2)
       Step-->>ExecStore: park execution with awaitUnitId
       Queue->>UnitStore: require dispatchComplete

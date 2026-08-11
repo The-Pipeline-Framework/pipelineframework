@@ -152,9 +152,12 @@ That continuation is the future beginning of the suspended pipeline. `AwaitConti
 
 ## Durable Recovery Contract
 
-Every await transition must be reconstructable from durable state. A worker-local observation,
-claim, cache, live session, or scheduler entry may reduce duplicate work, but it cannot be needed
-to determine whether an interaction, child continuation, or parent execution may progress.
+Every accepted durable Await fact must be reconstructable from durable state. An active live
+`Multi` is not itself reconstructed after process loss; retry or re-execution creates a new live
+segment and reuses already admitted durable interactions and completions. A worker-local
+observation, claim, cache, live session, or scheduler entry may reduce duplicate work, but it
+cannot be needed to determine whether an interaction, child continuation, or parent execution
+may progress through durable fallback.
 
 | Durable precondition | Event | Durable mutation | Emitted action | Restart reconstruction |
 | --- | --- | --- | --- | --- |
@@ -192,10 +195,11 @@ existing child-execution evidence. New units use the fact-based release gate. Pr
 may suppress duplicate dispatch work, but they never establish either provider or continuation
 completion.
 
-The runtime verifies these durable guarantees across every lifecycle transition, supported await
-shape, defined completion race, and restart boundary. A recovered runtime rebuilds progress from
-the persisted execution, await-unit, and interaction state; it does not depend on a local claim,
-cache, session, or scheduler entry from the process that observed an earlier event.
+The runtime verifies these durable-fallback guarantees across every lifecycle transition,
+supported await shape, defined completion race, and restart boundary. A recovered runtime
+rebuilds fallback progress from the persisted execution, await-unit, and interaction state; it
+does not depend on a local claim, cache, session, or scheduler entry from the process that
+observed an earlier event.
 
 Kafka, SQS, and webhook completion ingress each admit a single durable completion before release
 evaluation. Terminal execution leaves no pending interaction, active await unit, orphaned child
