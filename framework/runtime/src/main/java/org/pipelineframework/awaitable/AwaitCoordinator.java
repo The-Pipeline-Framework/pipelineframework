@@ -270,8 +270,7 @@ public class AwaitCoordinator {
             .onItem().transformToUni(record -> validateCompletionAdmission(record, normalized)
                 .onItem().transform(safeCommand -> completionContract(record, safeCommand)))
             .onItem().transformToUni(this::enforceCompletionPayloadLimit)
-            .onItem().transformToUni(validated -> interactionStore().completeResolved(
-                validated.record(), validated.command()));
+            .onItem().transformToUni(validated -> interactionStore().complete(validated.command()));
     }
 
     private Uni<AwaitCompletionCommand> validateCompletionAdmission(

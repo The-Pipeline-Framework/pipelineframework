@@ -49,6 +49,7 @@ public class SqsAwaitCompletionPoller {
     private static final Duration EXECUTOR_SHUTDOWN_TIMEOUT = Duration.ofSeconds(10);
     private static final int DEFAULT_WAIT_TIME_SECONDS = 1;
     private static final int DEFAULT_MAX_MESSAGES = 1;
+    static final int RECEIVE_LOOP_CONCURRENCY = 4;
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
@@ -58,6 +59,7 @@ public class SqsAwaitCompletionPoller {
 
     private volatile SqsClient client;
     private volatile ExecutorService pollExecutor;
+    private volatile ExecutorService receiveExecutor;
     private volatile ExecutorService deleteExecutor;
     private volatile Future<?> pollFuture;
     private volatile boolean running;
@@ -77,13 +79,18 @@ public class SqsAwaitCompletionPoller {
     }
 
     void onStartup(@Observes StartupEvent event) {
-        SqsAwaitPollerConfig config = SqsAwaitPollerConfig.fromRuntime();
+        startPolling(SqsAwaitPollerConfig.fromRuntime());
+    }
+
+    void startPolling(SqsAwaitPollerConfig config) {
         if (!config.enabled()) {
             return;
         }
         ensureExecutors(config.maxMessages());
         running = true;
-        schedulePoll(config.pollStartDelay());
+        for (int loop = 0; loop < RECEIVE_LOOP_CONCURRENCY; loop++) {
+            schedulePoll(config, config.pollStartDelay());
+        }
         LOG.infof("SQS await completion poller enabled for responseQueueUrl=%s", config.responseQueueUrl().orElse("<missing>"));
     }
 
@@ -96,6 +103,8 @@ public class SqsAwaitCompletionPoller {
         }
         shutdownExecutor(pollExecutor);
         pollExecutor = null;
+        shutdownExecutor(receiveExecutor);
+        receiveExecutor = null;
         shutdownExecutor(deleteExecutor);
         deleteExecutor = null;
         SqsClient activeClient = client;
@@ -112,8 +121,14 @@ public class SqsAwaitCompletionPoller {
     }
 
     Uni<Boolean> pollOnce(SqsAwaitPollerConfig config) {
+        return receiveMessages(config)
+            .onItem().transformToUni(received -> handleReceivedMessages(received.queueUrl(), received.messages(), config))
+            .replaceWith(true);
+    }
+
+    private Uni<ReceivedMessages> receiveMessages(SqsAwaitPollerConfig config) {
         if (!config.enabled()) {
-            return Uni.createFrom().item(true);
+            return Uni.createFrom().item(new ReceivedMessages("", List.of()));
         }
         ensureExecutors(config.maxMessages());
         String responseQueueUrl = config.responseQueueUrl()
@@ -128,26 +143,39 @@ public class SqsAwaitCompletionPoller {
             .visibilityTimeout(visibilityTimeoutSeconds(config.visibilityTimeout(), "tpf.await.sqs.visibility-timeout"))
             .build();
         return Uni.createFrom().item(() -> sqsClient().receiveMessage(request).messages())
-            .runSubscriptionOn(pollExecutor)
+            .runSubscriptionOn(receiveExecutor)
             .onFailure().invoke(e -> LOG.errorf(e,
                 "Failed receiving SQS await completions from queueUrl=%s", responseQueueUrl))
-            .onItem().transformToMulti(messages -> Multi.createFrom().iterable(messages)
-                .onItem().transformToUni(message -> handleMessage(responseQueueUrl, message, config))
-                .merge(config.maxMessages()))
-            .collect().asList()
-            .replaceWith(true);
+            .onItem().transform(messages -> new ReceivedMessages(responseQueueUrl, messages));
     }
 
-    private void pollLoop() {
+    private Uni<Void> handleReceivedMessages(
+        String queueUrl,
+        List<Message> messages,
+        SqsAwaitPollerConfig config
+    ) {
+        return Multi.createFrom().iterable(messages)
+            .onItem().transformToUni(message -> handleMessage(queueUrl, message, config))
+            .merge(config.maxMessages())
+            .collect().asList()
+            .replaceWithVoid();
+    }
+
+    private void pollLoop(SqsAwaitPollerConfig config) {
         if (!running || Thread.currentThread().isInterrupted()) {
             return;
         }
-        pollOnce(SqsAwaitPollerConfig.fromRuntime()).subscribe().with(
-            ignored -> {
+        receiveMessages(config).subscribe().with(
+            received -> {
                 consecutivePollFailures.set(0);
-                schedulePoll(Duration.ZERO);
+                schedulePoll(config, Duration.ZERO);
+                handleReceivedMessages(received.queueUrl(), received.messages(), config)
+                    .subscribe().with(
+                        ignored -> {
+                        },
+                        failure -> LOG.error("Failed handling received SQS await completions.", failure));
             },
-            failure -> schedulePoll(failureBackoff()));
+            failure -> schedulePoll(config, failureBackoff()));
     }
 
     private Uni<Void> handleMessage(String queueUrl, Message message, SqsAwaitPollerConfig config) {
@@ -253,8 +281,15 @@ public class SqsAwaitCompletionPoller {
 
     private synchronized void ensureExecutors(int maxMessages) {
         if (pollExecutor == null) {
-            pollExecutor = Executors.newSingleThreadExecutor(runnable -> {
+            pollExecutor = Executors.newFixedThreadPool(RECEIVE_LOOP_CONCURRENCY, runnable -> {
                 Thread thread = new Thread(runnable, "tpf-sqs-await-completion-poller");
+                thread.setDaemon(true);
+                return thread;
+            });
+        }
+        if (receiveExecutor == null) {
+            receiveExecutor = Executors.newFixedThreadPool(RECEIVE_LOOP_CONCURRENCY, runnable -> {
+                Thread thread = new Thread(runnable, "tpf-sqs-await-completion-receive");
                 thread.setDaemon(true);
                 return thread;
             });
@@ -268,7 +303,7 @@ public class SqsAwaitCompletionPoller {
         }
     }
 
-    private void schedulePoll(Duration delay) {
+    private void schedulePoll(SqsAwaitPollerConfig config, Duration delay) {
         if (!running) {
             return;
         }
@@ -279,7 +314,7 @@ public class SqsAwaitCompletionPoller {
         try {
             pollFuture = executor.submit(() -> {
                 sleep(delay);
-                pollLoop();
+                pollLoop(config);
             });
         } catch (RejectedExecutionException rejected) {
             LOG.debug("SQS await completion poll scheduling rejected during shutdown", rejected);
@@ -350,5 +385,8 @@ public class SqsAwaitCompletionPoller {
                 Math.max(1, Math.min(10,
                     config.getOptionalValue("tpf.await.sqs.max-messages", Integer.class).orElse(DEFAULT_MAX_MESSAGES))));
         }
+    }
+
+    private record ReceivedMessages(String queueUrl, List<Message> messages) {
     }
 }

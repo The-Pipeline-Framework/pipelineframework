@@ -9,6 +9,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -32,10 +33,25 @@ import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.TransactWriteItemsRequest;
+import software.amazon.awssdk.services.dynamodb.model.TransactWriteItemsResponse;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
 
 class DynamoAwaitInteractionStoreTest {
+
+    @Test
+    void firstCreateUsesItsConditionalTransactionWithoutAnIdempotencyLookupRead() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoAwaitInteractionStore store = new DynamoAwaitInteractionStore(client, mockConfig());
+        when(client.transactWriteItems(any(TransactWriteItemsRequest.class)))
+            .thenReturn(TransactWriteItemsResponse.builder().build());
+
+        store.createOrGet(command("tenant-a", "execution-1", "review", "idem-1", "corr-1", "unit-1", 0,
+            "alice", "finance", 20_000L)).await().indefinitely();
+
+        verify(client).transactWriteItems(any(TransactWriteItemsRequest.class));
+        verify(client, never()).getItem(any(GetItemRequest.class));
+    }
 
     @Test
     void writesAndRestoresTypedDurableAwaitPayloads() {
@@ -219,6 +235,27 @@ class DynamoAwaitInteractionStoreTest {
     }
 
     @Test
+    void findTimedOutUsesMetadataOnlyViewWithoutTypedPayloadResolution() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        AwaitDurablePayloadResolver payloads = mock(AwaitDurablePayloadResolver.class);
+        DynamoAwaitInteractionStore store = new DynamoAwaitInteractionStore(client, mockConfig(), payloads);
+        Map<String, AttributeValue> timedOut = item(
+            "tenant-a", "interaction-a", "unit-a", 7, AwaitInteractionStatus.WAITING, 1_000L, "alice", "finance");
+        timedOut.put("request_payload_json", avS("{\"canonicalTypeId\":\"Request\",\"typeExpressionFingerprint\":\"request\",\"catalogFingerprint\":\"catalog\",\"encoding\":\"json\",\"encodingVersion\":1,\"payload\":\"e30=\"}"));
+        timedOut.put("response_payload_json", avS("{\"canonicalTypeId\":\"Decision\",\"typeExpressionFingerprint\":\"response\",\"catalogFingerprint\":\"catalog\",\"encoding\":\"json\",\"encodingVersion\":1,\"payload\":\"e30=\"}"));
+        when(client.query(any(QueryRequest.class))).thenReturn(QueryResponse.builder().items(List.of(timedOut)).build());
+
+        AwaitInteractionRecord record = store.findTimedOut(2_000L, 1).await().indefinitely().getFirst();
+
+        assertEquals("interaction-a", record.interactionId());
+        assertEquals(7, record.itemIndex());
+        assertEquals(AwaitInteractionStatus.WAITING, record.status());
+        assertEquals(null, record.requestPayload());
+        assertEquals(null, record.responsePayload());
+        verifyNoInteractions(payloads);
+    }
+
+    @Test
     void terminalTransitionRemovesActivePendingAndDeadlineQueryKeys() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         DynamoAwaitInteractionStore store = new DynamoAwaitInteractionStore(client, mockConfig());
@@ -241,6 +278,26 @@ class DynamoAwaitInteractionStoreTest {
         assertTrue(updateExpression.contains("#deadlineKey"));
         assertTrue(updateExpression.contains("#deadlineSort"));
         verify(client, never()).scan(any(ScanRequest.class));
+    }
+
+    @Test
+    void markTimedOutUsesMetadataOnlyResultWithoutTypedPayloadResolution() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        AwaitDurablePayloadResolver payloads = mock(AwaitDurablePayloadResolver.class);
+        DynamoAwaitInteractionStore store = new DynamoAwaitInteractionStore(client, mockConfig(), payloads);
+        Map<String, AttributeValue> timedOut = item(
+            "tenant-a", "interaction-a", "unit-a", 7, AwaitInteractionStatus.TIMED_OUT, 1_000L, "alice", "finance");
+        timedOut.put("request_payload_json", avS("{\"canonicalTypeId\":\"Request\",\"typeExpressionFingerprint\":\"request\",\"catalogFingerprint\":\"catalog\",\"encoding\":\"json\",\"encodingVersion\":1,\"payload\":\"e30=\"}"));
+        timedOut.put("response_payload_json", avS("{\"canonicalTypeId\":\"Decision\",\"typeExpressionFingerprint\":\"response\",\"catalogFingerprint\":\"catalog\",\"encoding\":\"json\",\"encodingVersion\":1,\"payload\":\"e30=\"}"));
+        when(client.updateItem(any(UpdateItemRequest.class))).thenReturn(UpdateItemResponse.builder().attributes(timedOut).build());
+
+        AwaitInteractionRecord record = store.markTimedOut("tenant-a", "interaction-a", 0L, 2_000L)
+            .await().indefinitely().orElseThrow();
+
+        assertEquals(AwaitInteractionStatus.TIMED_OUT, record.status());
+        assertEquals(null, record.requestPayload());
+        assertEquals(null, record.responsePayload());
+        verifyNoInteractions(payloads);
     }
 
     @Test

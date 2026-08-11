@@ -222,47 +222,54 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
                 purgeExpired(command.nowEpochMs());
                 AwaitInteractionRecord current = resolveForCompletion(command)
                     .orElseThrow(() -> new AwaitInteractionNotFoundException("No await interaction matches completion"));
-                if (current.status() == AwaitInteractionStatus.COMPLETED) {
-                    return new AwaitCompletionResult(current, true);
-                }
-                if (current.status().terminal()) {
-                    throw new AwaitInteractionTerminalException("Await interaction is terminal: " + current.status());
-                }
-                if (current.deadlineEpochMs() <= command.nowEpochMs()) {
-                    AwaitInteractionRecord timedOut = updateStatus(current, AwaitInteractionStatus.TIMED_OUT, command.nowEpochMs(), null, null);
-                    interactionsByScopedId.put(scopedInteractionId(timedOut.tenantId(), timedOut.interactionId()), timedOut);
-                    throw new AwaitInteractionTerminalException("Await interaction timed out before completion");
-                }
-                AwaitInteractionRecord completed = new AwaitInteractionRecord(
-                    current.tenantId(),
-                    current.executionId(),
-                    current.stepId(),
-                    current.stepIndex(),
-                    current.outputType(),
-                    current.interactionId(),
-                    current.correlationId(),
-                    current.causationId(),
-                    current.idempotencyKey(),
-                    current.version() + 1,
-                    AwaitInteractionStatus.COMPLETED,
-                    current.requestPayload(),
-                    command.responsePayload(),
-                    current.unitId(),
-                    current.itemIndex(),
-                    command.actor(),
-                    current.assignee(),
-                    current.group(),
-                    current.transportType(),
-                    current.transportMetadata(),
+                return completeResolvedLocked(current, command);
+            }
+        });
+    }
+
+    private AwaitCompletionResult completeResolvedLocked(
+        AwaitInteractionRecord current,
+        AwaitCompletionCommand command
+    ) {
+        if (current.status() == AwaitInteractionStatus.COMPLETED) {
+            return new AwaitCompletionResult(current, true);
+        }
+        if (current.status().terminal()) {
+            throw new AwaitInteractionTerminalException("Await interaction is terminal: " + current.status());
+        }
+        if (current.deadlineEpochMs() <= command.nowEpochMs()) {
+            AwaitInteractionRecord timedOut = updateStatus(current, AwaitInteractionStatus.TIMED_OUT, command.nowEpochMs(), null, null);
+            interactionsByScopedId.put(scopedInteractionId(timedOut.tenantId(), timedOut.interactionId()), timedOut);
+            throw new AwaitInteractionTerminalException("Await interaction timed out before completion");
+        }
+        AwaitInteractionRecord completed = new AwaitInteractionRecord(
+            current.tenantId(),
+            current.executionId(),
+            current.stepId(),
+            current.stepIndex(),
+            current.outputType(),
+            current.interactionId(),
+            current.correlationId(),
+            current.causationId(),
+            current.idempotencyKey(),
+            current.version() + 1,
+            AwaitInteractionStatus.COMPLETED,
+            current.requestPayload(),
+            command.responsePayload(),
+            current.unitId(),
+            current.itemIndex(),
+            command.actor(),
+            current.assignee(),
+            current.group(),
+            current.transportType(),
+            current.transportMetadata(),
             current.deadlineEpochMs(),
             current.createdAtEpochMs(),
             command.nowEpochMs(),
             current.ttlEpochS(),
             current.transportOutputType());
-                interactionsByScopedId.put(scopedInteractionId(completed.tenantId(), completed.interactionId()), completed);
-                return new AwaitCompletionResult(completed, false);
-            }
-        });
+        interactionsByScopedId.put(scopedInteractionId(completed.tenantId(), completed.interactionId()), completed);
+        return new AwaitCompletionResult(completed, false);
     }
 
     @Override

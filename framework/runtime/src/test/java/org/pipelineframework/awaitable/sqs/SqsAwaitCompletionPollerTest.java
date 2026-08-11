@@ -11,6 +11,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Proxy;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +40,11 @@ import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageResponse;
 
 class SqsAwaitCompletionPollerTest {
+
+    @Test
+    void completionConsumerUsesBoundedConcurrentReceiveLoopsForBurstCompletions() {
+        assertEquals(4, SqsAwaitCompletionPoller.RECEIVE_LOOP_CONCURRENCY);
+    }
 
     private SqsClient client;
     private PipelineExecutionService executionService;
@@ -187,7 +193,7 @@ class SqsAwaitCompletionPollerTest {
     }
 
     @Test
-    void pollOnceAdmitsEachReceivedMessageConcurrently() throws Exception {
+    void pollOnceAdmitsDuplicateCompletionDeliveriesConcurrently() throws Exception {
         when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
             .messages(
                 message("receipt-1", completionJson()),
@@ -215,6 +221,118 @@ class SqsAwaitCompletionPollerTest {
             request.receiptHandle().equals("receipt-2")));
         verify(client).deleteMessage(argThat((DeleteMessageRequest request) ->
             request.receiptHandle().equals("receipt-3")));
+    }
+
+    @Test
+    void pollOnceBoundsAdmissionConcurrencyToTheReceivedBatchLimit() throws Exception {
+        SqsAwaitCompletionPoller.SqsAwaitPollerConfig config = new SqsAwaitCompletionPoller.SqsAwaitPollerConfig(
+            true,
+            Optional.of("http://sqs.local/responses"),
+            Duration.ZERO,
+            Duration.ofSeconds(45),
+            Duration.ofSeconds(5),
+            2,
+            2);
+        when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
+            .messages(
+                message("receipt-1", completionJson()),
+                message("receipt-2", completionJson()),
+                message("receipt-3", completionJson()))
+            .build());
+        AtomicInteger subscriptions = new AtomicInteger();
+        CountDownLatch firstBatchStarted = new CountDownLatch(2);
+        CopyOnWriteArrayList<UniEmitter<? super AwaitCompletionResult>> firstBatch = new CopyOnWriteArrayList<>();
+        when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class))).thenAnswer(ignored -> {
+            if (subscriptions.incrementAndGet() > 2) {
+                return Uni.createFrom().item(new AwaitCompletionResult(null, false));
+            }
+            return Uni.createFrom().emitter(emitter -> {
+                firstBatch.add(emitter);
+                firstBatchStarted.countDown();
+            });
+        });
+        CompletableFuture<Void> completed = new CompletableFuture<>();
+
+        poller.pollOnce(config).subscribe().with(
+            ignored -> completed.complete(null),
+            completed::completeExceptionally);
+        assertTrue(firstBatchStarted.await(1, TimeUnit.SECONDS));
+        assertEquals(2, subscriptions.get());
+
+        firstBatch.forEach(emitter -> emitter.complete(new AwaitCompletionResult(null, false)));
+        completed.get(5, TimeUnit.SECONDS);
+        assertEquals(3, subscriptions.get());
+    }
+
+    @Test
+    void pollOnceContinuesTheBatchWhenOneMessageIsMalformed() throws Exception {
+        when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
+            .messages(
+                message("receipt-bad", "{not-json"),
+                message("receipt-good", completionJson()))
+            .build());
+        when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class)))
+            .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(null, false)));
+
+        awaitPoll(enabledConfig());
+
+        verify(executionService).completeAwaitInteraction(any(AwaitCompletionCommand.class));
+        verify(client).deleteMessage(argThat((DeleteMessageRequest request) ->
+            request.receiptHandle().equals("receipt-good")));
+        verify(client, never()).deleteMessage(argThat((DeleteMessageRequest request) ->
+            request.receiptHandle().equals("receipt-bad")));
+    }
+
+    @Test
+    void startsFourBoundedConcurrentReceiveLoops() throws Exception {
+        CountDownLatch receivesStarted = new CountDownLatch(4);
+        CountDownLatch releaseReceives = new CountDownLatch(1);
+        SqsAwaitCompletionPoller loopingPoller = new SqsAwaitCompletionPoller(
+            config(),
+            executionService,
+            blockingReceiveClient(receivesStarted, releaseReceives));
+        loopingPoller.startPolling(enabledConfig());
+        try {
+            assertTrue(receivesStarted.await(1, TimeUnit.SECONDS));
+        } finally {
+            releaseReceives.countDown();
+            loopingPoller.shutdown();
+        }
+    }
+
+    @Test
+    void schedulesReplacementReceiveBeforePreviousBatchAdmissionCompletes() throws Exception {
+        AtomicInteger receiveCalls = new AtomicInteger();
+        CountDownLatch replacementReceiveStarted = new CountDownLatch(1);
+        CountDownLatch releaseReplacementReceive = new CountDownLatch(1);
+        when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenAnswer(ignored -> {
+            int call = receiveCalls.incrementAndGet();
+            if (call <= SqsAwaitCompletionPoller.RECEIVE_LOOP_CONCURRENCY) {
+                return ReceiveMessageResponse.builder()
+                    .messages(message("receipt-" + call, completionJson()))
+                    .build();
+            }
+            replacementReceiveStarted.countDown();
+            releaseReplacementReceive.await(5, TimeUnit.SECONDS);
+            return ReceiveMessageResponse.builder().messages(List.of()).build();
+        });
+        when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class))).thenReturn(
+            Uni.createFrom().emitter(ignored -> {
+            }));
+
+        poller.startPolling(new SqsAwaitCompletionPoller.SqsAwaitPollerConfig(
+            true,
+            Optional.of("http://sqs.local/responses"),
+            Duration.ZERO,
+            Duration.ofSeconds(45),
+            Duration.ofSeconds(5),
+            2,
+            1));
+        try {
+            assertTrue(replacementReceiveStarted.await(1, TimeUnit.SECONDS));
+        } finally {
+            releaseReplacementReceive.countDown();
+        }
     }
 
     @Test
@@ -300,5 +418,29 @@ class SqsAwaitCompletionPollerTest {
             Map.of("status", "Completed"),
             "csv-payments-sqs-provider");
         return PipelineJson.mapper().writeValueAsString(envelope);
+    }
+
+    private static SqsClient blockingReceiveClient(
+        CountDownLatch receivesStarted,
+        CountDownLatch releaseReceives
+    ) {
+        return (SqsClient) Proxy.newProxyInstance(
+            SqsClient.class.getClassLoader(),
+            new Class<?>[] { SqsClient.class },
+            (proxy, method, arguments) -> {
+                if (method.getName().equals("receiveMessage")) {
+                    receivesStarted.countDown();
+                    try {
+                        releaseReceives.await(5, TimeUnit.SECONDS);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return ReceiveMessageResponse.builder().messages(List.of()).build();
+                }
+                if (method.getName().equals("serviceName")) {
+                    return "sqs";
+                }
+                return null;
+            });
     }
 }

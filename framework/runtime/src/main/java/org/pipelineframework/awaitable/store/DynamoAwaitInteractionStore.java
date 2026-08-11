@@ -249,6 +249,16 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         String interactionId,
         long expectedVersion,
         long nowEpochMs) {
+        return markDispatching(tenantId, interactionId, expectedVersion, null, nowEpochMs);
+    }
+
+    @Override
+    public Uni<Optional<AwaitInteractionRecord>> markDispatching(
+        String tenantId,
+        String interactionId,
+        long expectedVersion,
+        Map<String, Object> transportMetadata,
+        long nowEpochMs) {
         return blocking(() -> transitionStatus(
             tenantId,
             interactionId,
@@ -257,7 +267,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             AwaitInteractionStatus.DISPATCHING,
             null,
             null,
-            null,
+            transportMetadata,
             nowEpochMs));
     }
 
@@ -377,7 +387,10 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
                 var response = dynamoClient().query(request.build());
                 if (response.items() != null) {
                     for (Map<String, AttributeValue> item : response.items()) {
-                        AwaitInteractionRecord record = toRecord(item);
+                        // Timeout discovery is a metadata-only control-plane read. Decoding an await
+                        // request/response here can require resolving the pinned release, even though
+                        // timeout admission only needs identity, status, deadline, and unit linkage.
+                        AwaitInteractionRecord record = toMetadataRecord(item);
                         if (!record.status().terminal()
                             && record.deadlineEpochMs() <= nowEpochMs
                             && !ttlExpired(record, nowEpochMs)) {
@@ -505,14 +518,6 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     }
 
     private AwaitCreateResult createOrGetBlocking(AwaitCreateCommand command) {
-        Optional<AwaitInteractionRecord> existing = findByLookup(
-            lookupKey("idempotency", command.tenantId(), command.stepId() + ":" + command.idempotencyKey()),
-            command.tenantId(),
-            command.nowEpochMs());
-        if (existing.isPresent()) {
-            return new AwaitCreateResult(existing.get(), true);
-        }
-
         String interactionId = UUID.randomUUID().toString();
         AwaitInteractionRecord created = new AwaitInteractionRecord(
             command.tenantId(),
@@ -577,6 +582,13 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     private AwaitCompletionResult completeBlocking(AwaitCompletionCommand command) {
         AwaitInteractionRecord current = resolveForCompletion(command)
             .orElseThrow(() -> new AwaitInteractionNotFoundException("No await interaction matches completion"));
+        return completeResolvedBlocking(current, command);
+    }
+
+    private AwaitCompletionResult completeResolvedBlocking(
+        AwaitInteractionRecord current,
+        AwaitCompletionCommand command
+    ) {
         if (current.status() == AwaitInteractionStatus.COMPLETED) {
             return new AwaitCompletionResult(current, true);
         }
@@ -734,7 +746,14 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
                 .expressionAttributeValues(values)
                 .returnValues(ReturnValue.ALL_NEW)
                 .build()).attributes();
-            return attributes == null || attributes.isEmpty() ? Optional.empty() : Optional.of(toRecord(attributes));
+            if (attributes == null || attributes.isEmpty()) {
+                return Optional.empty();
+            }
+            // The timeout sweep only consumes control-plane fields from this transition. Keep it
+            // independent of pinned-release payload decoding while Dynamo is under recovery load.
+            return Optional.of(status == AwaitInteractionStatus.TIMED_OUT
+                ? toMetadataRecord(attributes)
+                : toRecord(attributes));
         } catch (ConditionalCheckFailedException ignored) {
             return Optional.empty();
         }
@@ -822,7 +841,22 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
 
     @SuppressWarnings("unchecked")
     private AwaitInteractionRecord toRecord(Map<String, AttributeValue> item) {
-        AwaitInteractionRecord stored = new AwaitInteractionRecord(
+        AwaitInteractionRecord stored = toMetadataRecord(item);
+        return withPayloads(
+            stored,
+            deserializePayload(stored, AwaitDurablePayloadResolver.Slot.REQUEST, readString(item, REQUEST_PAYLOAD_JSON)),
+            deserializePayload(stored, AwaitDurablePayloadResolver.Slot.RESPONSE, readString(item, RESPONSE_PAYLOAD_JSON)));
+    }
+
+    /**
+     * Maps the durable control-plane fields without resolving typed payloads.
+     *
+     * <p>Due/timeout discovery must remain available when release metadata is temporarily unavailable;
+     * those paths never consume request or response payloads.
+     */
+    @SuppressWarnings("unchecked")
+    private AwaitInteractionRecord toMetadataRecord(Map<String, AttributeValue> item) {
+        return new AwaitInteractionRecord(
             readString(item, TENANT_ID),
             readString(item, EXECUTION_ID),
             readString(item, STEP_ID),
@@ -848,10 +882,6 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             readLong(item, UPDATED_AT_EPOCH_MS),
             readLong(item, TTL_EPOCH_S),
             readString(item, TRANSPORT_OUTPUT_TYPE));
-        return withPayloads(
-            stored,
-            deserializePayload(stored, AwaitDurablePayloadResolver.Slot.REQUEST, readString(item, REQUEST_PAYLOAD_JSON)),
-            deserializePayload(stored, AwaitDurablePayloadResolver.Slot.RESPONSE, readString(item, RESPONSE_PAYLOAD_JSON)));
     }
 
     private AwaitInteractionRecord withPayloads(AwaitInteractionRecord stored, Object requestPayload, Object responsePayload) {
