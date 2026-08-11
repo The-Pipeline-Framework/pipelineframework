@@ -2711,11 +2711,20 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 .findFirst()
                 .orElseThrow();
         Map<String, String> attributes = interactionDispatched.attributes();
-        assertTrue(attributes != null && attributes.containsKey("tpf.await.unit_id"),
+        assertTrue(
+                attributes != null
+                        && attributes.get("tpf.await.unit_id") != null
+                        && !attributes.get("tpf.await.unit_id").isBlank(),
                 "Expected await interaction dispatch event to include unit id.");
-        assertTrue(attributes.containsKey("tpf.await.interaction_id"),
+        assertTrue(
+                attributes != null
+                        && attributes.get("tpf.await.interaction_id") != null
+                        && !attributes.get("tpf.await.interaction_id").isBlank(),
                 "Expected await interaction dispatch event to include interaction id.");
-        assertTrue(attributes.containsKey("tpf.await.correlation_id"),
+        assertTrue(
+                attributes != null
+                        && attributes.get("tpf.await.correlation_id") != null
+                        && !attributes.get("tpf.await.correlation_id").isBlank(),
                 "Expected await interaction dispatch event to include correlation id.");
         assertFalse(
                 replayDocument.events().stream()

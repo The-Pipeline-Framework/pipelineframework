@@ -7,10 +7,16 @@ const __dirname = path.dirname(__filename);
 const docsDir = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(docsDir, "..");
 const sourceDir = path.join(repoRoot, "tools", "replay-viewer");
+const maintainerReadme = path.join(sourceDir, "README.md");
+const publicReadme = path.join(sourceDir, "public-README.md");
 const legacyTargetDir = path.join(docsDir, "public", "replay-viewer");
 const targetDir = path.join(docsDir, "public", "replay-viewer-app");
 
 rmSync(legacyTargetDir, { recursive: true, force: true });
 rmSync(targetDir, { recursive: true, force: true });
 mkdirSync(path.dirname(targetDir), { recursive: true });
-cpSync(sourceDir, targetDir, { recursive: true });
+cpSync(sourceDir, targetDir, {
+  recursive: true,
+  filter: (sourcePath) => sourcePath !== maintainerReadme && sourcePath !== publicReadme
+});
+cpSync(publicReadme, path.join(targetDir, "README.md"));

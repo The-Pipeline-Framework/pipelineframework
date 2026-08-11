@@ -83,6 +83,7 @@ cd "$REPO_ROOT/examples/csv-payments/orchestrator-svc"
 
 ../../../mvnw \
   -Dit.test=CsvPaymentsProviderRejectEndToEndIT \
+  -Dcsv.runtime.layout=modular \
   -Dcsv.e2e.telemetry.enabled=true \
   -Dcsv.e2e.telemetry.happy-path-only=false \
   -Dcsv.e2e.input.file=../input-csv-file-processing-svc/csv/payments_1k.csv \
@@ -138,5 +139,6 @@ Treat the captured timing as proof of that run, not a performance promise.
 ## Source layout
 
 - application source: `tools/replay-viewer/`
+- public usage README source: `tools/replay-viewer/public-README.md`
 - published docs copy: `docs/public/replay-viewer-app/`
 - vendored Three.js runtime: `tools/replay-viewer/vendor/`
