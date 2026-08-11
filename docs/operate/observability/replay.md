@@ -39,6 +39,8 @@ It is emitted by the framework replay exporter and contains:
 
 Replay JSON is the supported offline input for the TPF replay viewer.
 
+Await-unit events describe durable fallback. A healthy live itemized handoff is represented by durable interaction completion together with downstream step events; it does not add `await_unit_item_completed` or `await_resume_released` merely to visualize the live path.
+
 Command steps are included in the topology as authored pipeline nodes with `renderRole: "command"` and `actorKind` set to the command name. This keeps managed external effects visible in playback even when the connector hides provider details such as endpoint, credentials, index name, or SDK configuration.
 
 ## Live versus offline
@@ -127,17 +129,19 @@ Branch-aware replay also uses the normal event stream:
 
 The built-in CSV Payments replay is a captured proof run, not a benchmark promise. It is useful because it shows the intended connector-first shape and the timing relationship between parser dispatch, await completions, status processing, and Object Publish.
 
-The current dataset was captured from the 1k replay lane with provider rejects enabled so both branch alternatives appear in the proof:
+The current dataset was captured from the healthy 1k provider-reject replay lane. Its concurrent
+provider mock uses the deterministic `0.08` rejection rule, so both live status paths appear in
+the proof:
 
 | Field | Value |
 | --- | --- |
 | Input records | `1000` |
-| Payment provider permits | `250/s` |
+| Execution max concurrency | `250` |
 | Provider reject probability | `0.08` |
-| Replay duration | `15.621s` |
-| Effective throughput | `64.0 records/s` |
-| Replay events | `16008` |
-| Unapproved branch items | `93` |
+| Replay duration | `17.047s` |
+| Effective replay throughput | `58.7 records/s` |
+| Replay events | `17006` |
+| Approved / unapproved branch items | `907` / `93` |
 
 Treat the replay timing as boundary timing, not pure provider CPU time: it includes permit wait, Kafka transit, completion admission, and downstream branch processing overlap.
 
@@ -145,15 +149,18 @@ Key timing checks:
 
 | Signal | Time from start |
 | --- | --- |
-| First `Process Approved Payment Status` / `Process Unapproved Payment Status` event | `2.001s` |
-| Last input parser event | `6.901s` |
-| Last await dispatch | `10.713s` |
-| Last await completion | `15.585s` |
-| Object Publish | `15.612s` - `15.621s` |
+| First status event | `1.635s` |
+| Last input parser event | `9.962s` |
+| Last live admission release | `15.149s` |
+| Object Publish | `17.047s` |
 
-The important operational signal is the overlap: status processing starts before the parser has finished and before all await completions have arrived. That means the parser is being paced by reactive demand and the await in-flight window, not by a forced sleep. Object Publish runs at the terminal boundary after status output exists and before success is committed.
+The important operational signal is the overlap: status processing starts before the parser has
+finished. The capture contains live admission acquire/release and interaction-dispatch events,
+not durable await-unit completion or resume events. That means the parser is being paced by
+reactive demand and the await in-flight window, not by a forced sleep. Object Publish runs at the
+terminal boundary after status output exists and before success is committed.
 
-The repo proof also runs a 10k monolith lane with the same connector-first path. In the captured run, 10k records completed in `80s` of pipeline time with 10k output records and output checksum `cf8996e7d593202dd6f9f9405b82e95e69d48544c3edec830f64afabc703a023`.
+The repository also keeps a 10k self-host acceptance with the unchanged 180-second worker deadline. It is a scale acceptance, not evidence supplied by this 1k replay capture. Do not extrapolate the replay timing into a large-workload SLA.
 
 Command telemetry has two layers:
 

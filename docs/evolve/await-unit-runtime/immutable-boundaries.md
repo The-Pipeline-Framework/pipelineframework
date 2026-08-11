@@ -166,9 +166,9 @@ sequenceDiagram
 
 `BoundaryAdmissionFacts` is deliberately transport-agnostic. Kafka await completions and Kafka checkpoint handoffs should produce the same `BoundaryCompletionAdmitted` fact shape after their protocol-specific decoding.
 
-For await completions, `AwaitBoundaryAdmission` is the internal owner of that route. It normalizes the completion command, applies local control-plane admission, records the existing await completion projection, appends `BoundaryCompletionAdmitted`, and only then chooses between a local live-session handoff or durable continuation work.
+For await completions, `AwaitBoundaryAdmission` is the internal owner of that route. It normalizes the completion command, applies local control-plane admission, and completes the durable interaction projection. It then first tries the process-local live-session handoff. The live path appends `BoundaryCompletionAdmitted` without mutating an await-unit aggregate; durable fallback records the unit completion before it appends the fact and chooses continuation work.
 
-`AwaitContinuations` is now only the small façade for the "future beginning" after the boundary. The semantic decision is made by `AwaitContinuationPlanner`, which returns immutable continuation plans: hold the completion, release a scalar continuation, dispatch item continuations, record an item output, release the itemized parent, fail the parent, or no-op. `ScalarAwaitContinuationFlow` and `ItemizedAwaitContinuationFlow` interpret those plans through the existing projection stores and dispatcher. `ItemContinuationClaims` is process-local duplicate suppression only; it does not decide durable readiness.
+`AwaitContinuations` is now only the small façade for the durable fallback's "future beginning" after the boundary. The semantic decision is made by `AwaitContinuationPlanner`, which returns immutable continuation plans: hold the completion, release a scalar continuation, dispatch item continuations, record an item output, release the itemized parent, fail the parent, or no-op. `ScalarAwaitContinuationFlow` and `ItemizedAwaitContinuationFlow` interpret those plans through the existing projection stores and dispatcher. `ItemContinuationClaims` is process-local duplicate suppression only; it does not decide durable readiness.
 
 `QueueAsyncCoordinator` remains the API and provider façade; it delegates segment execution to `QueueAsyncSegmentPipeline` and await completion routing to `AwaitBoundaryAdmission`.
 
@@ -176,7 +176,8 @@ For await completions, `AwaitBoundaryAdmission` is the internal owner of that ro
 sequenceDiagram
     participant Broker as "Broker / transport"
     participant Admission as "AwaitBoundaryAdmission"
-    participant AwaitStore as "Await projections"
+    participant Interaction as "Await interaction projection"
+    participant Unit as "Await unit fallback projection"
     participant Ledger as "SegmentBoundaryLedger -> ControlPlaneJournal"
     participant Live as "LiveAwaitSession"
     participant Consumer as "Downstream live consumer"
@@ -187,13 +188,15 @@ sequenceDiagram
     participant Work as "Work dispatcher"
 
     Broker->>Admission: "correlated completion"
-    Admission->>AwaitStore: "record completion"
-    AwaitStore-->>Admission: "AwaitUnitRecord"
-    Admission->>Ledger: "append BoundaryCompletionAdmitted"
-    alt in-process worker and live-capable adapter
+    Admission->>Interaction: "complete durable interaction"
+    Interaction-->>Admission: "completed interaction"
+    alt active eligible live owner (in-process or portable)
       Admission->>Live: "signal admitted completion"
       Live-->>Consumer: "emit item by demand"
-    else portable worker or adapter requires suspension
+      Admission->>Ledger: "append BoundaryCompletionAdmitted"
+    else no live session or ineligible portable shape
+      Admission->>Unit: "record fallback completion"
+      Admission->>Ledger: "append BoundaryCompletionAdmitted"
       Admission->>Continue: "coordinator-owned durable handoff"
       Continue->>Planner: "plan future beginning"
       alt scalar await

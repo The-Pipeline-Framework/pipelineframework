@@ -5,6 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import java.lang.annotation.Annotation;
 import java.nio.file.Path;
@@ -23,6 +27,7 @@ import com.google.protobuf.DescriptorProtos;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
+import org.pipelineframework.awaitable.spi.AwaitUnitStore;
 import org.pipelineframework.awaitable.spi.AwaitTransportAdapter;
 import org.pipelineframework.awaitable.store.InMemoryAwaitInteractionStore;
 import org.pipelineframework.awaitable.store.InMemoryAwaitUnitStore;
@@ -31,6 +36,36 @@ import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
 
 class AwaitCoordinatorCompletionTest {
+
+    @Test
+    void scalarCompletionDoesNotReadAwaitUnitForAggregateOutputLimiting() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        AwaitInteractionRecord created = coordinator.createOrGet(
+            descriptor("FraudCheck"),
+            "tenant-1",
+            "exec-1",
+            1,
+            "cause-1",
+            Map.of("orderId", "o-1"),
+            null,
+            null).await().indefinitely().record();
+        AwaitUnitStore units = mock(AwaitUnitStore.class);
+        coordinator.unitStores = new SimpleInstance<>(List.of(units));
+
+        AwaitCompletionResult completion = coordinator.complete(new AwaitCompletionCommand(
+                created.tenantId(),
+                created.interactionId(),
+                null,
+                "completion-1",
+                Map.of("decision", "approved"),
+                "provider",
+                2_000L))
+            .await().indefinitely();
+
+        assertEquals(AwaitInteractionStatus.COMPLETED, completion.record().status());
+        verify(units, never()).get(anyString(), anyString());
+    }
 
     @Test
     void createOrGetRestoresCanonicalRequestBeforeInputToTransportMapping() {
@@ -319,6 +354,36 @@ class AwaitCoordinatorCompletionTest {
         assertTrue(duplicate.duplicate());
         assertEquals(1, afterDuplicate.completedItemCount());
         assertEquals(1, completed.completedItemCount());
+        assertEquals(AwaitUnitStatus.COMPLETED, completed.status());
+    }
+
+    @Test
+    void terminalItemReplayIsOrderIndependentAndDoesNotDoubleCountAwaitUnit() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        AwaitCoordinator coordinator = coordinator(store);
+        List<AwaitCreateResult> created = List.of(
+            item(coordinator, "record-2", 2),
+            item(coordinator, "record-0", 0),
+            item(coordinator, "record-1", 1));
+
+        for (AwaitCreateResult result : created) {
+            coordinator.complete(new AwaitCompletionCommand(
+                "tenant-1",
+                result.record().interactionId(),
+                null,
+                "completion-" + result.record().itemIndex(),
+                Map.of("status", "APPROVED"),
+                "provider",
+                11_000L + result.record().itemIndex())).await().indefinitely();
+        }
+
+        coordinator.reconcileCompletedItemInteractions("tenant-1", "unit-1", 20_000L).await().indefinitely();
+        coordinator.reconcileCompletedItemInteractions("tenant-1", "unit-1", 21_000L).await().indefinitely();
+        AwaitUnitRecord completed = coordinator.markDispatchComplete("tenant-1", "unit-1", 3, 22_000L)
+            .await().indefinitely();
+
+        assertEquals(3, completed.completedItemCount());
+        assertEquals(java.util.Set.of("item:0", "item:1", "item:2"), completed.completedItemKeys());
         assertEquals(AwaitUnitStatus.COMPLETED, completed.status());
     }
 
@@ -696,6 +761,20 @@ class AwaitCoordinatorCompletionTest {
         coordinator.descriptorFactory = new AwaitStepDescriptorFactory();
         coordinator.descriptorFactory.register(descriptor("FraudCheck"));
         return coordinator;
+    }
+
+    private static AwaitCreateResult item(AwaitCoordinator coordinator, String recordId, int itemIndex) {
+        return coordinator.createOrGetItem(
+            descriptor("AwaitPaymentProvider"),
+            "tenant-1",
+            "exec-1",
+            1,
+            recordId,
+            Map.of("paymentRecordId", recordId),
+            "unit-1",
+            itemIndex,
+            null,
+            null).await().indefinitely();
     }
 
     private static AwaitCreateCommand createCommand(long deadlineEpochMs) {

@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
@@ -373,7 +374,6 @@ class AwaitStepSupportTest {
         when(awaitCoordinator.supportsLiveAwaitWindow(testDescriptor)).thenReturn(true);
         List<AwaitInteractionRecord> dispatched = new CopyOnWriteArrayList<>();
         DemandSource source = new DemandSource("first", "second", "third");
-        AtomicInteger dispatchCompleteCalls = new AtomicInteger();
 
         when(awaitCoordinator.createOrGetItem(
             org.mockito.ArgumentMatchers.eq(testDescriptor),
@@ -395,36 +395,11 @@ class AwaitStepSupportTest {
                     null);
                 return Uni.createFrom().item(new AwaitCreateResult(record, false));
             });
-        when(awaitCoordinator.dispatch(org.mockito.ArgumentMatchers.eq(testDescriptor), any()))
+        when(awaitCoordinator.dispatchLive(org.mockito.ArgumentMatchers.eq(testDescriptor), any()))
             .thenAnswer(invocation -> {
                 AwaitInteractionRecord record = invocation.getArgument(1, AwaitInteractionRecord.class);
                 dispatched.add(record);
                 return Uni.createFrom().item(record);
-            });
-        when(awaitCoordinator.markDispatchComplete(
-            org.mockito.ArgumentMatchers.eq("tenant1"),
-            org.mockito.ArgumentMatchers.anyString(),
-            org.mockito.ArgumentMatchers.eq(3),
-            anyLong()))
-            .thenAnswer(invocation -> {
-                dispatchCompleteCalls.incrementAndGet();
-                return Uni.createFrom().item(new AwaitUnitRecord(
-                "tenant1",
-                invocation.getArgument(1, String.class),
-                "exec123",
-                testDescriptor.stepId(),
-                2,
-                testDescriptor.cardinality(),
-                1L,
-                AwaitUnitStatus.COMPLETED,
-                null,
-                3,
-                3,
-                java.util.Set.of("item:0", "item:1", "item:2"),
-                true,
-                System.currentTimeMillis(),
-                System.currentTimeMillis(),
-                System.currentTimeMillis() + 86400));
             });
 
         AssertSubscriber<String> subscriber = support.<String, String>awaitOneToOneStream(
@@ -433,11 +408,9 @@ class AwaitStepSupportTest {
             .subscribe().withSubscriber(AssertSubscriber.create(1));
 
         waitUntil(() -> dispatched.size() == 2);
-        assertEquals(0, dispatchCompleteCalls.get());
 
         support.liveCompletionRegistry.signal(
-            itemRecord(0, AwaitInteractionStatus.COMPLETED, "first", "approved-first"),
-            awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 3, 1, false))
+            itemRecord(0, AwaitInteractionStatus.COMPLETED, "first", "approved-first"))
             .await().indefinitely();
 
         subscriber.awaitItems(1, Duration.ofSeconds(5));
@@ -447,23 +420,38 @@ class AwaitStepSupportTest {
 
         subscriber.request(2);
         support.liveCompletionRegistry.signal(
-            itemRecord(1, AwaitInteractionStatus.COMPLETED, "second", "approved-second"),
-            awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 3, 2, false))
+            itemRecord(1, AwaitInteractionStatus.COMPLETED, "second", "approved-second"))
             .await().indefinitely();
 
         support.liveCompletionRegistry.signal(
-            itemRecord(2, AwaitInteractionStatus.COMPLETED, "third", "approved-third"),
-            awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 3, 3, false))
+            itemRecord(2, AwaitInteractionStatus.COMPLETED, "third", "approved-third"))
             .await().indefinitely();
 
         subscriber.awaitItems(3, Duration.ofSeconds(5));
         subscriber.awaitCompletion(Duration.ofSeconds(5));
         subscriber.assertItems("approved-first", "approved-second", "approved-third");
-        waitUntil(() -> dispatchCompleteCalls.get() == 1);
-        org.mockito.Mockito.verify(awaitCoordinator).markDispatchComplete(
+        org.mockito.Mockito.verify(awaitCoordinator).preloadDurablePayloads("tenant1", "exec123");
+        org.mockito.Mockito.verify(awaitCoordinator).prepareLiveItemizedUnit(
+            org.mockito.ArgumentMatchers.eq(testDescriptor),
             org.mockito.ArgumentMatchers.eq("tenant1"),
             org.mockito.ArgumentMatchers.anyString(),
-            org.mockito.ArgumentMatchers.eq(3),
+            org.mockito.ArgumentMatchers.eq("exec123"),
+            org.mockito.ArgumentMatchers.eq(2));
+        org.mockito.Mockito.verify(awaitCoordinator, org.mockito.Mockito.times(3)).createOrGetPreparedItem(
+            org.mockito.ArgumentMatchers.eq(testDescriptor),
+            org.mockito.ArgumentMatchers.eq("tenant1"),
+            org.mockito.ArgumentMatchers.eq("exec123"),
+            org.mockito.ArgumentMatchers.eq(2),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyInt(),
+            org.mockito.ArgumentMatchers.isNull(),
+            org.mockito.ArgumentMatchers.isNull());
+        org.mockito.Mockito.verify(awaitCoordinator, never()).markDispatchComplete(
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            anyInt(),
             anyLong());
     }
 
@@ -609,16 +597,12 @@ class AwaitStepSupportTest {
                 return Uni.createFrom().item(new AwaitCreateResult(itemRecord(
                     index, AwaitInteractionStatus.WAITING, invocation.getArgument(5), null), false));
             });
-        when(awaitCoordinator.dispatch(org.mockito.ArgumentMatchers.eq(testDescriptor), any()))
+        when(awaitCoordinator.dispatchLive(org.mockito.ArgumentMatchers.eq(testDescriptor), any()))
             .thenAnswer(invocation -> {
                 AwaitInteractionRecord record = invocation.getArgument(1, AwaitInteractionRecord.class);
                 dispatched.add(record);
                 return Uni.createFrom().item(record);
             });
-        when(awaitCoordinator.markDispatchComplete(any(), any(), anyInt(), anyLong()))
-            .thenAnswer(invocation -> Uni.createFrom().item(awaitUnit(
-                invocation.getArgument(1, String.class), AwaitUnitStatus.WAITING_EXTERNAL, 2, 0, false)));
-
         AssertSubscriber<String> subscriber = support.<String, String>awaitOneToOneStream(
                 testDescriptor,
                 Multi.createFrom().publisher(source))
@@ -628,16 +612,14 @@ class AwaitStepSupportTest {
         assertEquals(1, dispatched.size());
 
         support.liveCompletionRegistry.signal(
-            itemRecord(0, AwaitInteractionStatus.COMPLETED, "first", "approved-first"),
-            awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 2, 1, false))
+            itemRecord(0, AwaitInteractionStatus.COMPLETED, "first", "approved-first"))
             .await().indefinitely();
         subscriber.awaitItems(1, Duration.ofSeconds(5));
         waitUntil(() -> dispatched.size() == 2);
 
         subscriber.request(1);
         support.liveCompletionRegistry.signal(
-            itemRecord(1, AwaitInteractionStatus.COMPLETED, "second", "approved-second"),
-            awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 2, 2, false))
+            itemRecord(1, AwaitInteractionStatus.COMPLETED, "second", "approved-second"))
             .await().indefinitely();
         subscriber.awaitCompletion(Duration.ofSeconds(5));
     }
@@ -665,16 +647,12 @@ class AwaitStepSupportTest {
                 return Uni.createFrom().item(new AwaitCreateResult(itemRecord(
                     index, AwaitInteractionStatus.WAITING, invocation.getArgument(5), null), false));
             });
-        when(awaitCoordinator.dispatch(org.mockito.ArgumentMatchers.eq(testDescriptor), any()))
+        when(awaitCoordinator.dispatchLive(org.mockito.ArgumentMatchers.eq(testDescriptor), any()))
             .thenAnswer(invocation -> {
                 AwaitInteractionRecord record = invocation.getArgument(1, AwaitInteractionRecord.class);
                 dispatched.add(record);
                 return Uni.createFrom().item(record);
             });
-        when(awaitCoordinator.markDispatchComplete(any(), any(), anyInt(), anyLong()))
-            .thenAnswer(invocation -> Uni.createFrom().item(awaitUnit(
-                invocation.getArgument(1, String.class), AwaitUnitStatus.WAITING_EXTERNAL, 2, 0, false)));
-
         AssertSubscriber<String> subscriber = support.<String, String>awaitOneToOneStream(
                 testDescriptor,
                 Multi.createFrom().items("first", "second"))
@@ -682,16 +660,14 @@ class AwaitStepSupportTest {
 
         waitUntil(() -> dispatched.size() == 1);
         support.liveCompletionRegistry.signal(
-            itemRecord(0, AwaitInteractionStatus.COMPLETED, "first", "approved-first"),
-            awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 2, 1, false))
+            itemRecord(0, AwaitInteractionStatus.COMPLETED, "first", "approved-first"))
             .await().indefinitely();
         subscriber.awaitItems(1, Duration.ofSeconds(5));
 
         waitUntil(() -> dispatched.size() == 2);
         subscriber.request(1);
         support.liveCompletionRegistry.signal(
-            itemRecord(1, AwaitInteractionStatus.COMPLETED, "second", "approved-second"),
-            awaitUnit("unit-ignored", AwaitUnitStatus.WAITING_EXTERNAL, 2, 2, false))
+            itemRecord(1, AwaitInteractionStatus.COMPLETED, "second", "approved-second"))
             .await().indefinitely();
 
         subscriber.awaitItems(2, Duration.ofSeconds(5));
@@ -846,6 +822,40 @@ class AwaitStepSupportTest {
         support.awaitCoordinator = awaitCoordinator;
         support.pipelineConfig = new PipelineConfig();
         support.liveCompletionRegistry = new AwaitLiveCompletionRegistry();
+        lenient().when(awaitCoordinator.preloadDurablePayloads(
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString())).thenReturn(Uni.createFrom().voidItem());
+        lenient().when(awaitCoordinator.prepareLiveItemizedUnit(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            anyInt())).thenReturn(Uni.createFrom().voidItem());
+        lenient().when(awaitCoordinator.createOrGetPreparedItem(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            anyInt(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyString(),
+            anyInt(),
+            org.mockito.ArgumentMatchers.isNull(),
+            org.mockito.ArgumentMatchers.isNull())).thenAnswer(invocation -> awaitCoordinator.createOrGetItem(
+                invocation.getArgument(0),
+                invocation.getArgument(1),
+                invocation.getArgument(2),
+                invocation.getArgument(3),
+                invocation.getArgument(4),
+                invocation.getArgument(5),
+                invocation.getArgument(6),
+                invocation.getArgument(7),
+                invocation.getArgument(8),
+                invocation.getArgument(9)));
+        lenient().when(awaitCoordinator.reconcileCompletedItemInteractions(
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            anyLong())).thenReturn(Uni.createFrom().voidItem());
         return support;
     }
 

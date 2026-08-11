@@ -105,16 +105,15 @@ public class SegmentBoundaryLedger {
 
     public Uni<Void> recordBoundaryCompletionAdmitted(
         AwaitInteractionRecord record,
-        AwaitUnitRecord unit,
         long nowEpochMs
     ) {
-        if (record == null || unit == null) {
+        if (record == null) {
             return Uni.createFrom().voidItem();
         }
         return appender.appendFactsOrThrowBuildFailure(
             record.tenantId(),
             record.executionId(),
-            () -> facts.boundaryCompletionAdmitted(record, unit),
+            () -> facts.boundaryCompletionAdmitted(record),
             nowEpochMs);
     }
 

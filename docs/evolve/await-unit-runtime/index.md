@@ -13,12 +13,13 @@ continues. The transition-worker boundary owns that choice:
 
 | Transition-worker boundary | Await continuation | Terminal output ownership |
 | --- | --- | --- |
-| in-process worker | retain a live window only when the adapter supports it; otherwise suspend through the await unit | the worker keeps the existing local terminal-output path |
-| portable REST, gRPC, or SQS worker | durably hand the completed interaction back to the coordinator | the coordinator publishes the terminal output |
+| in-process worker or eligible portable REST/gRPC worker | retain a live window only for the supported itemized await shape; otherwise suspend through the await unit | the active worker keeps the terminal-output path |
+| other portable worker shapes | durably hand the completed interaction back to the coordinator | the coordinator publishes the terminal output |
 
 `interaction-api` and webhook awaits always use the interaction/unit suspension path. Kafka and
-SQS itemized adapters may optimize an in-process worker with a live completion window, but their
-completion remains admissible through the same unit path when that window is unavailable.
+SQS itemized adapters may retain a live completion window for an active eligible owner, including
+the supported portable REST/gRPC shape, but completion falls back to the same unit path when that
+window is unavailable.
 
 The word *durable* has two scopes here. An await unit always gives the running runtime a canonical
 interaction and continuation protocol. Crash recovery additionally requires durable execution,
@@ -52,6 +53,8 @@ The key split is:
 1. `AwaitUnitRecord`: one durable interaction unit for an authored await step at a specific execution and step index.
 2. `AwaitInteractionRecord`: one externally visible interaction that can be queried, dispatched, completed, timed out, or correlated by transport.
 3. `ExecutionRecord.awaitUnitId`: the parked continuation pointer used while the execution is `WAITING_EXTERNAL`.
+
+For an active live owner, the unit remains the interaction identity while each completion updates its interaction record and is handed to the live session. The `expectedItemCount`, `completedItemCount`, and `dispatchComplete` fields shown below are durable-fallback release gates; they are not updated to deliver a healthy live item.
 
 ```mermaid
 classDiagram
@@ -149,9 +152,12 @@ That continuation is the future beginning of the suspended pipeline. `AwaitConti
 
 ## Durable Recovery Contract
 
-Every await transition must be reconstructable from durable state. A worker-local observation,
-claim, cache, live session, or scheduler entry may reduce duplicate work, but it cannot be needed
-to determine whether an interaction, child continuation, or parent execution may progress.
+Every accepted durable Await fact must be reconstructable from durable state. An active live
+`Multi` is not itself reconstructed after process loss; retry or re-execution creates a new live
+segment and reuses already admitted durable interactions and completions. A worker-local
+observation, claim, cache, live session, or scheduler entry may reduce duplicate work, but it
+cannot be needed to determine whether an interaction, child continuation, or parent execution
+may progress through durable fallback.
 
 | Durable precondition | Event | Durable mutation | Emitted action | Restart reconstruction |
 | --- | --- | --- | --- | --- |
@@ -189,10 +195,11 @@ existing child-execution evidence. New units use the fact-based release gate. Pr
 may suppress duplicate dispatch work, but they never establish either provider or continuation
 completion.
 
-The runtime verifies these durable guarantees across every lifecycle transition, supported await
-shape, defined completion race, and restart boundary. A recovered runtime rebuilds progress from
-the persisted execution, await-unit, and interaction state; it does not depend on a local claim,
-cache, session, or scheduler entry from the process that observed an earlier event.
+The runtime verifies these durable-fallback guarantees across every lifecycle transition,
+supported await shape, defined completion race, and restart boundary. A recovered runtime
+rebuilds fallback progress from the persisted execution, await-unit, and interaction state; it
+does not depend on a local claim, cache, session, or scheduler entry from the process that
+observed an earlier event.
 
 Kafka, SQS, and webhook completion ingress each admit a single durable completion before release
 evaluation. Terminal execution leaves no pending interaction, active await unit, orphaned child
@@ -210,6 +217,8 @@ progress.
 4. The Kafka adapter publishes requests to `csv-payments.payment.requests`; the mock provider publishes completions to `csv-payments.payment.results`.
 5. Completed item outputs are `PaymentStatus` union variants. In the live Kafka path, completions are recorded and signalled into the live await session so the approved or unapproved status branch can run as downstream demand accepts it. In the fallback path, the runtime resumes per-item work from durable item continuations.
 6. In the connector-first default path, terminal `PaymentOutput` records are published by Object Publish rather than by a `ProcessCsvPaymentsOutputFileService` business step.
+
+The following class view shows the durable fallback representation after the live owner is unavailable:
 
 ```mermaid
 classDiagram

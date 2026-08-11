@@ -131,7 +131,7 @@ Business meaning:
 Immediate operator actions:
 
 1. Compare `tpf.await.completion.admitted.total`, downstream step throughput, Object Publish progress, and provider-native completion queue age.
-2. Inspect replay for `await_unit_item_completed`, downstream step events, and Object Publish events; use `await_execution_waiting` and `await_resume_released` to diagnose durable fallback.
+2. Inspect durable interaction completion alongside downstream step and Object Publish events. Use `await_unit_item_completed`, `await_execution_waiting`, and `await_resume_released` only to diagnose durable fallback.
 3. Check queue-async worker lag and state-store write latency before increasing provider throughput.
 
 ### Object Publish Failure (Critical)

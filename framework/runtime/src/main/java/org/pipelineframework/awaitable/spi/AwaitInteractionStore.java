@@ -1,6 +1,7 @@
 package org.pipelineframework.awaitable.spi;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
@@ -83,6 +84,15 @@ public interface AwaitInteractionStore {
         String interactionId,
         long expectedVersion,
         long nowEpochMs);
+
+    /** Persists a durable dispatch intent together with metadata required to recover that intent. */
+    Uni<Optional<AwaitInteractionRecord>> markDispatching(
+        String tenantId,
+        String interactionId,
+        long expectedVersion,
+        Map<String, Object> transportMetadata,
+        long nowEpochMs
+    );
 
     /**
      * Marks a claimed interaction as dispatched and stores adapter metadata.

@@ -1,6 +1,7 @@
 package org.pipelineframework.awaitable;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -126,6 +127,24 @@ class AwaitDurablePayloadResolverTest {
         resolver.executionStateStore = executionStore;
 
         assertFalse(resolver.supportsTypedPayloads(interaction));
+    }
+
+    @Test
+    void preloadTreatsAMissingPinnedReleaseAsACacheWarmupMiss() {
+        ExecutionStateStore executionStore = mock(ExecutionStateStore.class);
+        PipelineReleaseRegistry releases = mock(PipelineReleaseRegistry.class);
+        @SuppressWarnings("unchecked")
+        ExecutionRecord<Object, Object> execution = mock(ExecutionRecord.class);
+        when(execution.pipelineId()).thenReturn("payments");
+        when(execution.contractVersion()).thenReturn("3");
+        when(execution.releaseVersion()).thenReturn("release-7");
+        when(executionStore.getExecution("tenant", "execution")).thenReturn(Uni.createFrom().item(Optional.of(execution)));
+        when(releases.get("tenant", "payments", "release-7")).thenReturn(Uni.createFrom().item(Optional.empty()));
+        AwaitDurablePayloadResolver resolver = new AwaitDurablePayloadResolver();
+        resolver.executionStateStore = executionStore;
+        resolver.releaseRegistry = releases;
+
+        assertDoesNotThrow(() -> resolver.preload("tenant", "execution").await().indefinitely());
     }
 
     @Test

@@ -5,6 +5,7 @@ import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.HexFormat;
 import java.util.Map;
+import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -63,6 +64,22 @@ public class AwaitDurablePayloadResolver {
             // Remote transition workers do not own coordinator execution state. They return a
             // transport snapshot to the coordinator, which owns durable payload persistence.
             .orElse(false);
+    }
+
+    /**
+     * Resolves and caches the immutable release metadata before a concurrent itemized await dispatch
+     * starts. This keeps the release-registry lookup out of the per-item Dynamo worker pool.
+     */
+    public Uni<Void> preload(String tenantId, String executionId) {
+        ExecutionCacheKey key = new ExecutionCacheKey(tenantId, executionId);
+        return executionStateStore().getExecution(tenantId, executionId)
+            .onItem().transformToUni(optional -> {
+                if (optional.isEmpty()) {
+                    return Uni.createFrom().voidItem();
+                }
+                return preloadRelease(key, PinnedExecution.from(optional.get()), tenantId).replaceWithVoid();
+            })
+            .onFailure(OwningExecutionUnavailableException.class).recoverWithUni(Uni.createFrom().voidItem());
     }
 
     public Object decode(AwaitInteractionRecord interaction, Slot slot, String stored) {
@@ -173,6 +190,20 @@ public class AwaitDurablePayloadResolver {
             releaseRegistry.get(tenantId, execution.pipelineId(), execution.releaseVersion())
                 .await().atMost(RELEASE_LOOKUP_TIMEOUT)
                 .orElseThrow(() -> new IllegalStateException("pinned release is unavailable")));
+    }
+
+    private Uni<PipelineReleaseRecord> preloadRelease(
+        ExecutionCacheKey executionKey,
+        PinnedExecution execution,
+        String tenantId
+    ) {
+        executions.getOrLoad(executionKey, ignored -> execution);
+        DurablePayloadReleaseCoordinate coordinate = execution.coordinate();
+        return releaseRegistry.get(tenantId, execution.pipelineId(), execution.releaseVersion())
+            .onItem().transform(optional -> optional
+                .orElseThrow(() -> new OwningExecutionUnavailableException()))
+            .onItem().invoke(release -> releases.getOrLoad(
+                new ReleaseCacheKey(tenantId, coordinate), ignored -> release));
     }
 
     private PinnedExecution owningExecution(AwaitInteractionRecord interaction) {
