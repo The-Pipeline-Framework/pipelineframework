@@ -99,7 +99,13 @@ flowchart LR
     J -. "durable continuation" .-> G
 ```
 
-The repo proof run for the built-in CSV Payments replay used a `250/s` payment-provider permit setting. It processed 1k records in `15.621s` of replay time and showed the approved or unapproved status branches starting at `2.001s`, before the parser finished at `6.901s` and before the last await completion at `15.585s`. The overlap is the backpressure signal to look for: the parser, brokered await, branch-specific status steps, terminal merge, and Object Publish are moving as connected live segments, with durable fallback available for recovery.
+The repo proof run for the built-in CSV Payments replay used execution max concurrency `250`. It
+processed 1k records in `18.305s` of replay time and showed the approved status path starting at
+`2.170s`, before parser emission finished at `11.760s`. The capture records live admission and
+interaction-dispatch events, with no durable await-unit completion or resume events. That overlap
+is the backpressure signal to look for: the parser, brokered await, status step, terminal merge,
+and Object Publish are moving as connected live segments, with durable fallback available for
+recovery.
 
 ### Retry amplification example (real-world)
 

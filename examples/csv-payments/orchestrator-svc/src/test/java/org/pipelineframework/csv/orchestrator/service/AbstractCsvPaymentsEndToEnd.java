@@ -973,7 +973,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "package",
                 "-DskipTests",
                 "-Dquarkus.container-image.build=true",
-                "-Dquarkus.container-image.push=false"));
+                "-Dquarkus.container-image.push=false",
+                "-Dquarkus.container-image.tag=" + MODULAR_IMAGE_TAG));
         if (!mavenRepoLocal.isBlank()) {
             command.add("-Dmaven.repo.local=" + mavenRepoLocal);
         }
@@ -2700,49 +2701,33 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         "store".equals(transition.relationKind())),
                 "Expected store transitions in merged replay topology.");
         assertReplayLifecycleEvents(replayDocument);
-        assertItemizedAwaitLiveFlowStartsBeforeUnitCompletes(replayDocument);
+        assertItemizedAwaitLiveFlowStartsBeforeSourceExhausts(replayDocument);
     }
 
     private void assertReplayLifecycleEvents(PipelineReplayDocument replayDocument) {
         assertReplayEvent(replayDocument, AWAIT_INTERACTION_DISPATCHED);
-        assertReplayEvent(replayDocument, AWAIT_UNIT_DISPATCH_COMPLETE);
-        assertReplayEvent(replayDocument, AWAIT_UNIT_ITEM_COMPLETED);
-        boolean executionWaited = replayDocument.events().stream()
-                .anyMatch(event -> AWAIT_EXECUTION_WAITING.equals(event.event()));
-        if (executionWaited) {
-            assertReplayEvent(replayDocument, AWAIT_RESUME_RELEASED);
-        }
-        assertTrue(
-                replayDocument.events().stream()
-                        .filter(event -> AWAIT_UNIT_COMPLETED.equals(event.event())
-                                || AWAIT_UNIT_DISPATCH_COMPLETE.equals(event.event()))
-                        .map(PipelineExecutionEvent::attributes)
-                        .anyMatch(eventAttributes -> eventAttributes != null
-                                && "COMPLETED".equals(eventAttributes.get("tpf.await.status"))),
-                "Expected await lifecycle events to show unit completion.");
-        PipelineExecutionEvent itemCompleted = replayDocument.events().stream()
-                .filter(event -> AWAIT_UNIT_ITEM_COMPLETED.equals(event.event()))
+        PipelineExecutionEvent interactionDispatched = replayDocument.events().stream()
+                .filter(event -> AWAIT_INTERACTION_DISPATCHED.equals(event.event()))
                 .findFirst()
                 .orElseThrow();
-        Map<String, String> attributes = itemCompleted.attributes();
+        Map<String, String> attributes = interactionDispatched.attributes();
         assertTrue(attributes != null && attributes.containsKey("tpf.await.unit_id"),
-                "Expected await item completion event to include unit id.");
+                "Expected await interaction dispatch event to include unit id.");
         assertTrue(attributes.containsKey("tpf.await.interaction_id"),
-                "Expected await item completion event to include interaction id.");
-        assertTrue(attributes.containsKey("tpf.await.completed_item_count"),
-                "Expected await item completion event to include completed item count.");
-        assertTrue(
+                "Expected await interaction dispatch event to include interaction id.");
+        assertTrue(attributes.containsKey("tpf.await.correlation_id"),
+                "Expected await interaction dispatch event to include correlation id.");
+        assertFalse(
                 replayDocument.events().stream()
-                        .filter(event -> AWAIT_UNIT_ITEM_COMPLETED.equals(event.event())
-                                || AWAIT_UNIT_DISPATCH_COMPLETE.equals(event.event())
-                                || AWAIT_UNIT_COMPLETED.equals(event.event()))
-                        .map(PipelineExecutionEvent::attributes)
-                        .anyMatch(eventAttributes -> eventAttributes != null
-                                && eventAttributes.containsKey("tpf.await.expected_item_count")),
-                "Expected await lifecycle events to include expected item count once dispatch size is known.");
+                        .anyMatch(event -> AWAIT_UNIT_DISPATCH_COMPLETE.equals(event.event())
+                                || AWAIT_EXECUTION_WAITING.equals(event.event())
+                                || AWAIT_UNIT_ITEM_COMPLETED.equals(event.event())
+                                || AWAIT_UNIT_COMPLETED.equals(event.event())
+                                || AWAIT_RESUME_RELEASED.equals(event.event())),
+                "Expected healthy live itemized Await replay to avoid durable fallback lifecycle events.");
     }
 
-    private void assertItemizedAwaitLiveFlowStartsBeforeUnitCompletes(PipelineReplayDocument replayDocument) {
+    private void assertItemizedAwaitLiveFlowStartsBeforeSourceExhausts(PipelineReplayDocument replayDocument) {
         Comparator<PipelineExecutionEvent> playbackOrder = Comparator
                 .comparingDouble(AbstractCsvPaymentsEndToEnd::playbackTimeForEvent)
                 .thenComparingLong(event -> event.sequence() == null ? Long.MAX_VALUE : event.sequence());
@@ -2752,13 +2737,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                 || "ProcessUnapprovedPaymentStatus".equals(event.step()))
                 .min(playbackOrder)
                 .orElseThrow(() -> new AssertionError("Expected payment-status branch replay events."));
-        PipelineExecutionEvent awaitUnitCompletedEvent = replayDocument.events().stream()
-                .filter(event -> AWAIT_UNIT_COMPLETED.equals(event.event()))
-                .min(playbackOrder)
-                .orElseThrow(() -> new AssertionError("Expected await_unit_completed replay events."));
+        PipelineExecutionEvent lastSourceEmit = replayDocument.events().stream()
+                .filter(event -> "ProcessCsvPaymentsInput".equals(event.step()) && "emit".equals(event.event()))
+                .max(playbackOrder)
+                .orElseThrow(() -> new AssertionError("Expected input parser replay events."));
         assertTrue(
-                playbackOrder.compare(firstPaymentStatusEvent, awaitUnitCompletedEvent) < 0,
-                "Expected connector-first Kafka ONE_TO_ONE await to process completed items through the live session before the await unit completes.");
+                playbackOrder.compare(firstPaymentStatusEvent, lastSourceEmit) < 0,
+                "Expected connector-first Kafka ONE_TO_ONE await to process completed items through the live session before source exhaustion.");
     }
 
     private void assertReplayEvent(PipelineReplayDocument replayDocument, String eventName) {
