@@ -300,20 +300,14 @@ public class AwaitStepSupport {
             }
             AtomicInteger itemIndex = new AtomicInteger();
             AtomicReference<Cancellable> dispatchSubscription = new AtomicReference<>();
-            Uni<Void> dispatch = dispatchLiveAwaitItems(descriptor, input, context, unitId, itemIndex, session)
+            Uni<Void> dispatch = awaitCoordinator.preloadDurablePayloads(context.tenantId(), context.executionId())
+                .chain(() -> awaitCoordinator.prepareLiveItemizedUnit(
+                    descriptor, context.tenantId(), unitId, context.executionId(), stepIndex))
+                .chain(() -> dispatchLiveAwaitItems(descriptor, input, context, unitId, itemIndex, session))
                 .onItem().transformToUni(ignored -> {
                     int dispatchedItems = itemIndex.get();
-                    if (dispatchedItems == 0) {
-                        session.markDispatchComplete(0);
-                        return Uni.createFrom().voidItem();
-                    }
-                    return awaitCoordinator.markDispatchComplete(
-                        context.tenantId(),
-                        unitId,
-                        dispatchedItems,
-                        System.currentTimeMillis())
-                        .invoke(unit -> session.markDispatchComplete(dispatchedItems))
-                        .replaceWithVoid();
+                    session.markDispatchComplete(dispatchedItems);
+                    return Uni.createFrom().voidItem();
                 })
                 .onFailure().invoke(session::fail)
                 .replaceWithVoid();
@@ -364,7 +358,7 @@ public class AwaitStepSupport {
     ) {
         String completionKey = "item:" + index;
         return session.acquirePermit(completionKey, liveAwaitPendingWindow())
-            .chain(() -> withAwaitExecutionContext(context, () -> awaitCoordinator.createOrGetItem(
+            .chain(() -> withAwaitExecutionContext(context, () -> awaitCoordinator.createOrGetPreparedItem(
             descriptor,
             context.tenantId(),
             context.executionId(),
@@ -386,8 +380,10 @@ public class AwaitStepSupport {
                             + " is terminal with status " + record.status()
                             + " and cannot be accepted by the live await stream."));
                 }
-                if (record.status() == AwaitInteractionStatus.WAITING) {
-                    return awaitCoordinator.dispatch(descriptor, record);
+                if (record.status() == AwaitInteractionStatus.WAITING
+                    || record.status() == AwaitInteractionStatus.DISPATCHING
+                    || record.status() == AwaitInteractionStatus.DISPATCHED) {
+                    return awaitCoordinator.dispatchLive(descriptor, record);
                 }
                 return Uni.createFrom().item(record);
             })));
@@ -433,11 +429,15 @@ public class AwaitStepSupport {
                 if (itemIndex.get() == 0) {
                     return Multi.createFrom().empty();
                 }
-                return awaitCoordinator.markDispatchComplete(
+                return awaitCoordinator.reconcileCompletedItemInteractions(
                     context.tenantId(),
                     unitId,
-                    itemIndex.get(),
                     System.currentTimeMillis())
+                    .chain(() -> awaitCoordinator.markDispatchComplete(
+                        context.tenantId(),
+                        unitId,
+                        itemIndex.get(),
+                        System.currentTimeMillis()))
                     .onItem().transformToMulti(unit -> unit.status() == AwaitUnitStatus.COMPLETED
                         ? awaitCoordinator.loadResumePayload(context.tenantId(), unitId)
                             .toMulti()

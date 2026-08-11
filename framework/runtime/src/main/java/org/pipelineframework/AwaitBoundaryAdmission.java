@@ -10,8 +10,8 @@ import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitCompletionTenantMismatchException;
 import org.pipelineframework.awaitable.AwaitCoordinator;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
+import org.pipelineframework.awaitable.AwaitInteractionStatus;
 import org.pipelineframework.awaitable.AwaitLiveCompletionRegistry;
-import org.pipelineframework.awaitable.AwaitUnitRecord;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionDecision;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionException;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionOperation;
@@ -86,23 +86,50 @@ class AwaitBoundaryAdmission {
       AwaitCompletionResult validated,
       AwaitCompletionCommand normalized,
       AwaitItemContinuationHandler itemContinuationHandler) {
+    if (validated.record().status() != AwaitInteractionStatus.COMPLETED) {
+      return routeTerminalInteraction(validated, normalized, itemContinuationHandler);
+    }
+    return signalLiveAwaitCompletion(validated.record())
+        .onItem().transformToUni(liveAccepted -> {
+          Uni<AwaitCompletionResult> handoff = liveAccepted
+              ? segmentBoundaryLedger.get()
+                  .recordBoundaryCompletionAdmitted(validated.record(), normalized.nowEpochMs())
+                  .replaceWith(validated)
+              : awaitCoordinator.recordCompletion(validated.record(), normalized.nowEpochMs())
+                  .onItem().transformToUni(unit -> segmentBoundaryLedger.get()
+                      .recordBoundaryCompletionAdmitted(validated.record(), normalized.nowEpochMs())
+                      .chain(() -> continuations.afterRecordedCompletion(
+                          validated,
+                          unit,
+                          itemContinuationHandler,
+                          normalized.nowEpochMs())));
+          if (!awaitCoordinator.admissionEnabled()) {
+            return handoff;
+          }
+          return awaitCoordinator.releaseAdmission(validated.record()).chain(() -> handoff);
+        });
+  }
+
+  private Uni<AwaitCompletionResult> routeTerminalInteraction(
+      AwaitCompletionResult validated,
+      AwaitCompletionCommand normalized,
+      AwaitItemContinuationHandler itemContinuationHandler) {
     return awaitCoordinator.recordCompletion(validated.record(), normalized.nowEpochMs())
         .onItem().transformToUni(unit -> segmentBoundaryLedger.get()
-            .recordBoundaryCompletionAdmitted(validated.record(), unit, normalized.nowEpochMs())
-            .chain(() -> completionPlan(validated, unit))
-            .onItem().transformToUni(plan -> {
-              Uni<AwaitCompletionResult> handoff = plan.liveSession()
-                  ? Uni.createFrom().item(plan.result())
+            .recordBoundaryCompletionAdmitted(validated.record(), normalized.nowEpochMs())
+            .chain(() -> signalLiveAwaitCompletion(validated.record()))
+            .onItem().transformToUni(liveAccepted -> {
+              Uni<AwaitCompletionResult> handoff = liveAccepted
+                  ? Uni.createFrom().item(validated)
                   : continuations.afterRecordedCompletion(
-                      plan.result(),
-                      plan.unit(),
+                      validated,
+                      unit,
                       itemContinuationHandler,
                       normalized.nowEpochMs());
-        if (!awaitCoordinator.admissionEnabled()) {
-            return handoff;
-        }
-        return awaitCoordinator.releaseAdmission(validated.record())
-            .chain(() -> handoff);
+              if (!awaitCoordinator.admissionEnabled()) {
+                return handoff;
+              }
+              return awaitCoordinator.releaseAdmission(validated.record()).chain(() -> handoff);
             }));
   }
 
@@ -143,22 +170,11 @@ class AwaitBoundaryAdmission {
     return Uni.createFrom().item(result);
   }
 
-  private Uni<AwaitCompletionAdmissionPlan> completionPlan(
-      AwaitCompletionResult result,
-      AwaitUnitRecord unit) {
-    return signalLiveAwaitCompletion(result.record(), unit)
-        .onItem().transform(liveAccepted -> liveAccepted
-            ? AwaitCompletionAdmissionPlan.live(result, unit)
-            : AwaitCompletionAdmissionPlan.durable(result, unit));
-  }
-
-  private Uni<Boolean> signalLiveAwaitCompletion(
-      AwaitInteractionRecord record,
-      AwaitUnitRecord unit) {
+  private Uni<Boolean> signalLiveAwaitCompletion(AwaitInteractionRecord record) {
     if (awaitLiveCompletionRegistry == null) {
       return Uni.createFrom().item(false);
     }
-    return awaitLiveCompletionRegistry.signal(record, unit);
+    return awaitLiveCompletionRegistry.signal(record);
   }
 
   private static boolean explicitTenant(String tenantId) {

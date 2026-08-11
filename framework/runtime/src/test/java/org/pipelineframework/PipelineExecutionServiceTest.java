@@ -27,6 +27,8 @@ import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
+import org.pipelineframework.orchestrator.PipelineBundleCapabilities;
+import org.pipelineframework.orchestrator.PipelineBundleStepDescriptor;
 import org.pipelineframework.orchestrator.PipelineReleaseIdentityResolver;
 import org.pipelineframework.orchestrator.PipelineControlPlane;
 import org.pipelineframework.orchestrator.PipelineTransitionWorker;
@@ -298,6 +300,60 @@ class PipelineExecutionServiceTest {
     }
 
     @Test
+    void eligiblePortableItemizedAwaitKeepsTheLiveSessionAndTerminalStreamAtTheWorker() throws Exception {
+        markStartupHealthy(service);
+        JsonTransitionPayloadCodec codec = new JsonTransitionPayloadCodec();
+        service.transitionPayloadCodec = codec;
+        List<Object> steps = List.of(new Object(), new Object(), new Object());
+        AtomicReference<AwaitContinuationMode> continuationMode = new AtomicReference<>();
+        AtomicReference<TerminalOutputOwnership> terminalOutputOwnership = new AtomicReference<>();
+        when(releaseIdentityResolver.validateCommandIdentity(any(), isNull())).thenReturn(Optional.empty());
+        when(releaseIdentityResolver.contract()).thenReturn(portableLiveItemizedContract("EXPANSION", "ONE_TO_ONE"));
+        when(pipelineStepResolver.loadPipelineSteps()).thenReturn(steps);
+        when(pipelineRunner.runFromStepUntilWithContext(any(), eq(steps), eq(0), eq(3)))
+            .thenAnswer(invocation -> {
+                var context = org.pipelineframework.awaitable.AwaitExecutionContextHolder.get();
+                continuationMode.set(context.continuationMode());
+                terminalOutputOwnership.set(context.terminalOutputOwnership());
+                return new PipelineRunner.ExecutionResult(Multi.createFrom().empty(), telemetryContext);
+            });
+
+        TransitionResultEnvelope envelope = service.executePortableTransition(transitionCommand(codec, 0, -1))
+            .await().indefinitely();
+
+        assertEquals(TransitionWorkerOutcome.COMPLETED, envelope.outcome());
+        assertEquals(AwaitContinuationMode.LIVE_IF_SUPPORTED, continuationMode.get());
+        assertEquals(TerminalOutputOwnership.TRANSITION_WORKER, terminalOutputOwnership.get());
+    }
+
+    @Test
+    void nonEligiblePortableItemizedAwaitKeepsDurableHandoff() throws Exception {
+        markStartupHealthy(service);
+        JsonTransitionPayloadCodec codec = new JsonTransitionPayloadCodec();
+        service.transitionPayloadCodec = codec;
+        List<Object> steps = List.of(new Object(), new Object(), new Object());
+        AtomicReference<AwaitContinuationMode> continuationMode = new AtomicReference<>();
+        AtomicReference<TerminalOutputOwnership> terminalOutputOwnership = new AtomicReference<>();
+        when(releaseIdentityResolver.validateCommandIdentity(any(), isNull())).thenReturn(Optional.empty());
+        when(releaseIdentityResolver.contract()).thenReturn(portableLiveItemizedContract("ONE_TO_MANY", "MANY_TO_ONE"));
+        when(pipelineStepResolver.loadPipelineSteps()).thenReturn(steps);
+        when(pipelineRunner.runFromStepUntilWithContext(any(), eq(steps), eq(0), eq(3)))
+            .thenAnswer(invocation -> {
+                var context = org.pipelineframework.awaitable.AwaitExecutionContextHolder.get();
+                continuationMode.set(context.continuationMode());
+                terminalOutputOwnership.set(context.terminalOutputOwnership());
+                return new PipelineRunner.ExecutionResult(Multi.createFrom().empty(), telemetryContext);
+            });
+
+        TransitionResultEnvelope envelope = service.executePortableTransition(transitionCommand(codec, 0, -1))
+            .await().indefinitely();
+
+        assertEquals(TransitionWorkerOutcome.COMPLETED, envelope.outcome());
+        assertEquals(AwaitContinuationMode.DURABLE_HANDOFF, continuationMode.get());
+        assertEquals(TerminalOutputOwnership.COORDINATOR, terminalOutputOwnership.get());
+    }
+
+    @Test
     void terminalPortableTransitionRetainsMaterializedInputAtCoordinator() throws Exception {
         markStartupHealthy(service);
         JsonTransitionPayloadCodec codec = new JsonTransitionPayloadCodec();
@@ -442,6 +498,31 @@ class PipelineExecutionServiceTest {
             payload.payloadTypeId(),
             payload.payloadEncoding(),
             payload.payload());
+    }
+
+    private static PipelineContractDescriptor portableLiveItemizedContract(
+        String producerCardinality,
+        String awaitCardinality) {
+        return new PipelineContractDescriptor(
+            2,
+            "payments",
+            "1",
+            "contract",
+            null,
+            null,
+            null,
+            false,
+            null,
+            List.of(
+                new PipelineBundleStepDescriptor(0, "source", "service", producerCardinality,
+                    "CsvInput", "PaymentRecord", null, null, null),
+                new PipelineBundleStepDescriptor(1, "await", "await", awaitCardinality,
+                    "PaymentRecord", "PaymentStatus", null, null, "SQS"),
+                new PipelineBundleStepDescriptor(2, "suffix", "service", "ONE_TO_ONE",
+                    "PaymentStatus", "PaymentOutput", null, null, null)),
+            PipelineBundleCapabilities.defaults(),
+            Map.of(),
+            "");
     }
 
     private static PipelineYamlConfig objectPublishConfig(String provider) {

@@ -177,7 +177,7 @@ class QueueAsyncCoordinatorTest {
         lenient().when(workerConfig.maxInFlight()).thenReturn(64);
         lenient().when(workerConfig.saturatedDelay()).thenReturn(Duration.ofSeconds(1));
         lenient().when(awaitCoordinator.importSuspension(any())).thenReturn(Uni.createFrom().voidItem());
-        lenient().when(awaitLiveCompletionRegistry.signal(any(), any()))
+        lenient().when(awaitLiveCompletionRegistry.signal(any()))
             .thenReturn(Uni.createFrom().item(false));
     }
 
@@ -1327,7 +1327,6 @@ class QueueAsyncCoordinatorTest {
     void completeAwaitUsesLiveAwaitStreamInsteadOfDurableItemContinuationWhenAccepted() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitInteractionRecord completed = itemAwaitRecord(0, AwaitInteractionStatus.COMPLETED, "approved");
-        AwaitUnitRecord unit = awaitUnit("unit-1", AwaitUnitStatus.COMPLETED, 1, 1, true, null);
         AwaitCompletionCommand command = new AwaitCompletionCommand(
             "tenant-1",
             completed.interactionId(),
@@ -1339,15 +1338,13 @@ class QueueAsyncCoordinatorTest {
         AwaitItemContinuationHandler handler = mock(AwaitItemContinuationHandler.class);
         when(awaitCoordinator.complete(command))
             .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(completed, false)));
-        when(awaitCoordinator.recordCompletion(org.mockito.ArgumentMatchers.eq(completed), org.mockito.ArgumentMatchers.anyLong()))
-            .thenReturn(Uni.createFrom().item(unit));
-        when(awaitLiveCompletionRegistry.signal(completed, unit))
+        when(awaitLiveCompletionRegistry.signal(completed))
             .thenReturn(Uni.createFrom().item(true));
 
         AwaitCompletionResult result = coordinator.completeAwait(command, handler).await().indefinitely();
 
         assertEquals(completed.interactionId(), result.record().interactionId());
-        verify(awaitLiveCompletionRegistry).signal(completed, unit);
+        verify(awaitLiveCompletionRegistry).signal(completed);
         verify(handler, never()).continueAwaitItem(
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.any(),
@@ -1438,7 +1435,6 @@ class QueueAsyncCoordinatorTest {
     void completeAwaitPropagatesUnexpectedLiveAwaitSignalFailure() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         AwaitInteractionRecord completed = itemAwaitRecord(0, AwaitInteractionStatus.COMPLETED, "approved");
-        AwaitUnitRecord unit = awaitUnit("unit-1", AwaitUnitStatus.COMPLETED, 1, 1, true, null);
         AwaitCompletionCommand command = new AwaitCompletionCommand(
             "tenant-1",
             completed.interactionId(),
@@ -1450,16 +1446,14 @@ class QueueAsyncCoordinatorTest {
         AwaitItemContinuationHandler handler = mock(AwaitItemContinuationHandler.class);
         when(awaitCoordinator.complete(command))
             .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(completed, false)));
-        when(awaitCoordinator.recordCompletion(org.mockito.ArgumentMatchers.eq(completed), org.mockito.ArgumentMatchers.anyLong()))
-            .thenReturn(Uni.createFrom().item(unit));
-        when(awaitLiveCompletionRegistry.signal(completed, unit))
+        when(awaitLiveCompletionRegistry.signal(completed))
             .thenReturn(Uni.createFrom().failure(new IllegalStateException("closed live session")));
 
         IllegalStateException error = assertThrows(IllegalStateException.class, () ->
             coordinator.completeAwait(command, handler).await().indefinitely());
 
 	        assertEquals("closed live session", error.getMessage());
-	        verify(awaitLiveCompletionRegistry).signal(completed, unit);
+	        verify(awaitLiveCompletionRegistry).signal(completed);
 	        verify(executionStateStore, never()).getExecution(any(), any());
 	        verify(handler, never()).continueAwaitItem(
 	            org.mockito.ArgumentMatchers.any(),
@@ -1716,12 +1710,8 @@ class QueueAsyncCoordinatorTest {
             .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(second, false)));
         when(awaitCoordinator.recordCompletion(org.mockito.ArgumentMatchers.eq(second), org.mockito.ArgumentMatchers.anyLong()))
             .thenReturn(Uni.createFrom().item(awaitUnit("unit-1", AwaitUnitStatus.COMPLETED, null, 0, false, "interaction-1")));
-        when(awaitLiveCompletionRegistry.signal(org.mockito.ArgumentMatchers.eq(second), any()))
-            .thenAnswer(invocation -> {
-                ControlPlaneProjection projection = journal.projection("tenant-1", "exec-1").await().indefinitely();
-                assertTrue(projection.factKeys().contains("boundary-completion-admitted:unit-1:idem-1"));
-                return Uni.createFrom().item(false);
-            });
+        when(awaitLiveCompletionRegistry.signal(org.mockito.ArgumentMatchers.eq(second)))
+            .thenReturn(Uni.createFrom().item(false));
         ExecutionRecord<Object, Object> resumed = createRecordAtStep("tenant-1", "exec-1", "key-1", 3);
         when(executionStateStore.markAwaitCompleted(
                 org.mockito.ArgumentMatchers.eq("tenant-1"),
@@ -1742,6 +1732,7 @@ class QueueAsyncCoordinatorTest {
             org.mockito.ArgumentMatchers.anyLong());
         verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-1", "exec-1"));
         ControlPlaneProjection projection = journal.projection("tenant-1", "exec-1").await().indefinitely();
+        assertTrue(projection.factKeys().contains("boundary-completion-admitted:unit-1:idem-1"));
         assertTrue(projection.factKeys().contains("continuation-segment-created:exec-1:segment:3"));
     }
 
