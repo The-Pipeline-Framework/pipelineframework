@@ -159,7 +159,7 @@ not durable await-unit completion or resume events. That means the parser is bei
 reactive demand and the await in-flight window, not by a forced sleep. Object Publish runs at the
 terminal boundary after status output exists and before success is committed.
 
-The repository also keeps a 10k self-host acceptance with the unchanged 180-second worker deadline. It is a scale acceptance, not evidence supplied by this 1k replay capture: the current live-first implementation has a known throughput limitation tracked by #541 and does not yet satisfy that 10k deadline. Do not extrapolate the replay timing into a large-workload SLA.
+The repository also keeps a 10k self-host acceptance with the unchanged 180-second worker deadline. It is a scale acceptance, not evidence supplied by this 1k replay capture. Do not extrapolate the replay timing into a large-workload SLA.
 
 Command telemetry has two layers:
 
