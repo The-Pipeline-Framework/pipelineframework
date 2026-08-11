@@ -77,7 +77,7 @@ class SegmentBoundaryFactFactoryTest {
 
     @Test
     void boundaryCompletionUsesItemIndexAsIdempotencyKeyForItemizedAwait() {
-        ControlPlaneFact fact = facts.boundaryCompletionAdmitted(interaction(3), unit(false, null)).getFirst();
+        ControlPlaneFact fact = facts.boundaryCompletionAdmitted(interaction(3)).getFirst();
 
         ControlPlaneFact.BoundaryCompletionAdmitted admitted =
             assertInstanceOf(ControlPlaneFact.BoundaryCompletionAdmitted.class, fact);

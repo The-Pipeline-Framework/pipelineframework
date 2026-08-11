@@ -85,14 +85,11 @@ final class SegmentBoundaryFactFactory {
         return facts;
     }
 
-    List<ControlPlaneFact> boundaryCompletionAdmitted(
-        AwaitInteractionRecord record,
-        AwaitUnitRecord unit
-    ) {
+    List<ControlPlaneFact> boundaryCompletionAdmitted(AwaitInteractionRecord record) {
         return List.of(BoundaryAdmissionFacts.completion(new BoundaryAdmissionRequest(
             record.tenantId(),
             record.executionId(),
-            unit.unitId(),
+            record.unitId(),
             BoundaryKind.AWAIT,
             record.interactionId(),
             completionIdempotencyKey(record),

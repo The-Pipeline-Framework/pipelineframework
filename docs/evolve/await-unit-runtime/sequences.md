@@ -41,6 +41,7 @@ sequenceDiagram
     participant Coord as AwaitCoordinator
     participant Adapter as AwaitTransportAdapter
     participant UnitStore as AwaitUnitStore
+    participant InteractionStore as AwaitInteractionStore
     participant Queue as QueueAsyncCoordinator
     participant Live as LiveAwaitSession
     participant Suffix as Item continuation suffix
@@ -53,18 +54,18 @@ sequenceDiagram
     Step->>Coord: createOrGetItem(unitId, itemIndex=1)
     Coord->>Adapter: dispatch item 1
     Adapter-->>Coord: complete item 1
-    Coord->>UnitStore: recordItemCompleted
+    Coord->>InteractionStore: complete durable interaction 1
     Coord->>Queue: signal completion
     Adapter-->>Coord: complete item 0
-    Coord->>UnitStore: recordItemCompleted -> COMPLETED
+    Coord->>InteractionStore: complete durable interaction 0
     Coord->>Queue: signal completion
-    Step->>UnitStore: markDispatchComplete(expectedItemCount=2)
-    alt in-process worker and live-capable adapter
+    alt active eligible live owner (in-process or portable)
       Queue->>Live: accept admitted item 1
       Live->>Suffix: emit item 1 when downstream requests
       Queue->>Live: accept admitted item 0
       Live->>Suffix: emit item 0 when downstream requests
-    else portable worker or adapter requires suspension
+    else fallback execution or retry path (no live owner / ineligible shape)
+      Step->>UnitStore: markDispatchComplete(expectedItemCount=2)
       Step-->>ExecStore: park execution with awaitUnitId
       Queue->>UnitStore: require dispatchComplete
       Queue->>ExecStore: require parent WAITING_EXTERNAL(awaitUnitId)
@@ -123,7 +124,7 @@ sequenceDiagram
     Provider-->>Kafka: PaymentStatus item 0
     Kafka-->>Exec: complete by correlationId
     Exec->>Queue: complete await interaction
-    Queue->>AwaitCoord: record item 0 completed
+    Queue->>AwaitCoord: complete durable interaction 0
     Queue->>Live: signal item 0 after durable record
     alt approved
         Live->>Approved: emit item 0 when requested
@@ -143,7 +144,7 @@ sequenceDiagram
     Provider-->>Kafka: PaymentStatus item 1
     Kafka-->>Exec: complete by correlationId
     Exec->>Queue: complete await interaction
-    Queue->>AwaitCoord: record item 1 completed
+    Queue->>AwaitCoord: complete durable interaction 1
     Queue->>Live: signal item 1 after durable record
     alt approved
         Live->>Approved: emit item 1 when requested
@@ -154,12 +155,13 @@ sequenceDiagram
     end
     Finalize-->>Publish: PaymentOutput item 1 chunk
 
-    alt live session lost or worker restarted
+    alt no live owner after retry or re-execution
+      Queue->>AwaitCoord: rebuild fallback aggregate from completed interactions
       Await->>AwaitCoord: mark dispatchComplete(expectedItemCount=2)
       Await-->>Queue: suspend parent execution(awaitUnitId)
       Queue->>Queue: persist WAITING_EXTERNAL(awaitUnitId)
-      Queue->>Approved: dispatch approved item continuations
-      Queue->>Unapproved: dispatch unapproved item continuations
+      Queue->>Approved: dispatch durable item continuation
+      Queue->>Unapproved: dispatch durable item continuation
     end
 
     Publish-->>Queue: target sessions closed

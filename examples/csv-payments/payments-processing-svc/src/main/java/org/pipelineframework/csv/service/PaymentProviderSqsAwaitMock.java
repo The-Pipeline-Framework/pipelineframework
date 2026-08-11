@@ -20,6 +20,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -59,6 +60,7 @@ public class PaymentProviderSqsAwaitMock {
   private static final Logger LOG = Logger.getLogger(PaymentProviderSqsAwaitMock.class);
   private static final Duration DEFAULT_POLL_START_DELAY = Duration.ZERO;
   private static final Duration DEFAULT_VISIBILITY_TIMEOUT = Duration.ofSeconds(30);
+  static final int RECEIVE_LOOP_CONCURRENCY = 8;
   private static final Duration EXECUTOR_SHUTDOWN_TIMEOUT = Duration.ofSeconds(10);
   private static final Duration INITIAL_FAILURE_BACKOFF = Duration.ofSeconds(1);
   private static final Duration MAX_FAILURE_BACKOFF = Duration.ofSeconds(30);
@@ -71,7 +73,8 @@ public class PaymentProviderSqsAwaitMock {
 
   private volatile SqsClient client;
   private volatile ExecutorService pollExecutor;
-  private volatile Future<?> pollFuture;
+  private volatile ExecutorService processingExecutor;
+  private final List<Future<?>> pollFutures = new java.util.concurrent.CopyOnWriteArrayList<>();
   private volatile boolean running;
   private final AtomicInteger consecutivePollFailures = new AtomicInteger();
 
@@ -96,12 +99,14 @@ public class PaymentProviderSqsAwaitMock {
         "csv-payments.payment-provider.sqs.request-queue-url");
     String responseQueueUrl = requiredQueueUrl(config.responseQueueUrl(),
         "csv-payments.payment-provider.sqs.response-queue-url");
-    ensureExecutor();
+    ensureExecutors(config.maxMessages());
     running = true;
-    pollFuture = pollExecutor.submit(() -> {
-      sleep(config.pollStartDelay());
-      pollLoop();
-    });
+    for (int loop = 0; loop < RECEIVE_LOOP_CONCURRENCY; loop++) {
+      pollFutures.add(pollExecutor.submit(() -> {
+        sleep(config.pollStartDelay());
+        pollLoop();
+      }));
+    }
     LOG.infof("CSV SQS await mock provider enabled requestQueueUrl=%s responseQueueUrl=%s",
         requestQueueUrl,
         responseQueueUrl);
@@ -110,12 +115,12 @@ public class PaymentProviderSqsAwaitMock {
   @PreDestroy
   void shutdown() {
     running = false;
-    Future<?> activePollFuture = pollFuture;
-    if (activePollFuture != null) {
-      activePollFuture.cancel(true);
-    }
+    pollFutures.forEach(future -> future.cancel(true));
+    pollFutures.clear();
     shutdownExecutor(pollExecutor);
     pollExecutor = null;
+    shutdownExecutor(processingExecutor);
+    processingExecutor = null;
     SqsClient activeClient = client;
     if (activeClient == null) {
       return;
@@ -151,19 +156,16 @@ public class PaymentProviderSqsAwaitMock {
       sleepFailureBackoff();
       return false;
     }
-    for (Message message : messages) {
-      handleMessage(requestQueueUrl, message, config);
-    }
+    processBatch(requestQueueUrl, messages, config);
     return true;
   }
 
   int visibilityTimeoutSeconds(SqsProviderConfig config) {
     Duration perMessageProcessingWindow = Duration.ofMillis(Math.max(0L, paymentProviderConfig.timeoutMillis()))
         .plusMillis(Math.max(0L, paymentProviderConfig.responseDelayMillis()));
-    Duration batchProcessingWindow = perMessageProcessingWindow.multipliedBy(config.maxMessages());
-    Duration visibilityWindow = config.visibilityTimeout().compareTo(batchProcessingWindow) >= 0
+    Duration visibilityWindow = config.visibilityTimeout().compareTo(perMessageProcessingWindow) >= 0
         ? config.visibilityTimeout()
-        : batchProcessingWindow;
+        : perMessageProcessingWindow;
     long visibilityMillis = visibilityWindow.toMillis();
     long seconds = visibilityMillis / 1_000L + (visibilityMillis % 1_000L == 0 ? 0L : 1L);
     if (seconds < 0 || seconds > 43_200) {
@@ -272,10 +274,37 @@ public class PaymentProviderSqsAwaitMock {
     }
   }
 
-  private void ensureExecutor() {
+  private void processBatch(String requestQueueUrl, List<Message> messages, SqsProviderConfig config) {
+    ExecutorService executor = processingExecutor;
+    if (executor == null || executor.isShutdown()) {
+      throw new IllegalStateException("CSV SQS await provider processing executor is unavailable");
+    }
+    List<? extends Future<?>> tasks = messages.stream()
+        .map(message -> executor.submit(() -> handleMessage(requestQueueUrl, message, config)))
+        .toList();
+    for (Future<?> task : tasks) {
+      try {
+        task.get();
+      } catch (InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+        return;
+      } catch (ExecutionException failure) {
+        LOG.error("CSV SQS await provider batch item failed.", failure.getCause());
+      }
+    }
+  }
+
+  private void ensureExecutors(int maxMessages) {
     if (pollExecutor == null) {
-      pollExecutor = Executors.newSingleThreadExecutor(runnable -> {
+      pollExecutor = Executors.newFixedThreadPool(RECEIVE_LOOP_CONCURRENCY, runnable -> {
         Thread thread = new Thread(runnable, "csv-sqs-await-provider");
+        thread.setDaemon(true);
+        return thread;
+      });
+    }
+    if (processingExecutor == null) {
+      processingExecutor = Executors.newFixedThreadPool(maxMessages * RECEIVE_LOOP_CONCURRENCY, runnable -> {
+        Thread thread = new Thread(runnable, "csv-sqs-await-provider-message");
         thread.setDaemon(true);
         return thread;
       });

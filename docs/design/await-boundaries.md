@@ -76,13 +76,18 @@ The durable await model still matters. If the process restarts, the worker lease
 5. release the parent execution when the itemized unit is complete,
 6. publish terminal output before the execution is marked successful.
 
+This fallback reconstructs an immutable completed MANY result for the parent continuation. It is intentionally more conservative than the healthy live segment; TPF does not claim to resume the same in-memory `Multi` at its prior demand position after owner loss.
+
+For portable transition workers, durable fallback applies only when the contract is ineligible for the live itemized shape or no live session accepts the completion. Eligible portable workers retain the live session and terminal stream while the worker remains active.
+
 That is why `ONE_TO_ONE` await over a stream is not a hidden batch mode. It is a stream of item interactions owned by one durable await unit. The external provider is not a pipeline step; it is external reality behind a framework-owned I/O shell.
 
 ```mermaid
 sequenceDiagram
     participant Source as "Live source segment"
     participant Await as "Await step"
-    participant Unit as "Await unit"
+    participant Interaction as "Await interaction"
+    participant Unit as "Await unit / fallback state"
     participant Live as "Live await session"
     participant External as "External actor"
     participant Coordinator as "Coordinator"
@@ -91,15 +96,15 @@ sequenceDiagram
     participant Store as "Execution store"
 
     Source->>Await: emit typed item(s)
-    Await->>Unit: create item or aggregate interactions
+    Await->>Interaction: create durable item interaction(s)
     Await->>External: dispatch request(s)
-    External-->>Unit: admit correlated completion(s)
-    alt in-process worker and live-capable adapter
-      Unit-->>Live: signal admitted completion
+    External-->>Interaction: admit correlated completion(s)
+    alt active eligible live owner (in-process or portable)
+      Interaction-->>Live: signal admitted completion
       Live-->>Continue: emit typed output when downstream requests
       Continue-->>Publish: terminal domain output
       Publish-->>Store: worker publishes before markSucceeded
-    else interaction/webhook, portable worker, or no live window
+    else interaction/webhook, no live session, or ineligible portable shape
       Await-->>Store: suspend parent execution
       Store->>Store: persist WAITING_EXTERNAL(awaitUnitId)
       Unit-->>Coordinator: completion is admitted

@@ -14,8 +14,8 @@ import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
-import io.smallrye.mutiny.infrastructure.Infrastructure;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
@@ -118,17 +118,46 @@ public class AwaitCoordinator {
                     return Uni.createFrom().failure(new IllegalArgumentException("itemIndex must be non-negative"));
                 }
                 return createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex)
-                    .onItem().transformToUni(unit -> createInteraction(
-                descriptor,
-                unitId,
-                tenantId,
-                executionId,
-                stepIndex,
-                causationId,
-                requestPayload,
-                itemIndex,
-                assignee,
-                group));
+                    .onItem().transformToUni(unit -> createItemInPreparedUnit(
+                        descriptor, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
+                        itemIndex, assignee, group));
+            });
+    }
+
+    /** Creates the durable unit once before a live itemized source begins concurrent dispatch. */
+    public Uni<Void> prepareLiveItemizedUnit(
+        AwaitStepDescriptor descriptor,
+        String tenantId,
+        String unitId,
+        String executionId,
+        int stepIndex
+    ) {
+        return registerDescriptor(descriptor)
+            .chain(() -> createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex))
+            .replaceWithVoid();
+    }
+
+    /** Creates one item in a unit that was durably prepared by the live stream before source demand began. */
+    public Uni<AwaitCreateResult> createOrGetPreparedItem(
+        AwaitStepDescriptor descriptor,
+        String tenantId,
+        String executionId,
+        int stepIndex,
+        String causationId,
+        Object requestPayload,
+        String unitId,
+        int itemIndex,
+        String assignee,
+        String group
+    ) {
+        return registerDescriptor(descriptor)
+            .chain(() -> {
+                if (itemIndex < 0) {
+                    return Uni.createFrom().failure(new IllegalArgumentException("itemIndex must be non-negative"));
+                }
+                return createItemInPreparedUnit(
+                    descriptor, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
+                    itemIndex, assignee, group);
             });
     }
 
@@ -170,6 +199,45 @@ public class AwaitCoordinator {
                 .onItem().invoke(this::recordInteractionDispatched));
     }
 
+    /**
+     * Dispatches an interaction owned by an active live stream.  The durable dispatch intent,
+     * including the admission-reservation identity needed by a later retry, is committed before
+     * sending.  Unlike the conservative handoff path, live dispatch does not synchronously wait
+     * for a second post-send metadata transition: a completion may legally race the send and
+     * complete a {@code DISPATCHING} interaction.
+     */
+    @SuppressWarnings("unchecked")
+    public Uni<AwaitInteractionRecord> dispatchLive(AwaitStepDescriptor descriptor, AwaitInteractionRecord interaction) {
+        AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(descriptor.transportType());
+        Uni<AwaitInteractionRecord> intended = interaction.status() == AwaitInteractionStatus.WAITING
+            ? interactionStore().markDispatching(
+                interaction.tenantId(),
+                interaction.interactionId(),
+                interaction.version(),
+                dispatchMetadata(interaction, Map.of()),
+                System.currentTimeMillis())
+                .onItem().transform(optional -> optional.orElseThrow(() ->
+                    new IllegalStateException("Await interaction live dispatch transition lost OCC race: "
+                        + interaction.interactionId())))
+            : Uni.createFrom().item(interaction);
+        return intended.onItem().transformToUni(dispatching -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
+                descriptor,
+                dispatching,
+                transportRequestPayload(descriptor, dispatching)))
+            .onFailure().call(failure -> interactionStore().fail(
+                dispatching.tenantId(),
+                dispatching.interactionId(),
+                dispatching.version(),
+                failure.getMessage(),
+                System.currentTimeMillis())
+                .onItem().transformToUni(updated -> updated
+                    .map(this::releaseAdmission)
+                    .orElseGet(() -> Uni.createFrom().voidItem()))
+                .replaceWithVoid())
+            .replaceWith(dispatching)
+            .invoke(this::recordInteractionDispatched));
+    }
+
     private Map<String, Object> dispatchMetadata(AwaitInteractionRecord interaction, Map<String, Object> metadata) {
         return awaitAdmissionCoordinator == null ? metadata : awaitAdmissionCoordinator.dispatchMetadata(interaction, metadata);
     }
@@ -201,10 +269,7 @@ public class AwaitCoordinator {
         return resolveForCompletion(normalized)
             .onItem().transformToUni(record -> validateCompletionAdmission(record, normalized)
                 .onItem().transform(safeCommand -> completionContract(record, safeCommand)))
-            .onItem().transformToUni(validated -> enforceCompletionPayloadLimitIfUnitPresent(
-                    validated.record(),
-                    validated.command())
-                .onItem().transform(safeCommand -> new ValidatedCompletion(validated.record(), safeCommand)))
+            .onItem().transformToUni(this::enforceCompletionPayloadLimit)
             .onItem().transformToUni(validated -> interactionStore().complete(validated.command()));
     }
 
@@ -244,17 +309,22 @@ public class AwaitCoordinator {
             command.nowEpochMs());
     }
 
-    private Uni<AwaitCompletionCommand> enforceCompletionPayloadLimitIfUnitPresent(
-        AwaitInteractionRecord record,
-        AwaitCompletionCommand command
+    private Uni<ValidatedCompletion> enforceCompletionPayloadLimit(
+        ValidatedCompletion validated
     ) {
-        return unitStore().get(record.tenantId(), record.unitId())
+        if (!materializedOutputCardinality(validated.descriptor().cardinality())) {
+            return Uni.createFrom().item(validated);
+        }
+        return unitStore().get(validated.record().tenantId(), validated.record().unitId())
             .onItem().transform(optional -> {
                 if (optional.isEmpty()) {
-                    return command;
+                    return validated;
                 }
-                Object safePayload = validateAggregateOutputLimit(optional.get(), command.responsePayload());
-                return withResponsePayload(command, safePayload);
+                Object safePayload = validateAggregateOutputLimit(optional.get(), validated.command().responsePayload());
+                return new ValidatedCompletion(
+                    validated.record(),
+                    withResponsePayload(validated.command(), safePayload),
+                    validated.descriptor());
             });
     }
 
@@ -277,6 +347,19 @@ public class AwaitCoordinator {
         return updated.onItem().transform(optional -> optional.orElseThrow(
             () -> new IllegalStateException("Await unit not found while recording completion: " + record.unitId())))
             .onItem().invoke(unit -> recordCompletionLifecycle(record, unit));
+    }
+
+    /**
+     * Rebuilds the conservative itemized-await aggregate from durable interaction facts.
+     * This is intentionally used only after a stream has entered the no-live-owner fallback.
+     */
+    public Uni<Void> reconcileCompletedItemInteractions(String tenantId, String unitId, long nowEpochMs) {
+        return findByUnit(tenantId, unitId)
+            .onItem().transformToMulti(records -> Multi.createFrom().iterable(records))
+            .select().where(record -> record.itemInteraction() && record.status() == AwaitInteractionStatus.COMPLETED)
+            .onItem().transformToUniAndConcatenate(record -> recordCompletion(record, nowEpochMs).replaceWithVoid())
+            .collect().last()
+            .replaceWithVoid();
     }
 
     private static String itemCompletionKey(AwaitInteractionRecord record) {
@@ -352,6 +435,13 @@ public class AwaitCoordinator {
 
     public Uni<List<AwaitInteractionRecord>> findByUnit(String tenantId, String unitId) {
         return interactionStore().findByUnit(tenantId, unitId);
+    }
+
+    /** Preloads release-pinned payload metadata before concurrent item dispatch begins. */
+    public Uni<Void> preloadDurablePayloads(String tenantId, String executionId) {
+        return durablePayloadResolver == null
+            ? Uni.createFrom().voidItem()
+            : durablePayloadResolver.preload(tenantId, executionId);
     }
 
     public Uni<TransitionAwaitSuspension> suspensionSnapshot(AwaitSuspendedException suspended) {
@@ -578,6 +668,23 @@ public class AwaitCoordinator {
                 ttl))
                 .onItem().transformToUni(created -> bindOrReleaseAdmission(created, lease))
                 .onFailure().call(ignored -> releaseAdmissionAfterDefiniteCreateFailure(lease, tenantId, correlationId)));
+    }
+
+    private Uni<AwaitCreateResult> createItemInPreparedUnit(
+        AwaitStepDescriptor descriptor,
+        String unitId,
+        String tenantId,
+        String executionId,
+        int stepIndex,
+        String causationId,
+        Object requestPayload,
+        int itemIndex,
+        String assignee,
+        String group
+    ) {
+        return createInteraction(
+            descriptor, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
+            itemIndex, assignee, group);
     }
 
     private static Object restoreCanonicalRequestPayload(AwaitStepDescriptor descriptor, Object requestPayload) {
@@ -855,7 +962,7 @@ public class AwaitCoordinator {
         Object completionPayload = sameTypeIdentity(record.outputType(), record.transportOutputType())
             ? command.responsePayload()
             : canonicalCompletionPayload(record, descriptor, command.responsePayload());
-        return new ValidatedCompletion(record, withResponsePayload(command, completionPayload));
+        return new ValidatedCompletion(record, withResponsePayload(command, completionPayload), descriptor);
     }
 
     /**
@@ -1024,7 +1131,11 @@ public class AwaitCoordinator {
             command.nowEpochMs());
     }
 
-    private record ValidatedCompletion(AwaitInteractionRecord record, AwaitCompletionCommand command) {
+    private record ValidatedCompletion(
+        AwaitInteractionRecord record,
+        AwaitCompletionCommand command,
+        AwaitStepDescriptor descriptor
+    ) {
     }
 
     private static boolean materializedOutputCardinality(String cardinality) {

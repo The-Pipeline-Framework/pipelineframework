@@ -30,7 +30,7 @@ sequenceDiagram
     Client->>Coordinator: submit execution
     Coordinator->>Store: create execution + enqueue work
     Coordinator->>Worker: TransitionCommandEnvelope
-    alt await boundary
+    alt await requires durable fallback
         Worker-->>Coordinator: WAITING_EXTERNAL await unit id
         Coordinator->>Store: park execution as WAITING_EXTERNAL
         Client->>Coordinator: complete interaction
@@ -42,6 +42,8 @@ sequenceDiagram
     end
     Client->>Coordinator: status/result
 ```
+
+An eligible live itemized await remains in the active transition worker and follows the `COMPLETED` branch when its terminal stream finishes. `WAITING_EXTERNAL` is the outcome for an await that requires durable fallback, not a mandatory outcome for every await boundary.
 
 ## Guides
 

@@ -78,39 +78,31 @@ class AwaitBoundaryAdmissionTest {
   }
 
   @Test
-    void recordsBoundaryCompletionBeforeLiveSignalAndSkipsDurableContinuationWhenAccepted() {
+  void signalsLiveCompletionBeforeFallbackAggregationAndSkipsDurableContinuationWhenAccepted() {
     AwaitInteractionRecord interaction = awaitRecord(null);
-    AwaitUnitRecord unit = awaitUnit(AwaitUnitStatus.COMPLETED, null, 0, false, "interaction-1");
     AwaitCompletionCommand command = command(interaction.interactionId());
     when(awaitCoordinator.complete(any()))
         .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(interaction, false)));
-    when(awaitCoordinator.recordCompletion(interaction, command.nowEpochMs()))
-        .thenReturn(Uni.createFrom().item(unit));
-    when(liveCompletionRegistry.signal(interaction, unit))
-        .thenAnswer(ignored -> {
-          ControlPlaneProjection projection = journal.projection("tenant-1", "exec-1").await().indefinitely();
-          assertTrue(projection.factKeys().contains("boundary-completion-admitted:unit-1:idem-1"));
-          return Uni.createFrom().item(true);
-        });
+    when(liveCompletionRegistry.signal(interaction)).thenReturn(Uni.createFrom().item(true));
 
     AwaitCompletionResult result = admission.complete(command, AwaitContinuations.NOOP_ITEM_CONTINUATION_HANDLER)
         .await().indefinitely();
 
     assertEquals(interaction, result.record());
-    verify(liveCompletionRegistry).signal(interaction, unit);
-        verify(continuations, never()).afterRecordedCompletion(any(), any(), any(), any(Long.class));
-    }
+    ControlPlaneProjection projection = journal.projection("tenant-1", "exec-1").await().indefinitely();
+    assertTrue(projection.factKeys().contains("boundary-completion-admitted:unit-1:idem-1"));
+    verify(liveCompletionRegistry).signal(interaction);
+    verify(awaitCoordinator, never()).recordCompletion(any(), any(Long.class));
+    verify(continuations, never()).afterRecordedCompletion(any(), any(), any(), any(Long.class));
+  }
 
     @Test
     void releasesAdmissionAfterLiveSessionEnqueuesWithoutWaitingForDownstreamDelivery() {
       AwaitInteractionRecord interaction = awaitRecord(null);
-      AwaitUnitRecord unit = awaitUnit(AwaitUnitStatus.COMPLETED, null, 0, false, "interaction-1");
       AwaitCompletionCommand command = command(interaction.interactionId());
       when(awaitCoordinator.complete(any()))
           .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(interaction, false)));
-      when(awaitCoordinator.recordCompletion(interaction, command.nowEpochMs()))
-          .thenReturn(Uni.createFrom().item(unit));
-      when(liveCompletionRegistry.signal(interaction, unit)).thenReturn(Uni.createFrom().item(true));
+      when(liveCompletionRegistry.signal(interaction)).thenReturn(Uni.createFrom().item(true));
       when(awaitCoordinator.admissionEnabled()).thenReturn(true);
       when(awaitCoordinator.releaseAdmission(interaction)).thenReturn(Uni.createFrom().voidItem());
 
@@ -118,7 +110,7 @@ class AwaitBoundaryAdmissionTest {
           .await().indefinitely();
 
       InOrder order = inOrder(liveCompletionRegistry, awaitCoordinator);
-      order.verify(liveCompletionRegistry).signal(interaction, unit);
+      order.verify(liveCompletionRegistry).signal(interaction);
       order.verify(awaitCoordinator).releaseAdmission(interaction);
       verify(continuations, never()).afterRecordedCompletion(any(), any(), any(), any(Long.class));
     }
@@ -132,7 +124,7 @@ class AwaitBoundaryAdmissionTest {
     when(awaitCoordinator.complete(any())).thenReturn(Uni.createFrom().item(completion));
     when(awaitCoordinator.recordCompletion(interaction, command.nowEpochMs()))
         .thenReturn(Uni.createFrom().item(unit));
-    when(liveCompletionRegistry.signal(interaction, unit))
+    when(liveCompletionRegistry.signal(interaction))
         .thenReturn(Uni.createFrom().item(false));
     when(continuations.afterRecordedCompletion(
             completion,
@@ -159,9 +151,7 @@ class AwaitBoundaryAdmissionTest {
     AwaitCompletionCommand command = command(interaction.interactionId());
     AwaitCompletionResult completion = new AwaitCompletionResult(interaction, false);
     when(awaitCoordinator.complete(any())).thenReturn(Uni.createFrom().item(completion));
-    when(awaitCoordinator.recordCompletion(interaction, command.nowEpochMs()))
-        .thenReturn(Uni.createFrom().item(unit));
-    when(liveCompletionRegistry.signal(interaction, unit))
+    when(liveCompletionRegistry.signal(interaction))
         .thenReturn(Uni.createFrom().failure(new IllegalStateException("closed")));
 
     IllegalStateException error = assertThrows(IllegalStateException.class, () ->
@@ -169,6 +159,27 @@ class AwaitBoundaryAdmissionTest {
 
     assertEquals("closed", error.getMessage());
     verify(continuations, never()).afterRecordedCompletion(any(), any(), any(), any(Long.class));
+  }
+
+  @Test
+  void recordsTerminalFailureBeforeFailingTheLiveSession() {
+    AwaitInteractionRecord interaction = awaitRecord(0, AwaitInteractionStatus.FAILED);
+    AwaitUnitRecord unit = awaitUnit(AwaitUnitStatus.FAILED, 1, 0, false, null);
+    AwaitCompletionCommand command = command(interaction.interactionId());
+    AwaitCompletionResult completion = new AwaitCompletionResult(interaction, false);
+    when(awaitCoordinator.complete(any())).thenReturn(Uni.createFrom().item(completion));
+    when(awaitCoordinator.recordCompletion(interaction, command.nowEpochMs()))
+        .thenReturn(Uni.createFrom().item(unit));
+    when(liveCompletionRegistry.signal(interaction))
+        .thenReturn(Uni.createFrom().failure(new IllegalStateException("closed")));
+
+    IllegalStateException error = assertThrows(IllegalStateException.class, () ->
+        admission.complete(command, AwaitContinuations.NOOP_ITEM_CONTINUATION_HANDLER).await().indefinitely());
+
+    assertEquals("closed", error.getMessage());
+    InOrder order = inOrder(awaitCoordinator, liveCompletionRegistry);
+    order.verify(awaitCoordinator).recordCompletion(interaction, command.nowEpochMs());
+    order.verify(liveCompletionRegistry).signal(interaction);
   }
 
   @Test
@@ -182,7 +193,7 @@ class AwaitBoundaryAdmissionTest {
 
     assertInstanceOf(AwaitInteractionNotFoundException.class, error);
     verify(awaitCoordinator, never()).recordCompletion(any(), org.mockito.ArgumentMatchers.anyLong());
-    verify(liveCompletionRegistry, never()).signal(any(), any());
+    verify(liveCompletionRegistry, never()).signal(any());
     verify(continuations, never()).afterRecordedCompletion(any(), any(), any(), any(Long.class));
   }
 
@@ -198,6 +209,10 @@ class AwaitBoundaryAdmissionTest {
   }
 
   private static AwaitInteractionRecord awaitRecord(Integer itemIndex) {
+    return awaitRecord(itemIndex, AwaitInteractionStatus.COMPLETED);
+  }
+
+  private static AwaitInteractionRecord awaitRecord(Integer itemIndex, AwaitInteractionStatus status) {
     return new AwaitInteractionRecord(
         "tenant-1",
         "exec-1",
@@ -209,7 +224,7 @@ class AwaitBoundaryAdmissionTest {
         "cause-1",
         "idem-1",
         1L,
-        AwaitInteractionStatus.COMPLETED,
+        status,
         Map.of("value", "request"),
         Map.of("value", "approved"),
         "unit-1",

@@ -60,8 +60,8 @@ public class AwaitLiveCompletionRegistry {
         return session;
     }
 
-    public Uni<Boolean> signal(AwaitInteractionRecord record, AwaitUnitRecord unit) {
-        if (record == null || unit == null) {
+    public Uni<Boolean> signal(AwaitInteractionRecord record) {
+        if (record == null) {
             return Uni.createFrom().item(false);
         }
         LiveAwaitSession<?> session = sessions.get(new Key(record.tenantId(), record.unitId()));

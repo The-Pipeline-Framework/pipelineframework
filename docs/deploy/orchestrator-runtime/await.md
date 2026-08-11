@@ -4,7 +4,7 @@ Await steps model external boundaries inside `QUEUE_ASYNC` execution. TPF persis
 
 ## Single-process LOCAL execution
 
-`LOCAL` selects generated in-process pipeline contracts; it does not select a different await model. In-process queue-async execution may retain a live session only when the await adapter supports one. `interaction-api` and webhook awaits suspend through the normal await interaction and continuation path, while Kafka and SQS itemized streams may use a live completion window with durable fallback. A portable REST, gRPC, or SQS transition-worker boundary always hands the await back to coordinator-owned continuation.
+`LOCAL` selects generated in-process pipeline contracts; it does not select a different await model. In-process queue-async execution may retain a live session only when the await adapter supports one. `interaction-api` and webhook awaits suspend through the normal await interaction and continuation path, while Kafka and SQS itemized streams may use a live completion window with durable fallback. SQS is an await adapter for provider requests and completions, not a transition-worker transport. An eligible portable transition worker invoked over REST or gRPC keeps that live session and terminal stream in the worker; every other portable shape retains coordinator-owned durable handoff. `FUNCTION` selects a platform mode; `REST`, `GRPC`, and `LOCAL` are the only `pipeline.transport` values.
 
 The memory execution, await, and event-dispatch providers support this behavior for a single running process. They preserve the typed interaction, completion, and continuation lifecycle while the process is alive, but lose all orchestration state on process exit. They are suitable for local development and attended single-process applications; they do not provide restart recovery, multi-replica coordination, or high availability. Those require a complete durable coordination-store suite, not an application registry adapter.
 
@@ -55,13 +55,16 @@ This is still durable await, not a plain in-memory request/reply stream. If the 
 
 This handles crash recovery, fast providers, and broker redelivery safely. A completion that cannot be accepted by a live session is recorded, then released through durable continuation only when the parent execution is actually waiting on that unit. Duplicate completions resolve through the same interaction record instead of re-running the continuation.
 
+The live path does not write `dispatchComplete` or update item aggregate state merely to deliver a completed item. Those are fallback-only facts, rebuilt from the durable interaction rows when a live owner has been lost. The eligible portable shape is intentionally narrow: a streaming producer, an immediate scalar `await`, and a terminal scalar-only suffix. It does not promise transparent resurrection of an in-memory stream after process loss.
+
 For `csv-payments`, `Process Csv Payments Input` emits `PaymentRecord` rows incrementally, `Await Payment Provider` dispatches each row as an item interaction, the approved or unapproved status branch runs as completions are accepted by the live session or durable fallback, and `Finalize Payment Output` performs the terminal merge before Object Publish writes `PaymentOutput` objects.
 
 ```mermaid
 sequenceDiagram
     participant Input as "Input stream"
     participant Await as "AwaitStepSupport"
-    participant Unit as "Await unit store"
+    participant Interaction as "Await interaction store"
+    participant Unit as "Await unit / fallback state"
     participant Kafka as "Kafka/provider"
     participant Queue as "QueueAsyncCoordinator"
     participant Live as "Live await session"
@@ -69,10 +72,10 @@ sequenceDiagram
     participant Exec as "Execution store"
 
     Input->>Await: item 0
-    Await->>Unit: create interaction itemIndex=0
+    Await->>Interaction: create durable interaction itemIndex=0
     Await-->>Kafka: dispatch request 0
     Kafka-->>Queue: completion item 0
-    Queue->>Unit: record item 0 completed
+    Queue->>Interaction: complete durable interaction 0
     Queue->>Live: signal item 0
     Live-->>Status: emit when downstream requests
 
@@ -104,10 +107,9 @@ Set either value to `0` only when the application has its own upstream size cont
 
 ### Durable admission budget
 
-Durable provider admission is disabled by default. Enable it only for `QUEUE_ASYNC` deployments:
+Durable provider admission is enabled by default for endpoint-capable `ONE_TO_ONE` awaits in `QUEUE_ASYNC`. Use Dynamo for a multi-replica deployment:
 
 ```properties
-pipeline.await-admission.enabled=true
 pipeline.await-admission.store=dynamo
 pipeline.orchestrator.dynamo.await-admission-table=tpf_await_admission
 # Configure pipeline.orchestrator.dynamo.region and endpoint-override for the deployment.

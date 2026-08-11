@@ -65,6 +65,23 @@ class InMemoryAwaitInteractionStoreTest {
     }
 
     @Test
+    void markDispatchingPersistsRecoveryMetadata() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        var created = store.createOrGet(createCommand("idem-1", 10_000L, 70_000L)).await().indefinitely();
+
+        store.markDispatching(
+            "tenant",
+            created.record().interactionId(),
+            created.record().version(),
+            Map.of("admissionReservationId", "reservation-1"),
+            11_000L).await().indefinitely().orElseThrow();
+        var reloaded = store.get("tenant", created.record().interactionId()).await().indefinitely().orElseThrow();
+
+        assertEquals(AwaitInteractionStatus.DISPATCHING, reloaded.status());
+        assertEquals("reservation-1", reloaded.transportMetadata().get("admissionReservationId"));
+    }
+
+    @Test
     void dispatchedInteractionCannotBeClaimedAgain() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         var created = store.createOrGet(createCommand("idem-1", 10_000L, 70_000L)).await().indefinitely();

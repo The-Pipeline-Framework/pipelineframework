@@ -35,6 +35,7 @@ import lombok.Getter;
 import org.apache.commons.lang3.time.StopWatch;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.PipelineConfig;
+import org.pipelineframework.config.CardinalitySemantics;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.awaitable.AwaitCompletionResult;
 import org.pipelineframework.awaitable.AwaitContinuationMode;
@@ -51,6 +52,7 @@ import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionResultShape;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
+import org.pipelineframework.orchestrator.PipelineBundleStepDescriptor;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 import org.pipelineframework.orchestrator.JsonTransitionPayloadCodec;
@@ -399,7 +401,75 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
    * @return encoded worker result
    */
   public Uni<TransitionResultEnvelope> executePortableTransition(TransitionCommandEnvelope command) {
-    return executeTransition(command, TransitionExecutionPolicy.PORTABLE);
+    return executeTransition(command, portableExecutionPolicy(command));
+  }
+
+  /**
+   * Keeps a portable itemized await live only for the narrow generated shape that can complete its
+   * scalar suffix in this transition worker. Every missing, malformed, or ineligible contract
+   * remains on the durable handoff path.
+   */
+  private TransitionExecutionPolicy portableExecutionPolicy(TransitionCommandEnvelope command) {
+    try {
+      PipelineContractDescriptor contract = releaseIdentityResolver().contract();
+      return isPortableLiveItemizedAwait(command, contract)
+          ? TransitionExecutionPolicy.PORTABLE_LIVE_ITEMIZED
+          : TransitionExecutionPolicy.PORTABLE;
+    } catch (RuntimeException failure) {
+      LOG.debugf(failure, "Falling back to durable portable await execution because live eligibility could not be resolved");
+      return TransitionExecutionPolicy.PORTABLE;
+    }
+  }
+
+  private static boolean isPortableLiveItemizedAwait(
+      TransitionCommandEnvelope command,
+      PipelineContractDescriptor contract) {
+    if (command == null || contract == null || contract.steps() == null) {
+      return false;
+    }
+    List<PipelineBundleStepDescriptor> steps = contract.steps();
+    int producerIndex = command.currentStepIndex();
+    int stopBeforeStepIndex = command.stopBeforeStepIndex() < 0 ? steps.size() : command.stopBeforeStepIndex();
+    if (producerIndex < 0
+        || stopBeforeStepIndex != steps.size()
+        || producerIndex + 2 >= stopBeforeStepIndex) {
+      return false;
+    }
+
+    PipelineBundleStepDescriptor producer = steps.get(producerIndex);
+    PipelineBundleStepDescriptor await = steps.get(producerIndex + 1);
+    if (producer.index() != producerIndex
+        || await.index() != producerIndex + 1
+        || !hasCardinality(producer, CardinalitySemantics.ONE_TO_MANY)
+        || !"await".equalsIgnoreCase(await.kind())
+        || !hasCardinality(await, CardinalitySemantics.ONE_TO_ONE)
+        || !sameCanonicalType(producer.outputTypeId(), await.inputTypeId())) {
+      return false;
+    }
+
+    for (int index = producerIndex + 2; index < stopBeforeStepIndex; index++) {
+      PipelineBundleStepDescriptor suffix = steps.get(index);
+      if (suffix.index() != index
+          || !hasCardinality(suffix, CardinalitySemantics.ONE_TO_ONE)
+          || "await".equalsIgnoreCase(suffix.kind())) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static boolean sameCanonicalType(String left, String right) {
+    return left != null && !left.isBlank() && left.equals(right);
+  }
+
+  private static boolean hasCardinality(
+      PipelineBundleStepDescriptor descriptor,
+      CardinalitySemantics expected) {
+    try {
+      return expected == CardinalitySemantics.fromString(descriptor.cardinality());
+    } catch (IllegalArgumentException ignored) {
+      return false;
+    }
   }
 
   private Uni<TransitionResultEnvelope> executeTransition(
@@ -601,7 +671,12 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
         true,
         false,
         AwaitContinuationMode.DURABLE_HANDOFF,
-        TerminalOutputOwnership.COORDINATOR);
+        TerminalOutputOwnership.COORDINATOR),
+    PORTABLE_LIVE_ITEMIZED(
+        true,
+        false,
+        AwaitContinuationMode.LIVE_IF_SUPPORTED,
+        TerminalOutputOwnership.TRANSITION_WORKER);
 
     private final boolean encodeOutputs;
     private final boolean allowLocalFallbackIdentity;
