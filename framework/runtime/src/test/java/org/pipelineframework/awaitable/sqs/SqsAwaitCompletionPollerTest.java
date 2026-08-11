@@ -295,8 +295,8 @@ class SqsAwaitCompletionPollerTest {
         try {
             assertTrue(receivesStarted.await(1, TimeUnit.SECONDS));
         } finally {
-            releaseReceives.countDown();
             loopingPoller.shutdown();
+            releaseReceives.countDown();
         }
     }
 
@@ -339,9 +339,14 @@ class SqsAwaitCompletionPollerTest {
     void boundsReceivedMessagesWhilePreviousBatchAdmissionIsStillRunning() throws Exception {
         AtomicInteger receiveCalls = new AtomicInteger();
         CountDownLatch initialReceives = new CountDownLatch(SqsAwaitCompletionPoller.RECEIVE_LOOP_CONCURRENCY);
+        CountDownLatch unexpectedReceive = new CountDownLatch(1);
         when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenAnswer(ignored -> {
-            receiveCalls.incrementAndGet();
-            initialReceives.countDown();
+            int receiveCall = receiveCalls.incrementAndGet();
+            if (receiveCall <= SqsAwaitCompletionPoller.RECEIVE_LOOP_CONCURRENCY) {
+                initialReceives.countDown();
+            } else {
+                unexpectedReceive.countDown();
+            }
             return ReceiveMessageResponse.builder().messages(message("receipt", completionJson())).build();
         });
         when(executionService.completeAwaitInteraction(any(AwaitCompletionCommand.class))).thenReturn(
@@ -358,8 +363,7 @@ class SqsAwaitCompletionPollerTest {
             1));
         try {
             assertTrue(initialReceives.await(1, TimeUnit.SECONDS));
-            Thread.sleep(100L);
-            assertEquals(SqsAwaitCompletionPoller.RECEIVE_LOOP_CONCURRENCY, receiveCalls.get());
+            assertFalse(unexpectedReceive.await(100, TimeUnit.MILLISECONDS));
         } finally {
             poller.shutdown();
         }
