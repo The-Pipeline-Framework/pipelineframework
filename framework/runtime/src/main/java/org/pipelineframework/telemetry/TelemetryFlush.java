@@ -18,8 +18,6 @@ package org.pipelineframework.telemetry;
 
 import java.util.concurrent.TimeUnit;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
-
 /**
  * Best-effort flush for OpenTelemetry metrics/traces for short-lived CLI runs.
  */
@@ -29,11 +27,14 @@ public final class TelemetryFlush {
     }
 
     /**
-     * Force-flush OpenTelemetry meters and tracers if the SDK is present.
+     * Compatibility delegate. SDK lookup remains owned by the production telemetry runtime.
      */
     public static void flush() {
+        TelemetryRuntimes.global().flush();
+    }
+
+    static void flushSdk(Object openTelemetry) {
         try {
-            var openTelemetry = GlobalOpenTelemetry.get();
             Class<?> sdkClass = Class.forName("io.opentelemetry.sdk.OpenTelemetrySdk");
             if (!sdkClass.isInstance(openTelemetry)) {
                 return;

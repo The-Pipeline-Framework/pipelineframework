@@ -188,7 +188,7 @@ public class AwaitLiveCompletionRegistry {
                 if (!seenCompletions.add(completionKey)) {
                     return Uni.createFrom().voidItem();
                 }
-                pending.addLast(new Pending<>(completionKey, payload));
+                pending.addLast(new Pending<>(completionKey, payload, record));
             }
             scheduleDrain();
             return Uni.createFrom().voidItem();
@@ -343,6 +343,7 @@ public class AwaitLiveCompletionRegistry {
                 }
                 for (Pending<O> item : toEmit) {
                     try {
+                        AwaitCompletionMetrics.recordScalarContinuationStarted(item.interaction());
                         subscriber.onNext(item.item());
                         completeAcceptedWaiter(item.completionKey());
                     } catch (Throwable failure) {
@@ -503,7 +504,7 @@ public class AwaitLiveCompletionRegistry {
             }
         }
 
-        private record Pending<O>(String completionKey, O item) {
+        private record Pending<O>(String completionKey, O item, AwaitInteractionRecord interaction) {
         }
     }
 }

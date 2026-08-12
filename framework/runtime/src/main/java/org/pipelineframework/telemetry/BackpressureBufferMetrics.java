@@ -22,7 +22,6 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
@@ -105,7 +104,7 @@ public final class BackpressureBufferMetrics {
         if (!GAUGES_REGISTERED.compareAndSet(false, true)) {
             return;
         }
-        Meter meter = GlobalOpenTelemetry.getMeter("org.pipelineframework");
+        Meter meter = TelemetryRuntimes.global().meter("org.pipelineframework");
         meter.gaugeBuilder("tpf.step.buffer.queued")
             .setDescription("Queued items in the backpressure buffer per step")
             .setUnit("items")

@@ -17,7 +17,6 @@
 package org.pipelineframework.telemetry;
 
 import io.grpc.Status;
-import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
@@ -166,7 +165,7 @@ public final class RpcMetrics {
             if (meter != null) {
                 return;
             }
-            Meter localMeter = GlobalOpenTelemetry.getMeter("org.pipelineframework.rpc");
+            Meter localMeter = TelemetryRuntimes.global().meter("org.pipelineframework.rpc");
             serverRequests = localMeter.counterBuilder("rpc.server.requests").build();
             serverResponses = localMeter.counterBuilder("rpc.server.responses").build();
             serverDuration = localMeter.histogramBuilder("rpc.server.duration").setUnit("ms").build();

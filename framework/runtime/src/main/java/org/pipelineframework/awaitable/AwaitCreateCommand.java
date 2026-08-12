@@ -1,6 +1,7 @@
 package org.pipelineframework.awaitable;
 
 import java.time.Instant;
+import java.util.Map;
 
 /**
  * Command used to create or deduplicate an await interaction.
@@ -20,6 +21,7 @@ import java.time.Instant;
  * @param transportType await transport type
  * @param unitId durable await unit identifier
  * @param itemIndex zero-based item index for per-item await interactions
+ * @param transportMetadata durable transport and trace-continuity metadata
  * @param nowEpochMs command time in epoch milliseconds
  * @param deadlineEpochMs completion deadline in epoch milliseconds
  * @param ttlEpochS expiry time in epoch seconds
@@ -40,10 +42,37 @@ public record AwaitCreateCommand(
     String transportType,
     String unitId,
     Integer itemIndex,
+    Map<String, Object> transportMetadata,
     long nowEpochMs,
     long deadlineEpochMs,
     long ttlEpochS
 ) {
+    /** Compatibility constructor for callers that do not supply durable transport metadata. */
+    public AwaitCreateCommand(
+        String tenantId,
+        String executionId,
+        String stepId,
+        int stepIndex,
+        String outputType,
+        String transportOutputType,
+        String causationId,
+        String idempotencyKey,
+        String correlationId,
+        Object requestPayload,
+        String assignee,
+        String group,
+        String transportType,
+        String unitId,
+        Integer itemIndex,
+        long nowEpochMs,
+        long deadlineEpochMs,
+        long ttlEpochS
+    ) {
+        this(tenantId, executionId, stepId, stepIndex, outputType, transportOutputType, causationId,
+            idempotencyKey, correlationId, requestPayload, assignee, group, transportType, unitId, itemIndex,
+            Map.of(), nowEpochMs, deadlineEpochMs, ttlEpochS);
+    }
+
     public AwaitCreateCommand(
         String tenantId,
         String executionId,
@@ -79,6 +108,7 @@ public record AwaitCreateCommand(
             transportType,
             unitId,
             itemIndex,
+            Map.of(),
             nowEpochMs,
             deadlineEpochMs,
             ttlEpochS);
@@ -117,6 +147,7 @@ public record AwaitCreateCommand(
             transportType,
             causationId,
             null,
+            Map.of(),
             nowEpochMs,
             deadlineEpochMs,
             ttlEpochS);
@@ -156,6 +187,7 @@ public record AwaitCreateCommand(
         if (itemIndex != null && itemIndex < 0) {
             throw new IllegalArgumentException("itemIndex must be non-negative when set");
         }
+        transportMetadata = transportMetadata == null ? Map.of() : Map.copyOf(transportMetadata);
         if (nowEpochMs <= 0) {
             nowEpochMs = System.currentTimeMillis();
         }

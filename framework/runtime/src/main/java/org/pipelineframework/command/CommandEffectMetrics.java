@@ -2,7 +2,7 @@ package org.pipelineframework.command;
 
 import java.util.Locale;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
+import org.pipelineframework.telemetry.TelemetryRuntimes;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
@@ -89,21 +89,21 @@ public final class CommandEffectMetrics {
         }
         synchronized (CommandEffectMetrics.class) {
             if (transitionCounter == null) {
-                transitionCounter = GlobalOpenTelemetry.getMeter("org.pipelineframework")
+                transitionCounter = TelemetryRuntimes.global().meter("org.pipelineframework")
                     .counterBuilder(TRANSITION_TOTAL)
                     .setDescription("Total command effect lifecycle transitions recorded by TPF")
                     .setUnit("events")
                     .build();
             }
             if (duplicateCounter == null) {
-                duplicateCounter = GlobalOpenTelemetry.getMeter("org.pipelineframework")
+                duplicateCounter = TelemetryRuntimes.global().meter("org.pipelineframework")
                     .counterBuilder(DUPLICATE_TOTAL)
                     .setDescription("Total duplicate command ids resolved by TPF duplicate policy")
                     .setUnit("events")
                     .build();
             }
             if (durationHistogram == null) {
-                durationHistogram = GlobalOpenTelemetry.getMeter("org.pipelineframework")
+                durationHistogram = TelemetryRuntimes.global().meter("org.pipelineframework")
                     .histogramBuilder(DURATION)
                     .setDescription("Command effect duration from pending record creation to terminal effect state")
                     .setUnit("ms")

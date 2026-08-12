@@ -4,7 +4,7 @@ import java.util.Objects;
 
 import jakarta.enterprise.context.ApplicationScoped;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
+import org.pipelineframework.telemetry.TelemetryRuntimes;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
@@ -32,7 +32,7 @@ final class CircuitTelemetry implements CircuitBreakerListener {
     private final LongCounter transitions;
 
     CircuitTelemetry() {
-        this(GlobalOpenTelemetry.getMeter("org.pipelineframework.resilience"));
+        this(TelemetryRuntimes.global().meter("org.pipelineframework.resilience"));
     }
 
     CircuitTelemetry(Meter meter) {

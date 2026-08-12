@@ -19,7 +19,6 @@ package org.pipelineframework.telemetry;
 import java.util.concurrent.CancellationException;
 import jakarta.ws.rs.WebApplicationException;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
@@ -193,7 +192,7 @@ public final class HttpMetrics {
             if (meter != null) {
                 return;
             }
-            Meter localMeter = GlobalOpenTelemetry.getMeter("org.pipelineframework.http");
+            Meter localMeter = TelemetryRuntimes.global().meter("org.pipelineframework.http");
             serverRequests = localMeter.counterBuilder("rpc.server.requests").build();
             serverResponses = localMeter.counterBuilder("rpc.server.responses").build();
             serverDuration = localMeter.histogramBuilder("rpc.server.duration").setUnit("ms").build();

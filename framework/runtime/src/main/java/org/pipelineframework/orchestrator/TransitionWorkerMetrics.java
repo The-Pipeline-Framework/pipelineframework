@@ -3,12 +3,13 @@ package org.pipelineframework.orchestrator;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
+import org.pipelineframework.telemetry.TelemetryRuntimes;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
+import io.opentelemetry.api.trace.Span;
 
 /**
  * Lightweight queue-async transition worker metrics.
@@ -20,6 +21,7 @@ final class TransitionWorkerMetrics {
 
     private static volatile Meter meter;
     private static volatile LongCounter saturatedCounter;
+    private static volatile LongCounter dispatchedCounter;
     private static volatile LongCounter outcomeCounter;
     private static volatile DoubleHistogram durationHistogram;
 
@@ -39,6 +41,15 @@ final class TransitionWorkerMetrics {
     static void recordSaturated() {
         ensureInitialized();
         saturatedCounter.add(1);
+    }
+
+    static void recordDispatched() {
+        ensureInitialized();
+        dispatchedCounter.add(1);
+        Span span = TelemetryRuntimes.global().tracer("org.pipelineframework.orchestrator")
+            .spanBuilder("tpf.transition.dispatched")
+            .startSpan();
+        span.end();
     }
 
     static void recordOutcome(TransitionWorkerOutcome outcome) {
@@ -62,10 +73,14 @@ final class TransitionWorkerMetrics {
             if (meter != null) {
                 return;
             }
-            Meter localMeter = GlobalOpenTelemetry.getMeter("org.pipelineframework.orchestrator");
+            Meter localMeter = TelemetryRuntimes.global().meter("org.pipelineframework.orchestrator");
             saturatedCounter = localMeter.counterBuilder("tpf.orchestrator.transition.saturated")
                 .setDescription("Queue-async transition admission saturation count")
                 .setUnit("1")
+                .build();
+            dispatchedCounter = localMeter.counterBuilder("tpf.orchestrator.transition.dispatched.total")
+                .setDescription("Queue-async transitions dispatched to a worker")
+                .setUnit("transitions")
                 .build();
             outcomeCounter = localMeter.counterBuilder("tpf.orchestrator.transition.outcome")
                 .setDescription("Queue-async transition worker outcomes")

@@ -24,7 +24,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import io.grpc.Status;
-import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.trace.*;
 import io.opentelemetry.context.Context;
@@ -177,7 +176,7 @@ public final class GrpcClientTracing {
     }
 
     private static Tracer tracer() {
-        return GlobalOpenTelemetry.getTracer("org.pipelineframework.grpc.client");
+        return TelemetryRuntimes.global().tracer("org.pipelineframework.grpc.client");
     }
 
     private static void endSpan(Span span, Throwable failure) {

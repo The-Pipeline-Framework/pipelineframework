@@ -90,6 +90,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final Path REPLAY_ROOT_DIR = Paths.get(TEST_E2E_DIR, "replay");
     private static final Path REPLAY_CAPTURE_DIR = REPLAY_ROOT_DIR.resolve("csv-payments-runs");
     private static final Path REPLAY_FILE = REPLAY_ROOT_DIR.resolve("csv-payments-replay.json");
+    private static final Path GRAFANA_DASHBOARD = Path.of("src", "main", "resources", "META-INF", "grafana",
+            "grafana-dashboard-csv-payments.json");
+    private static final Path TEMPO_DASHBOARD = Path.of("src", "main", "resources", "META-INF", "grafana",
+            "grafana-dashboard-csv-payments-tempo.json");
     private static final String REPLAY_CAPTURE_CONTAINER_DIR = TEST_E2E_TARGET_DIR + "/replay/csv-payments-runs";
     private static final String LGTM_IMAGE = "docker.io/grafana/otel-lgtm:0.24.0";
     private static final DockerImageName KAFKA_IMAGE = DockerImageName.parse("apache/kafka-native:3.8.0");
@@ -243,7 +247,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
          * @throws IOException if creating directories, ensuring writability, or preparing development certificates fails
          */
     @BeforeAll
-    static void startServices() throws IOException {
+    static void startServices() throws Exception {
         assertFalse(
                 TELEMETRY_CAPTURE_ACTIVE && TEMPO_VERIFICATION_ACTIVE,
                 "Replay capture and Tempo verification modes are mutually exclusive.");
@@ -273,6 +277,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         if (TEMPO_VERIFICATION_ACTIVE) {
             Startables.deepStart(Stream.of(getPostgresContainer(), getKafkaContainer(), getLgtmStackContainer())).join();
+            provisionGrafanaDashboards();
         } else {
             Startables.deepStart(Stream.of(getPostgresContainer(), getKafkaContainer())).join();
         }
@@ -669,7 +674,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         }
         env.put("QUARKUS_OTEL_ENABLED", "true");
         env.put("QUARKUS_OTEL_SDK_DISABLED", "false");
-        env.put("QUARKUS_OTEL_METRICS_ENABLED", "false");
+        env.put("QUARKUS_OTEL_METRICS_ENABLED", "true");
         env.put("QUARKUS_OTEL_TRACES_ENABLED", "true");
         env.put("QUARKUS_OTEL_LOGS_ENABLED", "false");
         env.put("QUARKUS_OTEL_EXPORTER_OTLP_ENABLED", "true");
@@ -681,7 +686,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         env.put("PIPELINE_TELEMETRY_ENABLED", "true");
         env.put("PIPELINE_TELEMETRY_TRACING_ENABLED", "true");
         env.put("PIPELINE_TELEMETRY_TRACING_PER_ITEM", "true");
-        env.put("PIPELINE_TELEMETRY_METRICS_ENABLED", "false");
+        env.put("PIPELINE_TELEMETRY_METRICS_ENABLED", "true");
     }
 
     private static String lgtmCollectorContainerEndpoint() {
@@ -1109,6 +1114,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         executeHappyPathPipelineAndVerify();
         assertTempoTracesAvailable();
+        assertPrometheusMetricsAvailable();
 
         LOG.info("Tempo/LGTM verification test completed successfully!");
     }
@@ -2176,9 +2182,17 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private void assertTempoTracesAvailable() throws Exception {
-        JsonNode searchResponse = waitForTempoTraceSearch(List.of(
-                "{ name = \"tpf.pipeline.run\" }",
-                "{ name = \"tpf.step\" }"));
+        List<String> requiredSpans = List.of(
+                "tpf.pipeline.run",
+                "tpf.transition.dispatched",
+                "tpf.await.interaction.created",
+                "tpf.await.provider.dispatch",
+                "tpf.await.provider.admitted",
+                "tpf.await.completion.admitted",
+                "tpf.await.live.handoff",
+                "tpf.await.scalar.continuation",
+                "tpf.terminal.publication.completed");
+        JsonNode searchResponse = waitForTempoTraceSearch(List.of("{ name = \"tpf.pipeline.run\" }"));
         Set<String> traceIds = extractTraceIds(searchResponse);
         assertFalse(
                 traceIds.isEmpty(),
@@ -2194,15 +2208,45 @@ abstract class AbstractCsvPaymentsEndToEnd {
             }
             if (containsTpfTraceSemantics(traceDocument)) {
                 LOG.infof("Verified Tempo trace %s contains TPF spans.", traceId);
-                return;
+                break;
             }
         }
+        assertTrue(traceIds.stream().anyMatch(traceId -> {
+            try {
+                return containsTpfTraceSemantics(fetchTempoTrace(traceId));
+            } catch (Exception ignored) {
+                return false;
+            }
+        }), "Tempo returned traces, but none contained TPF span names. Trace IDs: " + traceIds);
 
-        fail(
-                "Tempo returned traces, but none contained TPF span names. Trace IDs: "
-                        + traceIds
-                        + ", search response: "
-                        + searchResponse);
+        for (String spanName : requiredSpans) {
+            JsonNode stageSearch = waitForTempoTraceSearch(List.of("{ name = \"" + spanName + "\" }"));
+            assertFalse(extractTraceIds(stageSearch).isEmpty(), "Missing required CSV proof span: " + spanName);
+        }
+
+        JsonNode completionSearch = waitForTempoTraceSearch(List.of("{ name = \"tpf.await.completion.admitted\" }"));
+        JsonNode completionTrace = fetchTempoTrace(extractTraceIds(completionSearch).iterator().next());
+        assertTrue(hasAwaitOriginLink(completionTrace, true),
+                "Await completion must preserve an origin parent or durable SpanLink.");
+        assertFalse(hasAwaitOriginLink(completionTrace, false),
+                "Await completion emitted an accidental rootless/unlinked span.");
+    }
+
+    private void assertPrometheusMetricsAvailable() throws Exception {
+        List<String> requiredMetrics = List.of(
+                "tpf_pipeline_run_count_total",
+                "tpf_orchestrator_transition_dispatched_transitions_total",
+                "tpf_await_interaction_created_interactions_total",
+                "tpf_await_interaction_dispatched_interactions_total",
+                "tpf_await_completion_admitted_completions_total",
+                "tpf_await_live_handoff_handoffs_total",
+                "tpf_await_scalar_continuation_started_continuations_total",
+                "tpf_object_publish_published_objects_total");
+        for (String metric : requiredMetrics) {
+            JsonNode metricResult = waitForPrometheusMetric(metric);
+            assertTrue(hasPositivePrometheusSample(metricResult),
+                    "CSV telemetry proof metric did not contain a positive sample: " + metric);
+        }
     }
 
     private JsonNode waitForTempoTraceSearch(List<String> candidateQueries) throws Exception {
@@ -2236,6 +2280,54 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         + ". Service names visible in Tempo: "
                         + serviceNames);
         return OBJECT_MAPPER.getNodeFactory().nullNode();
+    }
+
+    private JsonNode waitForPrometheusMetric(String metric) throws Exception {
+        long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(TEMPO_SEARCH_TIMEOUT_SECONDS);
+        JsonNode lastResponse = null;
+        while (System.currentTimeMillis() < deadline) {
+            lastResponse = queryPrometheus(metric);
+            if (hasPositivePrometheusSample(lastResponse)) {
+                return lastResponse;
+            }
+            Thread.sleep(TEMPO_SEARCH_POLL_MILLIS);
+        }
+        fail("Timed out waiting for emitted CSV proof metric " + metric + ". Last response: " + lastResponse);
+        return OBJECT_MAPPER.getNodeFactory().nullNode();
+    }
+
+    private JsonNode queryPrometheus(String promQl) throws Exception {
+        String encoded = URLEncoder.encode(promQl, StandardCharsets.UTF_8);
+        URI uri = URI.create(grafanaBaseUrl()
+                + "/api/datasources/uid/prometheus/resources/api/v1/query?query=" + encoded);
+        HttpRequest request = HttpRequest.newBuilder(uri)
+                .timeout(TEMPO_HTTP_REQUEST_TIMEOUT)
+                .header("Authorization", "Basic " + Base64.getEncoder()
+                        .encodeToString("admin:admin".getBytes(StandardCharsets.UTF_8)))
+                .GET()
+                .build();
+        HttpResponse<String> response =
+                HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertEquals(200, response.statusCode(),
+                "Expected HTTP 200 from Prometheus datasource for " + promQl + " but got "
+                        + response.statusCode() + ". Body: " + response.body());
+        return OBJECT_MAPPER.readTree(response.body());
+    }
+
+    private static boolean hasPositivePrometheusSample(JsonNode response) {
+        for (JsonNode sample : response.path("data").path("result")) {
+            JsonNode value = sample.path("value");
+            if (value.isArray() && value.size() > 1) {
+                try {
+                    if (Double.parseDouble(value.get(1).asText()) > 0D) {
+                        return true;
+                    }
+                } catch (NumberFormatException ignored) {
+                    // Keep looking for a valid positive Prometheus sample.
+                }
+            }
+        }
+        return false;
     }
 
     private boolean containsTpfTraceSemantics(JsonNode traceDocument) {
@@ -2296,6 +2388,54 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 response.statusCode(),
                 "Expected HTTP 200 from " + uri + " but got " + response.statusCode() + ". Body: " + response.body());
         return OBJECT_MAPPER.readTree(response.body());
+    }
+
+    private static void provisionGrafanaDashboards() throws IOException, InterruptedException {
+        provisionGrafanaDashboard(GRAFANA_DASHBOARD);
+        provisionGrafanaDashboard(TEMPO_DASHBOARD);
+    }
+
+    private static void provisionGrafanaDashboard(Path dashboardPath) throws IOException, InterruptedException {
+        JsonNode dashboard = OBJECT_MAPPER.readTree(Files.readString(dashboardPath));
+        com.fasterxml.jackson.databind.node.ObjectNode requestPayload = OBJECT_MAPPER.createObjectNode();
+        requestPayload.set("dashboard", dashboard);
+        requestPayload.put("overwrite", true);
+        String requestBody = requestPayload.toString();
+        HttpRequest request = HttpRequest.newBuilder(URI.create(grafanaBaseUrl() + "/api/dashboards/db"))
+                .timeout(TEMPO_HTTP_REQUEST_TIMEOUT)
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Basic " + Base64.getEncoder()
+                        .encodeToString("admin:admin".getBytes(StandardCharsets.UTF_8)))
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
+                .build();
+        HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertTrue(response.statusCode() == 200 || response.statusCode() == 201,
+                "Grafana failed to provision " + dashboardPath + ": " + response.statusCode() + " " + response.body());
+    }
+
+    private static boolean hasAwaitOriginLink(JsonNode node, boolean expected) {
+        if (node == null) {
+            return false;
+        }
+        if (node.isObject()) {
+            if ("tpf.await.origin.linked".equals(node.path("key").asText())
+                    && node.path("value").path("boolValue").asBoolean() == expected) {
+                return true;
+            }
+            Iterator<JsonNode> values = node.elements();
+            while (values.hasNext()) {
+                if (hasAwaitOriginLink(values.next(), expected)) {
+                    return true;
+                }
+            }
+        } else if (node.isArray()) {
+            for (JsonNode value : node) {
+                if (hasAwaitOriginLink(value, expected)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private Set<String> extractTraceIds(JsonNode searchResponse) {

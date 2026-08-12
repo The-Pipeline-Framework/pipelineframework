@@ -16,7 +16,7 @@
 
 package org.pipelineframework.reject;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
+import org.pipelineframework.telemetry.TelemetryRuntimes;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
@@ -31,7 +31,7 @@ public final class ItemRejectMetrics {
     private static final AttributeKey<String> REJECT_SCOPE = AttributeKey.stringKey("tpf.reject.scope");
     private static final AttributeKey<String> ERROR_CLASS = AttributeKey.stringKey("tpf.error.class");
 
-    private static final LongCounter REJECT_COUNTER = GlobalOpenTelemetry.getMeter("org.pipelineframework")
+    private static final LongCounter REJECT_COUNTER = TelemetryRuntimes.global().meter("org.pipelineframework")
         .counterBuilder("tpf.step.reject.total")
         .setDescription("Total rejected step items routed to item reject sinks")
         .setUnit("items")

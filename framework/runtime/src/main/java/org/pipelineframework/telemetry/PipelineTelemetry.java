@@ -28,6 +28,7 @@ import java.util.Optional;
 import org.pipelineframework.branching.BranchVariantIdentity;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -46,7 +47,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.enterprise.inject.Instance;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
@@ -142,6 +142,7 @@ public class PipelineTelemetry {
     private final ExecutionReplayTracker replayTracker;
     private final PipelineStepConfig stepConfig;
     private final RetryAmplificationGuard retryAmplificationGuard;
+    private final TelemetryPolicy telemetryPolicy;
     private final ConcurrentMap<String, RetryAmplificationMonitor> activeRetryAmplificationMonitors;
     private final ConcurrentMap<String, RunContext> activeRunContexts;
     private static final Set<PipelineTelemetry> ACTIVE_INSTANCES = ConcurrentHashMap.newKeySet();
@@ -155,11 +156,11 @@ public class PipelineTelemetry {
      */
     @Inject
     public PipelineTelemetry(PipelineStepConfig stepConfig, Instance<PipelineReplayExporter> replayExporters) {
-        this(stepConfig, resolveReplayExporter(replayExporters), PipelineReplayTopologyLoader.load().orElse(null));
+        this(stepConfig, resolveReplayExporter(replayExporters), PipelineReplayTopologyLoader.load().orElse(null), TelemetryRuntimes.global());
     }
 
     public PipelineTelemetry(PipelineStepConfig stepConfig) {
-        this(stepConfig, new NoopPipelineReplayExporter(), PipelineReplayTopologyLoader.load().orElse(null));
+        this(stepConfig, new NoopPipelineReplayExporter(), PipelineReplayTopologyLoader.load().orElse(null), TelemetryRuntimes.global());
     }
 
     private static PipelineReplayExporter resolveReplayExporter(Instance<PipelineReplayExporter> replayExporters) {
@@ -173,24 +174,36 @@ public class PipelineTelemetry {
         PipelineStepConfig stepConfig,
         PipelineReplayExporter replayExporter,
         PipelineReplayTopology replayTopology) {
+        this(stepConfig, replayExporter, replayTopology, TelemetryRuntimes.global());
+    }
+
+    /**
+     * Compatibility façade constructor with an injectable SDK runtime for deterministic adapter tests.
+     */
+    public PipelineTelemetry(
+        PipelineStepConfig stepConfig,
+        PipelineReplayExporter replayExporter,
+        PipelineReplayTopology replayTopology,
+        TelemetryRuntime telemetryRuntime) {
         PipelineStepConfig.TelemetryConfig telemetry = stepConfig.telemetry();
         PipelineStepConfig.RetryAmplificationGuardConfig guardConfig = null;
         PipelineStepConfig.KillSwitchConfig killSwitchConfig = stepConfig.killSwitch();
         if (killSwitchConfig != null) {
             guardConfig = killSwitchConfig.retryAmplification();
         }
-        this.enabled = telemetry != null && Boolean.TRUE.equals(telemetry.enabled());
+        this.telemetryPolicy = TelemetryPolicy.from(stepConfig, replayTopology != null);
+        this.enabled = telemetryPolicy.frameworkEnabled();
         this.stepConfig = stepConfig;
-        this.tracingEnabled = enabled && Boolean.TRUE.equals(telemetry.tracing().enabled());
-        this.perItemSpans = tracingEnabled && Boolean.TRUE.equals(telemetry.tracing().perItem());
-        this.metricsEnabled = enabled && Boolean.TRUE.equals(telemetry.metrics().enabled());
+        this.tracingEnabled = telemetryPolicy.tracingEnabled();
+        this.perItemSpans = telemetryPolicy.perItemSpansEnabled();
+        this.metricsEnabled = telemetryPolicy.metricsEnabled();
         this.replayTopology = replayTopology;
         PipelineStepConfig.ReplayConfig replayConfig = telemetry == null ? null : telemetry.replay();
         boolean replayRequested = replayConfig != null && Boolean.TRUE.equals(replayConfig.enabled());
         boolean fileExporterConfigured = replayConfig != null
             && "file".equalsIgnoreCase(replayConfig.exporter())
             && replayConfig.filePath().filter(path -> !path.isBlank()).isPresent();
-        this.replayEnabled = replayRequested && fileExporterConfigured && tracingEnabled && perItemSpans && replayTopology != null;
+        this.replayEnabled = telemetryPolicy.replayEnabled();
         if (replayRequested && !this.replayEnabled) {
             LOG.warn(
                 "pipeline.telemetry.replay.enabled=true requires pipeline.telemetry.replay.exporter=file, "
@@ -217,11 +230,11 @@ public class PipelineTelemetry {
             && sustainSamples > 0
             && !window.isZero()
             && !window.isNegative();
-        this.retryAmplificationEnabled = guardEnabled;
-        this.retryAmplificationWindow = window;
-        this.inflightSlopeThreshold = inflightThreshold;
-        this.retryAmplificationSustainSamples = sustainSamples;
-        this.retryAmplificationMode = mode;
+        this.retryAmplificationEnabled = telemetryPolicy.retryAmplificationEnabled();
+        this.retryAmplificationWindow = telemetryPolicy.retryAmplificationWindow();
+        this.inflightSlopeThreshold = telemetryPolicy.retryAmplificationInflightSlopeThreshold();
+        this.retryAmplificationSustainSamples = telemetryPolicy.retryAmplificationSustainSamples();
+        this.retryAmplificationMode = telemetryPolicy.retryAmplificationMode();
         this.retryAmplificationSampleInterval = resolveSampleInterval(this.retryAmplificationWindow);
         this.retryAmplificationScheduler = retryAmplificationEnabled
             ? Executors.newSingleThreadScheduledExecutor(runnable -> {
@@ -230,8 +243,8 @@ public class PipelineTelemetry {
                 return thread;
             })
             : null;
-        this.tracer = GlobalOpenTelemetry.getTracer("org.pipelineframework");
-        this.meter = GlobalOpenTelemetry.getMeter("org.pipelineframework");
+        this.tracer = telemetryRuntime.tracer("org.pipelineframework");
+        this.meter = telemetryRuntime.meter("org.pipelineframework");
         this.inflightByStep = new ConcurrentHashMap<>();
         this.retryByStep = new ConcurrentHashMap<>();
         this.maxConcurrency = new AtomicLong();
@@ -406,6 +419,24 @@ public class PipelineTelemetry {
      */
     public Object instrumentInput(Object input, RunContext runContext) {
         return input;
+    }
+
+    /**
+     * Returns the current run span when reactive execution has moved off the originating thread.
+     * Durable boundary code uses it only to capture correlation, never as a metric attribute.
+     */
+    public SpanContext activeRunSpanContext() {
+        SpanContext current = Span.current().getSpanContext();
+        if (current != null && current.isValid()) {
+            return current;
+        }
+        return activeRunContexts.values().stream()
+            .map(RunContext::span)
+            .filter(Objects::nonNull)
+            .map(Span::getSpanContext)
+            .filter(SpanContext::isValid)
+            .findFirst()
+            .orElse(SpanContext.getInvalid());
     }
 
     /**
@@ -621,21 +652,16 @@ public class PipelineTelemetry {
         if (runContext == null || !runContext.enabled()) {
             return uni;
         }
-        Span span = replayScope != null ? replayScope.span() : startStepSpan(stepClass, runContext, perItemOperation);
-        long startNanos = System.nanoTime();
-        onItemStart(stepClass, runContext);
-        return uni.onItemOrFailure().invoke((item, failure) -> {
-            recordStepOutcome(stepClass, startNanos, failure);
-            onItemEnd(stepClass, runContext);
-            if (replayScope != null) {
-                if (failure == null) {
-                    replayTracker.completeSuccess(replayScope);
-                } else {
-                    replayTracker.completeFailure(replayScope, failure);
-                }
-                return;
-            }
-            endSpan(span, failure);
+        return Uni.createFrom().deferred(() -> {
+            Span span = replayScope != null ? replayScope.span() : startStepSpan(stepClass, runContext, perItemOperation);
+            long startNanos = System.nanoTime();
+            AtomicBoolean terminal = new AtomicBoolean();
+            onItemStart(stepClass, runContext);
+            return uni.onItemOrFailure().invoke((item, failure) -> finishStepUni(
+                terminal, stepClass, runContext, replayScope, span, startNanos, failure))
+                .onCancellation().invoke(() -> finishStepUni(
+                    terminal, stepClass, runContext, replayScope, span, startNanos,
+                    new java.util.concurrent.CancellationException("Step Uni cancelled")));
         });
     }
 
@@ -666,24 +692,54 @@ public class PipelineTelemetry {
         if (runContext == null || !runContext.enabled()) {
             return multi;
         }
-        Span span = replayScope != null ? replayScope.span() : startStepSpan(stepClass, runContext, perItemOperation);
-        long startNanos = System.nanoTime();
-        AtomicReference<Throwable> failureRef = new AtomicReference<>();
-        onItemStart(stepClass, runContext);
-        return multi.onFailure().invoke(failureRef::set)
-            .onTermination().invoke(() -> {
-                recordStepOutcome(stepClass, startNanos, failureRef.get());
-                onItemEnd(stepClass, runContext);
-                if (replayScope != null) {
-                    if (failureRef.get() == null) {
-                        replayTracker.completeSuccess(replayScope);
-                    } else {
-                        replayTracker.completeFailure(replayScope, failureRef.get());
-                    }
-                    return;
-                }
-                endSpan(span, failureRef.get());
-            });
+        return Multi.createFrom().deferred(() -> {
+            Span span = replayScope != null ? replayScope.span() : startStepSpan(stepClass, runContext, perItemOperation);
+            long startNanos = System.nanoTime();
+            AtomicReference<Throwable> failureRef = new AtomicReference<>();
+            AtomicBoolean terminal = new AtomicBoolean();
+            onItemStart(stepClass, runContext);
+            return multi.onFailure().invoke(failureRef::set)
+                .onTermination().invoke(() -> finishStepMulti(
+                    terminal, stepClass, runContext, replayScope, span, startNanos, failureRef.get()))
+                .onCancellation().invoke(() -> finishStepMulti(
+                    terminal, stepClass, runContext, replayScope, span, startNanos,
+                    new java.util.concurrent.CancellationException("Step Multi cancelled")));
+        });
+    }
+
+    private void finishStepUni(
+        AtomicBoolean terminal,
+        Class<?> stepClass,
+        RunContext runContext,
+        ExecutionReplayTracker.StepExecutionScope replayScope,
+        Span span,
+        long startNanos,
+        Throwable failure) {
+        if (!terminal.compareAndSet(false, true)) {
+            return;
+        }
+        recordStepOutcome(stepClass, startNanos, failure);
+        onItemEnd(stepClass, runContext);
+        if (replayScope != null) {
+            if (failure == null) {
+                replayTracker.completeSuccess(replayScope);
+            } else {
+                replayTracker.completeFailure(replayScope, failure);
+            }
+            return;
+        }
+        endSpan(span, failure);
+    }
+
+    private void finishStepMulti(
+        AtomicBoolean terminal,
+        Class<?> stepClass,
+        RunContext runContext,
+        ExecutionReplayTracker.StepExecutionScope replayScope,
+        Span span,
+        long startNanos,
+        Throwable failure) {
+        finishStepUni(terminal, stepClass, runContext, replayScope, span, startNanos, failure);
     }
 
     public ExecutionReplayTracker.StepExecutionScope beginReplayStep(

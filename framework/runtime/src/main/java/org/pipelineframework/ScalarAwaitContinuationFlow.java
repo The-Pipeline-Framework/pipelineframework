@@ -50,7 +50,8 @@ class ScalarAwaitContinuationFlow {
         interaction.correlationId(),
         interaction.transportType(),
         interaction.itemIndex(),
-        nowEpochMs);
+        nowEpochMs)
+        .invoke(() -> AwaitCompletionMetrics.recordScalarContinuationStarted(interaction));
   }
 
   private Uni<Void> release(

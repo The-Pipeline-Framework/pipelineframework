@@ -6,12 +6,12 @@ import java.util.Map;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.trace.Span;
 import org.pipelineframework.objectpublish.ObjectPublishTelemetry;
 
 /**
@@ -38,7 +38,7 @@ public class ObjectPublishReplayTelemetry implements ObjectPublishTelemetry {
     PipelineTelemetry telemetry;
 
     public ObjectPublishReplayTelemetry() {
-        var meter = GlobalOpenTelemetry.getMeter("org.pipelineframework");
+        var meter = TelemetryRuntimes.global().meter("org.pipelineframework");
         groupedCounter = meter.counterBuilder("tpf.object_publish.grouped.total")
             .setDescription("Total Object Publish grouping operations")
             .setUnit("events")
@@ -91,6 +91,15 @@ public class ObjectPublishReplayTelemetry implements ObjectPublishTelemetry {
         publishedCounter.add(1, attributes);
         publishedBytesCounter.add(Math.max(0L, bytes), attributes);
         emit("object_publish_published", targetName, provider, objectKey, Long.toString(bytes), Map.of());
+        Span span = TelemetryRuntimes.global().tracer("org.pipelineframework")
+            .spanBuilder("tpf.terminal.publication.completed")
+            .startSpan();
+        try {
+            span.setAttribute("tpf.object_publish.target", normalize(targetName));
+            span.setAttribute("tpf.object_publish.provider", normalize(provider));
+        } finally {
+            span.end();
+        }
     }
 
     @Override
@@ -110,6 +119,18 @@ public class ObjectPublishReplayTelemetry implements ObjectPublishTelemetry {
             }
         }
         emit("object_publish_failed", targetName, provider, objectKey, null, attributes);
+        Span span = TelemetryRuntimes.global().tracer("org.pipelineframework")
+            .spanBuilder("tpf.terminal.publication.failed")
+            .startSpan();
+        try {
+            span.setAttribute("tpf.object_publish.target", normalize(targetName));
+            span.setAttribute("tpf.object_publish.provider", normalize(provider));
+            if (failure != null) {
+                span.recordException(failure);
+            }
+        } finally {
+            span.end();
+        }
     }
 
     @Override

@@ -1,6 +1,6 @@
 package org.pipelineframework.orchestrator;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
+import org.pipelineframework.telemetry.TelemetryRuntimes;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
@@ -56,7 +56,7 @@ public final class DeadLetterMetrics {
             if (dlqPublishCounter != null) {
                 return;
             }
-            dlqPublishCounter = GlobalOpenTelemetry.getMeter("org.pipelineframework")
+            dlqPublishCounter = TelemetryRuntimes.global().meter("org.pipelineframework")
                 .counterBuilder("tpf.execution.dlq.publish.total")
                 .setDescription("Total terminal execution failures published to dead-letter destinations")
                 .setUnit("events")

@@ -34,6 +34,7 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitCompletionEnvelope;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitDispatchEnvelope;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.telemetry.TelemetryRuntimes;
 import org.pipelineframework.csv.domain.PaymentRecord;
 import org.pipelineframework.csv.domain.PaymentStatus;
 import org.pipelineframework.csv.domain.PipelineDomainProtoAdapters;
@@ -64,6 +65,10 @@ public class PaymentProviderKafkaAwaitMock {
   @Incoming(REQUEST_CHANNEL)
   public CompletionStage<Void> consume(Message<String> message) {
     Objects.requireNonNull(message, "message must not be null");
+    TelemetryRuntimes.global().tracer("org.pipelineframework.csv-payments")
+        .spanBuilder("tpf.await.provider.admitted")
+        .startSpan()
+        .end();
     return Uni.createFrom().item(() -> parseDispatch(message.getPayload()))
         .runSubscriptionOn(Infrastructure.getDefaultExecutor())
         .onItem().transform(this::handle)
@@ -93,6 +98,10 @@ public class PaymentProviderKafkaAwaitMock {
   }
 
   private Uni<Void> publish(KafkaAwaitCompletionEnvelope completion) {
+    TelemetryRuntimes.global().tracer("org.pipelineframework.csv-payments")
+        .spanBuilder("tpf.await.provider.completion.dispatched")
+        .startSpan()
+        .end();
     OutgoingKafkaRecordMetadata<String> metadata = OutgoingKafkaRecordMetadata.<String>builder()
         .withKey(completion.correlationId())
         .build();

@@ -1,11 +1,22 @@
 package org.pipelineframework.awaitable;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongUpDownCounter;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
+import io.opentelemetry.api.trace.TraceFlags;
+import io.opentelemetry.api.trace.TraceState;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
+import io.smallrye.mutiny.Uni;
+import org.pipelineframework.telemetry.TelemetryRuntimes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 
 /**
@@ -20,12 +31,15 @@ public final class AwaitCompletionMetrics {
     private static final AttributeKey<String> STATUS = AttributeKey.stringKey("tpf.await.status");
 
     private static volatile LongCounter droppedCompletionCounter;
+    private static volatile LongCounter interactionCreatedCounter;
     private static volatile LongCounter interactionDispatchedCounter;
     private static volatile LongCounter unitDispatchCompleteCounter;
     private static volatile LongCounter completionAdmittedCounter;
     private static volatile LongCounter itemCompletedCounter;
     private static volatile LongCounter earlyCompletionHeldCounter;
     private static volatile LongCounter resumeReleasedCounter;
+    private static volatile LongCounter liveHandoffCounter;
+    private static volatile LongCounter scalarContinuationCounter;
     private static volatile LongCounter unitTerminalCounter;
     private static volatile DoubleHistogram completionLatencyHistogram;
     private static volatile DoubleHistogram unitDurationHistogram;
@@ -49,6 +63,12 @@ public final class AwaitCompletionMetrics {
         interactionDispatchedCounter.add(1, interactionAttributes(record));
     }
 
+    public static void recordInteractionCreated(AwaitInteractionRecord record) {
+        ensureInitialized();
+        interactionCreatedCounter.add(1, interactionAttributes(record));
+        emitSpan("tpf.await.interaction.created", record, false);
+    }
+
     public static void recordUnitDispatchComplete(AwaitUnitRecord unit) {
         ensureInitialized();
         unitDispatchCompleteCounter.add(1, unitAttributes(unit));
@@ -61,6 +81,56 @@ public final class AwaitCompletionMetrics {
         if (record != null && record.createdAtEpochMs() > 0 && record.updatedAtEpochMs() >= record.createdAtEpochMs()) {
             completionLatencyHistogram.record(record.updatedAtEpochMs() - record.createdAtEpochMs(), attributes);
         }
+        emitSpan("tpf.await.completion.admitted", record, false);
+    }
+
+    public static void recordLiveHandoff(AwaitInteractionRecord record) {
+        ensureInitialized();
+        liveHandoffCounter.add(1, interactionAttributes(record));
+        emitSpan("tpf.await.live.handoff", record, false);
+    }
+
+    public static void recordScalarContinuationStarted(AwaitInteractionRecord record) {
+        ensureInitialized();
+        scalarContinuationCounter.add(1, interactionAttributes(record));
+        emitSpan("tpf.await.scalar.continuation", record, false);
+    }
+
+    /**
+     * Captures the originating span in durable interaction metadata. This is deliberately not a metric attribute.
+     */
+    public static Map<String, Object> captureTraceMetadata() {
+        return captureTraceMetadata(Span.current().getSpanContext());
+    }
+
+    public static Map<String, Object> captureTraceMetadata(SpanContext context) {
+        if (context == null || !context.isValid()) {
+            return Map.of();
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("tpf.trace.id", context.getTraceId());
+        metadata.put("tpf.trace.span_id", context.getSpanId());
+        metadata.put("tpf.trace.flags", context.getTraceFlags().asHex());
+        return Map.copyOf(metadata);
+    }
+
+    /**
+     * Decorates the actual reactive dispatch subscription so Kafka/transport instrumentation sees the originating span.
+     */
+    public static <T> Uni<T> inProviderDispatchSpan(
+        AwaitInteractionRecord record,
+        Supplier<Uni<T>> operation
+    ) {
+        return Uni.createFrom().deferred(() -> {
+            Span span = startSpan("tpf.await.provider.dispatch", record, true);
+            AtomicBoolean terminal = new AtomicBoolean();
+            try (Scope ignored = span.makeCurrent()) {
+                return operation.get()
+                    .onItemOrFailure().invoke((item, failure) -> endOnce(terminal, span, failure))
+                    .onCancellation().invoke(() -> endOnce(
+                        terminal, span, new java.util.concurrent.CancellationException("Await provider dispatch cancelled")));
+            }
+        });
     }
 
     public static void recordItemCompleted(AwaitInteractionRecord record, AwaitUnitRecord unit) {
@@ -138,7 +208,11 @@ public final class AwaitCompletionMetrics {
             if (droppedCompletionCounter != null) {
                 return;
             }
-            var meter = GlobalOpenTelemetry.getMeter("org.pipelineframework");
+            var meter = TelemetryRuntimes.global().meter("org.pipelineframework");
+            interactionCreatedCounter = meter.counterBuilder("tpf.await.interaction.created.total")
+                .setDescription("Total durable await interactions created")
+                .setUnit("interactions")
+                .build();
             interactionDispatchedCounter = meter.counterBuilder("tpf.await.interaction.dispatched.total")
                 .setDescription("Total await interactions dispatched")
                 .setUnit("interactions")
@@ -162,6 +236,14 @@ public final class AwaitCompletionMetrics {
             resumeReleasedCounter = meter.counterBuilder("tpf.await.resume.released.total")
                 .setDescription("Total await resumes released")
                 .setUnit("resumes")
+                .build();
+            liveHandoffCounter = meter.counterBuilder("tpf.await.live.handoff.total")
+                .setDescription("Total await completions handed to a live continuation")
+                .setUnit("handoffs")
+                .build();
+            scalarContinuationCounter = meter.counterBuilder("tpf.await.scalar.continuation.started.total")
+                .setDescription("Total scalar await continuations started")
+                .setUnit("continuations")
                 .build();
             unitTerminalCounter = meter.counterBuilder("tpf.await.unit.terminal.total")
                 .setDescription("Total await units moved to a terminal state")
@@ -240,12 +322,15 @@ public final class AwaitCompletionMetrics {
 
     public static synchronized void resetForTest() {
         droppedCompletionCounter = null;
+        interactionCreatedCounter = null;
         interactionDispatchedCounter = null;
         unitDispatchCompleteCounter = null;
         completionAdmittedCounter = null;
         itemCompletedCounter = null;
         earlyCompletionHeldCounter = null;
         resumeReleasedCounter = null;
+        liveHandoffCounter = null;
+        scalarContinuationCounter = null;
         unitTerminalCounter = null;
         completionLatencyHistogram = null;
         unitDurationHistogram = null;
@@ -259,6 +344,76 @@ public final class AwaitCompletionMetrics {
             return "unknown";
         }
         return value;
+    }
+
+    private static void emitSpan(String name, AwaitInteractionRecord record, boolean continueOrigin) {
+        Span span = startSpan(name, record, continueOrigin);
+        try {
+            addSpanAttributes(span, record);
+        } finally {
+            span.end();
+        }
+    }
+
+    private static Span startSpan(String name, AwaitInteractionRecord record, boolean continueOrigin) {
+        var builder = TelemetryRuntimes.global().tracer("org.pipelineframework").spanBuilder(name);
+        SpanContext origin = origin(record);
+        SpanContext current = Span.current().getSpanContext();
+        boolean originLinked = false;
+        if (continueOrigin && origin != null && origin.isValid()) {
+            builder.setParent(Context.root().with(Span.wrap(origin)));
+            originLinked = true;
+        } else if (origin != null && origin.isValid()
+            && (current == null || !current.isValid() || !sameSpan(current, origin))) {
+            builder.addLink(origin);
+            originLinked = true;
+        } else if (origin != null && origin.isValid() && current != null && current.isValid()) {
+            originLinked = sameSpan(current, origin);
+        }
+        Span span = builder.startSpan();
+        addSpanAttributes(span, record);
+        span.setAttribute("tpf.await.origin.present", origin != null && origin.isValid());
+        span.setAttribute("tpf.await.origin.linked", originLinked);
+        return span;
+    }
+
+    private static void endOnce(AtomicBoolean terminal, Span span, Throwable failure) {
+        if (!terminal.compareAndSet(false, true)) {
+            return;
+        }
+        if (failure != null) {
+            span.recordException(failure);
+        }
+        span.end();
+    }
+
+    private static SpanContext origin(AwaitInteractionRecord record) {
+        if (record == null || record.transportMetadata() == null) {
+            return SpanContext.getInvalid();
+        }
+        Object traceId = record.transportMetadata().get("tpf.trace.id");
+        Object spanId = record.transportMetadata().get("tpf.trace.span_id");
+        Object flags = record.transportMetadata().get("tpf.trace.flags");
+        if (!(traceId instanceof String trace) || !(spanId instanceof String span)) {
+            return SpanContext.getInvalid();
+        }
+        return SpanContext.createFromRemoteParent(trace, span,
+            TraceFlags.fromHex(flags instanceof String value ? value : "01", 0), TraceState.getDefault());
+    }
+
+    private static boolean sameSpan(SpanContext first, SpanContext second) {
+        return first.getTraceId().equals(second.getTraceId()) && first.getSpanId().equals(second.getSpanId());
+    }
+
+    private static void addSpanAttributes(Span span, AwaitInteractionRecord record) {
+        span.setAllAttributes(interactionAttributes(record));
+        if (record == null) {
+            return;
+        }
+        span.setAttribute("tpf.await.execution_id", record.executionId());
+        span.setAttribute("tpf.await.interaction_id", record.interactionId());
+        span.setAttribute("tpf.await.correlation_id", record.correlationId());
+        span.setAttribute("tpf.await.unit_id", record.unitId());
     }
 
     public interface AwaitReplayView {

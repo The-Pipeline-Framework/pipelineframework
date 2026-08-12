@@ -5,7 +5,6 @@ import java.util.Map;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
@@ -32,7 +31,7 @@ public class ObjectIngestReplayTelemetry implements ObjectIngestTelemetry {
     PipelineTelemetry telemetry;
 
     public ObjectIngestReplayTelemetry() {
-        var meter = GlobalOpenTelemetry.getMeter("org.pipelineframework");
+        var meter = TelemetryRuntimes.global().meter("org.pipelineframework");
         listedCounter = meter.counterBuilder("tpf.object_ingest.list.total")
             .setDescription("Total Object Ingest listing attempts")
             .setUnit("events")

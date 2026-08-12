@@ -539,7 +539,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             command.assignee(),
             command.group(),
             command.transportType(),
-            Map.of(),
+            command.transportMetadata(),
             command.deadlineEpochMs(),
             command.nowEpochMs(),
             command.nowEpochMs(),

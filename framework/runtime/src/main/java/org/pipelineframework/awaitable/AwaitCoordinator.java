@@ -173,10 +173,12 @@ public class AwaitCoordinator {
             .onItem().transform(optional -> optional.orElseThrow(() ->
                 new IllegalStateException("Await interaction dispatch transition lost OCC race: "
                     + interaction.interactionId())))
-            .onItem().transformToUni(claimedInteraction -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
+            .onItem().transformToUni(claimedInteraction -> AwaitCompletionMetrics.inProviderDispatchSpan(
+                claimedInteraction,
+                () -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
                     descriptor,
                     claimedInteraction,
-                    transportRequestPayload(descriptor, claimedInteraction)))
+                    transportRequestPayload(descriptor, claimedInteraction))))
                 .onFailure().call(failure -> interactionStore().fail(
                     claimedInteraction.tenantId(),
                     claimedInteraction.interactionId(),
@@ -220,10 +222,12 @@ public class AwaitCoordinator {
                     new IllegalStateException("Await interaction live dispatch transition lost OCC race: "
                         + interaction.interactionId())))
             : Uni.createFrom().item(interaction);
-        return intended.onItem().transformToUni(dispatching -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
+        return intended.onItem().transformToUni(dispatching -> AwaitCompletionMetrics.inProviderDispatchSpan(
+            dispatching,
+            () -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
                 descriptor,
                 dispatching,
-                transportRequestPayload(descriptor, dispatching)))
+                transportRequestPayload(descriptor, dispatching))))
             .onFailure().call(failure -> interactionStore().fail(
                 dispatching.tenantId(),
                 dispatching.interactionId(),
@@ -239,7 +243,12 @@ public class AwaitCoordinator {
     }
 
     private Map<String, Object> dispatchMetadata(AwaitInteractionRecord interaction, Map<String, Object> metadata) {
-        return awaitAdmissionCoordinator == null ? metadata : awaitAdmissionCoordinator.dispatchMetadata(interaction, metadata);
+        Map<String, Object> merged = new java.util.LinkedHashMap<>(interaction.transportMetadata());
+        if (metadata != null) {
+            merged.putAll(metadata);
+        }
+        return awaitAdmissionCoordinator == null ? Map.copyOf(merged)
+            : awaitAdmissionCoordinator.dispatchMetadata(interaction, Map.copyOf(merged));
     }
 
     /**
@@ -663,10 +672,16 @@ public class AwaitCoordinator {
                 descriptor.transportType(),
                 unitId,
                 itemIndex,
+                AwaitCompletionMetrics.captureTraceMetadata(telemetry.activeRunSpanContext()),
                 now,
                 deadline,
                 ttl))
                 .onItem().transformToUni(created -> bindOrReleaseAdmission(created, lease))
+                .onItem().invoke(created -> {
+                    if (!created.duplicate()) {
+                        AwaitCompletionMetrics.recordInteractionCreated(created.record());
+                    }
+                })
                 .onFailure().call(ignored -> releaseAdmissionAfterDefiniteCreateFailure(lease, tenantId, correlationId)));
     }
 

@@ -16,7 +16,6 @@
 
 package org.pipelineframework.telemetry;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
@@ -88,7 +87,7 @@ public final class ApmCompatibilityMetrics {
             if (meter != null) {
                 return;
             }
-            Meter localMeter = GlobalOpenTelemetry.getMeter("org.pipelineframework.apm");
+            Meter localMeter = TelemetryRuntimes.global().meter("org.pipelineframework.apm");
             transactionCount = localMeter.counterBuilder("apm.service.transaction.count").build();
             errorCount = localMeter.counterBuilder("apm.service.error.count").build();
             transactionDuration = localMeter.histogramBuilder("apm.service.transaction.duration").setUnit("ms").build();

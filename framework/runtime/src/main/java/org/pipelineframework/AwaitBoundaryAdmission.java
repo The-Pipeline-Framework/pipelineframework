@@ -94,7 +94,10 @@ class AwaitBoundaryAdmission {
         .onItem().transformToUni(liveAccepted -> {
           Uni<AwaitCompletionResult> handoff = liveAccepted
               ? Uni.createFrom().item(validated)
-                  .invoke(result -> AwaitCompletionMetrics.recordCompletionAdmitted(result.record()))
+                  .invoke(result -> {
+                    AwaitCompletionMetrics.recordCompletionAdmitted(result.record());
+                    AwaitCompletionMetrics.recordLiveHandoff(result.record());
+                  })
                   .chain(result -> segmentBoundaryLedger.get()
                   .recordBoundaryCompletionAdmitted(validated.record(), normalized.nowEpochMs())
                   .replaceWith(result))
@@ -123,7 +126,8 @@ class AwaitBoundaryAdmission {
             .chain(() -> signalLiveAwaitCompletion(validated.record()))
             .onItem().transformToUni(liveAccepted -> {
               Uni<AwaitCompletionResult> handoff = liveAccepted
-                  ? Uni.createFrom().item(validated)
+              ? Uni.createFrom().item(validated)
+                  .invoke(result -> AwaitCompletionMetrics.recordLiveHandoff(result.record()))
                   : continuations.afterRecordedCompletion(
                       validated,
                       unit,
