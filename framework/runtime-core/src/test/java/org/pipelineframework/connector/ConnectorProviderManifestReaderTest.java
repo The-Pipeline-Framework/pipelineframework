@@ -71,6 +71,15 @@ class ConnectorProviderManifestReaderTest {
         assertTrue(nullValue.getMessage().contains("null values are not supported"));
     }
 
+    @Test
+    void rejectsFrameworkReservedProviderIDsInExternalStaticMetadata() {
+        IllegalArgumentException rejected = assertThrows(IllegalArgumentException.class, () -> ConnectorProviderManifestReader.read(input("""
+            {"schemaVersion":1,"providers":[{"id":"tpf.external","version":{"major":1,"minor":0},"operations":[]}]}
+            """)));
+
+        assertEquals("connector provider ID is reserved for framework use: tpf.external", rejected.getMessage());
+    }
+
     private static ByteArrayInputStream input(String value) {
         return new ByteArrayInputStream(value.getBytes(StandardCharsets.UTF_8));
     }

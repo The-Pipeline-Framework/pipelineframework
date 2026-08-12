@@ -75,6 +75,30 @@ class ConnectorRegistryTest {
     }
 
     @Test
+    void reservesTheTpfNamespaceUnlessAnExplicitFrameworkAllowlistAdmitsTheProvider() {
+        ConnectorProvider<Void> frameworkProvider = provider(
+            "tpf.legacy.command", new ArrayList<>(), operation("legacy.command", ConnectorOperationKind.COMMAND));
+
+        IllegalArgumentException rejected = assertThrows(
+            IllegalArgumentException.class, () -> new ConnectorRegistry(List.of(frameworkProvider)));
+        assertEquals("connector provider ID is reserved for framework use: tpf.legacy.command", rejected.getMessage());
+
+        ConnectorRegistry allowed = ConnectorRegistry.withFrameworkProviders(
+            List.of(frameworkProvider), List.of(ConnectorProviderId.of("tpf.legacy.command")));
+        assertEquals(1, allowed.providers().size());
+    }
+
+    @Test
+    void describesTheCompleteReservedTpfNamespaceInFrameworkAllowlistDiagnostics() {
+        IllegalArgumentException rejected = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorRegistry.withFrameworkProviders(List.of(), List.of(ConnectorProviderId.of("application.provider"))));
+
+        assertEquals(
+            "framework provider allowlist ID must use the reserved tpf namespace ('tpf' or 'tpf.*'): application.provider",
+            rejected.getMessage());
+    }
+
+    @Test
     void continuesStoppingAfterFailureAndRetriesOnlyProvidersThatDidNotStop() {
         List<String> lifecycle = new ArrayList<>();
         AtomicBoolean failZuluStop = new AtomicBoolean(true);
