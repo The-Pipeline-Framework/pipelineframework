@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
@@ -269,6 +270,34 @@ class CommandStepSupportTest {
 
     assertEquals("Multiple CommandEffectStore instances configured; command steps support a single effect store",
         error.getMessage());
+  }
+
+  @Test
+  void rejectsAnUnregisteredCommandBeforeReadingEffectState() {
+    AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
+    CommandEffectStore effectStore = mock(CommandEffectStore.class);
+    CommandStepSupport missingConnectorSupport = new CommandStepSupport(
+        List.of(),
+        List.of(effectStore),
+        config(OrchestratorMode.QUEUE_ASYNC));
+    CommandDescriptor missingConnectorDescriptor = new CommandDescriptor(
+        "MissingCommandConnectorService",
+        "missing-command",
+        "Input",
+        "Output",
+        StaticCommandIdGenerator.class.getName(),
+        CommandDuplicatePolicy.RETURN_RECORDED,
+        Map.of());
+
+    IllegalStateException error = assertThrows(IllegalStateException.class,
+        () -> missingConnectorSupport.<CommandInput, CommandOutput>execute(
+                missingConnectorDescriptor,
+                new StaticCommandIdGenerator(),
+                new CommandInput("doc-1"))
+            .await().atMost(Duration.ofSeconds(5)));
+
+    assertEquals("No CommandConnector found for command 'missing-command'", error.getMessage());
+    verifyNoInteractions(effectStore);
   }
 
   @Test

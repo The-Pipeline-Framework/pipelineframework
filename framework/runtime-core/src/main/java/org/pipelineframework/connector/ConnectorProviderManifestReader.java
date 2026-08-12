@@ -40,6 +40,10 @@ public final class ConnectorProviderManifestReader {
         Optional<ConnectorConfigSchemaDescriptor> schema = optionalSchema(value, "configurationSchema");
         ConnectorProviderDescriptor provider = new ConnectorProviderDescriptor(
             ConnectorProviderId.of(string(value, "id")), version(object(value.get("version"), "provider version")), schema);
+        if (provider.id().isFrameworkReserved()) {
+            throw new IllegalArgumentException(
+                "connector provider ID is reserved for framework use: " + provider.id().value());
+        }
         List<ConnectorOperationDescriptor> operations = array(value, "operations").stream()
             .map(entry -> operation(object(entry, "operation descriptor")))
             .toList();

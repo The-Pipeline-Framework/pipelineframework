@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
@@ -23,7 +24,34 @@ public final class ConnectorRegistry {
     private CompletionStage<Void> lifecycle = ConnectorCompletionStages.completed();
 
     public ConnectorRegistry(Collection<? extends ConnectorProvider<?>> discoveredProviders) {
+        this(discoveredProviders, Set.of());
+    }
+
+    /**
+     * Constructs a registry that explicitly admits the supplied framework-reserved provider IDs.
+     * This is intended for framework host adapters; application and external providers should use
+     * {@link #ConnectorRegistry(Collection)} instead.
+     */
+    public static ConnectorRegistry withFrameworkProviders(
+        Collection<? extends ConnectorProvider<?>> discoveredProviders,
+        Collection<ConnectorProviderId> frameworkProviderIds
+    ) {
+        return new ConnectorRegistry(discoveredProviders, Set.copyOf(
+            Objects.requireNonNull(frameworkProviderIds, "framework provider IDs must not be null")));
+    }
+
+    private ConnectorRegistry(
+        Collection<? extends ConnectorProvider<?>> discoveredProviders,
+        Set<ConnectorProviderId> frameworkProviderIds
+    ) {
         Objects.requireNonNull(discoveredProviders, "providers must not be null");
+        for (ConnectorProviderId frameworkProviderId : frameworkProviderIds) {
+            if (!Objects.requireNonNull(frameworkProviderId, "framework provider ID must not be null").isFrameworkReserved()) {
+                throw new IllegalArgumentException(
+                    "framework provider allowlist ID must use the reserved tpf namespace ('tpf' or 'tpf.*'): "
+                        + frameworkProviderId.value());
+            }
+        }
         List<ConnectorProvider<?>> orderedProviders = new ArrayList<>();
         for (ConnectorProvider<?> provider : discoveredProviders) {
             orderedProviders.add(Objects.requireNonNull(provider, "provider must not be null"));
@@ -37,6 +65,7 @@ public final class ConnectorRegistry {
         for (ConnectorProvider<?> provider : providerOrder) {
             ConnectorProviderDescriptor providerDescriptor = Objects.requireNonNull(
                 provider.descriptor(), "provider descriptor must not be null");
+            validateReservedProviderId(providerDescriptor.id(), frameworkProviderIds);
             validateProviderSchema(provider, providerDescriptor);
             if (providersById.putIfAbsent(providerDescriptor.id(), provider) != null) {
                 throw new IllegalArgumentException("duplicate connector provider ID: " + providerDescriptor.id().value());
@@ -177,6 +206,16 @@ public final class ConnectorRegistry {
 
     private static boolean isExecutionKindSupported(ConnectorOperationKind kind) {
         return ConnectorOperationKind.COMMAND.equals(kind) || ConnectorOperationKind.QUERY.equals(kind);
+    }
+
+    private static void validateReservedProviderId(
+        ConnectorProviderId providerId,
+        Set<ConnectorProviderId> frameworkProviderIds
+    ) {
+        if (providerId.isFrameworkReserved() && !frameworkProviderIds.contains(providerId)) {
+            throw new IllegalArgumentException(
+                "connector provider ID is reserved for framework use: " + providerId.value());
+        }
     }
 
     List<ConnectorProvider<?>> providerOrder() {

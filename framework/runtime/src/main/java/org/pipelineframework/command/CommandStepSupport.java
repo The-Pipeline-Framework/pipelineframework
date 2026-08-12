@@ -10,6 +10,7 @@ import jakarta.inject.Inject;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.connector.ConnectorRegistry;
 import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.step.NonRetryableException;
@@ -20,16 +21,16 @@ import org.pipelineframework.step.NonRetryableException;
 @ApplicationScoped
 public class CommandStepSupport {
     @Inject
-    Instance<CommandConnector<?, ?>> connectors;
+    Instance<CommandEffectStore> stores;
 
     @Inject
-    Instance<CommandEffectStore> stores;
+    ConnectorRegistry connectorRegistry;
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
 
-    private Collection<CommandConnector<?, ?>> fixedConnectors;
     private Collection<CommandEffectStore> fixedStores;
+    private ConnectorRegistry fixedConnectorRegistry;
 
     public CommandStepSupport() {
     }
@@ -39,7 +40,8 @@ public class CommandStepSupport {
         Collection<CommandEffectStore> stores,
         PipelineOrchestratorConfig orchestratorConfig
     ) {
-        this.fixedConnectors = connectors == null ? List.of() : connectors;
+        this.fixedConnectorRegistry = LegacyCommandConnectorProvider.createRegistry(
+            List.of(), connectors == null ? List.of() : connectors);
         this.fixedStores = stores == null ? List.of() : stores;
         this.orchestratorConfig = orchestratorConfig;
     }
@@ -115,17 +117,22 @@ public class CommandStepSupport {
             input,
             context,
             descriptor.config());
+        LegacyCommandConnectorProvider.LegacyCommandOperation operation;
+        try {
+            operation = requireLegacyOperation(request.descriptor().command());
+        } catch (IllegalStateException failure) {
+            return Uni.createFrom().failure(failure);
+        }
         CommandEffectStore store = selectStore();
-        CommandConnector<I, O> connector = selectConnector(descriptor.command());
         return store.find(context.tenantId(), request.commandId())
-            .onItem().transformToUni(existing -> handleExistingOrExecute(existing, store, connector, request));
+            .onItem().transformToUni(existing -> handleExistingOrExecute(existing, store, request, operation));
     }
 
     private <I, O> Uni<O> handleExistingOrExecute(
         Optional<CommandEffectRecord> existing,
         CommandEffectStore store,
-        CommandConnector<I, O> connector,
-        CommandRequest<I> request
+        CommandRequest<I> request,
+        LegacyCommandConnectorProvider.LegacyCommandOperation operation
     ) {
         if (existing.isPresent()) {
             CommandEffectRecord record = existing.get();
@@ -160,7 +167,7 @@ public class CommandStepSupport {
             .invoke(ignored -> CommandEffectMetrics.recordTransition(
                 request.descriptor(),
                 CommandEffectStatus.DISPATCHING))
-            .onItem().transformToUni(ignored -> connector.execute(request))
+            .onItem().<O>transformToUni(ignored -> dispatchLegacyConnector(operation, request))
             .onItem().transformToUni(output -> store.markSucceeded(
                     request.executionContext().tenantId(),
                     request.commandId(),
@@ -236,23 +243,19 @@ public class CommandStepSupport {
             context.terminalOutputOwnership());
     }
 
-    @SuppressWarnings("unchecked")
-    private <I, O> CommandConnector<I, O> selectConnector(String command) {
-        if (fixedConnectors != null) {
-            for (CommandConnector<?, ?> connector : fixedConnectors) {
-                if (connector != null && command.equals(connector.command())) {
-                    return (CommandConnector<I, O>) connector;
-                }
-            }
+    private LegacyCommandConnectorProvider.LegacyCommandOperation requireLegacyOperation(String command) {
+        ConnectorRegistry registry = fixedConnectorRegistry != null ? fixedConnectorRegistry : connectorRegistry;
+        if (registry == null) {
+            throw new IllegalStateException("connector registry is not available for command execution");
         }
-        if (connectors != null) {
-            for (CommandConnector<?, ?> connector : connectors) {
-                if (connector != null && command.equals(connector.command())) {
-                    return (CommandConnector<I, O>) connector;
-                }
-            }
-        }
-        throw new IllegalStateException("No CommandConnector found for command '" + command + "'");
+        return LegacyCommandConnectorProvider.requireOperation(registry, command);
+    }
+
+    private <I, O> Uni<O> dispatchLegacyConnector(
+        LegacyCommandConnectorProvider.LegacyCommandOperation operation,
+        CommandRequest<I> request
+    ) {
+        return Uni.createFrom().<O>completionStage(operation.dispatchOutput(request));
     }
 
     /**

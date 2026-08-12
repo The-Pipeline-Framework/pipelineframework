@@ -97,6 +97,7 @@ jobs:
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.xml \
             -pl orchestrator-svc \
+            -am \
             -Dcsv.runtime.layout=monolith \
             -Dcsv.e2e.pipeline.wait.seconds=120 \
             -Dit.test=CsvPaymentsEndToEndIT \

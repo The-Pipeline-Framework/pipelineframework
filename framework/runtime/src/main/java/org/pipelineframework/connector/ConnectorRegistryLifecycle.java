@@ -8,6 +8,8 @@ import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;
 import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.runtime.StartupEvent;
+import org.pipelineframework.command.CommandConnector;
+import org.pipelineframework.command.LegacyCommandConnectorProvider;
 
 /**
  * Quarkus/CDI lifecycle adapter. Provider implementations still use only the host-neutral core SPI.
@@ -18,12 +20,15 @@ public class ConnectorRegistryLifecycle {
     Instance<ConnectorProvider<?>> providerInstances;
 
     @Inject
+    Instance<CommandConnector<?, ?>> legacyCommandConnectors;
+
+    @Inject
     ConnectorRuntimeContext runtimeContext;
 
     private ConnectorRegistry registry;
 
     void onStart(@Observes StartupEvent event) {
-        registry = createRegistry(providerInstances.stream().toList());
+        registry = createRegistry(providerInstances.stream().toList(), legacyCommandConnectors.stream().toList());
         registry.start(runtimeContext).toCompletableFuture().join();
     }
 
@@ -44,5 +49,12 @@ public class ConnectorRegistryLifecycle {
 
     public static ConnectorRegistry createRegistry(Collection<? extends ConnectorProvider<?>> providers) {
         return new ConnectorRegistry(providers);
+    }
+
+    public static ConnectorRegistry createRegistry(
+        Collection<? extends ConnectorProvider<?>> providers,
+        Collection<? extends CommandConnector<?, ?>> legacyConnectors
+    ) {
+        return LegacyCommandConnectorProvider.createRegistry(providers, legacyConnectors);
     }
 }
