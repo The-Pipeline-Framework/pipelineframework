@@ -37,6 +37,7 @@ public final class ConnectorRegistry {
         for (ConnectorProvider<?> provider : providerOrder) {
             ConnectorProviderDescriptor providerDescriptor = Objects.requireNonNull(
                 provider.descriptor(), "provider descriptor must not be null");
+            validateProviderSchema(provider, providerDescriptor);
             if (providersById.putIfAbsent(providerDescriptor.id(), provider) != null) {
                 throw new IllegalArgumentException("duplicate connector provider ID: " + providerDescriptor.id().value());
             }
@@ -48,6 +49,7 @@ public final class ConnectorRegistry {
                 ConnectorOperationDescriptor operationDescriptor = Objects.requireNonNull(
                     checkedOperation.descriptor(), "operation descriptor must not be null for provider " + providerDescriptor.id().value());
                 validateOperationFamily(checkedOperation, operationDescriptor, providerDescriptor);
+                validateOperationSchema(checkedOperation, operationDescriptor, providerDescriptor);
                 ConnectorOperationIdentity identity = ConnectorOperationIdentity.of(providerDescriptor, operationDescriptor);
                 if (operationsByIdentity.putIfAbsent(identity, checkedOperation) != null) {
                     throw new IllegalArgumentException("duplicate connector operation identity: " + identity);
@@ -60,6 +62,27 @@ public final class ConnectorRegistry {
 
     public static ConnectorRegistry discover(ClassLoader classLoader) {
         return new ConnectorRegistry(ConnectorProviderDiscovery.discover(classLoader));
+    }
+
+    public BoundConnectorRegistry bind(ConnectorProviderConfigurations configurations) {
+        Objects.requireNonNull(configurations, "provider configurations must not be null");
+        Map<ConnectorProviderId, Object> bound = new LinkedHashMap<>();
+        for (ConnectorProvider<?> provider : providerOrder) {
+            ConnectorProviderId id = provider.descriptor().id();
+            ConnectorConfigurationDocument document = configurations.values().getOrDefault(id, ConnectorConfigurationDocument.empty());
+            provider.configurationSchema().ifPresent(schema -> bound.put(id, bindProvider(schema, document, id)));
+            if (provider.configurationSchema().isEmpty() && !document.values().isEmpty()) {
+                throw new ConnectorConfigurationException("connector provider " + id.value() + " does not declare a configuration schema");
+            }
+        }
+        configurations.values().keySet().stream()
+            .filter(id -> !providers.containsKey(id))
+            .sorted()
+            .findFirst()
+            .ifPresent(id -> {
+                throw new ConnectorConfigurationException("configuration supplied for unknown connector provider: " + id.value());
+            });
+        return new BoundConnectorRegistry(this, bound);
     }
 
     public Map<ConnectorProviderId, ConnectorProvider<?>> providers() {
@@ -144,6 +167,18 @@ public final class ConnectorRegistry {
         return ConnectorOperationKind.COMMAND.equals(kind) || ConnectorOperationKind.QUERY.equals(kind);
     }
 
+    List<ConnectorProvider<?>> providerOrder() {
+        return providerOrder;
+    }
+
+    private static <PC> PC bindProvider(
+        ConnectorConfigSchema<PC> schema,
+        ConnectorConfigurationDocument document,
+        ConnectorProviderId id
+    ) {
+        return ConnectorConfigurationBinder.bind(schema, document, "connector provider " + id.value());
+    }
+
     private static void validateOperationFamily(
         ConnectorOperation operation,
         ConnectorOperationDescriptor descriptor,
@@ -164,6 +199,42 @@ public final class ConnectorRegistry {
                 "agent operation " + descriptor.id() + " for provider " + provider.id().value() + " must use kind "
                     + ConnectorOperationKind.AGENT.value());
         }
+    }
+
+    private static void validateProviderSchema(ConnectorProvider<?> provider, ConnectorProviderDescriptor descriptor) {
+        provider.configurationSchema().ifPresent(schema -> {
+            if (!descriptor.configurationSchema().equals(java.util.Optional.of(schema.descriptor()))) {
+                throw new IllegalArgumentException(
+                    "connector provider " + descriptor.id().value() + " configuration schema does not match its descriptor");
+            }
+        });
+    }
+
+    private static void validateOperationSchema(
+        ConnectorOperation operation,
+        ConnectorOperationDescriptor descriptor,
+        ConnectorProviderDescriptor provider
+    ) {
+        if (operation instanceof CommandOperation<?, ?, ?> command) {
+            validateOperationSchema(command.configurationSchema(), descriptor, provider);
+        }
+        if (operation instanceof QueryOperation<?, ?, ?> query) {
+            validateOperationSchema(query.configurationSchema(), descriptor, provider);
+        }
+    }
+
+    private static void validateOperationSchema(
+        java.util.Optional<? extends ConnectorConfigSchema<?>> schema,
+        ConnectorOperationDescriptor descriptor,
+        ConnectorProviderDescriptor provider
+    ) {
+        schema.ifPresent(value -> {
+            if (!descriptor.configurationSchema().equals(java.util.Optional.of(value.descriptor()))) {
+                throw new IllegalArgumentException(
+                    "connector operation " + descriptor.id() + " for provider " + provider.id().value()
+                        + " configuration schema does not match its descriptor");
+            }
+        });
     }
 
     private static List<ConnectorProvider<?>> reverse(List<ConnectorProvider<?>> providers) {

@@ -63,8 +63,28 @@ public final class ConnectorProviderManifestReader {
             return Optional.empty();
         }
         Map<String, Object> schema = object(value.get(key), key);
-        requireOnly(schema, "id", "version");
-        return Optional.of(new ConnectorConfigSchemaDescriptor(string(schema, "id"), integer(schema, "version")));
+        requireOnly(schema, "id", "version", "fields");
+        List<ConnectorConfigFieldDescriptor> fields = schema.containsKey("fields")
+            ? array(schema, "fields").stream().map(entry -> field(object(entry, "configuration field"))).toList()
+            : List.of();
+        return Optional.of(new ConnectorConfigSchemaDescriptor(string(schema, "id"), integer(schema, "version"), fields));
+    }
+
+    private static ConnectorConfigFieldDescriptor field(Map<String, Object> value) {
+        requireOnly(value, "name", "type", "required", "enumValues");
+        List<String> enumValues = value.containsKey("enumValues")
+            ? array(value, "enumValues").stream().map(entry -> {
+                if (entry instanceof String string) {
+                    return string;
+                }
+                throw malformed("enumValues", "string array");
+            }).toList()
+            : List.of();
+        return new ConnectorConfigFieldDescriptor(
+            string(value, "name"),
+            ConnectorConfigValueType.valueOf(string(value, "type")),
+            bool(value, "required"),
+            enumValues);
     }
 
     private static void requireOnly(Map<String, Object> value, String... knownFields) {
@@ -96,6 +116,14 @@ public final class ConnectorProviderManifestReader {
             return integer;
         }
         throw malformed(key, "integer");
+    }
+
+    private static boolean bool(Map<String, Object> value, String key) {
+        Object result = required(value, key);
+        if (result instanceof Boolean bool) {
+            return bool;
+        }
+        throw malformed(key, "boolean");
     }
 
     private static List<Object> array(Map<String, Object> value, String key) {
@@ -151,6 +179,7 @@ public final class ConnectorProviderManifestReader {
                 case '{' -> object();
                 case '[' -> array();
                 case '"' -> string();
+                case 't', 'f' -> bool();
                 default -> number();
             };
         }
@@ -241,6 +270,18 @@ public final class ConnectorProviderManifestReader {
             } catch (NumberFormatException exception) {
                 throw error("integer is out of range");
             }
+        }
+
+        private Boolean bool() {
+            if (source.startsWith("true", index)) {
+                index += 4;
+                return Boolean.TRUE;
+            }
+            if (source.startsWith("false", index)) {
+                index += 5;
+                return Boolean.FALSE;
+            }
+            throw error("expected boolean");
         }
 
         private void whitespace() {

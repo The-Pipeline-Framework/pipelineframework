@@ -1,6 +1,7 @@
 package org.pipelineframework.connector;
 
 import java.util.Collection;
+import java.util.Optional;
 import java.util.concurrent.CompletionStage;
 
 /**
@@ -11,7 +12,15 @@ public interface ConnectorProvider<PC> {
 
     Collection<? extends ConnectorOperation> operations();
 
+    default Optional<ConnectorConfigSchema<PC>> configurationSchema() {
+        return Optional.empty();
+    }
+
     CompletionStage<Void> start(ConnectorRuntimeContext context);
+
+    default CompletionStage<Void> start(ConnectorRuntimeContext context, PC configuration) {
+        return start(context);
+    }
 
     CompletionStage<Void> stop(ConnectorRuntimeContext context);
 }
