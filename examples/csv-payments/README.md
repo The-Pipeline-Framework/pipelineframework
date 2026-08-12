@@ -90,7 +90,7 @@ To generate replay JSON for the supported TPF replay viewer:
 ```bash
 cd <repo-root>
 ./examples/csv-payments/build-modular-telemetry-images.sh
-./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc \
+./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
   -Dcsv.e2e.telemetry.enabled=true \
   -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
   -Dsurefire.failIfNoSpecifiedTests=false \

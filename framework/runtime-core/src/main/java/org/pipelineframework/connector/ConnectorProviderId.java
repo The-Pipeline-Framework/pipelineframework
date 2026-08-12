@@ -17,6 +17,13 @@ public record ConnectorProviderId(String value) implements Comparable<ConnectorP
         return new ConnectorProviderId(value);
     }
 
+    /**
+     * Whether this ID belongs to the namespace reserved for framework-provided adapters.
+     */
+    public boolean isFrameworkReserved() {
+        return value.equals("tpf") || value.startsWith("tpf.");
+    }
+
     static String require(String value, String label) {
         Objects.requireNonNull(value, label + " must not be null");
         if (!PATTERN.matcher(value).matches()) {
