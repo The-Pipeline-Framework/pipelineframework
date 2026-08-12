@@ -180,6 +180,7 @@ public final class ConnectorProviderManifestReader {
                 case '[' -> array();
                 case '"' -> string();
                 case 't', 'f' -> bool();
+                case 'n' -> unsupportedLiteral();
                 default -> number();
             };
         }
@@ -250,8 +251,32 @@ public final class ConnectorProviderManifestReader {
                 case 'n' -> '\n';
                 case 'r' -> '\r';
                 case 't' -> '\t';
+                case 'u' -> unicodeEscape();
                 default -> throw error("unsupported string escape");
             };
+        }
+
+        private char unicodeEscape() {
+            if (index + 4 > source.length()) {
+                throw error("malformed unicode escape");
+            }
+            int value = 0;
+            for (int offset = 0; offset < 4; offset++) {
+                int digit = Character.digit(source.charAt(index++), 16);
+                if (digit < 0) {
+                    throw error("malformed unicode escape");
+                }
+                value = (value << 4) | digit;
+            }
+            return (char) value;
+        }
+
+        private Object unsupportedLiteral() {
+            if (source.startsWith("null", index)) {
+                index += 4;
+                throw error("null values are not supported in connector provider manifests");
+            }
+            throw error("expected an integer");
         }
 
         private Integer number() {

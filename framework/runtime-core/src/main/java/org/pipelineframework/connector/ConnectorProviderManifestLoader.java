@@ -30,13 +30,15 @@ public final class ConnectorProviderManifestLoader {
             for (URL resource : ordered) {
                 try {
                     manifests.add(ConnectorProviderManifestReader.read(resource.openStream()));
+                } catch (IOException exception) {
+                    throw new IllegalStateException("unable to read connector provider metadata at " + resource, exception);
                 } catch (IllegalArgumentException exception) {
                     throw new IllegalArgumentException("invalid connector provider metadata at " + resource + ": " + exception.getMessage(), exception);
                 }
             }
             return new ConnectorProviderManifestCatalog(manifests);
         } catch (IOException exception) {
-            throw new IllegalArgumentException("unable to discover connector provider metadata", exception);
+            throw new IllegalStateException("unable to discover connector provider metadata", exception);
         }
     }
 }

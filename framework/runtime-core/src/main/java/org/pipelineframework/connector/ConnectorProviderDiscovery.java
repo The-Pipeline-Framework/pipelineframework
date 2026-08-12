@@ -16,6 +16,7 @@ public final class ConnectorProviderDiscovery {
         Objects.requireNonNull(classLoader, "class loader must not be null");
         List<ConnectorProviderFactory> factories = ServiceLoader.load(ConnectorProviderFactory.class, classLoader)
             .stream()
+            .sorted((left, right) -> left.type().getName().compareTo(right.type().getName()))
             .map(ServiceLoader.Provider::get)
             .sorted((left, right) -> left.getClass().getName().compareTo(right.getClass().getName()))
             .toList();

@@ -140,7 +140,13 @@ public final class ConnectorRegistry {
         if (state == LifecycleState.NEW) {
             state = LifecycleState.STARTING;
             lifecycle = startSequentially(context)
-                .whenComplete((ignored, failure) -> state = failure == null ? LifecycleState.STARTED : LifecycleState.FAILED);
+                .whenComplete((ignored, failure) -> {
+                    synchronized (this) {
+                        if (state == LifecycleState.STARTING) {
+                            state = failure == null ? LifecycleState.STARTED : LifecycleState.FAILED;
+                        }
+                    }
+                });
         }
         if (state == LifecycleState.STOPPING || state == LifecycleState.STOPPED) {
             return failed("connector registry cannot start after stop has begun");
@@ -157,8 +163,14 @@ public final class ConnectorRegistry {
             state = LifecycleState.STOPPING;
             lifecycle = lifecycle.handle((ignored, failure) -> ConnectorCompletionStages.completed())
                 .thenCompose(ignored -> ignored)
-                .thenCompose(ignored -> sequentially(reverse(startedProviders), provider -> provider.stop(context), "stop"))
-                .whenComplete((ignored, failure) -> state = failure == null ? LifecycleState.STOPPED : LifecycleState.FAILED);
+                .thenCompose(ignored -> stopSequentially(context))
+                .whenComplete((ignored, failure) -> {
+                    synchronized (this) {
+                        if (state == LifecycleState.STOPPING) {
+                            state = failure == null ? LifecycleState.STOPPED : LifecycleState.FAILED;
+                        }
+                    }
+                });
         }
         return lifecycle;
     }
@@ -251,37 +263,70 @@ public final class ConnectorRegistry {
                 if (stage == null) {
                     return failed("connector provider " + provider.descriptor().id().value() + " returned null from start");
                 }
-                return stage.thenRun(() -> startedProviders.add(provider));
+                return stage.thenRun(() -> recordStarted(provider));
             });
         }
         return sequence;
     }
 
-    private static CompletionStage<Void> sequentially(
-        Collection<ConnectorProvider<?>> providers,
-        ProviderLifecycleAction action,
-        String actionName
-    ) {
+    private synchronized void recordStarted(ConnectorProvider<?> provider) {
+        startedProviders.add(provider);
+    }
+
+    private CompletionStage<Void> stopSequentially(ConnectorRuntimeContext context) {
+        List<Throwable> failures = new ArrayList<>();
         CompletionStage<Void> sequence = ConnectorCompletionStages.completed();
-        for (ConnectorProvider<?> provider : providers) {
-            sequence = sequence.thenCompose(ignored -> {
-                CompletionStage<Void> stage = action.apply(provider);
-                if (stage == null) {
-                    return failed("connector provider " + provider.descriptor().id().value() + " returned null from " + actionName);
-                }
-                return stage;
-            });
+        for (ConnectorProvider<?> provider : startedProvidersInReverseOrder()) {
+            sequence = sequence.thenCompose(ignored -> stopProvider(context, provider, failures));
         }
-        return sequence;
+        return sequence.thenCompose(ignored -> failures.isEmpty()
+            ? ConnectorCompletionStages.completed()
+            : failed(stopFailures(failures)));
+    }
+
+    private CompletionStage<Void> stopProvider(
+        ConnectorRuntimeContext context,
+        ConnectorProvider<?> provider,
+        List<Throwable> failures
+    ) {
+        CompletionStage<Void> stage;
+        try {
+            stage = provider.stop(context);
+        } catch (RuntimeException exception) {
+            stage = CompletableFuture.failedFuture(exception);
+        }
+        if (stage == null) {
+            stage = failed("connector provider " + provider.descriptor().id().value() + " returned null from stop");
+        }
+        return stage.handle((ignored, failure) -> {
+            synchronized (this) {
+                if (failure == null) {
+                    startedProviders.remove(provider);
+                } else {
+                    failures.add(new IllegalStateException(
+                        "connector provider " + provider.descriptor().id().value() + " failed to stop", failure));
+                }
+            }
+            return null;
+        });
+    }
+
+    private static IllegalStateException stopFailures(List<Throwable> failures) {
+        IllegalStateException result = new IllegalStateException("one or more connector providers failed to stop");
+        failures.forEach(result::addSuppressed);
+        return result;
+    }
+
+    private synchronized List<ConnectorProvider<?>> startedProvidersInReverseOrder() {
+        return reverse(startedProviders);
     }
 
     private static CompletionStage<Void> failed(String message) {
         return CompletableFuture.failedFuture(new IllegalStateException(message));
     }
 
-    @FunctionalInterface
-    private interface ProviderLifecycleAction {
-        CompletionStage<Void> apply(ConnectorProvider<?> provider);
+    private static CompletionStage<Void> failed(Throwable failure) {
+        return CompletableFuture.failedFuture(failure);
     }
 
     private enum LifecycleState {

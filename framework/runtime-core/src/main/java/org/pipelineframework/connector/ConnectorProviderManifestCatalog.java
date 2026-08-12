@@ -41,7 +41,7 @@ public final class ConnectorProviderManifestCatalog {
     }
 
     public List<ConnectorProviderArtifactDescriptor> providers() {
-        return new ArrayList<>(providers.values());
+        return List.copyOf(providers.values());
     }
 
     public Map<ConnectorOperationIdentity, ConnectorOperationDescriptor> operations() {

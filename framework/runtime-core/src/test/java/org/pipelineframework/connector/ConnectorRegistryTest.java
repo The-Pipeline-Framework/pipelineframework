@@ -5,6 +5,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -72,6 +74,66 @@ class ConnectorRegistryTest {
         assertTrue(exception.getMessage().contains("metadata only"));
     }
 
+    @Test
+    void continuesStoppingAfterFailureAndRetriesOnlyProvidersThatDidNotStop() {
+        List<String> lifecycle = new ArrayList<>();
+        AtomicBoolean failZuluStop = new AtomicBoolean(true);
+        ConnectorRegistry registry = new ConnectorRegistry(List.of(
+            providerWithStop("alpha.provider", lifecycle, () -> ConnectorCompletionStages.completed()),
+            providerWithStop("zulu.provider", lifecycle, () -> failZuluStop.getAndSet(false)
+                ? CompletableFuture.failedFuture(new IllegalStateException("zulu unavailable"))
+                : ConnectorCompletionStages.completed())));
+
+        registry.start(ConnectorRuntimeContext.empty()).toCompletableFuture().join();
+        assertThrows(RuntimeException.class, () -> registry.stop(ConnectorRuntimeContext.empty()).toCompletableFuture().join());
+        assertEquals(List.of("start:alpha.provider", "start:zulu.provider", "stop:zulu.provider", "stop:alpha.provider"), lifecycle);
+
+        registry.stop(ConnectorRuntimeContext.empty()).toCompletableFuture().join();
+        assertEquals(List.of("start:alpha.provider", "start:zulu.provider", "stop:zulu.provider", "stop:alpha.provider", "stop:zulu.provider"), lifecycle);
+    }
+
+    @Test
+    void ignoresLateStartCompletionAfterStopHasBegun() {
+        CompletableFuture<Void> startGate = new CompletableFuture<>();
+        CompletableFuture<Void> stopGate = new CompletableFuture<>();
+        AtomicInteger stopInvocations = new AtomicInteger();
+        ConnectorRegistry registry = new ConnectorRegistry(List.of(new ConnectorProvider<Void>() {
+            @Override
+            public ConnectorProviderDescriptor descriptor() {
+                return new ConnectorProviderDescriptor(ConnectorProviderId.of("gated.provider"), new ConnectorProviderVersion(1, 0));
+            }
+
+            @Override
+            public Collection<? extends ConnectorOperation> operations() {
+                return List.of();
+            }
+
+            @Override
+            public CompletionStage<Void> start(ConnectorRuntimeContext context) {
+                return startGate;
+            }
+
+            @Override
+            public CompletionStage<Void> stop(ConnectorRuntimeContext context) {
+                stopInvocations.incrementAndGet();
+                return stopGate;
+            }
+        }));
+
+        CompletionStage<Void> started = registry.start(ConnectorRuntimeContext.empty());
+        CompletionStage<Void> stopped = registry.stop(ConnectorRuntimeContext.empty());
+        startGate.complete(null);
+
+        assertEquals(1, stopInvocations.get());
+        assertEquals(stopped, registry.stop(ConnectorRuntimeContext.empty()));
+        assertEquals(1, stopInvocations.get());
+
+        stopGate.complete(null);
+        started.toCompletableFuture().join();
+        stopped.toCompletableFuture().join();
+        assertEquals(1, stopInvocations.get());
+    }
+
     private static ConnectorProvider<Void> provider(
         String id,
         List<String> lifecycle,
@@ -110,5 +172,35 @@ class ConnectorRegistryTest {
 
     private static ConnectorOperation operation(String id, ConnectorOperationKind kind) {
         return () -> new ConnectorOperationDescriptor(id, kind, 1);
+    }
+
+    private static ConnectorProvider<Void> providerWithStop(
+        String id,
+        List<String> lifecycle,
+        java.util.function.Supplier<CompletionStage<Void>> stop
+    ) {
+        return new ConnectorProvider<>() {
+            @Override
+            public ConnectorProviderDescriptor descriptor() {
+                return new ConnectorProviderDescriptor(ConnectorProviderId.of(id), new ConnectorProviderVersion(1, 0));
+            }
+
+            @Override
+            public Collection<? extends ConnectorOperation> operations() {
+                return List.of();
+            }
+
+            @Override
+            public CompletionStage<Void> start(ConnectorRuntimeContext context) {
+                lifecycle.add("start:" + id);
+                return ConnectorCompletionStages.completed();
+            }
+
+            @Override
+            public CompletionStage<Void> stop(ConnectorRuntimeContext context) {
+                lifecycle.add("stop:" + id);
+                return stop.get();
+            }
+        };
     }
 }

@@ -18,6 +18,10 @@ public interface ConnectorRuntimeContext {
 
     Optional<SecretResolver> secretResolver();
 
+    /**
+     * Returns a plain-Java default using the caller-thread executor ({@code Runnable::run}).
+     * It does not offload blocking work, so invoking {@link #executor()} may block the calling thread.
+     */
     static ConnectorRuntimeContext empty() {
         return of("plain-java", Runnable::run, Clock.systemUTC(), Optional.empty(), Optional.empty());
     }
