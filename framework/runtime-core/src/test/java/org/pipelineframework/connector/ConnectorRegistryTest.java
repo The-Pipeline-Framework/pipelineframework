@@ -89,6 +89,16 @@ class ConnectorRegistryTest {
     }
 
     @Test
+    void describesTheCompleteReservedTpfNamespaceInFrameworkAllowlistDiagnostics() {
+        IllegalArgumentException rejected = assertThrows(IllegalArgumentException.class,
+            () -> ConnectorRegistry.withFrameworkProviders(List.of(), List.of(ConnectorProviderId.of("application.provider"))));
+
+        assertEquals(
+            "framework provider allowlist ID must use the reserved tpf namespace ('tpf' or 'tpf.*'): application.provider",
+            rejected.getMessage());
+    }
+
+    @Test
     void continuesStoppingAfterFailureAndRetriesOnlyProvidersThatDidNotStop() {
         List<String> lifecycle = new ArrayList<>();
         AtomicBoolean failZuluStop = new AtomicBoolean(true);

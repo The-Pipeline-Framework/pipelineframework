@@ -100,11 +100,20 @@ public final class LegacyCommandConnectorProvider implements ConnectorProvider<V
     public static <I, O> CompletionStage<O> dispatch(ConnectorRegistry registry, CommandRequest<I> request) {
         Objects.requireNonNull(registry, "connector registry must not be null");
         Objects.requireNonNull(request, "command request must not be null");
+        try {
+            return requireOperation(registry, request.descriptor().command()).dispatchOutput(request);
+        } catch (IllegalStateException failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
+    }
+
+    static LegacyCommandOperation requireOperation(ConnectorRegistry registry, String command) {
+        Objects.requireNonNull(registry, "connector registry must not be null");
         ConnectorProvider<?> provider = registry.providers().get(PROVIDER_ID);
         if (!(provider instanceof LegacyCommandConnectorProvider legacyProvider)) {
-            return CompletableFuture.failedFuture(noConnector(request.descriptor().command()));
+            throw noConnector(command);
         }
-        return legacyProvider.dispatch(request);
+        return legacyProvider.requireOperation(command);
     }
 
     @Override
@@ -127,12 +136,12 @@ public final class LegacyCommandConnectorProvider implements ConnectorProvider<V
         return ConnectorCompletionStages.completed();
     }
 
-    private <I, O> CompletionStage<O> dispatch(CommandRequest<I> request) {
-        LegacyCommandOperation operation = operationsByCommand.get(request.descriptor().command());
+    private LegacyCommandOperation requireOperation(String command) {
+        LegacyCommandOperation operation = operationsByCommand.get(command);
         if (operation == null) {
-            return CompletableFuture.failedFuture(noConnector(request.descriptor().command()));
+            throw noConnector(command);
         }
-        return operation.dispatchOutput(request);
+        return operation;
     }
 
     private static LegacyConnectorCandidate candidate(CommandConnector<?, ?> connector) {
@@ -223,7 +232,7 @@ public final class LegacyCommandConnectorProvider implements ConnectorProvider<V
     private record LegacyCommandOutcome<O>(O value) implements CommandOutcome<O> {
     }
 
-    private static final class LegacyCommandOperation implements CommandOperation<Object, LegacyCommandRequestConfiguration, Object> {
+    static final class LegacyCommandOperation implements CommandOperation<Object, LegacyCommandRequestConfiguration, Object> {
         private final ConnectorOperationDescriptor descriptor;
         private final String command;
         private final CommandConnector<Object, Object> connector;
@@ -248,7 +257,7 @@ public final class LegacyCommandConnectorProvider implements ConnectorProvider<V
             return adapt(request);
         }
 
-        private <I, O> CompletionStage<O> dispatchOutput(CommandRequest<I> request) {
+        <I, O> CompletionStage<O> dispatchOutput(CommandRequest<I> request) {
             CommandInvocation<Object, LegacyCommandRequestConfiguration> invocation = new CommandInvocation<>(
                 request.input(), new LegacyCommandRequestConfiguration(request), executionContext(request));
             return LegacyCompletionStages.map(dispatch(invocation), outcome -> output(outcome, request.descriptor().command()));

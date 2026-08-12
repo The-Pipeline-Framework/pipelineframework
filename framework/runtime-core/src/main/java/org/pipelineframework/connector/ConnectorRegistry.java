@@ -48,7 +48,8 @@ public final class ConnectorRegistry {
         for (ConnectorProviderId frameworkProviderId : frameworkProviderIds) {
             if (!Objects.requireNonNull(frameworkProviderId, "framework provider ID must not be null").isFrameworkReserved()) {
                 throw new IllegalArgumentException(
-                    "framework provider allowlist ID must use the reserved tpf.* namespace: " + frameworkProviderId.value());
+                    "framework provider allowlist ID must use the reserved tpf namespace ('tpf' or 'tpf.*'): "
+                        + frameworkProviderId.value());
             }
         }
         List<ConnectorProvider<?>> orderedProviders = new ArrayList<>();
