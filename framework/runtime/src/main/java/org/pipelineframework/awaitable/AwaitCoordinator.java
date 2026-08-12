@@ -672,7 +672,9 @@ public class AwaitCoordinator {
                 descriptor.transportType(),
                 unitId,
                 itemIndex,
-                AwaitCompletionMetrics.captureTraceMetadata(telemetry.activeRunSpanContext()),
+                telemetry == null
+                    ? AwaitCompletionMetrics.captureTraceMetadata()
+                    : AwaitCompletionMetrics.captureTraceMetadata(telemetry.activeRunSpanContext()),
                 now,
                 deadline,
                 ttl))

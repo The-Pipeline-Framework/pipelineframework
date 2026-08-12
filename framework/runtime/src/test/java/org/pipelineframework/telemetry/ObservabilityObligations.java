@@ -38,6 +38,20 @@ final class ObservabilityObligations {
             List.of("tpf_object_publish_published_objects_total"),
             List.of("tpf.terminal.publication.completed"), "continuation context"));
 
+    static final List<OperatorPanel> CSV_PAYMENTS_OPERATOR_PANELS = List.of(
+        new OperatorPanel("Per-step throughput", List.of("tpf_step_duration_milliseconds_count")),
+        new OperatorPanel("Per-step latency and success", List.of("tpf_step_duration_milliseconds_sum", "tpf_step_errors_total")),
+        new OperatorPanel("Per-step in-flight and configured concurrency", List.of("tpf_step_inflight_items", "tpf_pipeline_max_concurrency_items")),
+        new OperatorPanel("Step buffers and transition-worker pressure", List.of("tpf_step_buffer_queued_items", "tpf_orchestrator_transition_active")),
+        new OperatorPanel("Await completion latency — p50, p90, p99", List.of("tpf_await_completion_latency_milliseconds_bucket")),
+        new OperatorPanel("Await gate, routes, and terminal outcomes", List.of("tpf_await_admission_pending_reservations", "tpf_await_live_handoff_handoffs_total")),
+        new OperatorPanel("CSV input and terminal publication", List.of("tpf_item_consumed_items_total", "tpf_object_publish_published_objects_total")),
+        new OperatorPanel("Publication latency and output completeness", List.of("tpf_object_publish_write_duration_milliseconds_bucket")),
+        new OperatorPanel("CSV operator SLO defaults", List.of("tpf_slo_item_success_good_items_total")),
+        new OperatorPanel("JVM heap and GC pause", List.of("jvm_memory_used_bytes", "jvm_gc_pause_milliseconds_sum")));
+
+    record OperatorPanel(String title, List<String> requiredMetricNames) { }
+
     private ObservabilityObligations() {
     }
 }

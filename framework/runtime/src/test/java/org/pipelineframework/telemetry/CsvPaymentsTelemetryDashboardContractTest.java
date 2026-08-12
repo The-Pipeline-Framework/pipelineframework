@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class CsvPaymentsTelemetryDashboardContractTest {
@@ -43,6 +44,28 @@ class CsvPaymentsTelemetryDashboardContractTest {
         assertTrue(Files.readString(TEMPO).contains("self-host container profile, which intentionally disables telemetry"));
         assertTrue(traceQueries.stream().anyMatch(query -> query.contains("tpf.await.origin.linked") && query.contains("false")),
             "Tempo dashboard must expose rootless/unlinked Await completion spans");
+    }
+
+    @Test
+    void operatorDashboardPreservesCurrentOperationalPanelsWithoutHighCardinalityDimensions() throws Exception {
+        JsonNode metrics = new ObjectMapper().readTree(Files.readString(GRAFANA));
+        List<String> metricQueries = queryValues(metrics, "expr");
+        Set<String> panelTitles = Set.copyOf(queryValues(metrics, "title"));
+
+        for (ObservabilityObligations.OperatorPanel panel : ObservabilityObligations.CSV_PAYMENTS_OPERATOR_PANELS) {
+            assertTrue(panelTitles.contains(panel.title()), "Missing restored operator panel: " + panel.title());
+            for (String metric : panel.requiredMetricNames()) {
+                assertTrue(metricQueries.stream().anyMatch(query -> query.contains(metric)),
+                    () -> panel.title() + " lacks a query for " + metric);
+            }
+        }
+
+        assertTrue(metricQueries.stream().anyMatch(query -> query.contains("tpfProof")) == false,
+            "The dashboard proof marker is target metadata, not PromQL.");
+        for (String forbidden : List.of("execution_id", "interaction_id", "correlation_id", "request_id", "item_index")) {
+            assertTrue(metricQueries.stream().noneMatch(query -> query.contains(forbidden)),
+                () -> "Metric dashboard must not use high-cardinality dimension " + forbidden);
+        }
     }
 
     private static List<String> queryValues(JsonNode node, String field) {

@@ -143,6 +143,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
             TEMPO_ENABLED && !MONOLITH_LAYOUT && !PIPELINE_RUNTIME_LAYOUT;
     private static final boolean TEMPO_PAUSE_BEFORE_TEARDOWN =
             Boolean.getBoolean("csv.e2e.tempo.pause.before.teardown");
+    private static final boolean OPERATOR_DASHBOARD_10K_ACTIVE =
+            Boolean.getBoolean("csv.e2e.operator-dashboard.10k.enabled");
     private static final boolean TELEMETRY_HAPPY_PATH_ONLY =
             Boolean.parseBoolean(System.getProperty("csv.e2e.telemetry.happy-path-only", "true"));
     private static final String MODULAR_IMAGE_TAG = resolveModularImageTag();
@@ -1119,6 +1121,25 @@ abstract class AbstractCsvPaymentsEndToEnd {
         LOG.info("Tempo/LGTM verification test completed successfully!");
     }
 
+    @Test
+    void operatorDashboard10kProof() throws Exception {
+        assumeTrue(runOperatorDashboard10kScenario(), "10k operator-dashboard scenario disabled for this E2E class.");
+        assumeTrue(OPERATOR_DASHBOARD_10K_ACTIVE,
+                "10k operator-dashboard proof requires csv.e2e.operator-dashboard.10k.enabled=true.");
+        assumeTrue(TEMPO_VERIFICATION_ACTIVE,
+                "10k operator-dashboard proof requires csv.e2e.tempo.enabled in modular layout.");
+        assertEquals(10_000L, expectedPaymentRecordCount(),
+                "The operator-dashboard proof must run the canonical payments_10k.csv fixture.");
+
+        LOG.info("Running 10k CSV Payments operator-dashboard proof");
+        executeHappyPathPipelineAndVerify();
+        assertTempoTracesAvailable();
+        assertPrometheusMetricsAvailable();
+        assertOperatorDashboardQueriesAvailable();
+        assertOperatorJourneyCounts(10_000L);
+        LOG.info("10k CSV Payments operator-dashboard proof completed successfully!");
+    }
+
     private void executeHappyPathPipelineAndVerify() throws Exception {
         LOG.info("Executing happy-path pipeline run and verifying outputs.");
 
@@ -1254,6 +1275,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     protected boolean runTempoVerificationScenario() {
+        return false;
+    }
+
+    protected boolean runOperatorDashboard10kScenario() {
         return false;
     }
 
@@ -2249,6 +2274,41 @@ abstract class AbstractCsvPaymentsEndToEnd {
         }
     }
 
+    private void assertOperatorDashboardQueriesAvailable() throws Exception {
+        JsonNode dashboard = OBJECT_MAPPER.readTree(Files.readString(GRAFANA_DASHBOARD));
+        List<String> proofQueries = new ArrayList<>();
+        collectOperatorProofQueries(dashboard, proofQueries);
+        assertFalse(proofQueries.isEmpty(), "Operator dashboard must mark current-series proof queries.");
+        for (String expression : proofQueries) {
+            String resolved = expression
+                    .replace("$__rate_interval", "1m")
+                    .replace("$__range", "30m")
+                    .replace("${step}", ".*");
+            JsonNode result = waitForPrometheusQuery(resolved);
+            assertTrue(hasNumericPrometheusSample(result),
+                    "Operator dashboard proof query returned no numeric sample: " + expression);
+        }
+    }
+
+    private void assertOperatorJourneyCounts(long expectedItems) throws Exception {
+        assertPrometheusTotal("sum(tpf_pipeline_run_count_total)", 1L);
+        assertPrometheusTotal("sum(tpf_orchestrator_transition_dispatched_transitions_total)", 1L);
+        assertPrometheusTotal("sum(tpf_await_interaction_created_interactions_total)", expectedItems);
+        assertPrometheusTotal("sum(tpf_await_interaction_dispatched_interactions_total)", expectedItems);
+        assertPrometheusTotal("sum(tpf_await_completion_admitted_completions_total)", expectedItems);
+        assertPrometheusTotal("sum(tpf_await_live_handoff_handoffs_total)", expectedItems);
+        assertPrometheusTotal("sum(tpf_await_scalar_continuation_started_continuations_total)", expectedItems);
+        assertPrometheusTotal("sum(tpf_object_publish_published_objects_total)", 1L);
+    }
+
+    private void assertPrometheusTotal(String promQl, long expected) throws Exception {
+        JsonNode result = waitForPrometheusMetric(promQl);
+        double actual = prometheusSampleTotal(result);
+        assertEquals((double) expected, actual, 0.0001D,
+                "Unexpected CSV operator proof total for " + promQl);
+        LOG.infof("Operator dashboard metric %s = %.0f", promQl, actual);
+    }
+
     private JsonNode waitForTempoTraceSearch(List<String> candidateQueries) throws Exception {
         long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(TEMPO_SEARCH_TIMEOUT_SECONDS);
         JsonNode lastResponse = null;
@@ -2296,6 +2356,20 @@ abstract class AbstractCsvPaymentsEndToEnd {
         return OBJECT_MAPPER.getNodeFactory().nullNode();
     }
 
+    private JsonNode waitForPrometheusQuery(String promQl) throws Exception {
+        long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(TEMPO_SEARCH_TIMEOUT_SECONDS);
+        JsonNode lastResponse = null;
+        while (System.currentTimeMillis() < deadline) {
+            lastResponse = queryPrometheus(promQl);
+            if (hasNumericPrometheusSample(lastResponse)) {
+                return lastResponse;
+            }
+            Thread.sleep(TEMPO_SEARCH_POLL_MILLIS);
+        }
+        fail("Timed out waiting for numeric CSV operator dashboard query " + promQl + ". Last response: " + lastResponse);
+        return OBJECT_MAPPER.getNodeFactory().nullNode();
+    }
+
     private JsonNode queryPrometheus(String promQl) throws Exception {
         String encoded = URLEncoder.encode(promQl, StandardCharsets.UTF_8);
         URI uri = URI.create(grafanaBaseUrl()
@@ -2328,6 +2402,52 @@ abstract class AbstractCsvPaymentsEndToEnd {
             }
         }
         return false;
+    }
+
+    private static boolean hasNumericPrometheusSample(JsonNode response) {
+        for (JsonNode sample : response.path("data").path("result")) {
+            JsonNode value = sample.path("value");
+            if (!value.isArray() || value.size() < 2) {
+                continue;
+            }
+            try {
+                Double.parseDouble(value.get(1).asText());
+                return true;
+            } catch (NumberFormatException ignored) {
+                // Continue until a valid Prometheus sample is found.
+            }
+        }
+        return false;
+    }
+
+    private static double prometheusSampleTotal(JsonNode response) {
+        double total = 0D;
+        for (JsonNode sample : response.path("data").path("result")) {
+            JsonNode value = sample.path("value");
+            if (!value.isArray() || value.size() < 2) {
+                continue;
+            }
+            try {
+                total += Double.parseDouble(value.get(1).asText());
+            } catch (NumberFormatException ignored) {
+                // The assertion reports the observed total when a backend response has no numeric samples.
+            }
+        }
+        return total;
+    }
+
+    private static void collectOperatorProofQueries(JsonNode node, List<String> expressions) {
+        if (node == null) {
+            return;
+        }
+        if (node.isObject()) {
+            if (node.path("tpfProof").asBoolean(false) && node.hasNonNull("expr")) {
+                expressions.add(node.path("expr").asText());
+            }
+            node.elements().forEachRemaining(value -> collectOperatorProofQueries(value, expressions));
+        } else if (node.isArray()) {
+            node.forEach(value -> collectOperatorProofQueries(value, expressions));
+        }
     }
 
     private boolean containsTpfTraceSemantics(JsonNode traceDocument) {

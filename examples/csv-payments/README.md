@@ -199,6 +199,25 @@ cd <repo-root>
 
 That lane starts a dedicated LGTM stack, points the modular services and packaged orchestrator at its OTLP collector, and then queries Tempo directly to prove traces arrived and are queryable.
 
+### 10k operator-dashboard proof
+
+The 12-item Tempo check is the fast semantic and trace-continuity conformance path. Use the opt-in 10k proof when validating the operator dashboard under enough work to populate throughput, latency, pressure, Await, and publication panels:
+
+```bash
+cd <repo-root>
+./examples/csv-payments/build-modular-observability-images.sh
+./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.tempo.enabled=true \
+  -Dcsv.e2e.operator-dashboard.10k.enabled=true \
+  -Dcsv.e2e.pipeline.wait.seconds=1800 \
+  -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_10k.csv \
+  -Dtest=CsvPaymentsOperatorDashboard10kEndToEndIT \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test -Dmaven.repo.local="$PWD/.m2/repository"
+```
+
+It provisions the Grafana metrics and Tempo dashboards, verifies their marked current-series queries against Grafana's Prometheus datasource, checks the 10k stage counts, and rejects unlinked Await completion traces. It reports observed latency and pressure but intentionally does not enforce a performance budget.
+
 ### Object I/O Backpressure
 
 The default CSV Payments path uses Object Ingest and Object Publish. Object Ingest admits one source object into a queue-async execution, the CSV parser emits rows incrementally, Kafka await completions flow through a live await session when the transition is active, and Object Publish writes terminal rows through a streaming target session. The default path does not configure the CSV reader demand pacer.

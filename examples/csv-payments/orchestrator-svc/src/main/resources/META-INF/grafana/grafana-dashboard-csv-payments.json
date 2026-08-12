@@ -1,81 +1,176 @@
 {
   "uid": "csv-payments-dashboard",
-  "title": "CSV Payments — Telemetry Proof",
+  "title": "CSV Payments — Operations",
   "schemaVersion": 41,
-  "version": 2,
-  "tags": ["csv-payments", "telemetry-proof"],
-  "time": { "from": "now-15m", "to": "now" },
+  "version": 3,
+  "tags": ["csv-payments", "operations", "telemetry-proof"],
+  "time": { "from": "now-30m", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "step",
+        "label": "Step",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": { "query": "label_values(tpf_step_duration_milliseconds_count, tpf_step_class)", "refId": "StandardVariableQuery" },
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": ".*" }
+      }
+    ]
+  },
   "panels": [
     {
       "id": 1,
       "type": "text",
-      "title": "Proof profile",
+      "title": "Telemetry-capable operator profile",
       "gridPos": { "x": 0, "y": 0, "w": 24, "h": 4 },
-      "options": { "mode": "markdown", "content": "This dashboard proves the **telemetry-capable CSV Payments developer profile**: Quarkus tracing and Micrometer/Prometheus metrics are available, TPF telemetry is enabled, and OTLP traces route to the LGTM stack. The self-host profile intentionally disables telemetry and is not a proof target.\n\nMetrics use only low-cardinality stage, Await step/transport, outcome, target, and provider dimensions." }
+      "options": { "mode": "markdown", "content": "This is the CSV Payments **operator dashboard**, layered around the semantic proof journey. It targets the telemetry-capable modular deployment: Quarkus tracing and Micrometer/Prometheus metrics are enabled and OTLP traces route to the LGTM stack. The self-host container profile intentionally disables telemetry and is not expected to populate this dashboard.\n\nMetric groupings use only low-cardinality pipeline, step, transport, provider, target, and outcome dimensions." }
     },
-    {
-      "id": 2,
-      "type": "timeseries",
-      "title": "End-to-end semantic-stage throughput",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
-      "targets": [
-        { "refId": "A", "expr": "sum(rate(tpf_pipeline_run_count_total[$__rate_interval]))", "legendFormat": "pipeline run" },
-        { "refId": "B", "expr": "sum(rate(tpf_orchestrator_transition_dispatched_transitions_total[$__rate_interval]))", "legendFormat": "transition dispatched" },
-        { "refId": "C", "expr": "sum by (tpf_await_step_id, tpf_await_transport) (rate(tpf_await_interaction_created_interactions_total[$__rate_interval]))", "legendFormat": "Await interaction created {{tpf_await_step_id}}/{{tpf_await_transport}}" },
-        { "refId": "D", "expr": "sum by (tpf_await_step_id, tpf_await_transport) (rate(tpf_await_interaction_dispatched_interactions_total[$__rate_interval]))", "legendFormat": "provider dispatch {{tpf_await_step_id}}/{{tpf_await_transport}}" },
-        { "refId": "E", "expr": "sum by (tpf_await_step_id, tpf_await_transport) (rate(tpf_await_completion_admitted_completions_total[$__rate_interval]))", "legendFormat": "completion admitted {{tpf_await_step_id}}/{{tpf_await_transport}}" },
-        { "refId": "F", "expr": "sum by (tpf_await_step_id, tpf_await_transport) (rate(tpf_await_live_handoff_handoffs_total[$__rate_interval]))", "legendFormat": "live handoff {{tpf_await_step_id}}/{{tpf_await_transport}}" },
-        { "refId": "G", "expr": "sum by (tpf_await_step_id, tpf_await_transport) (rate(tpf_await_scalar_continuation_started_continuations_total[$__rate_interval]))", "legendFormat": "scalar continuation {{tpf_await_step_id}}/{{tpf_await_transport}}" },
-        { "refId": "H", "expr": "sum by (tpf_object_publish_target, tpf_object_publish_provider) (rate(tpf_object_publish_published_objects_total[$__rate_interval]))", "legendFormat": "terminal publication {{tpf_object_publish_target}}/{{tpf_object_publish_provider}}" }
-      ]
-    },
+    { "id": 2, "type": "row", "title": "Journey proof", "gridPos": { "x": 0, "y": 4, "w": 24, "h": 1 } },
     {
       "id": 3,
       "type": "timeseries",
-      "title": "Await completion latency — p50, p90, p99",
+      "title": "End-to-end semantic-stage throughput",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "gridPos": { "x": 0, "y": 5, "w": 24, "h": 8 },
       "targets": [
-        { "refId": "A", "expr": "histogram_quantile(0.50, sum by (le, tpf_await_step_id, tpf_await_transport) (rate(tpf_await_completion_latency_milliseconds_bucket[$__rate_interval])))", "legendFormat": "p50 {{tpf_await_step_id}}/{{tpf_await_transport}}" },
-        { "refId": "B", "expr": "histogram_quantile(0.90, sum by (le, tpf_await_step_id, tpf_await_transport) (rate(tpf_await_completion_latency_milliseconds_bucket[$__rate_interval])))", "legendFormat": "p90 {{tpf_await_step_id}}/{{tpf_await_transport}}" },
-        { "refId": "C", "expr": "histogram_quantile(0.99, sum by (le, tpf_await_step_id, tpf_await_transport) (rate(tpf_await_completion_latency_milliseconds_bucket[$__rate_interval])))", "legendFormat": "p99 {{tpf_await_step_id}}/{{tpf_await_transport}}" }
+        { "refId": "A", "expr": "sum(rate(tpf_pipeline_run_count_total[$__rate_interval]))", "legendFormat": "pipeline run", "tpfProof": true },
+        { "refId": "B", "expr": "sum(rate(tpf_orchestrator_transition_dispatched_transitions_total[$__rate_interval]))", "legendFormat": "transition dispatched", "tpfProof": true },
+        { "refId": "C", "expr": "sum by (tpf_await_step_id, tpf_await_transport) (rate(tpf_await_interaction_created_interactions_total[$__rate_interval]))", "legendFormat": "Await interaction created {{tpf_await_step_id}}/{{tpf_await_transport}}", "tpfProof": true },
+        { "refId": "D", "expr": "sum by (tpf_await_step_id, tpf_await_transport) (rate(tpf_await_interaction_dispatched_interactions_total[$__rate_interval]))", "legendFormat": "provider dispatch {{tpf_await_step_id}}/{{tpf_await_transport}}", "tpfProof": true },
+        { "refId": "E", "expr": "sum by (tpf_await_step_id, tpf_await_transport) (rate(tpf_await_completion_admitted_completions_total[$__rate_interval]))", "legendFormat": "completion admitted {{tpf_await_step_id}}/{{tpf_await_transport}}", "tpfProof": true },
+        { "refId": "F", "expr": "sum by (tpf_await_step_id, tpf_await_transport) (rate(tpf_await_live_handoff_handoffs_total[$__rate_interval]))", "legendFormat": "live handoff {{tpf_await_step_id}}/{{tpf_await_transport}}", "tpfProof": true },
+        { "refId": "G", "expr": "sum by (tpf_await_step_id, tpf_await_transport) (rate(tpf_await_scalar_continuation_started_continuations_total[$__rate_interval]))", "legendFormat": "scalar continuation {{tpf_await_step_id}}/{{tpf_await_transport}}", "tpfProof": true },
+        { "refId": "H", "expr": "sum by (tpf_object_publish_target, tpf_object_publish_provider) (rate(tpf_object_publish_published_objects_total[$__rate_interval]))", "legendFormat": "terminal publication {{tpf_object_publish_target}}/{{tpf_object_publish_provider}}", "tpfProof": true }
       ]
     },
-    {
-      "id": 4,
-      "type": "timeseries",
-      "title": "Queue and Await backpressure",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
-      "targets": [
-        { "refId": "A", "expr": "sum by (tpf_await_step_id, tpf_await_transport) (tpf_await_admission_pending_reservations)", "legendFormat": "Await reservations {{tpf_await_step_id}}/{{tpf_await_transport}}" },
-        { "refId": "B", "expr": "tpf_orchestrator_transition_active_ratio", "legendFormat": "transition worker active" }
-      ]
-    },
+    { "id": 4, "type": "row", "title": "Step execution and item flow", "gridPos": { "x": 0, "y": 13, "w": 24, "h": 1 } },
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Await routes, rejects, and timeouts",
+      "title": "Per-step throughput",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+      "gridPos": { "x": 0, "y": 14, "w": 12, "h": 8 },
       "targets": [
-        { "refId": "A", "expr": "sum by (tpf_await_step_id, tpf_await_transport) (increase(tpf_await_live_handoff_handoffs_total[$__range]))", "legendFormat": "live handoff {{tpf_await_step_id}}/{{tpf_await_transport}}" },
-        { "refId": "B", "expr": "sum by (tpf_await_step_id, tpf_await_transport) (increase(tpf_await_resume_released_resumes_total[$__range]))", "legendFormat": "durable fallback resume {{tpf_await_step_id}}/{{tpf_await_transport}}" },
-        { "refId": "C", "expr": "sum by (tpf_await_transport, tpf_await_completion_reason) (increase(tpf_await_completion_dropped_events_total[$__range]))", "legendFormat": "dropped {{tpf_await_transport}}/{{tpf_await_completion_reason}}" },
-        { "refId": "D", "expr": "sum by (tpf_await_step_id, tpf_await_status) (increase(tpf_await_unit_terminal_units_total[$__range]))", "legendFormat": "terminal {{tpf_await_step_id}}/{{tpf_await_status}}" }
+        { "refId": "A", "expr": "sum by (tpf_step_class) (rate(tpf_step_duration_milliseconds_count{tpf_step_class=~\"${step}\"}[$__rate_interval]))", "legendFormat": "{{tpf_step_class}}", "tpfProof": true },
+        { "refId": "B", "expr": "sum by (tpf_step_class) (rate(tpf_item_produced_items_total{tpf_step_class=~\"${step}\"}[$__rate_interval]))", "legendFormat": "produced {{tpf_step_class}}" },
+        { "refId": "C", "expr": "sum by (tpf_step_class) (rate(tpf_item_consumed_items_total{tpf_step_class=~\"${step}\"}[$__rate_interval]))", "legendFormat": "consumed {{tpf_step_class}}" }
       ]
     },
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Terminal publication outcomes and p95 write latency",
+      "title": "Per-step latency and success",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+      "gridPos": { "x": 12, "y": 14, "w": 12, "h": 8 },
       "targets": [
-        { "refId": "A", "expr": "sum by (tpf_object_publish_target, tpf_object_publish_provider) (increase(tpf_object_publish_published_objects_total[$__range]))", "legendFormat": "success {{tpf_object_publish_target}}/{{tpf_object_publish_provider}}" },
-        { "refId": "B", "expr": "sum by (tpf_object_publish_target, tpf_object_publish_provider) (increase(tpf_object_publish_failed_objects_total[$__range]))", "legendFormat": "failure {{tpf_object_publish_target}}/{{tpf_object_publish_provider}}" },
-        { "refId": "C", "expr": "histogram_quantile(0.95, sum by (le, tpf_object_publish_target, tpf_object_publish_provider) (rate(tpf_object_publish_write_duration_milliseconds_bucket[$__rate_interval])))", "legendFormat": "p95 {{tpf_object_publish_target}}/{{tpf_object_publish_provider}}" }
+        { "refId": "A", "expr": "sum by (tpf_step_class) (rate(tpf_step_duration_milliseconds_sum{tpf_step_class=~\"${step}\"}[$__rate_interval])) / sum by (tpf_step_class) (rate(tpf_step_duration_milliseconds_count{tpf_step_class=~\"${step}\"}[$__rate_interval]))", "legendFormat": "mean ms {{tpf_step_class}}", "tpfProof": true },
+        { "refId": "B", "expr": "100 * (1 - (sum by (tpf_step_class) (rate(tpf_step_errors_total{tpf_step_class=~\"${step}\"}[$__rate_interval])) / clamp_min(sum by (tpf_step_class) (rate(tpf_step_duration_milliseconds_count{tpf_step_class=~\"${step}\"}[$__rate_interval])), 1)))", "legendFormat": "success % {{tpf_step_class}}" },
+        { "refId": "C", "expr": "sum by (tpf_step_class) (rate(tpf_step_retry_count_total{tpf_step_class=~\"${step}\"}[$__rate_interval]))", "legendFormat": "retries {{tpf_step_class}}" }
+      ]
+    },
+    { "id": 7, "type": "row", "title": "Pressure and transition workers", "gridPos": { "x": 0, "y": 22, "w": 24, "h": 1 } },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Per-step in-flight and configured concurrency",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 23, "w": 12, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "max by (tpf_step_class) (tpf_step_inflight_items{tpf_step_class=~\"${step}\"})", "legendFormat": "in-flight {{tpf_step_class}}", "tpfProof": true },
+        { "refId": "B", "expr": "max(tpf_pipeline_max_concurrency_items)", "legendFormat": "pipeline max concurrency", "tpfProof": true }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Step buffers and transition-worker pressure",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 23, "w": 12, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "max by (tpf_step_class) (tpf_step_buffer_queued_items{tpf_step_class=~\"${step}\"})", "legendFormat": "queued {{tpf_step_class}}", "tpfProof": true },
+        { "refId": "B", "expr": "100 * max by (tpf_step_class) (tpf_step_buffer_queued_items{tpf_step_class=~\"${step}\"}) / clamp_min(max by (tpf_step_class) (tpf_step_buffer_capacity_items{tpf_step_class=~\"${step}\"}), 1)", "legendFormat": "buffer used % {{tpf_step_class}}" },
+        { "refId": "C", "expr": "tpf_orchestrator_transition_active", "legendFormat": "active transitions" },
+        { "refId": "D", "expr": "rate(tpf_orchestrator_transition_saturated_total[$__rate_interval])", "legendFormat": "saturated transitions" }
+      ]
+    },
+    { "id": 10, "type": "row", "title": "Await boundary health", "gridPos": { "x": 0, "y": 31, "w": 24, "h": 1 } },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Await completion latency — p50, p90, p99",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 32, "w": 12, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.50, sum by (le, tpf_await_step_id, tpf_await_transport) (rate(tpf_await_completion_latency_milliseconds_bucket[$__rate_interval])))", "legendFormat": "p50 {{tpf_await_step_id}}/{{tpf_await_transport}}", "tpfProof": true },
+        { "refId": "B", "expr": "histogram_quantile(0.90, sum by (le, tpf_await_step_id, tpf_await_transport) (rate(tpf_await_completion_latency_milliseconds_bucket[$__rate_interval])))", "legendFormat": "p90 {{tpf_await_step_id}}/{{tpf_await_transport}}" },
+        { "refId": "C", "expr": "histogram_quantile(0.99, sum by (le, tpf_await_step_id, tpf_await_transport) (rate(tpf_await_completion_latency_milliseconds_bucket[$__rate_interval])))", "legendFormat": "p99 {{tpf_await_step_id}}/{{tpf_await_transport}}" }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Await gate, routes, and terminal outcomes",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 32, "w": 12, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "sum by (tpf_await_step_id, tpf_await_transport) (tpf_await_admission_pending_reservations)", "legendFormat": "pending admission {{tpf_await_step_id}}/{{tpf_await_transport}}", "tpfProof": true },
+        { "refId": "B", "expr": "sum by (tpf_await_step_id, tpf_await_transport) (increase(tpf_await_live_handoff_handoffs_total[$__range]))", "legendFormat": "live handoff {{tpf_await_step_id}}/{{tpf_await_transport}}", "tpfProof": true },
+        { "refId": "C", "expr": "sum by (tpf_await_step_id, tpf_await_transport) (increase(tpf_await_resume_released_resumes_total[$__range]))", "legendFormat": "durable fallback {{tpf_await_step_id}}/{{tpf_await_transport}}" },
+        { "refId": "D", "expr": "sum by (tpf_await_transport, tpf_await_completion_reason) (increase(tpf_await_completion_dropped_events_total[$__range]))", "legendFormat": "dropped {{tpf_await_transport}}/{{tpf_await_completion_reason}}" },
+        { "refId": "E", "expr": "sum by (tpf_await_step_id, tpf_await_status) (increase(tpf_await_unit_terminal_units_total[$__range]))", "legendFormat": "terminal {{tpf_await_step_id}}/{{tpf_await_status}}" }
+      ]
+    },
+    { "id": 13, "type": "row", "title": "Input and terminal publication", "gridPos": { "x": 0, "y": 40, "w": 24, "h": 1 } },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "CSV input and terminal publication",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 41, "w": 12, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(tpf_item_consumed_items_total[$__rate_interval]))", "legendFormat": "input items", "tpfProof": true },
+        { "refId": "B", "expr": "sum by (tpf_object_publish_target, tpf_object_publish_provider) (rate(tpf_object_publish_published_objects_total[$__rate_interval]))", "legendFormat": "published {{tpf_object_publish_target}}/{{tpf_object_publish_provider}}", "tpfProof": true },
+        { "refId": "C", "expr": "sum by (tpf_object_publish_target, tpf_object_publish_provider) (rate(tpf_object_publish_published_bytes_total[$__rate_interval]))", "legendFormat": "bytes {{tpf_object_publish_target}}/{{tpf_object_publish_provider}}" },
+        { "refId": "D", "expr": "sum by (tpf_object_publish_target, tpf_object_publish_provider) (rate(tpf_object_publish_failed_objects_total[$__rate_interval]))", "legendFormat": "failures {{tpf_object_publish_target}}/{{tpf_object_publish_provider}}" }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Publication latency and output completeness",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 41, "w": 12, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, tpf_object_publish_target, tpf_object_publish_provider) (rate(tpf_object_publish_write_duration_milliseconds_bucket[$__rate_interval])))", "legendFormat": "p95 write {{tpf_object_publish_target}}/{{tpf_object_publish_provider}}", "tpfProof": true },
+        { "refId": "B", "expr": "sum by (tpf_object_publish_target) (increase(tpf_object_publish_grouped_items_total[$__range]))", "legendFormat": "grouped input {{tpf_object_publish_target}}", "tpfProof": true },
+        { "refId": "C", "expr": "sum by (tpf_object_publish_target, tpf_object_publish_provider) (increase(tpf_object_publish_published_objects_total[$__range]))", "legendFormat": "published output {{tpf_object_publish_target}}/{{tpf_object_publish_provider}}", "tpfProof": true }
+      ]
+    },
+    { "id": 16, "type": "row", "title": "SLO defaults and JVM context", "gridPos": { "x": 0, "y": 49, "w": 24, "h": 1 } },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "CSV operator SLO defaults",
+      "description": "Operational baselines only; these are not framework-wide alert thresholds.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 50, "w": 12, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "100 * sum(rate(tpf_slo_item_success_good_items_total[$__rate_interval])) / clamp_min(sum(rate(tpf_slo_item_success_total_items_total[$__rate_interval])), 1)", "legendFormat": "item success %", "tpfProof": true },
+        { "refId": "B", "expr": "100 * sum(rate(tpf_slo_item_throughput_good_total[$__rate_interval])) / clamp_min(sum(rate(tpf_slo_item_throughput_total_total[$__rate_interval])), 1)", "legendFormat": "throughput objective met %" },
+        { "refId": "C", "expr": "100 * sum(rate(tpf_slo_rpc_server_latency_good_total[$__rate_interval])) / clamp_min(sum(rate(tpf_slo_rpc_server_latency_total_total[$__rate_interval])), 1)", "legendFormat": "RPC latency objective met %" }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "JVM heap and GC pause",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 50, "w": 12, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "sum by (service_name) (jvm_memory_used_bytes{area=\"heap\"})", "legendFormat": "heap {{service_name}}", "tpfProof": true },
+        { "refId": "B", "expr": "sum by (service_name) (rate(jvm_gc_pause_milliseconds_sum[$__rate_interval])) / clamp_min(sum by (service_name) (rate(jvm_gc_pause_milliseconds_count[$__rate_interval])), 1)", "legendFormat": "mean GC ms {{service_name}}" }
       ]
     }
   ]
