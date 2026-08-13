@@ -45,18 +45,24 @@ class AwaitCoordinatorCompletionTest {
             "tpf.trace.span_id", "0123456789abcdef",
             "tpf.trace.flags", "01");
 
-        AwaitInteractionRecord created = coordinator.createOrGet(
-            descriptor("FraudCheck"),
-            "tenant-1",
-            "exec-1",
-            1,
-            "cause-1",
-            Map.of("orderId", "o-1"),
-            null,
-            null,
-            traceMetadata).await().indefinitely().record();
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext(
+            "tenant-1", "exec-1", 1, AwaitContinuationMode.LIVE_IF_SUPPORTED,
+            TerminalOutputOwnership.TRANSITION_WORKER, traceMetadata));
+        try {
+            AwaitInteractionRecord created = coordinator.createOrGet(
+                descriptor("FraudCheck"),
+                "tenant-1",
+                "exec-1",
+                1,
+                "cause-1",
+                Map.of("orderId", "o-1"),
+                null,
+                null).await().indefinitely().record();
 
-        assertEquals(traceMetadata, created.transportMetadata());
+            assertEquals(traceMetadata, created.transportMetadata());
+        } finally {
+            AwaitExecutionContextHolder.clear();
+        }
     }
 
     @Test

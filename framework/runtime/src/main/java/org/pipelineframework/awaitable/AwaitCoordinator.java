@@ -79,7 +79,7 @@ public class AwaitCoordinator {
         String group
     ) {
         return createOrGet(descriptor, tenantId, executionId, stepIndex, causationId, requestPayload, assignee, group,
-            AwaitCompletionMetrics.captureTraceMetadata());
+            traceMetadataForCurrentExecution());
     }
 
     Uni<AwaitCreateResult> createOrGet(
@@ -129,7 +129,7 @@ public class AwaitCoordinator {
         String group
     ) {
         return createOrGetItem(descriptor, tenantId, executionId, stepIndex, causationId, requestPayload, unitId,
-            itemIndex, assignee, group, AwaitCompletionMetrics.captureTraceMetadata());
+            itemIndex, assignee, group, traceMetadataForCurrentExecution());
     }
 
     Uni<AwaitCreateResult> createOrGetItem(
@@ -184,7 +184,7 @@ public class AwaitCoordinator {
         String group
     ) {
         return createOrGetPreparedItem(descriptor, tenantId, executionId, stepIndex, causationId, requestPayload,
-            unitId, itemIndex, assignee, group, AwaitCompletionMetrics.captureTraceMetadata());
+            unitId, itemIndex, assignee, group, traceMetadataForCurrentExecution());
     }
 
     Uni<AwaitCreateResult> createOrGetPreparedItem(
@@ -1248,6 +1248,14 @@ public class AwaitCoordinator {
             builder.append(value == null || value.isNull() ? "<null>" : value.asText());
         }
         return builder.toString();
+    }
+
+    private static Map<String, Object> traceMetadataForCurrentExecution() {
+        AwaitExecutionContext context = AwaitExecutionContextHolder.get();
+        if (context != null && !context.traceMetadata().isEmpty()) {
+            return context.traceMetadata();
+        }
+        return AwaitCompletionMetrics.captureTraceMetadata();
     }
 
     private static String deriveUnitId(String tenantId, String executionId, String stepId, int stepIndex) {
