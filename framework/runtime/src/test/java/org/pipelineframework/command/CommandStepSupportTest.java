@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
@@ -273,13 +273,14 @@ class CommandStepSupportTest {
   }
 
   @Test
-  void rejectsAnUnregisteredCommandBeforeReadingEffectState() {
+  void rejectsAnUnregisteredCommandAfterEffectLookup() {
     AwaitExecutionContextHolder.set(new AwaitExecutionContext("tenant", "exec-1", 4));
     CommandEffectStore effectStore = mock(CommandEffectStore.class);
     CommandStepSupport missingConnectorSupport = new CommandStepSupport(
         List.of(),
         List.of(effectStore),
         config(OrchestratorMode.QUEUE_ASYNC));
+    when(effectStore.find("tenant", "cmd-doc-1")).thenReturn(Uni.createFrom().item(java.util.Optional.empty()));
     CommandDescriptor missingConnectorDescriptor = new CommandDescriptor(
         "MissingCommandConnectorService",
         "missing-command",
@@ -297,7 +298,7 @@ class CommandStepSupportTest {
             .await().atMost(Duration.ofSeconds(5)));
 
     assertEquals("No CommandConnector found for command 'missing-command'", error.getMessage());
-    verifyNoInteractions(effectStore);
+    verify(effectStore).find("tenant", "cmd-doc-1");
   }
 
   @Test

@@ -267,6 +267,15 @@ public class PipelineYamlConfigLoader {
             String commandIdGenerator = readString(stepMap, "commandIdGenerator");
             String duplicatePolicy = readString(stepMap, "duplicatePolicy");
             Map<String, Object> commandConfig = readCommandConfig(stepMap, name);
+            Optional<NativeCommandYaml> nativeCommand = readNativeCommand(stepMap, name);
+            if (nativeCommand.isPresent()) {
+                NativeCommandYaml selector = nativeCommand.orElseThrow();
+                if (command != null && !command.isBlank()) {
+                    throw new IllegalArgumentException("command step '" + name + "' must declare either command or connector, not both");
+                }
+                command = selector.commandName();
+                commandConfig = selector.embed(commandConfig);
+            }
             String queryId = trimToNull(readString(stepMap, "query"));
             PipelineYamlQueryCapture queryCapture = readQueryCapture(stepMap, name);
             List<String> accepts = readStringList(stepMap, "accepts");
@@ -311,6 +320,57 @@ public class PipelineYamlConfigLoader {
         @SuppressWarnings("unchecked")
         Map<String, Object> normalized = (Map<String, Object>) normalizeConfigValue(configMap);
         return normalized;
+    }
+
+    private Optional<NativeCommandYaml> readNativeCommand(Map<?, ?> stepMap, String stepName) {
+        Object connector = stepMap.get("connector");
+        if (connector == null) {
+            return Optional.empty();
+        }
+        if (!(connector instanceof Map<?, ?> values)) {
+            throw new IllegalArgumentException("command step '" + stepName + "' connector must be a map");
+        }
+        String provider = readRequiredString(values, "provider", "command step '" + stepName + "' connector");
+        String operation = readRequiredString(values, "operation", "command step '" + stepName + "' connector");
+        int providerVersion = readPositiveInteger(values, "providerVersion", "command step '" + stepName + "' connector");
+        int operationVersion = readPositiveInteger(values, "operationVersion", "command step '" + stepName + "' connector");
+        Object policy = values.get("policy");
+        if (policy != null && !(policy instanceof Map<?, ?>)) {
+            throw new IllegalArgumentException("command step '" + stepName + "' connector policy must be a map");
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> normalizedPolicy = policy == null ? Map.of() : (Map<String, Object>) normalizeConfigValue(policy);
+        return Optional.of(new NativeCommandYaml(provider, providerVersion, operation, operationVersion, normalizedPolicy));
+    }
+
+    private int readPositiveInteger(Map<?, ?> values, String key, String context) {
+        Object value = values.get(key);
+        if (!(value instanceof Number number) || number.intValue() < 1 || number.doubleValue() != number.intValue()) {
+            throw new IllegalArgumentException(context + " " + key + " must be a positive integer");
+        }
+        return number.intValue();
+    }
+
+    private record NativeCommandYaml(
+        String provider,
+        int providerVersion,
+        String operation,
+        int operationVersion,
+        Map<String, Object> policy
+    ) {
+        private String commandName() {
+            return "native:" + provider + "/" + operation;
+        }
+
+        private Map<String, Object> embed(Map<String, Object> config) {
+            Map<String, Object> embedded = new LinkedHashMap<>(config);
+            embedded.put("__tpf_native_provider", provider);
+            embedded.put("__tpf_native_provider_version", providerVersion);
+            embedded.put("__tpf_native_operation", operation);
+            embedded.put("__tpf_native_operation_version", operationVersion);
+            embedded.put("__tpf_native_policy", policy);
+            return Map.copyOf(embedded);
+        }
     }
 
     private Map<String, PipelineYamlQuery> readQueries(Map<?, ?> rootMap) {

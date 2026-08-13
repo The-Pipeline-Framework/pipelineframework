@@ -17,6 +17,8 @@
 package org.pipelineframework.processor.parser;
 
 import java.io.IOException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -449,6 +451,94 @@ class StepDefinitionParserTest {
         assertEquals("RETURN_RECORDED", step.duplicatePolicy());
         assertEquals(StreamingShape.UNARY_UNARY, step.streamingShapeHint());
         assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
+    }
+
+    @Test
+    void validatesNativeCommandSelectorAndPolicyAgainstStaticProviderMetadata() throws IOException {
+        Path metadataRoot = tempDir.resolve("connector-metadata");
+        Path manifest = metadataRoot.resolve("META-INF/pipeline/connector-providers.json");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, """
+            {"schemaVersion":1,"providers":[{"id":"acme.search","version":{"major":1,"minor":0},
+            "executionCapabilities":{"executionStyle":"PROVIDER_MANAGED","concurrencyScope":"PROVIDER_MANAGED"},
+            "operations":[{"id":"write.document","kind":"tpf:command","majorVersion":1,
+            "commandCapabilities":{"retryRedriveSupported":false,"providerIdempotencySupported":true,
+            "reconciliationSupported":true,"maximumMachineConfirmation":"PROVIDER_ACKNOWLEDGED",
+            "userConfirmationSupported":false,"durableReferenceKinds":["ticket"]}}]}]}
+            """);
+        Path pipeline = tempDir.resolve("native-command.yaml");
+        Files.writeString(pipeline, """
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Write Search Index Document"
+                kind: "command"
+                connector:
+                  provider: " acme.search "
+                  providerVersion: 1
+                  operation: " write.document "
+                  operationVersion: 1
+                  policy:
+                    requireIdempotency: true
+                    requireReconciliation: true
+                    requiredExecutionStyle: "PROVIDER_MANAGED"
+                    requiredConcurrencyScope: "PROVIDER_MANAGED"
+                    minimumMachineConfirmation: "PROVIDER_ACKNOWLEDGED"
+                input: "com.example.SearchIndexDocument"
+                output: "com.example.SearchIndexWriteResult"
+                commandIdGenerator: "com.example.SearchIndexDocumentCommandIdGenerator"
+            """);
+        List<String> diagnostics = new ArrayList<>();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
+            List<StepDefinition> steps = new StepDefinitionParser(
+                (kind, message) -> diagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertEquals(1, steps.size(), diagnostics.toString());
+            StepDefinition step = steps.getFirst();
+            assertEquals("native:acme.search/write.document", step.command());
+            assertEquals("acme.search", step.commandConfig().get("__tpf_native_provider"));
+            assertEquals(1, step.commandConfig().get("__tpf_native_provider_version"));
+            assertEquals("write.document", step.commandConfig().get("__tpf_native_operation"));
+            assertEquals(1, step.commandConfig().get("__tpf_native_operation_version"));
+            assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())), diagnostics.toString());
+        }
+    }
+
+    @Test
+    void rejectsNativeCommandSelectorWithoutMatchingStaticMetadata() throws IOException {
+        Path metadataRoot = tempDir.resolve("empty-connector-metadata");
+        Files.createDirectories(metadataRoot);
+        Path pipeline = tempDir.resolve("missing-native-command.yaml");
+        Files.writeString(pipeline, """
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Write Search Index Document"
+                kind: "command"
+                connector:
+                  provider: "acme.search"
+                  providerVersion: 1
+                  operation: "write.document"
+                  operationVersion: 1
+                input: "com.example.SearchIndexDocument"
+                output: "com.example.SearchIndexWriteResult"
+                commandIdGenerator: "com.example.SearchIndexDocumentCommandIdGenerator"
+            """);
+        List<String> diagnostics = new ArrayList<>();
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { metadataRoot.toUri().toURL() }, null)) {
+            List<StepDefinition> steps = new StepDefinitionParser(
+                (kind, message) -> diagnostics.add(kind + ":" + message),
+                StepDefinitionParser.DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX,
+                loader).parseStepDefinitions(pipeline);
+
+            assertTrue(steps.isEmpty());
+            assertTrue(diagnostics.stream().anyMatch(message -> message.contains("no connector provider static metadata")),
+                diagnostics.toString());
+        }
     }
 
     @Test

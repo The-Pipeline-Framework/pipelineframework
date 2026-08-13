@@ -47,4 +47,26 @@ public final class ConnectorProviderManifestCatalog {
     public Map<ConnectorOperationIdentity, ConnectorOperationDescriptor> operations() {
         return operations;
     }
+
+    public void validateCommandPolicy(
+        ConnectorOperationIdentity identity,
+        int expectedProviderMajorVersion,
+        CommandPolicy policy
+    ) {
+        Objects.requireNonNull(identity, "command operation identity must not be null");
+        ConnectorProviderArtifactDescriptor provider = providers.get(identity.providerId());
+        if (provider == null) {
+            throw new IllegalArgumentException("no connector provider static metadata found for ID: " + identity.providerId().value());
+        }
+        if (provider.provider().version().major() != expectedProviderMajorVersion) {
+            throw new IllegalArgumentException("incompatible connector provider major version in static metadata for "
+                + identity.providerId().value() + ": requested " + expectedProviderMajorVersion + ", published "
+                + provider.provider().version().major());
+        }
+        ConnectorOperationDescriptor operation = operations.get(identity);
+        if (operation == null) {
+            throw new IllegalArgumentException("no connector command operation static metadata found for identity: " + identity);
+        }
+        CommandPolicyValidator.validate(provider.provider(), operation, policy);
+    }
 }

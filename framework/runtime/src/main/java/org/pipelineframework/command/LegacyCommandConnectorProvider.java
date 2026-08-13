@@ -229,9 +229,6 @@ public final class LegacyCommandConnectorProvider implements ConnectorProvider<V
         }
     }
 
-    private record LegacyCommandOutcome<O>(O value) implements CommandOutcome<O> {
-    }
-
     static final class LegacyCommandOperation implements CommandOperation<Object, LegacyCommandRequestConfiguration, Object> {
         private final ConnectorOperationDescriptor descriptor;
         private final String command;
@@ -285,7 +282,8 @@ public final class LegacyCommandConnectorProvider implements ConnectorProvider<V
                     "legacy CommandConnector " + connector.getClass().getName()
                         + " returned a Uni without a CompletionStage for command '" + command + "'"));
             }
-            return LegacyCompletionStages.map(stage, LegacyCommandOutcome::new);
+            return LegacyCompletionStages.map(stage, value -> new CommandOutcome.Succeeded<>(
+                value, org.pipelineframework.connector.CommandConfirmation.none(), List.of()));
         }
 
         private static ConnectorExecutionContext executionContext(CommandRequest<?> request) {
@@ -304,8 +302,8 @@ public final class LegacyCommandConnectorProvider implements ConnectorProvider<V
 
         @SuppressWarnings("unchecked")
         private static <O> O output(CommandOutcome<Object> outcome, String command) {
-            if (outcome instanceof LegacyCommandOutcome<?> legacyOutcome) {
-                return (O) legacyOutcome.value();
+            if (outcome instanceof CommandOutcome.Succeeded<?> succeeded) {
+                return (O) succeeded.output();
             }
             throw new IllegalStateException("legacy CommandConnector operation returned an unsupported outcome for command '" + command + "'");
         }

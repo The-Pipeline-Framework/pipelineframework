@@ -2,7 +2,9 @@ package org.pipelineframework.command;
 
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -17,6 +19,13 @@ import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.pipeline.PipelineYamlStep;
+import org.pipelineframework.connector.CommandMachineConfirmation;
+import org.pipelineframework.connector.CommandPolicy;
+import org.pipelineframework.connector.ConnectorConcurrencyScope;
+import org.pipelineframework.connector.ConnectorExecutionStyle;
+import org.pipelineframework.connector.ConnectorOperationIdentity;
+import org.pipelineframework.connector.ConnectorOperationKind;
+import org.pipelineframework.connector.ConnectorProviderId;
 
 /**
  * Builds command descriptors from runtime pipeline YAML.
@@ -97,14 +106,14 @@ public class CommandStepDescriptorFactory {
         String resolvedGenerator = firstNonBlank(step.commandIdGenerator(), commandIdGenerator)
             .orElseThrow(() -> new IllegalArgumentException(
                 "Command step " + serviceName + " is missing commandIdGenerator"));
-        return new CommandDescriptor(
-            serviceName,
-            resolvedCommand,
-            inputType,
-            outputType,
-            resolvedGenerator,
-            CommandDuplicatePolicy.fromString(step.duplicatePolicy()),
-            step.commandConfig());
+        Optional<NativeCommandSelector> selector = nativeSelector(resolvedCommand, step.commandConfig());
+        Map<String, Object> configuration = selector.isPresent() ? operationConfiguration(step.commandConfig()) : step.commandConfig();
+        return selector.map(value -> CommandDescriptor.nativeCommand(
+                serviceName, value, inputType, outputType, resolvedGenerator,
+                CommandDuplicatePolicy.fromString(step.duplicatePolicy()), configuration))
+            .orElseGet(() -> new CommandDescriptor(
+                serviceName, resolvedCommand, inputType, outputType, resolvedGenerator,
+                CommandDuplicatePolicy.fromString(step.duplicatePolicy()), configuration));
     }
 
     private static Path resolveConfigBase() {
@@ -126,6 +135,100 @@ public class CommandStepDescriptorFactory {
             }
         }
         return Optional.empty();
+    }
+
+    private static Optional<NativeCommandSelector> nativeSelector(String command, Map<String, Object> configuration) {
+        if (!command.startsWith("native:")) {
+            return Optional.empty();
+        }
+        String provider = requiredString(configuration, "__tpf_native_provider");
+        String operation = requiredString(configuration, "__tpf_native_operation");
+        int providerVersion = requiredPositiveInteger(configuration, "__tpf_native_provider_version");
+        int operationVersion = requiredPositiveInteger(configuration, "__tpf_native_operation_version");
+        return Optional.of(new NativeCommandSelector(
+            new ConnectorOperationIdentity(
+                ConnectorProviderId.of(provider), operation, ConnectorOperationKind.COMMAND, operationVersion),
+            providerVersion,
+            policy(configuration.get("__tpf_native_policy"))));
+    }
+
+    private static CommandPolicy policy(Object value) {
+        if (value == null) {
+            return CommandPolicy.none();
+        }
+        if (!(value instanceof Map<?, ?> values)) {
+            throw new IllegalArgumentException("native command policy must be a map");
+        }
+        values.keySet().stream()
+            .map(String::valueOf)
+            .filter(key -> !Set.of(
+                "requireRetryRedrive", "requireIdempotency", "requireReconciliation", "requiredExecutionStyle",
+                "requiredConcurrencyScope", "minimumMachineConfirmation", "requireUserConfirmation").contains(key))
+            .sorted()
+            .findFirst()
+            .ifPresent(key -> {
+                throw new IllegalArgumentException("native command policy has unsupported field '" + key + "'");
+            });
+        return new CommandPolicy(
+            bool(values, "requireRetryRedrive"),
+            bool(values, "requireIdempotency"),
+            bool(values, "requireReconciliation"),
+            optionalEnum(values, "requiredExecutionStyle", ConnectorExecutionStyle.class),
+            optionalEnum(values, "requiredConcurrencyScope", ConnectorConcurrencyScope.class),
+            optionalEnum(values, "minimumMachineConfirmation", CommandMachineConfirmation.class),
+            bool(values, "requireUserConfirmation"));
+    }
+
+    private static Map<String, Object> operationConfiguration(Map<String, Object> configuration) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        configuration.forEach((key, value) -> {
+            if (!key.startsWith("__tpf_native_")) {
+                result.put(key, value);
+            }
+        });
+        return Map.copyOf(result);
+    }
+
+    private static String requiredString(Map<String, Object> values, String key) {
+        Object value = values.get(key);
+        if (!(value instanceof String string) || string.isBlank()) {
+            throw new IllegalArgumentException("native command selector " + key + " must be a non-blank string");
+        }
+        return string;
+    }
+
+    private static int requiredPositiveInteger(Map<String, Object> values, String key) {
+        Object value = values.get(key);
+        if (!(value instanceof Number number) || number.intValue() < 1 || number.doubleValue() != number.intValue()) {
+            throw new IllegalArgumentException("native command selector " + key + " must be a positive integer");
+        }
+        return number.intValue();
+    }
+
+    private static boolean bool(Map<?, ?> values, String key) {
+        Object value = values.get(key);
+        if (value == null) {
+            return false;
+        }
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        throw new IllegalArgumentException("native command policy " + key + " must be a boolean");
+    }
+
+    private static <T extends Enum<T>> Optional<T> optionalEnum(Map<?, ?> values, String key, Class<T> type) {
+        Object value = values.get(key);
+        if (value == null) {
+            return Optional.empty();
+        }
+        if (!(value instanceof String string)) {
+            throw new IllegalArgumentException("native command policy " + key + " must be a string");
+        }
+        try {
+            return Optional.of(Enum.valueOf(type, string));
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException("native command policy " + key + " has unsupported value " + string, exception);
+        }
     }
 
     private static String toServiceName(String stepName) {

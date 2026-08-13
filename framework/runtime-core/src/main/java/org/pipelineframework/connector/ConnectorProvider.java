@@ -12,6 +12,10 @@ public interface ConnectorProvider<PC> {
 
     Collection<? extends ConnectorOperation> operations();
 
+    default ConnectorExecutionCapabilities executionCapabilities() {
+        return ConnectorExecutionCapabilities.conservative();
+    }
+
     default Optional<ConnectorConfigSchema<PC>> configurationSchema() {
         return Optional.empty();
     }

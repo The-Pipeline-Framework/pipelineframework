@@ -164,6 +164,19 @@ public final class ConnectorRegistry {
         return operationType.cast(operation);
     }
 
+    public CommandOperation<?, ?, ?> requireCommandOperation(
+        ConnectorOperationIdentity identity,
+        int expectedProviderMajorVersion,
+        CommandPolicy policy
+    ) {
+        Objects.requireNonNull(identity, "command operation identity must not be null");
+        requireProvider(identity.providerId(), expectedProviderMajorVersion);
+        CommandOperation<?, ?, ?> operation = requireExecutionOperation(identity, CommandOperation.class);
+        CommandPolicyValidator.validate(
+            providers.get(identity.providerId()).descriptor(), operation.descriptor(), policy);
+        return operation;
+    }
+
     public synchronized CompletionStage<Void> start(ConnectorRuntimeContext context) {
         Objects.requireNonNull(context, "runtime context must not be null");
         if (state == LifecycleState.NEW) {
@@ -259,6 +272,11 @@ public final class ConnectorRegistry {
                     "connector provider " + descriptor.id().value() + " configuration schema does not match its descriptor");
             }
         });
+        if (!descriptor.executionCapabilities().orElse(ConnectorExecutionCapabilities.conservative())
+            .equals(provider.executionCapabilities())) {
+            throw new IllegalArgumentException(
+                "connector provider " + descriptor.id().value() + " execution capabilities do not match its descriptor");
+        }
     }
 
     private static void validateOperationSchema(
@@ -268,6 +286,12 @@ public final class ConnectorRegistry {
     ) {
         if (operation instanceof CommandOperation<?, ?, ?> command) {
             validateOperationSchema(command.configurationSchema(), descriptor, provider);
+            if (!descriptor.commandCapabilities().orElse(CommandCapabilities.conservative())
+                .equals(command.capabilities())) {
+                throw new IllegalArgumentException(
+                    "command operation " + descriptor.id() + " for provider " + provider.id().value()
+                        + " capabilities do not match its descriptor");
+            }
         }
         if (operation instanceof QueryOperation<?, ?, ?> query) {
             validateOperationSchema(query.configurationSchema(), descriptor, provider);

@@ -32,6 +32,7 @@ public class InMemoryCommandEffectStore implements CommandEffectStore {
             null,
             null,
             null,
+            null,
             nowEpochMs,
             nowEpochMs);
         CommandEffectRecord existing = records.putIfAbsent(key(pending.tenantId(), pending.commandId()), pending);
@@ -47,8 +48,24 @@ public class InMemoryCommandEffectStore implements CommandEffectStore {
     }
 
     @Override
+    public boolean supportsNativeOutcomeSnapshots() {
+        return true;
+    }
+
+    @Override
     public Uni<CommandEffectRecord> markSucceeded(String tenantId, String commandId, Object output, long nowEpochMs) {
         return update(tenantId, commandId, record -> record.succeeded(output, nowEpochMs));
+    }
+
+    @Override
+    public Uni<CommandEffectRecord> markSucceeded(
+        String tenantId,
+        String commandId,
+        Object output,
+        CommandOutcomeSnapshot outcome,
+        long nowEpochMs
+    ) {
+        return update(tenantId, commandId, record -> record.succeeded(output, outcome, nowEpochMs));
     }
 
     @Override
@@ -59,6 +76,18 @@ public class InMemoryCommandEffectStore implements CommandEffectStore {
     @Override
     public Uni<CommandEffectRecord> markDlq(String tenantId, String commandId, Throwable failure, long nowEpochMs) {
         return update(tenantId, commandId, record -> record.dlq(failure, nowEpochMs));
+    }
+
+    @Override
+    public Uni<CommandEffectRecord> markOutcome(
+        String tenantId,
+        String commandId,
+        CommandEffectStatus status,
+        Throwable failure,
+        CommandOutcomeSnapshot outcome,
+        long nowEpochMs
+    ) {
+        return update(tenantId, commandId, record -> record.failedWithStatus(status, failure, outcome, nowEpochMs));
     }
 
     public void clear() {

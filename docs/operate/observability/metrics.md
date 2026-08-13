@@ -214,7 +214,10 @@ Command effect metrics:
 | `tpf.command.effect.duplicate.total` | `tpf_command_effect_duplicate_total` | counter | `tpf.command`, `tpf.command.step`, `tpf.command.duplicate_policy`, `tpf.command.duplicate_result` |
 | `tpf.command.effect.duration` | `tpf_command_effect_duration_*` | histogram | `tpf.command`, `tpf.command.step`, `tpf.command.status` |
 
-Command status values are `pending`, `dispatching`, `succeeded`, `failed_retryable`, and `dlq`.
+Command status values are `pending`, `dispatching`, `succeeded`, `failed_retryable`, `ambiguous`,
+`user_action_required`, and `dlq`. `ambiguous` and `user_action_required` are distinct durable
+barriers even though their enclosing pipeline execution follows the established terminal
+failure/DLQ path.
 Duplicate result values are `returned_recorded`, `rejected`, and `in_progress`.
 
 Command step SLO examples:
