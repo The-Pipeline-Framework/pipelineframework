@@ -36,6 +36,7 @@ import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.helpers.test.AssertSubscriber;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -236,6 +237,47 @@ class PipelineReplayExecutionTest {
         assertEquals(PipelineKillSwitchException.class.getName(), exporter.failureType);
         assertEquals("kill", exporter.failureMessage);
         assertTrue(exporter.durationMs >= 0L);
+    }
+
+    @Test
+    void emitsOneReplayCancellationForAnInstrumentedUni() {
+        CollectingExporter exporter = new CollectingExporter();
+        PipelineTelemetry telemetry = new PipelineTelemetry(
+            new ReplayEnabledPipelineStepConfig(), exporter, cancellationTopology());
+        Uni<Payload> input = Uni.createFrom().item(new Payload("cancel-uni"));
+        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+
+        Uni<Payload> current = (Uni<Payload>) PipelineStepExecutor.applyOneToOneUnchecked(
+            new NeverCompletesStep(), input, false, 4, telemetry, runContext, null, null);
+        var subscription = current.subscribe().with(ignored -> { });
+        subscription.cancel();
+
+        assertReplayCancelledOnly(exporter, "NeverCompletes");
+    }
+
+    @Test
+    void emitsOneReplayCancellationForAnInstrumentedMulti() {
+        CollectingExporter exporter = new CollectingExporter();
+        PipelineTelemetry telemetry = new PipelineTelemetry(
+            new ReplayEnabledPipelineStepConfig(), exporter, cancellationTopology());
+        Multi<Payload> input = Multi.createFrom().item(new Payload("cancel-multi"));
+        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+
+        Multi<Payload> current = (Multi<Payload>) PipelineStepExecutor.applyManyToManyUnchecked(
+            new NeverCompletesTransformStep(), input, telemetry, runContext, null);
+        AssertSubscriber<Payload> subscriber = current.subscribe().withSubscriber(AssertSubscriber.create(1));
+        subscriber.cancel();
+
+        assertReplayCancelledOnly(exporter, "NeverCompletesTransform");
+    }
+
+    private static void assertReplayCancelledOnly(CollectingExporter exporter, String step) {
+        List<PipelineExecutionEvent> terminalEvents = exporter.events.stream()
+            .filter(event -> step.equals(event.step()))
+            .filter(event -> List.of("cancelled", "success", "error").contains(event.event()))
+            .toList();
+        assertEquals(1, terminalEvents.size());
+        assertEquals("cancelled", terminalEvents.getFirst().event());
     }
 
     @Test
@@ -598,6 +640,17 @@ class PipelineReplayExecutionTest {
             List.of());
     }
 
+    private PipelineReplayTopology cancellationTopology() {
+        String uniStep = NeverCompletesStep.class.getName();
+        String multiStep = NeverCompletesTransformStep.class.getName();
+        return new PipelineReplayTopology(
+            "csv-payments",
+            List.of(
+                new PipelineReplayTopology.Step(uniStep, "NeverCompletes", "NeverCompletesService", "one-to-one", 0, false, null, null),
+                new PipelineReplayTopology.Step(multiStep, "NeverCompletesTransform", "NeverCompletesTransformService", "many-to-many", 1, false, null, null)),
+            List.of());
+    }
+
     private PipelineReplayTopology cacheHitTopology() {
         String step = PrefixStep.class.getName();
         String cacheStep = "org.pipelineframework.synthetic.CachePrefixClientStep";
@@ -770,6 +823,13 @@ class PipelineReplayExecutionTest {
         @Override
         public Uni<Payload> applyOneToOne(Payload in) {
             return Uni.createFrom().nothing();
+        }
+    }
+
+    static final class NeverCompletesTransformStep extends BaseStep implements StepManyToMany<Payload, Payload> {
+        @Override
+        public Multi<Payload> applyTransform(Multi<Payload> input) {
+            return Multi.createFrom().nothing();
         }
     }
 

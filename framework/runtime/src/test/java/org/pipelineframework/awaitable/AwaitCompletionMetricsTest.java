@@ -48,31 +48,7 @@ class AwaitCompletionMetricsTest {
 
     @Test
     void recordsAwaitLifecycleMetricsWithoutHighCardinalityIds() {
-        AwaitInteractionRecord interaction = new AwaitInteractionRecord(
-            "tenant-1",
-            "exec-1",
-            "Await Payment Provider",
-            1,
-            "PaymentStatus",
-            "interaction-1",
-            "correlation-1",
-            "cause-1",
-            "idem-1",
-            1L,
-            AwaitInteractionStatus.COMPLETED,
-            "request",
-            "response",
-            "unit-1",
-            0,
-            null,
-            null,
-            null,
-            "kafka",
-            Map.of(),
-            2_000L,
-            1_000L,
-            1_500L,
-            100_000L);
+        AwaitInteractionRecord interaction = interactionRecord();
         AwaitUnitRecord unit = new AwaitUnitRecord(
             "tenant-1",
             "unit-1",
@@ -120,7 +96,7 @@ class AwaitCompletionMetricsTest {
     void keepsProviderDispatchSpanCurrentForTheActualSubscription() {
         AtomicBoolean spanWasCurrent = new AtomicBoolean();
 
-        String value = AwaitCompletionMetrics.inProviderDispatchSpan(null,
+        String value = AwaitCompletionMetrics.inProviderDispatchSpan(interactionRecord(),
             () -> Uni.createFrom().item(() -> {
                 spanWasCurrent.set(io.opentelemetry.api.trace.Span.current().getSpanContext().isValid());
                 return "dispatched";
@@ -129,6 +105,34 @@ class AwaitCompletionMetricsTest {
 
         assertTrue(spanWasCurrent.get());
         assertTrue("dispatched".equals(value));
+    }
+
+    private static AwaitInteractionRecord interactionRecord() {
+        return new AwaitInteractionRecord(
+            "tenant-1",
+            "exec-1",
+            "Await Payment Provider",
+            1,
+            "PaymentStatus",
+            "interaction-1",
+            "correlation-1",
+            "cause-1",
+            "idem-1",
+            1L,
+            AwaitInteractionStatus.COMPLETED,
+            "request",
+            "response",
+            "unit-1",
+            0,
+            null,
+            null,
+            null,
+            "kafka",
+            Map.of(),
+            2_000L,
+            1_000L,
+            1_500L,
+            100_000L);
     }
 
     private static boolean hasMetric(Iterable<MetricData> metrics, String name) {

@@ -385,7 +385,15 @@ final class ExecutionReplayTracker {
         complete(scope, failure);
     }
 
+    void completeCancelled(StepExecutionScope scope) {
+        complete(scope, null, true);
+    }
+
     private void complete(StepExecutionScope scope, Throwable failure) {
+        complete(scope, failure, false);
+    }
+
+    private void complete(StepExecutionScope scope, Throwable failure, boolean cancelled) {
         if (scope == null) {
             return;
         }
@@ -394,7 +402,7 @@ final class ExecutionReplayTracker {
                 startIfNecessary(scope);
                 long endNanos = System.nanoTime();
                 long durationMs = Math.max(0L, Math.round((endNanos - scope.startNanos()) / 1_000_000d));
-                String eventName = failure == null ? "success" : "error";
+                String eventName = cancelled ? "cancelled" : failure == null ? "success" : "error";
                 PipelineExecutionEvent event = newEvent(
                     scope,
                     scope.eventItemId(),
@@ -413,7 +421,7 @@ final class ExecutionReplayTracker {
                     failure == null ? null : failure.getMessage(),
                     Map.of());
                 exporter.emit(scope.runContext().runId(), event);
-                addSpanEvent(scope.span(), failure == null ? "tpf.step.success" : "tpf.step.error",
+                addSpanEvent(scope.span(), cancelled ? "tpf.step.cancelled" : failure == null ? "tpf.step.success" : "tpf.step.error",
                     Attributes.builder()
                         .put(PIPELINE, topology.pipeline())
                         .put(TARGET_STEP, scope.descriptor().step())

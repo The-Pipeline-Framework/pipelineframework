@@ -138,7 +138,7 @@ public class PipelineTelemetry {
     private final AtomicLong maxConcurrency;
     private final PipelineTelemetryResourceLoader.ItemBoundary itemBoundary;
     private final Map<String, String> stepParents;
-    private final PipelineReplayTopology replayTopology;
+    private final Optional<PipelineReplayTopology> replayTopology;
     private final ExecutionReplayTracker replayTracker;
     private final PipelineStepConfig stepConfig;
     private final RetryAmplificationGuard retryAmplificationGuard;
@@ -156,11 +156,11 @@ public class PipelineTelemetry {
      */
     @Inject
     public PipelineTelemetry(PipelineStepConfig stepConfig, Instance<PipelineReplayExporter> replayExporters) {
-        this(stepConfig, resolveReplayExporter(replayExporters), PipelineReplayTopologyLoader.load().orElse(null), TelemetryRuntimes.global());
+        this(stepConfig, resolveReplayExporter(replayExporters), PipelineReplayTopologyLoader.load(), TelemetryRuntimes.global());
     }
 
     public PipelineTelemetry(PipelineStepConfig stepConfig) {
-        this(stepConfig, new NoopPipelineReplayExporter(), PipelineReplayTopologyLoader.load().orElse(null), TelemetryRuntimes.global());
+        this(stepConfig, new NoopPipelineReplayExporter(), PipelineReplayTopologyLoader.load(), TelemetryRuntimes.global());
     }
 
     private static PipelineReplayExporter resolveReplayExporter(Instance<PipelineReplayExporter> replayExporters) {
@@ -174,7 +174,7 @@ public class PipelineTelemetry {
         PipelineStepConfig stepConfig,
         PipelineReplayExporter replayExporter,
         PipelineReplayTopology replayTopology) {
-        this(stepConfig, replayExporter, replayTopology, TelemetryRuntimes.global());
+        this(stepConfig, replayExporter, Optional.ofNullable(replayTopology), TelemetryRuntimes.global());
     }
 
     /**
@@ -185,8 +185,16 @@ public class PipelineTelemetry {
         PipelineReplayExporter replayExporter,
         PipelineReplayTopology replayTopology,
         TelemetryRuntime telemetryRuntime) {
+        this(stepConfig, replayExporter, Optional.ofNullable(replayTopology), telemetryRuntime);
+    }
+
+    PipelineTelemetry(
+        PipelineStepConfig stepConfig,
+        PipelineReplayExporter replayExporter,
+        Optional<PipelineReplayTopology> replayTopology,
+        TelemetryRuntime telemetryRuntime) {
         PipelineStepConfig.TelemetryConfig telemetry = stepConfig.telemetry();
-        this.telemetryPolicy = TelemetryPolicy.from(stepConfig, replayTopology != null);
+        this.telemetryPolicy = TelemetryPolicy.from(stepConfig, replayTopology.isPresent());
         this.enabled = telemetryPolicy.frameworkEnabled();
         this.stepConfig = stepConfig;
         this.tracingEnabled = telemetryPolicy.tracingEnabled();
@@ -315,7 +323,7 @@ public class PipelineTelemetry {
             this.transitionLatency = null;
         }
         this.replayTracker = this.replayEnabled
-            ? new ExecutionReplayTracker(tracer, replayExporter, replayTopology, this.transitionCounter, this.transitionLatency)
+            ? new ExecutionReplayTracker(tracer, replayExporter, replayTopology.orElseThrow(), this.transitionCounter, this.transitionLatency)
             : null;
     }
 
@@ -347,7 +355,7 @@ public class PipelineTelemetry {
                 .setAttribute("tpf.parallelism", policy == null ? "AUTO" : policy.name())
                 .setAttribute("tpf.max_concurrency", maxConcurrency)
                 .setAttribute("tpf.input", multiInput ? "multi" : "uni")
-                .setAttribute("tpf.pipeline", replayTopology == null ? "pipeline" : replayTopology.pipeline())
+                .setAttribute("tpf.pipeline", replayTopology.map(PipelineReplayTopology::pipeline).orElse("pipeline"))
                 .startSpan();
             context = context.with(span);
         }
@@ -675,7 +683,9 @@ public class PipelineTelemetry {
         recordStepOutcome(stepClass, startNanos, failure, cancelled);
         onItemEnd(stepClass, runContext);
         if (replayScope != null) {
-            if (failure == null) {
+            if (cancelled) {
+                replayTracker.completeCancelled(replayScope);
+            } else if (failure == null) {
                 replayTracker.completeSuccess(replayScope);
             } else {
                 replayTracker.completeFailure(replayScope, failure);
@@ -794,9 +804,9 @@ public class PipelineTelemetry {
             .setSpanKind(SpanKind.INTERNAL)
             .setAttribute("tpf.step.class", resolvedStepClass)
             .startSpan();
-        PipelineReplayTopology.Step descriptor = replayTopology == null ? null : replayTopology.step(resolvedStepClass).orElse(null);
+        PipelineReplayTopology.Step descriptor = replayTopology.flatMap(topology -> topology.step(resolvedStepClass)).orElse(null);
         if (descriptor != null) {
-            span.setAttribute("tpf.pipeline", replayTopology.pipeline());
+            span.setAttribute("tpf.pipeline", replayTopology.orElseThrow().pipeline());
             span.setAttribute("tpf.step", descriptor.step());
             span.setAttribute("tpf.service", descriptor.service());
             span.setAttribute("tpf.cardinality", descriptor.cardinality());
@@ -1004,18 +1014,18 @@ public class PipelineTelemetry {
     private Attributes runAttributes(String inputKind) {
         AttributesBuilder builder = Attributes.builder()
             .put(INPUT_KIND, inputKind == null ? "unknown" : inputKind);
-        if (replayTopology != null && replayTopology.pipeline() != null && !replayTopology.pipeline().isBlank()) {
-            builder.put(PIPELINE, replayTopology.pipeline());
-        }
+        replayTopology.map(PipelineReplayTopology::pipeline)
+            .filter(pipeline -> !pipeline.isBlank())
+            .ifPresent(pipeline -> builder.put(PIPELINE, pipeline));
         return builder.build();
     }
 
     private void applyReplayStepAttributes(AttributesBuilder builder, String stepClassName) {
-        if (builder == null || replayTopology == null || stepClassName == null || stepClassName.isBlank()) {
+        if (builder == null || replayTopology.isEmpty() || stepClassName == null || stepClassName.isBlank()) {
             return;
         }
-        replayTopology.step(stepClassName).ifPresent(step -> {
-            builder.put(PIPELINE, replayTopology.pipeline());
+        replayTopology.orElseThrow().step(stepClassName).ifPresent(step -> {
+            builder.put(PIPELINE, replayTopology.orElseThrow().pipeline());
             if (step.step() != null) {
                 builder.put(STEP, step.step());
             }
