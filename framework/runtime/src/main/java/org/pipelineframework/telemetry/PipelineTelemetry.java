@@ -1345,7 +1345,13 @@ public class PipelineTelemetry {
         ExecutionReplayTracker.RunReplayState replayState,
         AtomicBoolean endSignalled) {
 
-        static RunContext disabled() {
+        /**
+         * Returns a non-recording context for execution paths that are intentionally not a
+         * pipeline-run telemetry owner.
+         *
+         * @return disabled run context
+         */
+        public static RunContext disabled() {
             return new RunContext(
                 "disabled",
                 Context.current(),

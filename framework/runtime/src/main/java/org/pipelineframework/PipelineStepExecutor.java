@@ -75,7 +75,27 @@ class PipelineStepExecutor {
         PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot) {
-        PipelineStepTelemetry stepTelemetry = PipelineStepTelemetry.of(telemetry, telemetryContext);
+        return applyStep(
+            step,
+            current,
+            parallelismPolicy,
+            maxConcurrency,
+            PipelineStepTelemetry.of(telemetry, telemetryContext),
+            cacheReadSupport,
+            contextSnapshot,
+            awaitContextSnapshot);
+    }
+
+    @SuppressWarnings("unchecked")
+    Object applyStep(
+        Object step,
+        Object current,
+        org.pipelineframework.config.ParallelismPolicy parallelismPolicy,
+        int maxConcurrency,
+        PipelineStepTelemetry stepTelemetry,
+        PipelineCacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot,
+        AwaitExecutionContext awaitContextSnapshot) {
         Object resolvedStep = unwrapClientProxy(step).orElse(step);
         StepBranchingDescriptor branchingDescriptor = branchingRegistry == null
             ? null
