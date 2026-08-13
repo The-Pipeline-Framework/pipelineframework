@@ -80,7 +80,9 @@ public final class PipelineCompositionContractProjector {
                 step.inputContractId(),
                 step.outputContractId(),
                 step.directCardinality().orElseThrow().name(),
-                "");
+                "",
+                step.acceptedContractIds(),
+                step.terminal());
         }
         PipelineReference target = step.pipelineReference().orElseThrow();
         CardinalitySemantics cardinality = invocationCardinalities.get(target);
@@ -94,7 +96,9 @@ public final class PipelineCompositionContractProjector {
             step.inputContractId(),
             step.outputContractId(),
             cardinality.name(),
-            target.logicalId());
+            target.logicalId(),
+            step.acceptedContractIds(),
+            step.terminal());
     }
 
     private static List<PipelineCompositionContinuation> continuations(

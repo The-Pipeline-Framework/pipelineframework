@@ -4,10 +4,15 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.CardinalitySemantics;
+import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
+import org.pipelineframework.config.template.PipelineTemplateTypeModel;
+import org.pipelineframework.config.template.PipelineTemplateTypeReference;
+import org.pipelineframework.processor.routing.V3PipelineInvocationCompatibility;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineDefinitionLinkerTest {
 
@@ -129,6 +134,64 @@ class PipelineDefinitionLinkerTest {
             () -> linker(Map.of(targetReference, target)).link(root));
 
         assertEquals("Pipeline reference target input contract does not match callsite call", failure.getMessage());
+    }
+
+    @Test
+    void acceptsV3UnionPayloadsAtAnInvocationCallsite() {
+        PipelineTemplateTypeModel typeModel = new PipelineTemplateTypeModel(Map.of(
+            "Decision", new PipelineTemplateTypeDefinition.UnionType("Decision", Map.of(
+                "physical", new PipelineTemplateTypeDefinition.Variant(
+                    "physical", new PipelineTemplateTypeReference.Named("PhysicalOrder")))),
+            "PhysicalOrder", new PipelineTemplateTypeDefinition.RecordType("PhysicalOrder", List.of()),
+            "Assessment", new PipelineTemplateTypeDefinition.RecordType("Assessment", List.of()),
+            "AnalysisResult", new PipelineTemplateTypeDefinition.UnionType("AnalysisResult", Map.of(
+                "assessment", new PipelineTemplateTypeDefinition.Variant(
+                    "assessment", new PipelineTemplateTypeReference.Named("Assessment"))))));
+        PipelineReference targetReference = new PipelineReference("physical-analysis");
+        PipelineDefinition target = definition(
+            targetReference,
+            "PhysicalOrder",
+            "Assessment",
+            PipelineDefinitionStep.direct("analyse", "PhysicalOrder", "Assessment", CardinalitySemantics.ONE_TO_ONE));
+        PipelineDefinition root = definition(
+            new PipelineReference("root"),
+            "Decision",
+            "AnalysisResult",
+            PipelineDefinitionStep.pipeline("analyse-physical", "Decision", "AnalysisResult", targetReference));
+
+        ResolvedPipelineDefinitionGraph graph = new PipelineDefinitionLinker(
+            reference -> java.util.Optional.ofNullable(Map.of(targetReference, target).get(reference)),
+            new V3PipelineInvocationCompatibility(typeModel)).link(root);
+
+        assertEquals(CardinalitySemantics.ONE_TO_ONE, graph.rootCardinality());
+    }
+
+    @Test
+    void representsRoutedChildStepsWithoutRequiringImmediatePredecessorEquality() {
+        PipelineReference childReference = new PipelineReference("decision-routing");
+        PipelineDefinition child = definition(
+            childReference,
+            "OrderRequest",
+            "FinalizedOrder",
+            PipelineDefinitionStep.direct("classify", "OrderRequest", "OrderDecision", CardinalitySemantics.ONE_TO_ONE),
+            PipelineDefinitionStep.direct("reserve", "OrderDecision", "StockReserved", CardinalitySemantics.ONE_TO_ONE,
+                List.of("PhysicalOrder"), false),
+            PipelineDefinitionStep.direct("provision", "OrderDecision", "LicenseProvisioned", CardinalitySemantics.ONE_TO_ONE,
+                List.of("DigitalOrder"), false),
+            PipelineDefinitionStep.direct("finalize", "OrderCompletion", "FinalizedOrder", CardinalitySemantics.ONE_TO_ONE,
+                List.of("StockReserved", "LicenseProvisioned"), true));
+        PipelineDefinition root = definition(
+            new PipelineReference("root"),
+            "OrderRequest",
+            "FinalizedOrder",
+            PipelineDefinitionStep.pipeline("route", "OrderRequest", "FinalizedOrder", childReference));
+
+        ResolvedPipelineDefinitionGraph graph = linker(Map.of(childReference, child)).link(root);
+
+        assertEquals(CardinalitySemantics.ONE_TO_ONE, graph.rootCardinality());
+        assertEquals(List.of("PhysicalOrder"), child.steps().get(1).acceptedContractIds());
+        assertEquals(List.of("DigitalOrder"), child.steps().get(2).acceptedContractIds());
+        assertTrue(child.steps().get(3).terminal());
     }
 
     @Test

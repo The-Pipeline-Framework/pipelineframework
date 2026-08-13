@@ -31,9 +31,29 @@ import org.pipelineframework.config.CardinalitySemantics;
 public final class PipelineDefinitionLinker {
 
     private final PipelineDefinitionResolver resolver;
+    private final PipelineInvocationCompatibility invocationCompatibility;
+    private final PipelineDefinitionValidator definitionValidator;
 
     public PipelineDefinitionLinker(PipelineDefinitionResolver resolver) {
+        this(resolver, PipelineInvocationCompatibility.exactIdentity(), PipelineDefinitionValidator.none());
+    }
+
+    public PipelineDefinitionLinker(
+        PipelineDefinitionResolver resolver,
+        PipelineInvocationCompatibility invocationCompatibility
+    ) {
+        this(resolver, invocationCompatibility, PipelineDefinitionValidator.none());
+    }
+
+    public PipelineDefinitionLinker(
+        PipelineDefinitionResolver resolver,
+        PipelineInvocationCompatibility invocationCompatibility,
+        PipelineDefinitionValidator definitionValidator
+    ) {
         this.resolver = Objects.requireNonNull(resolver, "resolver must not be null");
+        this.invocationCompatibility = Objects.requireNonNull(
+            invocationCompatibility, "invocationCompatibility must not be null");
+        this.definitionValidator = Objects.requireNonNull(definitionValidator, "definitionValidator must not be null");
     }
 
     public ResolvedPipelineDefinitionGraph link(PipelineDefinition root) {
@@ -68,6 +88,7 @@ public final class PipelineDefinitionLinker {
         Deque<PipelineReference> stack
     ) {
         PipelineReference reference = definition.reference();
+        definitionValidator.validate(definition);
         CardinalitySemantics cached = cardinalities.get(reference);
         if (cached != null) {
             return cached;
@@ -108,13 +129,13 @@ public final class PipelineDefinitionLinker {
             "Static pipeline reference could not be resolved: " + reference.logicalId()));
     }
 
-    private static void validateInvocationContract(PipelineDefinitionStep invocation, PipelineDefinition target) {
-        if (!invocation.inputContractId().equals(target.inputContractId())) {
+    private void validateInvocationContract(PipelineDefinitionStep invocation, PipelineDefinition target) {
+        if (!invocationCompatibility.inputCompatible(invocation.inputContractId(), target.inputContractId())) {
             throw new IllegalArgumentException(
                 "Pipeline reference " + target.reference().logicalId() + " input contract does not match callsite "
                     + invocation.localStepId());
         }
-        if (!invocation.outputContractId().equals(target.outputContractId())) {
+        if (!invocationCompatibility.outputCompatible(target.outputContractId(), invocation.outputContractId())) {
             throw new IllegalArgumentException(
                 "Pipeline reference " + target.reference().logicalId() + " output contract does not match callsite "
                     + invocation.localStepId());

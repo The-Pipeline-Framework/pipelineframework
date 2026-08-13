@@ -17,6 +17,7 @@
 package org.pipelineframework.processor.composition;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,33 @@ class PipelineCompositionContractProjectorTest {
         assertEquals("middle", composition.definition("outer").node("call-middle").targetDefinitionId());
         assertEquals(CardinalitySemantics.ONE_TO_ONE.name(),
             composition.definition("outer").node("call-middle").cardinality());
+    }
+
+    @Test
+    void pinsRoutingDeclarationsWithoutChangingStructuredContinuationResolution() {
+        PipelineReference child = new PipelineReference("child");
+        PipelineDefinition childDefinition = definition(child, "Request", "Final",
+            PipelineDefinitionStep.direct("classify", "Request", "Decision", CardinalitySemantics.ONE_TO_ONE),
+            PipelineDefinitionStep.direct("handle-physical", "Decision", "PhysicalResult", CardinalitySemantics.ONE_TO_ONE,
+                List.of("Physical"), false),
+            PipelineDefinitionStep.direct("finish", "Result", "Final", CardinalitySemantics.ONE_TO_ONE,
+                List.of("PhysicalResult"), true));
+        PipelineReference root = new PipelineReference("root");
+        PipelineDefinition rootDefinition = definition(root, "Request", "Final",
+            PipelineDefinitionStep.pipeline("invoke", "Request", "Final", child));
+
+        PipelineCompositionDescriptor first = new PipelineCompositionContractProjector().project(
+            linker(Map.of(child, childDefinition)).link(rootDefinition));
+        PipelineCompositionDescriptor second = new PipelineCompositionContractProjector().project(
+            linker(Map.of(child, childDefinition)).link(rootDefinition));
+
+        assertEquals(first.definition("child").definitionFingerprint(), second.definition("child").definitionFingerprint());
+        assertEquals(List.of("Physical"), first.definition("child").node("handle-physical").acceptedContractIds());
+        assertTrue(first.definition("child").node("finish").terminal());
+        assertEquals(PipelineCompositionContinuationKind.NEXT_LOCAL,
+            first.definition("child").continuation("handle-physical").kind());
+        assertEquals(PipelineCompositionContinuationKind.RETURN,
+            first.definition("child").continuation("finish").kind());
     }
 
     private static PipelineDefinitionLinker linker(Map<PipelineReference, PipelineDefinition> definitions) {

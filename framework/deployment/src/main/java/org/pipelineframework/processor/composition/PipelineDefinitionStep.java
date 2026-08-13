@@ -18,20 +18,24 @@ package org.pipelineframework.processor.composition;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.List;
 import org.pipelineframework.config.CardinalitySemantics;
 
 /**
  * Compiler-owned structural step in a reusable pipeline definition.
  *
- * <p>This proof model deliberately represents only semantic contracts and static references. It
- * does not model a runtime step implementation or introduce the DSL {@code pipeline} step kind.
+ * <p>The accepted contracts and terminal marker are the resolved declarations from the v3 branch
+ * planner. They preserve typed linear-routing semantics in a source-neutral definition without
+ * introducing a second routing implementation or a runtime routing graph.
  */
 public record PipelineDefinitionStep(
     String localStepId,
     String inputContractId,
     String outputContractId,
     Optional<CardinalitySemantics> directCardinality,
-    Optional<PipelineReference> pipelineReference
+    Optional<PipelineReference> pipelineReference,
+    List<String> acceptedContractIds,
+    boolean terminal
 ) {
 
     public PipelineDefinitionStep {
@@ -40,6 +44,10 @@ public record PipelineDefinitionStep(
         outputContractId = requireNonBlank(outputContractId, "outputContractId");
         directCardinality = Objects.requireNonNull(directCardinality, "directCardinality must not be null");
         pipelineReference = Objects.requireNonNull(pipelineReference, "pipelineReference must not be null");
+        acceptedContractIds = acceptedContractIds == null ? List.of() : acceptedContractIds.stream()
+            .map(value -> requireNonBlank(value, "acceptedContractIds entry"))
+            .distinct()
+            .toList();
         if (directCardinality.isPresent() == pipelineReference.isPresent()) {
             throw new IllegalArgumentException(
                 "A definition step must declare exactly one of directCardinality or pipelineReference");
@@ -57,7 +65,7 @@ public record PipelineDefinitionStep(
             inputContractId,
             outputContractId,
             Optional.of(Objects.requireNonNull(cardinality, "cardinality must not be null")),
-            Optional.empty());
+            Optional.empty(), List.of(), false);
     }
 
     public static PipelineDefinitionStep pipeline(
@@ -71,7 +79,33 @@ public record PipelineDefinitionStep(
             inputContractId,
             outputContractId,
             Optional.empty(),
-            Optional.of(Objects.requireNonNull(pipelineReference, "pipelineReference must not be null")));
+            Optional.of(Objects.requireNonNull(pipelineReference, "pipelineReference must not be null")), List.of(), false);
+    }
+
+    public static PipelineDefinitionStep pipeline(
+        String localStepId,
+        String inputContractId,
+        String outputContractId,
+        PipelineReference pipelineReference,
+        List<String> acceptedContractIds,
+        boolean terminal
+    ) {
+        return new PipelineDefinitionStep(localStepId, inputContractId, outputContractId,
+            Optional.empty(), Optional.of(Objects.requireNonNull(
+                pipelineReference, "pipelineReference must not be null")), acceptedContractIds, terminal);
+    }
+
+    public static PipelineDefinitionStep direct(
+        String localStepId,
+        String inputContractId,
+        String outputContractId,
+        CardinalitySemantics cardinality,
+        List<String> acceptedContractIds,
+        boolean terminal
+    ) {
+        return new PipelineDefinitionStep(localStepId, inputContractId, outputContractId,
+            Optional.of(Objects.requireNonNull(cardinality, "cardinality must not be null")), Optional.empty(),
+            acceptedContractIds, terminal);
     }
 
     private static String requireNonBlank(String value, String field) {

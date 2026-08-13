@@ -23,6 +23,10 @@ import java.util.Set;
 
 /**
  * Structural, source-neutral compiler definition of an ordered typed pipeline.
+ *
+ * <p>This class protects structural invariants only. The v3 compiler validates flow reachability,
+ * union narrowing, and terminal coverage through its authoritative branch planner; imposing
+ * adjacent input/output equality here would silently narrow that language.
  */
 public record PipelineDefinition(
     PipelineReference reference,
@@ -45,15 +49,6 @@ public record PipelineDefinition(
             if (!localStepIds.add(step.localStepId())) {
                 throw new IllegalArgumentException("Duplicate definition-local step id: " + step.localStepId());
             }
-            if (index == 0 && !inputContractId.equals(step.inputContractId())) {
-                throw new IllegalArgumentException("First step input contract must match pipeline definition input contract");
-            }
-            if (index > 0 && !steps.get(index - 1).outputContractId().equals(step.inputContractId())) {
-                throw new IllegalArgumentException("Step contracts must form an ordered linear pipeline");
-            }
-        }
-        if (!outputContractId.equals(steps.get(steps.size() - 1).outputContractId())) {
-            throw new IllegalArgumentException("Last step output contract must match pipeline definition output contract");
         }
     }
 

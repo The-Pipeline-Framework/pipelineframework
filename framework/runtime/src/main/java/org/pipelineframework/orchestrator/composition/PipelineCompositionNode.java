@@ -17,6 +17,7 @@
 package org.pipelineframework.orchestrator.composition;
 
 import java.util.Objects;
+import java.util.List;
 
 /** One ordered node in a resolved definition. */
 public record PipelineCompositionNode(
@@ -26,7 +27,9 @@ public record PipelineCompositionNode(
     String inputContractId,
     String outputContractId,
     String cardinality,
-    String targetDefinitionId
+    String targetDefinitionId,
+    List<String> acceptedContractIds,
+    boolean terminal
 ) {
     public static final String DIRECT = "direct";
     public static final String INVOCATION = "pipeline";
@@ -41,12 +44,28 @@ public record PipelineCompositionNode(
         outputContractId = required(outputContractId, "outputContractId");
         cardinality = required(cardinality, "cardinality");
         targetDefinitionId = targetDefinitionId == null ? "" : targetDefinitionId.strip();
+        acceptedContractIds = acceptedContractIds == null ? List.of() : acceptedContractIds.stream()
+            .map(value -> required(value, "acceptedContractIds entry"))
+            .distinct()
+            .toList();
         if (!DIRECT.equals(kind) && !INVOCATION.equals(kind)) {
             throw new IllegalArgumentException("Unsupported composition node kind: " + kind);
         }
         if (INVOCATION.equals(kind) == targetDefinitionId.isEmpty()) {
             throw new IllegalArgumentException("Pipeline invocation nodes must declare exactly one targetDefinitionId");
         }
+    }
+
+    public PipelineCompositionNode(
+        int index,
+        String nodeId,
+        String kind,
+        String inputContractId,
+        String outputContractId,
+        String cardinality,
+        String targetDefinitionId
+    ) {
+        this(index, nodeId, kind, inputContractId, outputContractId, cardinality, targetDefinitionId, List.of(), false);
     }
 
     public boolean invocation() {

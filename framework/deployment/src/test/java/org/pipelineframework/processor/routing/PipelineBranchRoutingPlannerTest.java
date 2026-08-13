@@ -37,6 +37,11 @@ import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StepKind;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.branching.BranchVariantIdentity;
+import org.pipelineframework.config.CardinalitySemantics;
+import org.pipelineframework.processor.composition.PipelineDefinition;
+import org.pipelineframework.processor.composition.PipelineDefinitionLinker;
+import org.pipelineframework.processor.composition.PipelineDefinitionStep;
+import org.pipelineframework.processor.composition.PipelineReference;
 
 class PipelineBranchRoutingPlannerTest {
 
@@ -155,6 +160,26 @@ class PipelineBranchRoutingPlannerTest {
             .map(ClassName::toString)
             .toList());
         assertTrue(diagnostics.isEmpty(), diagnostics.toString());
+
+        PipelineReference childReference = new PipelineReference("order-routing-child");
+        PipelineDefinition child = new PipelineDefinition(childReference, "OrderRequest", "FinalizedOrder", List.of(
+            PipelineDefinitionStep.direct("classifyOrder", "OrderRequest", "OrderDecision", CardinalitySemantics.ONE_TO_ONE,
+                List.of("OrderRequest"), false),
+            PipelineDefinitionStep.direct("reserveStock", "OrderDecision", "StockReserved", CardinalitySemantics.ONE_TO_ONE,
+                List.of("PhysicalOrder"), false),
+            PipelineDefinitionStep.direct("provisionLicense", "OrderDecision", "LicenseProvisioned", CardinalitySemantics.ONE_TO_ONE,
+                List.of("DigitalOrder"), false),
+            PipelineDefinitionStep.direct("finalize", "OrderCompletion", "FinalizedOrder", CardinalitySemantics.ONE_TO_ONE,
+                List.of("StockReserved", "LicenseProvisioned"), true)));
+        PipelineDefinition root = new PipelineDefinition(new PipelineReference("root"), "OrderRequest", "FinalizedOrder", List.of(
+            PipelineDefinitionStep.pipeline("route", "OrderRequest", "FinalizedOrder", childReference)));
+
+        var graph = new PipelineDefinitionLinker(
+            reference -> java.util.Optional.ofNullable(Map.of(childReference, child).get(reference)),
+            new V3PipelineInvocationCompatibility(new PipelineTemplateTypeModel(definitions)),
+            new BranchPlanPipelineDefinitionValidator(Map.of(childReference, plan.orElseThrow()))).link(root);
+
+        assertEquals(CardinalitySemantics.ONE_TO_ONE, graph.rootCardinality());
     }
 
     @Test
@@ -403,6 +428,45 @@ class PipelineBranchRoutingPlannerTest {
         assertTrue(diagnostics.stream().anyMatch(message ->
                 message.contains("does not cover all reachable branch-end alternatives")
                     && message.contains("ManualReviewRequested")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsStepThatAcceptsAnAlreadyConsumedAlternative() {
+        List<String> diagnostics = new ArrayList<>();
+        PipelineCompilationContext ctx = context(diagnostics);
+        ctx.setPipelineTemplateConfig(new PipelineTemplateConfig(
+            2,
+            "Order Routing",
+            "com.example.order",
+            "GRPC",
+            PipelinePlatform.COMPUTE,
+            messages(),
+            unions(),
+            List.of(
+                step("classifyOrder", "OrderRequest", "OrderDecision", List.of(), false),
+                step("reserveStock", "PhysicalOrder", "StockReserved", List.of("PhysicalOrder"), false),
+                step("provisionLicense", "DigitalOrder", "LicenseProvisioned", List.of("DigitalOrder"), false),
+                step("reserveAgain", "PhysicalOrder", "StockReserved", List.of("PhysicalOrder"), false),
+                step("finalize", "OrderCompletion", "FinalizedOrder",
+                    List.of("StockReserved", "LicenseProvisioned", "ManualReviewRequested"), true)),
+            Map.of(),
+            null,
+            null,
+            null));
+        ctx.setStepDefinitions(List.of(
+            stepDefinition("classifyOrder", "OrderRequest", "OrderDecision"),
+            stepDefinition("reserveStock", "PhysicalOrder", "StockReserved"),
+            stepDefinition("provisionLicense", "DigitalOrder", "LicenseProvisioned"),
+            stepDefinition("reserveAgain", "PhysicalOrder", "StockReserved"),
+            stepDefinition("finalize", "OrderCompletion", "FinalizedOrder")));
+
+        var plan = planner.plan(ctx);
+
+        assertTrue(plan.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message ->
+                message.contains("Step 'reserveAgain' accepts types that are not currently reachable")
+                    && message.contains("PhysicalOrder")),
             diagnostics.toString());
     }
 

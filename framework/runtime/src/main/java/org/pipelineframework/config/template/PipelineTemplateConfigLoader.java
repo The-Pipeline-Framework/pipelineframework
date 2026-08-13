@@ -610,7 +610,8 @@ public class PipelineTemplateConfigLoader {
         for (int index = 1; index < steps.size(); index++) {
             PipelineTemplateStep current = steps.get(index);
             boolean suppliedByAnEarlierStep = steps.subList(0, index).stream()
-                .anyMatch(previous -> v3FlowCompatible(typeModel, previous.outputTypeName(), current.inputTypeName()));
+                .anyMatch(previous -> PipelineTemplateV3FlowCompatibility.compatible(
+                    typeModel, previous.outputTypeName(), current.inputTypeName()));
             if (!suppliedByAnEarlierStep) {
                 throw new IllegalStateException("No preceding step output is assignable to step '" + current.name()
                     + "' input '" + current.inputTypeName() + "'.");
@@ -628,24 +629,6 @@ public class PipelineTemplateConfigLoader {
      * assignable to that payload in ordinary Java terms, so keep that rule local to pipeline flow
      * validation rather than weakening the type model's general assignability contract.
      */
-    private boolean v3FlowCompatible(PipelineTemplateTypeModel typeModel, String source, String target) {
-        if (typeModel.isAssignable(source, target)) {
-            return true;
-        }
-        if (typeModel.definition(target)
-            .filter(PipelineTemplateTypeDefinition.UnionType.class::isInstance)
-            .isPresent()) {
-            return false;
-        }
-        return typeModel.definition(source)
-            .filter(PipelineTemplateTypeDefinition.UnionType.class::isInstance)
-            .map(PipelineTemplateTypeDefinition.UnionType.class::cast)
-            .map(union -> union.variants().values().stream()
-                .map(PipelineTemplateTypeDefinition.Variant::payload)
-                .anyMatch(payload -> typeModel.isAssignable(payload.name(), target)))
-            .orElse(false);
-    }
-
     /**
      * Load and parse a YAML document from the given file path.
      *
