@@ -26,6 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import org.pipelineframework.branching.BranchVariantIdentity;
 import java.util.UUID;
@@ -378,22 +379,18 @@ final class ExecutionReplayTracker {
     }
 
     void completeSuccess(StepExecutionScope scope) {
-        complete(scope, null);
+        complete(scope, CompletionOutcome.success());
     }
 
     void completeFailure(StepExecutionScope scope, Throwable failure) {
-        complete(scope, failure);
+        complete(scope, CompletionOutcome.failure(failure));
     }
 
     void completeCancelled(StepExecutionScope scope) {
-        complete(scope, null, true);
+        complete(scope, CompletionOutcome.cancelled());
     }
 
-    private void complete(StepExecutionScope scope, Throwable failure) {
-        complete(scope, failure, false);
-    }
-
-    private void complete(StepExecutionScope scope, Throwable failure, boolean cancelled) {
+    private void complete(StepExecutionScope scope, CompletionOutcome outcome) {
         if (scope == null) {
             return;
         }
@@ -402,7 +399,7 @@ final class ExecutionReplayTracker {
                 startIfNecessary(scope);
                 long endNanos = System.nanoTime();
                 long durationMs = Math.max(0L, Math.round((endNanos - scope.startNanos()) / 1_000_000d));
-                String eventName = cancelled ? "cancelled" : failure == null ? "success" : "error";
+                String eventName = outcome.eventName();
                 PipelineExecutionEvent event = newEvent(
                     scope,
                     scope.eventItemId(),
@@ -417,11 +414,11 @@ final class ExecutionReplayTracker {
                     scope.descriptor().cardinality(),
                     scope.parentItemIds(),
                     scope.retryAttempt().get() == 0 ? null : scope.retryAttempt().get(),
-                    failure == null ? null : failure.getClass().getName(),
-                    failure == null ? null : failure.getMessage(),
+                    outcome.failure().map(failure -> failure.getClass().getName()).orElse(null),
+                    outcome.failure().map(Throwable::getMessage).orElse(null),
                     Map.of());
                 exporter.emit(scope.runContext().runId(), event);
-                addSpanEvent(scope.span(), cancelled ? "tpf.step.cancelled" : failure == null ? "tpf.step.success" : "tpf.step.error",
+                addSpanEvent(scope.span(), outcome.spanEventName(),
                     Attributes.builder()
                         .put(PIPELINE, topology.pipeline())
                         .put(TARGET_STEP, scope.descriptor().step())
@@ -430,7 +427,7 @@ final class ExecutionReplayTracker {
             }
         }
         removeScope(scope);
-        endSpan(scope.span(), failure);
+        endSpan(scope.span(), outcome.failure());
     }
 
     private void attachInput(StepExecutionScope scope, Object inputItem) {
@@ -651,15 +648,60 @@ final class ExecutionReplayTracker {
         }
     }
 
-    private void endSpan(Span span, Throwable failure) {
+    private void endSpan(Span span, Optional<Throwable> failure) {
         if (span == null) {
             return;
         }
-        if (failure != null) {
-            span.recordException(failure);
-            span.setStatus(StatusCode.ERROR, failure.getMessage());
-        }
+        failure.ifPresent(error -> {
+            span.recordException(error);
+            span.setStatus(StatusCode.ERROR, error.getMessage());
+        });
         span.end();
+    }
+
+    private enum CompletionKind {
+        SUCCESS,
+        FAILURE,
+        CANCELLED
+    }
+
+    private record CompletionOutcome(CompletionKind kind, Optional<Throwable> failure) {
+        private CompletionOutcome {
+            Objects.requireNonNull(kind, "kind");
+            Objects.requireNonNull(failure, "failure");
+            if (kind == CompletionKind.FAILURE && failure.isEmpty()) {
+                throw new IllegalArgumentException("Failure completion requires a failure.");
+            }
+            if (kind != CompletionKind.FAILURE && failure.isPresent()) {
+                throw new IllegalArgumentException("Only failure completion may carry a failure.");
+            }
+        }
+
+        private static CompletionOutcome success() {
+            return new CompletionOutcome(CompletionKind.SUCCESS, Optional.empty());
+        }
+
+        private static CompletionOutcome failure(Throwable failure) {
+            return new CompletionOutcome(
+                CompletionKind.FAILURE,
+                Optional.of(Objects.requireNonNull(failure, "failure")));
+        }
+
+        private static CompletionOutcome cancelled() {
+            return new CompletionOutcome(CompletionKind.CANCELLED, Optional.empty());
+        }
+
+        private String eventName() {
+            return switch (kind) {
+                case SUCCESS -> "success";
+                case FAILURE -> "error";
+                case CANCELLED -> "cancelled";
+            };
+        }
+
+        private String spanEventName() {
+            return "tpf.step." + eventName();
+        }
     }
 
     private PipelineReplayTopology.Step descriptor(String runtimeStepClass) {

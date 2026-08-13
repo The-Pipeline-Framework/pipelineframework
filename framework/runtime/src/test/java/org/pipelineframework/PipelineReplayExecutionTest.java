@@ -33,6 +33,7 @@ import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.data.SpanData;
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
@@ -249,8 +250,12 @@ class PipelineReplayExecutionTest {
 
         Uni<Payload> current = (Uni<Payload>) PipelineStepExecutor.applyOneToOneUnchecked(
             new NeverCompletesStep(), input, false, 4, telemetry, runContext, null, null);
-        var subscription = current.subscribe().with(ignored -> { });
-        subscription.cancel();
+        try {
+            var subscription = current.subscribe().with(ignored -> { });
+            subscription.cancel();
+        } finally {
+            telemetry.abortRun(runContext, new java.util.concurrent.CancellationException("test cancellation"));
+        }
 
         assertReplayCancelledOnly(exporter, "NeverCompletes");
     }
@@ -265,19 +270,30 @@ class PipelineReplayExecutionTest {
 
         Multi<Payload> current = (Multi<Payload>) PipelineStepExecutor.applyManyToManyUnchecked(
             new NeverCompletesTransformStep(), input, telemetry, runContext, null);
-        AssertSubscriber<Payload> subscriber = current.subscribe().withSubscriber(AssertSubscriber.create(1));
-        subscriber.cancel();
+        try {
+            AssertSubscriber<Payload> subscriber = current.subscribe().withSubscriber(AssertSubscriber.create(1));
+            subscriber.cancel();
+        } finally {
+            telemetry.abortRun(runContext, new java.util.concurrent.CancellationException("test cancellation"));
+        }
 
         assertReplayCancelledOnly(exporter, "NeverCompletesTransform");
     }
 
-    private static void assertReplayCancelledOnly(CollectingExporter exporter, String step) {
+    private void assertReplayCancelledOnly(CollectingExporter exporter, String step) {
         List<PipelineExecutionEvent> terminalEvents = exporter.events.stream()
             .filter(event -> step.equals(event.step()))
             .filter(event -> List.of("cancelled", "success", "error").contains(event.event()))
             .toList();
         assertEquals(1, terminalEvents.size());
         assertEquals("cancelled", terminalEvents.getFirst().event());
+        List<SpanData> stepSpans = spanExporter.getFinishedSpanItems().stream()
+            .filter(span -> "tpf.step".equals(span.getName()))
+            .toList();
+        assertEquals(1, stepSpans.size());
+        assertEquals(1, stepSpans.getFirst().getEvents().stream()
+            .filter(event -> "tpf.step.cancelled".equals(event.getName()))
+            .count());
     }
 
     @Test

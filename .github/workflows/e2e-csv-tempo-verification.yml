@@ -75,7 +75,7 @@ jobs:
 
       - name: Ensure matching framework parent is available
         run: |
-          framework_version="$(./mvnw -q -f framework/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)"
+          framework_version="$(./mvnw -q -N help:evaluate -Dexpression=project.version -DforceStdout)"
           framework_parent="$HOME/.m2/repository/org/pipelineframework/framework-parent/${framework_version}/framework-parent-${framework_version}.pom"
           if [ ! -f "$framework_parent" ]; then
             ./mvnw -B --no-transfer-progress -f framework/pom.xml -N install -Dgpg.skip
