@@ -28,23 +28,26 @@ import org.pipelineframework.invocation.PipelineInvocationSteps;
  * resources, or a runtime definition registry. A generated local binding can supply the child
  * step instances directly.
  */
-public final class LocalPipelineInvocationBinder {
+public final class LocalPipelineInvocationBinder implements PipelineInvocationRealization<Object> {
 
-    public Object bind(
-        PipelineInvocationBinding binding,
-        PipelineRunner runner,
-        List<Object> linkedChildSteps
-    ) {
-        Objects.requireNonNull(binding, "binding must not be null");
-        Objects.requireNonNull(runner, "runner must not be null");
-        List<Object> steps = List.copyOf(Objects.requireNonNull(
+    private final PipelineRunner runner;
+    private final List<Object> linkedChildSteps;
+
+    public LocalPipelineInvocationBinder(PipelineRunner runner, List<Object> linkedChildSteps) {
+        this.runner = Objects.requireNonNull(runner, "runner must not be null");
+        this.linkedChildSteps = List.copyOf(Objects.requireNonNull(
             linkedChildSteps,
             "linkedChildSteps must not be null"));
+    }
+
+    @Override
+    public Object realize(PipelineInvocationBinding binding) {
+        Objects.requireNonNull(binding, "binding must not be null");
         return switch (binding.cardinality()) {
-            case ONE_TO_ONE -> PipelineInvocationSteps.oneToOne(runner, steps);
-            case ONE_TO_MANY -> PipelineInvocationSteps.oneToMany(runner, steps);
-            case MANY_TO_ONE -> PipelineInvocationSteps.manyToOne(runner, steps);
-            case MANY_TO_MANY -> PipelineInvocationSteps.manyToMany(runner, steps);
+            case ONE_TO_ONE -> PipelineInvocationSteps.oneToOne(runner, linkedChildSteps);
+            case ONE_TO_MANY -> PipelineInvocationSteps.oneToMany(runner, linkedChildSteps);
+            case MANY_TO_ONE -> PipelineInvocationSteps.manyToOne(runner, linkedChildSteps);
+            case MANY_TO_MANY -> PipelineInvocationSteps.manyToMany(runner, linkedChildSteps);
         };
     }
 }

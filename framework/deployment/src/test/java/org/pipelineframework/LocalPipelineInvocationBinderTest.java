@@ -18,11 +18,14 @@ package org.pipelineframework;
 
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import io.smallrye.mutiny.Multi;
@@ -44,7 +47,6 @@ import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
-import org.pipelineframework.invocation.PipelineInvocationSteps;
 import org.pipelineframework.objectpublish.ObjectPayload;
 import org.pipelineframework.objectpublish.ObjectPublishMapper;
 import org.pipelineframework.objectpublish.ObjectPublishRunner;
@@ -60,6 +62,7 @@ import org.pipelineframework.processor.composition.PipelineDefinition;
 import org.pipelineframework.processor.composition.PipelineDefinitionLinker;
 import org.pipelineframework.processor.composition.PipelineDefinitionStep;
 import org.pipelineframework.processor.composition.PipelineInvocationBinding;
+import org.pipelineframework.processor.composition.PipelineInvocationRealization;
 import org.pipelineframework.processor.composition.PipelineReference;
 import org.pipelineframework.processor.composition.ResolvedPipelineDefinitionGraph;
 import org.pipelineframework.repository.PayloadReference;
@@ -75,7 +78,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -156,10 +161,10 @@ class LocalPipelineInvocationBinderTest {
         assertEquals(CardinalitySemantics.ONE_TO_ONE, binding.cardinality());
 
         AtomicReference<PipelineContext> observedContext = new AtomicReference<>();
-        Object innerStep = new LocalPipelineInvocationBinder().bind(
-            binding,
+        Object innerStep = new LocalPipelineInvocationBinder(
             runner,
-            List.of(new ContextSuffix("-x", observedContext), new ContextSuffix("-y", observedContext)));
+            List.of(new ContextSuffix("-x", observedContext), new ContextSuffix("-y", observedContext)))
+            .realize(binding);
         assertInstanceOf(StepOneToOne.class, innerStep);
 
         CountingObjectTargetProvider publisher = new CountingObjectTargetProvider();
@@ -209,10 +214,8 @@ class LocalPipelineInvocationBinderTest {
         assertEquals(CardinalitySemantics.ONE_TO_MANY, binding.cardinality());
 
         AtomicReference<PipelineContext> observedContext = new AtomicReference<>();
-        Object innerStep = new LocalPipelineInvocationBinder().bind(
-            binding,
-            runner,
-            List.of(new SplitStep(observedContext)));
+        Object innerStep = new LocalPipelineInvocationBinder(runner, List.of(new SplitStep(observedContext)))
+            .realize(binding);
         assertInstanceOf(StepOneToMany.class, innerStep);
         setObjectPublishRunner(ObjectPublishRunner.disabled());
         PipelineContext context = new PipelineContext("release-2", "tenant-2", "prefer-cache");
@@ -251,10 +254,8 @@ class LocalPipelineInvocationBinderTest {
         PipelineInvocationBinding reductionBinding = link(reductionOuter, Map.of(reductionReference, reduction))
             .invocationBindings()
             .getFirst();
-        Object reductionStep = new LocalPipelineInvocationBinder().bind(
-            reductionBinding,
-            runner,
-            List.of(new JoinStep()));
+        Object reductionStep = new LocalPipelineInvocationBinder(runner, List.of(new JoinStep()))
+            .realize(reductionBinding);
         assertInstanceOf(ManyToOne.class, reductionStep);
         setObjectPublishRunner(ObjectPublishRunner.disabled());
 
@@ -278,10 +279,8 @@ class LocalPipelineInvocationBinderTest {
         PipelineInvocationBinding streamingBinding = link(streamingOuter, Map.of(streamingReference, streaming))
             .invocationBindings()
             .getFirst();
-        Object streamingStep = new LocalPipelineInvocationBinder().bind(
-            streamingBinding,
-            runner,
-            List.of(new UppercaseStep()));
+        Object streamingStep = new LocalPipelineInvocationBinder(runner, List.of(new UppercaseStep()))
+            .realize(streamingBinding);
         assertInstanceOf(StepManyToMany.class, streamingStep);
 
         PipelineRunner.ExecutionResult streamingExecution = runner.runWithContext(
@@ -290,6 +289,170 @@ class LocalPipelineInvocationBinderTest {
         assertEquals(List.of("RED", "BLUE"),
             ((Multi<String>) streamingExecution.result()).collect().asList().await().indefinitely());
         verify(telemetry, times(2)).startRun(any(), anyInt(), any(), anyInt());
+    }
+
+    @Test
+    void pointwiseInvocationOfAnOuterMultiUsesTheExistingMaxConcurrencyBound() throws Exception {
+        when(parallelismPolicyResolver.resolveParallelismPolicy(any())).thenReturn(ParallelismPolicy.PARALLEL);
+        when(parallelismPolicyResolver.resolveMaxConcurrency(any())).thenReturn(2);
+        PipelineReference innerReference = new PipelineReference("bounded-inner");
+        PipelineDefinition inner = definition(
+            innerReference,
+            "Number",
+            "Number",
+            PipelineDefinitionStep.direct("delay", "Number", "Number", CardinalitySemantics.ONE_TO_ONE));
+        PipelineDefinition outer = definition(
+            new PipelineReference("bounded-outer"),
+            "Number",
+            "Number",
+            PipelineDefinitionStep.pipeline("bounded", "Number", "Number", innerReference));
+        PipelineInvocationBinding binding = link(outer, Map.of(innerReference, inner)).invocationBindings().getFirst();
+        AtomicInteger activeChildren = new AtomicInteger();
+        AtomicInteger maximumActiveChildren = new AtomicInteger();
+        Object invocation = new LocalPipelineInvocationBinder(
+            runner,
+            List.of(new DelayedIdentityStep(activeChildren, maximumActiveChildren)))
+            .realize(binding);
+        setObjectPublishRunner(ObjectPublishRunner.disabled());
+        AtomicInteger rootSubscriptions = new AtomicInteger();
+
+        PipelineRunner.ExecutionResult execution = runner.runWithContext(
+            Multi.createFrom().deferred(() -> {
+                rootSubscriptions.incrementAndGet();
+                return Multi.createFrom().range(0, 10);
+            }),
+            List.of(invocation));
+
+        assertEquals(0, rootSubscriptions.get(), "building an invocation must not subscribe to its outer Multi");
+        assertEquals(10, ((Multi<Integer>) execution.result()).collect().asList().await().indefinitely().size());
+        assertEquals(1, rootSubscriptions.get());
+        assertEquals(2, maximumActiveChildren.get());
+        assertEquals(0, activeChildren.get());
+    }
+
+    @Test
+    void streamScopedChildrenRunOncePerParentStreamWithoutResubscribing() throws Exception {
+        setObjectPublishRunner(ObjectPublishRunner.disabled());
+        PipelineReference reductionReference = new PipelineReference("scoped-reduction");
+        PipelineDefinition reduction = definition(
+            reductionReference,
+            "Text",
+            "Text",
+            PipelineDefinitionStep.direct("join", "Text", "Text", CardinalitySemantics.MANY_TO_ONE));
+        PipelineDefinition reductionOuter = definition(
+            new PipelineReference("scoped-reduction-outer"),
+            "Text",
+            "Text",
+            PipelineDefinitionStep.pipeline("reduce", "Text", "Text", reductionReference));
+        AtomicInteger reductionApplications = new AtomicInteger();
+        Object reductionInvocation = new LocalPipelineInvocationBinder(
+            runner,
+            List.of(new CountingJoinStep(reductionApplications)))
+            .realize(link(reductionOuter, Map.of(reductionReference, reduction)).invocationBindings().getFirst());
+        AtomicInteger reductionSubscriptions = new AtomicInteger();
+
+        PipelineRunner.ExecutionResult reductionExecution = runner.runWithContext(
+            Multi.createFrom().deferred(() -> {
+                reductionSubscriptions.incrementAndGet();
+                return Multi.createFrom().items("red", "blue");
+            }),
+            List.of(reductionInvocation));
+        assertEquals("red-blue", ((Uni<String>) reductionExecution.result()).await().indefinitely());
+        assertEquals(1, reductionApplications.get());
+        assertEquals(1, reductionSubscriptions.get());
+
+        PipelineReference streamingReference = new PipelineReference("scoped-streaming");
+        PipelineDefinition streaming = definition(
+            streamingReference,
+            "Text",
+            "Text",
+            PipelineDefinitionStep.direct("uppercase", "Text", "Text", CardinalitySemantics.MANY_TO_MANY));
+        PipelineDefinition streamingOuter = definition(
+            new PipelineReference("scoped-streaming-outer"),
+            "Text",
+            "Text",
+            PipelineDefinitionStep.pipeline("stream", "Text", "Text", streamingReference));
+        AtomicInteger streamingApplications = new AtomicInteger();
+        Object streamingInvocation = new LocalPipelineInvocationBinder(
+            runner,
+            List.of(new CountingUppercaseStep(streamingApplications)))
+            .realize(link(streamingOuter, Map.of(streamingReference, streaming)).invocationBindings().getFirst());
+        AtomicInteger streamingSubscriptions = new AtomicInteger();
+
+        PipelineRunner.ExecutionResult streamingExecution = runner.runWithContext(
+            Multi.createFrom().deferred(() -> {
+                streamingSubscriptions.incrementAndGet();
+                return Multi.createFrom().items("red", "blue");
+            }),
+            List.of(streamingInvocation));
+        assertEquals(List.of("RED", "BLUE"),
+            ((Multi<String>) streamingExecution.result()).collect().asList().await().indefinitely());
+        assertEquals(1, streamingApplications.get());
+        assertEquals(1, streamingSubscriptions.get());
+    }
+
+    @Test
+    void nestedFailuresAndCancellationUseTheOuterReactiveSubscription() throws Exception {
+        setObjectPublishRunner(ObjectPublishRunner.disabled());
+        PipelineReference innerReference = new PipelineReference("reactive-inner");
+        PipelineDefinition inner = definition(
+            innerReference,
+            "Text",
+            "Text",
+            PipelineDefinitionStep.direct("work", "Text", "Text", CardinalitySemantics.ONE_TO_ONE));
+        PipelineDefinition outer = definition(
+            new PipelineReference("reactive-outer"),
+            "Text",
+            "Text",
+            PipelineDefinitionStep.pipeline("inner", "Text", "Text", innerReference));
+        PipelineInvocationBinding binding = link(outer, Map.of(innerReference, inner)).invocationBindings().getFirst();
+        IllegalStateException failure = new IllegalStateException("inner failure");
+        Object failingInvocation = new LocalPipelineInvocationBinder(runner, List.of(new FailingStep(failure)))
+            .realize(binding);
+
+        PipelineRunner.ExecutionResult failed = runner.runWithContext(
+            Multi.createFrom().item("input"),
+            List.of(failingInvocation));
+        assertSame(failure, assertThrows(IllegalStateException.class,
+            () -> ((Multi<String>) failed.result()).collect().asList().await().indefinitely()));
+
+        CountDownLatch childSubscribed = new CountDownLatch(1);
+        CountDownLatch childCancelled = new CountDownLatch(1);
+        Object cancellableInvocation = new LocalPipelineInvocationBinder(
+            runner,
+            List.of(new CancellableStep(childSubscribed, childCancelled)))
+            .realize(binding);
+        PipelineRunner.ExecutionResult active = runner.runWithContext(
+            Multi.createFrom().item("input"),
+            List.of(cancellableInvocation));
+
+        var subscription = ((Multi<String>) active.result()).subscribe().with(
+            ignored -> fail("The pending child must not emit before cancellation"),
+            failureSignal -> fail("The pending child must not fail before cancellation"));
+        assertTrue(childSubscribed.await(2, TimeUnit.SECONDS));
+        subscription.cancel();
+        assertTrue(childCancelled.await(2, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void bindingIsRealizedByPlacementSpecificAdaptersWithoutEncodingPlacement() {
+        PipelineReference innerReference = new PipelineReference("placement-neutral-inner");
+        PipelineDefinition inner = definition(
+            innerReference,
+            "Input",
+            "Output",
+            PipelineDefinitionStep.direct("step", "Input", "Output", CardinalitySemantics.ONE_TO_ONE));
+        PipelineDefinition outer = definition(
+            new PipelineReference("placement-neutral-outer"),
+            "Input",
+            "Output",
+            PipelineDefinitionStep.pipeline("call", "Input", "Output", innerReference));
+        PipelineInvocationBinding binding = link(outer, Map.of(innerReference, inner)).invocationBindings().getFirst();
+
+        PipelineInvocationRealization<String> futureRemoteAdapter = current ->
+            current.target().logicalId() + ":" + current.cardinality();
+
+        assertEquals("placement-neutral-inner:ONE_TO_ONE", futureRemoteAdapter.realize(binding));
     }
 
     private static ResolvedPipelineDefinitionGraph link(
@@ -446,6 +609,86 @@ class LocalPipelineInvocationBinderTest {
         @Override
         public Multi<String> applyTransform(Multi<String> input) {
             return input.onItem().transform(String::toUpperCase);
+        }
+    }
+
+    private static final class DelayedIdentityStep extends ConfigurableStep implements StepOneToOne<Integer, Integer> {
+        private final AtomicInteger active;
+        private final AtomicInteger maximumActive;
+
+        private DelayedIdentityStep(AtomicInteger active, AtomicInteger maximumActive) {
+            this.active = active;
+            this.maximumActive = maximumActive;
+        }
+
+        @Override
+        public Uni<Integer> applyOneToOne(Integer input) {
+            return Uni.createFrom().deferred(() -> {
+                int current = active.incrementAndGet();
+                maximumActive.accumulateAndGet(current, Math::max);
+                return Uni.createFrom().item(input)
+                    .onItem().delayIt().by(Duration.ofMillis(20))
+                    .onTermination().invoke(active::decrementAndGet);
+            });
+        }
+    }
+
+    private static final class CountingJoinStep extends ConfigurableStep implements ManyToOne<String, String> {
+        private final AtomicInteger applications;
+
+        private CountingJoinStep(AtomicInteger applications) {
+            this.applications = applications;
+        }
+
+        @Override
+        public Uni<String> apply(Multi<String> input) {
+            applications.incrementAndGet();
+            return input.collect().asList().map(items -> String.join("-", items));
+        }
+    }
+
+    private static final class CountingUppercaseStep extends ConfigurableStep implements StepManyToMany<String, String> {
+        private final AtomicInteger applications;
+
+        private CountingUppercaseStep(AtomicInteger applications) {
+            this.applications = applications;
+        }
+
+        @Override
+        public Multi<String> applyTransform(Multi<String> input) {
+            applications.incrementAndGet();
+            return input.onItem().transform(String::toUpperCase);
+        }
+    }
+
+    private static final class FailingStep extends ConfigurableStep implements StepOneToOne<String, String> {
+        private final IllegalStateException failure;
+
+        private FailingStep(IllegalStateException failure) {
+            this.failure = failure;
+        }
+
+        @Override
+        public Uni<String> applyOneToOne(String input) {
+            return Uni.createFrom().failure(failure);
+        }
+    }
+
+    private static final class CancellableStep extends ConfigurableStep implements StepOneToOne<String, String> {
+        private final CountDownLatch subscribed;
+        private final CountDownLatch cancelled;
+
+        private CancellableStep(CountDownLatch subscribed, CountDownLatch cancelled) {
+            this.subscribed = subscribed;
+            this.cancelled = cancelled;
+        }
+
+        @Override
+        public Uni<String> applyOneToOne(String input) {
+            return Uni.createFrom().emitter(emitter -> {
+                subscribed.countDown();
+                emitter.onTermination(cancelled::countDown);
+            });
         }
     }
 }
