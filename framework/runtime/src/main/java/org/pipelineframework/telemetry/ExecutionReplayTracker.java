@@ -102,21 +102,21 @@ final class ExecutionReplayTracker {
         return topology != null;
     }
 
-    void runStarted(PipelineTelemetry.RunContext runContext) {
+    void runStarted(PipelineRunContext runContext) {
         if (!enabled() || runContext == null || runContext.replayState() == null) {
             return;
         }
         exporter.runStarted(runContext.runId(), topology.pipeline(), runContext.startedAt(), runContext.runParameters(), topology);
     }
 
-    void runCompleted(PipelineTelemetry.RunContext runContext, long durationMs) {
+    void runCompleted(PipelineRunContext runContext, long durationMs) {
         if (!enabled() || runContext == null || runContext.replayState() == null) {
             return;
         }
         exporter.runCompleted(runContext.runId(), topology.pipeline(), runContext.startedAt(), durationMs, topology);
     }
 
-    void runFailed(PipelineTelemetry.RunContext runContext, long durationMs, Throwable failure) {
+    void runFailed(PipelineRunContext runContext, long durationMs, Throwable failure) {
         if (!enabled() || runContext == null || runContext.replayState() == null) {
             return;
         }
@@ -207,7 +207,7 @@ final class ExecutionReplayTracker {
 
     void recordSkip(
         String runtimeStepClass,
-        PipelineTelemetry.RunContext runContext,
+        PipelineRunContext runContext,
         Object inputItem,
         String currentType,
         List<String> acceptedTypes,
@@ -262,7 +262,7 @@ final class ExecutionReplayTracker {
 
     StepExecutionScope beginStep(
         String runtimeStepClass,
-        PipelineTelemetry.RunContext runContext,
+        PipelineRunContext runContext,
         boolean perItemOperation,
         Object inputItem
     ) {
@@ -275,7 +275,7 @@ final class ExecutionReplayTracker {
 
     StepExecutionScope beginPendingStep(
         String runtimeStepClass,
-        PipelineTelemetry.RunContext runContext,
+        PipelineRunContext runContext,
         boolean perItemOperation
     ) {
         return new StepExecutionScope(runtimeStepClass, descriptor(runtimeStepClass), inbound(runtimeStepClass),
@@ -555,7 +555,7 @@ final class ExecutionReplayTracker {
         return !"many-to-one".equals(cardinality) && !"many-to-many".equals(cardinality);
     }
 
-    private ItemLineage lookupOrCreateLineage(PipelineTelemetry.RunContext runContext, Object item) {
+    private ItemLineage lookupOrCreateLineage(PipelineRunContext runContext, Object item) {
         RunReplayState replayState = runContext.replayState();
         if (replayState == null) {
             return null;
@@ -844,7 +844,7 @@ final class ExecutionReplayTracker {
         return java.util.Collections.unmodifiableMap(ordered);
     }
 
-    private double secondsSinceRunStart(PipelineTelemetry.RunContext runContext, long nanos) {
+    private double secondsSinceRunStart(PipelineRunContext runContext, long nanos) {
         return (nanos - runContext.startNanos()) / 1_000_000_000d;
     }
 
@@ -1057,7 +1057,7 @@ final class ExecutionReplayTracker {
         private final PipelineReplayTopology.Step descriptor;
         private final PipelineReplayTopology.Transition inbound;
         private final List<PipelineReplayTopology.Transition> outbounds;
-        private final PipelineTelemetry.RunContext runContext;
+        private final PipelineRunContext runContext;
         private final boolean perItemOperation;
         private final List<ItemLineage> inputLineages;
         private final AtomicLong outputSequence;
@@ -1078,7 +1078,7 @@ final class ExecutionReplayTracker {
             PipelineReplayTopology.Step descriptor,
             PipelineReplayTopology.Transition inbound,
             List<PipelineReplayTopology.Transition> outbounds,
-            PipelineTelemetry.RunContext runContext,
+            PipelineRunContext runContext,
             boolean perItemOperation
         ) {
             this.runtimeStepClass = runtimeStepClass;
@@ -1124,7 +1124,7 @@ final class ExecutionReplayTracker {
             return outbounds;
         }
 
-        PipelineTelemetry.RunContext runContext() {
+        PipelineRunContext runContext() {
             return runContext;
         }
 

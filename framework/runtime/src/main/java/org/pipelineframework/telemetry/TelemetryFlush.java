@@ -30,7 +30,7 @@ public final class TelemetryFlush {
      * Compatibility delegate. SDK lookup remains owned by the production telemetry runtime.
      */
     public static void flush() {
-        TelemetryRuntimes.global().flush();
+        TelemetryCompatibilityAccess.runtime().flush();
     }
 
     static void flushSdk(Object openTelemetry) {

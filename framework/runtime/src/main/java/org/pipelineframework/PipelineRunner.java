@@ -35,7 +35,6 @@ import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
-import org.pipelineframework.awaitable.AwaitCompletionMetrics;
 import org.pipelineframework.awaitable.TerminalOutputOwnership;
 import org.pipelineframework.objectpublish.ObjectPublishRunner;
 import org.pipelineframework.objectpublish.ObjectPublishTelemetry;
@@ -43,7 +42,10 @@ import org.pipelineframework.runtime.core.PipelineRunnerCore;
 import org.pipelineframework.step.Configurable;
 import org.pipelineframework.step.ConfigFactory;
 import org.pipelineframework.step.StepOneToOne;
-import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineRunContext;
+import org.pipelineframework.telemetry.PipelineRunTelemetry;
+import org.pipelineframework.telemetry.PipelineStepTelemetry;
+import org.pipelineframework.telemetry.PipelineTracingSupport;
 
 /**
  * A service that runs a sequence of pipeline steps against a reactive source.
@@ -65,7 +67,10 @@ public class PipelineRunner implements AutoCloseable {
     PipelineConfig pipelineConfig;
 
     @Inject
-    PipelineTelemetry telemetry;
+    PipelineRunTelemetry runTelemetry;
+
+    @Inject
+    PipelineStepTelemetry.Seam stepTelemetry;
 
     @Inject
     PipelineStepOrderer stepOrderer;
@@ -149,9 +154,9 @@ public class PipelineRunner implements AutoCloseable {
 
         ParallelismPolicy parallelismPolicy = parallelismPolicyResolver.resolveParallelismPolicy(pipelineConfig);
         int maxConcurrency = parallelismPolicyResolver.resolveMaxConcurrency(pipelineConfig);
-        PipelineTelemetry.RunContext telemetryContext =
-            telemetry.startRun(input, orderedSteps.size(), parallelismPolicy, maxConcurrency);
-        Object instrumentedInput = telemetry.instrumentInput(input, telemetryContext);
+        PipelineRunContext telemetryContext =
+            runTelemetry.startRun(input, orderedSteps.size(), parallelismPolicy, maxConcurrency);
+        Object instrumentedInput = runTelemetry.instrumentInput(input, telemetryContext);
 
         PipelineContext contextSnapshot = PipelineContextHolder.get();
         CacheReadSupport cacheReadSupport = cacheSupportFactory.buildCacheReadSupport();
@@ -170,7 +175,7 @@ public class PipelineRunner implements AutoCloseable {
                         index,
                         awaitContext.continuationMode(),
                         awaitContext.terminalOutputOwnership(),
-                        AwaitCompletionMetrics.captureTraceMetadata(
+                        PipelineTracingSupport.capture(
                             telemetryContext == null || telemetryContext.span() == null
                                 ? io.opentelemetry.api.trace.SpanContext.getInvalid()
                                 : telemetryContext.span().getSpanContext()));
@@ -190,7 +195,7 @@ public class PipelineRunner implements AutoCloseable {
                     value,
                     parallelismPolicy,
                     maxConcurrency,
-                    telemetry,
+                    stepTelemetry,
                     telemetryContext,
                     cacheReadSupport,
                     contextSnapshot,
@@ -211,16 +216,16 @@ public class PipelineRunner implements AutoCloseable {
             }
         }
         return new ExecutionResult(
-            telemetry.instrumentRunCompletion(terminal, telemetryContext),
+            runTelemetry.instrumentRunCompletion(terminal, telemetryContext),
             telemetryContext,
             terminalOutputPublished);
     }
 
     public record ExecutionResult(
         Object result,
-        PipelineTelemetry.RunContext telemetryContext,
+        PipelineRunContext telemetryContext,
         boolean terminalOutputPublished) {
-        public ExecutionResult(Object result, PipelineTelemetry.RunContext telemetryContext) {
+        public ExecutionResult(Object result, PipelineRunContext telemetryContext) {
             this(result, telemetryContext, false);
         }
     }
@@ -264,8 +269,8 @@ public class PipelineRunner implements AutoCloseable {
         Object current,
         boolean parallel,
         int maxConcurrency,
-        PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext,
+        PipelineStepTelemetry.Seam telemetry,
+        PipelineRunContext telemetryContext,
         CacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot) {
         return PipelineStepExecutor.applyOneToOneUnchecked(

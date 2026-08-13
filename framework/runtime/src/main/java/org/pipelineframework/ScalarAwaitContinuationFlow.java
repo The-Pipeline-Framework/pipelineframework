@@ -6,8 +6,8 @@ import java.util.function.Supplier;
 
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
-import org.pipelineframework.awaitable.AwaitCompletionMetrics;
 import org.pipelineframework.awaitable.AwaitInteractionRecord;
+import org.pipelineframework.awaitable.AwaitTelemetry;
 import org.pipelineframework.awaitable.AwaitUnitRecord;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
@@ -25,16 +25,28 @@ class ScalarAwaitContinuationFlow {
   private final WorkDispatcher workDispatcher;
   private final Supplier<SegmentBoundaryLedger> segmentBoundaryLedger;
   private final Consumer<AwaitReplayLifecycleEvent> lifecycleRecorder;
+  private final AwaitTelemetry awaitTelemetry;
 
   ScalarAwaitContinuationFlow(
       ExecutionStateStore executionStateStore,
       WorkDispatcher workDispatcher,
       Supplier<SegmentBoundaryLedger> segmentBoundaryLedger,
       Consumer<AwaitReplayLifecycleEvent> lifecycleRecorder) {
+    this(executionStateStore, workDispatcher, segmentBoundaryLedger, lifecycleRecorder,
+        AwaitTelemetry.disabled());
+  }
+
+  ScalarAwaitContinuationFlow(
+      ExecutionStateStore executionStateStore,
+      WorkDispatcher workDispatcher,
+      Supplier<SegmentBoundaryLedger> segmentBoundaryLedger,
+      Consumer<AwaitReplayLifecycleEvent> lifecycleRecorder,
+      AwaitTelemetry awaitTelemetry) {
     this.executionStateStore = executionStateStore;
     this.workDispatcher = workDispatcher;
     this.segmentBoundaryLedger = segmentBoundaryLedger;
     this.lifecycleRecorder = lifecycleRecorder;
+    this.awaitTelemetry = awaitTelemetry == null ? AwaitTelemetry.disabled() : awaitTelemetry;
   }
 
   Uni<Void> release(AwaitContinuationPlan.ReleaseScalar plan, long nowEpochMs) {
@@ -51,7 +63,7 @@ class ScalarAwaitContinuationFlow {
         interaction.transportType(),
         interaction.itemIndex(),
         nowEpochMs)
-        .invoke(() -> AwaitCompletionMetrics.recordScalarContinuationStarted(interaction));
+        .invoke(() -> awaitTelemetry.recordScalarContinuationStarted(interaction));
   }
 
   private Uni<Void> release(
@@ -171,7 +183,8 @@ class ScalarAwaitContinuationFlow {
               null,
               null);
           lifecycleRecorder.accept(lifecycleEvent);
-          AwaitCompletionMetrics.recordResumeReleased(lifecycleEvent);
+          awaitTelemetry.recordResumeReleased(
+              lifecycleEvent.stepId(), lifecycleEvent.status(), lifecycleEvent.transport());
         })
         .replaceWithVoid();
   }

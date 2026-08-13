@@ -1,5 +1,7 @@
 package org.pipelineframework.invocation;
 
+import org.pipelineframework.telemetry.TelemetryCompatibilityAccess;
+
 import java.util.Objects;
 
 import org.pipelineframework.telemetry.TelemetryRuntimes;
@@ -21,7 +23,7 @@ final class TransportBoundaryDiagnostics {
     private final DoubleHistogram duration;
 
     TransportBoundaryDiagnostics() {
-        this(new TransportBoundaryFailureClassifier(), TelemetryRuntimes.global().meter("org.pipelineframework.invocation"));
+        this(new TransportBoundaryFailureClassifier(), TelemetryCompatibilityAccess.metricsRuntime().meter("org.pipelineframework.invocation"));
     }
 
     TransportBoundaryDiagnostics(TransportBoundaryFailureClassifier failureClassifier, Meter meter) {

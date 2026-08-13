@@ -27,7 +27,7 @@ import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
 import org.pipelineframework.orchestrator.TypedDurablePayload;
 import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
-import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineReplayTelemetry;
 
 /**
  * Coordinates await unit persistence, interaction dispatch, completion admission, and replay payload loading.
@@ -61,7 +61,15 @@ public class AwaitCoordinator {
     AwaitDurablePayloadResolver durablePayloadResolver;
 
     @Inject
-    PipelineTelemetry telemetry;
+    PipelineReplayTelemetry telemetry;
+
+    @Inject
+    AwaitTelemetry awaitTelemetry = AwaitTelemetry.disabled();
+
+    /** Focused Await telemetry seam for runtime collaborators that already own this coordinator. */
+    public AwaitTelemetry awaitTelemetry() {
+        return awaitTelemetry == null ? AwaitTelemetry.disabled() : awaitTelemetry;
+    }
 
     private volatile AwaitInteractionStore resolvedInteractionStore;
     private volatile AwaitUnitStore resolvedUnitStore;
@@ -223,7 +231,7 @@ public class AwaitCoordinator {
             .onItem().transform(optional -> optional.orElseThrow(() ->
                 new IllegalStateException("Await interaction dispatch transition lost OCC race: "
                     + interaction.interactionId())))
-            .onItem().transformToUni(claimedInteraction -> AwaitCompletionMetrics.inProviderDispatchSpan(
+            .onItem().transformToUni(claimedInteraction -> awaitTelemetry.inProviderDispatchSpan(
                 claimedInteraction,
                 () -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
                     descriptor,
@@ -272,7 +280,7 @@ public class AwaitCoordinator {
                     new IllegalStateException("Await interaction live dispatch transition lost OCC race: "
                         + interaction.interactionId())))
             : Uni.createFrom().item(interaction);
-        return intended.onItem().transformToUni(dispatching -> AwaitCompletionMetrics.inProviderDispatchSpan(
+        return intended.onItem().transformToUni(dispatching -> awaitTelemetry.inProviderDispatchSpan(
             dispatching,
             () -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
                 descriptor,
@@ -573,7 +581,7 @@ public class AwaitCoordinator {
     }
 
     private void recordInteractionDispatched(AwaitInteractionRecord record) {
-        AwaitCompletionMetrics.recordInteractionDispatched(record);
+        awaitTelemetry.recordInteractionDispatched(record);
         recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
             AwaitReplayLifecycleEvent.INTERACTION_DISPATCHED,
             record.executionId(),
@@ -608,7 +616,7 @@ public class AwaitCoordinator {
     }
 
     private void recordUnitDispatchComplete(AwaitUnitRecord unit) {
-        AwaitCompletionMetrics.recordUnitDispatchComplete(unit);
+        awaitTelemetry.recordUnitDispatchComplete(unit);
         recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
             AwaitReplayLifecycleEvent.UNIT_DISPATCH_COMPLETE,
             unit.executionId(),
@@ -626,9 +634,9 @@ public class AwaitCoordinator {
     }
 
     private void recordCompletionLifecycle(AwaitInteractionRecord record, AwaitUnitRecord unit) {
-        AwaitCompletionMetrics.recordCompletionAdmitted(record);
+        awaitTelemetry.recordCompletionAdmitted(record);
         if (record.itemInteraction()) {
-            AwaitCompletionMetrics.recordItemCompleted(record, unit);
+            awaitTelemetry.recordItemCompleted(record, unit);
             recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
                 AwaitReplayLifecycleEvent.UNIT_ITEM_COMPLETED,
                 record.executionId(),
@@ -663,7 +671,7 @@ public class AwaitCoordinator {
     }
 
     private void recordUnitTerminal(AwaitInteractionRecord record, AwaitUnitRecord unit) {
-        AwaitCompletionMetrics.recordUnitTerminal(record, unit);
+        awaitTelemetry.recordUnitTerminal(record, unit);
         recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
             AwaitReplayLifecycleEvent.UNIT_TERMINAL,
             unit.executionId(),
@@ -730,7 +738,7 @@ public class AwaitCoordinator {
                 .onItem().transformToUni(created -> bindOrReleaseAdmission(created, lease))
                 .onItem().invoke(created -> {
                     if (!created.duplicate()) {
-                        AwaitCompletionMetrics.recordInteractionCreated(created.record());
+                    awaitTelemetry.recordInteractionCreated(created.record());
                     }
                 })
                 .onFailure().call(ignored -> releaseAdmissionAfterDefiniteCreateFailure(lease, tenantId, correlationId)));
@@ -1250,12 +1258,12 @@ public class AwaitCoordinator {
         return builder.toString();
     }
 
-    private static Map<String, Object> traceMetadataForCurrentExecution() {
+    private Map<String, Object> traceMetadataForCurrentExecution() {
         AwaitExecutionContext context = AwaitExecutionContextHolder.get();
         if (context != null && !context.traceMetadata().isEmpty()) {
             return context.traceMetadata();
         }
-        return AwaitCompletionMetrics.captureTraceMetadata();
+        return awaitTelemetry.captureTraceMetadata();
     }
 
     private static String deriveUnitId(String tenantId, String executionId, String stepId, int stepIndex) {

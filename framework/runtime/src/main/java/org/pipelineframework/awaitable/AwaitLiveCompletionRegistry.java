@@ -31,6 +31,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicBoolean;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
@@ -43,6 +44,9 @@ public class AwaitLiveCompletionRegistry {
 
     private final ConcurrentMap<Key, LiveAwaitSession<?>> sessions = new ConcurrentHashMap<>();
 
+    @Inject
+    AwaitTelemetry awaitTelemetry = AwaitTelemetry.disabled();
+
     public <O> LiveAwaitSession<O> open(AwaitStepDescriptor descriptor, String tenantId, String unitId) {
         Objects.requireNonNull(descriptor, "descriptor must not be null");
         Objects.requireNonNull(tenantId, "tenantId must not be null");
@@ -52,7 +56,8 @@ public class AwaitLiveCompletionRegistry {
         LiveAwaitSession<O> session = new LiveAwaitSession<>(
             key,
             canonicalOutputType,
-            () -> sessions.remove(key));
+            () -> sessions.remove(key),
+            awaitTelemetry);
         LiveAwaitSession<?> existing = sessions.putIfAbsent(key, session);
         if (existing != null) {
             throw new IllegalStateException("A live await stream already owns await unit " + unitId);
@@ -99,6 +104,7 @@ public class AwaitLiveCompletionRegistry {
         private final Key key;
         private final Class<?> canonicalOutputType;
         private final Runnable closeHook;
+        private final AwaitTelemetry awaitTelemetry;
         private final Object lock = new Object();
         private final ArrayDeque<Pending<O>> pending = new ArrayDeque<>();
         private final Set<String> seenCompletions = new HashSet<>();
@@ -123,11 +129,13 @@ public class AwaitLiveCompletionRegistry {
         private LiveAwaitSession(
             Key key,
             Class<?> canonicalOutputType,
-            Runnable closeHook
+            Runnable closeHook,
+            AwaitTelemetry awaitTelemetry
         ) {
             this.key = key;
             this.canonicalOutputType = canonicalOutputType;
             this.closeHook = closeHook;
+            this.awaitTelemetry = awaitTelemetry == null ? AwaitTelemetry.disabled() : awaitTelemetry;
         }
 
         @Override
@@ -400,7 +408,7 @@ public class AwaitLiveCompletionRegistry {
 
         private void recordContinuationTelemetry(Pending<O> item) {
             try {
-                AwaitCompletionMetrics.recordScalarContinuationStarted(item.interaction());
+                awaitTelemetry.recordScalarContinuationStarted(item.interaction());
             } catch (RuntimeException ignored) {
                 // Telemetry must never change delivery/failure semantics for an admitted completion.
             }

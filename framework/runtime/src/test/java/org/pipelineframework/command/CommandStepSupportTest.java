@@ -61,7 +61,6 @@ class CommandStepSupportTest {
         .build();
     GlobalOpenTelemetry.resetForTest();
     GlobalOpenTelemetry.set(sdk);
-    CommandEffectMetrics.resetForTest();
   }
 
   @AfterEach
@@ -71,7 +70,6 @@ class CommandStepSupportTest {
       meterProvider.shutdown();
     }
     GlobalOpenTelemetry.resetForTest();
-    CommandEffectMetrics.resetForTest();
   }
 
   @Test

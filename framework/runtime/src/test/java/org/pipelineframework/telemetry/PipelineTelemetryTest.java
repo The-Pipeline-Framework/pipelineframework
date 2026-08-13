@@ -84,9 +84,9 @@ class PipelineTelemetryTest {
     @Test
     void abortRunOnlyEndsTargetRun() {
         PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
-        PipelineTelemetry.RunContext target =
+        PipelineRunContext target =
             telemetry.startRun(Multi.createFrom().item(1), 1, ParallelismPolicy.AUTO, 4);
-        PipelineTelemetry.RunContext sibling =
+        PipelineRunContext sibling =
             telemetry.startRun(Multi.createFrom().item(2), 1, ParallelismPolicy.AUTO, 4);
 
         telemetry.abortRun(target, new IllegalStateException("retry amplification"));
@@ -134,7 +134,7 @@ class PipelineTelemetryTest {
             new TestPipelineStepConfig(), new NoopPipelineReplayExporter(), Optional.empty(), delayedRuntime);
 
         tracer.set(GlobalOpenTelemetry.getTracer("org.pipelineframework"));
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(
+        PipelineRunContext runContext = telemetry.startRun(
             Multi.createFrom().item(1), 1, ParallelismPolicy.AUTO, 4);
         telemetry.abortRun(runContext, new IllegalStateException("test"));
 
@@ -146,7 +146,7 @@ class PipelineTelemetryTest {
     void recordsRunAttributesForParallelismAndBackpressure() {
         PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
         Multi<Integer> input = Multi.createFrom().items(1, 2, 3);
-        PipelineTelemetry.RunContext runContext =
+        PipelineRunContext runContext =
             telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
 
         Multi<Integer> instrumented = (Multi<Integer>) telemetry.instrumentInput(input, runContext);
@@ -174,7 +174,7 @@ class PipelineTelemetryTest {
     void exposesStepInflightGauge() {
         PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
         Multi<Integer> input = Multi.createFrom().items(1, 2);
-        PipelineTelemetry.RunContext runContext =
+        PipelineRunContext runContext =
             telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
 
         Multi<Integer> instrumented = (Multi<Integer>) telemetry.instrumentInput(input, runContext);
@@ -210,7 +210,7 @@ class PipelineTelemetryTest {
     @Test
     void resolvesConsumerAndProducerStepForProxyClasses() {
         PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
-        PipelineTelemetry.RunContext runContext =
+        PipelineRunContext runContext =
             telemetry.startRun(Multi.createFrom().items(1, 2), 1, ParallelismPolicy.AUTO, 4);
 
         Multi<Integer> consumed = telemetry.instrumentItemConsumed(
@@ -245,7 +245,7 @@ class PipelineTelemetryTest {
     @Test
     void recordsItemSuccessSloFromConsumedAndProducedCounts() {
         PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
-        PipelineTelemetry.RunContext runContext =
+        PipelineRunContext runContext =
             telemetry.startRun(Multi.createFrom().items(1, 2, 3), 1, ParallelismPolicy.AUTO, 4);
 
         Multi<Integer> consumed = telemetry.instrumentItemConsumed(
@@ -287,7 +287,7 @@ class PipelineTelemetryTest {
     void normalizesStepAttributesForProxyClasses() {
         PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
         Multi<Integer> input = Multi.createFrom().items(1, 2);
-        PipelineTelemetry.RunContext runContext =
+        PipelineRunContext runContext =
             telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
 
         Multi<Integer> instrumented = (Multi<Integer>) telemetry.instrumentInput(input, runContext);
@@ -339,7 +339,7 @@ class PipelineTelemetryTest {
     @Test
     void cancellationFinalizesAnInstrumentedMultiOnceWithoutRecordingAStepError() {
         PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(
+        PipelineRunContext runContext = telemetry.startRun(
             Multi.createFrom().<Integer>emitter(ignored -> { }), 1, ParallelismPolicy.AUTO, 4);
 
         Multi<Integer> stepped = telemetry.instrumentStepMulti(

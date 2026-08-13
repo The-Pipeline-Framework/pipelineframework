@@ -1,5 +1,7 @@
 package org.pipelineframework.invocation;
 
+import org.pipelineframework.telemetry.TelemetryCompatibilityAccess;
+
 import java.util.Objects;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -32,7 +34,7 @@ final class CircuitTelemetry implements CircuitBreakerListener {
     private final LongCounter transitions;
 
     CircuitTelemetry() {
-        this(TelemetryRuntimes.global().meter("org.pipelineframework.resilience"));
+        this(TelemetryCompatibilityAccess.metricsRuntime().meter("org.pipelineframework.resilience"));
     }
 
     CircuitTelemetry(Meter meter) {

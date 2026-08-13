@@ -26,7 +26,7 @@ import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.context.TransportDispatchMetadata;
 import org.pipelineframework.context.TransportDispatchMetadataHolder;
 import org.pipelineframework.reject.ItemRejectRouter;
-import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineRetryTelemetry;
 import org.pipelineframework.runtime.core.RuntimeAdapters;
 
 /**
@@ -148,7 +148,8 @@ public interface ItemRejectable<I, O> {
     }
 
     private Uni<O> localFallbackReject(Throwable cause, String rejectScope) {
-        PipelineTelemetry.recordReject(this.getClass(), rejectScope, cause);
+        PipelineRetryTelemetry.recordReject(this.getClass(), rejectScope,
+            cause == null ? null : cause.getClass().getName(), cause == null ? null : cause.getMessage());
         LOG.warnf("Item reject sink unavailable, falling back to local log-and-continue: %s", cause.toString());
         LOG.debug("Item reject fallback cause", cause);
         return Uni.createFrom().nullItem();

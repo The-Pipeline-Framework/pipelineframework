@@ -7,11 +7,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.context.Scope;
-import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.metrics.data.MetricData;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
@@ -22,36 +20,40 @@ import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.telemetry.TelemetryPolicy;
+import org.pipelineframework.telemetry.TelemetryRuntime;
+import org.pipelineframework.telemetry.RetryAmplificationGuardMode;
+import java.time.Duration;
 
-class AwaitCompletionMetricsTest {
+class AwaitTelemetryTest {
 
     private InMemoryMetricReader metricReader;
     private SdkMeterProvider meterProvider;
     private SdkTracerProvider tracerProvider;
     private InMemorySpanExporter spanExporter;
+    private AwaitTelemetry awaitTelemetry;
 
     @BeforeEach
     void setUp() {
-        AwaitCompletionMetrics.resetForTest();
         metricReader = InMemoryMetricReader.create();
         meterProvider = SdkMeterProvider.builder().registerMetricReader(metricReader).build();
         spanExporter = InMemorySpanExporter.create();
         tracerProvider = SdkTracerProvider.builder()
             .addSpanProcessor(SimpleSpanProcessor.create(spanExporter))
             .build();
-        GlobalOpenTelemetry.resetForTest();
-        GlobalOpenTelemetry.set(OpenTelemetrySdk.builder()
-            .setMeterProvider(meterProvider)
-            .setTracerProvider(tracerProvider)
-            .build());
+        TelemetryRuntime runtime = new TelemetryRuntime() {
+            @Override public io.opentelemetry.api.metrics.Meter meter(String scope) { return meterProvider.get(scope); }
+            @Override public io.opentelemetry.api.trace.Tracer tracer(String scope) { return tracerProvider.get(scope); }
+            @Override public void flush() { }
+        };
+        awaitTelemetry = new AwaitTelemetry(new TelemetryPolicy(true, true, true, false, true, false,
+            Duration.ofSeconds(30), 10d, 3, RetryAmplificationGuardMode.FAIL_FAST), runtime);
     }
 
     @AfterEach
     void tearDown() {
         meterProvider.close();
         tracerProvider.close();
-        GlobalOpenTelemetry.resetForTest();
-        AwaitCompletionMetrics.resetForTest();
     }
 
     @Test
@@ -75,14 +77,14 @@ class AwaitCompletionMetricsTest {
             1_750L,
             100_000L);
 
-        AwaitCompletionMetrics.recordInteractionDispatched(interaction);
-        AwaitCompletionMetrics.recordUnitDispatchComplete(unit);
-        AwaitCompletionMetrics.recordCompletionAdmitted(interaction);
-        AwaitCompletionMetrics.recordItemCompleted(interaction, unit);
-        AwaitCompletionMetrics.recordEarlyCompletionHeld(interaction, unit);
-        AwaitCompletionMetrics.recordResumeReleased(unit);
-        AwaitCompletionMetrics.recordUnitTerminal(interaction, unit);
-        AwaitCompletionMetrics.recordDroppedCompletion("kafka", "terminal");
+        awaitTelemetry.recordInteractionDispatched(interaction);
+        awaitTelemetry.recordUnitDispatchComplete(unit);
+        awaitTelemetry.recordCompletionAdmitted(interaction);
+        awaitTelemetry.recordItemCompleted(interaction, unit);
+        awaitTelemetry.recordEarlyCompletionHeld(interaction, unit);
+        awaitTelemetry.recordResumeReleased(unit);
+        awaitTelemetry.recordUnitTerminal(interaction, unit);
+        awaitTelemetry.recordDroppedCompletion("kafka", "terminal");
 
         var metrics = metricReader.collectAllMetrics();
         assertTrue(hasMetric(metrics, "tpf.await.interaction.dispatched.total"));
@@ -104,7 +106,7 @@ class AwaitCompletionMetricsTest {
     void keepsProviderDispatchSpanCurrentForTheActualSubscription() {
         AtomicBoolean spanWasCurrent = new AtomicBoolean();
 
-        String value = AwaitCompletionMetrics.inProviderDispatchSpan(interactionRecord(),
+        String value = awaitTelemetry.inProviderDispatchSpan(interactionRecord(),
             () -> Uni.createFrom().item(() -> {
                 spanWasCurrent.set(io.opentelemetry.api.trace.Span.current().getSpanContext().isValid());
                 return "dispatched";
@@ -117,15 +119,15 @@ class AwaitCompletionMetricsTest {
 
     @Test
     void completionAddsDurableLinkToCapturedOrigin() {
-        Span origin = GlobalOpenTelemetry.getTracer("await-test").spanBuilder("origin").startSpan();
+        Span origin = tracerProvider.get("await-test").spanBuilder("origin").startSpan();
         Map<String, Object> traceMetadata;
         try (Scope ignored = origin.makeCurrent()) {
-            traceMetadata = AwaitCompletionMetrics.captureTraceMetadata();
+            traceMetadata = awaitTelemetry.captureTraceMetadata();
         } finally {
             origin.end();
         }
 
-        AwaitCompletionMetrics.recordCompletionAdmitted(interactionRecord(traceMetadata));
+        awaitTelemetry.recordCompletionAdmitted(interactionRecord(traceMetadata));
 
         var completion = spanExporter.getFinishedSpanItems().stream()
             .filter(span -> "tpf.await.completion.admitted".equals(span.getName()))

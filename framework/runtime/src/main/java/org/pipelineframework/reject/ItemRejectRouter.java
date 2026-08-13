@@ -40,7 +40,7 @@ import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.context.TransportDispatchMetadata;
 import org.pipelineframework.context.TransportDispatchMetadataHolder;
-import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineRetryTelemetry;
 
 /**
  * Central router for step-level reject publication.
@@ -284,7 +284,7 @@ public class ItemRejectRouter {
      */
     private Uni<Void> publishEnvelope(ItemRejectEnvelope envelope) {
         ItemRejectSink selected = ensureSinkInitialized();
-        PipelineTelemetry.recordReject(
+        PipelineRetryTelemetry.recordReject(
             resolveStepClass(envelope.stepClass()),
             envelope.rejectScope(),
             envelope.errorClass(),

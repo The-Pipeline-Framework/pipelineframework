@@ -31,6 +31,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.security.MessageDigest;
 import java.sql.*;
 import java.time.Duration;
 import java.time.Instant;
@@ -150,6 +151,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final String MODULAR_IMAGE_TAG = resolveModularImageTag();
     private static final String CSV_E2E_INPUT_FILE = System.getProperty("csv.e2e.input.file", "").trim();
     private static final boolean CUSTOM_INPUT_FILE = !CSV_E2E_INPUT_FILE.isBlank();
+    private static final String FRAMEWORK_PROVENANCE_FILE =
+            "org/pipelineframework/tpf-worktree-provenance.properties";
+    private static final List<String> FRAMEWORK_PROVENANCE_KEYS = List.of(
+            "framework.version",
+            "framework.commit",
+            "framework.source.fingerprint",
+            "framework.runtime.sha256");
+    private static Properties frameworkProvenance;
     private static volatile boolean orchestratorPackagingVerified;
     private static volatile boolean modularServiceImagesVerified;
     private static final Pattern TERMINAL_GRPC_FAILURE = Pattern.compile(
@@ -258,6 +267,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         Path dir = Paths.get(TEST_E2E_DIR);
         Files.createDirectories(dir);
         ensureWritable(dir);
+        prepareFrameworkArtifactProvenance();
         rebuildModularServiceImages();
         ensurePackagedOrchestratorFresh();
         prepareObservabilityHarness();
@@ -287,6 +297,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         }
         ensureKafkaTopics();
         verifyModularServiceImagesMatchDockerArchitecture();
+        verifyFrameworkArtifactProvenance();
 
         Stream.Builder<GenericContainer<?>> services = Stream.builder();
         services.add(getPersistenceService());
@@ -684,13 +695,22 @@ abstract class AbstractCsvPaymentsEndToEnd {
         env.put("QUARKUS_OTEL_EXPORTER_OTLP_ENABLED", "true");
         env.put("QUARKUS_OTEL_EXPORTER_OTLP_ENDPOINT", otlpEndpoint);
         env.put("QUARKUS_OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf");
-        env.put("QUARKUS_OTEL_TRACES_SAMPLER", "parentbased_always_on");
+        env.put("QUARKUS_OTEL_TRACES_SAMPLER", "always_on");
         env.put("QUARKUS_OTEL_TRACES_SAMPLER_ARG", "1.0");
         env.put("QUARKUS_OBSERVABILITY_LGTM_ENABLED", "false");
         env.put("PIPELINE_TELEMETRY_ENABLED", "true");
         env.put("PIPELINE_TELEMETRY_TRACING_ENABLED", "true");
         env.put("PIPELINE_TELEMETRY_TRACING_PER_ITEM", "true");
         env.put("PIPELINE_TELEMETRY_METRICS_ENABLED", "true");
+    }
+
+    private static void configureTempoBuildEnv(Map<String, String> env) {
+        if (!TEMPO_VERIFICATION_ACTIVE) {
+            return;
+        }
+        env.put("QUARKUS_OTEL_LOGS_ENABLED", "false");
+        env.put("QUARKUS_OTEL_TRACES_SAMPLER", "always_on");
+        env.put("QUARKUS_OTEL_TRACES_SAMPLER_ARG", "1.0");
     }
 
     private static String lgtmCollectorContainerEndpoint() {
@@ -920,6 +940,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.directory(processDir.toFile());
             pb.environment().put("CSV_RUNTIME_LAYOUT", RUNTIME_LAYOUT);
+            configureTempoBuildEnv(pb.environment());
             if (!mavenRepoLocal.isBlank()) {
                 String existingMavenArgs = pb.environment().getOrDefault("MAVEN_ARGS", "").trim();
                 String repoArg = "-Dmaven.repo.local=" + mavenRepoLocal;
@@ -984,6 +1005,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "-Dquarkus.container-image.build=true",
                 "-Dquarkus.container-image.push=false",
                 "-Dquarkus.container-image.tag=" + MODULAR_IMAGE_TAG));
+        command.add("-Dquarkus.container-image.labels.tpf_framework_version="
+                + frameworkProvenance("framework.version"));
+        command.add("-Dquarkus.container-image.labels.tpf_framework_commit="
+                + frameworkProvenance("framework.commit"));
+        command.add("-Dquarkus.container-image.labels.tpf_framework_source_fingerprint="
+                + frameworkProvenance("framework.source.fingerprint"));
+        command.add("-Dquarkus.container-image.labels.tpf_framework_runtime_sha256="
+                + frameworkProvenance("framework.runtime.sha256"));
         if (!mavenRepoLocal.isBlank()) {
             command.add("-Dmaven.repo.local=" + mavenRepoLocal);
         }
@@ -1008,6 +1037,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.directory(moduleDir.toFile());
             pb.environment().put("CSV_RUNTIME_LAYOUT", RUNTIME_LAYOUT);
+            configureTempoBuildEnv(pb.environment());
             pb.redirectErrorStream(true);
             Process process = pb.start();
             CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> {
@@ -1043,6 +1073,105 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 Files.deleteIfExists(activeRuntimeMapping);
             }
         }
+    }
+
+    private static void prepareFrameworkArtifactProvenance() throws IOException {
+        Path moduleDir = Paths.get(System.getProperty("user.dir")).toAbsolutePath().normalize();
+        String mavenRepoLocal = System.getProperty("maven.repo.local", "").trim();
+        Path repository = mavenRepoLocal.isBlank()
+                ? moduleDir.resolve("../../../.m2/repository").normalize()
+                : Path.of(mavenRepoLocal).toAbsolutePath().normalize();
+        ProcessBuilder pb = new ProcessBuilder("bash", "../ensure-framework-artifact-provenance.sh");
+        pb.directory(moduleDir.toFile());
+        pb.environment().put("MAVEN_REPOSITORY", repository.toString());
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+        String output;
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            output = reader.lines().collect(java.util.stream.Collectors.joining(System.lineSeparator()));
+        }
+        try {
+            int exitCode = process.waitFor();
+            assertEquals(0, exitCode,
+                    "Failed to install current framework artifacts before CSV image build. Output tail:\n"
+                            + tailLines(output, 120));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while preparing framework artifact provenance.", e);
+        }
+
+        Properties loaded = new Properties();
+        Path provenancePath = repository.resolve(FRAMEWORK_PROVENANCE_FILE);
+        try (var input = Files.newInputStream(provenancePath)) {
+            loaded.load(input);
+        }
+        for (String key : FRAMEWORK_PROVENANCE_KEYS) {
+            assertFalse(loaded.getProperty(key, "").isBlank(),
+                    "Framework provenance file must define " + key + ": " + provenancePath);
+        }
+        frameworkProvenance = loaded;
+        LOG.infof("CSV framework artifact provenance: version=%s commit=%s source=%s runtime=%s",
+                frameworkProvenance("framework.version"),
+                frameworkProvenance("framework.commit"),
+                frameworkProvenance("framework.source.fingerprint"),
+                frameworkProvenance("framework.runtime.sha256"));
+    }
+
+    private static void verifyFrameworkArtifactProvenance() throws Exception {
+        Map<String, String> expectedLabels = Map.of(
+                "tpf_framework_version", frameworkProvenance("framework.version"),
+                "tpf_framework_commit", frameworkProvenance("framework.commit"),
+                "tpf_framework_source_fingerprint", frameworkProvenance("framework.source.fingerprint"),
+                "tpf_framework_runtime_sha256", frameworkProvenance("framework.runtime.sha256"));
+        for (String image : List.of(
+                modularImage("persistence-svc"),
+                modularImage("input-csv-file-processing-svc"),
+                modularImage("payments-processing-svc"),
+                modularImage("payment-status-svc"))) {
+            Map<String, String> labels = Optional.ofNullable(
+                            DockerClientFactory.instance().client().inspectImageCmd(image).exec().getConfig())
+                    .map(config -> config.getLabels())
+                    .orElseGet(Map::of);
+            expectedLabels.forEach((key, expected) -> assertEquals(
+                    expected,
+                    labels.get(key),
+                    "Image " + image + " must use the current framework artifact provenance for " + key));
+            LOG.infof("Verified %s framework provenance %s", image, expectedLabels);
+        }
+
+        Path runtimeCodeSource = Paths.get(PipelineTelemetry.class.getProtectionDomain()
+                        .getCodeSource().getLocation().toURI())
+                .toAbsolutePath()
+                .normalize();
+        assertTrue(Files.isRegularFile(runtimeCodeSource),
+                "CSV proof must load framework runtime from the installed JAR: " + runtimeCodeSource);
+        assertEquals(
+                frameworkProvenance("framework.runtime.sha256"),
+                sha256(runtimeCodeSource),
+                "CSV orchestrator test process must load the same framework runtime JAR as the service images");
+        LOG.infof("Verified CSV orchestrator process framework runtime %s", runtimeCodeSource);
+    }
+
+    private static String frameworkProvenance(String key) {
+        if (frameworkProvenance == null) {
+            throw new IllegalStateException("Framework provenance has not been prepared.");
+        }
+        return Optional.ofNullable(frameworkProvenance.getProperty(key))
+                .filter(value -> !value.isBlank())
+                .orElseThrow(() -> new IllegalStateException("Missing framework provenance value: " + key));
+    }
+
+    private static String sha256(Path path) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (var input = Files.newInputStream(path)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                digest.update(buffer, 0, read);
+            }
+        }
+        return HexFormat.of().formatHex(digest.digest());
     }
 
     /**

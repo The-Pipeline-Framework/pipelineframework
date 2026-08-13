@@ -19,6 +19,11 @@ public record TelemetryPolicy(
     int retryAmplificationSustainSamples,
     RetryAmplificationGuardMode retryAmplificationMode
 ) {
+    public static TelemetryPolicy disabled() {
+        return new TelemetryPolicy(false, false, false, false, false, false,
+            Duration.ofSeconds(30), 10d, 3, RetryAmplificationGuardMode.FAIL_FAST);
+    }
+
     public static TelemetryPolicy from(PipelineStepConfig config, boolean replayTopologyAvailable) {
         PipelineStepConfig.TelemetryConfig telemetry = config.telemetry();
         Optional<PipelineStepConfig.RetryAmplificationGuardConfig> guard = Optional.ofNullable(config.killSwitch())

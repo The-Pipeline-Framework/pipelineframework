@@ -73,7 +73,7 @@ class ExecutionReplayTrackerTest {
             topology(),
             null,
             null);
-        PipelineTelemetry.RunContext runContext = new PipelineTelemetry.RunContext(
+        PipelineRunContext runContext = new PipelineRunContext(
             "run-1",
             Context.current(),
             null,
@@ -182,7 +182,7 @@ class ExecutionReplayTrackerTest {
             topology(),
             null,
             null);
-        PipelineTelemetry.RunContext runContext = new PipelineTelemetry.RunContext(
+        PipelineRunContext runContext = new PipelineRunContext(
             "run-1",
             Context.current(),
             null,

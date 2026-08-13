@@ -64,6 +64,7 @@ import org.pipelineframework.telemetry.PipelineReplayExporter;
 import org.pipelineframework.telemetry.PipelineReplayRunParameters;
 import org.pipelineframework.telemetry.PipelineReplayTopology;
 import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineRunContext;
 import org.pipelineframework.telemetry.RetryAmplificationGuardMode;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -114,7 +115,7 @@ class PipelineReplayExecutionTest {
 
         Payload inputPayload = new Payload("alpha");
         Multi<Payload> input = Multi.createFrom().item(inputPayload);
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 3, ParallelismPolicy.AUTO, 4);
+        PipelineRunContext runContext = telemetry.startRun(input, 3, ParallelismPolicy.AUTO, 4);
 
         Object current = input;
         current = PipelineStepExecutor.applyOneToOneUnchecked(new PrefixStep(), current, false, 4, telemetry, runContext, null, null);
@@ -157,7 +158,7 @@ class PipelineReplayExecutionTest {
         PipelineTelemetry telemetry = new PipelineTelemetry(new ReplayEnabledPipelineStepConfig(), exporter, manyToManyTopology());
 
         Multi<Payload> input = Multi.createFrom().items(new Payload("alpha"), new Payload("beta"));
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        PipelineRunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
 
         Object current = PipelineStepExecutor.applyManyToManyUnchecked(
             new TransformStep(), input, telemetry, runContext, null);
@@ -181,7 +182,7 @@ class PipelineReplayExecutionTest {
         PipelineTelemetry telemetry = new PipelineTelemetry(new ReplayEnabledPipelineStepConfig(), exporter, retryTopology());
 
         Uni<Payload> input = Uni.createFrom().item(new Payload("beta"));
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        PipelineRunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
         Object current = PipelineStepExecutor.applyOneToOneUnchecked(
             new RetryOnceStep(), input, false, 4, telemetry, runContext, null, null);
         Uni<Payload> completed = (Uni<Payload>) telemetry.instrumentRunCompletion(current, runContext);
@@ -203,7 +204,7 @@ class PipelineReplayExecutionTest {
         PipelineTelemetry telemetry = new PipelineTelemetry(new ReplayEnabledPipelineStepConfig(), exporter, failureTopology());
 
         Uni<Payload> input = Uni.createFrom().item(new Payload("gamma"));
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        PipelineRunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
         Object current = PipelineStepExecutor.applyOneToOneUnchecked(
             new AlwaysFailStep(), input, false, 4, telemetry, runContext, null, null);
         Uni<Payload> completed = (Uni<Payload>) telemetry.instrumentRunCompletion(current, runContext);
@@ -226,7 +227,7 @@ class PipelineReplayExecutionTest {
         PipelineTelemetry telemetry = new PipelineTelemetry(new ReplayEnabledPipelineStepConfig(), exporter, failureTopology());
 
         Uni<Payload> input = Uni.createFrom().item(new Payload("delta"));
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        PipelineRunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
         Object current = PipelineStepExecutor.applyOneToOneUnchecked(
             new NeverCompletesStep(), input, false, 4, telemetry, runContext, null, null);
         telemetry.instrumentRunCompletion(current, runContext);
@@ -246,7 +247,7 @@ class PipelineReplayExecutionTest {
         PipelineTelemetry telemetry = new PipelineTelemetry(
             new ReplayEnabledPipelineStepConfig(), exporter, cancellationTopology());
         Uni<Payload> input = Uni.createFrom().item(new Payload("cancel-uni"));
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        PipelineRunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
 
         Uni<Payload> current = (Uni<Payload>) PipelineStepExecutor.applyOneToOneUnchecked(
             new NeverCompletesStep(), input, false, 4, telemetry, runContext, null, null);
@@ -266,7 +267,7 @@ class PipelineReplayExecutionTest {
         PipelineTelemetry telemetry = new PipelineTelemetry(
             new ReplayEnabledPipelineStepConfig(), exporter, cancellationTopology());
         Multi<Payload> input = Multi.createFrom().item(new Payload("cancel-multi"));
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        PipelineRunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
 
         Multi<Payload> current = (Multi<Payload>) PipelineStepExecutor.applyManyToManyUnchecked(
             new NeverCompletesTransformStep(), input, telemetry, runContext, null);
@@ -306,7 +307,7 @@ class PipelineReplayExecutionTest {
 
         Payload inputPayload = new Payload("alpha");
         Multi<Payload> input = Multi.createFrom().item(inputPayload);
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 3, ParallelismPolicy.AUTO, 4);
+        PipelineRunContext runContext = telemetry.startRun(input, 3, ParallelismPolicy.AUTO, 4);
 
         Object current = input;
         current = PipelineStepExecutor.applyOneToOneUnchecked(new PrefixStep(), current, false, 4, telemetry, runContext, null, null);
@@ -331,7 +332,7 @@ class PipelineReplayExecutionTest {
             failureTopology());
 
         Uni<Payload> input = Uni.createFrom().item(new Payload("delta"));
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        PipelineRunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
         Object current = PipelineStepExecutor.applyOneToOneUnchecked(
             new NeverCompletesStep(), input, false, 4, telemetry, runContext, null, null);
         telemetry.instrumentRunCompletion(current, runContext);
@@ -357,7 +358,7 @@ class PipelineReplayExecutionTest {
 
         for (String value : List.of("alpha", "beta")) {
             Multi<Payload> input = Multi.createFrom().item(new Payload(value));
-            PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+            PipelineRunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
             Object current = PipelineStepExecutor.applyOneToOneUnchecked(
                 new PrefixStep(), input, false, 4, telemetry, runContext, null, null);
             ((Multi<Payload>) telemetry.instrumentRunCompletion(current, runContext)).collect().asList().await().indefinitely();
@@ -429,7 +430,7 @@ class PipelineReplayExecutionTest {
             topology());
 
         Uni<Payload> input = Uni.createFrom().item(new Payload("zeta"));
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        PipelineRunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
         Object current = PipelineStepExecutor.applyOneToOneUnchecked(
             new PrefixStep(), input, false, 4, telemetry, runContext, null, null);
         ((Uni<Payload>) telemetry.instrumentRunCompletion(current, runContext)).await().indefinitely();
@@ -448,7 +449,7 @@ class PipelineReplayExecutionTest {
             topology());
 
         Uni<Payload> input = Uni.createFrom().item(new Payload("eta"));
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        PipelineRunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
         Object current = PipelineStepExecutor.applyOneToOneUnchecked(
             new PrefixStep(), input, false, 4, telemetry, runContext, null, null);
         ((Uni<Payload>) telemetry.instrumentRunCompletion(current, runContext)).await().indefinitely();
@@ -478,7 +479,7 @@ class PipelineReplayExecutionTest {
         PipelineContext context = new PipelineContext("v1", null, "prefer-cache");
 
         Uni<Payload> input = Uni.createFrom().item(new Payload("alpha"));
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        PipelineRunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
         Object current = PipelineStepExecutor.applyOneToOneUnchecked(
             new PrefixStep(), input, false, 4, telemetry, runContext, support, context);
         Payload output = ((Uni<Payload>) telemetry.instrumentRunCompletion(current, runContext)).await().indefinitely();
@@ -498,7 +499,7 @@ class PipelineReplayExecutionTest {
             rejectTopology());
 
         Uni<Payload> input = Uni.createFrom().item(new Payload("reject-me"));
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        PipelineRunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
         Object current = PipelineStepExecutor.applyOneToOneUnchecked(
             new RejectingStep(), input, false, 4, telemetry, runContext, null, null);
         ((Uni<Payload>) telemetry.instrumentRunCompletion(current, runContext)).await().indefinitely();
@@ -515,7 +516,7 @@ class PipelineReplayExecutionTest {
         PipelineTelemetry telemetry = new PipelineTelemetry(new ReplayEnabledPipelineStepConfig(), exporter, branchSkipTopology());
 
         Uni<DigitalPayload> input = Uni.createFrom().item(new DigitalPayload("digital-1"));
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        PipelineRunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
         StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
             0,
             "PhysicalOnly",
@@ -559,7 +560,7 @@ class PipelineReplayExecutionTest {
         CollectingExporter exporter = new CollectingExporter();
         PipelineTelemetry telemetry = new PipelineTelemetry(new ReplayEnabledPipelineStepConfig(), exporter, branchSkipTopology());
         Uni<PaymentStatusEnvelope> input = Uni.createFrom().item(PaymentStatusEnvelope.digital("digital-1"));
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        PipelineRunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
         StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
             0,
             "PhysicalOnly",
@@ -593,7 +594,7 @@ class PipelineReplayExecutionTest {
         PipelineTelemetry telemetry = new PipelineTelemetry(new ReplayEnabledPipelineStepConfig(), exporter, branchSkipTopology());
         Multi<PaymentStatusEnvelope> input = Multi.createFrom().items(
             PaymentStatusEnvelope.digital("digital-1"), PaymentStatusEnvelope.digital("digital-2"));
-        PipelineTelemetry.RunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        PipelineRunContext runContext = telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
         StepBranchingDescriptor descriptor = new StepBranchingDescriptor(
             0, "PhysicalOnly", PhysicalOnlyStep.class.getName(), PhysicalPayload.class.getName(), PhysicalPayload.class,
             List.of("PhysicalPayload"), List.of(PhysicalPayload.class.getName()), List.of(PhysicalPayload.class),
