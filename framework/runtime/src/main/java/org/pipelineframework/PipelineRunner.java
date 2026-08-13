@@ -171,7 +171,7 @@ public class PipelineRunner implements AutoCloseable {
                         awaitContext.continuationMode(),
                         awaitContext.terminalOutputOwnership(),
                         AwaitCompletionMetrics.captureTraceMetadata(
-                            telemetryContext.span() == null
+                            telemetryContext == null || telemetryContext.span() == null
                                 ? io.opentelemetry.api.trace.SpanContext.getInvalid()
                                 : telemetryContext.span().getSpanContext()));
 

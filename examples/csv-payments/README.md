@@ -92,9 +92,8 @@ cd <repo-root>
 ./examples/csv-payments/build-modular-telemetry-images.sh
 ./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
   -Dcsv.e2e.telemetry.enabled=true \
-  -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
-  -Dsurefire.failIfNoSpecifiedTests=false \
-  test -Dmaven.repo.local="$PWD/.m2/repository"
+  -Dit.test=CsvPaymentsEndToEndIT#fullPipelineWorks \
+  verify -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
 The replay artifact is written to:
@@ -112,9 +111,8 @@ cd <repo-root>
    -Dcsv-payments.payment-provider.provider-reject-probability=0.08 \
    -Dcsv.e2e.pipeline.wait.seconds=1800 \
   -Dcsv.e2e.orchestrator.wait.seconds=1800 \
-  -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
-  -Dsurefire.failIfNoSpecifiedTests=false \
-  test -Dmaven.repo.local="$PWD/.m2/repository"
+  -Dit.test=CsvPaymentsEndToEndIT#fullPipelineWorks \
+  verify -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
 Open the supported replay viewer at `/replay-viewer/` and either:
@@ -205,9 +203,8 @@ cd <repo-root>
 ./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
   -Dcsv.e2e.tempo.enabled=true \
   -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
-  -Dtest=CsvPaymentsTempoVerificationEndToEndIT \
-  -Dsurefire.failIfNoSpecifiedTests=false \
-  test -Dmaven.repo.local="$PWD/.m2/repository"
+  -Dit.test=CsvPaymentsTempoVerificationEndToEndIT \
+  verify -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
 That lane starts a dedicated LGTM stack, provisions both dashboards, and queries Tempo directly
@@ -268,9 +265,8 @@ For local manual inspection before teardown:
   -Dcsv.e2e.tempo.enabled=true \
   -Dcsv.e2e.tempo.pause.before.teardown=true \
   -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
-  -Dtest=CsvPaymentsTempoVerificationEndToEndIT \
-  -Dsurefire.failIfNoSpecifiedTests=false \
-  test -Dmaven.repo.local="$PWD/.m2/repository"
+  -Dit.test=CsvPaymentsTempoVerificationEndToEndIT \
+  verify -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
 The harness logs the Grafana UI URL and Tempo API URL before pausing. Grafana uses a dynamically

@@ -56,8 +56,8 @@ class AwaitCoordinatorCompletionTest {
                 1,
                 "cause-1",
                 Map.of("orderId", "o-1"),
-                null,
-                null).await().indefinitely().record();
+                "alice",
+                "fraud-review").await().indefinitely().record();
 
             assertEquals(traceMetadata, created.transportMetadata());
         } finally {

@@ -43,9 +43,10 @@ Use MDC for logs and OpenTelemetry context for traces.
 
 TPF preserves parent/child context while work remains live. A deliberately durable or asynchronous
 boundary may begin a separate physical trace only when the downstream span retains an explicit
-OpenTelemetry link or correlation to the originating execution journey. A downstream Await
-completion or continuation span that is neither a valid child nor deliberately linked is an
-accidental rootless span and should be treated as a conformance failure.
+OpenTelemetry span link to the originating execution journey. Correlation attributes are supplemental
+diagnostics, not a substitute for parentage or a span link. A downstream Await completion or
+continuation span that is neither a valid child nor deliberately linked is an accidental rootless
+span and should be treated as a conformance failure.
 
 For the representative CSV Payments journey, trace proof follows transition-worker dispatch,
 Await interaction creation, provider dispatch, completion admission, live handoff, scalar

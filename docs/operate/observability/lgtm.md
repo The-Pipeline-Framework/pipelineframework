@@ -39,8 +39,8 @@ and use Prometheus-backed panels for throughput, latency, queue depth, inflight,
 
 For `csv-payments`, the dedicated Tempo verification E2E does not rely on nested LGTM Dev Services inside the service containers. It starts an explicit LGTM stack, provisions both dashboards, and points the modular services plus packaged orchestrator at its OTLP collector. This is the telemetry-capable modular/LGTM proof profile: tracing and metrics are build-capable, the framework policy enables them, Prometheus supplies the metrics dashboard, and OTLP supplies Tempo.
 
-The CSV self-host HA profile is intentionally telemetry-disabled for this proof. It is a negative
-configuration contract and must not be expected to populate either Grafana dashboard. See the
+The CSV self-host HA profile does not emit telemetry in this verification setup, so do not expect it
+to populate either Grafana dashboard. See the
 [CSV Payments runbook](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/csv-payments)
 for the fast verification and opt-in 10k operator-proof commands.
 
