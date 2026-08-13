@@ -94,7 +94,7 @@ cd <repo-root>
   -Dcsv.e2e.telemetry.enabled=true \
   -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
   -Dsurefire.failIfNoSpecifiedTests=false \
-  test
+  test -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
 The replay artifact is written to:
@@ -114,7 +114,7 @@ cd <repo-root>
   -Dcsv.e2e.orchestrator.wait.seconds=1800 \
   -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
   -Dsurefire.failIfNoSpecifiedTests=false \
-  test
+  test -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
 Open the supported replay viewer at `/replay-viewer/` and either:
@@ -184,6 +184,19 @@ Copy that file to a scenario-specific local capture name before running the next
 
 Replay export and live Tempo verification are separate lanes.
 
+The dedicated modular LGTM lane is the CSV telemetry proof profile. It builds telemetry-capable
+modular services, enables the TPF metrics and tracing policy, sends traces to the test stack's OTLP
+collector, and exposes the metrics dashboard through its Prometheus datasource. The self-host HA
+reference is intentionally telemetry-disabled for this proof; use it as a negative configuration
+contract, not as a Grafana or Tempo data source.
+
+The provisioned dashboard resources are:
+
+- `orchestrator-svc/src/main/resources/META-INF/grafana/grafana-dashboard-csv-payments.json`:
+  the operator dashboard, whose first row is the eight-stage journey proof;
+- `orchestrator-svc/src/main/resources/META-INF/grafana/grafana-dashboard-csv-payments-tempo.json`:
+  executable TraceQL journey panels and the rootless/unlinked Await diagnostic.
+
 To run the dedicated modular Tempo/LGTM verification path:
 
 ```bash
@@ -194,14 +207,17 @@ cd <repo-root>
   -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
   -Dtest=CsvPaymentsTempoVerificationEndToEndIT \
   -Dsurefire.failIfNoSpecifiedTests=false \
-  test
+  test -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
-That lane starts a dedicated LGTM stack, points the modular services and packaged orchestrator at its OTLP collector, and then queries Tempo directly to prove traces arrived and are queryable.
+That lane starts a dedicated LGTM stack, provisions both dashboards, and queries Tempo directly
+to prove that traces arrived and are queryable. It is the fast semantic and trace-continuity
+conformance check; the 10k proof below is the workload-sized operator-dashboard check.
 
 ### 10k operator-dashboard proof
 
-The 12-item Tempo check is the fast semantic and trace-continuity conformance path. Use the opt-in 10k proof when validating the operator dashboard under enough work to populate throughput, latency, pressure, Await, and publication panels:
+Use the opt-in 10k proof when validating the operator dashboard under enough work to populate
+throughput, latency, pressure, Await, and publication panels:
 
 ```bash
 cd <repo-root>
@@ -215,7 +231,7 @@ cd <repo-root>
   verify -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
-It provisions the Grafana metrics and Tempo dashboards, verifies their marked current-series queries against Grafana's Prometheus datasource, checks the 10k stage counts, and rejects unlinked Await completion traces. It reports observed latency and pressure but intentionally does not enforce a performance budget.
+It provisions the Grafana metrics and Tempo dashboards, verifies their marked current-series queries against Grafana's Prometheus datasource, checks the 10k stage counts, and rejects unlinked Await completion traces. It reports observed latency and pressure but intentionally does not enforce a performance budget. The journey covers pipeline run, transition dispatch, Await interaction creation, provider dispatch, completion admission, live handoff, scalar continuation, and terminal publication.
 
 ### Object I/O Backpressure
 
@@ -254,10 +270,12 @@ For local manual inspection before teardown:
   -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
   -Dtest=CsvPaymentsTempoVerificationEndToEndIT \
   -Dsurefire.failIfNoSpecifiedTests=false \
-  test
+  test -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
-The harness logs the Grafana UI URL and Tempo API URL before pausing. Use that mode for manual inspection only; the CI proof comes from the Tempo API assertion.
+The harness logs the Grafana UI URL and Tempo API URL before pausing. Grafana uses a dynamically
+mapped local port, so open the URL printed by the test rather than assuming `localhost:3000`. Use
+that mode for manual inspection only; the CI proof comes from the Tempo API assertion.
 
 ## Runtime-mapping matrix (Phase 2 build/functional smoke tests)
 
@@ -706,7 +724,11 @@ export QUARKUS_OBSERVABILITY_LGTM_ENABLED=true
 export QUARKUS_MICROMETER_EXPORT_PROMETHEUS_ENABLED=true
 ```
 
-This gives you the live Prometheus/Grafana/Tempo stack in dev mode. The replay-enabled E2E harness is separate and produces offline replay artifacts, and the Tempo verification lane is separate again and proves live trace visibility against a dedicated LGTM stack.
+This gives you the live Prometheus/Grafana/Tempo stack in dev mode when the application was built
+with the corresponding telemetry capability and its `pipeline.telemetry.*` policy enables the
+signal. It does not make a telemetry-disabled binary emit data. The replay-enabled E2E harness is
+separate and produces offline replay artifacts, and the Tempo verification lane is separate again
+and proves live trace visibility against a dedicated LGTM stack.
 
 The telemetry harness launches the packaged orchestrator application. If the packaged `target/quarkus-app/quarkus-run.jar` is stale or missing, the test bootstrap rebuilds it automatically before the run starts.
 
@@ -714,8 +736,11 @@ The telemetry harness launches the packaged orchestrator application. If the pac
 
 The application ships separate observability surfaces:
 
-1. **Grafana metrics dashboard**: Prometheus-backed throughput, latency, queue depth, inflight, retry, Object Ingest, await-boundary, and Object Publish panels
-2. **Tempo tracing surface**: live topology and trace drill-down
+1. **Grafana metrics dashboard** (`grafana-dashboard-csv-payments.json`): the operator surface.
+   Its first row proves the semantic journey, followed by step flow, pressure, Await health,
+   ingest/publication, and SLO/JVM sections.
+2. **Tempo tracing dashboard** (`grafana-dashboard-csv-payments-tempo.json`): executable TraceQL
+   journey and continuity panels, including the rootless/unlinked Await diagnostic.
 3. **Replay viewer**: deterministic playback from `csv-payments-replay.json`
 
 Dashboards are discovered from `META-INF/grafana/grafana-dashboard-*.json` resources when LGTM Dev Services are active.

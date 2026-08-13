@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
 
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
@@ -36,6 +37,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExecutionReplayTrackerTest {
@@ -169,6 +171,50 @@ class ExecutionReplayTrackerTest {
         assertEquals("ObjectPublishConnector", publish.service());
         assertEquals("object-publish", publish.attributes().get("connector"));
         assertEquals("payments.out", publish.attributes().get("key"));
+    }
+
+    @Test
+    void cancelledStepEmitsCancellationWithoutFailureMetadata() {
+        CollectingExporter exporter = new CollectingExporter();
+        ExecutionReplayTracker tracker = new ExecutionReplayTracker(
+            GlobalOpenTelemetry.getTracer("replay-test"),
+            exporter,
+            topology(),
+            null,
+            null);
+        PipelineTelemetry.RunContext runContext = new PipelineTelemetry.RunContext(
+            "run-1",
+            Context.current(),
+            null,
+            System.nanoTime(),
+            Instant.now(),
+            Attributes.empty(),
+            true,
+            new AtomicLong(),
+            new AtomicLong(),
+            new LongAdder(),
+            new LongAdder(),
+            new LongAdder(),
+            new LongAdder(),
+            null,
+            new ExecutionReplayTracker.RunReplayState(),
+            new AtomicBoolean());
+
+        var scope = tracker.beginStep("source-a", runContext, true, new Object());
+        tracker.completeCancelled(scope);
+
+        PipelineExecutionEvent cancelled = exporter.find("cancelled", scope.spanId());
+        assertNull(cancelled.errorType());
+        assertNull(cancelled.errorMessage());
+
+        var span = spanExporter.getFinishedSpanItems().stream()
+            .filter(item -> scope.spanId().equals(item.getSpanId()))
+            .findFirst()
+            .orElseThrow();
+        assertEquals(StatusCode.UNSET, span.getStatus().getStatusCode());
+        assertEquals(1L, span.getEvents().stream()
+            .filter(event -> "tpf.step.cancelled".equals(event.getName()))
+            .count());
     }
 
     private PipelineReplayTopology topology() {
