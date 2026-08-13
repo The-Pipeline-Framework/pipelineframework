@@ -16,13 +16,14 @@
 
 package org.pipelineframework.telemetry;
 
-import org.pipelineframework.telemetry.PipelineRunContext;
 import io.opentelemetry.api.trace.Span;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
-import java.util.concurrent.CancellationException;
+import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import org.pipelineframework.telemetry.derivation.StepTelemetryDerivation;
+import org.pipelineframework.telemetry.observation.StepObservation;
 
 /** Reactive lifecycle decorator for a single pipeline step subscription. */
 final class PipelineStepInstrumentation {
@@ -30,17 +31,23 @@ final class PipelineStepInstrumentation {
     private final PipelineTracingRecorder tracing;
     private final PipelineReplaySupport replay;
     private final RetryAmplificationGuardRuntime retryGuard;
+    private final PipelineMetricAttributes attributes;
+    private final PipelineSpanAttributes spanAttributes;
 
     PipelineStepInstrumentation(
         PipelineMetricsRecorder metrics,
         PipelineTracingRecorder tracing,
         PipelineReplaySupport replay,
-        RetryAmplificationGuardRuntime retryGuard
+        RetryAmplificationGuardRuntime retryGuard,
+        PipelineMetricAttributes attributes,
+        PipelineSpanAttributes spanAttributes
     ) {
         this.metrics = metrics;
         this.tracing = tracing;
         this.replay = replay;
         this.retryGuard = retryGuard;
+        this.attributes = attributes;
+        this.spanAttributes = spanAttributes;
     }
 
     <T> Uni<T> instrument(
@@ -51,14 +58,19 @@ final class PipelineStepInstrumentation {
             return result;
         }
         return Uni.createFrom().deferred(() -> {
-            Span span = replayScope != null ? replayScope.span() : tracing.startStep(stepClass, runContext, perItem);
+            StepObservation.Started observation = started(stepClass, perItem);
+            StepTelemetryDerivation.StartedSignals signals = StepTelemetryDerivation.started(
+                observation, attributes.step(observation.context().stepClass()),
+                spanAttributes.step(observation.context().stepClass()));
+            Span span = replayScope != null ? replayScope.span() : tracing.startStep(signals.span(), runContext);
             long started = System.nanoTime();
             AtomicBoolean terminal = new AtomicBoolean();
-            started(stepClass, runContext);
+            metrics.record(signals.metric(), runContext);
+            retryGuard.itemStarted(signals.retrySafety().stepClass());
             return result.onItemOrFailure().invoke((item, failure) ->
-                finish(terminal, stepClass, runContext, replayScope, span, started, failure, false))
-                .onCancellation().invoke(() -> finish(terminal, stepClass, runContext, replayScope, span, started,
-                    new CancellationException("Step Uni cancelled"), true));
+                finish(terminal, observation.context(), runContext, replayScope, span, started, failure, false))
+                .onCancellation().invoke(() -> finish(terminal, observation.context(), runContext, replayScope, span,
+                    started, null, true));
         });
     }
 
@@ -70,38 +82,51 @@ final class PipelineStepInstrumentation {
             return result;
         }
         return Multi.createFrom().deferred(() -> {
-            Span span = replayScope != null ? replayScope.span() : tracing.startStep(stepClass, runContext, perItem);
+            StepObservation.Started observation = started(stepClass, perItem);
+            StepTelemetryDerivation.StartedSignals signals = StepTelemetryDerivation.started(
+                observation, attributes.step(observation.context().stepClass()),
+                spanAttributes.step(observation.context().stepClass()));
+            Span span = replayScope != null ? replayScope.span() : tracing.startStep(signals.span(), runContext);
             long started = System.nanoTime();
             AtomicReference<Throwable> failure = new AtomicReference<>();
             AtomicBoolean terminal = new AtomicBoolean();
-            started(stepClass, runContext);
+            metrics.record(signals.metric(), runContext);
+            retryGuard.itemStarted(signals.retrySafety().stepClass());
             return result.onFailure().invoke(failure::set)
-                .onTermination().invoke(() -> finish(terminal, stepClass, runContext, replayScope, span, started,
+                .onTermination().invoke(() -> finish(terminal, observation.context(), runContext, replayScope, span, started,
                     failure.get(), false))
-                .onCancellation().invoke(() -> finish(terminal, stepClass, runContext, replayScope, span, started,
-                    new CancellationException("Step Multi cancelled"), true));
+                .onCancellation().invoke(() -> finish(terminal, observation.context(), runContext, replayScope, span,
+                    started, null, true));
         });
     }
 
-    private void started(Class<?> stepClass, PipelineRunContext runContext) {
-        metrics.stepStarted(stepClass, runContext);
-        retryGuard.itemStarted(PipelineMetricAttributes.resolveStepClassName(stepClass));
+    private static StepObservation.Started started(Class<?> stepClass, boolean perItem) {
+        return new StepObservation.Started(new StepObservation.Context(
+            PipelineMetricAttributes.resolveStepClassName(stepClass), perItem), Instant.now());
     }
 
     private void finish(
-        AtomicBoolean terminal, Class<?> stepClass, PipelineRunContext runContext,
+        AtomicBoolean terminal, StepObservation.Context stepContext, PipelineRunContext runContext,
         ExecutionReplayTracker.StepExecutionScope replayScope, Span span, long started,
         Throwable failure, boolean cancelled
     ) {
         if (!terminal.compareAndSet(false, true)) {
             return;
         }
-        metrics.stepFinished(stepClass, runContext, started, failure, cancelled);
-        retryGuard.itemEnded(PipelineMetricAttributes.resolveStepClassName(stepClass));
+        long duration = System.nanoTime() - started;
+        StepObservation observation = cancelled
+            ? new StepObservation.Cancelled(stepContext, duration, Instant.now())
+            : failure == null
+                ? new StepObservation.Completed(stepContext, duration, Instant.now())
+                : new StepObservation.Failed(stepContext, duration, failure, Instant.now());
+        StepTelemetryDerivation.TerminalSignals signals = StepTelemetryDerivation.terminal(
+            observation, attributes.step(stepContext.stepClass()));
+        metrics.record(signals.metric(), runContext);
+        retryGuard.itemEnded(signals.retrySafety().stepClass());
         if (replayScope != null) {
-            replay.complete(replayScope, failure, cancelled);
+            replay.complete(replayScope, signals.replay());
             return;
         }
-        tracing.finish(span, cancelled ? null : failure);
+        tracing.finish(span, signals.span());
     }
 }

@@ -24,11 +24,13 @@ import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.metrics.ObservableLongMeasurement;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
-import org.pipelineframework.config.pipeline.PipelineTelemetryResourceLoader;
+import org.pipelineframework.telemetry.derivation.PipelineSloDerivation;
+import org.pipelineframework.telemetry.derivation.RunTelemetryDerivation;
+import org.pipelineframework.telemetry.derivation.StepTelemetryDerivation;
+import org.pipelineframework.telemetry.derivation.RetryTelemetryDerivation;
 
 /** Imperative metric adapter for pipeline observations. It owns no spans or replay state. */
 final class PipelineMetricsRecorder {
@@ -55,10 +57,10 @@ final class PipelineMetricsRecorder {
     PipelineMetricsRecorder(
         TelemetryPolicy policy,
         TelemetryRuntime telemetryRuntime,
-        Optional<PipelineReplayTopology> replayTopology
+        PipelineMetricAttributes attributes
     ) {
         enabled = policy.metricsEnabled();
-        attributes = new PipelineMetricAttributes(replayTopology, PipelineTelemetryResourceLoader.loadItemBoundary());
+        this.attributes = attributes;
         if (!enabled) {
             pipelineRunCounter = null;
             pipelineRunErrorCounter = null;
@@ -99,16 +101,12 @@ final class PipelineMetricsRecorder {
             .setUnit("items").ofLongs().buildWithCallback(this::recordMaxConcurrencyGauge);
     }
 
-    Attributes runAttributes(String inputKind) {
-        return sdk(attributes.run(inputKind));
-    }
-
-    void runStarted(String inputKind, int configuredMaxConcurrency) {
+    void record(RunTelemetryDerivation.MetricStarted signal) {
         if (!enabled) {
             return;
         }
-        pipelineRunCounter.add(1, runAttributes(inputKind));
-        maxConcurrency.set(Math.max(1, configuredMaxConcurrency));
+        pipelineRunCounter.add(1, sdk(signal.attributes()));
+        maxConcurrency.set(Math.max(1, signal.maxConcurrency()));
     }
 
     <T> Multi<T> instrumentConsumed(Class<?> stepClass, PipelineRunContext runContext, Multi<T> input) {
@@ -139,7 +137,7 @@ final class PipelineMetricsRecorder {
         return output.onItem().invoke(item -> produced(stepClass, runContext));
     }
 
-    void stepStarted(Class<?> stepClass, PipelineRunContext runContext) {
+    void record(StepTelemetryDerivation.MetricStarted signal, PipelineRunContext runContext) {
         if (runContext == null || !runContext.enabled()) {
             return;
         }
@@ -148,12 +146,13 @@ final class PipelineMetricsRecorder {
         runContext.inflightSum().add(current);
         runContext.inflightMax().accumulateAndGet(current, Math::max);
         if (enabled) {
-            inflightByStep.computeIfAbsent(PipelineMetricAttributes.resolveStepClassName(stepClass), ignored -> new AtomicLong())
+            String stepClass = signal.attributes().get("tpf.step.class");
+            inflightByStep.computeIfAbsent(stepClass, ignored -> new AtomicLong())
                 .incrementAndGet();
         }
     }
 
-    void stepFinished(Class<?> stepClass, PipelineRunContext runContext, long startNanos, Throwable failure, boolean cancelled) {
+    void record(StepTelemetryDerivation.MetricFinished signal, PipelineRunContext runContext) {
         if (runContext == null || !runContext.enabled()) {
             return;
         }
@@ -161,34 +160,32 @@ final class PipelineMetricsRecorder {
         runContext.inflightSamples().increment();
         runContext.inflightSum().add(Math.max(current, 0));
         if (enabled) {
-            AtomicLong stepInflight = inflightByStep.get(PipelineMetricAttributes.resolveStepClassName(stepClass));
+            AtomicLong stepInflight = inflightByStep.get(signal.attributes().get("tpf.step.class"));
             if (stepInflight != null) {
                 stepInflight.updateAndGet(value -> Math.max(0, value - 1));
             }
-            Attributes metricAttributes = sdk(attributes.step(stepClass));
-            stepDuration.record(elapsedMillis(startNanos), metricAttributes);
-            if (failure != null && !cancelled) {
+            Attributes metricAttributes = sdk(signal.attributes());
+            stepDuration.record(signal.durationMillis(), metricAttributes);
+            if (signal.error()) {
                 stepErrorCounter.add(1, metricAttributes);
             }
         }
     }
 
-    void runFinished(PipelineRunContext runContext, Throwable failure) {
+    void record(RunTelemetryDerivation.MetricFinished signal, PipelineRunContext runContext) {
         if (!enabled) {
             return;
         }
-        double duration = elapsedMillis(runContext.startNanos());
+        double duration = signal.durationMillis();
         pipelineRunDuration.record(duration, runContext.attributes());
-        if (failure != null) {
+        if (signal.error()) {
             pipelineRunErrorCounter.add(1, runContext.attributes());
         }
-        recordThroughputSlo(runContext, duration);
-        recordItemSuccessSlo(runContext);
     }
 
-    void retryRecorded(Class<?> stepClass) {
+    void record(RetryTelemetryDerivation.MetricSignal signal) {
         if (enabled) {
-            stepRetryCounter.add(1, sdk(attributes.step(stepClass)));
+            stepRetryCounter.add(1, sdk(signal.attributes()));
         }
     }
 
@@ -236,39 +233,26 @@ final class PipelineMetricsRecorder {
         measurement.record(maxConcurrency.get());
     }
 
-    private void recordThroughputSlo(PipelineRunContext runContext, double durationMs) {
-        attributes.itemBoundary().ifPresent(boundary -> {
-            if (durationMs <= 0d || boundary.consumerStep() == null || boundary.consumerStep().isBlank()
-                || boundary.itemInputType() == null || boundary.itemInputType().isBlank()) {
-                return;
-            }
-            long consumed = runContext.itemsConsumed().sum();
-            double itemsPerMinute = consumed / (durationMs / 60_000d);
-            Attributes metricAttributes = sdk(attributes.boundary(boundary.consumerStep(), boundary.itemInputType()));
-            sloItemThroughputTotal.add(1, metricAttributes);
-            if (itemsPerMinute >= TelemetrySloConfig.itemThroughputPerMinute()) {
-                sloItemThroughputGood.add(1, metricAttributes);
-            }
-        });
+    void record(PipelineSloDerivation.ThroughputSignal signal) {
+        if (!enabled) {
+            return;
+        }
+        Attributes metricAttributes = sdk(signal.attributes());
+        sloItemThroughputTotal.add(1, metricAttributes);
+        if (signal.good()) {
+            sloItemThroughputGood.add(1, metricAttributes);
+        }
     }
 
-    private void recordItemSuccessSlo(PipelineRunContext runContext) {
-        attributes.itemBoundary().ifPresent(boundary -> {
-            if (boundary.consumerStep() == null || boundary.consumerStep().isBlank()
-                || boundary.itemInputType() == null || boundary.itemInputType().isBlank()) {
-                return;
-            }
-            long consumed = runContext.itemsConsumed().sum();
-            if (consumed <= 0) {
-                return;
-            }
-            long goodCount = Math.min(consumed, runContext.itemsProduced().sum());
-            Attributes metricAttributes = sdk(attributes.boundary(boundary.consumerStep(), boundary.itemInputType()));
-            sloItemSuccessTotal.add(consumed, metricAttributes);
-            if (goodCount > 0) {
-                sloItemSuccessGood.add(goodCount, metricAttributes);
-            }
-        });
+    void record(PipelineSloDerivation.SuccessSignal signal) {
+        if (!enabled) {
+            return;
+        }
+        Attributes metricAttributes = sdk(signal.attributes());
+        sloItemSuccessTotal.add(signal.total(), metricAttributes);
+        if (signal.good() > 0) {
+            sloItemSuccessGood.add(signal.good(), metricAttributes);
+        }
     }
 
     private static LongCounter counter(Meter meter, String name, String description, String unit) {
@@ -283,7 +267,4 @@ final class PipelineMetricsRecorder {
         return TelemetrySdkAttributes.from(values);
     }
 
-    private static double elapsedMillis(long startNanos) {
-        return (System.nanoTime() - startNanos) / 1_000_000d;
-    }
 }

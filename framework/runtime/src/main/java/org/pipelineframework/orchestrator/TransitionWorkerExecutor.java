@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import java.util.Optional;
+import java.time.Instant;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -12,6 +13,8 @@ import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.invocation.PipelineInvocationRuntime;
+import org.pipelineframework.telemetry.observation.TransitionObservation;
+import org.pipelineframework.telemetry.derivation.TransitionTelemetryDerivation;
 
 /**
  * Bounded executor for queue-async transition workers.
@@ -27,6 +30,9 @@ public class TransitionWorkerExecutor {
 
     @Inject
     TransitionWorkerMetrics telemetry = TransitionWorkerMetrics.disabled();
+
+    @Inject
+    TransitionWorkerTracing tracing = TransitionWorkerTracing.disabled();
 
     private final Object lifecycleLock = new Object();
     private volatile Semaphore permits;
@@ -61,10 +67,10 @@ public class TransitionWorkerExecutor {
     public Optional<TransitionAdmission> tryAdmit() {
         Semaphore activePermits = permits();
         if (!activePermits.tryAcquire()) {
-            telemetry().recordSaturated();
+            record(new TransitionObservation.Saturated(Instant.now()));
             return Optional.empty();
         }
-        telemetry().incrementActive();
+        record(new TransitionObservation.Admitted(Instant.now()));
         return Optional.of(new TransitionAdmission(this, activePermits));
     }
 
@@ -79,21 +85,25 @@ public class TransitionWorkerExecutor {
         PipelineTransitionWorker worker,
         TransitionCommandEnvelope command) {
         Uni<TransitionResultEnvelope> execution = invocationRuntime().invokeTransitionWorker(
-            telemetry()::recordDuration,
+            duration -> record(new TransitionObservation.DurationRecorded(duration, Instant.now())),
             () -> {
-                telemetry().recordDispatched();
+                record(new TransitionObservation.Dispatched(Instant.now()));
                 try {
                     Uni<TransitionResultEnvelope> result = worker.executeTransition(command);
                     if (result == null) {
-                        telemetry().recordOutcome(TransitionWorkerOutcome.FAILED);
+                        record(new TransitionObservation.OutcomeRecorded(
+                            TransitionWorkerOutcome.FAILED.name(), Instant.now()));
                         return Uni.createFrom().item(TransitionResultEnvelope.failed(
                             new IllegalStateException("PipelineTransitionWorker returned null")));
                     }
                     return result
-                        .onItem().invoke(item -> telemetry().recordOutcome(item.outcome()))
-                        .onFailure().invoke(failure -> telemetry().recordOutcome(TransitionWorkerOutcome.FAILED));
+                        .onItem().invoke(item -> record(new TransitionObservation.OutcomeRecorded(
+                            item.outcome().name(), Instant.now())))
+                        .onFailure().invoke(failure -> record(new TransitionObservation.OutcomeRecorded(
+                            TransitionWorkerOutcome.FAILED.name(), Instant.now())));
                 } catch (Exception failure) {
-                    telemetry().recordOutcome(TransitionWorkerOutcome.FAILED);
+                    record(new TransitionObservation.OutcomeRecorded(
+                        TransitionWorkerOutcome.FAILED.name(), Instant.now()));
                     return Uni.createFrom().item(TransitionResultEnvelope.failed(failure));
                 }
             });
@@ -156,6 +166,12 @@ public class TransitionWorkerExecutor {
         return telemetry == null ? TransitionWorkerMetrics.disabled() : telemetry;
     }
 
+    private void record(TransitionObservation observation) {
+        TransitionTelemetryDerivation.metrics(observation).forEach(telemetry()::record);
+        TransitionTelemetryDerivation.span(observation)
+            .ifPresent((tracing == null ? TransitionWorkerTracing.disabled() : tracing)::record);
+    }
+
     private Executor virtualThreadExecutor() {
         ExecutorService active = virtualThreadExecutor;
         if (active != null) {
@@ -171,7 +187,7 @@ public class TransitionWorkerExecutor {
 
     private void release(Semaphore acquiredPermits) {
         acquiredPermits.release();
-        telemetry().decrementActive();
+        record(new TransitionObservation.Released(Instant.now()));
     }
 
     @PreDestroy

@@ -86,6 +86,12 @@ final class PipelineMetricAttributes {
         return itemBoundary;
     }
 
+    Optional<Map<String, String>> sloBoundary() {
+        return itemBoundary.filter(boundary -> boundary.consumerStep() != null && !boundary.consumerStep().isBlank()
+                && boundary.itemInputType() != null && !boundary.itemInputType().isBlank())
+            .map(boundary -> boundary(boundary.consumerStep(), boundary.itemInputType()));
+    }
+
     static String resolveStepClassName(Class<?> stepClass) {
         if (stepClass == null) {
             return null;

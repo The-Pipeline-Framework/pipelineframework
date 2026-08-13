@@ -1,19 +1,16 @@
 package org.pipelineframework.orchestrator;
 
-import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import org.pipelineframework.telemetry.NoopTelemetryRuntime;
 import org.pipelineframework.telemetry.TelemetryRuntime;
-import io.opentelemetry.api.common.AttributeKey;
-import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.Tracer;
+import org.pipelineframework.telemetry.TelemetrySdkAttributes;
+import org.pipelineframework.telemetry.derivation.TransitionTelemetryDerivation;
 
 /**
  * Lightweight queue-async transition worker metrics.
@@ -22,18 +19,14 @@ import io.opentelemetry.api.trace.Tracer;
 final class TransitionWorkerMetrics {
 
     private static final AtomicLong ACTIVE_TRANSITIONS = new AtomicLong();
-    private static final AttributeKey<String> OUTCOME = AttributeKey.stringKey("tpf.transition.outcome");
-
     private final LongCounter saturatedCounter;
     private final LongCounter dispatchedCounter;
     private final LongCounter outcomeCounter;
     private final DoubleHistogram durationHistogram;
-    private final Tracer tracer;
 
     @Inject
     TransitionWorkerMetrics(TelemetryRuntime runtime) {
         Meter meter = runtime.meter("org.pipelineframework.orchestrator");
-        tracer = runtime.tracer("org.pipelineframework.orchestrator");
         saturatedCounter = meter.counterBuilder("tpf.orchestrator.transition.saturated").setDescription("Queue-async transition admission saturation count").setUnit("1").build();
         dispatchedCounter = meter.counterBuilder("tpf.orchestrator.transition.dispatched.total").setDescription("Queue-async transitions dispatched to a worker").setUnit("transitions").build();
         outcomeCounter = meter.counterBuilder("tpf.orchestrator.transition.outcome").setDescription("Queue-async transition worker outcomes").setUnit("1").build();
@@ -46,33 +39,16 @@ final class TransitionWorkerMetrics {
         return new TransitionWorkerMetrics(new NoopTelemetryRuntime());
     }
 
-    void incrementActive() {
-        ACTIVE_TRANSITIONS.incrementAndGet();
-    }
-
-    void decrementActive() {
-        ACTIVE_TRANSITIONS.updateAndGet(current -> Math.max(0L, current - 1L));
-    }
-
-    void recordSaturated() {
-        saturatedCounter.add(1);
-    }
-
-    void recordDispatched() {
-        dispatchedCounter.add(1);
-        Span span = tracer.spanBuilder("tpf.transition.dispatched").startSpan();
-        span.end();
-    }
-
-    void recordOutcome(TransitionWorkerOutcome outcome) {
-        if (outcome == null) {
-            return;
+    void record(TransitionTelemetryDerivation.MetricSignal signal) {
+        var attributes = TelemetrySdkAttributes.from(signal.attributes());
+        switch (signal.metric()) {
+            case ACTIVE -> ACTIVE_TRANSITIONS.updateAndGet(current ->
+                Math.max(0L, current + (long) signal.value()));
+            case SATURATED -> saturatedCounter.add((long) signal.value(), attributes);
+            case DISPATCHED -> dispatchedCounter.add((long) signal.value(), attributes);
+            case OUTCOME -> outcomeCounter.add((long) signal.value(), attributes);
+            case DURATION -> durationHistogram.record(signal.value(), attributes);
         }
-        outcomeCounter.add(1, Attributes.of(OUTCOME, outcome.name().toLowerCase(Locale.ROOT)));
-    }
-
-    void recordDuration(long durationNanos) {
-        durationHistogram.record(Math.max(0.0, durationNanos / 1_000_000.0));
     }
 
 }
