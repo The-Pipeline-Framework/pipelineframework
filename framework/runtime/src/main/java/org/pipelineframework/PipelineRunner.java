@@ -137,6 +137,32 @@ public class PipelineRunner implements AutoCloseable {
         List<Object> steps,
         int startStepIndex,
         int stopBeforeStepIndex) {
+        return runFromStepUntilWithContext(input, steps, startStepIndex, stopBeforeStepIndex, true);
+    }
+
+    /**
+     * Runs a statically linked child definition within the current root invocation.
+     *
+     * <p>The child uses the same step executor, configuration, and {@link PipelineContext} capture
+     * as a top-level range, but it neither starts another pipeline run nor owns terminal object
+     * publication. The caller receives the child reactive result to flatten through its ordinary
+     * step interface.
+     *
+     * @param input child input as a Uni or Multi
+     * @param steps statically linked child step instances
+     * @return child result without terminal publication ownership
+     */
+    public ExecutionResult runNestedWithContext(Object input, List<Object> steps) {
+        Objects.requireNonNull(steps, "Steps list must not be null");
+        return runFromStepUntilWithContext(input, steps, 0, steps.size(), false);
+    }
+
+    private ExecutionResult runFromStepUntilWithContext(
+        Object input,
+        List<Object> steps,
+        int startStepIndex,
+        int stopBeforeStepIndex,
+        boolean rootInvocation) {
         Objects.requireNonNull(steps, "Steps list must not be null");
         if (!(input instanceof Uni<?> || input instanceof Multi<?>)) {
             throw new IllegalArgumentException(MessageFormat.format(
@@ -154,9 +180,13 @@ public class PipelineRunner implements AutoCloseable {
 
         ParallelismPolicy parallelismPolicy = parallelismPolicyResolver.resolveParallelismPolicy(pipelineConfig);
         int maxConcurrency = parallelismPolicyResolver.resolveMaxConcurrency(pipelineConfig);
-        PipelineRunContext telemetryContext =
-            runTelemetry.startRun(input, orderedSteps.size(), parallelismPolicy, maxConcurrency);
-        Object instrumentedInput = runTelemetry.instrumentInput(input, telemetryContext);
+        PipelineRunContext telemetryContext = rootInvocation
+            ? runTelemetry.startRun(input, orderedSteps.size(), parallelismPolicy, maxConcurrency)
+            : PipelineRunContext.disabled();
+        Object instrumentedInput = rootInvocation ? runTelemetry.instrumentInput(input, telemetryContext) : input;
+        PipelineStepTelemetry executionStepTelemetry = rootInvocation
+            ? PipelineStepTelemetry.of(stepTelemetry, telemetryContext)
+            : PipelineStepTelemetry.disabled();
 
         PipelineContext contextSnapshot = PipelineContextHolder.get();
         CacheReadSupport cacheReadSupport = cacheSupportFactory.buildCacheReadSupport();
@@ -195,8 +225,7 @@ public class PipelineRunner implements AutoCloseable {
                     value,
                     parallelismPolicy,
                     maxConcurrency,
-                    stepTelemetry,
-                    telemetryContext,
+                    executionStepTelemetry,
                     cacheReadSupport,
                     contextSnapshot,
                     awaitContextSnapshot);
@@ -206,7 +235,8 @@ public class PipelineRunner implements AutoCloseable {
         // Terminal object publish only runs after a full pipeline execution, not for partial/early-stop runs.
         Object terminal = current;
         boolean terminalOutputPublished = false;
-        if (stopBeforeStepIndex == orderedSteps.size()
+        if (rootInvocation
+            && stopBeforeStepIndex == orderedSteps.size()
             && (awaitContext == null
                 || awaitContext.terminalOutputOwnership() == TerminalOutputOwnership.TRANSITION_WORKER)) {
             ObjectPublishRunner publishRunner = objectPublishRunner();
@@ -215,8 +245,9 @@ public class PipelineRunner implements AutoCloseable {
                 terminalOutputPublished = true;
             }
         }
+        Object completed = rootInvocation ? runTelemetry.instrumentRunCompletion(terminal, telemetryContext) : terminal;
         return new ExecutionResult(
-            runTelemetry.instrumentRunCompletion(terminal, telemetryContext),
+            completed,
             telemetryContext,
             terminalOutputPublished);
     }

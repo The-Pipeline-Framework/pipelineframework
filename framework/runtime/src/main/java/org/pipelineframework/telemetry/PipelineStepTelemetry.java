@@ -44,6 +44,15 @@ public final class PipelineStepTelemetry {
         this.runContext = runContext;
     }
 
+    /**
+     * Returns a step decorator that performs no telemetry or replay work.
+     *
+     * @return disabled step telemetry decorator
+     */
+    public static PipelineStepTelemetry disabled() {
+        return DISABLED;
+    }
+
     public static PipelineStepTelemetry of(
         Seam telemetry,
         Object runContext
