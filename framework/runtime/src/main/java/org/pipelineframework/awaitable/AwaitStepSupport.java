@@ -63,7 +63,8 @@ public class AwaitStepSupport {
             context.executionId() + ":" + stepIndex,
             input,
             null,
-            null)
+            null,
+            context.traceMetadata())
             .onItem().transformToUni(created -> {
                 AwaitInteractionRecord record = created.record();
                 Uni<AwaitInteractionRecord> dispatched = record.status() == AwaitInteractionStatus.WAITING
@@ -267,7 +268,8 @@ public class AwaitStepSupport {
             context.executionId(),
             context.currentStepIndex(),
             context.continuationMode(),
-            context.terminalOutputOwnership());
+            context.terminalOutputOwnership(),
+            context.traceMetadata());
     }
 
     @SuppressWarnings("unchecked")
@@ -368,7 +370,8 @@ public class AwaitStepSupport {
             unitId,
             index,
             null,
-            null)
+            null,
+            context.traceMetadata())
             .onItem().transformToUni(created -> {
                 AwaitInteractionRecord record = created.record();
                 if (record.status() == AwaitInteractionStatus.COMPLETED) {
@@ -409,7 +412,8 @@ public class AwaitStepSupport {
                 unitId,
                 index,
                 null,
-                null)
+                null,
+                context.traceMetadata())
                 .onItem().transformToUni(created -> {
                     AwaitInteractionRecord record = created.record();
                     return record.status() == AwaitInteractionStatus.WAITING

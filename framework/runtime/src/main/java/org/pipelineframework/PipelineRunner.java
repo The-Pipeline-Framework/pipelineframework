@@ -35,6 +35,7 @@ import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.awaitable.AwaitCompletionMetrics;
 import org.pipelineframework.awaitable.TerminalOutputOwnership;
 import org.pipelineframework.objectpublish.ObjectPublishRunner;
 import org.pipelineframework.objectpublish.ObjectPublishTelemetry;
@@ -168,7 +169,11 @@ public class PipelineRunner implements AutoCloseable {
                         awaitContext.executionId(),
                         index,
                         awaitContext.continuationMode(),
-                        awaitContext.terminalOutputOwnership());
+                        awaitContext.terminalOutputOwnership(),
+                        AwaitCompletionMetrics.captureTraceMetadata(
+                            telemetryContext.span() == null
+                                ? io.opentelemetry.api.trace.SpanContext.getInvalid()
+                                : telemetryContext.span().getSpanContext()));
 
                 if (step instanceof Configurable configurable) {
                     configurable.initialiseWithConfig(configFactory.buildConfig(step.getClass(), pipelineConfig));

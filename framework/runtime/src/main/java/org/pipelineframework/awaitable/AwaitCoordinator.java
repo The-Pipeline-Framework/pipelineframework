@@ -78,6 +78,21 @@ public class AwaitCoordinator {
         String assignee,
         String group
     ) {
+        return createOrGet(descriptor, tenantId, executionId, stepIndex, causationId, requestPayload, assignee, group,
+            AwaitCompletionMetrics.captureTraceMetadata());
+    }
+
+    Uni<AwaitCreateResult> createOrGet(
+        AwaitStepDescriptor descriptor,
+        String tenantId,
+        String executionId,
+        int stepIndex,
+        String causationId,
+        Object requestPayload,
+        String assignee,
+        String group,
+        Map<String, Object> traceMetadata
+    ) {
         String unitId = deriveUnitId(tenantId, executionId, descriptor.stepId(), stepIndex);
         return registerDescriptor(descriptor)
             .chain(() -> createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex))
@@ -91,7 +106,8 @@ public class AwaitCoordinator {
                 requestPayload,
                 null,
                 assignee,
-                group)
+                group,
+                traceMetadata)
                 .onItem().transformToUni(created -> unitStore().attachPrimaryInteraction(
                         tenantId,
                         unit.unitId(),
@@ -112,6 +128,23 @@ public class AwaitCoordinator {
         String assignee,
         String group
     ) {
+        return createOrGetItem(descriptor, tenantId, executionId, stepIndex, causationId, requestPayload, unitId,
+            itemIndex, assignee, group, AwaitCompletionMetrics.captureTraceMetadata());
+    }
+
+    Uni<AwaitCreateResult> createOrGetItem(
+        AwaitStepDescriptor descriptor,
+        String tenantId,
+        String executionId,
+        int stepIndex,
+        String causationId,
+        Object requestPayload,
+        String unitId,
+        int itemIndex,
+        String assignee,
+        String group,
+        Map<String, Object> traceMetadata
+    ) {
         return registerDescriptor(descriptor)
             .onItem().transformToUni(ignored -> {
                 if (itemIndex < 0) {
@@ -120,7 +153,7 @@ public class AwaitCoordinator {
                 return createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex)
                     .onItem().transformToUni(unit -> createItemInPreparedUnit(
                         descriptor, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
-                        itemIndex, assignee, group));
+                        itemIndex, assignee, group, traceMetadata));
             });
     }
 
@@ -150,6 +183,23 @@ public class AwaitCoordinator {
         String assignee,
         String group
     ) {
+        return createOrGetPreparedItem(descriptor, tenantId, executionId, stepIndex, causationId, requestPayload,
+            unitId, itemIndex, assignee, group, AwaitCompletionMetrics.captureTraceMetadata());
+    }
+
+    Uni<AwaitCreateResult> createOrGetPreparedItem(
+        AwaitStepDescriptor descriptor,
+        String tenantId,
+        String executionId,
+        int stepIndex,
+        String causationId,
+        Object requestPayload,
+        String unitId,
+        int itemIndex,
+        String assignee,
+        String group,
+        Map<String, Object> traceMetadata
+    ) {
         return registerDescriptor(descriptor)
             .chain(() -> {
                 if (itemIndex < 0) {
@@ -157,7 +207,7 @@ public class AwaitCoordinator {
                 }
                 return createItemInPreparedUnit(
                     descriptor, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
-                    itemIndex, assignee, group);
+                    itemIndex, assignee, group, traceMetadata);
             });
     }
 
@@ -646,7 +696,8 @@ public class AwaitCoordinator {
         Object requestPayload,
         Integer itemIndex,
         String assignee,
-        String group
+        String group,
+        Map<String, Object> traceMetadata
     ) {
         Object canonicalRequestPayload = restoreCanonicalRequestPayload(descriptor, requestPayload);
         long now = System.currentTimeMillis();
@@ -672,7 +723,7 @@ public class AwaitCoordinator {
                 descriptor.transportType(),
                 unitId,
                 itemIndex,
-                AwaitCompletionMetrics.captureTraceMetadata(),
+                traceMetadata,
                 now,
                 deadline,
                 ttl))
@@ -695,11 +746,12 @@ public class AwaitCoordinator {
         Object requestPayload,
         int itemIndex,
         String assignee,
-        String group
+        String group,
+        Map<String, Object> traceMetadata
     ) {
         return createInteraction(
             descriptor, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
-            itemIndex, assignee, group);
+            itemIndex, assignee, group, traceMetadata);
     }
 
     private static Object restoreCanonicalRequestPayload(AwaitStepDescriptor descriptor, Object requestPayload) {

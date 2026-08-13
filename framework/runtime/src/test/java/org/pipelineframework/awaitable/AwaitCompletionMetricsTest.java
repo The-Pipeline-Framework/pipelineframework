@@ -9,11 +9,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.metrics.data.MetricData;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
+import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,13 +28,17 @@ class AwaitCompletionMetricsTest {
     private InMemoryMetricReader metricReader;
     private SdkMeterProvider meterProvider;
     private SdkTracerProvider tracerProvider;
+    private InMemorySpanExporter spanExporter;
 
     @BeforeEach
     void setUp() {
         AwaitCompletionMetrics.resetForTest();
         metricReader = InMemoryMetricReader.create();
         meterProvider = SdkMeterProvider.builder().registerMetricReader(metricReader).build();
-        tracerProvider = SdkTracerProvider.builder().build();
+        spanExporter = InMemorySpanExporter.create();
+        tracerProvider = SdkTracerProvider.builder()
+            .addSpanProcessor(SimpleSpanProcessor.create(spanExporter))
+            .build();
         GlobalOpenTelemetry.resetForTest();
         GlobalOpenTelemetry.set(OpenTelemetrySdk.builder()
             .setMeterProvider(meterProvider)
@@ -107,7 +115,34 @@ class AwaitCompletionMetricsTest {
         assertTrue("dispatched".equals(value));
     }
 
+    @Test
+    void completionAddsDurableLinkToCapturedOrigin() {
+        Span origin = GlobalOpenTelemetry.getTracer("await-test").spanBuilder("origin").startSpan();
+        Map<String, Object> traceMetadata;
+        try (Scope ignored = origin.makeCurrent()) {
+            traceMetadata = AwaitCompletionMetrics.captureTraceMetadata();
+        } finally {
+            origin.end();
+        }
+
+        AwaitCompletionMetrics.recordCompletionAdmitted(interactionRecord(traceMetadata));
+
+        var completion = spanExporter.getFinishedSpanItems().stream()
+            .filter(span -> "tpf.await.completion.admitted".equals(span.getName()))
+            .findFirst()
+            .orElseThrow();
+        assertTrue(completion.getLinks().stream()
+            .anyMatch(link -> origin.getSpanContext().getTraceId().equals(link.getSpanContext().getTraceId())
+                && origin.getSpanContext().getSpanId().equals(link.getSpanContext().getSpanId())));
+        assertTrue(Boolean.TRUE.equals(completion.getAttributes()
+            .get(io.opentelemetry.api.common.AttributeKey.booleanKey("tpf.await.origin.linked"))));
+    }
+
     private static AwaitInteractionRecord interactionRecord() {
+        return interactionRecord(Map.of());
+    }
+
+    private static AwaitInteractionRecord interactionRecord(Map<String, Object> transportMetadata) {
         return new AwaitInteractionRecord(
             "tenant-1",
             "exec-1",
@@ -128,7 +163,7 @@ class AwaitCompletionMetricsTest {
             null,
             null,
             "kafka",
-            Map.of(),
+            transportMetadata,
             2_000L,
             1_000L,
             1_500L,

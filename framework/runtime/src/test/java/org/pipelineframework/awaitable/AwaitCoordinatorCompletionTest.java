@@ -38,6 +38,28 @@ import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
 class AwaitCoordinatorCompletionTest {
 
     @Test
+    void createOrGetPersistsExplicitOriginTraceMetadata() {
+        AwaitCoordinator coordinator = coordinator(new InMemoryAwaitInteractionStore());
+        Map<String, Object> traceMetadata = Map.of(
+            "tpf.trace.id", "0123456789abcdef0123456789abcdef",
+            "tpf.trace.span_id", "0123456789abcdef",
+            "tpf.trace.flags", "01");
+
+        AwaitInteractionRecord created = coordinator.createOrGet(
+            descriptor("FraudCheck"),
+            "tenant-1",
+            "exec-1",
+            1,
+            "cause-1",
+            Map.of("orderId", "o-1"),
+            null,
+            null,
+            traceMetadata).await().indefinitely().record();
+
+        assertEquals(traceMetadata, created.transportMetadata());
+    }
+
+    @Test
     void scalarCompletionDoesNotReadAwaitUnitForAggregateOutputLimiting() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         AwaitCoordinator coordinator = coordinator(store);
