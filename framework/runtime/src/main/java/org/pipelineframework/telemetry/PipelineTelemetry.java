@@ -116,6 +116,7 @@ public class PipelineTelemetry {
     private final RetryAmplificationGuardMode retryAmplificationMode;
     private final Duration retryAmplificationSampleInterval;
     private final ScheduledExecutorService retryAmplificationScheduler;
+    private final TelemetryRuntime telemetryRuntime;
     private final Tracer tracer;
     private final Meter meter;
     private final LongCounter pipelineRunCounter;
@@ -194,6 +195,7 @@ public class PipelineTelemetry {
         Optional<PipelineReplayTopology> replayTopology,
         TelemetryRuntime telemetryRuntime) {
         PipelineStepConfig.TelemetryConfig telemetry = stepConfig.telemetry();
+        this.telemetryRuntime = telemetryRuntime;
         this.telemetryPolicy = TelemetryPolicy.from(stepConfig, replayTopology.isPresent());
         this.enabled = telemetryPolicy.frameworkEnabled();
         this.stepConfig = stepConfig;
@@ -349,7 +351,7 @@ public class PipelineTelemetry {
         Span span = null;
         Context context = Context.current();
         if (tracingEnabled) {
-            span = tracer.spanBuilder("tpf.pipeline.run")
+            span = currentTracer().spanBuilder("tpf.pipeline.run")
                 .setSpanKind(SpanKind.INTERNAL)
                 .setAttribute("tpf.steps.count", stepCount)
                 .setAttribute("tpf.parallelism", policy == null ? "AUTO" : policy.name())
@@ -799,7 +801,7 @@ public class PipelineTelemetry {
             return null;
         }
         String resolvedStepClass = resolveStepClassName(stepClass);
-        Span span = tracer.spanBuilder("tpf.step")
+        Span span = currentTracer().spanBuilder("tpf.step")
             .setParent(runContext.context())
             .setSpanKind(SpanKind.INTERNAL)
             .setAttribute("tpf.step.class", resolvedStepClass)
@@ -812,6 +814,15 @@ public class PipelineTelemetry {
             span.setAttribute("tpf.cardinality", descriptor.cardinality());
         }
         return span;
+    }
+
+    /**
+     * Resolves the tracer when a semantic span is started. Quarkus installs its
+     * OpenTelemetry provider during runtime bootstrap, which can occur after
+     * this compatibility facade has been constructed.
+     */
+    private Tracer currentTracer() {
+        return telemetryRuntime.tracer("org.pipelineframework");
     }
 
     private void recordStepOutcome(Class<?> stepClass, long startNanos, Throwable failure, boolean cancelled) {

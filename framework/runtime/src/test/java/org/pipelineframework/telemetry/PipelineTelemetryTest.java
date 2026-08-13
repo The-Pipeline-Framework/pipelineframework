@@ -21,10 +21,14 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.Meter;
+import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.metrics.data.MetricData;
@@ -104,6 +108,38 @@ class PipelineTelemetryTest {
         assertEquals(1, runSpans.stream()
             .filter(span -> span.getStatus().getStatusCode() == StatusCode.UNSET)
             .count());
+    }
+
+    @Test
+    void resolvesTracerWhenRunStartsRatherThanWhenFacadeIsConstructed() {
+        AtomicReference<Tracer> tracer = new AtomicReference<>(
+            OpenTelemetry.noop().getTracer("org.pipelineframework"));
+        TelemetryRuntime delayedRuntime = new TelemetryRuntime() {
+            @Override
+            public Meter meter(String instrumentationScope) {
+                return GlobalOpenTelemetry.getMeter(instrumentationScope);
+            }
+
+            @Override
+            public Tracer tracer(String instrumentationScope) {
+                return tracer.get();
+            }
+
+            @Override
+            public void flush() {
+                // No SDK lifecycle work is needed for the in-memory runtime.
+            }
+        };
+        PipelineTelemetry telemetry = new PipelineTelemetry(
+            new TestPipelineStepConfig(), new NoopPipelineReplayExporter(), Optional.empty(), delayedRuntime);
+
+        tracer.set(GlobalOpenTelemetry.getTracer("org.pipelineframework"));
+        PipelineTelemetry.RunContext runContext = telemetry.startRun(
+            Multi.createFrom().item(1), 1, ParallelismPolicy.AUTO, 4);
+        telemetry.abortRun(runContext, new IllegalStateException("test"));
+
+        assertTrue(exporter.getFinishedSpanItems().stream()
+            .anyMatch(span -> "tpf.pipeline.run".equals(span.getName())));
     }
 
     @Test
