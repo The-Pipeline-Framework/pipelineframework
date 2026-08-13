@@ -31,9 +31,8 @@ framework_source_fingerprint() {
 FRAMEWORK_COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 FRAMEWORK_SOURCE_FINGERPRINT="$(framework_source_fingerprint)"
 FRAMEWORK_VERSION="$(
-  "$ROOT_DIR/mvnw" -q -f "$ROOT_DIR/framework/pom.xml" help:evaluate \
-    -Dexpression=project.version -DforceStdout \
-    -Dmaven.repo.local="$MAVEN_REPOSITORY"
+  "$ROOT_DIR/examples/csv-payments/resolve-framework-version.sh" \
+    "$ROOT_DIR/mvnw" "$ROOT_DIR/framework/pom.xml" "$MAVEN_REPOSITORY"
 )"
 FRAMEWORK_RUNTIME_JAR="$MAVEN_REPOSITORY/org/pipelineframework/pipelineframework/${FRAMEWORK_VERSION}/pipelineframework-${FRAMEWORK_VERSION}.jar"
 
