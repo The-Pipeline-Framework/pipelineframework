@@ -23,6 +23,7 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution;
 import org.pipelineframework.processor.routing.PipelineBranchingPlan;
 import org.pipelineframework.processor.representation.ResolvedRepresentationRegistry;
+import org.pipelineframework.processor.composition.ResolvedPipelineDefinitionGraph;
 
 /**
  * Holds the compilation context for the pipeline annotation processing.
@@ -56,6 +57,8 @@ public class PipelineCompilationContext {
     private List<StepDefinition> stepDefinitions;
     @Setter
     private PipelineBranchingPlan branchingPlan;
+    @Setter
+    private ResolvedPipelineDefinitionGraph resolvedPipelineDefinitionGraph;
     @Setter
     private ResolvedRepresentationRegistry resolvedRepresentationRegistry;
     @Setter

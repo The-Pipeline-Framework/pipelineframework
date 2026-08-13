@@ -30,6 +30,8 @@ import org.pipelineframework.config.template.PipelineTemplateTypeDefinition;
 import org.pipelineframework.config.template.PipelineTemplateTypeModel;
 import org.pipelineframework.config.template.PipelineTemplateTypeReference;
 import org.pipelineframework.processor.PipelineCompilationContext;
+import org.pipelineframework.processor.composition.PipelineCompositionContractProjector;
+import org.pipelineframework.orchestrator.composition.PipelineCompositionDescriptor;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineTransport;
@@ -75,7 +77,10 @@ public class PipelineContractMetadataGenerator {
         String pipelineId = resolvePipelineId(ctx);
         Map<String, Object> contractWithoutHash = new LinkedHashMap<>();
         Map<String, Object> canonicalTypes = canonicalTypes(ctx);
-        int schemaVersion = canonicalTypes.isEmpty() ? 1 : 2;
+        PipelineCompositionDescriptor composition = ctx.getResolvedPipelineDefinitionGraph() == null
+            ? PipelineCompositionDescriptor.empty()
+            : new PipelineCompositionContractProjector().project(ctx.getResolvedPipelineDefinitionGraph());
+        int schemaVersion = composition.present() ? 3 : canonicalTypes.isEmpty() ? 1 : 2;
         String canonicalCatalogFingerprint = sha256(CANONICAL_GSON.toJson(canonicalTypes));
         contractWithoutHash.put("schemaVersion", schemaVersion);
         contractWithoutHash.put("pipelineId", pipelineId);
@@ -87,6 +92,9 @@ public class PipelineContractMetadataGenerator {
         contractWithoutHash.put("steps", steps);
         contractWithoutHash.put("canonicalTypes", canonicalTypes);
         contractWithoutHash.put("canonicalCatalogFingerprint", canonicalCatalogFingerprint);
+        if (composition.present()) {
+            contractWithoutHash.put("composition", composition);
+        }
         contractWithoutHash.put("capabilities", capabilities());
 
         String contractHash = sha256(CANONICAL_GSON.toJson(contractWithoutHash));
@@ -103,6 +111,9 @@ public class PipelineContractMetadataGenerator {
         finalContract.put("steps", steps);
         finalContract.put("canonicalTypes", canonicalTypes);
         finalContract.put("canonicalCatalogFingerprint", canonicalCatalogFingerprint);
+        if (composition.present()) {
+            finalContract.put("composition", composition);
+        }
         finalContract.put("capabilities", contractWithoutHash.get("capabilities"));
 
         if (processingEnv != null) {
