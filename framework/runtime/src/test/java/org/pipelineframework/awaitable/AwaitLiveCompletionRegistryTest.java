@@ -62,6 +62,15 @@ class AwaitLiveCompletionRegistryTest {
     }
 
     @Test
+    void signalReportsOnlyNewlyEnqueuedCompletions() {
+        AwaitLiveCompletionRegistry registry = new AwaitLiveCompletionRegistry();
+        registry.open(descriptor(), "tenant", "unit");
+
+        assertTrue(registry.signal(completion(0)).await().indefinitely());
+        assertFalse(registry.signal(completion(0)).await().indefinitely());
+    }
+
+    @Test
     void enqueuesAFullBurstWithoutReleasingLocalPermitsBeforeDelivery() {
         AwaitLiveCompletionRegistry registry = new AwaitLiveCompletionRegistry();
         AwaitLiveCompletionRegistry.LiveAwaitSession<String> session = registry.open(descriptor(), "tenant", "unit");

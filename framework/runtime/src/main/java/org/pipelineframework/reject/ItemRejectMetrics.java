@@ -31,11 +31,7 @@ public final class ItemRejectMetrics {
     private static final AttributeKey<String> REJECT_SCOPE = AttributeKey.stringKey("tpf.reject.scope");
     private static final AttributeKey<String> ERROR_CLASS = AttributeKey.stringKey("tpf.error.class");
 
-    private static final LongCounter REJECT_COUNTER = TelemetryRuntimes.global().meter("org.pipelineframework")
-        .counterBuilder("tpf.step.reject.total")
-        .setDescription("Total rejected step items routed to item reject sinks")
-        .setUnit("items")
-        .build();
+    private static volatile LongCounter rejectCounter;
 
     /**
      * Prevents instantiation of this utility class.
@@ -57,10 +53,31 @@ public final class ItemRejectMetrics {
         if (envelope == null) {
             return;
         }
-        REJECT_COUNTER.add(1, Attributes.of(
+        rejectCounter().add(1, Attributes.of(
             PROVIDER, provider == null ? "unknown" : provider,
             STEP_CLASS, envelope.stepClass(),
             REJECT_SCOPE, envelope.rejectScope(),
             ERROR_CLASS, envelope.errorClass()));
+    }
+
+    static synchronized void resetForTest() {
+        rejectCounter = null;
+    }
+
+    private static LongCounter rejectCounter() {
+        LongCounter current = rejectCounter;
+        if (current != null) {
+            return current;
+        }
+        synchronized (ItemRejectMetrics.class) {
+            if (rejectCounter == null) {
+                rejectCounter = TelemetryRuntimes.global().meter("org.pipelineframework")
+                    .counterBuilder("tpf.step.reject.total")
+                    .setDescription("Total rejected step items routed to item reject sinks")
+                    .setUnit("items")
+                    .build();
+            }
+            return rejectCounter;
+        }
     }
 }

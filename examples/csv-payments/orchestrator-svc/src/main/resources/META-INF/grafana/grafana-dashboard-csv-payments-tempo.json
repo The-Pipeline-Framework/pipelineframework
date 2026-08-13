@@ -15,7 +15,7 @@
     },
     {
       "id": 2,
-      "type": "traces",
+      "type": "table",
       "title": "Pipeline and transition dispatch",
       "datasource": { "type": "tempo", "uid": "tempo" },
       "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
@@ -61,7 +61,8 @@
       "datasource": { "type": "tempo", "uid": "tempo" },
       "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
       "targets": [
-        { "refId": "A", "queryType": "traceql", "query": "{ name = \"tpf.await.completion.admitted\" && span[\"tpf.await.origin.linked\"] = false }" }
+        { "refId": "A", "queryType": "traceql", "query": "{ name = \"tpf.await.completion.admitted\" && span[\"tpf.await.origin.linked\"] = false }" },
+        { "refId": "B", "queryType": "traceql", "query": "{ name = \"tpf.await.completion.admitted\" && span[\"tpf.await.origin.linked\"] = nil }" }
       ]
     }
   ]

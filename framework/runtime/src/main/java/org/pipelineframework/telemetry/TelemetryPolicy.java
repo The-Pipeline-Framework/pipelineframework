@@ -1,6 +1,7 @@
 package org.pipelineframework.telemetry;
 
 import java.time.Duration;
+import java.util.Optional;
 import org.pipelineframework.config.PipelineStepConfig;
 
 /**
@@ -20,9 +21,8 @@ public record TelemetryPolicy(
 ) {
     public static TelemetryPolicy from(PipelineStepConfig config, boolean replayTopologyAvailable) {
         PipelineStepConfig.TelemetryConfig telemetry = config.telemetry();
-        PipelineStepConfig.RetryAmplificationGuardConfig guard = config.killSwitch() == null
-            ? null
-            : config.killSwitch().retryAmplification();
+        Optional<PipelineStepConfig.RetryAmplificationGuardConfig> guard = Optional.ofNullable(config.killSwitch())
+            .map(PipelineStepConfig.KillSwitchConfig::retryAmplification);
         boolean frameworkEnabled = telemetry != null && Boolean.TRUE.equals(telemetry.enabled());
         boolean tracingEnabled = frameworkEnabled && telemetry.tracing() != null
             && Boolean.TRUE.equals(telemetry.tracing().enabled());
@@ -33,19 +33,20 @@ public record TelemetryPolicy(
             && Boolean.TRUE.equals(telemetry.replay().enabled());
         boolean fileExporter = replayRequested && "file".equalsIgnoreCase(telemetry.replay().exporter())
             && telemetry.replay().filePath().filter(path -> !path.isBlank()).isPresent();
-        Duration window = guard == null || guard.window() == null || guard.window().isZero() || guard.window().isNegative()
-            ? Duration.ofSeconds(30)
-            : guard.window();
-        double threshold = guard == null || guard.inflightSlopeThreshold() == null || guard.inflightSlopeThreshold() <= 0d
-            ? 10d
-            : guard.inflightSlopeThreshold();
-        int samples = guard == null || guard.sustainSamples() == null || guard.sustainSamples() <= 0
-            ? 3
-            : guard.sustainSamples();
-        RetryAmplificationGuardMode mode = guard == null || guard.mode() == null
-            ? RetryAmplificationGuardMode.FAIL_FAST
-            : guard.mode();
-        boolean guardEnabled = guard != null && Boolean.TRUE.equals(guard.enabled());
+        Duration window = guard.map(PipelineStepConfig.RetryAmplificationGuardConfig::window)
+            .filter(value -> !value.isZero() && !value.isNegative())
+            .orElse(Duration.ofSeconds(30));
+        double threshold = guard.map(PipelineStepConfig.RetryAmplificationGuardConfig::inflightSlopeThreshold)
+            .filter(value -> value > 0d)
+            .orElse(10d);
+        int samples = guard.map(PipelineStepConfig.RetryAmplificationGuardConfig::sustainSamples)
+            .filter(value -> value > 0)
+            .orElse(3);
+        RetryAmplificationGuardMode mode = guard.map(PipelineStepConfig.RetryAmplificationGuardConfig::mode)
+            .orElse(RetryAmplificationGuardMode.FAIL_FAST);
+        boolean guardEnabled = guard.map(PipelineStepConfig.RetryAmplificationGuardConfig::enabled)
+            .filter(Boolean.TRUE::equals)
+            .isPresent();
         return new TelemetryPolicy(
             frameworkEnabled,
             metricsEnabled,

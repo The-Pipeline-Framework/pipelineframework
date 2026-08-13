@@ -247,6 +247,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
          * In monolith layout only the PostgreSQL container is started.
          *
          * @throws IOException if creating directories, ensuring writability, or preparing development certificates fails
+         * @throws InterruptedException if container startup or Grafana provisioning is interrupted
          */
     @BeforeAll
     static void startServices() throws Exception {
@@ -279,6 +280,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         if (TEMPO_VERIFICATION_ACTIVE) {
             Startables.deepStart(Stream.of(getPostgresContainer(), getKafkaContainer(), getLgtmStackContainer())).join();
+            awaitGrafanaReady();
             provisionGrafanaDashboards();
         } else {
             Startables.deepStart(Stream.of(getPostgresContainer(), getKafkaContainer())).join();
@@ -2223,6 +2225,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 traceIds.isEmpty(),
                 "Expected Tempo search to return at least one trace. Search response: " + searchResponse);
 
+        boolean foundTpfTrace = false;
         for (String traceId : traceIds) {
             JsonNode traceDocument;
             try {
@@ -2233,16 +2236,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
             }
             if (containsTpfTraceSemantics(traceDocument)) {
                 LOG.infof("Verified Tempo trace %s contains TPF spans.", traceId);
-                break;
+                foundTpfTrace = true;
             }
         }
-        assertTrue(traceIds.stream().anyMatch(traceId -> {
-            try {
-                return containsTpfTraceSemantics(fetchTempoTrace(traceId));
-            } catch (Exception ignored) {
-                return false;
-            }
-        }), "Tempo returned traces, but none contained TPF span names. Trace IDs: " + traceIds);
+        assertTrue(foundTpfTrace, "Tempo returned traces, but none contained TPF span names. Trace IDs: " + traceIds);
 
         for (String spanName : requiredSpans) {
             JsonNode stageSearch = waitForTempoTraceSearch(List.of("{ name = \"" + spanName + "\" }"));
@@ -2250,11 +2247,15 @@ abstract class AbstractCsvPaymentsEndToEnd {
         }
 
         JsonNode completionSearch = waitForTempoTraceSearch(List.of("{ name = \"tpf.await.completion.admitted\" }"));
-        JsonNode completionTrace = fetchTempoTrace(extractTraceIds(completionSearch).iterator().next());
-        assertTrue(hasAwaitOriginLink(completionTrace, true),
-                "Await completion must preserve an origin parent or durable SpanLink.");
-        assertFalse(hasAwaitOriginLink(completionTrace, false),
-                "Await completion emitted an accidental rootless/unlinked span.");
+        for (String traceId : extractTraceIds(completionSearch)) {
+            List<JsonNode> completionSpans = completionSpans(fetchTempoTrace(traceId));
+            assertFalse(completionSpans.isEmpty(), "Tempo search returned no completion span for trace " + traceId);
+            for (JsonNode completionSpan : completionSpans) {
+                AwaitOriginLinkState originLink = awaitOriginLinkState(completionSpan);
+                assertEquals(AwaitOriginLinkState.LINKED, originLink,
+                        "Await completion must preserve an origin parent or durable SpanLink in trace " + traceId);
+            }
+        }
     }
 
     private void assertPrometheusMetricsAvailable() throws Exception {
@@ -2302,10 +2303,19 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private void assertPrometheusTotal(String promQl, long expected) throws Exception {
-        JsonNode result = waitForPrometheusMetric(promQl);
-        double actual = prometheusSampleTotal(result);
+        long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(TEMPO_SEARCH_TIMEOUT_SECONDS);
+        JsonNode result = null;
+        double actual = Double.NaN;
+        while (System.currentTimeMillis() < deadline) {
+            result = queryPrometheus(promQl);
+            actual = prometheusSampleTotal(result);
+            if (actual == expected) {
+                break;
+            }
+            Thread.sleep(TEMPO_SEARCH_POLL_MILLIS);
+        }
         assertEquals((double) expected, actual, 0.0001D,
-                "Unexpected CSV operator proof total for " + promQl);
+                "Unexpected CSV operator proof total for " + promQl + ". Last response: " + result);
         LOG.infof("Operator dashboard metric %s = %.0f", promQl, actual);
     }
 
@@ -2515,6 +2525,31 @@ abstract class AbstractCsvPaymentsEndToEnd {
         provisionGrafanaDashboard(TEMPO_DASHBOARD);
     }
 
+    private static void awaitGrafanaReady() throws Exception {
+        long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(TEMPO_SEARCH_TIMEOUT_SECONDS);
+        Exception lastFailure = null;
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                HttpRequest request = HttpRequest.newBuilder(URI.create(grafanaBaseUrl() + "/api/health"))
+                        .timeout(TEMPO_HTTP_REQUEST_TIMEOUT)
+                        .GET()
+                        .build();
+                HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() == 200) {
+                    return;
+                }
+            } catch (IOException | InterruptedException failure) {
+                if (failure instanceof InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw interrupted;
+                }
+                lastFailure = failure;
+            }
+            Thread.sleep(TEMPO_SEARCH_POLL_MILLIS);
+        }
+        throw new IllegalStateException("Timed out waiting for Grafana health endpoint at " + grafanaBaseUrl(), lastFailure);
+    }
+
     private static void provisionGrafanaDashboard(Path dashboardPath) throws IOException, InterruptedException {
         JsonNode dashboard = OBJECT_MAPPER.readTree(Files.readString(dashboardPath));
         com.fasterxml.jackson.databind.node.ObjectNode requestPayload = OBJECT_MAPPER.createObjectNode();
@@ -2533,30 +2568,61 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "Grafana failed to provision " + dashboardPath + ": " + response.statusCode() + " " + response.body());
     }
 
-    private static boolean hasAwaitOriginLink(JsonNode node, boolean expected) {
+    private static List<JsonNode> completionSpans(JsonNode node) {
+        List<JsonNode> spans = new ArrayList<>();
+        collectCompletionSpans(node, spans);
+        return spans;
+    }
+
+    private static void collectCompletionSpans(JsonNode node, List<JsonNode> spans) {
         if (node == null) {
-            return false;
+            return;
         }
         if (node.isObject()) {
-            if ("tpf.await.origin.linked".equals(node.path("key").asText())
-                    && node.path("value").path("boolValue").asBoolean() == expected) {
-                return true;
+            if ("tpf.await.completion.admitted".equals(node.path("name").asText())) {
+                spans.add(node);
             }
             Iterator<JsonNode> values = node.elements();
             while (values.hasNext()) {
-                if (hasAwaitOriginLink(values.next(), expected)) {
-                    return true;
+                collectCompletionSpans(values.next(), spans);
+            }
+        } else if (node.isArray()) {
+            for (JsonNode value : node) {
+                collectCompletionSpans(value, spans);
+            }
+        }
+    }
+
+    private static AwaitOriginLinkState awaitOriginLinkState(JsonNode node) {
+        if (node == null) {
+            return AwaitOriginLinkState.MISSING;
+        }
+        if (node.isObject()) {
+            if ("tpf.await.origin.linked".equals(node.path("key").asText())) {
+                JsonNode value = node.path("value").path("boolValue");
+                return value.isBoolean() && value.asBoolean()
+                        ? AwaitOriginLinkState.LINKED
+                        : AwaitOriginLinkState.UNLINKED;
+            }
+            Iterator<JsonNode> values = node.elements();
+            while (values.hasNext()) {
+                AwaitOriginLinkState state = awaitOriginLinkState(values.next());
+                if (state != AwaitOriginLinkState.MISSING) {
+                    return state;
                 }
             }
         } else if (node.isArray()) {
             for (JsonNode value : node) {
-                if (hasAwaitOriginLink(value, expected)) {
-                    return true;
+                AwaitOriginLinkState state = awaitOriginLinkState(value);
+                if (state != AwaitOriginLinkState.MISSING) {
+                    return state;
                 }
             }
         }
-        return false;
+        return AwaitOriginLinkState.MISSING;
     }
+
+    private enum AwaitOriginLinkState { LINKED, UNLINKED, MISSING }
 
     private Set<String> extractTraceIds(JsonNode searchResponse) {
         Set<String> traceIds = new HashSet<>();

@@ -73,6 +73,15 @@ jobs:
         if: ${{ !inputs.download_artifacts }}
         run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
 
+      - name: Ensure matching framework parent is available
+        run: |
+          framework_version="$(./mvnw -q -f framework/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)"
+          framework_parent="$HOME/.m2/repository/org/pipelineframework/framework-parent/${framework_version}/framework-parent-${framework_version}.pom"
+          if [ ! -f "$framework_parent" ]; then
+            ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
+          fi
+          test -f "$framework_parent"
+
       - name: Setup Testcontainers Docker environment
         uses: ./.github/actions/setup-testcontainers
         with:

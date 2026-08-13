@@ -211,9 +211,8 @@ cd <repo-root>
   -Dcsv.e2e.operator-dashboard.10k.enabled=true \
   -Dcsv.e2e.pipeline.wait.seconds=1800 \
   -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_10k.csv \
-  -Dtest=CsvPaymentsOperatorDashboard10kEndToEndIT \
-  -Dsurefire.failIfNoSpecifiedTests=false \
-  test -Dmaven.repo.local="$PWD/.m2/repository"
+  -Dit.test=CsvPaymentsOperatorDashboard10kEndToEndIT \
+  verify -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
 It provisions the Grafana metrics and Tempo dashboards, verifies their marked current-series queries against Grafana's Prometheus datasource, checks the 10k stage counts, and rejects unlinked Await completion traces. It reports observed latency and pressure but intentionally does not enforce a performance budget.

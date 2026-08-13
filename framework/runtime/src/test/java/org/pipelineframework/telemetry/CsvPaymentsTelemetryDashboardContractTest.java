@@ -44,6 +44,8 @@ class CsvPaymentsTelemetryDashboardContractTest {
         assertTrue(Files.readString(TEMPO).contains("self-host container profile, which intentionally disables telemetry"));
         assertTrue(traceQueries.stream().anyMatch(query -> query.contains("tpf.await.origin.linked") && query.contains("false")),
             "Tempo dashboard must expose rootless/unlinked Await completion spans");
+        assertTrue(traceQueries.stream().anyMatch(query -> query.contains("tpf.await.origin.linked") && query.contains("nil")),
+            "Tempo dashboard must expose Await completion spans missing origin-link metadata");
     }
 
     @Test

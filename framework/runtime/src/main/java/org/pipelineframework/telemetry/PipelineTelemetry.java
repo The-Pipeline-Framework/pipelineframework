@@ -186,11 +186,6 @@ public class PipelineTelemetry {
         PipelineReplayTopology replayTopology,
         TelemetryRuntime telemetryRuntime) {
         PipelineStepConfig.TelemetryConfig telemetry = stepConfig.telemetry();
-        PipelineStepConfig.RetryAmplificationGuardConfig guardConfig = null;
-        PipelineStepConfig.KillSwitchConfig killSwitchConfig = stepConfig.killSwitch();
-        if (killSwitchConfig != null) {
-            guardConfig = killSwitchConfig.retryAmplification();
-        }
         this.telemetryPolicy = TelemetryPolicy.from(stepConfig, replayTopology != null);
         this.enabled = telemetryPolicy.frameworkEnabled();
         this.stepConfig = stepConfig;
@@ -200,36 +195,12 @@ public class PipelineTelemetry {
         this.replayTopology = replayTopology;
         PipelineStepConfig.ReplayConfig replayConfig = telemetry == null ? null : telemetry.replay();
         boolean replayRequested = replayConfig != null && Boolean.TRUE.equals(replayConfig.enabled());
-        boolean fileExporterConfigured = replayConfig != null
-            && "file".equalsIgnoreCase(replayConfig.exporter())
-            && replayConfig.filePath().filter(path -> !path.isBlank()).isPresent();
         this.replayEnabled = telemetryPolicy.replayEnabled();
         if (replayRequested && !this.replayEnabled) {
             LOG.warn(
                 "pipeline.telemetry.replay.enabled=true requires pipeline.telemetry.replay.exporter=file, "
                     + "pipeline.telemetry.replay.file.path, tracing, per-item spans, and replay topology metadata.");
         }
-        Duration window = guardConfig != null ? guardConfig.window() : null;
-        if (window == null || window.isZero() || window.isNegative()) {
-            window = Duration.ofSeconds(30);
-        }
-        Double inflightThreshold = guardConfig != null ? guardConfig.inflightSlopeThreshold() : null;
-        if (inflightThreshold == null || inflightThreshold <= 0d) {
-            inflightThreshold = 10d;
-        }
-        Integer sustainSamples = guardConfig != null ? guardConfig.sustainSamples() : null;
-        if (sustainSamples == null || sustainSamples <= 0) {
-            sustainSamples = 3;
-        }
-        RetryAmplificationGuardMode mode = guardConfig != null ? guardConfig.mode() : null;
-        if (mode == null) {
-            mode = RetryAmplificationGuardMode.FAIL_FAST;
-        }
-        boolean guardEnabled = guardConfig != null && Boolean.TRUE.equals(guardConfig.enabled())
-            && inflightThreshold > 0d
-            && sustainSamples > 0
-            && !window.isZero()
-            && !window.isNegative();
         this.retryAmplificationEnabled = telemetryPolicy.retryAmplificationEnabled();
         this.retryAmplificationWindow = telemetryPolicy.retryAmplificationWindow();
         this.inflightSlopeThreshold = telemetryPolicy.retryAmplificationInflightSlopeThreshold();
@@ -419,24 +390,6 @@ public class PipelineTelemetry {
      */
     public Object instrumentInput(Object input, RunContext runContext) {
         return input;
-    }
-
-    /**
-     * Returns the current run span when reactive execution has moved off the originating thread.
-     * Durable boundary code uses it only to capture correlation, never as a metric attribute.
-     */
-    public SpanContext activeRunSpanContext() {
-        SpanContext current = Span.current().getSpanContext();
-        if (current != null && current.isValid()) {
-            return current;
-        }
-        return activeRunContexts.values().stream()
-            .map(RunContext::span)
-            .filter(Objects::nonNull)
-            .map(Span::getSpanContext)
-            .filter(SpanContext::isValid)
-            .findFirst()
-            .orElse(SpanContext.getInvalid());
     }
 
     /**
@@ -658,10 +611,10 @@ public class PipelineTelemetry {
             AtomicBoolean terminal = new AtomicBoolean();
             onItemStart(stepClass, runContext);
             return uni.onItemOrFailure().invoke((item, failure) -> finishStepUni(
-                terminal, stepClass, runContext, replayScope, span, startNanos, failure))
+                terminal, stepClass, runContext, replayScope, span, startNanos, failure, false))
                 .onCancellation().invoke(() -> finishStepUni(
                     terminal, stepClass, runContext, replayScope, span, startNanos,
-                    new java.util.concurrent.CancellationException("Step Uni cancelled")));
+                    new java.util.concurrent.CancellationException("Step Uni cancelled"), true));
         });
     }
 
@@ -700,10 +653,10 @@ public class PipelineTelemetry {
             onItemStart(stepClass, runContext);
             return multi.onFailure().invoke(failureRef::set)
                 .onTermination().invoke(() -> finishStepMulti(
-                    terminal, stepClass, runContext, replayScope, span, startNanos, failureRef.get()))
+                    terminal, stepClass, runContext, replayScope, span, startNanos, failureRef.get(), false))
                 .onCancellation().invoke(() -> finishStepMulti(
                     terminal, stepClass, runContext, replayScope, span, startNanos,
-                    new java.util.concurrent.CancellationException("Step Multi cancelled")));
+                    new java.util.concurrent.CancellationException("Step Multi cancelled"), true));
         });
     }
 
@@ -714,11 +667,12 @@ public class PipelineTelemetry {
         ExecutionReplayTracker.StepExecutionScope replayScope,
         Span span,
         long startNanos,
-        Throwable failure) {
+        Throwable failure,
+        boolean cancelled) {
         if (!terminal.compareAndSet(false, true)) {
             return;
         }
-        recordStepOutcome(stepClass, startNanos, failure);
+        recordStepOutcome(stepClass, startNanos, failure, cancelled);
         onItemEnd(stepClass, runContext);
         if (replayScope != null) {
             if (failure == null) {
@@ -728,7 +682,7 @@ public class PipelineTelemetry {
             }
             return;
         }
-        endSpan(span, failure);
+        endSpan(span, cancelled ? null : failure);
     }
 
     private void finishStepMulti(
@@ -738,8 +692,9 @@ public class PipelineTelemetry {
         ExecutionReplayTracker.StepExecutionScope replayScope,
         Span span,
         long startNanos,
-        Throwable failure) {
-        finishStepUni(terminal, stepClass, runContext, replayScope, span, startNanos, failure);
+        Throwable failure,
+        boolean cancelled) {
+        finishStepUni(terminal, stepClass, runContext, replayScope, span, startNanos, failure, cancelled);
     }
 
     public ExecutionReplayTracker.StepExecutionScope beginReplayStep(
@@ -849,14 +804,14 @@ public class PipelineTelemetry {
         return span;
     }
 
-    private void recordStepOutcome(Class<?> stepClass, long startNanos, Throwable failure) {
+    private void recordStepOutcome(Class<?> stepClass, long startNanos, Throwable failure, boolean cancelled) {
         if (!metricsEnabled) {
             return;
         }
         double durationMs = nanosToMillis(startNanos);
         Attributes attributes = stepAttributes(stepClass);
         stepDuration.record(durationMs, attributes);
-        if (failure != null) {
+        if (failure != null && !cancelled) {
             stepErrorCounter.add(1, attributes);
         }
     }

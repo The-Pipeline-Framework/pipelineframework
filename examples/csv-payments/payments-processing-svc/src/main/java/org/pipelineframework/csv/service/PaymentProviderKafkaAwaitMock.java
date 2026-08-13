@@ -65,10 +65,7 @@ public class PaymentProviderKafkaAwaitMock {
   @Incoming(REQUEST_CHANNEL)
   public CompletionStage<Void> consume(Message<String> message) {
     Objects.requireNonNull(message, "message must not be null");
-    TelemetryRuntimes.global().tracer("org.pipelineframework.csv-payments")
-        .spanBuilder("tpf.await.provider.admitted")
-        .startSpan()
-        .end();
+    emitProviderSpan("tpf.await.provider.admitted");
     return Uni.createFrom().item(() -> parseDispatch(message.getPayload()))
         .runSubscriptionOn(Infrastructure.getDefaultExecutor())
         .onItem().transform(this::handle)
@@ -98,14 +95,18 @@ public class PaymentProviderKafkaAwaitMock {
   }
 
   private Uni<Void> publish(KafkaAwaitCompletionEnvelope completion) {
-    TelemetryRuntimes.global().tracer("org.pipelineframework.csv-payments")
-        .spanBuilder("tpf.await.provider.completion.dispatched")
-        .startSpan()
-        .end();
+    emitProviderSpan("tpf.await.provider.completion.dispatched");
     OutgoingKafkaRecordMetadata<String> metadata = OutgoingKafkaRecordMetadata.<String>builder()
         .withKey(completion.correlationId())
         .build();
     return results.sendMessage(Message.of(serialize(completion)).addMetadata(metadata));
+  }
+
+  private static void emitProviderSpan(String name) {
+    var span = TelemetryRuntimes.global().tracer("org.pipelineframework.csv-payments")
+        .spanBuilder(name)
+        .startSpan();
+    span.end();
   }
 
   private Uni<KafkaAwaitCompletionEnvelope> delayCompletion(KafkaAwaitCompletionEnvelope completion) {

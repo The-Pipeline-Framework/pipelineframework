@@ -3,6 +3,7 @@ package org.pipelineframework.awaitable;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
@@ -16,6 +17,7 @@ import io.opentelemetry.api.trace.TraceState;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.subscription.Cancellable;
 import org.pipelineframework.telemetry.TelemetryRuntimes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 
@@ -124,12 +126,32 @@ public final class AwaitCompletionMetrics {
         return Uni.createFrom().deferred(() -> {
             Span span = startSpan("tpf.await.provider.dispatch", record, true);
             AtomicBoolean terminal = new AtomicBoolean();
-            try (Scope ignored = span.makeCurrent()) {
-                return operation.get()
-                    .onItemOrFailure().invoke((item, failure) -> endOnce(terminal, span, failure))
-                    .onCancellation().invoke(() -> endOnce(
+            Context dispatchContext = Context.current().with(span);
+            return Uni.createFrom().emitter(emitter -> {
+                AtomicReference<Cancellable> subscription = new AtomicReference<>();
+                emitter.onTermination(() -> {
+                    Cancellable active = subscription.get();
+                    if (active != null) {
+                        active.cancel();
+                    }
+                    withContext(dispatchContext, () -> endOnce(
                         terminal, span, new java.util.concurrent.CancellationException("Await provider dispatch cancelled")));
-            }
+                });
+                try (Scope ignored = dispatchContext.makeCurrent()) {
+                    subscription.set(operation.get().subscribe().with(
+                        item -> withContext(dispatchContext, () -> {
+                            endOnce(terminal, span, null);
+                            emitter.complete(item);
+                        }),
+                        failure -> withContext(dispatchContext, () -> {
+                            endOnce(terminal, span, failure);
+                            emitter.fail(failure);
+                        })));
+                } catch (Throwable failure) {
+                    endOnce(terminal, span, failure);
+                    emitter.fail(failure);
+                }
+            });
         });
     }
 
@@ -385,6 +407,12 @@ public final class AwaitCompletionMetrics {
             span.recordException(failure);
         }
         span.end();
+    }
+
+    private static void withContext(Context context, Runnable action) {
+        try (Scope ignored = context.makeCurrent()) {
+            action.run();
+        }
     }
 
     private static SpanContext origin(AwaitInteractionRecord record) {

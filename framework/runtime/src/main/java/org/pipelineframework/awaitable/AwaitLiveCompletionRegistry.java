@@ -68,7 +68,7 @@ public class AwaitLiveCompletionRegistry {
         if (session == null) {
             return Uni.createFrom().item(false);
         }
-        return session.enqueue(record).replaceWith(Boolean.TRUE);
+        return session.enqueueIfNew(record);
     }
 
     public void close(String tenantId, String unitId) {
@@ -159,6 +159,10 @@ public class AwaitLiveCompletionRegistry {
          * downstream has consumed it yet.
          */
         public Uni<Void> enqueue(AwaitInteractionRecord record) {
+            return enqueueIfNew(record).replaceWithVoid();
+        }
+
+        private Uni<Boolean> enqueueIfNew(AwaitInteractionRecord record) {
             Objects.requireNonNull(record, "record must not be null");
             if (record.status() != AwaitInteractionStatus.COMPLETED) {
                 IllegalStateException failure = new IllegalStateException(
@@ -186,12 +190,12 @@ public class AwaitLiveCompletionRegistry {
                         "Live await stream is no longer accepting completions for unit " + key.unitId()));
                 }
                 if (!seenCompletions.add(completionKey)) {
-                    return Uni.createFrom().voidItem();
+                    return Uni.createFrom().item(false);
                 }
                 pending.addLast(new Pending<>(completionKey, payload, record));
             }
             scheduleDrain();
-            return Uni.createFrom().voidItem();
+            return Uni.createFrom().item(true);
         }
 
         /**
@@ -343,7 +347,7 @@ public class AwaitLiveCompletionRegistry {
                 }
                 for (Pending<O> item : toEmit) {
                     try {
-                        AwaitCompletionMetrics.recordScalarContinuationStarted(item.interaction());
+                        recordContinuationTelemetry(item);
                         subscriber.onNext(item.item());
                         completeAcceptedWaiter(item.completionKey());
                     } catch (Throwable failure) {
@@ -391,6 +395,14 @@ public class AwaitLiveCompletionRegistry {
                     close();
                 }
                 return;
+            }
+        }
+
+        private void recordContinuationTelemetry(Pending<O> item) {
+            try {
+                AwaitCompletionMetrics.recordScalarContinuationStarted(item.interaction());
+            } catch (RuntimeException ignored) {
+                // Telemetry must never change delivery/failure semantics for an admitted completion.
             }
         }
 

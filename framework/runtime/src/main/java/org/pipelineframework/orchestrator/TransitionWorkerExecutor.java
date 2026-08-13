@@ -75,10 +75,10 @@ public class TransitionWorkerExecutor {
     public Uni<TransitionResultEnvelope> execute(
         PipelineTransitionWorker worker,
         TransitionCommandEnvelope command) {
-        TransitionWorkerMetrics.recordDispatched();
         Uni<TransitionResultEnvelope> execution = invocationRuntime().invokeTransitionWorker(
             TransitionWorkerMetrics::recordDuration,
             () -> {
+                TransitionWorkerMetrics.recordDispatched();
                 try {
                     Uni<TransitionResultEnvelope> result = worker.executeTransition(command);
                     if (result == null) {

@@ -12,6 +12,7 @@ import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
 import org.pipelineframework.objectpublish.ObjectPublishTelemetry;
 
 /**
@@ -125,6 +126,7 @@ public class ObjectPublishReplayTelemetry implements ObjectPublishTelemetry {
         try {
             span.setAttribute("tpf.object_publish.target", normalize(targetName));
             span.setAttribute("tpf.object_publish.provider", normalize(provider));
+            span.setStatus(StatusCode.ERROR);
             if (failure != null) {
                 span.recordException(failure);
             }

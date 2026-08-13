@@ -35,6 +35,7 @@ import io.opentelemetry.sdk.trace.data.SpanData;
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import io.opentelemetry.api.trace.StatusCode;
 import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.helpers.test.AssertSubscriber;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -297,6 +298,32 @@ class PipelineTelemetryTest {
             .orElseThrow()
             .getValue();
         assertEquals(2L, value);
+    }
+
+    @Test
+    void cancellationFinalizesAnInstrumentedMultiOnceWithoutRecordingAStepError() {
+        PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
+        PipelineTelemetry.RunContext runContext = telemetry.startRun(
+            Multi.createFrom().<Integer>emitter(ignored -> { }), 1, ParallelismPolicy.AUTO, 4);
+
+        Multi<Integer> stepped = telemetry.instrumentStepMulti(
+            DummyStep.class, Multi.createFrom().<Integer>emitter(ignored -> { }), runContext, false);
+        AssertSubscriber<Integer> subscriber = stepped.subscribe().withSubscriber(AssertSubscriber.create(1));
+        subscriber.cancel();
+
+        Collection<MetricData> metrics = metricReader.collectAllMetrics();
+        MetricData duration = metrics.stream()
+            .filter(metric -> "tpf.step.duration".equals(metric.getName()))
+            .findFirst()
+            .orElseThrow();
+        assertEquals(1L, duration.getHistogramData().getPoints().stream()
+            .mapToLong(point -> point.getCount())
+            .sum());
+        assertTrue(metrics.stream().noneMatch(metric -> "tpf.step.errors".equals(metric.getName())
+            && metric.getLongSumData().getPoints().stream().anyMatch(point -> point.getValue() > 0)));
+        assertEquals(1L, exporter.getFinishedSpanItems().stream()
+            .filter(span -> "tpf.step".equals(span.getName()))
+            .count());
     }
 
     static final class DummyStep$$Proxy extends DummyStep {
