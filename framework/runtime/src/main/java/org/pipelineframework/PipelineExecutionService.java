@@ -597,7 +597,7 @@ public class PipelineExecutionService implements PipelineTransitionWorker {
         AwaitExecutionContextHolder.set(new AwaitExecutionContext(
             command.tenantId(),
             command.executionId(),
-            command.currentStepIndex(),
+            command.currentPosition(),
             continuationMode,
             terminalOutputOwnership));
         try {

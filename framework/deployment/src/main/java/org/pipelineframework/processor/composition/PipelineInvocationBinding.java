@@ -17,6 +17,7 @@
 package org.pipelineframework.processor.composition;
 
 import java.util.Objects;
+import java.util.List;
 import org.pipelineframework.config.CardinalitySemantics;
 
 /**
@@ -25,12 +26,15 @@ import org.pipelineframework.config.CardinalitySemantics;
 public record PipelineInvocationBinding(
     CompiledPipelineLocation invocationLocation,
     PipelineReference target,
-    CardinalitySemantics cardinality
+    CardinalitySemantics cardinality,
+    List<CompiledPipelineLocation> childStepLocations
 ) {
 
     public PipelineInvocationBinding {
         invocationLocation = Objects.requireNonNull(invocationLocation, "invocationLocation must not be null");
         target = Objects.requireNonNull(target, "target must not be null");
         cardinality = Objects.requireNonNull(cardinality, "cardinality must not be null");
+        childStepLocations = List.copyOf(Objects.requireNonNull(
+            childStepLocations, "childStepLocations must not be null"));
     }
 }

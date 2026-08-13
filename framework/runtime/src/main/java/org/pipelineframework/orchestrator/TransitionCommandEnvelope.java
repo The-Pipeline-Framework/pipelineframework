@@ -37,8 +37,19 @@ public record TransitionCommandEnvelope(
     String traceId,
     String payloadTypeId,
     String payloadEncoding,
-    String payload
+    String payload,
+    PipelineExecutionPosition currentPosition
 ) {
+    public TransitionCommandEnvelope(
+        String tenantId, String executionId, String pipelineId, String contractVersion, String releaseVersion,
+        int currentStepIndex, int stopBeforeStepIndex, int attempt, ExecutionResultShape resultShape,
+        long executionVersion, String transitionKey, String traceId, String payloadTypeId,
+        String payloadEncoding, String payload
+    ) {
+        this(tenantId, executionId, pipelineId, contractVersion, releaseVersion, currentStepIndex,
+            stopBeforeStepIndex, attempt, resultShape, executionVersion, transitionKey, traceId,
+            payloadTypeId, payloadEncoding, payload, PipelineExecutionPosition.root(currentStepIndex));
+    }
     public TransitionCommandEnvelope(
         String tenantId,
         String executionId,
@@ -69,7 +80,8 @@ public record TransitionCommandEnvelope(
             traceId,
             payloadTypeId,
             payloadEncoding,
-            payload);
+            payload,
+            PipelineExecutionPosition.root(currentStepIndex));
     }
 
     public TransitionCommandEnvelope {
@@ -102,6 +114,10 @@ public record TransitionCommandEnvelope(
         Objects.requireNonNull(payloadTypeId, "payloadTypeId");
         Objects.requireNonNull(payloadEncoding, "payloadEncoding");
         Objects.requireNonNull(payload, "payload");
+        currentPosition = currentPosition == null ? PipelineExecutionPosition.root(currentStepIndex) : currentPosition;
+        if (currentPosition.rootStepIndex() != currentStepIndex) {
+            throw new IllegalArgumentException("currentPosition root cursor must equal currentStepIndex");
+        }
     }
 
     public static TransitionCommandEnvelope from(
@@ -145,7 +161,8 @@ public record TransitionCommandEnvelope(
             traceId,
             encodedPayload.payloadTypeId(),
             encodedPayload.payloadEncoding(),
-            encodedPayload.payload());
+            encodedPayload.payload(),
+            command.currentPosition());
     }
 
     public TransitionWorkerCommand toCommand(TransitionPayloadCodec codec) {
@@ -159,7 +176,8 @@ public record TransitionCommandEnvelope(
             resultShape,
             executionVersion,
             transitionKey,
-            codec.decode(serializedPayload()));
+            codec.decode(serializedPayload()),
+            currentPosition);
     }
 
     public SerializedTransitionPayload serializedPayload() {

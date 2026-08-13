@@ -1,6 +1,7 @@
 package org.pipelineframework.awaitable;
 
 import org.pipelineframework.step.PipelineControlFlowException;
+import org.pipelineframework.orchestrator.PipelineExecutionPosition;
 
 /**
  * Internal signal used to suspend queue-async execution at an await step.
@@ -10,13 +11,21 @@ public class AwaitSuspendedException extends PipelineControlFlowException {
     private final String executionId;
     private final String unitId;
     private final int stepIndex;
+    private final PipelineExecutionPosition position;
 
     public AwaitSuspendedException(String tenantId, String executionId, String unitId, int stepIndex) {
-        super(message(tenantId, executionId, unitId, stepIndex));
+        this(tenantId, executionId, unitId, PipelineExecutionPosition.root(stepIndex));
+    }
+
+    public AwaitSuspendedException(
+        String tenantId, String executionId, String unitId, PipelineExecutionPosition position
+    ) {
+        super(message(tenantId, executionId, unitId, position.rootStepIndex()));
         this.tenantId = tenantId;
         this.executionId = executionId;
         this.unitId = unitId;
-        this.stepIndex = stepIndex;
+        this.stepIndex = position.rootStepIndex();
+        this.position = position;
     }
 
     private static String message(String tenantId, String executionId, String unitId, int stepIndex) {
@@ -49,5 +58,9 @@ public class AwaitSuspendedException extends PipelineControlFlowException {
 
     public int stepIndex() {
         return stepIndex;
+    }
+
+    public PipelineExecutionPosition position() {
+        return position;
     }
 }

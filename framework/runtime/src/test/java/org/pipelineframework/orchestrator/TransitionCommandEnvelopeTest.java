@@ -73,6 +73,21 @@ class TransitionCommandEnvelopeTest {
     }
 
     @Test
+    void preservesNestedStaticContinuationLocationAcrossEnvelopeRoundTrip() {
+        PipelineExecutionPosition position = PipelineExecutionPosition.nested(
+            5, "outer/invoke/inner/await", "outer/invoke/inner/y");
+        TransitionWorkerCommand command = new TransitionWorkerCommand(
+            "tenant-1", "exec-1", 5, 0, ExecutionResultShape.SINGLE, 0L, "nested-transition",
+            new SamplePayload("payment-1", 99), position);
+
+        TransitionCommandEnvelope envelope = TransitionCommandEnvelope.from(
+            command, "pipeline-1", "contract-1", "release-1", "trace-1", payloadCodec.encode(command.inputPayload()));
+
+        assertEquals(position, envelope.currentPosition());
+        assertEquals(position, envelope.toCommand(payloadCodec).currentPosition());
+    }
+
+    @Test
     void defaultTransitionWorkerCommandRunsToPipelineEnd() {
         TransitionWorkerCommand command = command(new ExecutionInputSnapshot(
             ExecutionInputShape.UNI,

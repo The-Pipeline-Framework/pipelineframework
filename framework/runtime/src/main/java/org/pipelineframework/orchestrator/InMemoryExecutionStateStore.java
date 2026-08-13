@@ -175,7 +175,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(),
+                    current.currentPosition());
                 executionsByScopedId.put(scopedId, claimed);
                 return Optional.of(claimed);
             }
@@ -223,7 +224,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(),
+                    current.currentPosition());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -272,11 +274,28 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(),
+                    PipelineExecutionPosition.root(awaitStepIndex));
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
         });
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markWaitingExternal(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        String transitionKey,
+        String awaitUnitId,
+        PipelineExecutionPosition awaitPosition,
+        long nowEpochMs
+    ) {
+        Objects.requireNonNull(awaitPosition, "awaitPosition must not be null");
+        return markWaitingExternal(tenantId, executionId, expectedVersion, transitionKey, awaitUnitId,
+            awaitPosition.rootStepIndex(), nowEpochMs)
+            .onItem().transform(updated -> updated.map(record -> replacePosition(record, awaitPosition)));
     }
 
     @Override
@@ -322,11 +341,43 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(),
+                    PipelineExecutionPosition.root(nextStepIndex));
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
         });
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markAwaitCompleted(
+        String tenantId,
+        String executionId,
+        String awaitUnitId,
+        PipelineExecutionPosition nextPosition,
+        long nowEpochMs
+    ) {
+        Objects.requireNonNull(nextPosition, "nextPosition must not be null");
+        return markAwaitCompleted(tenantId, executionId, awaitUnitId, nextPosition.rootStepIndex(), nowEpochMs)
+            .onItem().transform(updated -> updated.map(record -> replacePosition(record, nextPosition)));
+    }
+
+    private ExecutionRecord<Object, Object> replacePosition(
+        ExecutionRecord<Object, Object> record,
+        PipelineExecutionPosition position
+    ) {
+        ExecutionRecord<Object, Object> positioned = new ExecutionRecord<>(
+            record.tenantId(), record.executionId(), record.executionKey(), record.pipelineId(),
+            record.contractVersion(), record.releaseVersion(), record.resultShape(), record.status(), record.version(),
+            record.currentStepIndex(), record.attempt(), record.leaseOwner(), record.leaseExpiresEpochMs(),
+            record.nextDueEpochMs(), record.lastTransitionKey(), record.inputPayload(), record.awaitUnitId(),
+            record.resultPayload(), record.errorCode(), record.errorMessage(), record.createdAtEpochMs(),
+            record.updatedAtEpochMs(), record.ttlEpochS(), record.firstCircuitDeferredAtEpochMs(),
+            record.circuitDeferralCount(), record.circuitIdentity(), position);
+        synchronized (lock) {
+            executionsByScopedId.put(scopedExecutionId(record.tenantId(), record.executionId()), positioned);
+        }
+        return positioned;
     }
 
     @Override
@@ -378,7 +429,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(),
+                    PipelineExecutionPosition.root(nextStepIndex));
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -443,7 +495,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(),
+                    current.currentPosition());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -477,7 +530,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.version() + 1, current.currentStepIndex(), current.attempt(), null, 0L, nextDueEpochMs,
                     transitionKey, current.inputPayload(), current.awaitUnitId(), null, reason, truncate(errorMessage),
                     current.createdAtEpochMs(), nowEpochMs, current.ttlEpochS(), firstCircuitDeferredAtEpochMs,
-                    circuitDeferralCount, circuitIdentity == null ? "" : circuitIdentity);
+                    circuitDeferralCount, circuitIdentity == null ? "" : circuitIdentity, current.currentPosition());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -530,7 +583,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(),
+                    current.currentPosition());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }
@@ -580,7 +634,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.ttlEpochS(),
                     current.firstCircuitDeferredAtEpochMs(),
                     current.circuitDeferralCount(),
-                    current.circuitIdentity());
+                    current.circuitIdentity(),
+                    current.currentPosition());
                 executionsByScopedId.put(scopedId, updated);
                 return Optional.of(updated);
             }

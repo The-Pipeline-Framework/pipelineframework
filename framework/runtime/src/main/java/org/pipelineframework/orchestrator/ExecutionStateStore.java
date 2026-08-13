@@ -153,6 +153,23 @@ public interface ExecutionStateStore {
         long nowEpochMs);
 
     /**
+     * Records the complete durable continuation position. Implementations that predate nested
+     * invocation retain their compatible flat-cursor behaviour until migrated.
+     */
+    default Uni<Optional<ExecutionRecord<Object, Object>>> markWaitingExternal(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        String transitionKey,
+        String awaitUnitId,
+        PipelineExecutionPosition awaitPosition,
+        long nowEpochMs
+    ) {
+        return markWaitingExternal(tenantId, executionId, expectedVersion, transitionKey, awaitUnitId,
+            awaitPosition.rootStepIndex(), nowEpochMs);
+    }
+
+    /**
      * Stores a completed await payload and makes the execution due for continuation.
      *
      * <p>This method matches by {@link ExecutionStatus#WAITING_EXTERNAL} plus
@@ -173,6 +190,17 @@ public interface ExecutionStateStore {
         String awaitUnitId,
         int nextStepIndex,
         long nowEpochMs);
+
+    /** Releases an await at its full compiler-derived continuation position. */
+    default Uni<Optional<ExecutionRecord<Object, Object>>> markAwaitCompleted(
+        String tenantId,
+        String executionId,
+        String awaitUnitId,
+        PipelineExecutionPosition nextPosition,
+        long nowEpochMs
+    ) {
+        return markAwaitCompleted(tenantId, executionId, awaitUnitId, nextPosition.rootStepIndex(), nowEpochMs);
+    }
 
     /**
      * Replaces a waiting execution's input with itemized continuation output and queues the parent

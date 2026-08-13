@@ -47,6 +47,10 @@ import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.awaitable.AwaitExecutionContext;
+import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.awaitable.AwaitSuspendedException;
+import org.pipelineframework.awaitable.TerminalOutputOwnership;
 import org.pipelineframework.objectpublish.ObjectPayload;
 import org.pipelineframework.objectpublish.ObjectPublishMapper;
 import org.pipelineframework.objectpublish.ObjectPublishRunner;
@@ -66,6 +70,7 @@ import org.pipelineframework.processor.composition.PipelineInvocationRealization
 import org.pipelineframework.processor.composition.PipelineReference;
 import org.pipelineframework.processor.composition.ResolvedPipelineDefinitionGraph;
 import org.pipelineframework.repository.PayloadReference;
+import org.pipelineframework.orchestrator.PipelineExecutionPosition;
 import org.pipelineframework.step.ConfigFactory;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepManyToMany;
@@ -455,6 +460,67 @@ class LocalPipelineInvocationBinderTest {
         assertEquals("placement-neutral-inner:ONE_TO_ONE", futureRemoteAdapter.realize(binding));
     }
 
+    @Test
+    void nestedAwaitPositionResumesTheInnerSuffixWithoutRestartingTheChild() throws Exception {
+        setObjectPublishRunner(ObjectPublishRunner.disabled());
+        PipelineReference innerReference = new PipelineReference("inner-await");
+        PipelineDefinition inner = definition(
+            innerReference,
+            "Text",
+            "Text",
+            PipelineDefinitionStep.direct("x", "Text", "Text", CardinalitySemantics.ONE_TO_ONE),
+            PipelineDefinitionStep.direct("await", "Text", "Text", CardinalitySemantics.ONE_TO_ONE),
+            PipelineDefinitionStep.direct("y", "Text", "Text", CardinalitySemantics.ONE_TO_ONE));
+        PipelineDefinition outer = definition(
+            new PipelineReference("outer-await"),
+            "Text",
+            "Text",
+            PipelineDefinitionStep.direct("a", "Text", "Text", CardinalitySemantics.ONE_TO_ONE),
+            PipelineDefinitionStep.pipeline("invoke", "Text", "Text", innerReference),
+            PipelineDefinitionStep.direct("c", "Text", "Text", CardinalitySemantics.ONE_TO_ONE));
+        PipelineInvocationBinding binding = link(outer, Map.of(innerReference, inner)).invocationBindings().getFirst();
+        AtomicInteger innerPrefixApplications = new AtomicInteger();
+        Object invocation = new LocalPipelineInvocationBinder(runner, List.of(
+            new CountingSuffix("-x", innerPrefixApplications),
+            new SuspendingStep(),
+            new ContextSuffix("-y", new AtomicReference<>())))
+            .realize(binding);
+        List<Object> outerSteps = List.of(
+            new ContextSuffix("-a", new AtomicReference<>()), invocation,
+            new ContextSuffix("-c", new AtomicReference<>()));
+
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext(
+            "tenant-await", "execution-await", 1,
+            org.pipelineframework.awaitable.AwaitContinuationMode.DURABLE_HANDOFF,
+            TerminalOutputOwnership.COORDINATOR));
+        AwaitSuspendedException suspended;
+        try {
+            suspended = assertThrows(AwaitSuspendedException.class, () ->
+                ((Uni<String>) runner.runFromStep(Uni.createFrom().item("input-a"), outerSteps, 1))
+                    .await().indefinitely());
+        } finally {
+            AwaitExecutionContextHolder.clear();
+        }
+
+        PipelineExecutionPosition waiting = suspended.position();
+        assertEquals(1, waiting.rootStepIndex());
+        assertEquals(binding.childStepLocations().get(1).display(), waiting.staticLocation());
+        assertEquals(binding.childStepLocations().get(2).display(), waiting.nextStaticLocation());
+        assertEquals(1, innerPrefixApplications.get());
+
+        AwaitExecutionContextHolder.set(new AwaitExecutionContext(
+            "tenant-await", "execution-await", waiting.next(),
+            org.pipelineframework.awaitable.AwaitContinuationMode.DURABLE_HANDOFF,
+            TerminalOutputOwnership.COORDINATOR));
+        try {
+            assertEquals("input-a-x-y-c", ((Uni<String>) runner.runFromStep(
+                Uni.createFrom().item("input-a-x"), outerSteps, 1)).await().indefinitely());
+        } finally {
+            AwaitExecutionContextHolder.clear();
+        }
+        assertEquals(1, innerPrefixApplications.get(), "recovery must enter the linked inner suffix, not step zero");
+    }
+
     private static ResolvedPipelineDefinitionGraph link(
         PipelineDefinition root,
         Map<PipelineReference, PipelineDefinition> localDefinitions
@@ -567,6 +633,31 @@ class LocalPipelineInvocationBinderTest {
         public Uni<String> applyOneToOne(String input) {
             observedContext.set(PipelineContextHolder.get());
             return Uni.createFrom().item(input + suffix);
+        }
+    }
+
+    private static final class CountingSuffix extends ConfigurableStep implements StepOneToOne<String, String> {
+        private final String suffix;
+        private final AtomicInteger applications;
+
+        private CountingSuffix(String suffix, AtomicInteger applications) {
+            this.suffix = suffix;
+            this.applications = applications;
+        }
+
+        @Override
+        public Uni<String> applyOneToOne(String input) {
+            applications.incrementAndGet();
+            return Uni.createFrom().item(input + suffix);
+        }
+    }
+
+    private static final class SuspendingStep extends ConfigurableStep implements StepOneToOne<String, String> {
+        @Override
+        public Uni<String> applyOneToOne(String input) {
+            AwaitExecutionContext context = AwaitExecutionContextHolder.get();
+            return Uni.createFrom().failure(new AwaitSuspendedException(
+                context.tenantId(), context.executionId(), "unit-await", context.currentPosition()));
         }
     }
 

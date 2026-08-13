@@ -169,9 +169,15 @@ public final class PipelineDefinitionLinker {
             if (targetCardinality == null) {
                 throw new IllegalStateException("Resolved cardinality is missing: " + targetReference.logicalId());
             }
-            bindings.add(new PipelineInvocationBinding(compiledLocation, targetReference, targetCardinality));
             List<DefinitionLocalLocation> childPath = new ArrayList<>(invocationPath);
             childPath.add(localLocation);
+            bindings.add(new PipelineInvocationBinding(
+                compiledLocation,
+                targetReference,
+                targetCardinality,
+                target.steps().stream().map(child -> new CompiledPipelineLocation(
+                    childPath,
+                    new DefinitionLocalLocation(target.reference(), child.localStepId()))).toList()));
             expand(target, childPath, definitions, cardinalities, bindings, executableLocations);
         }
     }

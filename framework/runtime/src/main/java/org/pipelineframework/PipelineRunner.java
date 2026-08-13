@@ -36,6 +36,7 @@ import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.awaitable.AwaitExecutionContext;
 import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.awaitable.TerminalOutputOwnership;
+import org.pipelineframework.invocation.PipelineInvocationDescriptor;
 import org.pipelineframework.objectpublish.ObjectPublishRunner;
 import org.pipelineframework.objectpublish.ObjectPublishTelemetry;
 import org.pipelineframework.runtime.core.PipelineRunnerCore;
@@ -152,12 +153,37 @@ public class PipelineRunner implements AutoCloseable {
         return runFromStepUntilWithContext(input, steps, 0, steps.size(), false);
     }
 
+    /**
+     * Runs a linked child definition from a durable static continuation location.
+     */
+    public ExecutionResult runNestedWithContext(
+        Object input,
+        List<Object> steps,
+        int startStepIndex,
+        PipelineInvocationDescriptor invocationDescriptor
+    ) {
+        Objects.requireNonNull(invocationDescriptor, "invocationDescriptor must not be null");
+        return runFromStepUntilWithContext(
+            input, steps, startStepIndex, steps.size(), false, invocationDescriptor);
+    }
+
     private ExecutionResult runFromStepUntilWithContext(
         Object input,
         List<Object> steps,
         int startStepIndex,
         int stopBeforeStepIndex,
         boolean rootInvocation) {
+        return runFromStepUntilWithContext(
+            input, steps, startStepIndex, stopBeforeStepIndex, rootInvocation, null);
+    }
+
+    private ExecutionResult runFromStepUntilWithContext(
+        Object input,
+        List<Object> steps,
+        int startStepIndex,
+        int stopBeforeStepIndex,
+        boolean rootInvocation,
+        PipelineInvocationDescriptor invocationDescriptor) {
         Objects.requireNonNull(steps, "Steps list must not be null");
         if (!(input instanceof Uni<?> || input instanceof Multi<?>)) {
             throw new IllegalArgumentException(MessageFormat.format(
@@ -194,12 +220,10 @@ public class PipelineRunner implements AutoCloseable {
             (step, value, index) -> {
                 AwaitExecutionContext awaitContextSnapshot = awaitContext == null
                     ? null
-                    : new AwaitExecutionContext(
-                        awaitContext.tenantId(),
-                        awaitContext.executionId(),
-                        index,
-                        awaitContext.continuationMode(),
-                        awaitContext.terminalOutputOwnership());
+                    : invocationDescriptor == null
+                        ? awaitContext.atRootStep(index)
+                        : awaitContext.atPosition(invocationDescriptor.positionAt(
+                            awaitContext.currentPosition().rootStepIndex(), index));
 
                 if (step instanceof Configurable configurable) {
                     configurable.initialiseWithConfig(configFactory.buildConfig(step.getClass(), pipelineConfig));

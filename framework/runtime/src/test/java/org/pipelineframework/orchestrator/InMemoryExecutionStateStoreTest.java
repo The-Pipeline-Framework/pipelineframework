@@ -10,6 +10,37 @@ import static org.junit.jupiter.api.Assertions.*;
 class InMemoryExecutionStateStoreTest {
 
     @Test
+    void nestedAwaitRecoveryKeepsOneExecutionAndResumesTheStaticInnerSuffix() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult created = store.createOrGetExecution(new ExecutionCreateCommand(
+            "tenant-a", "nested-await", "pipeline-a", "contract-a", "release-a", "input",
+            ExecutionResultShape.SINGLE, 3, now, now / 1000 + 60)).await().indefinitely();
+        ExecutionRecord<Object, Object> running = store.claimLease(
+            "tenant-a", created.record().executionId(), "worker-a", now, 1_000).await().indefinitely().orElseThrow();
+        PipelineExecutionPosition waiting = PipelineExecutionPosition.nested(
+            3, "outer:invoke/inner:await", "outer:invoke/inner:y");
+
+        ExecutionRecord<Object, Object> persisted = store.markWaitingExternal(
+            "tenant-a", running.executionId(), running.version(), "nested-transition", "unit-a", waiting, now + 1)
+            .await().indefinitely().orElseThrow();
+        assertEquals(waiting, persisted.currentPosition());
+        assertEquals(created.record().executionId(), persisted.executionId());
+        assertEquals("release-a", persisted.releaseVersion());
+
+        ExecutionRecord<Object, Object> released = store.markAwaitCompleted(
+            "tenant-a", persisted.executionId(), "unit-a", waiting.next(), now + 2)
+            .await().indefinitely().orElseThrow();
+        ExecutionRecord<Object, Object> recovered = store.claimLease(
+            "tenant-a", released.executionId(), "worker-b", now + 2, 1_000).await().indefinitely().orElseThrow();
+
+        assertEquals(waiting.next(), recovered.currentPosition());
+        assertEquals(3, recovered.currentStepIndex(), "the root runner re-enters the invocation step");
+        assertEquals(created.record().executionId(), recovered.executionId());
+        assertEquals("release-a", recovered.releaseVersion());
+    }
+
+    @Test
     void createOrGetReturnsDuplicateForSameKey() {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();

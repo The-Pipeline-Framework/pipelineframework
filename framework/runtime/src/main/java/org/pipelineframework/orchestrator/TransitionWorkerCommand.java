@@ -24,8 +24,31 @@ public record TransitionWorkerCommand(
     ExecutionResultShape resultShape,
     long executionVersion,
     String transitionKey,
-    Object inputPayload
+    Object inputPayload,
+    PipelineExecutionPosition currentPosition
 ) {
+    public TransitionWorkerCommand(
+        String tenantId, String executionId, int currentStepIndex, int stopBeforeStepIndex, int attempt,
+        ExecutionResultShape resultShape, long executionVersion, String transitionKey, Object inputPayload
+    ) {
+        this(tenantId, executionId, currentStepIndex, stopBeforeStepIndex, attempt, resultShape,
+            executionVersion, transitionKey, inputPayload, PipelineExecutionPosition.root(currentStepIndex));
+    }
+    public TransitionWorkerCommand(
+        String tenantId,
+        String executionId,
+        int currentStepIndex,
+        int attempt,
+        ExecutionResultShape resultShape,
+        long executionVersion,
+        String transitionKey,
+        Object inputPayload,
+        PipelineExecutionPosition currentPosition
+    ) {
+        this(tenantId, executionId, currentStepIndex, -1, attempt, resultShape, executionVersion,
+            transitionKey, inputPayload, currentPosition);
+    }
+
     public TransitionWorkerCommand(
         String tenantId,
         String executionId,
@@ -45,7 +68,8 @@ public record TransitionWorkerCommand(
             resultShape,
             executionVersion,
             transitionKey,
-            inputPayload);
+            inputPayload,
+            PipelineExecutionPosition.root(currentStepIndex));
     }
 
     public TransitionWorkerCommand {
@@ -66,6 +90,10 @@ public record TransitionWorkerCommand(
         }
         if (transitionKey == null || transitionKey.isBlank()) {
             throw new IllegalArgumentException("transitionKey must not be blank");
+        }
+        currentPosition = currentPosition == null ? PipelineExecutionPosition.root(currentStepIndex) : currentPosition;
+        if (currentPosition.rootStepIndex() != currentStepIndex) {
+            throw new IllegalArgumentException("currentPosition root cursor must equal currentStepIndex");
         }
     }
 }

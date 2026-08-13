@@ -13,10 +13,18 @@ public record TransitionAwaitSuspension(
     String unitId,
     int stepIndex,
     AwaitUnitRecord unit,
-    List<AwaitInteractionRecord> interactions
+    List<AwaitInteractionRecord> interactions,
+    PipelineExecutionPosition position
 ) {
     public TransitionAwaitSuspension(String tenantId, String executionId, String unitId, int stepIndex) {
-        this(tenantId, executionId, unitId, stepIndex, null, List.of());
+        this(tenantId, executionId, unitId, stepIndex, null, List.of(), PipelineExecutionPosition.root(stepIndex));
+    }
+
+    public TransitionAwaitSuspension(
+        String tenantId, String executionId, String unitId, int stepIndex, AwaitUnitRecord unit,
+        List<AwaitInteractionRecord> interactions
+    ) {
+        this(tenantId, executionId, unitId, stepIndex, unit, interactions, PipelineExecutionPosition.root(stepIndex));
     }
 
     public TransitionAwaitSuspension {
@@ -33,5 +41,9 @@ public record TransitionAwaitSuspension(
             throw new IllegalArgumentException("stepIndex must be >= 0");
         }
         interactions = interactions == null ? List.of() : List.copyOf(interactions);
+        position = position == null ? PipelineExecutionPosition.root(stepIndex) : position;
+        if (position.rootStepIndex() != stepIndex) {
+            throw new IllegalArgumentException("position root cursor must equal stepIndex");
+        }
     }
 }

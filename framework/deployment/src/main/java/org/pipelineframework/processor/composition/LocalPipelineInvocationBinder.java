@@ -19,6 +19,7 @@ package org.pipelineframework.processor.composition;
 import java.util.List;
 import java.util.Objects;
 import org.pipelineframework.PipelineRunner;
+import org.pipelineframework.invocation.PipelineInvocationDescriptor;
 import org.pipelineframework.invocation.PipelineInvocationSteps;
 
 /**
@@ -43,11 +44,23 @@ public final class LocalPipelineInvocationBinder implements PipelineInvocationRe
     @Override
     public Object realize(PipelineInvocationBinding binding) {
         Objects.requireNonNull(binding, "binding must not be null");
+        PipelineInvocationDescriptor descriptor = descriptorFor(binding);
         return switch (binding.cardinality()) {
-            case ONE_TO_ONE -> PipelineInvocationSteps.oneToOne(runner, linkedChildSteps);
-            case ONE_TO_MANY -> PipelineInvocationSteps.oneToMany(runner, linkedChildSteps);
-            case MANY_TO_ONE -> PipelineInvocationSteps.manyToOne(runner, linkedChildSteps);
-            case MANY_TO_MANY -> PipelineInvocationSteps.manyToMany(runner, linkedChildSteps);
+            case ONE_TO_ONE -> PipelineInvocationSteps.oneToOne(runner, linkedChildSteps, descriptor);
+            case ONE_TO_MANY -> PipelineInvocationSteps.oneToMany(runner, linkedChildSteps, descriptor);
+            case MANY_TO_ONE -> PipelineInvocationSteps.manyToOne(runner, linkedChildSteps, descriptor);
+            case MANY_TO_MANY -> PipelineInvocationSteps.manyToMany(runner, linkedChildSteps, descriptor);
         };
+    }
+
+    private PipelineInvocationDescriptor descriptorFor(PipelineInvocationBinding binding) {
+        String invocation = binding.invocationLocation().display();
+        if (binding.childStepLocations().size() != linkedChildSteps.size()) {
+            throw new IllegalArgumentException("Linked child runtime steps do not match the compiled child locations");
+        }
+        List<String> childLocations = binding.childStepLocations().stream()
+            .map(location -> location.display())
+            .toList();
+        return new PipelineInvocationDescriptor(invocation, childLocations);
     }
 }

@@ -66,6 +66,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private static final String STATUS = "status";
     private static final String VERSION = "version";
     private static final String CURRENT_STEP_INDEX = "current_step_index";
+    private static final String CURRENT_POSITION = "current_position";
     private static final String ATTEMPT = "attempt";
     private static final String LEASE_OWNER = "lease_owner";
     private static final String LEASE_EXPIRES_EPOCH_MS = "lease_expires_epoch_ms";
@@ -659,8 +660,17 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             expectedVersion,
             transitionKey,
             awaitUnitId,
-            awaitStepIndex,
+            PipelineExecutionPosition.root(awaitStepIndex),
             nowEpochMs));
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markWaitingExternal(
+        String tenantId, String executionId, long expectedVersion, String transitionKey, String awaitUnitId,
+        PipelineExecutionPosition awaitPosition, long nowEpochMs
+    ) {
+        return blocking(() -> markWaitingExternalBlocking(tenantId, executionId, expectedVersion, transitionKey,
+            awaitUnitId, awaitPosition, nowEpochMs));
     }
 
     @Override
@@ -675,8 +685,16 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             tenantId,
             executionId,
             awaitUnitId,
-            nextStepIndex,
+            PipelineExecutionPosition.root(nextStepIndex),
             nowEpochMs));
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markAwaitCompleted(
+        String tenantId, String executionId, String awaitUnitId, PipelineExecutionPosition nextPosition,
+        long nowEpochMs
+    ) {
+        return blocking(() -> markAwaitCompletedBlocking(tenantId, executionId, awaitUnitId, nextPosition, nowEpochMs));
     }
 
     @Override
@@ -707,13 +725,14 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         long expectedVersion,
         String transitionKey,
         String awaitUnitId,
-        int awaitStepIndex,
+        PipelineExecutionPosition awaitPosition,
         long nowEpochMs
     ) {
         Map<String, String> names = Map.ofEntries(
             Map.entry("#status", STATUS),
             Map.entry("#version", VERSION),
             Map.entry("#step", CURRENT_STEP_INDEX),
+            Map.entry("#position", CURRENT_POSITION),
             Map.entry("#nextDue", NEXT_DUE_EPOCH_MS),
             Map.entry("#transition", LAST_TRANSITION_KEY),
             Map.entry("#awaitUnit", AWAIT_UNIT_ID),
@@ -728,7 +747,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         Map<String, AttributeValue> values = Map.ofEntries(
             Map.entry(":expected", avN(expectedVersion)),
             Map.entry(":waiting", avS(ExecutionStatus.WAITING_EXTERNAL.name())),
-            Map.entry(":step", avN(awaitStepIndex)),
+            Map.entry(":step", avN(awaitPosition.rootStepIndex())),
+            Map.entry(":position", avS(awaitPosition.encode())),
             Map.entry(":awaitUnit", avS(awaitUnitId)),
             Map.entry(":nextDue", avN(Long.MAX_VALUE)),
             Map.entry(":transition", avS(transitionKey == null ? "" : transitionKey)),
@@ -742,7 +762,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             .key(executionPrimaryKey(tenantId, executionId))
             .conditionExpression("#version = :expected AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
             .updateExpression(
-                "SET #status = :waiting, #version = #version + :one, #step = :step, #nextDue = :nextDue, " +
+                "SET #status = :waiting, #version = #version + :one, #step = :step, #position = :position, #nextDue = :nextDue, " +
                     "#transition = :transition, #awaitUnit = :awaitUnit, #leaseExpires = :zero, " +
                     "#updated = :now REMOVE #result, #resultReference, #errorCode, #errorMessage, #leaseOwner")
             .expressionAttributeNames(names)
@@ -764,13 +784,14 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         String tenantId,
         String executionId,
         String awaitUnitId,
-        int nextStepIndex,
+        PipelineExecutionPosition nextPosition,
         long nowEpochMs
     ) {
         Map<String, String> names = Map.ofEntries(
             Map.entry("#status", STATUS),
             Map.entry("#version", VERSION),
             Map.entry("#step", CURRENT_STEP_INDEX),
+            Map.entry("#position", CURRENT_POSITION),
             Map.entry("#nextDue", NEXT_DUE_EPOCH_MS),
             Map.entry("#awaitUnit", AWAIT_UNIT_ID),
             Map.entry("#result", RESULT_PAYLOAD_JSON),
@@ -784,7 +805,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         Map<String, AttributeValue> values = Map.ofEntries(
             Map.entry(":queued", avS(ExecutionStatus.QUEUED.name())),
             Map.entry(":waitingExternal", avS(ExecutionStatus.WAITING_EXTERNAL.name())),
-            Map.entry(":step", avN(nextStepIndex)),
+            Map.entry(":step", avN(nextPosition.rootStepIndex())),
+            Map.entry(":position", avS(nextPosition.encode())),
             Map.entry(":awaitUnit", avS(awaitUnitId)),
             Map.entry(":zero", avN(0)),
             Map.entry(":now", avN(nowEpochMs)),
@@ -799,7 +821,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
                     "AND (attribute_not_exists(#awaitUnit) OR #awaitUnit = :awaitUnit) " +
                     "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
             .updateExpression(
-                "SET #status = :queued, #version = #version + :one, #step = :step, #nextDue = :now, " +
+                "SET #status = :queued, #version = #version + :one, #step = :step, #position = :position, #nextDue = :now, " +
                     "#awaitUnit = :awaitUnit, #leaseExpires = :zero, #updated = :now " +
                     "REMOVE #result, #resultReference, #errorCode, #errorMessage, #leaseOwner")
             .expressionAttributeNames(names)
@@ -1314,6 +1336,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         item.put(STATUS, avS(record.status().name()));
         item.put(VERSION, avN(record.version()));
         item.put(CURRENT_STEP_INDEX, avN(record.currentStepIndex()));
+        item.put(CURRENT_POSITION, avS(record.currentPosition().encode()));
         item.put(ATTEMPT, avN(record.attempt()));
         item.put(LEASE_EXPIRES_EPOCH_MS, avN(record.leaseExpiresEpochMs()));
         item.put(NEXT_DUE_EPOCH_MS, avN(record.nextDueEpochMs()));
@@ -1602,6 +1625,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         ExecutionStatus status = ExecutionStatus.valueOf(readString(item, STATUS));
         long version = readLong(item, VERSION);
         int currentStepIndex = (int) readLong(item, CURRENT_STEP_INDEX);
+        PipelineExecutionPosition currentPosition = PipelineExecutionPosition.decode(
+            readString(item, CURRENT_POSITION), currentStepIndex);
         int attempt = (int) readLong(item, ATTEMPT);
         String leaseOwner = readString(item, LEASE_OWNER);
         long leaseExpires = readLong(item, LEASE_EXPIRES_EPOCH_MS);
@@ -1650,7 +1675,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             ttlEpochS,
             firstCircuitDeferredAt,
             circuitDeferralCount,
-            circuitIdentity == null ? "" : circuitIdentity);
+            circuitIdentity == null ? "" : circuitIdentity,
+            currentPosition);
         return withPayloads(stored, readInputPayload(stored, item), readResultPayload(stored, item));
     }
 
@@ -1660,7 +1686,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             stored.currentStepIndex(), stored.attempt(), stored.leaseOwner(), stored.leaseExpiresEpochMs(), stored.nextDueEpochMs(),
             stored.lastTransitionKey(), inputPayload, stored.awaitUnitId(), resultPayload, stored.errorCode(), stored.errorMessage(),
             stored.createdAtEpochMs(), stored.updatedAtEpochMs(), stored.ttlEpochS(), stored.firstCircuitDeferredAtEpochMs(),
-            stored.circuitDeferralCount(), stored.circuitIdentity());
+            stored.circuitDeferralCount(), stored.circuitIdentity(), stored.currentPosition());
     }
 
     private ExecutionRecord<Object, Object> withCurrentStepIndex(ExecutionRecord<Object, Object> stored, int currentStepIndex) {

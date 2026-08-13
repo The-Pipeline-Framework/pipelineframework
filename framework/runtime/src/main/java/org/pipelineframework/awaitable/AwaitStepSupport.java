@@ -55,15 +55,7 @@ public class AwaitStepSupport {
 
     private <I, O> Uni<O> awaitOneToOne(AwaitStepDescriptor descriptor, I input, AwaitExecutionContext context) {
         int stepIndex = context.currentStepIndex();
-        return withAwaitExecutionContext(context, () -> awaitCoordinator.createOrGet(
-            descriptor,
-            context.tenantId(),
-            context.executionId(),
-            stepIndex,
-            context.executionId() + ":" + stepIndex,
-            input,
-            null,
-            null)
+        return withAwaitExecutionContext(context, () -> createOrGet(descriptor, input, context, stepIndex)
             .onItem().transformToUni(created -> {
                 AwaitInteractionRecord record = created.record();
                 Uni<AwaitInteractionRecord> dispatched = record.status() == AwaitInteractionStatus.WAITING
@@ -74,8 +66,24 @@ public class AwaitStepSupport {
                         context.tenantId(),
                         context.executionId(),
                         updated.unitId(),
-                        stepIndex)));
+                        context.currentPosition())));
             }));
+    }
+
+    private <I> Uni<AwaitCreateResult> createOrGet(
+        AwaitStepDescriptor descriptor,
+        I input,
+        AwaitExecutionContext context,
+        int stepIndex
+    ) {
+        if (!context.currentPosition().nested()) {
+            return awaitCoordinator.createOrGet(
+                descriptor, context.tenantId(), context.executionId(), stepIndex,
+                context.executionId() + ":" + stepIndex, input, null, null);
+        }
+        return awaitCoordinator.createOrGet(
+            descriptor, context.tenantId(), context.executionId(), context.currentPosition(),
+            context.executionId() + ":" + context.currentPosition().transitionLocation(), input, null, null);
     }
 
     /**
@@ -265,7 +273,7 @@ public class AwaitStepSupport {
         return new AwaitExecutionContext(
             context.tenantId(),
             context.executionId(),
-            context.currentStepIndex(),
+            context.currentPosition(),
             context.continuationMode(),
             context.terminalOutputOwnership());
     }
@@ -458,7 +466,7 @@ public class AwaitStepSupport {
                             context.tenantId(),
                             context.executionId(),
                             unitId,
-                            stepIndex)).toMulti());
+                            context.currentPosition())).toMulti());
             });
     }
 

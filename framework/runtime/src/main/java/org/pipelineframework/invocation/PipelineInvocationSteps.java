@@ -40,30 +40,34 @@ public final class PipelineInvocationSteps {
 
     public static <I, O> StepOneToOne<I, O> oneToOne(
         PipelineRunner runner,
-        List<Object> linkedChildSteps
+        List<Object> linkedChildSteps,
+        PipelineInvocationDescriptor descriptor
     ) {
-        return new OneToOneInvocationStep<>(runner, linkedChildSteps);
+        return new OneToOneInvocationStep<>(runner, linkedChildSteps, descriptor);
     }
 
     public static <I, O> StepOneToMany<I, O> oneToMany(
         PipelineRunner runner,
-        List<Object> linkedChildSteps
+        List<Object> linkedChildSteps,
+        PipelineInvocationDescriptor descriptor
     ) {
-        return new OneToManyInvocationStep<>(runner, linkedChildSteps);
+        return new OneToManyInvocationStep<>(runner, linkedChildSteps, descriptor);
     }
 
     public static <I, O> ManyToOne<I, O> manyToOne(
         PipelineRunner runner,
-        List<Object> linkedChildSteps
+        List<Object> linkedChildSteps,
+        PipelineInvocationDescriptor descriptor
     ) {
-        return new ManyToOneInvocationStep<>(runner, linkedChildSteps);
+        return new ManyToOneInvocationStep<>(runner, linkedChildSteps, descriptor);
     }
 
     public static <I, O> StepManyToMany<I, O> manyToMany(
         PipelineRunner runner,
-        List<Object> linkedChildSteps
+        List<Object> linkedChildSteps,
+        PipelineInvocationDescriptor descriptor
     ) {
-        return new ManyToManyInvocationStep<>(runner, linkedChildSteps);
+        return new ManyToManyInvocationStep<>(runner, linkedChildSteps, descriptor);
     }
 
     private static final class OneToOneInvocationStep<I, O> extends ConfigurableStep
@@ -71,18 +75,20 @@ public final class PipelineInvocationSteps {
 
         private final PipelineRunner runner;
         private final List<Object> linkedChildSteps;
+        private final PipelineInvocationDescriptor descriptor;
 
-        private OneToOneInvocationStep(PipelineRunner runner, List<Object> linkedChildSteps) {
+        private OneToOneInvocationStep(PipelineRunner runner, List<Object> linkedChildSteps, PipelineInvocationDescriptor descriptor) {
             this.runner = Objects.requireNonNull(runner, "runner must not be null");
             this.linkedChildSteps = List.copyOf(Objects.requireNonNull(
                 linkedChildSteps,
                 "linkedChildSteps must not be null"));
+            this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
         }
 
         @Override
         @SuppressWarnings("unchecked")
         public Uni<O> applyOneToOne(I input) {
-            Object result = nestedResult(runner, linkedChildSteps, Uni.createFrom().item(input));
+            Object result = nestedResult(runner, linkedChildSteps, descriptor, Uni.createFrom().item(input));
             if (result instanceof Uni<?> uni) {
                 return (Uni<O>) uni;
             }
@@ -95,18 +101,20 @@ public final class PipelineInvocationSteps {
 
         private final PipelineRunner runner;
         private final List<Object> linkedChildSteps;
+        private final PipelineInvocationDescriptor descriptor;
 
-        private OneToManyInvocationStep(PipelineRunner runner, List<Object> linkedChildSteps) {
+        private OneToManyInvocationStep(PipelineRunner runner, List<Object> linkedChildSteps, PipelineInvocationDescriptor descriptor) {
             this.runner = Objects.requireNonNull(runner, "runner must not be null");
             this.linkedChildSteps = List.copyOf(Objects.requireNonNull(
                 linkedChildSteps,
                 "linkedChildSteps must not be null"));
+            this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
         }
 
         @Override
         @SuppressWarnings("unchecked")
         public Multi<O> applyOneToMany(I input) {
-            Object result = nestedResult(runner, linkedChildSteps, Uni.createFrom().item(input));
+            Object result = nestedResult(runner, linkedChildSteps, descriptor, Uni.createFrom().item(input));
             if (result instanceof Multi<?> multi) {
                 return (Multi<O>) multi;
             }
@@ -119,18 +127,20 @@ public final class PipelineInvocationSteps {
 
         private final PipelineRunner runner;
         private final List<Object> linkedChildSteps;
+        private final PipelineInvocationDescriptor descriptor;
 
-        private ManyToOneInvocationStep(PipelineRunner runner, List<Object> linkedChildSteps) {
+        private ManyToOneInvocationStep(PipelineRunner runner, List<Object> linkedChildSteps, PipelineInvocationDescriptor descriptor) {
             this.runner = Objects.requireNonNull(runner, "runner must not be null");
             this.linkedChildSteps = List.copyOf(Objects.requireNonNull(
                 linkedChildSteps,
                 "linkedChildSteps must not be null"));
+            this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
         }
 
         @Override
         @SuppressWarnings("unchecked")
         public Uni<O> apply(Multi<I> input) {
-            Object result = nestedResult(runner, linkedChildSteps, input);
+            Object result = nestedResult(runner, linkedChildSteps, descriptor, input);
             if (result instanceof Uni<?> uni) {
                 return (Uni<O>) uni;
             }
@@ -143,18 +153,20 @@ public final class PipelineInvocationSteps {
 
         private final PipelineRunner runner;
         private final List<Object> linkedChildSteps;
+        private final PipelineInvocationDescriptor descriptor;
 
-        private ManyToManyInvocationStep(PipelineRunner runner, List<Object> linkedChildSteps) {
+        private ManyToManyInvocationStep(PipelineRunner runner, List<Object> linkedChildSteps, PipelineInvocationDescriptor descriptor) {
             this.runner = Objects.requireNonNull(runner, "runner must not be null");
             this.linkedChildSteps = List.copyOf(Objects.requireNonNull(
                 linkedChildSteps,
                 "linkedChildSteps must not be null"));
+            this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
         }
 
         @Override
         @SuppressWarnings("unchecked")
         public Multi<O> applyTransform(Multi<I> input) {
-            Object result = nestedResult(runner, linkedChildSteps, input);
+            Object result = nestedResult(runner, linkedChildSteps, descriptor, input);
             if (result instanceof Multi<?> multi) {
                 return (Multi<O>) multi;
             }
@@ -162,8 +174,20 @@ public final class PipelineInvocationSteps {
         }
     }
 
-    private static Object nestedResult(PipelineRunner runner, List<Object> linkedChildSteps, Object input) {
-        PipelineRunner.ExecutionResult execution = runner.runNestedWithContext(input, linkedChildSteps);
+    private static Object nestedResult(
+        PipelineRunner runner,
+        List<Object> linkedChildSteps,
+        PipelineInvocationDescriptor descriptor,
+        Object input
+    ) {
+        var awaitContext = org.pipelineframework.awaitable.AwaitExecutionContextHolder.get();
+        PipelineRunner.ExecutionResult execution = awaitContext == null
+            ? runner.runNestedWithContext(input, linkedChildSteps)
+            : runner.runNestedWithContext(
+                input,
+                linkedChildSteps,
+                descriptor.resumeStartIndex(awaitContext.currentPosition()).orElse(0),
+                descriptor);
         if (execution.terminalOutputPublished()) {
             throw new IllegalStateException("Nested pipeline invocation must not own terminal publication");
         }

@@ -26,12 +26,11 @@ record ClaimedSegment(
     Objects.requireNonNull(record, "record must not be null");
     return new ClaimedSegment(
         record,
-        transitionKey(record.executionId(), record.currentStepIndex(), record.attempt()));
+        transitionKey(record.executionId(), record.currentPosition().transitionLocation(), record.attempt()));
   }
 
   boolean resumesFromAwait() {
-    return record.currentStepIndex() > 0
-        && record.awaitUnitId() != null
+    return record.awaitUnitId() != null
         && !record.awaitUnitId().isBlank();
   }
 
@@ -45,7 +44,8 @@ record ClaimedSegment(
         record.resultShape(),
         record.version(),
         transitionKey,
-        payload);
+        payload,
+        record.currentPosition());
     SerializedTransitionPayload encodedPayload = payloadCodec.encode(payload);
     return TransitionCommandEnvelope.from(
         command,
@@ -56,7 +56,7 @@ record ClaimedSegment(
         encodedPayload);
   }
 
-  private static String transitionKey(String executionId, int stepIndex, int attempt) {
-    return executionId + ":" + stepIndex + ":" + attempt;
+  private static String transitionKey(String executionId, String location, int attempt) {
+    return executionId + ":" + location + ":" + attempt;
   }
 }

@@ -30,8 +30,34 @@ public record ExecutionRecord<I, R>(
     long ttlEpochS,
     long firstCircuitDeferredAtEpochMs,
     int circuitDeferralCount,
-    String circuitIdentity
+    String circuitIdentity,
+    PipelineExecutionPosition currentPosition
 ) {
+    public ExecutionRecord {
+        currentPosition = currentPosition == null
+            ? PipelineExecutionPosition.root(currentStepIndex)
+            : currentPosition;
+        if (currentPosition.rootStepIndex() != currentStepIndex) {
+            throw new IllegalArgumentException("currentPosition root cursor must equal currentStepIndex");
+        }
+    }
+
+    /** Compatibility constructor for records written before static nested continuation locations. */
+    public ExecutionRecord(
+        String tenantId, String executionId, String executionKey, String pipelineId,
+        String contractVersion, String releaseVersion, ExecutionResultShape resultShape,
+        ExecutionStatus status, long version, int currentStepIndex, int attempt, String leaseOwner,
+        long leaseExpiresEpochMs, long nextDueEpochMs, String lastTransitionKey, I inputPayload,
+        String awaitUnitId, R resultPayload, String errorCode, String errorMessage,
+        long createdAtEpochMs, long updatedAtEpochMs, long ttlEpochS,
+        long firstCircuitDeferredAtEpochMs, int circuitDeferralCount, String circuitIdentity
+    ) {
+        this(tenantId, executionId, executionKey, pipelineId, contractVersion, releaseVersion, resultShape,
+            status, version, currentStepIndex, attempt, leaseOwner, leaseExpiresEpochMs, nextDueEpochMs,
+            lastTransitionKey, inputPayload, awaitUnitId, resultPayload, errorCode, errorMessage,
+            createdAtEpochMs, updatedAtEpochMs, ttlEpochS, firstCircuitDeferredAtEpochMs,
+            circuitDeferralCount, circuitIdentity, PipelineExecutionPosition.root(currentStepIndex));
+    }
     /** Compatibility constructor for records persisted before circuit deferral metadata existed. */
     public ExecutionRecord(
         String tenantId,
@@ -195,6 +221,7 @@ public record ExecutionRecord<I, R>(
             ttlEpochS,
             firstCircuitDeferredAtEpochMs,
             circuitDeferralCount,
-            circuitIdentity);
+            circuitIdentity,
+            currentPosition);
     }
 }

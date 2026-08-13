@@ -45,6 +45,46 @@ import static org.mockito.Mockito.*;
 class DynamoExecutionStateStoreTest {
 
     @Test
+    void persistsNestedAwaitPositionAndRestoresItsStaticContinuation() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, mockConfig("tpf_execution", "tpf_execution_key"));
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        PipelineExecutionPosition waiting = PipelineExecutionPosition.nested(
+            3, "outer/invoke/inner/await", "outer/invoke/inner/y");
+        PipelineExecutionPosition resumed = waiting.next();
+        Map<String, AttributeValue> base = new HashMap<>(executionItem(
+            "tenant-a", "exec-nested", "key-nested", ttl, ExecutionStatus.RUNNING));
+
+        when(client.updateItem(any(UpdateItemRequest.class))).thenAnswer(invocation -> {
+            UpdateItemRequest request = invocation.getArgument(0);
+            Map<String, AttributeValue> values = request.expressionAttributeValues();
+            Map<String, AttributeValue> updated = new HashMap<>(base);
+            boolean waitingWrite = values.containsKey(":waiting");
+            updated.put("status", waitingWrite ? values.get(":waiting") : values.get(":queued"));
+            updated.put("current_step_index", values.get(":step"));
+            updated.put("current_position", values.get(":position"));
+            updated.put("await_unit_id", values.get(":awaitUnit"));
+            updated.put("version", AttributeValue.builder().n(waitingWrite ? "1" : "2").build());
+            return UpdateItemResponse.builder().attributes(updated).build();
+        });
+
+        ExecutionRecord<Object, Object> persisted = store.markWaitingExternal(
+            "tenant-a", "exec-nested", 0L, "transition-nested", "unit-nested", waiting, now)
+            .await().indefinitely().orElseThrow();
+        assertEquals(waiting, persisted.currentPosition());
+
+        ExecutionRecord<Object, Object> recovered = store.markAwaitCompleted(
+            "tenant-a", "exec-nested", "unit-nested", resumed, now + 1)
+            .await().indefinitely().orElseThrow();
+        assertEquals(resumed, recovered.currentPosition());
+        ArgumentCaptor<UpdateItemRequest> writes = ArgumentCaptor.forClass(UpdateItemRequest.class);
+        verify(client, times(2)).updateItem(writes.capture());
+        assertEquals(waiting.encode(), writes.getAllValues().getFirst().expressionAttributeValues().get(":position").s());
+        assertEquals(resumed.encode(), writes.getAllValues().get(1).expressionAttributeValues().get(":position").s());
+    }
+
+    @Test
     void writesAndRestoresTypedExecutionInputAndMaterializedChildResults() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");

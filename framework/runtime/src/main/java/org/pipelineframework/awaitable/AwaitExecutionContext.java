@@ -1,5 +1,8 @@
 package org.pipelineframework.awaitable;
 
+import java.util.Objects;
+import org.pipelineframework.orchestrator.PipelineExecutionPosition;
+
 /**
  * Internal queue-async execution context used by generated await steps.
  */
@@ -8,7 +11,7 @@ public final class AwaitExecutionContext {
     private final String executionId;
     private final AwaitContinuationMode continuationMode;
     private final TerminalOutputOwnership terminalOutputOwnership;
-    private int currentStepIndex;
+    private PipelineExecutionPosition currentPosition;
 
     public AwaitExecutionContext(String tenantId, String executionId, int currentStepIndex) {
         this(
@@ -35,20 +38,38 @@ public final class AwaitExecutionContext {
         AwaitContinuationMode continuationMode,
         TerminalOutputOwnership terminalOutputOwnership
     ) {
+        this(
+            tenantId,
+            executionId,
+            PipelineExecutionPosition.root(currentStepIndex),
+            continuationMode,
+            terminalOutputOwnership);
+    }
+
+    /**
+     * Creates a queue-async context at a compiler-derived execution position.
+     *
+     * <p>The root cursor remains available through {@link #currentStepIndex()} for the existing
+     * runner range API. The static location disambiguates an await inside a nested invocation.
+     */
+    public AwaitExecutionContext(
+        String tenantId,
+        String executionId,
+        PipelineExecutionPosition currentPosition,
+        AwaitContinuationMode continuationMode,
+        TerminalOutputOwnership terminalOutputOwnership
+    ) {
         if (tenantId == null || tenantId.isBlank()) {
             throw new IllegalArgumentException("tenantId must not be blank");
         }
         if (executionId == null || executionId.isBlank()) {
             throw new IllegalArgumentException("executionId must not be blank");
         }
-        if (currentStepIndex < 0) {
-            throw new IllegalArgumentException("currentStepIndex must be non-negative");
-        }
         this.tenantId = tenantId;
         this.executionId = executionId;
-        this.currentStepIndex = currentStepIndex;
-        this.continuationMode = java.util.Objects.requireNonNull(continuationMode, "continuationMode must not be null");
-        this.terminalOutputOwnership = java.util.Objects.requireNonNull(
+        this.currentPosition = Objects.requireNonNull(currentPosition, "currentPosition must not be null");
+        this.continuationMode = Objects.requireNonNull(continuationMode, "continuationMode must not be null");
+        this.terminalOutputOwnership = Objects.requireNonNull(
             terminalOutputOwnership,
             "terminalOutputOwnership must not be null");
     }
@@ -62,7 +83,11 @@ public final class AwaitExecutionContext {
     }
 
     public int currentStepIndex() {
-        return currentStepIndex;
+        return currentPosition.rootStepIndex();
+    }
+
+    public PipelineExecutionPosition currentPosition() {
+        return currentPosition;
     }
 
     /**
@@ -84,9 +109,20 @@ public final class AwaitExecutionContext {
     }
 
     public void currentStepIndex(int currentStepIndex) {
-        if (currentStepIndex < 0) {
-            throw new IllegalArgumentException("currentStepIndex must be non-negative");
-        }
-        this.currentStepIndex = currentStepIndex;
+        this.currentPosition = PipelineExecutionPosition.root(currentStepIndex);
+    }
+
+    public AwaitExecutionContext atRootStep(int rootStepIndex) {
+        PipelineExecutionPosition position = currentPosition.nested()
+            && currentPosition.rootStepIndex() == rootStepIndex
+            ? currentPosition
+            : PipelineExecutionPosition.root(rootStepIndex);
+        return new AwaitExecutionContext(
+            tenantId, executionId, position, continuationMode, terminalOutputOwnership);
+    }
+
+    public AwaitExecutionContext atPosition(PipelineExecutionPosition position) {
+        return new AwaitExecutionContext(
+            tenantId, executionId, position, continuationMode, terminalOutputOwnership);
     }
 }

@@ -102,14 +102,7 @@ class SegmentCommitEffects {
       AwaitItemContinuationHandler itemContinuationHandler) {
     ClaimedSegment segment = suspended.segment();
     long nowEpochMs = System.currentTimeMillis();
-    return executionStateStore.markWaitingExternal(
-            segment.record().tenantId(),
-            segment.record().executionId(),
-            segment.record().version(),
-            segment.transitionKey(),
-            suspended.suspension().unitId(),
-            suspended.suspension().stepIndex(),
-            nowEpochMs)
+    return markWaitingExternal(segment, suspended, nowEpochMs)
         .onItem().transformToUni(updated -> {
           if (updated.isEmpty()) {
             return Uni.createFrom().failure(waitingExternalFailure(suspended));
@@ -117,6 +110,21 @@ class SegmentCommitEffects {
           return awaitCoordinator.importSuspension(suspended.suspension())
               .chain(() -> afterWaitingExternal(suspended, updated.get(), itemContinuationHandler, nowEpochMs));
         });
+  }
+
+  private Uni<java.util.Optional<ExecutionRecord<Object, Object>>> markWaitingExternal(
+      ClaimedSegment segment,
+      SuspendedSegment suspended,
+      long nowEpochMs) {
+    var suspension = suspended.suspension();
+    if (!suspension.position().nested()) {
+      return executionStateStore.markWaitingExternal(
+          segment.record().tenantId(), segment.record().executionId(), segment.record().version(),
+          segment.transitionKey(), suspension.unitId(), suspension.stepIndex(), nowEpochMs);
+    }
+    return executionStateStore.markWaitingExternal(
+        segment.record().tenantId(), segment.record().executionId(), segment.record().version(),
+        segment.transitionKey(), suspension.unitId(), suspension.position(), nowEpochMs);
   }
 
   private Uni<Void> afterWaitingExternal(

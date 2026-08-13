@@ -25,6 +25,7 @@ import org.pipelineframework.awaitable.admission.AwaitAdmissionReservation;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
+import org.pipelineframework.orchestrator.PipelineExecutionPosition;
 import org.pipelineframework.orchestrator.TypedDurablePayload;
 import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
 import org.pipelineframework.telemetry.PipelineTelemetry;
@@ -79,6 +80,43 @@ public class AwaitCoordinator {
         String group
     ) {
         String unitId = deriveUnitId(tenantId, executionId, descriptor.stepId(), stepIndex);
+        return createOrGetWithUnitId(
+            descriptor, tenantId, executionId, stepIndex, unitId, causationId, requestPayload, assignee, group);
+    }
+
+    /**
+     * Creates an await unit at a complete static execution position.
+     *
+     * <p>The flat step index remains in the existing unit schema for compatibility, while the
+     * unit identity includes the static path so different nested callsites cannot alias.
+     */
+    public Uni<AwaitCreateResult> createOrGet(
+        AwaitStepDescriptor descriptor,
+        String tenantId,
+        String executionId,
+        PipelineExecutionPosition position,
+        String causationId,
+        Object requestPayload,
+        String assignee,
+        String group
+    ) {
+        int stepIndex = position.rootStepIndex();
+        String unitId = deriveUnitId(tenantId, executionId, descriptor.stepId(), position);
+        return createOrGetWithUnitId(
+            descriptor, tenantId, executionId, stepIndex, unitId, causationId, requestPayload, assignee, group);
+    }
+
+    private Uni<AwaitCreateResult> createOrGetWithUnitId(
+        AwaitStepDescriptor descriptor,
+        String tenantId,
+        String executionId,
+        int stepIndex,
+        String unitId,
+        String causationId,
+        Object requestPayload,
+        String assignee,
+        String group
+    ) {
         return registerDescriptor(descriptor)
             .chain(() -> createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex))
             .onItem().transformToUni(unit -> createInteraction(
@@ -454,7 +492,8 @@ public class AwaitCoordinator {
                     suspended.unitId(),
                     suspended.stepIndex(),
                     unit,
-                    interactions.stream().map(this::transportSafeSnapshot).toList())));
+                    interactions.stream().map(this::transportSafeSnapshot).toList(),
+                    suspended.position())));
     }
 
     private AwaitInteractionRecord transportSafeSnapshot(AwaitInteractionRecord interaction) {
@@ -1181,6 +1220,13 @@ public class AwaitCoordinator {
             builder.append(value == null || value.isNull() ? "<null>" : value.asText());
         }
         return builder.toString();
+    }
+
+    private static String deriveUnitId(
+        String tenantId, String executionId, String stepId, PipelineExecutionPosition position
+    ) {
+        String basis = tenantId + ":" + executionId + ":" + stepId + ":" + position.encode();
+        return UUID.nameUUIDFromBytes(basis.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
     }
 
     private static String deriveUnitId(String tenantId, String executionId, String stepId, int stepIndex) {
