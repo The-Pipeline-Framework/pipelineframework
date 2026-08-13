@@ -62,8 +62,12 @@ public class PaymentProviderKafkaAwaitMock {
   @Channel(RESULT_CHANNEL)
   MutinyEmitter<String> results;
 
+  private final AwaitTelemetry awaitTelemetry;
+
   @Inject
-  AwaitTelemetry awaitTelemetry;
+  PaymentProviderKafkaAwaitMock(AwaitTelemetry awaitTelemetry) {
+    this.awaitTelemetry = Objects.requireNonNull(awaitTelemetry, "awaitTelemetry must not be null");
+  }
 
   @Incoming(REQUEST_CHANNEL)
   public CompletionStage<Void> consume(Message<String> message) {
