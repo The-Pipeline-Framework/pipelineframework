@@ -60,7 +60,7 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals(List.of("inner"), config.pipelines().keySet().stream().toList());
         assertEquals(List.of("X", "Y"), config.pipelines().get("inner").steps().stream()
             .map(PipelineTemplateStep::name).toList());
-        assertEquals("inner", config.steps().getFirst().pipelineReference());
+        assertEquals(java.util.Optional.of("inner"), config.steps().getFirst().pipelineReference());
     }
 
     @Test
@@ -82,6 +82,29 @@ class PipelineTemplateConfigLoaderTest {
             () -> new PipelineTemplateConfigLoader().load(configPath));
 
         assertTrue(exception.getMessage().contains("duplicate key inner"), exception.getMessage());
+    }
+
+    @Test
+    void rejectsEmptyV3LocalPipelineDefinition() throws Exception {
+        Path configPath = tempDir.resolve("empty-v3-local-pipeline.yaml");
+        Files.writeString(configPath, """
+            version: 3
+            appName: Empty catalog entry
+            basePackage: com.example.local
+            contract: { input: Value, output: Value }
+            types: { Value: { fields: [[id, string]] } }
+            pipelines:
+              empty:
+                input: Value
+                output: Value
+                steps: []
+            steps: []
+            """);
+
+        IllegalStateException failure = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(failure.getMessage().contains("Pipeline definition 'empty' requires at least one step"));
     }
 
     @Test
@@ -158,6 +181,7 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals(1, config.steps().size());
 
         PipelineTemplateStep step = config.steps().getFirst();
+        assertEquals(java.util.Optional.empty(), step.pipelineReference());
         assertEquals("Process Foo", step.name());
         assertEquals("ONE_TO_ONE", step.cardinality());
         assertEquals("FooInput", step.inputTypeName());

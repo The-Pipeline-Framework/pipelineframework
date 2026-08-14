@@ -316,12 +316,12 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     "Failed to write platform metadata: " + e.getMessage());
             }
         }
+        if (ctx.getResolvedPipelineDefinitionGraph() != null && ctx.isTransportModeLocal()) {
+            new LocalPipelineInvocationRenderer().render(
+                ctx,
+                generationPathResolver.resolveRoleOutputDir(ctx, DeploymentRole.ORCHESTRATOR_CLIENT));
+        }
         try {
-            if (ctx.getResolvedPipelineDefinitionGraph() != null && ctx.isTransportModeLocal()) {
-                new LocalPipelineInvocationRenderer().render(
-                    ctx,
-                    generationPathResolver.resolveRoleOutputDir(ctx, DeploymentRole.ORCHESTRATOR_CLIENT));
-            }
             PipelineOrderMetadataGenerator orderMetadataGenerator =
                 new PipelineOrderMetadataGenerator(ctx.getProcessingEnv());
             orderMetadataGenerator.writeOrderMetadata(ctx);

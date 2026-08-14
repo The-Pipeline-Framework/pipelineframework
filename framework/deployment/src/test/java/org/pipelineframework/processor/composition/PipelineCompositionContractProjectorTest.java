@@ -125,7 +125,8 @@ class PipelineCompositionContractProjectorTest {
         PipelineReference alpha = new PipelineReference("alpha");
         PipelineReference zeta = new PipelineReference("zeta");
         PipelineDefinition rootDefinition = definition(root, "Value", "Value",
-            PipelineDefinitionStep.direct("root-step", "Value", "Value", CardinalitySemantics.ONE_TO_ONE));
+            PipelineDefinitionStep.pipeline("call-zeta", "Value", "Value", zeta),
+            PipelineDefinitionStep.pipeline("call-alpha", "Value", "Value", alpha));
         PipelineDefinition alphaDefinition = definition(alpha, "Value", "Value",
             PipelineDefinitionStep.direct("alpha-step", "Value", "Value", CardinalitySemantics.ONE_TO_ONE));
         PipelineDefinition zetaDefinition = definition(zeta, "Value", "Value",
@@ -141,24 +142,12 @@ class PipelineCompositionContractProjectorTest {
         secondOrder.put(zeta, zetaDefinition);
 
         PipelineCompositionContractProjector projector = new PipelineCompositionContractProjector();
-        PipelineCompositionDescriptor first = projector.project(graph(rootDefinition, firstOrder));
-        PipelineCompositionDescriptor second = projector.project(graph(rootDefinition, secondOrder));
+        PipelineCompositionDescriptor first = projector.project(linker(firstOrder).link(rootDefinition));
+        PipelineCompositionDescriptor second = projector.project(linker(secondOrder).link(rootDefinition));
 
         assertEquals(first, second);
         assertEquals(List.of("root", "alpha", "zeta"),
             first.definitions().stream().map(definition -> definition.definitionId()).toList());
-    }
-
-    private static ResolvedPipelineDefinitionGraph graph(
-        PipelineDefinition root,
-        Map<PipelineReference, PipelineDefinition> definitions
-    ) {
-        return new ResolvedPipelineDefinitionGraph(
-            root,
-            definitions,
-            CardinalitySemantics.ONE_TO_ONE,
-            List.of(),
-            List.of());
     }
 
     private static PipelineDefinitionLinker linker(Map<PipelineReference, PipelineDefinition> definitions) {

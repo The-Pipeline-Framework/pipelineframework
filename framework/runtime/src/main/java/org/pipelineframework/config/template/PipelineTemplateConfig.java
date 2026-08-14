@@ -19,6 +19,7 @@ package org.pipelineframework.config.template;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
@@ -93,7 +94,9 @@ public record PipelineTemplateConfig(
         outputContract = normalize(outputContract);
         typeModel = typeModel == null ? PipelineTemplateTypeModel.fromLegacy(messages, unions) : typeModel;
         validateMap(pipelines, "pipelines");
-        pipelines = pipelines == null ? Map.of() : Map.copyOf(pipelines);
+        pipelines = pipelines == null
+            ? Map.of()
+            : Collections.unmodifiableMap(new LinkedHashMap<>(pipelines));
     }
 
     /**

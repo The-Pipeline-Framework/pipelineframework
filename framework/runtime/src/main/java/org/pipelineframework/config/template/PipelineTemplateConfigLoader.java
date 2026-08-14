@@ -271,6 +271,9 @@ public class PipelineTemplateConfigLoader {
             String input = readDefinitionContract(definition, "input", id);
             String output = readDefinitionContract(definition, "output", id);
             List<PipelineTemplateStep> steps = readSteps(definition, version);
+            if (steps.isEmpty()) {
+                throw new IllegalStateException("Pipeline definition '" + id + "' requires at least one step.");
+            }
             validateV3Contracts(typeModel, input, output, steps);
             if (containsAwait(definition.get("steps"))) {
                 throw new IllegalStateException("Pipeline definition '" + id
@@ -280,7 +283,7 @@ public class PipelineTemplateConfigLoader {
                 throw new IllegalStateException("Duplicate pipeline definition ID '" + id + "'.");
             }
         }
-        return Map.copyOf(parsed);
+        return java.util.Collections.unmodifiableMap(parsed);
     }
 
     private void rejectUnexpectedDefinitionKeys(String id, Map<?, ?> definition) {
@@ -1212,7 +1215,9 @@ public class PipelineTemplateConfigLoader {
             PipelineTemplateStepExecution execution = readExecution(stepMap.get("execution"), version, name);
             List<String> accepts = readStringList(stepMap, "accepts");
             boolean terminal = readBoolean(stepMap, "terminal", false);
-            String pipelineReference = readString(stepMap, "pipeline");
+            Optional<String> pipelineReference = Optional.ofNullable(readString(stepMap, "pipeline"))
+                .map(String::trim)
+                .filter(reference -> !reference.isEmpty());
             if (version < 2 && (stepMap.containsKey("accepts") || terminal)) {
                 throw new IllegalStateException(
                     "Step '" + name + "' declares accepts/terminal, but branch-aware routing requires version: 2");

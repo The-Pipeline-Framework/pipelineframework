@@ -16,7 +16,6 @@
 
 package org.pipelineframework;
 
-import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
@@ -530,9 +529,7 @@ class LocalPipelineInvocationBinderTest {
     }
 
     private void setObjectPublishRunner(ObjectPublishRunner publishRunner) throws Exception {
-        Field field = PipelineRunner.class.getDeclaredField("objectPublishRunner");
-        field.setAccessible(true);
-        field.set(runner, publishRunner);
+        PipelineRunnerTestHarness.setObjectPublishRunner(runner, publishRunner);
     }
 
     record TerminalValue(String value) {

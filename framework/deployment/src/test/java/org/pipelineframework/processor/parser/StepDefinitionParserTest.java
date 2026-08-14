@@ -94,7 +94,11 @@ class StepDefinitionParserTest {
             steps: []
             """);
 
-        assertThrows(IOException.class, () -> new StepDefinitionParser().parseDefinitionCatalog(file));
+        IOException failure = assertThrows(
+            IOException.class,
+            () -> new StepDefinitionParser().parseDefinitionCatalog(file));
+        assertTrue(failure.getMessage().toLowerCase(java.util.Locale.ROOT).contains("duplicate"), failure::getMessage);
+        assertTrue(failure.getMessage().contains("inner"), failure::getMessage);
     }
 
     @Test
@@ -114,6 +118,46 @@ class StepDefinitionParserTest {
         assertTrue(catalog.rootSteps().isEmpty());
         assertEquals(List.of("inner"), catalog.localDefinitions().keySet().stream().toList());
         assertEquals("X", catalog.localDefinitions().get("inner").getFirst().name());
+    }
+
+    @Test
+    void preservesAuthoredLocalDefinitionOrder() throws IOException {
+        Path file = tempDir.resolve("ordered-catalog.yaml");
+        Files.writeString(file, """
+            version: 3
+            basePackage: com.example
+            pipelines:
+              zeta:
+                steps: [{ name: Z, service: com.example.ZService, input: Value, output: Value }]
+              alpha:
+                steps: [{ name: A, service: com.example.AService, input: Value, output: Value }]
+            steps: []
+            """);
+
+        ParsedPipelineDefinitionCatalog catalog = new StepDefinitionParser().parseDefinitionCatalog(file);
+
+        assertEquals(List.of("zeta", "alpha"), catalog.localDefinitions().keySet().stream().toList());
+    }
+
+    @Test
+    void rejectsInvalidPipelineCardinalityInsteadOfDefaultingToOneToOne() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+
+        List<StepDefinition> steps = parse("""
+            version: 3
+            basePackage: com.example
+            steps:
+              - name: Invalid invocation
+                pipeline: inner
+                cardinality: SOMETIMES_MANY
+                input: Value
+                output: Value
+                java: { input: com.example.Value, output: com.example.Value }
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(
+            "invalid pipeline cardinality 'SOMETIMES_MANY'")));
     }
 
     @Test

@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.parser;
 
 import java.util.LinkedHashMap;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.pipelineframework.processor.ir.StepDefinition;
@@ -18,6 +19,6 @@ public record ParsedPipelineDefinitionCatalog(
     private static Map<String, List<StepDefinition>> immutableDefinitions(Map<String, List<StepDefinition>> values) {
         Map<String, List<StepDefinition>> copy = new LinkedHashMap<>();
         values.forEach((id, steps) -> copy.put(id, steps == null ? List.of() : List.copyOf(steps)));
-        return Map.copyOf(copy);
+        return Collections.unmodifiableMap(copy);
     }
 }

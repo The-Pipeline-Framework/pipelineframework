@@ -76,8 +76,7 @@ final class PipelineCompositionLinkingPhase {
     }
 
     private boolean containsPipelineReference(List<PipelineTemplateStep> steps) {
-        return steps.stream().anyMatch(step -> step.pipelineReference() != null
-            && !step.pipelineReference().isBlank());
+        return steps.stream().anyMatch(step -> step.pipelineReference().isPresent());
     }
 
     private PipelineDefinition definition(PipelineReference reference, String input, String output,

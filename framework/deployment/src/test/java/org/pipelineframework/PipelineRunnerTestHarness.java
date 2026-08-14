@@ -8,7 +8,8 @@ import org.pipelineframework.branching.PipelineBranchingRegistry;
 import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.step.ConfigFactory;
-import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineRunTelemetry;
+import org.pipelineframework.telemetry.PipelineStepTelemetry;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -20,8 +21,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** Runtime test fixture for exercising generated invocation beans without starting Quarkus. */
-public final class TestPipelineRunnerFactory {
-    private TestPipelineRunnerFactory() {
+public final class PipelineRunnerTestHarness {
+    private PipelineRunnerTestHarness() {
     }
 
     public static PipelineRunner create() {
@@ -40,9 +41,11 @@ public final class TestPipelineRunnerFactory {
         PipelineRunner runner = new PipelineRunner();
         runner.configFactory = new ConfigFactory();
         runner.pipelineConfig = new PipelineConfig();
-        PipelineTelemetry telemetry = mock(PipelineTelemetry.class);
+        PipelineRunTelemetry runTelemetry = mock(PipelineRunTelemetry.class);
+        PipelineStepTelemetry.Seam stepTelemetry = mock(PipelineStepTelemetry.Seam.class);
         PipelineStepOrderer orderer = mock(PipelineStepOrderer.class);
-        runner.telemetry = telemetry;
+        runner.runTelemetry = runTelemetry;
+        runner.stepTelemetry = stepTelemetry;
         runner.stepOrderer = orderer;
         runner.parallelismPolicyResolver = mock(PipelineParallelismPolicyResolver.class);
         runner.cacheSupportFactory = mock(PipelineCacheSupportFactory.class);
@@ -52,36 +55,46 @@ public final class TestPipelineRunnerFactory {
         when(runner.parallelismPolicyResolver.resolveMaxConcurrency(any())).thenReturn(1);
         when(runner.cacheSupportFactory.buildCacheReadSupport()).thenReturn(null);
         when(orderer.orderSteps(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(telemetry.startRun(any(), anyInt(), any(), anyInt()))
-            .thenReturn(PipelineTelemetry.RunContext.disabled());
-        when(telemetry.instrumentInput(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(telemetry.instrumentRunCompletion(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
-        lenient().when(telemetry.instrumentItemConsumed(any(), any(), any(Multi.class)))
+        when(runTelemetry.startRun(any(), anyInt(), any(), anyInt()))
+            .thenReturn(PipelineRunTelemetry.nonOwningContext());
+        when(runTelemetry.instrumentInput(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(runTelemetry.instrumentRunCompletion(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(stepTelemetry.instrumentItemConsumed(any(), any(), any(Multi.class)))
             .thenAnswer(invocation -> invocation.getArgument(2));
-        lenient().when(telemetry.instrumentItemProduced(any(), any(), any(Multi.class)))
+        lenient().when(stepTelemetry.instrumentItemConsumed(any(), any(), any(Uni.class)))
             .thenAnswer(invocation -> invocation.getArgument(2));
-        lenient().when(telemetry.instrumentItemProduced(any(), any(), any(Uni.class)))
+        lenient().when(stepTelemetry.instrumentItemProduced(any(), any(), any(Multi.class)))
             .thenAnswer(invocation -> invocation.getArgument(2));
-        lenient().when(telemetry.instrumentStepUni(any(), any(), any(), anyBoolean(), any()))
+        lenient().when(stepTelemetry.instrumentItemProduced(any(), any(), any(Uni.class)))
+            .thenAnswer(invocation -> invocation.getArgument(2));
+        lenient().when(stepTelemetry.instrumentStepUni(any(), any(), any(), anyBoolean(), any()))
             .thenAnswer(invocation -> invocation.getArgument(1));
-        lenient().when(telemetry.instrumentStepUni(any(), any(), any(), anyBoolean()))
+        lenient().when(stepTelemetry.instrumentStepUni(any(), any(), any(), anyBoolean()))
             .thenAnswer(invocation -> invocation.getArgument(1));
-        lenient().when(telemetry.instrumentStepMulti(any(), any(), any(), anyBoolean(), any()))
+        lenient().when(stepTelemetry.instrumentStepMulti(any(), any(), any(), anyBoolean(), any()))
             .thenAnswer(invocation -> invocation.getArgument(1));
-        lenient().when(telemetry.instrumentStepMulti(any(), any(), any(), anyBoolean()))
+        lenient().when(stepTelemetry.instrumentStepMulti(any(), any(), any(), anyBoolean()))
             .thenAnswer(invocation -> invocation.getArgument(1));
         ObjectPublishRunner publisher = mock(ObjectPublishRunner.class);
         when(publisher.enabled()).thenReturn(true);
         when(publisher.publish(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        Field publisherField = PipelineRunner.class.getDeclaredField("objectPublishRunner");
-        publisherField.setAccessible(true);
-        publisherField.set(runner, publisher);
-        return new Harness(runner, telemetry, orderer, publisher);
+        setObjectPublishRunner(runner, publisher);
+        return new Harness(runner, runTelemetry, orderer, publisher);
+    }
+
+    public static void setObjectPublishRunner(PipelineRunner runner, ObjectPublishRunner publishRunner) {
+        try {
+            Field publisherField = PipelineRunner.class.getDeclaredField("objectPublishRunner");
+            publisherField.setAccessible(true);
+            publisherField.set(runner, publishRunner);
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("Could not configure PipelineRunner terminal publisher", exception);
+        }
     }
 
     public record Harness(
         PipelineRunner runner,
-        PipelineTelemetry telemetry,
+        PipelineRunTelemetry runTelemetry,
         PipelineStepOrderer orderer,
         ObjectPublishRunner publisher
     ) {

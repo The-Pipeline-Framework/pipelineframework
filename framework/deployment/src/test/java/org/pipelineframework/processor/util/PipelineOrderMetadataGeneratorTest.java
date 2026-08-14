@@ -43,6 +43,58 @@ class PipelineOrderMetadataGeneratorTest {
     Path tempDir;
 
     @Test
+    void explicitRootOrderRetainsGeneratedLocalSideEffectClients() throws IOException {
+        Path classOutput = tempDir.resolve("class-output-explicit-root");
+        Path moduleDir = tempDir.resolve("module-explicit-root");
+        Files.createDirectories(moduleDir);
+        Files.writeString(moduleDir.resolve("pipeline.yaml"), """
+            version: 2
+            appName: Test
+            basePackage: com.example
+            transport: LOCAL
+            aspects:
+              persistence:
+                enabled: true
+                scope: GLOBAL
+                position: AFTER_STEP
+            steps:
+              - name: Process
+                input: Value
+                output: Value
+            """);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(java.util.Map.of());
+        when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(classOutput));
+        PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, mock(RoundEnvironment.class));
+        ctx.setTransportMode(PipelineTransport.LOCAL);
+        ctx.setModuleDir(moduleDir);
+        ctx.setGeneratedRootPipelineStepClasses(List.of("com.example.pipeline.ProcessLocalClientStep"));
+        ctx.setStepModels(List.of(new PipelineStepModel.Builder()
+            .serviceName("PersistenceValueSideEffect")
+            .generatedName("PersistenceValueSideEffectService")
+            .servicePackage("com.example")
+            .serviceClassName(ClassName.get("com.example", "PersistenceValueSideEffectService"))
+            .inputMapping(new TypeMapping(ClassName.get("com.example", "Value"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("com.example", "Value"), null, false))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(Set.of(GenerationTarget.LOCAL_CLIENT_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .sideEffect(true)
+            .build()));
+
+        new PipelineOrderMetadataGenerator(processingEnv).writeOrderMetadata(ctx);
+
+        JsonArray order = new Gson().fromJson(
+            Files.readString(classOutput.resolve("META-INF/pipeline/order.json")), JsonObject.class)
+            .getAsJsonArray("order");
+        assertEquals(List.of(
+            "com.example.pipeline.ProcessLocalClientStep",
+            "com.example.pipeline.PersistenceValueSideEffectLocalClientStep"),
+            order.asList().stream().map(element -> element.getAsString()).toList());
+    }
+
+    @Test
     void writesAwaitClientStepToOrderMetadata() throws IOException {
         Path classOutput = tempDir.resolve("class-output");
         Path moduleDir = tempDir.resolve("module");

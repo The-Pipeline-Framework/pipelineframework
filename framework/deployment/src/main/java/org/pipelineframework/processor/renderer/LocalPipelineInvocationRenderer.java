@@ -25,6 +25,7 @@ import org.pipelineframework.processor.composition.PipelineDefinition;
 import org.pipelineframework.processor.composition.PipelineDefinitionStep;
 import org.pipelineframework.processor.composition.PipelineInvocationBinding;
 import org.pipelineframework.processor.composition.PipelineReference;
+import org.pipelineframework.processor.composition.ResolvedPipelineDefinitionGraph;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StepDefinition;
@@ -37,12 +38,13 @@ public final class LocalPipelineInvocationRenderer {
     private static final ClassName CONFIGURABLE_STEP = ClassName.get("org.pipelineframework.step", "ConfigurableStep");
 
     public void render(PipelineCompilationContext ctx, Path outputDir) throws IOException {
-        if (ctx.getResolvedPipelineDefinitionGraph() == null
-            || !(ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig template)) {
+        var resolvedGraph = ctx.getResolvedPipelineDefinitionGraph();
+        if (resolvedGraph.isEmpty() || !(ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig template)) {
             return;
         }
+        ResolvedPipelineDefinitionGraph graph = resolvedGraph.orElseThrow();
         Map<CompiledPipelineLocation, PipelineInvocationBinding> bindings = new LinkedHashMap<>();
-        for (PipelineInvocationBinding binding : ctx.getResolvedPipelineDefinitionGraph().invocationBindings()) {
+        for (PipelineInvocationBinding binding : graph.invocationBindings()) {
             bindings.put(binding.invocationLocation(), binding);
         }
         Map<CompiledPipelineLocation, ClassName> invocationTypes = new LinkedHashMap<>();
@@ -51,14 +53,15 @@ public final class LocalPipelineInvocationRenderer {
                 invocationClassName(binding.invocationLocation())));
         }
         for (PipelineInvocationBinding binding : bindings.values()) {
-            writeInvocation(ctx, outputDir, binding, invocationTypes);
+            writeInvocation(ctx, outputDir, graph, binding, invocationTypes);
         }
         ctx.setGeneratedRootPipelineStepClasses(rootClasses(ctx, bindings, invocationTypes));
     }
 
-    private void writeInvocation(PipelineCompilationContext ctx, Path outputDir, PipelineInvocationBinding binding,
+    private void writeInvocation(PipelineCompilationContext ctx, Path outputDir, ResolvedPipelineDefinitionGraph graph,
+            PipelineInvocationBinding binding,
             Map<CompiledPipelineLocation, ClassName> invocationTypes) throws IOException {
-        PipelineDefinition target = ctx.getResolvedPipelineDefinitionGraph().definitions().get(binding.target());
+        PipelineDefinition target = graph.definitions().get(binding.target());
         StepDefinition callsite = invocationCallsite(ctx, binding);
         TypeName input = callsite.inputType();
         TypeName output = callsite.outputType();
@@ -79,7 +82,13 @@ public final class LocalPipelineInvocationRenderer {
                 .addAnnotation(ClassName.get("jakarta.inject", "Inject")).build());
             childFields.add(field);
         }
-        type.addMethod(invocationMethod(binding.cardinality(), input, output, childFields));
+        var targetPlan = ctx.getLocalDefinitionBranchingPlans().get(binding.target());
+        if (targetPlan == null) {
+            throw new IllegalStateException("No branch plan for linked pipeline definition '"
+                + binding.target().logicalId() + "'.");
+        }
+        type.addMethod(invocationMethod(
+            binding.cardinality(), input, output, binding.target().logicalId(), targetPlan.terminalStepIndex(), childFields));
         JavaFile.builder(invocationTypes.get(binding.invocationLocation()).packageName(), type.build()).build().writeTo(outputDir);
     }
 
@@ -154,23 +163,28 @@ public final class LocalPipelineInvocationRenderer {
                 + binding.invocationLocation().display()));
     }
 
-    private MethodSpec invocationMethod(CardinalitySemantics cardinality, TypeName input, TypeName output, List<String> children) {
+    private MethodSpec invocationMethod(CardinalitySemantics cardinality, TypeName input, TypeName output,
+            String definitionId, int definitionTerminalStepIndex, List<String> children) {
         String list = "java.util.List.of(" + String.join(", ", children) + ")";
         return switch (cardinality) {
             case ONE_TO_ONE -> MethodSpec.methodBuilder("applyOneToOne").addAnnotation(Override.class).addModifiers(Modifier.PUBLIC)
                 .returns(ParameterizedTypeName.get(ClassName.get("io.smallrye.mutiny", "Uni"), output)).addParameter(input, "input")
-                .addStatement("return $T.<$T, $T>oneToOne(runner, $L).applyOneToOne(input)", INVOCATION_STEPS, input, output, list).build();
+                .addStatement("return $T.<$T, $T>oneToOne(runner, $S, $L, $L).applyOneToOne(input)",
+                    INVOCATION_STEPS, input, output, definitionId, definitionTerminalStepIndex, list).build();
             case ONE_TO_MANY -> MethodSpec.methodBuilder("applyOneToMany").addAnnotation(Override.class).addModifiers(Modifier.PUBLIC)
                 .returns(ParameterizedTypeName.get(ClassName.get("io.smallrye.mutiny", "Multi"), output)).addParameter(input, "input")
-                .addStatement("return $T.<$T, $T>oneToMany(runner, $L).applyOneToMany(input)", INVOCATION_STEPS, input, output, list).build();
+                .addStatement("return $T.<$T, $T>oneToMany(runner, $S, $L, $L).applyOneToMany(input)",
+                    INVOCATION_STEPS, input, output, definitionId, definitionTerminalStepIndex, list).build();
             case MANY_TO_ONE -> MethodSpec.methodBuilder("apply").addAnnotation(Override.class).addModifiers(Modifier.PUBLIC)
                 .returns(ParameterizedTypeName.get(ClassName.get("io.smallrye.mutiny", "Uni"), output))
                 .addParameter(ParameterizedTypeName.get(ClassName.get("io.smallrye.mutiny", "Multi"), input), "input")
-                .addStatement("return $T.<$T, $T>manyToOne(runner, $L).apply(input)", INVOCATION_STEPS, input, output, list).build();
+                .addStatement("return $T.<$T, $T>manyToOne(runner, $S, $L, $L).apply(input)",
+                    INVOCATION_STEPS, input, output, definitionId, definitionTerminalStepIndex, list).build();
             case MANY_TO_MANY -> MethodSpec.methodBuilder("applyTransform").addAnnotation(Override.class).addModifiers(Modifier.PUBLIC)
                 .returns(ParameterizedTypeName.get(ClassName.get("io.smallrye.mutiny", "Multi"), output))
                 .addParameter(ParameterizedTypeName.get(ClassName.get("io.smallrye.mutiny", "Multi"), input), "input")
-                .addStatement("return $T.<$T, $T>manyToMany(runner, $L).applyTransform(input)", INVOCATION_STEPS, input, output, list).build();
+                .addStatement("return $T.<$T, $T>manyToMany(runner, $S, $L, $L).applyTransform(input)",
+                    INVOCATION_STEPS, input, output, definitionId, definitionTerminalStepIndex, list).build();
         };
     }
 

@@ -17,6 +17,8 @@
 package org.pipelineframework.config.template;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Step configuration from the pipeline template definition.
@@ -45,10 +47,13 @@ public record PipelineTemplateStep(
     PipelineTemplateStepExecution execution,
     List<String> accepts,
     boolean terminal,
-    String pipelineReference
+    Optional<String> pipelineReference
 ) {
     public PipelineTemplateStep {
         accepts = accepts == null ? List.of() : List.copyOf(accepts);
+        pipelineReference = Objects.requireNonNull(pipelineReference, "pipelineReference must not be null")
+            .map(String::trim)
+            .filter(reference -> !reference.isEmpty());
     }
 
     public PipelineTemplateStep(
@@ -59,7 +64,8 @@ public record PipelineTemplateStep(
         String outputTypeName,
         List<PipelineTemplateField> outputFields
     ) {
-        this(name, cardinality, inputTypeName, inputFields, null, outputTypeName, outputFields, null, null, List.of(), false, null);
+        this(name, cardinality, inputTypeName, inputFields, null, outputTypeName, outputFields, null, null, List.of(), false,
+            Optional.empty());
     }
 
     public PipelineTemplateStep(
@@ -71,7 +77,8 @@ public record PipelineTemplateStep(
         List<PipelineTemplateField> outputFields,
         PipelineTemplateStepExecution execution
     ) {
-        this(name, cardinality, inputTypeName, inputFields, null, outputTypeName, outputFields, null, execution, List.of(), false, null);
+        this(name, cardinality, inputTypeName, inputFields, null, outputTypeName, outputFields, null, execution, List.of(), false,
+            Optional.empty());
     }
 
     public PipelineTemplateStep(
@@ -84,7 +91,8 @@ public record PipelineTemplateStep(
         List<PipelineTemplateField> outputFields,
         String outboundMapper
     ) {
-        this(name, cardinality, inputTypeName, inputFields, inboundMapper, outputTypeName, outputFields, outboundMapper, null, List.of(), false, null);
+        this(name, cardinality, inputTypeName, inputFields, inboundMapper, outputTypeName, outputFields, outboundMapper, null,
+            List.of(), false, Optional.empty());
     }
 
     /**
@@ -112,6 +120,6 @@ public record PipelineTemplateStep(
             List<PipelineTemplateField> outputFields, String outboundMapper,
             PipelineTemplateStepExecution execution, List<String> accepts, boolean terminal) {
         this(name, cardinality, inputTypeName, inputFields, inboundMapper, outputTypeName, outputFields,
-            outboundMapper, execution, accepts, terminal, null);
+            outboundMapper, execution, accepts, terminal, Optional.empty());
     }
 }

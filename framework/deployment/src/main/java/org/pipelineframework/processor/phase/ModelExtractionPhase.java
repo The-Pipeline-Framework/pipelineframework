@@ -77,9 +77,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             // Extract pipeline step models based on explicit YAML step definitions.
             stepModels = new ArrayList<>(extractStepModelsFromYaml(ctx, stepDefinitions, ctxWarningLogger));
             stepModels = addProviderBoundaryModels(ctx, stepDefinitions, stepModels, ctxWarningLogger);
-            // Root contract validation remains scoped to root models. Local definition models are
-            // generated below, but their semantic flow is owned by each definition's v3 branch plan.
-            new PipelineStepContractValidator().validate(ctx, stepModels);
             Map<String, List<PipelineStepModel>> localDefinitionModels = new LinkedHashMap<>();
             for (var entry : ctx.getParsedPipelineDefinitionCatalog().localDefinitions().entrySet()) {
                 List<org.pipelineframework.processor.ir.StepDefinition> directSteps = entry.getValue().stream()
@@ -87,14 +84,17 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                     .toList();
                 List<PipelineStepModel> models = extractStepModelsFromYaml(ctx, directSteps, ctxWarningLogger);
                 localDefinitionModels.put(entry.getKey(), List.copyOf(models));
-                stepModels.addAll(models);
             }
-            ctx.setLocalDefinitionStepModels(Map.copyOf(localDefinitionModels));
+            ctx.setLocalDefinitionStepModels(Collections.unmodifiableMap(new LinkedHashMap<>(localDefinitionModels)));
             // Some template-driven YAMLs declare logical steps without resolvable execution classes
             // for plugin-host modules. Keep legacy behavior by falling back to annotation extraction.
             if (stepModels.isEmpty()) {
                 stepModels = new ArrayList<>(extractStepModelsFromAnnotations(ctx));
             }
+            // Validate the effective root models after the annotation fallback. Local definitions
+            // are validated by their own v3 branch plans and must not change root contract arity.
+            new PipelineStepContractValidator().validate(ctx, stepModels);
+            localDefinitionModels.values().forEach(stepModels::addAll);
             List<PipelineStepModel> contextualModels = contextRoleEnricher.enrich(ctx, stepModels);
             if (contextualModels != null && !contextualModels.isEmpty()) {
                 stepModels = contextualModels;

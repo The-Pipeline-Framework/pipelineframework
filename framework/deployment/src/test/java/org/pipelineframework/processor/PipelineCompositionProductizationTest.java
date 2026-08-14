@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.tools.JavaFileObject;
+import javax.tools.DiagnosticCollector;
 import javax.tools.StandardLocation;
 import javax.tools.ToolProvider;
 
@@ -22,7 +23,7 @@ import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.PipelineRunner;
-import org.pipelineframework.TestPipelineRunnerFactory;
+import org.pipelineframework.PipelineRunnerTestHarness;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 
@@ -108,7 +109,7 @@ class PipelineCompositionProductizationTest {
         ClassLoader previous = Thread.currentThread().getContextClassLoader();
         try (URLClassLoader loader = new URLClassLoader(new java.net.URL[]{classes.toUri().toURL()}, previous)) {
             Thread.currentThread().setContextClassLoader(loader);
-            TestPipelineRunnerFactory.Harness harness = TestPipelineRunnerFactory.createHarness();
+            PipelineRunnerTestHarness.Harness harness = PipelineRunnerTestHarness.createHarness();
             Object generated = instantiateGeneratedInvocation(loader, harness.runner(),
                 "com.example.routed.pipeline.PipelineInvocation_root_Call_routed",
                 List.of("com.example.routed.pipeline.ProcessClassifyLocalClientStep",
@@ -137,7 +138,7 @@ class PipelineCompositionProductizationTest {
             assertEquals("FinalResult[id=42]", terminal.toString());
             assertTrue(execution.terminalOutputPublished(), "Only the root run must own terminal publication");
             assertEquals(1, subscriptions.get(), "Nested invocation must not add a root-source subscription");
-            verify(harness.telemetry(), times(1)).startRun(any(), anyInt(), any(), anyInt());
+            verify(harness.runTelemetry(), times(1)).startRun(any(), anyInt(), any(), anyInt());
             verify(harness.publisher(), times(1)).publish(any());
             harness.verifyRootOrderAppliedOnce();
             assertSame(context, loader.loadClass("com.example.routed.ClassifyService").getField("context").get(null));
@@ -291,7 +292,7 @@ class PipelineCompositionProductizationTest {
             Class<?> valueType = loader.loadClass("com.example.cardinality.Value");
             Object value = valueType.getConstructor(String.class).newInstance("v");
 
-            TestPipelineRunnerFactory.Harness pointwiseHarness = TestPipelineRunnerFactory.createHarness();
+            PipelineRunnerTestHarness.Harness pointwiseHarness = PipelineRunnerTestHarness.createHarness();
             Object pointwise = instantiateGeneratedInvocation(loader, pointwiseHarness.runner(),
                 "com.example.cardinality.pipeline.PipelineInvocation_root_Pointwise",
                 List.of("com.example.cardinality.pipeline.ProcessIdentityLocalClientStep"),
@@ -455,7 +456,7 @@ class PipelineCompositionProductizationTest {
         List<String> childClasses,
         List<String> serviceClasses
     ) throws Exception {
-        return instantiateGeneratedInvocation(loader, TestPipelineRunnerFactory.create(), invocationClass,
+        return instantiateGeneratedInvocation(loader, PipelineRunnerTestHarness.create(), invocationClass,
             childClasses, serviceClasses);
     }
 
@@ -500,12 +501,16 @@ class PipelineCompositionProductizationTest {
             javaSources.add(fixture.generatedClass(generatedName));
         }
         var compiler = ToolProvider.getSystemJavaCompiler();
+        var diagnostics = new DiagnosticCollector<JavaFileObject>();
         try (var fileManager = compiler.getStandardFileManager(null, null, null)) {
             var units = fileManager.getJavaFileObjectsFromPaths(javaSources);
-            boolean success = compiler.getTask(null, fileManager, null,
+            boolean success = compiler.getTask(null, fileManager, diagnostics,
                 List.of("-proc:none", "-classpath", System.getProperty("java.class.path"), "-d", classes.toString()),
                 null, units).call();
-            assertTrue(success, "Generated invocation and child client sources must compile against runtime artifacts");
+            assertTrue(success, () -> "Generated invocation and child client sources must compile against runtime artifacts: "
+                + diagnostics.getDiagnostics().stream()
+                    .map(diagnostic -> diagnostic.getKind() + ": " + diagnostic.getMessage(null))
+                    .collect(java.util.stream.Collectors.joining(System.lineSeparator())));
         }
         return classes;
     }
@@ -646,6 +651,7 @@ class PipelineCompositionProductizationTest {
             try (var stream = Files.walk(generatedRoot)) {
                 return stream.filter(path -> path.getFileName() != null
                         && path.getFileName().toString().equals(simpleName + ".java"))
+                    .sorted()
                     .findFirst().orElseThrow(() -> new IllegalStateException("Missing generated class " + simpleName
                         + "; generated=" + generatedFiles()));
             }

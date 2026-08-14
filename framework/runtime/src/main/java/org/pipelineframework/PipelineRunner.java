@@ -147,7 +147,9 @@ public class PipelineRunner implements AutoCloseable {
             startStepIndex,
             stopBeforeStepIndex,
             true,
-            Optional.empty());
+            Optional.empty(),
+            "$root",
+            -1);
     }
 
     /**
@@ -163,23 +165,46 @@ public class PipelineRunner implements AutoCloseable {
      * @return child result without terminal publication ownership
      */
     public ExecutionResult runNestedWithContext(Object input, List<Object> steps) {
-        Objects.requireNonNull(steps, "Steps list must not be null");
-        return runFromStepUntilWithContext(input, steps, 0, steps.size(), false, Optional.empty());
+        return runNestedWithContext(input, steps, "$root", -1);
     }
 
     public ExecutionResult runNestedWithContext(
         Object input,
         List<Object> steps,
-        PipelineRunContext owningRunContext
+        String definitionId,
+        int definitionTerminalStepIndex
     ) {
         Objects.requireNonNull(steps, "Steps list must not be null");
+        Objects.requireNonNull(definitionId, "definitionId must not be null");
         return runFromStepUntilWithContext(
             input,
             steps,
             0,
             steps.size(),
             false,
-            Optional.of(Objects.requireNonNull(owningRunContext, "owningRunContext must not be null")));
+            Optional.empty(),
+            definitionId,
+            definitionTerminalStepIndex);
+    }
+
+    public ExecutionResult runNestedWithContext(
+        Object input,
+        List<Object> steps,
+        String definitionId,
+        int definitionTerminalStepIndex,
+        PipelineRunContext owningRunContext
+    ) {
+        Objects.requireNonNull(steps, "Steps list must not be null");
+        Objects.requireNonNull(definitionId, "definitionId must not be null");
+        return runFromStepUntilWithContext(
+            input,
+            steps,
+            0,
+            steps.size(),
+            false,
+            Optional.of(Objects.requireNonNull(owningRunContext, "owningRunContext must not be null")),
+            definitionId,
+            definitionTerminalStepIndex);
     }
 
     private ExecutionResult runFromStepUntilWithContext(
@@ -188,7 +213,9 @@ public class PipelineRunner implements AutoCloseable {
         int startStepIndex,
         int stopBeforeStepIndex,
         boolean rootInvocation,
-        Optional<PipelineRunContext> owningRunContext) {
+        Optional<PipelineRunContext> owningRunContext,
+        String definitionId,
+        int definitionTerminalStepIndex) {
         Objects.requireNonNull(steps, "Steps list must not be null");
         if (!(input instanceof Uni<?> || input instanceof Multi<?>)) {
             throw new IllegalArgumentException(MessageFormat.format(
@@ -265,7 +292,9 @@ public class PipelineRunner implements AutoCloseable {
                     executionStepTelemetry,
                     cacheReadSupport,
                     contextSnapshot,
-                    awaitContextSnapshot);
+                    awaitContextSnapshot,
+                    definitionId,
+                    definitionTerminalStepIndex);
             },
             index -> logger.warnf("Warning: Found null step at index %d in configuration, skipping...", index)));
 

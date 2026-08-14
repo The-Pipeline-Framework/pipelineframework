@@ -949,6 +949,14 @@ public class StepDefinitionParser {
                 throw new StepSkippedException();
             }
             StreamingShape shape = parseStreamingShapeHint(stepData, name);
+            String cardinality = getStringValue(stepData, "cardinality");
+            if (!isBlank(cardinality) && shape == null) {
+                String message = "Skipping step '" + name + "': invalid pipeline cardinality '" + cardinality
+                    + "'. Allowed values: ONE_TO_ONE, ONE_TO_MANY, EXPANSION, MANY_TO_ONE, REDUCTION, MANY_TO_MANY";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                throw new StepSkippedException();
+            }
             return StepDefinition.pipeline(
                 name,
                 inputType,

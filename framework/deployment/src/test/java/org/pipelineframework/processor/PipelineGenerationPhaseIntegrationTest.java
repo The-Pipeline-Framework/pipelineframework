@@ -67,7 +67,12 @@ class PipelineGenerationPhaseIntegrationTest {
             + generatedJavaFiles(generatedSourcesDir));
         String source = Files.readString(invocation);
         assertTrue(source.contains("PipelineInvocationSteps.<Value, Value>oneToOne"));
+        assertTrue(java.util.regex.Pattern.compile(
+            "oneToOne\\(runner,\\s*\\\"inner\\\",\\s*-1,",
+            java.util.regex.Pattern.MULTILINE).matcher(source).find(), source);
         assertTrue(source.contains("java.util.List.of(child0, child1)"));
+        assertTrue(source.contains("ProcessXLocalClientStep child0"));
+        assertTrue(source.contains("ProcessYLocalClientStep child1"));
         var contract = compilation.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/pipeline", "pipeline-contract.json").orElseThrow();
         assertTrue(contract.getCharContent(true).toString().contains("composition"));
         var order = compilation.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/pipeline", "order.json").orElseThrow();
