@@ -4,12 +4,17 @@ The Pipeline Framework (TPF) keeps observability lightweight by default in dev. 
 
 ## LGTM (explicit opt-in)
 
-LGTM Dev Services are off by default. Enable them explicitly:
+LGTM Dev Services are off by default. The application must include the Quarkus LGTM Dev Services,
+OpenTelemetry, and metrics integrations during augmentation. Then enable the local stack and the
+matching TPF policy explicitly:
 
 ```bash
 export QUARKUS_OBSERVABILITY_LGTM_ENABLED=true
 export QUARKUS_MICROMETER_EXPORT_PROMETHEUS_ENABLED=true
-./mvnw quarkus:dev
+./mvnw quarkus:dev \
+  -Dpipeline.telemetry.enabled=true \
+  -Dpipeline.telemetry.metrics.enabled=true \
+  -Dpipeline.telemetry.tracing.enabled=true
 ```
 
 This enables Prometheus metrics for Grafana dashboards and activates the LGTM stack.
@@ -44,6 +49,12 @@ to populate either Grafana dashboard. See the
 [CSV Payments runbook](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/csv-payments)
 for the fast verification and opt-in 10k operator-proof commands.
 
+The fast CSV proof validates the required semantic stages and Await trace continuity with a small
+input. The opt-in 10k proof is the operator-dashboard workload: it gives rate, percentile, pressure,
+and publication panels enough samples to be useful. Do not use the small semantic proof to judge
+dashboard shape, and do not require a healthy 10k run to fabricate retry, reject, timeout, or durable
+fallback activity that it did not exercise.
+
 ## Tempo versus Prometheus
 
 - Tempo receives spans through OTLP exporters in real time.
@@ -51,6 +62,12 @@ for the fast verification and opt-in 10k operator-proof commands.
 
 If a panel looks stale because of scrape timing, that is a metrics issue, not a tracing issue.
 For the full surface split, see [Replay & Live Topology](/operate/observability/replay).
+
+Tempo search can also omit the root of an oversized trace even though later semantic spans were
+ingested. If service names and stage spans are visible but a root-span search is empty, inspect the
+journey spans and their parent/link provenance before concluding that TPF failed to start or close
+the run. An unparented and unlinked Await completion is still a conformance failure; backend search
+limitations do not relax that rule.
 
 ## Prometheus/Micrometer Defaults
 

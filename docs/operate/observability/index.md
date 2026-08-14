@@ -1,6 +1,8 @@
 # Observability Overview
 
-Observability in The Pipeline Framework is designed for distributed pipelines: you should be able to see what each step did, how long it took, and where failures occurred.
+Observability in The Pipeline Framework is designed for distributed pipelines: you should be able
+to see what each step did, where ownership changed, how long each asynchronous stage took, and where
+failure semantics changed.
 
 ## Signal Ownership And Effective Instrumentation
 
@@ -18,8 +20,40 @@ artifact tracing- or metrics-capable, and enabling a TPF policy cannot add a sig
 disabled during Quarkus augmentation. Conversely, an enabled signal with no exporter is a
 valid non-failing configuration: exporter routing and backend health remain deployment-owned.
 
+The master framework switch is also required. A typical telemetry-capable application uses:
+
+```properties
+pipeline.telemetry.enabled=true
+pipeline.telemetry.metrics.enabled=true
+pipeline.telemetry.tracing.enabled=true
+```
+
+These properties express TPF intent; they do not install Quarkus extensions, enable a signal that
+was excluded at build time, or configure an exporter.
+
+When a signal is missing, diagnose the layers in order:
+
+1. Confirm that the deployable artifact contains the required Quarkus capability and was augmented
+   with that signal enabled.
+2. Confirm that the master TPF policy and the signal-specific TPF policy are enabled in every
+   process that owns part of the pipeline journey, including workers.
+3. Confirm exporter or scrape configuration, then inspect platform exporter logs and backend health.
+
 TPF uses metrics for low-cardinality operational aggregates. Execution, interaction,
 correlation, and request identities belong in traces, replay, or logs rather than metric labels.
+
+## Semantic Coverage
+
+TPF records semantic runtime facts explicitly at their ownership seams. Metrics, traces, and replay
+derive their sink-specific representation from the same fact, but a fact does not need to appear in
+every signal. Completeness means that each important transition has an explicit observability
+decision.
+
+For queued, leased, remote, retried, persistent, or durable work, observe paired boundaries rather
+than only total latency. For example, an Await journey may need interaction creation, provider
+dispatch, completion admission, live handoff or durable release, continuation, and terminal
+publication. This is what lets an operator locate ten seconds of delay instead of seeing only a
+ten-second total.
 
 ## What You Get Out of the Box
 
@@ -30,7 +64,11 @@ correlation, and request identities belong in traces, replay, or logs rather tha
 - [Health Checks](/operate/observability/health-checks) and [In-flight Probe](/operate/in-flight-probe): Liveness, readiness and killswitch for orchestration
 - [Alerting](/operate/observability/alerting): Dashboards and alert rules tuned for pipeline behavior
 - [Security Notes](/operate/observability/security): Prevent accidental leakage of sensitive information
+- [Best Practices](/operate/observability/best-practices): Keep coverage coherent across async and durable boundaries
 - [Working with NewRelic OTel](/operate/observability/newrelic): Enabling OTel export to use NewRelic
 - [Test locally using LGTM](/operate/observability/lgtm): Enabling Prometheus metrics for Grafana dashboards on Quarkus LGTM stack
 
-Managed external boundaries appear as first-class nodes. Await steps expose suspend/resume lifecycle events. Command steps appear as command nodes in replay topology and participate in normal step spans and metrics while their effect lifecycle is recorded by the command effect store.
+Managed external boundaries appear as first-class nodes. Await telemetry distinguishes interaction
+creation, dispatch, completion admission, live handoff, and durable fallback/release. Command steps
+appear as command nodes in replay topology and participate in normal step spans and metrics while
+their effect lifecycle is recorded by the command effect store.

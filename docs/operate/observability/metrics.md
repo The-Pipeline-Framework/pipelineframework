@@ -1,31 +1,35 @@
 # Metrics
 
-The framework exposes metrics through Quarkus and Micrometer, giving step-level visibility into throughput, latency, and failures.
+TPF creates framework metrics through its shared OpenTelemetry runtime abstraction. The deployable
+Quarkus application owns the metric capability and the integration that exports or exposes those
+instruments. A deployment can use Prometheus/Micrometer, OTLP, New Relic, or another supported
+platform route without changing TPF's semantic metric contract.
 
 ## Built-in Metrics
 
-Typical metrics you can expect to expose:
+Core pipeline metrics include:
 
-1. Execution duration per step
-2. Success and failure counts
-3. End-to-end pipeline latency
-4. Throughput and backpressure signals
-5. Error rates by step and error type
+1. pipeline run count, errors, and duration;
+2. step duration, errors, retries, and in-flight work;
+3. transition count and latency;
+4. configured item-boundary throughput;
+5. backpressure, Await, connector, and publication signals where those subsystems are used.
 
-## Micrometer Integration
+## Prometheus Through Quarkus
 
-Micrometer is the default metrics façade. You can export to Prometheus or other backends supported by Quarkus.
+The CSV operator dashboard uses Quarkus Micrometer's Prometheus registry. A deployable that uses this
+route must include the corresponding Quarkus extension at build time and enable the registry:
 
 ```properties
 quarkus.micrometer.export.prometheus.enabled=true
 quarkus.micrometer.export.prometheus.path=/q/metrics
 ```
 
-Metrics are produced only when the deployable is metrics-capable and the resolved
-`pipeline.telemetry.metrics.enabled` policy is enabled. Prometheus, OTLP, New Relic, or another
-backend then decides where those metrics go; exporter availability is not an instrumentation
-switch. See [Observability Overview](/operate/observability/) for the full capability, policy,
-and exporter model.
+Framework metrics are produced only when the deployable is metrics-capable and both
+`pipeline.telemetry.enabled` and `pipeline.telemetry.metrics.enabled` resolve to true. Prometheus,
+OTLP, New Relic, or another backend then decides where those metrics go; exporter availability is
+not an instrumentation switch. See [Observability Overview](/operate/observability/) for the full
+capability, policy, and exporter model.
 
 ## Dashboards
 
@@ -116,9 +120,10 @@ max(tpf_step_inflight_items) by (tpf_step_class)
 max(tpf_step_buffer_queued_items) by (tpf_step_class)
 ```
 
-## Custom Metrics
+## Application Metrics
 
-Use Micrometer to add counters and timers inside your services:
+Application code may use Micrometer for application-specific counters and timers. These instruments
+are separate from TPF's framework telemetry ownership and should not duplicate a TPF semantic fact:
 
 ```java
 @Inject

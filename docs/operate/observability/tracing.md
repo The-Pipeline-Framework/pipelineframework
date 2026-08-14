@@ -12,6 +12,16 @@ quarkus.otel.exporter.otlp.endpoint=http://otel-collector:4318
 quarkus.otel.exporter.otlp.protocol=http/protobuf
 ```
 
+Enable TPF's tracing policy separately:
+
+```properties
+pipeline.telemetry.enabled=true
+pipeline.telemetry.tracing.enabled=true
+```
+
+The Quarkus OpenTelemetry extension and trace capability must be present when the deployable is
+built. The TPF properties cannot retrofit tracing into an artifact that lacks that capability.
+
 When OTLP tracing is enabled, spans and span events are emitted to the collector in real time.
 That is the live topology source for Tempo. Prometheus does not ingest or poll spans.
 
@@ -25,15 +35,20 @@ pipeline.telemetry.tracing.client-spans.force=true
 pipeline.telemetry.tracing.client-spans.allowlist=ProcessCsvPaymentsInputService
 ```
 
-## Custom Spans
+## Application Spans
 
-Add spans around external calls or expensive transformations to make hotspots visible:
+Add application spans around domain-specific external calls or expensive transformations to make
+hotspots visible:
 
 ```java
 try (Scope ignored = tracer.spanBuilder("payment.validate").startScopedSpan()) {
     // validation work
 }
 ```
+
+Do not use an interceptor or application span to infer a framework semantic transition such as
+durable Await admission or live handoff. TPF emits those facts explicitly at the runtime seam that
+owns them.
 
 ## Context Propagation
 
@@ -61,16 +76,21 @@ unlinked/rootless Await completions; it is not a substitute for checking the jou
 4. Record step class and pipeline run attributes (`tpf.*`)
 5. Enable per-item spans only when needed (`pipeline.telemetry.tracing.per-item=true`)
 
-TPF runtime tracing also emits:
+TPF runtime tracing uses these primary span names:
 
 - `tpf.pipeline.run` spans
 - `tpf.step` spans
-- `tpf.step.start`
-- `tpf.step.emit`
-- `tpf.step.retry`
-- `tpf.step.success`
-- `tpf.step.error`
-- `tpf.step.cancelled`
+
+Failed run and step spans record the exception and use error status. Cancellation closes the span
+exactly once without classifying cancellation as an error. When replay/per-item instrumentation is
+enabled, replay-scoped step spans also carry lifecycle events such as `tpf.step.start`,
+`tpf.step.emit`, `tpf.step.retry`, `tpf.step.success`, `tpf.step.error`, and
+`tpf.step.cancelled`. Do not build a tracing conformance check that assumes those replay-scoped
+events exist when replay is disabled.
+
+Await, transition-worker, transport, connector, and terminal-publication spans add the semantic
+stage detail needed by their boundary. Use the canonical dashboards and conformance journeys as the
+contract rather than reconstructing a journey from Java method names.
 
 For replay JSON versus live Tempo usage, see
 [Replay & Live Topology](/operate/observability/replay).

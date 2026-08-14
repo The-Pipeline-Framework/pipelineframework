@@ -39,6 +39,10 @@ It is emitted by the framework replay exporter and contains:
 
 Replay JSON is the supported offline input for the TPF replay viewer.
 
+The telemetry entries under `runParameters` are the TPF instrumentation policy captured with that run. They are
+not evidence of Quarkus build capability, exporter configuration, or backend availability. The viewer displays
+the snapshot as replay provenance; use live metrics and tracing to verify signal delivery.
+
 Await-unit events describe durable fallback. A healthy live itemized handoff is represented by durable interaction completion together with downstream step events; it does not add `await_unit_item_completed` or `await_resume_released` merely to visualize the live path.
 
 Command steps are included in the topology as authored pipeline nodes with `renderRole: "command"` and `actorKind` set to the command name. This keeps managed external effects visible in playback even when the connector hides provider details such as endpoint, credentials, index name, or SDK configuration.
@@ -93,7 +97,9 @@ TPF emits:
 - branch applicability replay event:
   - `skip`
 
-Replay JSON is written from the same runtime semantics by the framework replay exporter.
+Replay JSON is derived from the same typed runtime observations as metrics and tracing, then written
+by the framework replay adapter. The sinks intentionally derive different attributes: replay may
+retain execution and item identity that must not become a metric label.
 
 Await boundaries record durable await unit and interaction events even when the live path keeps work flowing. Replay events include await unit ids, execution ids, interaction ids, step ids, unit status, and expected/completed item counts where the runtime knows them. For operations, see [Await Boundary Operations](/operate/await-boundaries); for the implementation model, see [Await Unit Runtime](/evolve/await-unit-runtime/).
 
@@ -219,6 +225,9 @@ The viewer uses a video-first layout:
 - hover or tap-revealed player chrome over the canvas for transport controls, the scrubber, and inline speed radios
 - bottom-right utility icons for replay source, replay info, and player fullscreen
 - modal panes for source selection/import and `Run parameters` plus `Legend`
+
+`Run parameters` includes the captured TPF telemetry policy. That section describes what the framework was asked
+to instrument; it does not claim that a platform exporter or backend was available.
 
 `Custom replay` is only exposed inside the replay-source modal. Selecting a source there stages the choice, and the viewer only switches when `Load dataset` is pressed.
 

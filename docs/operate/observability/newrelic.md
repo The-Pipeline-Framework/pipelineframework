@@ -1,7 +1,13 @@
 # Using New Relic OTel
 
-If `NEW_RELIC_LICENSE_KEY` is present, the runtime config source auto-enables OTel export and disables LGTM.
-No application properties changes are required, automatically switches on when `NEW_RELIC_LICENSE_KEY` is set.
+If `NEW_RELIC_LICENSE_KEY` is present, TPF's config source supplies Quarkus OpenTelemetry/OTLP
+routing defaults for New Relic and disables LGTM.
+
+This is exporter configuration, not telemetry capability or TPF instrumentation policy. The
+deployable must already contain the required Quarkus telemetry extensions and must be augmented with
+the required signals enabled. For a packaged application, setting the license key at runtime cannot
+retrofit a capability that was absent or disabled at build time. The application must also enable
+the relevant `pipeline.telemetry.*` policy.
 
 Enabled settings (defaults):
 - `quarkus.otel.enabled=true`
@@ -24,6 +30,18 @@ export NEW_RELIC_LICENSE_KEY=...
 export NEW_RELIC_OTLP_ENDPOINT=https://otlp.nr-data.net:443
 ./mvnw quarkus:dev
 ```
+
+For framework metrics and traces, also configure the TPF intent:
+
+```properties
+pipeline.telemetry.enabled=true
+pipeline.telemetry.metrics.enabled=true
+pipeline.telemetry.tracing.enabled=true
+```
+
+An enabled signal without a working New Relic endpoint remains an exporter/platform failure. TPF
+does not probe New Relic health, own exporter retries, or disable instrumentation when the backend
+is unavailable.
 
 ## Forcing gRPC Client Spans (Dependencies)
 

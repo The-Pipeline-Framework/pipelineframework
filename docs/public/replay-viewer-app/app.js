@@ -1537,7 +1537,7 @@ function clearElement(element) {
 function renderRunParameters(runParameters) {
   clearElement(runParametersContent);
   const sections = Array.isArray(runParameters?.sections)
-    ? runParameters.sections.filter((section) => section?.id !== "telemetry")
+    ? runParameters.sections
     : [];
 
   for (const section of sections) {
