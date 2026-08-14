@@ -52,7 +52,8 @@ import org.pipelineframework.step.StepOneToMany;
 import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.step.functional.ManyToOne;
 import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
-import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineRunContext;
+import org.pipelineframework.telemetry.PipelineRetryTelemetry;
 import org.pipelineframework.telemetry.PipelineStepTelemetry;
 
 @ApplicationScoped
@@ -70,8 +71,8 @@ class PipelineStepExecutor {
         Object current,
         org.pipelineframework.config.ParallelismPolicy parallelismPolicy,
         int maxConcurrency,
-        PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext,
+        PipelineStepTelemetry.Seam telemetry,
+        PipelineRunContext telemetryContext,
         PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot) {
@@ -208,8 +209,8 @@ class PipelineStepExecutor {
         Object current,
         boolean parallel,
         int maxConcurrency,
-        PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext,
+        PipelineStepTelemetry.Seam telemetry,
+        PipelineRunContext telemetryContext,
         PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot) {
         return applyOneToOneUnchecked(
@@ -230,8 +231,8 @@ class PipelineStepExecutor {
         Object current,
         boolean parallel,
         int maxConcurrency,
-        PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext,
+        PipelineStepTelemetry.Seam telemetry,
+        PipelineRunContext telemetryContext,
         PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot) {
@@ -254,8 +255,8 @@ class PipelineStepExecutor {
         Object current,
         boolean parallel,
         int maxConcurrency,
-        PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext,
+        PipelineStepTelemetry.Seam telemetry,
+        PipelineRunContext telemetryContext,
         PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot,
@@ -531,8 +532,8 @@ class PipelineStepExecutor {
         Object current,
         boolean parallel,
         int maxConcurrency,
-        PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext,
+        PipelineStepTelemetry.Seam telemetry,
+        PipelineRunContext telemetryContext,
         PipelineContext contextSnapshot) {
         return applyOneToOneFutureUnchecked(
             step,
@@ -551,8 +552,8 @@ class PipelineStepExecutor {
         Object current,
         boolean parallel,
         int maxConcurrency,
-        PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext,
+        PipelineStepTelemetry.Seam telemetry,
+        PipelineRunContext telemetryContext,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot) {
         return applyOneToOneFutureUnchecked(
@@ -573,8 +574,8 @@ class PipelineStepExecutor {
         Object current,
         boolean parallel,
         int maxConcurrency,
-        PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext,
+        PipelineStepTelemetry.Seam telemetry,
+        PipelineRunContext telemetryContext,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot,
         StepBranchingDescriptor branchingDescriptor) {
@@ -728,8 +729,8 @@ class PipelineStepExecutor {
         Object current,
         boolean parallel,
         int maxConcurrency,
-        PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext,
+        PipelineStepTelemetry.Seam telemetry,
+        PipelineRunContext telemetryContext,
         PipelineContext contextSnapshot) {
         return applyOneToManyUnchecked(
             step,
@@ -748,8 +749,8 @@ class PipelineStepExecutor {
         Object current,
         boolean parallel,
         int maxConcurrency,
-        PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext,
+        PipelineStepTelemetry.Seam telemetry,
+        PipelineRunContext telemetryContext,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot) {
         return applyOneToMany(
@@ -831,7 +832,7 @@ class PipelineStepExecutor {
                 return output;
             })
             .onFailure(step::shouldRetry)
-            .invoke(t -> PipelineTelemetry.recordRetry(step.getClass(), t))
+            .invoke(t -> PipelineRetryTelemetry.recordRetry(step.getClass(), t))
             .onFailure(step::shouldRetry)
             .retry()
             .withBackOff(step.retryWait(), step.maxBackoff())
@@ -860,8 +861,8 @@ class PipelineStepExecutor {
     static <I, O> Object applyManyToOneUnchecked(
         ManyToOne<I, O> step,
         Object current,
-        PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext,
+        PipelineStepTelemetry.Seam telemetry,
+        PipelineRunContext telemetryContext,
         PipelineContext contextSnapshot) {
         return applyManyToOneUnchecked(step, current, telemetry, telemetryContext, contextSnapshot, null);
     }
@@ -870,8 +871,8 @@ class PipelineStepExecutor {
     static <I, O> Object applyManyToOneUnchecked(
         ManyToOne<I, O> step,
         Object current,
-        PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext,
+        PipelineStepTelemetry.Seam telemetry,
+        PipelineRunContext telemetryContext,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot) {
         return applyManyToOne(
@@ -918,8 +919,8 @@ class PipelineStepExecutor {
     static <I, O> Object applyManyToManyUnchecked(
         StepManyToMany<I, O> step,
         Object current,
-        PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext,
+        PipelineStepTelemetry.Seam telemetry,
+        PipelineRunContext telemetryContext,
         PipelineContext contextSnapshot) {
         return applyManyToManyUnchecked(step, current, telemetry, telemetryContext, contextSnapshot, null);
     }
@@ -928,8 +929,8 @@ class PipelineStepExecutor {
     static <I, O> Object applyManyToManyUnchecked(
         StepManyToMany<I, O> step,
         Object current,
-        PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext,
+        PipelineStepTelemetry.Seam telemetry,
+        PipelineRunContext telemetryContext,
         PipelineContext contextSnapshot,
         AwaitExecutionContext awaitContextSnapshot) {
         return applyManyToMany(

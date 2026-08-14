@@ -83,7 +83,7 @@ jobs:
             alpine:3.17
 
       - name: Build csv-payments modular observability images
-        run: bash ./examples/csv-payments/build-modular-observability-images.sh
+        run: MAVEN_REPOSITORY="$HOME/.m2/repository" bash ./examples/csv-payments/build-modular-observability-images.sh
 
       - name: Run csv-payments Tempo verification E2E
         run: |

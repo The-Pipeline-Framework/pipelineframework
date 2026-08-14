@@ -21,10 +21,14 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.Meter;
+import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.metrics.data.MetricData;
@@ -35,6 +39,7 @@ import io.opentelemetry.sdk.trace.data.SpanData;
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import io.opentelemetry.api.trace.StatusCode;
 import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.helpers.test.AssertSubscriber;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -79,9 +84,9 @@ class PipelineTelemetryTest {
     @Test
     void abortRunOnlyEndsTargetRun() {
         PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
-        PipelineTelemetry.RunContext target =
+        PipelineRunContext target =
             telemetry.startRun(Multi.createFrom().item(1), 1, ParallelismPolicy.AUTO, 4);
-        PipelineTelemetry.RunContext sibling =
+        PipelineRunContext sibling =
             telemetry.startRun(Multi.createFrom().item(2), 1, ParallelismPolicy.AUTO, 4);
 
         telemetry.abortRun(target, new IllegalStateException("retry amplification"));
@@ -106,10 +111,42 @@ class PipelineTelemetryTest {
     }
 
     @Test
+    void resolvesTracerWhenRunStartsRatherThanWhenFacadeIsConstructed() {
+        AtomicReference<Tracer> tracer = new AtomicReference<>(
+            OpenTelemetry.noop().getTracer("org.pipelineframework"));
+        TelemetryRuntime delayedRuntime = new TelemetryRuntime() {
+            @Override
+            public Meter meter(String instrumentationScope) {
+                return GlobalOpenTelemetry.getMeter(instrumentationScope);
+            }
+
+            @Override
+            public Tracer tracer(String instrumentationScope) {
+                return tracer.get();
+            }
+
+            @Override
+            public void flush() {
+                // No SDK lifecycle work is needed for the in-memory runtime.
+            }
+        };
+        PipelineTelemetry telemetry = new PipelineTelemetry(
+            new TestPipelineStepConfig(), new NoopPipelineReplayExporter(), Optional.empty(), delayedRuntime);
+
+        tracer.set(GlobalOpenTelemetry.getTracer("org.pipelineframework"));
+        PipelineRunContext runContext = telemetry.startRun(
+            Multi.createFrom().item(1), 1, ParallelismPolicy.AUTO, 4);
+        telemetry.abortRun(runContext, new IllegalStateException("test"));
+
+        assertTrue(exporter.getFinishedSpanItems().stream()
+            .anyMatch(span -> "tpf.pipeline.run".equals(span.getName())));
+    }
+
+    @Test
     void recordsRunAttributesForParallelismAndBackpressure() {
         PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
         Multi<Integer> input = Multi.createFrom().items(1, 2, 3);
-        PipelineTelemetry.RunContext runContext =
+        PipelineRunContext runContext =
             telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
 
         Multi<Integer> instrumented = (Multi<Integer>) telemetry.instrumentInput(input, runContext);
@@ -137,7 +174,7 @@ class PipelineTelemetryTest {
     void exposesStepInflightGauge() {
         PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
         Multi<Integer> input = Multi.createFrom().items(1, 2);
-        PipelineTelemetry.RunContext runContext =
+        PipelineRunContext runContext =
             telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
 
         Multi<Integer> instrumented = (Multi<Integer>) telemetry.instrumentInput(input, runContext);
@@ -173,7 +210,7 @@ class PipelineTelemetryTest {
     @Test
     void resolvesConsumerAndProducerStepForProxyClasses() {
         PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
-        PipelineTelemetry.RunContext runContext =
+        PipelineRunContext runContext =
             telemetry.startRun(Multi.createFrom().items(1, 2), 1, ParallelismPolicy.AUTO, 4);
 
         Multi<Integer> consumed = telemetry.instrumentItemConsumed(
@@ -208,7 +245,7 @@ class PipelineTelemetryTest {
     @Test
     void recordsItemSuccessSloFromConsumedAndProducedCounts() {
         PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
-        PipelineTelemetry.RunContext runContext =
+        PipelineRunContext runContext =
             telemetry.startRun(Multi.createFrom().items(1, 2, 3), 1, ParallelismPolicy.AUTO, 4);
 
         Multi<Integer> consumed = telemetry.instrumentItemConsumed(
@@ -250,7 +287,7 @@ class PipelineTelemetryTest {
     void normalizesStepAttributesForProxyClasses() {
         PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
         Multi<Integer> input = Multi.createFrom().items(1, 2);
-        PipelineTelemetry.RunContext runContext =
+        PipelineRunContext runContext =
             telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
 
         Multi<Integer> instrumented = (Multi<Integer>) telemetry.instrumentInput(input, runContext);
@@ -297,6 +334,32 @@ class PipelineTelemetryTest {
             .orElseThrow()
             .getValue();
         assertEquals(2L, value);
+    }
+
+    @Test
+    void cancellationFinalizesAnInstrumentedMultiOnceWithoutRecordingAStepError() {
+        PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
+        PipelineRunContext runContext = telemetry.startRun(
+            Multi.createFrom().<Integer>emitter(ignored -> { }), 1, ParallelismPolicy.AUTO, 4);
+
+        Multi<Integer> stepped = telemetry.instrumentStepMulti(
+            DummyStep.class, Multi.createFrom().<Integer>emitter(ignored -> { }), runContext, false);
+        AssertSubscriber<Integer> subscriber = stepped.subscribe().withSubscriber(AssertSubscriber.create(1));
+        subscriber.cancel();
+
+        Collection<MetricData> metrics = metricReader.collectAllMetrics();
+        MetricData duration = metrics.stream()
+            .filter(metric -> "tpf.step.duration".equals(metric.getName()))
+            .findFirst()
+            .orElseThrow();
+        assertEquals(1L, duration.getHistogramData().getPoints().stream()
+            .mapToLong(point -> point.getCount())
+            .sum());
+        assertTrue(metrics.stream().noneMatch(metric -> "tpf.step.errors".equals(metric.getName())
+            && metric.getLongSumData().getPoints().stream().anyMatch(point -> point.getValue() > 0)));
+        assertEquals(1L, exporter.getFinishedSpanItems().stream()
+            .filter(span -> "tpf.step".equals(span.getName()))
+            .count());
     }
 
     static final class DummyStep$$Proxy extends DummyStep {

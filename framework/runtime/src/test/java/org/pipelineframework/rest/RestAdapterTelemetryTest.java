@@ -48,7 +48,6 @@ class RestAdapterTelemetryTest {
             .build();
         GlobalOpenTelemetry.resetForTest();
         GlobalOpenTelemetry.set(sdk);
-        HttpMetrics.resetForTest();
 
         try {
             new UnaryAdapter().remoteProcess("a").await().indefinitely();

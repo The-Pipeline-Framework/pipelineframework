@@ -25,7 +25,7 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.PipelineExecutionService;
 import org.pipelineframework.awaitable.AwaitCompletionAdmissionFailures;
 import org.pipelineframework.awaitable.AwaitCompletionCommand;
-import org.pipelineframework.awaitable.AwaitCompletionMetrics;
+import org.pipelineframework.awaitable.AwaitTelemetry;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
@@ -57,6 +57,9 @@ public class SqsAwaitCompletionPoller {
 
     @Inject
     PipelineExecutionService executionService;
+
+    @Inject
+    AwaitTelemetry awaitTelemetry = AwaitTelemetry.disabled();
 
     private volatile SqsClient client;
     private volatile ExecutorService pollExecutor;
@@ -238,7 +241,7 @@ public class SqsAwaitCompletionPoller {
     ) {
         if (AwaitCompletionAdmissionFailures.isDeterministic(failure)) {
             String reason = AwaitCompletionAdmissionFailures.reason(failure);
-            AwaitCompletionMetrics.recordDroppedCompletion("sqs", reason);
+            awaitTelemetry.recordDroppedCompletion("sqs", reason);
             LOG.warnf(failure, "Dropping deterministic SQS await completion message: reason=%s", reason);
             return deleteMessageSafely(queueUrl, receiptHandle, "deterministic-" + reason);
         }

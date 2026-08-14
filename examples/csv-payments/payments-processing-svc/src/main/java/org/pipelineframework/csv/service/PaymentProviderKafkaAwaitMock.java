@@ -34,6 +34,7 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitCompletionEnvelope;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitDispatchEnvelope;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.awaitable.AwaitTelemetry;
 import org.pipelineframework.csv.domain.PaymentRecord;
 import org.pipelineframework.csv.domain.PaymentStatus;
 import org.pipelineframework.csv.domain.PipelineDomainProtoAdapters;
@@ -61,9 +62,17 @@ public class PaymentProviderKafkaAwaitMock {
   @Channel(RESULT_CHANNEL)
   MutinyEmitter<String> results;
 
+  private final AwaitTelemetry awaitTelemetry;
+
+  @Inject
+  PaymentProviderKafkaAwaitMock(AwaitTelemetry awaitTelemetry) {
+    this.awaitTelemetry = Objects.requireNonNull(awaitTelemetry, "awaitTelemetry must not be null");
+  }
+
   @Incoming(REQUEST_CHANNEL)
   public CompletionStage<Void> consume(Message<String> message) {
     Objects.requireNonNull(message, "message must not be null");
+    awaitTelemetry.recordProviderAdmitted();
     return Uni.createFrom().item(() -> parseDispatch(message.getPayload()))
         .runSubscriptionOn(Infrastructure.getDefaultExecutor())
         .onItem().transform(this::handle)
@@ -93,6 +102,7 @@ public class PaymentProviderKafkaAwaitMock {
   }
 
   private Uni<Void> publish(KafkaAwaitCompletionEnvelope completion) {
+    awaitTelemetry.recordProviderCompletionDispatched();
     OutgoingKafkaRecordMetadata<String> metadata = OutgoingKafkaRecordMetadata.<String>builder()
         .withKey(completion.correlationId())
         .build();

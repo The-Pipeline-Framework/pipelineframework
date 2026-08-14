@@ -16,7 +16,6 @@
 
 package org.pipelineframework.telemetry;
 
-import org.pipelineframework.awaitable.AwaitCompletionMetrics;
 
 /**
  * Replay-friendly control-plane event for durable await unit lifecycle changes.
@@ -35,7 +34,7 @@ public record AwaitReplayLifecycleEvent(
     Integer expectedItemCount,
     Integer completedItemCount,
     Boolean dispatchComplete
-) implements AwaitCompletionMetrics.AwaitReplayView {
+) {
     public static final String INTERACTION_DISPATCHED = "await_interaction_dispatched";
     public static final String ADMISSION_ACQUIRED = "await_admission_acquired";
     public static final String ADMISSION_REUSED = "await_admission_reused";

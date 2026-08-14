@@ -32,7 +32,7 @@ import org.pipelineframework.orchestrator.ControlPlaneAdmissionOperation;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionPolicy;
 import org.pipelineframework.orchestrator.ControlPlaneAdmissionRequest;
 import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
-import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineReplayTelemetry;
 import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRedriveResult;
@@ -127,7 +127,7 @@ class QueueAsyncCoordinator {
   private final CachedIntSupplier pipelineStepCount = new CachedIntSupplier(this::loadPipelineStepCount);
 
   @Inject
-  PipelineTelemetry telemetry;
+  PipelineReplayTelemetry telemetry;
 
   private final ScheduledExecutorService queueSweepExecutor = Executors.newSingleThreadScheduledExecutor(
       runnable -> {

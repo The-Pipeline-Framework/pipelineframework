@@ -19,7 +19,6 @@ package org.pipelineframework.telemetry;
 import java.util.List;
 import java.util.Optional;
 import org.pipelineframework.branching.BranchVariantIdentity;
-import java.util.Optional;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
@@ -34,20 +33,20 @@ public final class PipelineStepTelemetry {
 
     private static final PipelineStepTelemetry DISABLED = new PipelineStepTelemetry(Optional.empty(), Optional.empty());
 
-    private final Optional<PipelineTelemetry> telemetry;
-    private final Optional<PipelineTelemetry.RunContext> runContext;
+    private final Optional<Seam> telemetry;
+    private final Optional<Object> runContext;
 
     private PipelineStepTelemetry(
-        Optional<PipelineTelemetry> telemetry,
-        Optional<PipelineTelemetry.RunContext> runContext
+        Optional<Seam> telemetry,
+        Optional<Object> runContext
     ) {
         this.telemetry = telemetry;
         this.runContext = runContext;
     }
 
     public static PipelineStepTelemetry of(
-        PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext runContext
+        Seam telemetry,
+        Object runContext
     ) {
         if (telemetry == null) {
             return DISABLED;
@@ -133,8 +132,8 @@ public final class PipelineStepTelemetry {
         if (telemetry.isEmpty() || runContext.isEmpty()) {
             return result;
         }
-        PipelineTelemetry current = telemetry.orElseThrow();
-        PipelineTelemetry.RunContext context = runContext.orElseThrow();
+        Seam current = telemetry.orElseThrow();
+        Object context = runContext.orElseThrow();
         return scope.value
             .map(replayScope -> current.instrumentStepUni(stepClass, result, context, perItemOperation, replayScope))
             .orElseGet(() -> current.instrumentStepUni(stepClass, result, context, perItemOperation));
@@ -144,8 +143,8 @@ public final class PipelineStepTelemetry {
         if (telemetry.isEmpty() || runContext.isEmpty()) {
             return result;
         }
-        PipelineTelemetry current = telemetry.orElseThrow();
-        PipelineTelemetry.RunContext context = runContext.orElseThrow();
+        Seam current = telemetry.orElseThrow();
+        Object context = runContext.orElseThrow();
         return scope.value
             .map(replayScope -> current.instrumentStepMulti(stepClass, result, context, perItemOperation, replayScope))
             .orElseGet(() -> current.instrumentStepMulti(stepClass, result, context, perItemOperation));
@@ -157,5 +156,34 @@ public final class PipelineStepTelemetry {
         private ReplayScope(Optional<ExecutionReplayTracker.StepExecutionScope> value) {
             this.value = value;
         }
+    }
+
+    /** Focused execution seam; the compatibility facade is merely one implementation. */
+    public interface Seam {
+        <T> Uni<T> instrumentItemConsumed(Class<?> stepClass, Object context, Uni<T> input);
+        <T> Multi<T> instrumentItemConsumed(Class<?> stepClass, Object context, Multi<T> input);
+        <T> Uni<T> instrumentItemConsumed(Class<?> stepClass, Uni<T> input);
+        <T> Multi<T> instrumentItemConsumed(Class<?> stepClass, Multi<T> input);
+        <T> Uni<T> instrumentItemProduced(Class<?> stepClass, Object context, Uni<T> output);
+        <T> Multi<T> instrumentItemProduced(Class<?> stepClass, Object context, Multi<T> output);
+        <T> Uni<T> instrumentItemProduced(Class<?> stepClass, Uni<T> output);
+        <T> Multi<T> instrumentItemProduced(Class<?> stepClass, Multi<T> output);
+        ExecutionReplayTracker.StepExecutionScope beginReplayStep(
+            Class<?> stepClass, Object context, boolean perItemOperation, Object inputItem);
+        ExecutionReplayTracker.StepExecutionScope beginPendingReplayStep(
+            Class<?> stepClass, Object context, boolean perItemOperation);
+        void recordReplayInput(ExecutionReplayTracker.StepExecutionScope scope, Object inputItem);
+        void recordReplayOutput(ExecutionReplayTracker.StepExecutionScope scope, Object outputItem);
+        void recordReplayCacheHit(Object scope);
+        void recordReplaySkip(Class<?> stepClass, Object context, Object inputItem,
+                              List<String> acceptedTypes, Optional<BranchVariantIdentity> variantIdentity);
+        <T> Uni<T> instrumentStepUni(Class<?> stepClass, Uni<T> result, Object context,
+                                     boolean perItemOperation, ExecutionReplayTracker.StepExecutionScope scope);
+        <T> Uni<T> instrumentStepUni(Class<?> stepClass, Uni<T> result, Object context,
+                                     boolean perItemOperation);
+        <T> Multi<T> instrumentStepMulti(Class<?> stepClass, Multi<T> result, Object context,
+                                         boolean perItemOperation, ExecutionReplayTracker.StepExecutionScope scope);
+        <T> Multi<T> instrumentStepMulti(Class<?> stepClass, Multi<T> result, Object context,
+                                         boolean perItemOperation);
     }
 }

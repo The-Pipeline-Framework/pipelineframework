@@ -1,73 +1,24 @@
+/*
+ * Copyright (c) 2026 Mariano Barcia
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND.
+ */
 package org.pipelineframework.orchestrator;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
-import io.opentelemetry.api.common.AttributeKey;
-import io.opentelemetry.api.common.Attributes;
-import io.opentelemetry.api.metrics.LongCounter;
+import org.pipelineframework.telemetry.TelemetryCompatibilityAccess;
 
-/**
- * Dead-letter observability metrics helper.
- */
-public final class DeadLetterMetrics {
+/** Compatibility delegate for dead-letter metrics. */
+final class DeadLetterMetrics {
+    private DeadLetterMetrics() { }
 
-    private static final AttributeKey<String> PROVIDER = AttributeKey.stringKey("tpf.dlq.provider");
-    private static final AttributeKey<String> TRANSPORT = AttributeKey.stringKey("tpf.transport");
-    private static final AttributeKey<String> PLATFORM = AttributeKey.stringKey("tpf.platform");
-    private static final AttributeKey<String> TERMINAL_STATUS = AttributeKey.stringKey("tpf.execution.terminal_status");
-    private static final AttributeKey<String> TERMINAL_REASON = AttributeKey.stringKey("tpf.execution.terminal_reason");
-    private static final AttributeKey<String> ERROR_CODE = AttributeKey.stringKey("tpf.error.code");
-    private static final AttributeKey<Boolean> RETRYABLE = AttributeKey.booleanKey("tpf.error.retryable");
-    private static final AttributeKey<String> RESOURCE_TYPE = AttributeKey.stringKey("tpf.resource.type");
-
-    private static volatile LongCounter dlqPublishCounter;
-
-    private DeadLetterMetrics() {
+    private static DeadLetterMetricsRecorder delegate() {
+        return TelemetryCompatibilityAccess.adapter(DeadLetterMetricsRecorder.class, DeadLetterMetricsRecorder::new);
     }
 
-    /**
-     * Record one dead-letter publication with standardized dimensions.
-     *
-     * @param provider provider name
-     * @param envelope dead-letter envelope
-     */
-    public static void record(String provider, DeadLetterEnvelope envelope) {
-        if (envelope == null) {
-            return;
-        }
-        ensureInitialized();
-        Attributes attributes = Attributes.builder()
-            .put(PROVIDER, normalize(provider))
-            .put(TRANSPORT, normalize(envelope.transport()))
-            .put(PLATFORM, normalize(envelope.platform()))
-            .put(TERMINAL_STATUS, normalize(envelope.terminalStatus()))
-            .put(TERMINAL_REASON, normalize(envelope.terminalReason()))
-            .put(ERROR_CODE, normalize(envelope.errorCode()))
-            .put(RETRYABLE, envelope.retryable())
-            .put(RESOURCE_TYPE, normalize(envelope.resourceType()))
-            .build();
-        dlqPublishCounter.add(1, attributes);
-    }
-
-    private static void ensureInitialized() {
-        if (dlqPublishCounter != null) {
-            return;
-        }
-        synchronized (DeadLetterMetrics.class) {
-            if (dlqPublishCounter != null) {
-                return;
-            }
-            dlqPublishCounter = GlobalOpenTelemetry.getMeter("org.pipelineframework")
-                .counterBuilder("tpf.execution.dlq.publish.total")
-                .setDescription("Total terminal execution failures published to dead-letter destinations")
-                .setUnit("events")
-                .build();
-        }
-    }
-
-    private static String normalize(String value) {
-        if (value == null || value.isBlank()) {
-            return "unknown";
-        }
-        return value;
+    static void record(String provider, DeadLetterEnvelope envelope) {
+        delegate().record(provider, envelope);
     }
 }

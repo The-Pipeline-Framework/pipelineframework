@@ -17,6 +17,11 @@ This enables Prometheus metrics for Grafana dashboards and activates the LGTM st
 Note: when LGTM Dev Services are enabled, Quarkus may override some OTel timing defaults
 for dev convenience (for example `quarkus.otel.metric.export.interval=10s`).
 
+LGTM is an export/runtime choice, not a substitute for build capability or TPF telemetry policy.
+The application still needs the matching Quarkus capability, and TPF still needs the corresponding
+`pipeline.telemetry.*.enabled` signal policy. A disabled exporter must not be interpreted as a
+disabled framework signal; backend health and exporter retry remain platform concerns.
+
 ## Dashboard discovery
 
 LGTM Dev Services discovers Grafana dashboards from classpath resources under `META-INF/grafana/`
@@ -24,13 +29,20 @@ that use the `grafana-dashboard-*.json` naming convention.
 
 For `csv-payments`, the repo now ships separate resources for:
 
-- Prometheus-backed metrics dashboard
-- Tempo tracing entry surface
+- `grafana-dashboard-csv-payments.json`: the Prometheus-backed operator dashboard, with the
+  eight-stage proof journey as its first row
+- `grafana-dashboard-csv-payments-tempo.json`: executable Tempo journey and continuity panels,
+  including the Await rootless/unlinked diagnostic
 
 Keep Tempo separate from the Prometheus dashboard. Use Tempo for live topology and trace drill-down,
 and use Prometheus-backed panels for throughput, latency, queue depth, inflight, and retries.
 
-For `csv-payments`, the dedicated Tempo verification E2E does not rely on nested LGTM Dev Services inside the service containers. It starts an explicit LGTM stack and points the modular services plus packaged orchestrator at its OTLP collector.
+For `csv-payments`, the dedicated Tempo verification E2E does not rely on nested LGTM Dev Services inside the service containers. It starts an explicit LGTM stack, provisions both dashboards, and points the modular services plus packaged orchestrator at its OTLP collector. This is the telemetry-capable modular/LGTM proof profile: tracing and metrics are build-capable, the framework policy enables them, Prometheus supplies the metrics dashboard, and OTLP supplies Tempo.
+
+The CSV self-host HA profile does not emit telemetry in this verification setup, so do not expect it
+to populate either Grafana dashboard. See the
+[CSV Payments runbook](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/examples/csv-payments)
+for the fast verification and opt-in 10k operator-proof commands.
 
 ## Tempo versus Prometheus
 

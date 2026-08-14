@@ -23,6 +23,7 @@ import org.pipelineframework.config.boundary.PipelineObjectSourceConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 import org.pipelineframework.telemetry.ObjectIngestReplayTelemetry;
+import org.pipelineframework.telemetry.TelemetryRuntimes;
 
 class ObjectIngestMetricsTest {
 
@@ -74,7 +75,7 @@ class ObjectIngestMetricsTest {
                 idempotencyKey.endsWith("beta.txt:v1:etag-2")
                     ? new RunAsyncAcceptedDto("execution-2", true, "/executions/execution-2", 1L)
                     : new RunAsyncAcceptedDto("execution-1", false, "/executions/execution-1", 1L)),
-            new ObjectIngestReplayTelemetry());
+            new ObjectIngestReplayTelemetry(TelemetryRuntimes.global()));
 
         runner.pollOnce();
 
@@ -93,7 +94,7 @@ class ObjectIngestMetricsTest {
             config(),
             new ObjectSourceRegistry(List.of(new TwoItemProvider())),
             (input, tenantId, idempotencyKey) -> Uni.createFrom().failure(new IllegalStateException("admission failed")),
-            new ObjectIngestReplayTelemetry());
+            new ObjectIngestReplayTelemetry(TelemetryRuntimes.global()));
 
         ObjectIngestRunner.PollResult result = runner.pollOnce();
 

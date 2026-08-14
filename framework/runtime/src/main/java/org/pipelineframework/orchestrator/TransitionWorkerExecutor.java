@@ -25,6 +25,9 @@ public class TransitionWorkerExecutor {
     @Inject
     PipelineInvocationRuntime invocationRuntime;
 
+    @Inject
+    TransitionWorkerMetrics telemetry = TransitionWorkerMetrics.disabled();
+
     private final Object lifecycleLock = new Object();
     private volatile Semaphore permits;
     private volatile int maxInFlight;
@@ -58,10 +61,10 @@ public class TransitionWorkerExecutor {
     public Optional<TransitionAdmission> tryAdmit() {
         Semaphore activePermits = permits();
         if (!activePermits.tryAcquire()) {
-            TransitionWorkerMetrics.recordSaturated();
+            telemetry().recordSaturated();
             return Optional.empty();
         }
-        TransitionWorkerMetrics.incrementActive();
+        telemetry().incrementActive();
         return Optional.of(new TransitionAdmission(this, activePermits));
     }
 
@@ -76,20 +79,21 @@ public class TransitionWorkerExecutor {
         PipelineTransitionWorker worker,
         TransitionCommandEnvelope command) {
         Uni<TransitionResultEnvelope> execution = invocationRuntime().invokeTransitionWorker(
-            TransitionWorkerMetrics::recordDuration,
+            telemetry()::recordDuration,
             () -> {
+                telemetry().recordDispatched();
                 try {
                     Uni<TransitionResultEnvelope> result = worker.executeTransition(command);
                     if (result == null) {
-                        TransitionWorkerMetrics.recordOutcome(TransitionWorkerOutcome.FAILED);
+                        telemetry().recordOutcome(TransitionWorkerOutcome.FAILED);
                         return Uni.createFrom().item(TransitionResultEnvelope.failed(
                             new IllegalStateException("PipelineTransitionWorker returned null")));
                     }
                     return result
-                        .onItem().invoke(item -> TransitionWorkerMetrics.recordOutcome(item.outcome()))
-                        .onFailure().invoke(failure -> TransitionWorkerMetrics.recordOutcome(TransitionWorkerOutcome.FAILED));
+                        .onItem().invoke(item -> telemetry().recordOutcome(item.outcome()))
+                        .onFailure().invoke(failure -> telemetry().recordOutcome(TransitionWorkerOutcome.FAILED));
                 } catch (Exception failure) {
-                    TransitionWorkerMetrics.recordOutcome(TransitionWorkerOutcome.FAILED);
+                    telemetry().recordOutcome(TransitionWorkerOutcome.FAILED);
                     return Uni.createFrom().item(TransitionResultEnvelope.failed(failure));
                 }
             });
@@ -148,6 +152,10 @@ public class TransitionWorkerExecutor {
         return invocationRuntime;
     }
 
+    private TransitionWorkerMetrics telemetry() {
+        return telemetry == null ? TransitionWorkerMetrics.disabled() : telemetry;
+    }
+
     private Executor virtualThreadExecutor() {
         ExecutorService active = virtualThreadExecutor;
         if (active != null) {
@@ -163,7 +171,7 @@ public class TransitionWorkerExecutor {
 
     private void release(Semaphore acquiredPermits) {
         acquiredPermits.release();
-        TransitionWorkerMetrics.decrementActive();
+        telemetry().decrementActive();
     }
 
     @PreDestroy

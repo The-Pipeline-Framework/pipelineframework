@@ -31,6 +31,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.security.MessageDigest;
 import java.sql.*;
 import java.time.Duration;
 import java.time.Instant;
@@ -90,6 +91,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final Path REPLAY_ROOT_DIR = Paths.get(TEST_E2E_DIR, "replay");
     private static final Path REPLAY_CAPTURE_DIR = REPLAY_ROOT_DIR.resolve("csv-payments-runs");
     private static final Path REPLAY_FILE = REPLAY_ROOT_DIR.resolve("csv-payments-replay.json");
+    private static final Path GRAFANA_DASHBOARD = Path.of("src", "main", "resources", "META-INF", "grafana",
+            "grafana-dashboard-csv-payments.json");
+    private static final Path TEMPO_DASHBOARD = Path.of("src", "main", "resources", "META-INF", "grafana",
+            "grafana-dashboard-csv-payments-tempo.json");
     private static final String REPLAY_CAPTURE_CONTAINER_DIR = TEST_E2E_TARGET_DIR + "/replay/csv-payments-runs";
     private static final String LGTM_IMAGE = "docker.io/grafana/otel-lgtm:0.24.0";
     private static final DockerImageName KAFKA_IMAGE = DockerImageName.parse("apache/kafka-native:3.8.0");
@@ -139,11 +144,21 @@ abstract class AbstractCsvPaymentsEndToEnd {
             TEMPO_ENABLED && !MONOLITH_LAYOUT && !PIPELINE_RUNTIME_LAYOUT;
     private static final boolean TEMPO_PAUSE_BEFORE_TEARDOWN =
             Boolean.getBoolean("csv.e2e.tempo.pause.before.teardown");
+    private static final boolean OPERATOR_DASHBOARD_10K_ACTIVE =
+            Boolean.getBoolean("csv.e2e.operator-dashboard.10k.enabled");
     private static final boolean TELEMETRY_HAPPY_PATH_ONLY =
             Boolean.parseBoolean(System.getProperty("csv.e2e.telemetry.happy-path-only", "true"));
     private static final String MODULAR_IMAGE_TAG = resolveModularImageTag();
     private static final String CSV_E2E_INPUT_FILE = System.getProperty("csv.e2e.input.file", "").trim();
     private static final boolean CUSTOM_INPUT_FILE = !CSV_E2E_INPUT_FILE.isBlank();
+    private static final String FRAMEWORK_PROVENANCE_FILE =
+            "org/pipelineframework/tpf-worktree-provenance.properties";
+    private static final List<String> FRAMEWORK_PROVENANCE_KEYS = List.of(
+            "framework.version",
+            "framework.commit",
+            "framework.source.fingerprint",
+            "framework.runtime.sha256");
+    private static Properties frameworkProvenance;
     private static volatile boolean orchestratorPackagingVerified;
     private static volatile boolean modularServiceImagesVerified;
     private static final Pattern TERMINAL_GRPC_FAILURE = Pattern.compile(
@@ -241,9 +256,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
          * In monolith layout only the PostgreSQL container is started.
          *
          * @throws IOException if creating directories, ensuring writability, or preparing development certificates fails
+         * @throws InterruptedException if container startup or Grafana provisioning is interrupted
          */
     @BeforeAll
-    static void startServices() throws IOException {
+    static void startServices() throws Exception {
         assertFalse(
                 TELEMETRY_CAPTURE_ACTIVE && TEMPO_VERIFICATION_ACTIVE,
                 "Replay capture and Tempo verification modes are mutually exclusive.");
@@ -251,6 +267,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         Path dir = Paths.get(TEST_E2E_DIR);
         Files.createDirectories(dir);
         ensureWritable(dir);
+        prepareFrameworkArtifactProvenance();
         rebuildModularServiceImages();
         ensurePackagedOrchestratorFresh();
         prepareObservabilityHarness();
@@ -273,11 +290,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         if (TEMPO_VERIFICATION_ACTIVE) {
             Startables.deepStart(Stream.of(getPostgresContainer(), getKafkaContainer(), getLgtmStackContainer())).join();
+            awaitGrafanaReady();
+            provisionGrafanaDashboards();
         } else {
             Startables.deepStart(Stream.of(getPostgresContainer(), getKafkaContainer())).join();
         }
         ensureKafkaTopics();
         verifyModularServiceImagesMatchDockerArchitecture();
+        verifyFrameworkArtifactProvenance();
 
         Stream.Builder<GenericContainer<?>> services = Stream.builder();
         services.add(getPersistenceService());
@@ -669,19 +689,28 @@ abstract class AbstractCsvPaymentsEndToEnd {
         }
         env.put("QUARKUS_OTEL_ENABLED", "true");
         env.put("QUARKUS_OTEL_SDK_DISABLED", "false");
-        env.put("QUARKUS_OTEL_METRICS_ENABLED", "false");
+        env.put("QUARKUS_OTEL_METRICS_ENABLED", "true");
         env.put("QUARKUS_OTEL_TRACES_ENABLED", "true");
         env.put("QUARKUS_OTEL_LOGS_ENABLED", "false");
         env.put("QUARKUS_OTEL_EXPORTER_OTLP_ENABLED", "true");
         env.put("QUARKUS_OTEL_EXPORTER_OTLP_ENDPOINT", otlpEndpoint);
         env.put("QUARKUS_OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf");
-        env.put("QUARKUS_OTEL_TRACES_SAMPLER", "parentbased_always_on");
+        env.put("QUARKUS_OTEL_TRACES_SAMPLER", "always_on");
         env.put("QUARKUS_OTEL_TRACES_SAMPLER_ARG", "1.0");
         env.put("QUARKUS_OBSERVABILITY_LGTM_ENABLED", "false");
         env.put("PIPELINE_TELEMETRY_ENABLED", "true");
         env.put("PIPELINE_TELEMETRY_TRACING_ENABLED", "true");
         env.put("PIPELINE_TELEMETRY_TRACING_PER_ITEM", "true");
-        env.put("PIPELINE_TELEMETRY_METRICS_ENABLED", "false");
+        env.put("PIPELINE_TELEMETRY_METRICS_ENABLED", "true");
+    }
+
+    private static void configureTempoBuildEnv(Map<String, String> env) {
+        if (!TEMPO_VERIFICATION_ACTIVE) {
+            return;
+        }
+        env.put("QUARKUS_OTEL_LOGS_ENABLED", "false");
+        env.put("QUARKUS_OTEL_TRACES_SAMPLER", "always_on");
+        env.put("QUARKUS_OTEL_TRACES_SAMPLER_ARG", "1.0");
     }
 
     private static String lgtmCollectorContainerEndpoint() {
@@ -911,6 +940,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.directory(processDir.toFile());
             pb.environment().put("CSV_RUNTIME_LAYOUT", RUNTIME_LAYOUT);
+            configureTempoBuildEnv(pb.environment());
             if (!mavenRepoLocal.isBlank()) {
                 String existingMavenArgs = pb.environment().getOrDefault("MAVEN_ARGS", "").trim();
                 String repoArg = "-Dmaven.repo.local=" + mavenRepoLocal;
@@ -975,6 +1005,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "-Dquarkus.container-image.build=true",
                 "-Dquarkus.container-image.push=false",
                 "-Dquarkus.container-image.tag=" + MODULAR_IMAGE_TAG));
+        command.add("-Dquarkus.container-image.labels.tpf_framework_version="
+                + frameworkProvenance("framework.version"));
+        command.add("-Dquarkus.container-image.labels.tpf_framework_commit="
+                + frameworkProvenance("framework.commit"));
+        command.add("-Dquarkus.container-image.labels.tpf_framework_source_fingerprint="
+                + frameworkProvenance("framework.source.fingerprint"));
+        command.add("-Dquarkus.container-image.labels.tpf_framework_runtime_sha256="
+                + frameworkProvenance("framework.runtime.sha256"));
         if (!mavenRepoLocal.isBlank()) {
             command.add("-Dmaven.repo.local=" + mavenRepoLocal);
         }
@@ -999,6 +1037,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.directory(moduleDir.toFile());
             pb.environment().put("CSV_RUNTIME_LAYOUT", RUNTIME_LAYOUT);
+            configureTempoBuildEnv(pb.environment());
             pb.redirectErrorStream(true);
             Process process = pb.start();
             CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> {
@@ -1034,6 +1073,105 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 Files.deleteIfExists(activeRuntimeMapping);
             }
         }
+    }
+
+    private static void prepareFrameworkArtifactProvenance() throws IOException {
+        Path moduleDir = Paths.get(System.getProperty("user.dir")).toAbsolutePath().normalize();
+        String mavenRepoLocal = System.getProperty("maven.repo.local", "").trim();
+        Path repository = mavenRepoLocal.isBlank()
+                ? moduleDir.resolve("../../../.m2/repository").normalize()
+                : Path.of(mavenRepoLocal).toAbsolutePath().normalize();
+        ProcessBuilder pb = new ProcessBuilder("bash", "../ensure-framework-artifact-provenance.sh");
+        pb.directory(moduleDir.toFile());
+        pb.environment().put("MAVEN_REPOSITORY", repository.toString());
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+        String output;
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            output = reader.lines().collect(java.util.stream.Collectors.joining(System.lineSeparator()));
+        }
+        try {
+            int exitCode = process.waitFor();
+            assertEquals(0, exitCode,
+                    "Failed to install current framework artifacts before CSV image build. Output tail:\n"
+                            + tailLines(output, 120));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while preparing framework artifact provenance.", e);
+        }
+
+        Properties loaded = new Properties();
+        Path provenancePath = repository.resolve(FRAMEWORK_PROVENANCE_FILE);
+        try (var input = Files.newInputStream(provenancePath)) {
+            loaded.load(input);
+        }
+        for (String key : FRAMEWORK_PROVENANCE_KEYS) {
+            assertFalse(loaded.getProperty(key, "").isBlank(),
+                    "Framework provenance file must define " + key + ": " + provenancePath);
+        }
+        frameworkProvenance = loaded;
+        LOG.infof("CSV framework artifact provenance: version=%s commit=%s source=%s runtime=%s",
+                frameworkProvenance("framework.version"),
+                frameworkProvenance("framework.commit"),
+                frameworkProvenance("framework.source.fingerprint"),
+                frameworkProvenance("framework.runtime.sha256"));
+    }
+
+    private static void verifyFrameworkArtifactProvenance() throws Exception {
+        Map<String, String> expectedLabels = Map.of(
+                "tpf_framework_version", frameworkProvenance("framework.version"),
+                "tpf_framework_commit", frameworkProvenance("framework.commit"),
+                "tpf_framework_source_fingerprint", frameworkProvenance("framework.source.fingerprint"),
+                "tpf_framework_runtime_sha256", frameworkProvenance("framework.runtime.sha256"));
+        for (String image : List.of(
+                modularImage("persistence-svc"),
+                modularImage("input-csv-file-processing-svc"),
+                modularImage("payments-processing-svc"),
+                modularImage("payment-status-svc"))) {
+            Map<String, String> labels = Optional.ofNullable(
+                            DockerClientFactory.instance().client().inspectImageCmd(image).exec().getConfig())
+                    .map(config -> config.getLabels())
+                    .orElseGet(Map::of);
+            expectedLabels.forEach((key, expected) -> assertEquals(
+                    expected,
+                    labels.get(key),
+                    "Image " + image + " must use the current framework artifact provenance for " + key));
+            LOG.infof("Verified %s framework provenance %s", image, expectedLabels);
+        }
+
+        Path runtimeCodeSource = Paths.get(PipelineTelemetry.class.getProtectionDomain()
+                        .getCodeSource().getLocation().toURI())
+                .toAbsolutePath()
+                .normalize();
+        assertTrue(Files.isRegularFile(runtimeCodeSource),
+                "CSV proof must load framework runtime from the installed JAR: " + runtimeCodeSource);
+        assertEquals(
+                frameworkProvenance("framework.runtime.sha256"),
+                sha256(runtimeCodeSource),
+                "CSV orchestrator test process must load the same framework runtime JAR as the service images");
+        LOG.infof("Verified CSV orchestrator process framework runtime %s", runtimeCodeSource);
+    }
+
+    private static String frameworkProvenance(String key) {
+        if (frameworkProvenance == null) {
+            throw new IllegalStateException("Framework provenance has not been prepared.");
+        }
+        return Optional.ofNullable(frameworkProvenance.getProperty(key))
+                .filter(value -> !value.isBlank())
+                .orElseThrow(() -> new IllegalStateException("Missing framework provenance value: " + key));
+    }
+
+    private static String sha256(Path path) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (var input = Files.newInputStream(path)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                digest.update(buffer, 0, read);
+            }
+        }
+        return HexFormat.of().formatHex(digest.digest());
     }
 
     /**
@@ -1109,8 +1247,28 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         executeHappyPathPipelineAndVerify();
         assertTempoTracesAvailable();
+        assertPrometheusMetricsAvailable();
 
         LOG.info("Tempo/LGTM verification test completed successfully!");
+    }
+
+    @Test
+    void operatorDashboard10kProof() throws Exception {
+        assumeTrue(runOperatorDashboard10kScenario(), "10k operator-dashboard scenario disabled for this E2E class.");
+        assumeTrue(OPERATOR_DASHBOARD_10K_ACTIVE,
+                "10k operator-dashboard proof requires csv.e2e.operator-dashboard.10k.enabled=true.");
+        assumeTrue(TEMPO_VERIFICATION_ACTIVE,
+                "10k operator-dashboard proof requires csv.e2e.tempo.enabled in modular layout.");
+        assertEquals(10_000L, expectedPaymentRecordCount(),
+                "The operator-dashboard proof must run the canonical payments_10k.csv fixture.");
+
+        LOG.info("Running 10k CSV Payments operator-dashboard proof");
+        executeHappyPathPipelineAndVerify();
+        assertTempoTracesAvailable();
+        assertPrometheusMetricsAvailable();
+        assertOperatorDashboardQueriesAvailable();
+        assertOperatorJourneyCounts(10_000L);
+        LOG.info("10k CSV Payments operator-dashboard proof completed successfully!");
     }
 
     private void executeHappyPathPipelineAndVerify() throws Exception {
@@ -1248,6 +1406,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     protected boolean runTempoVerificationScenario() {
+        return false;
+    }
+
+    protected boolean runOperatorDashboard10kScenario() {
         return false;
     }
 
@@ -2176,14 +2338,23 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private void assertTempoTracesAvailable() throws Exception {
-        JsonNode searchResponse = waitForTempoTraceSearch(List.of(
-                "{ name = \"tpf.pipeline.run\" }",
-                "{ name = \"tpf.step\" }"));
+        List<String> requiredSpans = List.of(
+                "tpf.pipeline.run",
+                "tpf.transition.dispatched",
+                "tpf.await.interaction.created",
+                "tpf.await.provider.dispatch",
+                "tpf.await.provider.admitted",
+                "tpf.await.completion.admitted",
+                "tpf.await.live.handoff",
+                "tpf.await.scalar.continuation",
+                "tpf.terminal.publication.completed");
+        JsonNode searchResponse = waitForTempoTraceSearch(List.of("{ name = \"tpf.pipeline.run\" }"));
         Set<String> traceIds = extractTraceIds(searchResponse);
         assertFalse(
                 traceIds.isEmpty(),
                 "Expected Tempo search to return at least one trace. Search response: " + searchResponse);
 
+        boolean foundTpfTrace = false;
         for (String traceId : traceIds) {
             JsonNode traceDocument;
             try {
@@ -2194,15 +2365,87 @@ abstract class AbstractCsvPaymentsEndToEnd {
             }
             if (containsTpfTraceSemantics(traceDocument)) {
                 LOG.infof("Verified Tempo trace %s contains TPF spans.", traceId);
-                return;
+                foundTpfTrace = true;
             }
         }
+        assertTrue(foundTpfTrace, "Tempo returned traces, but none contained TPF span names. Trace IDs: " + traceIds);
 
-        fail(
-                "Tempo returned traces, but none contained TPF span names. Trace IDs: "
-                        + traceIds
-                        + ", search response: "
-                        + searchResponse);
+        for (String spanName : requiredSpans) {
+            JsonNode stageSearch = waitForTempoTraceSearch(List.of("{ name = \"" + spanName + "\" }"));
+            assertFalse(extractTraceIds(stageSearch).isEmpty(), "Missing required CSV proof span: " + spanName);
+        }
+
+        JsonNode completionSearch = waitForTempoTraceSearch(List.of("{ name = \"tpf.await.completion.admitted\" }"));
+        for (String traceId : extractTraceIds(completionSearch)) {
+            List<JsonNode> completionSpans = completionSpans(fetchTempoTrace(traceId));
+            assertFalse(completionSpans.isEmpty(), "Tempo search returned no completion span for trace " + traceId);
+            for (JsonNode completionSpan : completionSpans) {
+                AwaitOriginLinkState originLink = awaitOriginLinkState(completionSpan);
+                assertEquals(AwaitOriginLinkState.LINKED, originLink,
+                        "Await completion must preserve an origin parent or durable SpanLink in trace " + traceId);
+            }
+        }
+    }
+
+    private void assertPrometheusMetricsAvailable() throws Exception {
+        List<String> requiredMetrics = List.of(
+                "tpf_pipeline_run_count_total",
+                "tpf_orchestrator_transition_dispatched_transitions_total",
+                "tpf_await_interaction_created_interactions_total",
+                "tpf_await_interaction_dispatched_interactions_total",
+                "tpf_await_completion_admitted_completions_total",
+                "tpf_await_live_handoff_handoffs_total",
+                "tpf_await_scalar_continuation_started_continuations_total",
+                "tpf_object_publish_published_objects_total");
+        for (String metric : requiredMetrics) {
+            JsonNode metricResult = waitForPrometheusMetric(metric);
+            assertTrue(hasPositivePrometheusSample(metricResult),
+                    "CSV telemetry proof metric did not contain a positive sample: " + metric);
+        }
+    }
+
+    private void assertOperatorDashboardQueriesAvailable() throws Exception {
+        JsonNode dashboard = OBJECT_MAPPER.readTree(Files.readString(GRAFANA_DASHBOARD));
+        List<String> proofQueries = new ArrayList<>();
+        collectOperatorProofQueries(dashboard, proofQueries);
+        assertFalse(proofQueries.isEmpty(), "Operator dashboard must mark current-series proof queries.");
+        for (String expression : proofQueries) {
+            String resolved = expression
+                    .replace("$__rate_interval", "1m")
+                    .replace("$__range", "30m")
+                    .replace("${step}", ".*");
+            JsonNode result = waitForPrometheusQuery(resolved);
+            assertTrue(hasNumericPrometheusSample(result),
+                    "Operator dashboard proof query returned no numeric sample: " + expression);
+        }
+    }
+
+    private void assertOperatorJourneyCounts(long expectedItems) throws Exception {
+        assertPrometheusTotal("sum(tpf_pipeline_run_count_total)", 1L);
+        assertPrometheusTotal("sum(tpf_orchestrator_transition_dispatched_transitions_total)", 1L);
+        assertPrometheusTotal("sum(tpf_await_interaction_created_interactions_total)", expectedItems);
+        assertPrometheusTotal("sum(tpf_await_interaction_dispatched_interactions_total)", expectedItems);
+        assertPrometheusTotal("sum(tpf_await_completion_admitted_completions_total)", expectedItems);
+        assertPrometheusTotal("sum(tpf_await_live_handoff_handoffs_total)", expectedItems);
+        assertPrometheusTotal("sum(tpf_await_scalar_continuation_started_continuations_total)", expectedItems);
+        assertPrometheusTotal("sum(tpf_object_publish_published_objects_total)", 1L);
+    }
+
+    private void assertPrometheusTotal(String promQl, long expected) throws Exception {
+        long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(TEMPO_SEARCH_TIMEOUT_SECONDS);
+        JsonNode result = null;
+        double actual = Double.NaN;
+        while (System.currentTimeMillis() < deadline) {
+            result = queryPrometheus(promQl);
+            actual = prometheusSampleTotal(result);
+            if (actual == expected) {
+                break;
+            }
+            Thread.sleep(TEMPO_SEARCH_POLL_MILLIS);
+        }
+        assertEquals((double) expected, actual, 0.0001D,
+                "Unexpected CSV operator proof total for " + promQl + ". Last response: " + result);
+        LOG.infof("Operator dashboard metric %s = %.0f", promQl, actual);
     }
 
     private JsonNode waitForTempoTraceSearch(List<String> candidateQueries) throws Exception {
@@ -2236,6 +2479,114 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         + ". Service names visible in Tempo: "
                         + serviceNames);
         return OBJECT_MAPPER.getNodeFactory().nullNode();
+    }
+
+    private JsonNode waitForPrometheusMetric(String metric) throws Exception {
+        long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(TEMPO_SEARCH_TIMEOUT_SECONDS);
+        JsonNode lastResponse = null;
+        while (System.currentTimeMillis() < deadline) {
+            lastResponse = queryPrometheus(metric);
+            if (hasPositivePrometheusSample(lastResponse)) {
+                return lastResponse;
+            }
+            Thread.sleep(TEMPO_SEARCH_POLL_MILLIS);
+        }
+        fail("Timed out waiting for emitted CSV proof metric " + metric + ". Last response: " + lastResponse);
+        return OBJECT_MAPPER.getNodeFactory().nullNode();
+    }
+
+    private JsonNode waitForPrometheusQuery(String promQl) throws Exception {
+        long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(TEMPO_SEARCH_TIMEOUT_SECONDS);
+        JsonNode lastResponse = null;
+        while (System.currentTimeMillis() < deadline) {
+            lastResponse = queryPrometheus(promQl);
+            if (hasNumericPrometheusSample(lastResponse)) {
+                return lastResponse;
+            }
+            Thread.sleep(TEMPO_SEARCH_POLL_MILLIS);
+        }
+        fail("Timed out waiting for numeric CSV operator dashboard query " + promQl + ". Last response: " + lastResponse);
+        return OBJECT_MAPPER.getNodeFactory().nullNode();
+    }
+
+    private JsonNode queryPrometheus(String promQl) throws Exception {
+        String encoded = URLEncoder.encode(promQl, StandardCharsets.UTF_8);
+        URI uri = URI.create(grafanaBaseUrl()
+                + "/api/datasources/uid/prometheus/resources/api/v1/query?query=" + encoded);
+        HttpRequest request = HttpRequest.newBuilder(uri)
+                .timeout(TEMPO_HTTP_REQUEST_TIMEOUT)
+                .header("Authorization", "Basic " + Base64.getEncoder()
+                        .encodeToString("admin:admin".getBytes(StandardCharsets.UTF_8)))
+                .GET()
+                .build();
+        HttpResponse<String> response =
+                HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertEquals(200, response.statusCode(),
+                "Expected HTTP 200 from Prometheus datasource for " + promQl + " but got "
+                        + response.statusCode() + ". Body: " + response.body());
+        return OBJECT_MAPPER.readTree(response.body());
+    }
+
+    private static boolean hasPositivePrometheusSample(JsonNode response) {
+        for (JsonNode sample : response.path("data").path("result")) {
+            JsonNode value = sample.path("value");
+            if (value.isArray() && value.size() > 1) {
+                try {
+                    if (Double.parseDouble(value.get(1).asText()) > 0D) {
+                        return true;
+                    }
+                } catch (NumberFormatException ignored) {
+                    // Keep looking for a valid positive Prometheus sample.
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasNumericPrometheusSample(JsonNode response) {
+        for (JsonNode sample : response.path("data").path("result")) {
+            JsonNode value = sample.path("value");
+            if (!value.isArray() || value.size() < 2) {
+                continue;
+            }
+            try {
+                Double.parseDouble(value.get(1).asText());
+                return true;
+            } catch (NumberFormatException ignored) {
+                // Continue until a valid Prometheus sample is found.
+            }
+        }
+        return false;
+    }
+
+    private static double prometheusSampleTotal(JsonNode response) {
+        double total = 0D;
+        for (JsonNode sample : response.path("data").path("result")) {
+            JsonNode value = sample.path("value");
+            if (!value.isArray() || value.size() < 2) {
+                continue;
+            }
+            try {
+                total += Double.parseDouble(value.get(1).asText());
+            } catch (NumberFormatException ignored) {
+                // The assertion reports the observed total when a backend response has no numeric samples.
+            }
+        }
+        return total;
+    }
+
+    private static void collectOperatorProofQueries(JsonNode node, List<String> expressions) {
+        if (node == null) {
+            return;
+        }
+        if (node.isObject()) {
+            if (node.path("tpfProof").asBoolean(false) && node.hasNonNull("expr")) {
+                expressions.add(node.path("expr").asText());
+            }
+            node.elements().forEachRemaining(value -> collectOperatorProofQueries(value, expressions));
+        } else if (node.isArray()) {
+            node.forEach(value -> collectOperatorProofQueries(value, expressions));
+        }
     }
 
     private boolean containsTpfTraceSemantics(JsonNode traceDocument) {
@@ -2297,6 +2648,110 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "Expected HTTP 200 from " + uri + " but got " + response.statusCode() + ". Body: " + response.body());
         return OBJECT_MAPPER.readTree(response.body());
     }
+
+    private static void provisionGrafanaDashboards() throws IOException, InterruptedException {
+        provisionGrafanaDashboard(GRAFANA_DASHBOARD);
+        provisionGrafanaDashboard(TEMPO_DASHBOARD);
+    }
+
+    private static void awaitGrafanaReady() throws Exception {
+        long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(TEMPO_SEARCH_TIMEOUT_SECONDS);
+        Exception lastFailure = null;
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                HttpRequest request = HttpRequest.newBuilder(URI.create(grafanaBaseUrl() + "/api/health"))
+                        .timeout(TEMPO_HTTP_REQUEST_TIMEOUT)
+                        .GET()
+                        .build();
+                HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() == 200) {
+                    return;
+                }
+            } catch (IOException | InterruptedException failure) {
+                if (failure instanceof InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw interrupted;
+                }
+                lastFailure = failure;
+            }
+            Thread.sleep(TEMPO_SEARCH_POLL_MILLIS);
+        }
+        throw new IllegalStateException("Timed out waiting for Grafana health endpoint at " + grafanaBaseUrl(), lastFailure);
+    }
+
+    private static void provisionGrafanaDashboard(Path dashboardPath) throws IOException, InterruptedException {
+        JsonNode dashboard = OBJECT_MAPPER.readTree(Files.readString(dashboardPath));
+        com.fasterxml.jackson.databind.node.ObjectNode requestPayload = OBJECT_MAPPER.createObjectNode();
+        requestPayload.set("dashboard", dashboard);
+        requestPayload.put("overwrite", true);
+        String requestBody = requestPayload.toString();
+        HttpRequest request = HttpRequest.newBuilder(URI.create(grafanaBaseUrl() + "/api/dashboards/db"))
+                .timeout(TEMPO_HTTP_REQUEST_TIMEOUT)
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Basic " + Base64.getEncoder()
+                        .encodeToString("admin:admin".getBytes(StandardCharsets.UTF_8)))
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
+                .build();
+        HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertTrue(response.statusCode() == 200 || response.statusCode() == 201,
+                "Grafana failed to provision " + dashboardPath + ": " + response.statusCode() + " " + response.body());
+    }
+
+    private static List<JsonNode> completionSpans(JsonNode node) {
+        List<JsonNode> spans = new ArrayList<>();
+        collectCompletionSpans(node, spans);
+        return spans;
+    }
+
+    private static void collectCompletionSpans(JsonNode node, List<JsonNode> spans) {
+        if (node == null) {
+            return;
+        }
+        if (node.isObject()) {
+            if ("tpf.await.completion.admitted".equals(node.path("name").asText())) {
+                spans.add(node);
+            }
+            Iterator<JsonNode> values = node.elements();
+            while (values.hasNext()) {
+                collectCompletionSpans(values.next(), spans);
+            }
+        } else if (node.isArray()) {
+            for (JsonNode value : node) {
+                collectCompletionSpans(value, spans);
+            }
+        }
+    }
+
+    private static AwaitOriginLinkState awaitOriginLinkState(JsonNode node) {
+        if (node == null) {
+            return AwaitOriginLinkState.MISSING;
+        }
+        if (node.isObject()) {
+            if ("tpf.await.origin.linked".equals(node.path("key").asText())) {
+                JsonNode value = node.path("value").path("boolValue");
+                return value.isBoolean() && value.asBoolean()
+                        ? AwaitOriginLinkState.LINKED
+                        : AwaitOriginLinkState.UNLINKED;
+            }
+            Iterator<JsonNode> values = node.elements();
+            while (values.hasNext()) {
+                AwaitOriginLinkState state = awaitOriginLinkState(values.next());
+                if (state != AwaitOriginLinkState.MISSING) {
+                    return state;
+                }
+            }
+        } else if (node.isArray()) {
+            for (JsonNode value : node) {
+                AwaitOriginLinkState state = awaitOriginLinkState(value);
+                if (state != AwaitOriginLinkState.MISSING) {
+                    return state;
+                }
+            }
+        }
+        return AwaitOriginLinkState.MISSING;
+    }
+
+    private enum AwaitOriginLinkState { LINKED, UNLINKED, MISSING }
 
     private Set<String> extractTraceIds(JsonNode searchResponse) {
         Set<String> traceIds = new HashSet<>();

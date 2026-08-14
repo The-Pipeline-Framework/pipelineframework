@@ -27,7 +27,7 @@ import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.TransitionAwaitSuspension;
 import org.pipelineframework.orchestrator.TypedDurablePayload;
 import org.pipelineframework.telemetry.AwaitReplayLifecycleEvent;
-import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineReplayTelemetry;
 
 /**
  * Coordinates await unit persistence, interaction dispatch, completion admission, and replay payload loading.
@@ -61,7 +61,15 @@ public class AwaitCoordinator {
     AwaitDurablePayloadResolver durablePayloadResolver;
 
     @Inject
-    PipelineTelemetry telemetry;
+    PipelineReplayTelemetry telemetry;
+
+    @Inject
+    AwaitTelemetry awaitTelemetry = AwaitTelemetry.disabled();
+
+    /** Focused Await telemetry seam for runtime collaborators that already own this coordinator. */
+    public AwaitTelemetry awaitTelemetry() {
+        return awaitTelemetry == null ? AwaitTelemetry.disabled() : awaitTelemetry;
+    }
 
     private volatile AwaitInteractionStore resolvedInteractionStore;
     private volatile AwaitUnitStore resolvedUnitStore;
@@ -78,6 +86,21 @@ public class AwaitCoordinator {
         String assignee,
         String group
     ) {
+        return createOrGet(descriptor, tenantId, executionId, stepIndex, causationId, requestPayload, assignee, group,
+            traceMetadataForCurrentExecution());
+    }
+
+    Uni<AwaitCreateResult> createOrGet(
+        AwaitStepDescriptor descriptor,
+        String tenantId,
+        String executionId,
+        int stepIndex,
+        String causationId,
+        Object requestPayload,
+        String assignee,
+        String group,
+        Map<String, Object> traceMetadata
+    ) {
         String unitId = deriveUnitId(tenantId, executionId, descriptor.stepId(), stepIndex);
         return registerDescriptor(descriptor)
             .chain(() -> createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex))
@@ -91,7 +114,8 @@ public class AwaitCoordinator {
                 requestPayload,
                 null,
                 assignee,
-                group)
+                group,
+                traceMetadata)
                 .onItem().transformToUni(created -> unitStore().attachPrimaryInteraction(
                         tenantId,
                         unit.unitId(),
@@ -112,6 +136,23 @@ public class AwaitCoordinator {
         String assignee,
         String group
     ) {
+        return createOrGetItem(descriptor, tenantId, executionId, stepIndex, causationId, requestPayload, unitId,
+            itemIndex, assignee, group, traceMetadataForCurrentExecution());
+    }
+
+    Uni<AwaitCreateResult> createOrGetItem(
+        AwaitStepDescriptor descriptor,
+        String tenantId,
+        String executionId,
+        int stepIndex,
+        String causationId,
+        Object requestPayload,
+        String unitId,
+        int itemIndex,
+        String assignee,
+        String group,
+        Map<String, Object> traceMetadata
+    ) {
         return registerDescriptor(descriptor)
             .onItem().transformToUni(ignored -> {
                 if (itemIndex < 0) {
@@ -120,7 +161,7 @@ public class AwaitCoordinator {
                 return createOrGetUnit(descriptor, tenantId, unitId, executionId, stepIndex)
                     .onItem().transformToUni(unit -> createItemInPreparedUnit(
                         descriptor, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
-                        itemIndex, assignee, group));
+                        itemIndex, assignee, group, traceMetadata));
             });
     }
 
@@ -150,6 +191,23 @@ public class AwaitCoordinator {
         String assignee,
         String group
     ) {
+        return createOrGetPreparedItem(descriptor, tenantId, executionId, stepIndex, causationId, requestPayload,
+            unitId, itemIndex, assignee, group, traceMetadataForCurrentExecution());
+    }
+
+    Uni<AwaitCreateResult> createOrGetPreparedItem(
+        AwaitStepDescriptor descriptor,
+        String tenantId,
+        String executionId,
+        int stepIndex,
+        String causationId,
+        Object requestPayload,
+        String unitId,
+        int itemIndex,
+        String assignee,
+        String group,
+        Map<String, Object> traceMetadata
+    ) {
         return registerDescriptor(descriptor)
             .chain(() -> {
                 if (itemIndex < 0) {
@@ -157,7 +215,7 @@ public class AwaitCoordinator {
                 }
                 return createItemInPreparedUnit(
                     descriptor, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
-                    itemIndex, assignee, group);
+                    itemIndex, assignee, group, traceMetadata);
             });
     }
 
@@ -173,10 +231,12 @@ public class AwaitCoordinator {
             .onItem().transform(optional -> optional.orElseThrow(() ->
                 new IllegalStateException("Await interaction dispatch transition lost OCC race: "
                     + interaction.interactionId())))
-            .onItem().transformToUni(claimedInteraction -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
+            .onItem().transformToUni(claimedInteraction -> awaitTelemetry.inProviderDispatchSpan(
+                claimedInteraction,
+                () -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
                     descriptor,
                     claimedInteraction,
-                    transportRequestPayload(descriptor, claimedInteraction)))
+                    transportRequestPayload(descriptor, claimedInteraction))))
                 .onFailure().call(failure -> interactionStore().fail(
                     claimedInteraction.tenantId(),
                     claimedInteraction.interactionId(),
@@ -220,10 +280,12 @@ public class AwaitCoordinator {
                     new IllegalStateException("Await interaction live dispatch transition lost OCC race: "
                         + interaction.interactionId())))
             : Uni.createFrom().item(interaction);
-        return intended.onItem().transformToUni(dispatching -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
+        return intended.onItem().transformToUni(dispatching -> awaitTelemetry.inProviderDispatchSpan(
+            dispatching,
+            () -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
                 descriptor,
                 dispatching,
-                transportRequestPayload(descriptor, dispatching)))
+                transportRequestPayload(descriptor, dispatching))))
             .onFailure().call(failure -> interactionStore().fail(
                 dispatching.tenantId(),
                 dispatching.interactionId(),
@@ -239,7 +301,12 @@ public class AwaitCoordinator {
     }
 
     private Map<String, Object> dispatchMetadata(AwaitInteractionRecord interaction, Map<String, Object> metadata) {
-        return awaitAdmissionCoordinator == null ? metadata : awaitAdmissionCoordinator.dispatchMetadata(interaction, metadata);
+        Map<String, Object> merged = new java.util.LinkedHashMap<>(interaction.transportMetadata());
+        if (metadata != null) {
+            merged.putAll(metadata);
+        }
+        return awaitAdmissionCoordinator == null ? Map.copyOf(merged)
+            : awaitAdmissionCoordinator.dispatchMetadata(interaction, Map.copyOf(merged));
     }
 
     /**
@@ -514,7 +581,7 @@ public class AwaitCoordinator {
     }
 
     private void recordInteractionDispatched(AwaitInteractionRecord record) {
-        AwaitCompletionMetrics.recordInteractionDispatched(record);
+        awaitTelemetry.recordInteractionDispatched(record);
         recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
             AwaitReplayLifecycleEvent.INTERACTION_DISPATCHED,
             record.executionId(),
@@ -549,7 +616,7 @@ public class AwaitCoordinator {
     }
 
     private void recordUnitDispatchComplete(AwaitUnitRecord unit) {
-        AwaitCompletionMetrics.recordUnitDispatchComplete(unit);
+        awaitTelemetry.recordUnitDispatchComplete(unit);
         recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
             AwaitReplayLifecycleEvent.UNIT_DISPATCH_COMPLETE,
             unit.executionId(),
@@ -567,9 +634,9 @@ public class AwaitCoordinator {
     }
 
     private void recordCompletionLifecycle(AwaitInteractionRecord record, AwaitUnitRecord unit) {
-        AwaitCompletionMetrics.recordCompletionAdmitted(record);
+        awaitTelemetry.recordCompletionAdmitted(record);
         if (record.itemInteraction()) {
-            AwaitCompletionMetrics.recordItemCompleted(record, unit);
+            awaitTelemetry.recordItemCompleted(record, unit);
             recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
                 AwaitReplayLifecycleEvent.UNIT_ITEM_COMPLETED,
                 record.executionId(),
@@ -604,7 +671,7 @@ public class AwaitCoordinator {
     }
 
     private void recordUnitTerminal(AwaitInteractionRecord record, AwaitUnitRecord unit) {
-        AwaitCompletionMetrics.recordUnitTerminal(record, unit);
+        awaitTelemetry.recordUnitTerminal(record, unit);
         recordAwaitLifecycle(new AwaitReplayLifecycleEvent(
             AwaitReplayLifecycleEvent.UNIT_TERMINAL,
             unit.executionId(),
@@ -637,7 +704,8 @@ public class AwaitCoordinator {
         Object requestPayload,
         Integer itemIndex,
         String assignee,
-        String group
+        String group,
+        Map<String, Object> traceMetadata
     ) {
         Object canonicalRequestPayload = restoreCanonicalRequestPayload(descriptor, requestPayload);
         long now = System.currentTimeMillis();
@@ -663,10 +731,16 @@ public class AwaitCoordinator {
                 descriptor.transportType(),
                 unitId,
                 itemIndex,
+                traceMetadata,
                 now,
                 deadline,
                 ttl))
                 .onItem().transformToUni(created -> bindOrReleaseAdmission(created, lease))
+                .onItem().invoke(created -> {
+                    if (!created.duplicate()) {
+                    awaitTelemetry.recordInteractionCreated(created.record());
+                    }
+                })
                 .onFailure().call(ignored -> releaseAdmissionAfterDefiniteCreateFailure(lease, tenantId, correlationId)));
     }
 
@@ -680,11 +754,12 @@ public class AwaitCoordinator {
         Object requestPayload,
         int itemIndex,
         String assignee,
-        String group
+        String group,
+        Map<String, Object> traceMetadata
     ) {
         return createInteraction(
             descriptor, unitId, tenantId, executionId, stepIndex, causationId, requestPayload,
-            itemIndex, assignee, group);
+            itemIndex, assignee, group, traceMetadata);
     }
 
     private static Object restoreCanonicalRequestPayload(AwaitStepDescriptor descriptor, Object requestPayload) {
@@ -1181,6 +1256,14 @@ public class AwaitCoordinator {
             builder.append(value == null || value.isNull() ? "<null>" : value.asText());
         }
         return builder.toString();
+    }
+
+    private Map<String, Object> traceMetadataForCurrentExecution() {
+        AwaitExecutionContext context = AwaitExecutionContextHolder.get();
+        if (context != null && !context.traceMetadata().isEmpty()) {
+            return context.traceMetadata();
+        }
+        return awaitTelemetry.captureTraceMetadata();
     }
 
     private static String deriveUnitId(String tenantId, String executionId, String stepId, int stepIndex) {

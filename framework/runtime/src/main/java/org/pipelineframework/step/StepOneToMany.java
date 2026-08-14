@@ -22,7 +22,7 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.step.functional.OneToMany;
-import org.pipelineframework.telemetry.PipelineTelemetry;
+import org.pipelineframework.telemetry.PipelineRetryTelemetry;
 import org.pipelineframework.telemetry.BackpressureBufferMetrics;
 import org.pipelineframework.invocation.TransportBoundaryInvocation;
 
@@ -82,7 +82,7 @@ public interface StepOneToMany<I, O> extends OneToMany<I, O>, Configurable, Item
             }
             return output
             .onFailure(this::shouldRetry)
-            .invoke(t -> PipelineTelemetry.recordRetry(this.getClass(), t))
+            .invoke(t -> PipelineRetryTelemetry.recordRetry(this.getClass(), t))
             .onFailure(this::shouldRetry)
             .retry()
             .withBackOff(retryWait(), maxBackoff())

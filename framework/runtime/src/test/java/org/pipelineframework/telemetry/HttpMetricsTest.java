@@ -41,7 +41,6 @@ class HttpMetricsTest {
             .build();
         GlobalOpenTelemetry.resetForTest();
         GlobalOpenTelemetry.set(sdk);
-        HttpMetrics.resetForTest();
 
         try {
             long startNanos = System.nanoTime();

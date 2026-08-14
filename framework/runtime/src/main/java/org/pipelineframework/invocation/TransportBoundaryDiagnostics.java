@@ -1,8 +1,10 @@
 package org.pipelineframework.invocation;
 
+import org.pipelineframework.telemetry.TelemetryCompatibilityAccess;
+
 import java.util.Objects;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
+import org.pipelineframework.telemetry.TelemetryRuntimes;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
@@ -21,7 +23,7 @@ final class TransportBoundaryDiagnostics {
     private final DoubleHistogram duration;
 
     TransportBoundaryDiagnostics() {
-        this(new TransportBoundaryFailureClassifier(), GlobalOpenTelemetry.getMeter("org.pipelineframework.invocation"));
+        this(new TransportBoundaryFailureClassifier(), TelemetryCompatibilityAccess.metricsRuntime().meter("org.pipelineframework.invocation"));
     }
 
     TransportBoundaryDiagnostics(TransportBoundaryFailureClassifier failureClassifier, Meter meter) {

@@ -40,6 +40,7 @@ import org.eclipse.microprofile.reactive.messaging.Message;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitDispatchEnvelope;
 import org.pipelineframework.awaitable.kafka.KafkaAwaitCompletionEnvelope;
 import org.pipelineframework.awaitable.AwaitPayloadSupport;
+import org.pipelineframework.awaitable.AwaitTelemetry;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.csv.domain.PaymentRecord;
 import org.pipelineframework.csv.domain.PaymentStatus;
@@ -118,7 +119,7 @@ class PaymentProviderAwaitContractTest {
     }
 
     private static PaymentProviderKafkaAwaitMock configuredKafkaAwaitMock(MutinyEmitter<String> results) {
-        PaymentProviderKafkaAwaitMock awaitMock = new PaymentProviderKafkaAwaitMock();
+        PaymentProviderKafkaAwaitMock awaitMock = new PaymentProviderKafkaAwaitMock(AwaitTelemetry.disabled());
         awaitMock.paymentProvider = new PaymentProviderServiceMock(new PaymentProviderServiceMockTest.FakePaymentProviderConfig());
         awaitMock.paymentProviderConfig = new PaymentProviderServiceMockTest.FakePaymentProviderConfig();
         awaitMock.results = results;
