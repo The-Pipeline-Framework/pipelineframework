@@ -202,7 +202,7 @@ cd <repo-root>
 ./examples/csv-payments/build-modular-observability-images.sh
 ./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
   -Dcsv.e2e.tempo.enabled=true \
-  -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
+  -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_12.csv \
   -Dit.test=CsvPaymentsTempoVerificationEndToEndIT \
   verify -Dmaven.repo.local="$PWD/.m2/repository"
 ```
@@ -264,7 +264,7 @@ For local manual inspection before teardown:
 ./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
   -Dcsv.e2e.tempo.enabled=true \
   -Dcsv.e2e.tempo.pause.before.teardown=true \
-  -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
+  -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_12.csv \
   -Dit.test=CsvPaymentsTempoVerificationEndToEndIT \
   verify -Dmaven.repo.local="$PWD/.m2/repository"
 ```
