@@ -19,16 +19,20 @@ public final class TransitionTelemetryDerivation {
     private TransitionTelemetryDerivation() { }
 
     public static List<MetricSignal> metrics(TransitionObservation observation) {
-        if (observation instanceof TransitionObservation.Admitted) return List.of(new MetricSignal(Metric.ACTIVE, 1d, Map.of()));
-        if (observation instanceof TransitionObservation.Released) return List.of(new MetricSignal(Metric.ACTIVE, -1d, Map.of()));
-        if (observation instanceof TransitionObservation.Saturated) return List.of(new MetricSignal(Metric.SATURATED, 1d, Map.of()));
-        if (observation instanceof TransitionObservation.Dispatched) return List.of(new MetricSignal(Metric.DISPATCHED, 1d, Map.of()));
-        if (observation instanceof TransitionObservation.OutcomeRecorded outcome) {
-            return List.of(new MetricSignal(Metric.OUTCOME, 1d,
+        return switch (observation) {
+            case TransitionObservation.Admitted ignored ->
+                List.of(new MetricSignal(Metric.ACTIVE, 1d, Map.of()));
+            case TransitionObservation.Released ignored ->
+                List.of(new MetricSignal(Metric.ACTIVE, -1d, Map.of()));
+            case TransitionObservation.Saturated ignored ->
+                List.of(new MetricSignal(Metric.SATURATED, 1d, Map.of()));
+            case TransitionObservation.Dispatched ignored ->
+                List.of(new MetricSignal(Metric.DISPATCHED, 1d, Map.of()));
+            case TransitionObservation.OutcomeRecorded outcome -> List.of(new MetricSignal(Metric.OUTCOME, 1d,
                 Map.of("tpf.transition.outcome", outcome.outcome().toLowerCase(Locale.ROOT))));
-        }
-        TransitionObservation.DurationRecorded duration = (TransitionObservation.DurationRecorded) observation;
-        return List.of(new MetricSignal(Metric.DURATION, duration.durationNanos() / 1_000_000d, Map.of()));
+            case TransitionObservation.DurationRecorded duration ->
+                List.of(new MetricSignal(Metric.DURATION, duration.durationNanos() / 1_000_000d, Map.of()));
+        };
     }
 
     public static Optional<SpanPlan> span(TransitionObservation observation) {

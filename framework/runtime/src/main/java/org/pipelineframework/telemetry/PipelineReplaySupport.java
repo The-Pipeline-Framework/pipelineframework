@@ -139,7 +139,8 @@ final class PipelineReplaySupport {
     }
 
     void recordRetry(RetryTelemetryDerivation.ReplaySignal signal) {
-        tracker.ifPresent(current -> current.recordRetry(signal.stepClass(), currentSpanId(), signal.failure()));
+        tracker.ifPresent(current -> current.recordRetry(
+            signal.stepClass(), currentSpanId(), signal.failure().orElse(null)));
     }
 
     void recordReject(RejectObservation observation) {

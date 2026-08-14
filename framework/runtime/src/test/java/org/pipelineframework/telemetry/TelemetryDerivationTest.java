@@ -12,13 +12,16 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.telemetry.derivation.AwaitTelemetryDerivation;
 import org.pipelineframework.telemetry.derivation.PipelineSloDerivation;
+import org.pipelineframework.telemetry.derivation.RetryTelemetryDerivation;
 import org.pipelineframework.telemetry.derivation.RunTelemetryDerivation;
 import org.pipelineframework.telemetry.derivation.StepTelemetryDerivation;
 import org.pipelineframework.telemetry.derivation.TransitionTelemetryDerivation;
 import org.pipelineframework.telemetry.observation.RunObservation;
+import org.pipelineframework.telemetry.observation.RetryObservation;
 import org.pipelineframework.telemetry.observation.StepObservation;
 import org.pipelineframework.telemetry.observation.TransitionObservation;
 
@@ -28,10 +31,14 @@ class TelemetryDerivationTest {
 
     @Test
     void stepCancellationHasOneConsistentNonErrorMeaningAcrossSinks() {
+        var started = StepTelemetryDerivation.started(
+            new StepObservation.Started(STEP, Instant.EPOCH), STEP_ATTRIBUTES, STEP_ATTRIBUTES);
         var signals = StepTelemetryDerivation.terminal(
             new StepObservation.Cancelled(STEP, 2_000_000L, Instant.EPOCH), STEP_ATTRIBUTES);
 
+        assertEquals("example.Step", started.metric().stepClass());
         assertFalse(signals.metric().error());
+        assertEquals("example.Step", signals.metric().stepClass());
         assertEquals(2d, signals.metric().durationMillis());
         assertTrue(signals.span().failure().isEmpty());
         assertTrue(signals.span().cancelled());
@@ -47,6 +54,7 @@ class TelemetryDerivationTest {
             new StepObservation.Failed(STEP, 1_000_000L, failure, Instant.EPOCH), STEP_ATTRIBUTES);
 
         assertTrue(signals.metric().error());
+        assertEquals("example.Step", signals.metric().stepClass());
         assertSame(failure, signals.span().failure().orElseThrow());
         assertEquals(StepTelemetryDerivation.ReplayOutcome.FAILURE, signals.replay().outcome());
         assertSame(failure, signals.replay().failure().orElseThrow());
@@ -88,8 +96,9 @@ class TelemetryDerivationTest {
     @Test
     void awaitCompletionDerivesMetricAndExistingSpanName() {
         AwaitObservation.Context context = new AwaitObservation.Context(
-            "approval", "REST", "COMPLETED", "ONE_TO_ONE", "execution", "interaction",
-            "correlation", "unit", Map.of());
+            Optional.of("approval"), Optional.of("REST"), Optional.of("COMPLETED"),
+            Optional.of("ONE_TO_ONE"), Optional.of("execution"), Optional.of("interaction"),
+            Optional.of("correlation"), Optional.of("unit"), Map.of());
         AwaitObservation.CompletionAdmitted observation =
             new AwaitObservation.CompletionAdmitted(context, 12L, Instant.EPOCH);
 
@@ -99,11 +108,59 @@ class TelemetryDerivationTest {
     }
 
     @Test
+    void awaitAdmissionDerivesReconciledWaitedAndPendingSignals() {
+        AwaitObservation.Context context = new AwaitObservation.Context(
+            Optional.of("approval"), Optional.of("REST"), Optional.of("WAITING"),
+            Optional.of("ONE_TO_ONE"), Optional.of("execution"), Optional.of("interaction"),
+            Optional.of("correlation"), Optional.of("unit"), Map.of());
+        var acquired = AwaitTelemetryDerivation.metrics(new AwaitObservation.AdmissionAcquired(
+            context, false, true, 12L, true, Instant.EPOCH));
+        var released = AwaitTelemetryDerivation.metrics(new AwaitObservation.AdmissionReleased(
+            context, true, true, Instant.EPOCH));
+
+        assertEquals(5, acquired.size());
+        assertTrue(acquired.stream().anyMatch(signal ->
+            signal.metric() == AwaitTelemetryDerivation.Metric.ADMISSION_OUTCOME
+                && "reconciled".equals(signal.attributes().get("tpf.await.admission.outcome"))));
+        assertTrue(acquired.stream().anyMatch(signal ->
+            signal.metric() == AwaitTelemetryDerivation.Metric.ADMISSION_OUTCOME
+                && "waited".equals(signal.attributes().get("tpf.await.admission.outcome"))));
+        assertTrue(acquired.stream().anyMatch(signal ->
+            signal.metric() == AwaitTelemetryDerivation.Metric.ADMISSION_PENDING && signal.value() == 1d));
+        assertEquals(2, released.size());
+        assertTrue(released.stream().anyMatch(signal ->
+            signal.metric() == AwaitTelemetryDerivation.Metric.ADMISSION_PENDING && signal.value() == -1d));
+    }
+
+    @Test
     void sloClassificationIsPureAndDeterministic() {
         assertTrue(PipelineSloDerivation.throughput(Map.of("boundary", "x"), 10, 60_000, 10)
             .orElseThrow().good());
         var success = PipelineSloDerivation.success(Map.of("boundary", "x"), 10, 8).orElseThrow();
         assertEquals(10, success.total());
         assertEquals(8, success.good());
+    }
+
+    @Test
+    void sloClassificationRejectsInvalidNumericInputs() {
+        Map<String, String> attributes = Map.of("boundary", "x");
+
+        assertTrue(PipelineSloDerivation.throughput(attributes, -1, 1d, 1d).isEmpty());
+        assertTrue(PipelineSloDerivation.throughput(attributes, 1, Double.NaN, 1d).isEmpty());
+        assertTrue(PipelineSloDerivation.throughput(attributes, 1, Double.POSITIVE_INFINITY, 1d).isEmpty());
+        assertTrue(PipelineSloDerivation.throughput(attributes, 1, 1d, Double.NaN).isEmpty());
+        assertTrue(PipelineSloDerivation.success(attributes, 1, -1).isEmpty());
+    }
+
+    @Test
+    void retryReplayFailureIsExplicitlyOptional() {
+        var withoutFailure = RetryTelemetryDerivation.derive(
+            new RetryObservation("example.Step", null, Instant.EPOCH), STEP_ATTRIBUTES);
+        IllegalStateException failure = new IllegalStateException("retry");
+        var withFailure = RetryTelemetryDerivation.derive(
+            new RetryObservation("example.Step", failure, Instant.EPOCH), STEP_ATTRIBUTES);
+
+        assertTrue(withoutFailure.replay().failure().isEmpty());
+        assertSame(failure, withFailure.replay().failure().orElseThrow());
     }
 }

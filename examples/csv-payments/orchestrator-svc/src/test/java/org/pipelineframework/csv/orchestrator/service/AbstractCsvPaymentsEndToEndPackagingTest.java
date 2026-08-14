@@ -4,9 +4,14 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.HexFormat;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -87,9 +92,9 @@ class AbstractCsvPaymentsEndToEndPackagingTest {
 
     @Test
     void frameworkRuntimeContentHashIgnoresJarEntryTimestamps() throws Exception {
-        Path first = writeJar("first.jar", 1_000L, "same runtime content");
-        Path second = writeJar("second.jar", 2_000L, "same runtime content");
-        Path changed = writeJar("changed.jar", 2_000L, "changed runtime content");
+        Path first = writeJar("first.jar", 1_000L, entry("telemetry/contract.txt", "same runtime content"));
+        Path second = writeJar("second.jar", 2_000L, entry("telemetry/contract.txt", "same runtime content"));
+        Path changed = writeJar("changed.jar", 2_000L, entry("telemetry/contract.txt", "changed runtime content"));
 
         String firstContentHash = AbstractCsvPaymentsEndToEnd.jarContentSha256(first);
         String secondContentHash = AbstractCsvPaymentsEndToEnd.jarContentSha256(second);
@@ -101,16 +106,57 @@ class AbstractCsvPaymentsEndToEndPackagingTest {
         assertEquals(secondContentHash, hashJarWithProofScript(second));
     }
 
-    private Path writeJar(String name, long timestamp, String content) throws Exception {
+    @Test
+    void frameworkRuntimeContentHashSeparatesEntryBoundaries() throws Exception {
+        Path split = writeJar("split.jar", 1_000L, entry("a", "x"), entry("b", "y"));
+        Path joined = writeJar("joined.jar", 1_000L,
+                new JarContent("a", new byte[] {'x', 'b', 0, 'y'}));
+
+        assertEquals(legacyJarContentSha256(split), legacyJarContentSha256(joined),
+                "Fixture must reproduce the former entry-boundary collision");
+        assertNotEquals(
+                AbstractCsvPaymentsEndToEnd.jarContentSha256(split),
+                AbstractCsvPaymentsEndToEnd.jarContentSha256(joined));
+        assertNotEquals(hashJarWithProofScript(split), hashJarWithProofScript(joined));
+    }
+
+    private Path writeJar(String name, long timestamp, JarContent... contents) throws Exception {
         Path jar = tempDir.resolve(name);
         try (OutputStream output = Files.newOutputStream(jar); JarOutputStream jarOutput = new JarOutputStream(output)) {
-            JarEntry entry = new JarEntry("telemetry/contract.txt");
-            entry.setTime(timestamp);
-            jarOutput.putNextEntry(entry);
-            jarOutput.write(content.getBytes(StandardCharsets.UTF_8));
-            jarOutput.closeEntry();
+            for (JarContent content : contents) {
+                JarEntry entry = new JarEntry(content.name());
+                entry.setTime(timestamp);
+                jarOutput.putNextEntry(entry);
+                jarOutput.write(content.bytes());
+                jarOutput.closeEntry();
+            }
         }
         return jar;
+    }
+
+    private static JarContent entry(String name, String content) {
+        return new JarContent(name, content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String legacyJarContentSha256(Path path) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (ZipFile jar = new ZipFile(path.toFile())) {
+            List<? extends ZipEntry> entries = jar.stream()
+                    .sorted(java.util.Comparator.comparing(ZipEntry::getName))
+                    .toList();
+            byte[] buffer = new byte[8192];
+            for (ZipEntry entry : entries) {
+                digest.update(entry.getName().getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) 0);
+                try (var input = jar.getInputStream(entry)) {
+                    int read;
+                    while ((read = input.read(buffer)) >= 0) {
+                        digest.update(buffer, 0, read);
+                    }
+                }
+            }
+        }
+        return HexFormat.of().formatHex(digest.digest());
     }
 
     private String hashJarWithProofScript(Path jar) throws Exception {
@@ -125,5 +171,7 @@ class AbstractCsvPaymentsEndToEndPackagingTest {
         assertEquals(0, process.exitValue(), output);
         return output.strip();
     }
+
+    private record JarContent(String name, byte[] bytes) { }
 
 }

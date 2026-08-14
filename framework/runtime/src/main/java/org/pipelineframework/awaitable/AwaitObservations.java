@@ -20,15 +20,15 @@ final class AwaitObservations {
     static AwaitObservation.Context context(Optional<AwaitInteractionRecord> record,
                                             Optional<AwaitUnitRecord> unit) {
         return new AwaitObservation.Context(
-            record.map(AwaitInteractionRecord::stepId).orElseGet(() -> unit.map(AwaitUnitRecord::stepId).orElse(null)),
-            record.map(AwaitInteractionRecord::transportType).orElse(null),
+            record.map(AwaitInteractionRecord::stepId).or(() -> unit.map(AwaitUnitRecord::stepId)),
+            record.map(AwaitInteractionRecord::transportType),
             record.map(AwaitInteractionRecord::status).map(Enum::name)
-                .orElseGet(() -> unit.map(AwaitUnitRecord::status).map(Enum::name).orElse(null)),
-            unit.map(AwaitUnitRecord::cardinality).orElse(null),
-            record.map(AwaitInteractionRecord::executionId).orElse(null),
-            record.map(AwaitInteractionRecord::interactionId).orElse(null),
-            record.map(AwaitInteractionRecord::correlationId).orElse(null),
-            record.map(AwaitInteractionRecord::unitId).orElseGet(() -> unit.map(AwaitUnitRecord::unitId).orElse(null)),
+                .or(() -> unit.map(AwaitUnitRecord::status).map(Enum::name)),
+            unit.map(AwaitUnitRecord::cardinality),
+            record.map(AwaitInteractionRecord::executionId),
+            record.map(AwaitInteractionRecord::interactionId),
+            record.map(AwaitInteractionRecord::correlationId),
+            record.map(AwaitInteractionRecord::unitId).or(() -> unit.map(AwaitUnitRecord::unitId)),
             record.map(AwaitInteractionRecord::transportMetadata).orElse(Map.of()));
     }
 

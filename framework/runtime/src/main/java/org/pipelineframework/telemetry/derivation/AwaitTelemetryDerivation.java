@@ -71,22 +71,24 @@ public final class AwaitTelemetryDerivation {
     }
 
     public static Optional<AwaitObservation.Context> context(AwaitObservation observation) {
-        if (observation instanceof AwaitObservation.CompletionDropped) return Optional.empty();
-        if (observation instanceof AwaitObservation.InteractionCreated value) return Optional.of(value.context());
-        if (observation instanceof AwaitObservation.InteractionDispatched value) return Optional.of(value.context());
-        if (observation instanceof AwaitObservation.ProviderDispatched value) return Optional.of(value.context());
-        if (observation instanceof AwaitObservation.ProviderAdmitted value) return Optional.of(value.context());
-        if (observation instanceof AwaitObservation.ProviderCompletionDispatched value) return Optional.of(value.context());
-        if (observation instanceof AwaitObservation.CompletionAdmitted value) return Optional.of(value.context());
-        if (observation instanceof AwaitObservation.LiveHandoff value) return Optional.of(value.context());
-        if (observation instanceof AwaitObservation.ScalarContinuationStarted value) return Optional.of(value.context());
-        if (observation instanceof AwaitObservation.UnitDispatchCompleted value) return Optional.of(value.context());
-        if (observation instanceof AwaitObservation.ItemCompleted value) return Optional.of(value.context());
-        if (observation instanceof AwaitObservation.EarlyCompletionHeld value) return Optional.of(value.context());
-        if (observation instanceof AwaitObservation.ResumeReleased value) return Optional.of(value.context());
-        if (observation instanceof AwaitObservation.UnitTerminal value) return Optional.of(value.context());
-        if (observation instanceof AwaitObservation.AdmissionAcquired value) return Optional.of(value.context());
-        return Optional.of(((AwaitObservation.AdmissionReleased) observation).context());
+        return switch (observation) {
+            case AwaitObservation.CompletionDropped ignored -> Optional.empty();
+            case AwaitObservation.InteractionCreated value -> Optional.of(value.context());
+            case AwaitObservation.InteractionDispatched value -> Optional.of(value.context());
+            case AwaitObservation.ProviderDispatched value -> Optional.of(value.context());
+            case AwaitObservation.ProviderAdmitted value -> Optional.of(value.context());
+            case AwaitObservation.ProviderCompletionDispatched value -> Optional.of(value.context());
+            case AwaitObservation.CompletionAdmitted value -> Optional.of(value.context());
+            case AwaitObservation.LiveHandoff value -> Optional.of(value.context());
+            case AwaitObservation.ScalarContinuationStarted value -> Optional.of(value.context());
+            case AwaitObservation.UnitDispatchCompleted value -> Optional.of(value.context());
+            case AwaitObservation.ItemCompleted value -> Optional.of(value.context());
+            case AwaitObservation.EarlyCompletionHeld value -> Optional.of(value.context());
+            case AwaitObservation.ResumeReleased value -> Optional.of(value.context());
+            case AwaitObservation.UnitTerminal value -> Optional.of(value.context());
+            case AwaitObservation.AdmissionAcquired value -> Optional.of(value.context());
+            case AwaitObservation.AdmissionReleased value -> Optional.of(value.context());
+        };
     }
 
     private static Map<String, String> outcome(Map<String, String> attributes, String outcome) {

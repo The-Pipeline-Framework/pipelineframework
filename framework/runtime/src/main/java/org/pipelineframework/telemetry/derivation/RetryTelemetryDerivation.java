@@ -9,6 +9,7 @@
 package org.pipelineframework.telemetry.derivation;
 
 import java.util.Map;
+import java.util.Optional;
 import org.pipelineframework.telemetry.observation.RetryObservation;
 
 /** Pure sink plans for a retry fact. */
@@ -16,7 +17,8 @@ public final class RetryTelemetryDerivation {
     private RetryTelemetryDerivation() { }
 
     public static Signals derive(RetryObservation observation, Map<String, String> metricAttributes) {
-        return new Signals(new MetricSignal(metricAttributes), new ReplaySignal(observation.stepClass(), observation.failure()),
+        return new Signals(new MetricSignal(metricAttributes),
+            new ReplaySignal(observation.stepClass(), Optional.ofNullable(observation.failure())),
             new SafetySignal(observation.stepClass()));
     }
 
@@ -24,6 +26,6 @@ public final class RetryTelemetryDerivation {
     public record MetricSignal(Map<String, String> attributes) {
         public MetricSignal { attributes = Map.copyOf(attributes); }
     }
-    public record ReplaySignal(String stepClass, Throwable failure) { }
+    public record ReplaySignal(String stepClass, Optional<Throwable> failure) { }
     public record SafetySignal(String stepClass) { }
 }

@@ -19,10 +19,11 @@ public final class StepTelemetryDerivation {
 
     public static StartedSignals started(StepObservation.Started observation, Map<String, String> metricAttributes,
                                          Map<String, String> spanAttributes) {
+        RetrySafetyStarted retrySafety = new RetrySafetyStarted(observation.context().stepClass());
         return new StartedSignals(
-            new MetricStarted(metricAttributes),
+            new MetricStarted(metricAttributes, retrySafety.stepClass()),
             new SpanStarted("tpf.step", spanAttributes, observation.context().perItem()),
-            new RetrySafetyStarted(observation.context().stepClass()));
+            retrySafety);
     }
 
     public static TerminalSignals terminal(StepObservation observation, Map<String, String> metricAttributes) {
@@ -43,22 +44,28 @@ public final class StepTelemetryDerivation {
 
     private static TerminalSignals terminal(Map<String, String> attributes, long durationNanos, boolean error,
                                               boolean cancelled, Optional<Throwable> failure, String stepClass) {
+        RetrySafetyFinished retrySafety = new RetrySafetyFinished(stepClass);
         return new TerminalSignals(
-            new MetricFinished(attributes, durationNanos / 1_000_000d, error),
+            new MetricFinished(attributes, durationNanos / 1_000_000d, error, retrySafety.stepClass()),
             new SpanFinished(failure, cancelled),
             new ReplayFinished(cancelled ? ReplayOutcome.CANCELLED : error ? ReplayOutcome.FAILURE : ReplayOutcome.SUCCESS,
                 failure),
-            new RetrySafetyFinished(stepClass));
+            retrySafety);
     }
 
     public record StartedSignals(MetricStarted metric, SpanStarted span, RetrySafetyStarted retrySafety) { }
     public record TerminalSignals(MetricFinished metric, SpanFinished span, ReplayFinished replay,
                                   RetrySafetyFinished retrySafety) { }
-    public record MetricStarted(Map<String, String> attributes) {
-        public MetricStarted { attributes = Map.copyOf(attributes); }
+    public record MetricStarted(Map<String, String> attributes, String stepClass) {
+        public MetricStarted { attributes = Map.copyOf(attributes); Objects.requireNonNull(stepClass, "stepClass"); }
     }
-    public record MetricFinished(Map<String, String> attributes, double durationMillis, boolean error) {
-        public MetricFinished { attributes = Map.copyOf(attributes); durationMillis = Math.max(0d, durationMillis); }
+    public record MetricFinished(Map<String, String> attributes, double durationMillis, boolean error,
+                                 String stepClass) {
+        public MetricFinished {
+            attributes = Map.copyOf(attributes);
+            durationMillis = Math.max(0d, durationMillis);
+            Objects.requireNonNull(stepClass, "stepClass");
+        }
     }
     public record SpanStarted(String name, Map<String, String> attributes, boolean perItem) {
         public SpanStarted { Objects.requireNonNull(name, "name"); attributes = Map.copyOf(attributes); }

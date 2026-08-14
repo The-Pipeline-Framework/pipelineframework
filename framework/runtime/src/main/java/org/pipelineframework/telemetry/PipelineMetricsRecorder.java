@@ -146,8 +146,7 @@ final class PipelineMetricsRecorder {
         runContext.inflightSum().add(current);
         runContext.inflightMax().accumulateAndGet(current, Math::max);
         if (enabled) {
-            String stepClass = signal.attributes().get("tpf.step.class");
-            inflightByStep.computeIfAbsent(stepClass, ignored -> new AtomicLong())
+            inflightByStep.computeIfAbsent(signal.stepClass(), ignored -> new AtomicLong())
                 .incrementAndGet();
         }
     }
@@ -160,7 +159,7 @@ final class PipelineMetricsRecorder {
         runContext.inflightSamples().increment();
         runContext.inflightSum().add(Math.max(current, 0));
         if (enabled) {
-            AtomicLong stepInflight = inflightByStep.get(signal.attributes().get("tpf.step.class"));
+            AtomicLong stepInflight = inflightByStep.get(signal.stepClass());
             if (stepInflight != null) {
                 stepInflight.updateAndGet(value -> Math.max(0, value - 1));
             }

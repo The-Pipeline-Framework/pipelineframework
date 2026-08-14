@@ -17,7 +17,8 @@ public final class PipelineSloDerivation {
 
     public static Optional<ThroughputSignal> throughput(Map<String, String> attributes, long consumed,
                                                          double durationMillis, double thresholdPerMinute) {
-        if (attributes.isEmpty() || durationMillis <= 0d) {
+        if (attributes.isEmpty() || consumed < 0L || !Double.isFinite(durationMillis) || durationMillis <= 0d
+                || !Double.isFinite(thresholdPerMinute)) {
             return Optional.empty();
         }
         double itemsPerMinute = consumed / (durationMillis / 60_000d);
@@ -25,7 +26,7 @@ public final class PipelineSloDerivation {
     }
 
     public static Optional<SuccessSignal> success(Map<String, String> attributes, long consumed, long produced) {
-        if (attributes.isEmpty() || consumed <= 0L) {
+        if (attributes.isEmpty() || consumed <= 0L || produced < 0L) {
             return Optional.empty();
         }
         return Optional.of(new SuccessSignal(attributes, consumed, Math.min(consumed, produced)));

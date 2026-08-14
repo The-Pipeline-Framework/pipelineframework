@@ -21,13 +21,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class AwaitTelemetryAttributesTest {
     @Test
     void metricsRemainLowCardinalityWhileSpansCarryJourneyIdentity() {
-        AwaitObservation.Context context = new AwaitObservation.Context("AwaitPayment", "GRPC", "COMPLETED",
-            "ONE_TO_ONE", "execution-1", "interaction-1", "correlation-1", "unit-1", Map.of());
+        AwaitObservation.Context context = new AwaitObservation.Context(
+            Optional.of("AwaitPayment"), Optional.of("GRPC"), Optional.of("COMPLETED"),
+            Optional.of("ONE_TO_ONE"), Optional.of("execution-1"), Optional.of("interaction-1"),
+            Optional.of("correlation-1"), Optional.of("unit-1"), Map.of());
         AwaitObservation observation = new AwaitObservation.CompletionAdmitted(context, 42L, Instant.EPOCH);
 
         Map<String, String> metrics = AwaitTelemetryAttributes.metricAttributes(observation);

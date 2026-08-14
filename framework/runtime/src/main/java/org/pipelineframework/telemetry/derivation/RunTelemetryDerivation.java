@@ -25,16 +25,16 @@ public final class RunTelemetryDerivation {
     }
 
     public static TerminalSignals terminal(RunObservation observation) {
-        if (observation instanceof RunObservation.Completed completed) {
-            return terminal(completed.durationMillis(), Optional.empty(), false);
-        }
-        if (observation instanceof RunObservation.Failed failed) {
-            return terminal(failed.durationMillis(), Optional.of(failed.failure()), false);
-        }
-        if (observation instanceof RunObservation.Cancelled cancelled) {
-            return terminal(cancelled.durationMillis(), Optional.empty(), true);
-        }
-        throw new IllegalArgumentException("A terminal run observation is required");
+        return switch (observation) {
+            case RunObservation.Started ignored ->
+                throw new IllegalArgumentException("A terminal run observation is required");
+            case RunObservation.Completed completed ->
+                terminal(completed.durationMillis(), Optional.empty(), false);
+            case RunObservation.Failed failed ->
+                terminal(failed.durationMillis(), Optional.of(failed.failure()), false);
+            case RunObservation.Cancelled cancelled ->
+                terminal(cancelled.durationMillis(), Optional.empty(), true);
+        };
     }
 
     public static InflightSignal inflight(long maximum, long sum, long samples) {

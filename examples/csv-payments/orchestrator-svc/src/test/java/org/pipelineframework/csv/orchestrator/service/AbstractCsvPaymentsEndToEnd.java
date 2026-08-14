@@ -1166,20 +1166,22 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
     static String jarContentSha256(Path path) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        MessageDigest entryDigest = MessageDigest.getInstance("SHA-256");
         try (ZipFile jar = new ZipFile(path.toFile())) {
             List<? extends ZipEntry> entries = jar.stream()
                     .sorted(Comparator.comparing(ZipEntry::getName))
                     .toList();
             byte[] buffer = new byte[8192];
             for (ZipEntry entry : entries) {
-                digest.update(entry.getName().getBytes(StandardCharsets.UTF_8));
-                digest.update((byte) 0);
+                entryDigest.reset();
                 try (var input = jar.getInputStream(entry)) {
                     int read;
                     while ((read = input.read(buffer)) >= 0) {
-                        digest.update(buffer, 0, read);
+                        entryDigest.update(buffer, 0, read);
                     }
                 }
+                String record = entry.getName() + '\0' + HexFormat.of().formatHex(entryDigest.digest()) + '\n';
+                digest.update(record.getBytes(StandardCharsets.UTF_8));
             }
         }
         return HexFormat.of().formatHex(digest.digest());

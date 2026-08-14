@@ -106,7 +106,11 @@ public class AwaitTelemetry {
             return Uni.createFrom().deferred(() -> operation.get());
         }
         return Uni.createFrom().deferred(() -> {
-            Span span = startSpan(AwaitTelemetryDerivation.span(observation).orElseThrow());
+            Optional<AwaitTelemetryDerivation.SpanPlan> plan = AwaitTelemetryDerivation.span(observation);
+            if (plan.isEmpty()) {
+                return operation.get();
+            }
+            Span span = startSpan(plan.orElseThrow());
             AtomicBoolean terminal = new AtomicBoolean();
             Context dispatchContext = Context.current().with(span);
             return Uni.createFrom().emitter(emitter -> {
@@ -155,7 +159,8 @@ public class AwaitTelemetry {
 
     public void recordResumeReleased(String stepId, String status, String transport) {
         emit(new AwaitObservation.ResumeReleased(new AwaitObservation.Context(
-            stepId, transport, status, null, null, null, null, null, Map.of()), Instant.now()));
+            Optional.ofNullable(stepId), Optional.ofNullable(transport), Optional.ofNullable(status), Optional.empty(),
+            Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Map.of()), Instant.now()));
     }
 
     public void recordUnitTerminal(AwaitInteractionRecord record, AwaitUnitRecord unit) {
