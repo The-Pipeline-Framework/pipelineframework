@@ -362,6 +362,24 @@ class PipelineTelemetryTest {
             .count());
     }
 
+    @Test
+    void cancellationFinalizesRunOnceWithoutMarkingItsSpanAsError() {
+        PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
+        Multi<Integer> never = Multi.createFrom().emitter(ignored -> { });
+        PipelineRunContext runContext = telemetry.startRun(never, 1, ParallelismPolicy.AUTO, 4);
+        Multi<Integer> instrumented = (Multi<Integer>) telemetry.instrumentRunCompletion(never, runContext);
+
+        AssertSubscriber<Integer> subscriber = instrumented.subscribe().withSubscriber(AssertSubscriber.create(1));
+        subscriber.cancel();
+        subscriber.cancel();
+
+        List<SpanData> runSpans = exporter.getFinishedSpanItems().stream()
+            .filter(span -> "tpf.pipeline.run".equals(span.getName())).toList();
+        assertEquals(1, runSpans.size());
+        assertEquals(StatusCode.UNSET, runSpans.getFirst().getStatus().getStatusCode());
+        assertTrue(runContext.endSignalled().get());
+    }
+
     static final class DummyStep$$Proxy extends DummyStep {
     }
 

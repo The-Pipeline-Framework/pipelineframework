@@ -16,11 +16,11 @@
 
 package org.pipelineframework.telemetry;
 
-import org.pipelineframework.telemetry.PipelineRunContext;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -29,6 +29,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.LongAdder;
 import org.pipelineframework.config.ParallelismPolicy;
+import org.pipelineframework.telemetry.derivation.RunTelemetryDerivation;
+import org.pipelineframework.telemetry.derivation.PipelineSloDerivation;
+import org.pipelineframework.telemetry.observation.RunObservation;
 
 /** Owns the mutable state of active pipeline runs and their terminal lifecycle. */
 final class PipelineRunLifecycle {
@@ -38,6 +41,8 @@ final class PipelineRunLifecycle {
     private final PipelineReplaySupport replay;
     private final RetryAmplificationGuardRuntime retryGuard;
     private final PipelineRetryTelemetry retryTelemetry;
+    private final PipelineMetricAttributes attributes;
+    private final PipelineSpanAttributes spanAttributes;
     private final ConcurrentMap<String, PipelineRunContext> activeRuns = new ConcurrentHashMap<>();
 
     PipelineRunLifecycle(
@@ -46,7 +51,9 @@ final class PipelineRunLifecycle {
         PipelineTracingRecorder tracing,
         PipelineReplaySupport replay,
         RetryAmplificationGuardRuntime retryGuard,
-        PipelineRetryTelemetry retryTelemetry
+        PipelineRetryTelemetry retryTelemetry,
+        PipelineMetricAttributes attributes,
+        PipelineSpanAttributes spanAttributes
     ) {
         this.policy = policy;
         this.metrics = metrics;
@@ -54,6 +61,8 @@ final class PipelineRunLifecycle {
         this.replay = replay;
         this.retryGuard = retryGuard;
         this.retryTelemetry = retryTelemetry;
+        this.attributes = attributes;
+        this.spanAttributes = spanAttributes;
     }
 
     PipelineRunContext start(Object input, int stepCount, ParallelismPolicy parallelism, int maxConcurrency) {
@@ -61,11 +70,17 @@ final class PipelineRunLifecycle {
             return PipelineRunContext.disabled();
         }
         String inputKind = input instanceof Multi<?> ? "multi" : "uni";
-        metrics.runStarted(inputKind, maxConcurrency);
-        PipelineTracingRecorder.TracedRun tracedRun = tracing.startRun(stepCount, parallelism, maxConcurrency, inputKind);
+        String runId = UUID.randomUUID().toString();
+        RunObservation.Started observation = new RunObservation.Started(runId, inputKind, stepCount,
+            parallelism == null ? "AUTO" : parallelism.name(), maxConcurrency, Instant.now());
+        var metricAttributes = attributes.run(inputKind);
+        RunTelemetryDerivation.StartedSignals signals = RunTelemetryDerivation.started(
+            observation, metricAttributes, spanAttributes.run(inputKind));
+        metrics.record(signals.metric());
+        PipelineTracingRecorder.TracedRun tracedRun = tracing.startRun(signals.span());
         PipelineRunContext context = new PipelineRunContext(
-            UUID.randomUUID().toString(), tracedRun.context(), tracedRun.span(), System.nanoTime(), Instant.now(),
-            metrics.runAttributes(inputKind), true, new AtomicLong(), new AtomicLong(), new LongAdder(), new LongAdder(),
+            runId, tracedRun.context(), tracedRun.span(), System.nanoTime(), observation.occurredAt(),
+            TelemetrySdkAttributes.from(metricAttributes), true, new AtomicLong(), new AtomicLong(), new LongAdder(), new LongAdder(),
             new LongAdder(), new LongAdder(), replay.runParameters(), replay.runState(), new AtomicBoolean(false));
         replay.runStarted(context);
         activeRuns.put(context.runId(), context);
@@ -79,38 +94,52 @@ final class PipelineRunLifecycle {
             return publisher;
         }
         if (publisher instanceof Uni<?> uni) {
-            return uni.onItemOrFailure().invoke((item, failure) -> finish(context, failure));
+            return uni.onItemOrFailure().invoke((item, failure) -> finish(context, Optional.ofNullable(failure), false))
+                .onCancellation().invoke(() -> finish(context, Optional.empty(), true));
         }
         if (publisher instanceof Multi<?> multi) {
             AtomicReference<Throwable> failure = new AtomicReference<>();
             return multi.onFailure().invoke(failure::set)
-                .onTermination().invoke(() -> finish(context, failure.get()));
+                .onTermination().invoke(() -> finish(context, Optional.ofNullable(failure.get()), false))
+                .onCancellation().invoke(() -> finish(context, Optional.empty(), true));
         }
         return publisher;
     }
 
     void abort(PipelineRunContext context, Throwable failure) {
         if (context != null && context.enabled()) {
-            finish(context, failure == null ? new IllegalStateException("Pipeline aborted.") : failure);
+            finish(context, Optional.of(failure == null ? new IllegalStateException("Pipeline aborted.") : failure), false);
         }
     }
 
     void abortActive(Throwable failure) {
         Throwable effectiveFailure = failure == null ? new IllegalStateException("Pipeline aborted.") : failure;
-        List.copyOf(activeRuns.values()).forEach(context -> finish(context, effectiveFailure));
+        List.copyOf(activeRuns.values()).forEach(context -> finish(context, Optional.of(effectiveFailure), false));
     }
 
-    void finish(PipelineRunContext context, Throwable failure) {
+    void finish(PipelineRunContext context, Optional<Throwable> failure, boolean cancelled) {
         if (context == null || !context.enabled() || !context.endSignalled().compareAndSet(false, true)) {
             return;
         }
         activeRuns.remove(context.runId(), context);
         retryGuard.runFinished(context.runId());
         long durationMillis = Math.max(0L, Math.round((System.nanoTime() - context.startNanos()) / 1_000_000d));
-        metrics.runFinished(context, failure);
-        tracing.recordRunInflight(context);
-        replay.runFinished(context, durationMillis, failure);
-        tracing.finish(context.span(), failure);
+        RunObservation observation = cancelled
+            ? new RunObservation.Cancelled(context.runId(), durationMillis, Instant.now())
+            : failure.<RunObservation>map(error ->
+                new RunObservation.Failed(context.runId(), durationMillis, error, Instant.now()))
+                .orElseGet(() -> new RunObservation.Completed(context.runId(), durationMillis, Instant.now()));
+        RunTelemetryDerivation.TerminalSignals signals = RunTelemetryDerivation.terminal(observation);
+        metrics.record(signals.metric(), context);
+        attributes.sloBoundary().flatMap(boundary -> PipelineSloDerivation.throughput(
+            boundary, context.itemsConsumed().sum(), signals.metric().durationMillis(),
+            TelemetrySloConfig.itemThroughputPerMinute())).ifPresent(metrics::record);
+        attributes.sloBoundary().flatMap(boundary -> PipelineSloDerivation.success(
+            boundary, context.itemsConsumed().sum(), context.itemsProduced().sum())).ifPresent(metrics::record);
+        tracing.recordRunInflight(context, RunTelemetryDerivation.inflight(
+            context.inflightMax().get(), context.inflightSum().sum(), context.inflightSamples().sum()));
+        replay.runFinished(context, signals.replay());
+        tracing.finish(context.span(), signals.span());
         retryTelemetry.unregister(context);
     }
 

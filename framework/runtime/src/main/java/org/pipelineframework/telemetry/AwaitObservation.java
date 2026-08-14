@@ -18,6 +18,8 @@ package org.pipelineframework.telemetry;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 /** Granular facts emitted by the Await runtime. They contain no SDK behaviour. */
 public sealed interface AwaitObservation permits AwaitObservation.InteractionCreated,
@@ -32,11 +34,20 @@ public sealed interface AwaitObservation permits AwaitObservation.InteractionCre
 
     Instant occurredAt();
 
-    record Context(String stepId, String transport, String status, String cardinality,
-                   String executionId, String interactionId, String correlationId, String unitId,
+    record Context(Optional<String> stepId, Optional<String> transport, Optional<String> status,
+                   Optional<String> cardinality, Optional<String> executionId, Optional<String> interactionId,
+                   Optional<String> correlationId, Optional<String> unitId,
                    Map<String, Object> traceMetadata) {
         public Context {
-            traceMetadata = traceMetadata == null ? Map.of() : Map.copyOf(traceMetadata);
+            Objects.requireNonNull(stepId, "stepId");
+            Objects.requireNonNull(transport, "transport");
+            Objects.requireNonNull(status, "status");
+            Objects.requireNonNull(cardinality, "cardinality");
+            Objects.requireNonNull(executionId, "executionId");
+            Objects.requireNonNull(interactionId, "interactionId");
+            Objects.requireNonNull(correlationId, "correlationId");
+            Objects.requireNonNull(unitId, "unitId");
+            traceMetadata = Map.copyOf(Objects.requireNonNull(traceMetadata, "traceMetadata"));
         }
     }
 

@@ -92,14 +92,11 @@ jobs:
             -pl orchestrator-svc \
             -am \
             -Dcsv.e2e.tempo.enabled=true \
-            -Dcsv.e2e.reader-demand-pacer.rows-per-period=20 \
-            -Dcsv.e2e.reader-demand-pacer.millis-period=1000 \
-            -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
+            -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_12.csv \
             -Dcsv.e2e.pipeline.wait.seconds=900 \
             -Dcsv.e2e.orchestrator.wait.seconds=900 \
-            -Dtest=CsvPaymentsTempoVerificationEndToEndIT \
-            -Dsurefire.failIfNoSpecifiedTests=false \
-            test
+            -Dit.test=CsvPaymentsTempoVerificationEndToEndIT \
+            verify
 
       - name: Dump reports on failure
         if: failure()

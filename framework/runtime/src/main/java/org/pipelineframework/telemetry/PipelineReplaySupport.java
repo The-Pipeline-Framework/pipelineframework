@@ -25,6 +25,10 @@ import java.util.Map;
 import java.util.Optional;
 import org.pipelineframework.branching.BranchVariantIdentity;
 import org.pipelineframework.config.PipelineStepConfig;
+import org.pipelineframework.telemetry.derivation.RunTelemetryDerivation;
+import org.pipelineframework.telemetry.derivation.StepTelemetryDerivation;
+import org.pipelineframework.telemetry.derivation.RetryTelemetryDerivation;
+import org.pipelineframework.telemetry.observation.RejectObservation;
 
 /** Imperative replay adapter: topology, scope and exporter coordination only. */
 final class PipelineReplaySupport {
@@ -63,12 +67,12 @@ final class PipelineReplaySupport {
 
     void runStarted(PipelineRunContext context) { tracker.ifPresent(current -> current.runStarted(context)); }
 
-    void runFinished(PipelineRunContext context, long durationMillis, Throwable failure) {
+    void runFinished(PipelineRunContext context, RunTelemetryDerivation.ReplayFinished signal) {
         tracker.ifPresent(current -> {
-            if (failure == null) {
-                current.runCompleted(context, durationMillis);
+            if (signal.outcome() == RunTelemetryDerivation.ReplayOutcome.SUCCESS) {
+                current.runCompleted(context, signal.durationMillis());
             } else {
-                current.runFailed(context, durationMillis, failure);
+                current.runFailed(context, signal.durationMillis(), signal.failure().orElseThrow());
             }
         });
     }
@@ -112,14 +116,14 @@ final class PipelineReplaySupport {
             .ifPresent(current -> current.recordCacheHit((ExecutionReplayTracker.StepExecutionScope) scope));
     }
 
-    void complete(ExecutionReplayTracker.StepExecutionScope scope, Throwable failure, boolean cancelled) {
+    void complete(ExecutionReplayTracker.StepExecutionScope scope, StepTelemetryDerivation.ReplayFinished signal) {
         tracker.filter(ignored -> scope != null).ifPresent(current -> {
-            if (cancelled) {
+            if (signal.outcome() == StepTelemetryDerivation.ReplayOutcome.CANCELLED) {
                 current.completeCancelled(scope);
-            } else if (failure == null) {
+            } else if (signal.outcome() == StepTelemetryDerivation.ReplayOutcome.SUCCESS) {
                 current.completeSuccess(scope);
             } else {
-                current.completeFailure(scope, failure);
+                current.completeFailure(scope, signal.failure().orElseThrow());
             }
         });
     }
@@ -134,14 +138,14 @@ final class PipelineReplaySupport {
             connectorStep, service, eventName, from, to, attributes, Instant.now()));
     }
 
-    void recordRetry(Class<?> stepClass, Throwable failure) {
-        tracker.filter(ignored -> stepClass != null).ifPresent(current -> current.recordRetry(
-            PipelineMetricAttributes.resolveStepClassName(stepClass), currentSpanId(), failure));
+    void recordRetry(RetryTelemetryDerivation.ReplaySignal signal) {
+        tracker.ifPresent(current -> current.recordRetry(
+            signal.stepClass(), currentSpanId(), signal.failure().orElse(null)));
     }
 
-    void recordReject(Class<?> stepClass, String scope, String errorType, String errorMessage) {
-        tracker.filter(ignored -> stepClass != null).ifPresent(current -> current.recordReject(
-            PipelineMetricAttributes.resolveStepClassName(stepClass), currentSpanId(), scope, errorType, errorMessage));
+    void recordReject(RejectObservation observation) {
+        tracker.ifPresent(current -> current.recordReject(observation.stepClass(), currentSpanId(), observation.scope(),
+            observation.errorType(), observation.errorMessage()));
     }
 
     private boolean valid(Class<?> stepClass, PipelineRunContext context) {

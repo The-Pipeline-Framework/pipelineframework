@@ -16,7 +16,6 @@
 
 package org.pipelineframework.telemetry;
 
-import org.pipelineframework.telemetry.PipelineRunContext;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanKind;
@@ -24,80 +23,75 @@ import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Context;
 import java.util.Optional;
-import org.pipelineframework.config.ParallelismPolicy;
+import org.pipelineframework.telemetry.derivation.RunTelemetryDerivation;
+import org.pipelineframework.telemetry.derivation.StepTelemetryDerivation;
 
 /** Imperative span and context adapter. It owns no metric or replay instruments. */
 final class PipelineTracingRecorder {
     private final TelemetryRuntime runtime;
     private final boolean enabled;
     private final boolean perItemSpansEnabled;
-    private final Optional<PipelineReplayTopology> replayTopology;
 
     PipelineTracingRecorder(
         TelemetryPolicy policy,
-        TelemetryRuntime runtime,
-        Optional<PipelineReplayTopology> replayTopology
+        TelemetryRuntime runtime
     ) {
         this.runtime = runtime;
         this.enabled = policy.tracingEnabled();
         this.perItemSpansEnabled = policy.perItemSpansEnabled();
-        this.replayTopology = replayTopology;
     }
 
-    TracedRun startRun(int stepCount, ParallelismPolicy policy, int maxConcurrency, String inputKind) {
+    TracedRun startRun(RunTelemetryDerivation.SpanStarted plan) {
         Context context = Context.current();
         if (!enabled) {
             return new TracedRun(context, null);
         }
-        Span span = tracer().spanBuilder("tpf.pipeline.run")
+        Span span = tracer().spanBuilder(plan.name())
             .setSpanKind(SpanKind.INTERNAL)
-            .setAttribute("tpf.steps.count", stepCount)
-            .setAttribute("tpf.parallelism", policy == null ? "AUTO" : policy.name())
-            .setAttribute("tpf.max_concurrency", maxConcurrency)
-            .setAttribute("tpf.input", inputKind)
-            .setAttribute("tpf.pipeline", replayTopology.map(PipelineReplayTopology::pipeline).orElse("pipeline"))
+            .setAllAttributes(TelemetrySdkAttributes.from(plan.attributes()))
+            .setAttribute("tpf.steps.count", plan.stepCount())
+            .setAttribute("tpf.parallelism", plan.parallelism())
+            .setAttribute("tpf.max_concurrency", plan.maxConcurrency())
             .startSpan();
         return new TracedRun(context.with(span), span);
     }
 
-    Span startStep(Class<?> stepClass, PipelineRunContext runContext, boolean perItemOperation) {
-        if (!enabled || runContext == null || !runContext.enabled() || (perItemOperation && !perItemSpansEnabled)) {
+    Span startStep(StepTelemetryDerivation.SpanStarted plan, PipelineRunContext runContext) {
+        if (!enabled || runContext == null || !runContext.enabled() || (plan.perItem() && !perItemSpansEnabled)) {
             return null;
         }
-        String resolvedStepClass = PipelineMetricAttributes.resolveStepClassName(stepClass);
-        Span span = tracer().spanBuilder("tpf.step")
+        return tracer().spanBuilder(plan.name())
             .setParent(runContext.context())
             .setSpanKind(SpanKind.INTERNAL)
-            .setAttribute("tpf.step.class", resolvedStepClass)
+            .setAllAttributes(TelemetrySdkAttributes.from(plan.attributes()))
             .startSpan();
-        replayTopology.flatMap(topology -> topology.step(resolvedStepClass)).ifPresent(descriptor -> {
-            span.setAttribute("tpf.pipeline", replayTopology.orElseThrow().pipeline());
-            span.setAttribute("tpf.step", descriptor.step());
-            span.setAttribute("tpf.service", descriptor.service());
-            span.setAttribute("tpf.cardinality", descriptor.cardinality());
-        });
-        return span;
     }
 
-    void finish(Span span, Throwable failure) {
+    void finish(Span span, StepTelemetryDerivation.SpanFinished signal) {
+        finish(span, signal.failure());
+    }
+
+    void finish(Span span, RunTelemetryDerivation.SpanFinished signal) {
+        finish(span, signal.failure());
+    }
+
+    private void finish(Span span, Optional<Throwable> failure) {
         if (span == null) {
             return;
         }
-        if (failure != null) {
-            span.recordException(failure);
-            span.setStatus(StatusCode.ERROR, failure.getMessage());
-        }
+        failure.ifPresent(error -> {
+            span.recordException(error);
+            span.setStatus(StatusCode.ERROR, error.getMessage());
+        });
         span.end();
     }
 
-    void recordRunInflight(PipelineRunContext runContext) {
+    void recordRunInflight(PipelineRunContext runContext, RunTelemetryDerivation.InflightSignal signal) {
         if (!enabled || runContext == null || runContext.span() == null) {
             return;
         }
-        long samples = runContext.inflightSamples().sum();
-        double inflightAverage = samples > 0 ? runContext.inflightSum().sum() / (double) samples : 0d;
-        runContext.span().setAttribute("tpf.parallel.max_in_flight", runContext.inflightMax().get());
-        runContext.span().setAttribute("tpf.parallel.avg_in_flight", inflightAverage);
+        runContext.span().setAttribute("tpf.parallel.max_in_flight", signal.maximum());
+        runContext.span().setAttribute("tpf.parallel.avg_in_flight", signal.average());
     }
 
     void recordKillSwitch(PipelineRunContext runContext, RetryAmplificationGuard.Trigger trigger) {

@@ -44,6 +44,8 @@ import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -1148,7 +1150,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "CSV proof must load framework runtime from the installed JAR: " + runtimeCodeSource);
         assertEquals(
                 frameworkProvenance("framework.runtime.sha256"),
-                sha256(runtimeCodeSource),
+                jarContentSha256(runtimeCodeSource),
                 "CSV orchestrator test process must load the same framework runtime JAR as the service images");
         LOG.infof("Verified CSV orchestrator process framework runtime %s", runtimeCodeSource);
     }
@@ -1162,13 +1164,24 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 .orElseThrow(() -> new IllegalStateException("Missing framework provenance value: " + key));
     }
 
-    private static String sha256(Path path) throws Exception {
+    static String jarContentSha256(Path path) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        try (var input = Files.newInputStream(path)) {
+        MessageDigest entryDigest = MessageDigest.getInstance("SHA-256");
+        try (ZipFile jar = new ZipFile(path.toFile())) {
+            List<? extends ZipEntry> entries = jar.stream()
+                    .sorted(Comparator.comparing(ZipEntry::getName))
+                    .toList();
             byte[] buffer = new byte[8192];
-            int read;
-            while ((read = input.read(buffer)) >= 0) {
-                digest.update(buffer, 0, read);
+            for (ZipEntry entry : entries) {
+                entryDigest.reset();
+                try (var input = jar.getInputStream(entry)) {
+                    int read;
+                    while ((read = input.read(buffer)) >= 0) {
+                        entryDigest.update(buffer, 0, read);
+                    }
+                }
+                String record = entry.getName() + '\0' + HexFormat.of().formatHex(entryDigest.digest()) + '\n';
+                digest.update(record.getBytes(StandardCharsets.UTF_8));
             }
         }
         return HexFormat.of().formatHex(digest.digest());

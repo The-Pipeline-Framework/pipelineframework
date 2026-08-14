@@ -30,12 +30,13 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import org.pipelineframework.config.PipelineStepConfig;
 import org.pipelineframework.telemetry.AwaitObservation;
-import org.pipelineframework.telemetry.AwaitTelemetryAttributes;
+import org.pipelineframework.telemetry.derivation.AwaitTelemetryDerivation;
 import org.pipelineframework.telemetry.PipelineTracingSupport;
 import org.pipelineframework.telemetry.NoopTelemetryRuntime;
 import org.pipelineframework.telemetry.TelemetryPolicy;
@@ -69,39 +70,47 @@ public class AwaitTelemetry {
     }
 
     public void recordInteractionDispatched(AwaitInteractionRecord record) {
-        emit(new AwaitObservation.InteractionDispatched(context(record, null), Instant.now()));
+        emit(new AwaitObservation.InteractionDispatched(
+            AwaitObservations.context(Optional.of(record), Optional.empty()), Instant.now()));
     }
 
     public void recordInteractionCreated(AwaitInteractionRecord record) {
-        emit(new AwaitObservation.InteractionCreated(context(record, null), Instant.now()));
+        emit(new AwaitObservation.InteractionCreated(
+            AwaitObservations.context(Optional.of(record), Optional.empty()), Instant.now()));
     }
 
     public void recordUnitDispatchComplete(AwaitUnitRecord unit) {
-        emit(new AwaitObservation.UnitDispatchCompleted(context(null, unit), Instant.now()));
+        emit(new AwaitObservation.UnitDispatchCompleted(
+            AwaitObservations.context(Optional.empty(), Optional.of(unit)), Instant.now()));
     }
 
     public void recordCompletionAdmitted(AwaitInteractionRecord record) {
-        long latency = record != null && record.createdAtEpochMs() > 0 && record.updatedAtEpochMs() >= record.createdAtEpochMs()
-            ? record.updatedAtEpochMs() - record.createdAtEpochMs() : 0L;
-        emit(new AwaitObservation.CompletionAdmitted(context(record, null), latency, Instant.now()));
+        emit(AwaitObservations.completionAdmitted(record, Instant.now()));
     }
 
     public void recordLiveHandoff(AwaitInteractionRecord record) {
-        emit(new AwaitObservation.LiveHandoff(context(record, null), Instant.now()));
+        emit(new AwaitObservation.LiveHandoff(
+            AwaitObservations.context(Optional.of(record), Optional.empty()), Instant.now()));
     }
 
     public void recordScalarContinuationStarted(AwaitInteractionRecord record) {
-        emit(new AwaitObservation.ScalarContinuationStarted(context(record, null), Instant.now()));
+        emit(new AwaitObservation.ScalarContinuationStarted(
+            AwaitObservations.context(Optional.of(record), Optional.empty()), Instant.now()));
     }
 
     public <T> Uni<T> inProviderDispatchSpan(AwaitInteractionRecord record, Supplier<Uni<T>> operation) {
-        AwaitObservation.ProviderDispatched observation = new AwaitObservation.ProviderDispatched(context(record, null), Instant.now());
+        AwaitObservation.ProviderDispatched observation = new AwaitObservation.ProviderDispatched(
+            AwaitObservations.context(Optional.of(record), Optional.empty()), Instant.now());
         if (!policy.tracingEnabled()) {
             emit(observation);
             return Uni.createFrom().deferred(() -> operation.get());
         }
         return Uni.createFrom().deferred(() -> {
-            Span span = startSpan("tpf.await.provider.dispatch", observation, true);
+            Optional<AwaitTelemetryDerivation.SpanPlan> plan = AwaitTelemetryDerivation.span(observation);
+            if (plan.isEmpty()) {
+                return operation.get();
+            }
+            Span span = startSpan(plan.orElseThrow());
             AtomicBoolean terminal = new AtomicBoolean();
             Context dispatchContext = Context.current().with(span);
             return Uni.createFrom().emitter(emitter -> {
@@ -126,44 +135,48 @@ public class AwaitTelemetry {
 
     /** Provider fixture boundary facts use the same policy/runtime rather than a framework-global tracer. */
     public void recordProviderAdmitted() {
-        emit(new AwaitObservation.ProviderAdmitted(emptyContext(), Instant.now()));
+        emit(new AwaitObservation.ProviderAdmitted(AwaitObservations.emptyContext(), Instant.now()));
     }
 
     public void recordProviderCompletionDispatched() {
-        emit(new AwaitObservation.ProviderCompletionDispatched(emptyContext(), Instant.now()));
+        emit(new AwaitObservation.ProviderCompletionDispatched(AwaitObservations.emptyContext(), Instant.now()));
     }
 
     public void recordItemCompleted(AwaitInteractionRecord record, AwaitUnitRecord unit) {
-        emit(new AwaitObservation.ItemCompleted(context(record, unit), Instant.now()));
+        emit(new AwaitObservation.ItemCompleted(
+            AwaitObservations.context(Optional.of(record), Optional.of(unit)), Instant.now()));
     }
 
     public void recordEarlyCompletionHeld(AwaitInteractionRecord record, AwaitUnitRecord unit) {
-        emit(new AwaitObservation.EarlyCompletionHeld(context(record, unit), Instant.now()));
+        emit(new AwaitObservation.EarlyCompletionHeld(
+            AwaitObservations.context(Optional.of(record), Optional.of(unit)), Instant.now()));
     }
 
     public void recordResumeReleased(AwaitUnitRecord unit) {
-        emit(new AwaitObservation.ResumeReleased(context(null, unit), Instant.now()));
+        emit(new AwaitObservation.ResumeReleased(
+            AwaitObservations.context(Optional.empty(), Optional.of(unit)), Instant.now()));
     }
 
     public void recordResumeReleased(String stepId, String status, String transport) {
         emit(new AwaitObservation.ResumeReleased(new AwaitObservation.Context(
-            stepId, transport, status, null, null, null, null, null, Map.of()), Instant.now()));
+            Optional.ofNullable(stepId), Optional.ofNullable(transport), Optional.ofNullable(status), Optional.empty(),
+            Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Map.of()), Instant.now()));
     }
 
     public void recordUnitTerminal(AwaitInteractionRecord record, AwaitUnitRecord unit) {
-        long duration = unit != null && unit.createdAtEpochMs() > 0 && unit.updatedAtEpochMs() >= unit.createdAtEpochMs()
-            ? unit.updatedAtEpochMs() - unit.createdAtEpochMs() : 0L;
-        emit(new AwaitObservation.UnitTerminal(context(record, unit), duration, Instant.now()));
+        emit(AwaitObservations.unitTerminal(record, unit, Instant.now()));
     }
 
     public void recordAdmissionAcquired(AwaitInteractionRecord record, boolean reused, boolean reconciled,
                                         long waitMillis, boolean locallyTracked) {
-        emit(new AwaitObservation.AdmissionAcquired(context(record, null), reused, reconciled, waitMillis,
+        emit(new AwaitObservation.AdmissionAcquired(
+            AwaitObservations.context(Optional.of(record), Optional.empty()), reused, reconciled, waitMillis,
             locallyTracked, Instant.now()));
     }
 
     public void recordAdmissionReleased(AwaitInteractionRecord record, boolean released, boolean locallyTracked) {
-        emit(new AwaitObservation.AdmissionReleased(context(record, null), released, locallyTracked, Instant.now()));
+        emit(new AwaitObservation.AdmissionReleased(
+            AwaitObservations.context(Optional.of(record), Optional.empty()), released, locallyTracked, Instant.now()));
     }
 
     public Map<String, Object> captureTraceMetadata() {
@@ -177,20 +190,19 @@ public class AwaitTelemetry {
     private void emit(AwaitObservation observation) {
         instruments.record(observation);
         if (!policy.tracingEnabled()) return;
-        String spanName = spanName(observation);
-        if (spanName != null) {
-            Span span = startSpan(spanName, observation, false);
+        AwaitTelemetryDerivation.span(observation).ifPresent(plan -> {
+            Span span = startSpan(plan);
             span.end();
-        }
+        });
     }
 
-    private Span startSpan(String name, AwaitObservation observation, boolean continueOrigin) {
-        var builder = runtime.tracer("org.pipelineframework").spanBuilder(name);
-        AwaitObservation.Context context = observationContext(observation);
-        SpanContext origin = context == null ? SpanContext.getInvalid() : PipelineTracingSupport.durableOrigin(context.traceMetadata());
+    private Span startSpan(AwaitTelemetryDerivation.SpanPlan plan) {
+        var builder = runtime.tracer("org.pipelineframework").spanBuilder(plan.name());
+        SpanContext origin = plan.context().map(AwaitObservation.Context::traceMetadata)
+            .map(PipelineTracingSupport::durableOrigin).orElseGet(SpanContext::getInvalid);
         SpanContext current = Span.current().getSpanContext();
         boolean linked = false;
-        if (continueOrigin && origin.isValid()) {
+        if (plan.linkMode() == AwaitTelemetryDerivation.LinkMode.CONTINUE_DURABLE_ORIGIN && origin.isValid()) {
             builder.setParent(Context.root().with(Span.wrap(origin)));
             linked = true;
         } else if (origin.isValid() && (!current.isValid() || !PipelineTracingSupport.same(current, origin))) {
@@ -200,54 +212,10 @@ public class AwaitTelemetry {
             linked = PipelineTracingSupport.same(current, origin);
         }
         Span span = builder.startSpan();
-        span.setAllAttributes(TelemetrySdkAttributes.from(AwaitTelemetryAttributes.spanAttributes(observation)));
+        span.setAllAttributes(TelemetrySdkAttributes.from(plan.attributes()));
         span.setAttribute("tpf.await.origin.present", origin.isValid());
         span.setAttribute("tpf.await.origin.linked", linked);
         return span;
-    }
-
-    private static String spanName(AwaitObservation observation) {
-        if (observation instanceof AwaitObservation.InteractionCreated) return "tpf.await.interaction.created";
-        if (observation instanceof AwaitObservation.ProviderAdmitted) return "tpf.await.provider.admitted";
-        if (observation instanceof AwaitObservation.ProviderCompletionDispatched) return "tpf.await.provider.completion.dispatched";
-        if (observation instanceof AwaitObservation.CompletionAdmitted) return "tpf.await.completion.admitted";
-        if (observation instanceof AwaitObservation.LiveHandoff) return "tpf.await.live.handoff";
-        if (observation instanceof AwaitObservation.ScalarContinuationStarted) return "tpf.await.scalar.continuation";
-        return null;
-    }
-
-    private static AwaitObservation.Context context(AwaitInteractionRecord record, AwaitUnitRecord unit) {
-        return new AwaitObservation.Context(
-            record != null ? record.stepId() : unit == null ? null : unit.stepId(),
-            record == null ? null : record.transportType(),
-            record != null && record.status() != null ? record.status().name() : unit != null && unit.status() != null ? unit.status().name() : null,
-            unit == null || unit.cardinality() == null ? null : unit.cardinality(),
-            record == null ? null : record.executionId(), record == null ? null : record.interactionId(),
-            record == null ? null : record.correlationId(), record == null ? unit == null ? null : unit.unitId() : record.unitId(),
-            record == null ? Map.of() : record.transportMetadata());
-    }
-
-    private static AwaitObservation.Context emptyContext() {
-        return new AwaitObservation.Context(null, null, null, null, null, null, null, null, Map.of());
-    }
-
-    private static AwaitObservation.Context observationContext(AwaitObservation observation) {
-        if (observation instanceof AwaitObservation.CompletionDropped) return null;
-        if (observation instanceof AwaitObservation.InteractionCreated value) return value.context();
-        if (observation instanceof AwaitObservation.InteractionDispatched value) return value.context();
-        if (observation instanceof AwaitObservation.ProviderDispatched value) return value.context();
-        if (observation instanceof AwaitObservation.ProviderAdmitted value) return value.context();
-        if (observation instanceof AwaitObservation.ProviderCompletionDispatched value) return value.context();
-        if (observation instanceof AwaitObservation.CompletionAdmitted value) return value.context();
-        if (observation instanceof AwaitObservation.LiveHandoff value) return value.context();
-        if (observation instanceof AwaitObservation.ScalarContinuationStarted value) return value.context();
-        if (observation instanceof AwaitObservation.UnitDispatchCompleted value) return value.context();
-        if (observation instanceof AwaitObservation.ItemCompleted value) return value.context();
-        if (observation instanceof AwaitObservation.EarlyCompletionHeld value) return value.context();
-        if (observation instanceof AwaitObservation.ResumeReleased value) return value.context();
-        if (observation instanceof AwaitObservation.UnitTerminal value) return value.context();
-        if (observation instanceof AwaitObservation.AdmissionAcquired value) return value.context();
-        return ((AwaitObservation.AdmissionReleased) observation).context();
     }
 
     private static void endOnce(AtomicBoolean terminal, Span span, Throwable failure) {
@@ -288,30 +256,29 @@ public class AwaitTelemetry {
         }
         void record(AwaitObservation observation) {
             if (dropped == null) return;
-            Attributes attributes = TelemetrySdkAttributes.from(AwaitTelemetryAttributes.metricAttributes(observation));
-            if (observation instanceof AwaitObservation.InteractionCreated) interactionCreated.add(1, attributes);
-            else if (observation instanceof AwaitObservation.InteractionDispatched) interactionDispatched.add(1, attributes);
-            else if (observation instanceof AwaitObservation.UnitDispatchCompleted) unitDispatchComplete.add(1, attributes);
-            else if (observation instanceof AwaitObservation.CompletionAdmitted value) { completionAdmitted.add(1, attributes); if (value.latencyMillis() > 0) completionLatency.record(value.latencyMillis(), attributes); }
-            else if (observation instanceof AwaitObservation.LiveHandoff) liveHandoff.add(1, attributes);
-            else if (observation instanceof AwaitObservation.ScalarContinuationStarted) scalarContinuation.add(1, attributes);
-            else if (observation instanceof AwaitObservation.ItemCompleted) itemCompleted.add(1, attributes);
-            else if (observation instanceof AwaitObservation.EarlyCompletionHeld) earlyHeld.add(1, attributes);
-            else if (observation instanceof AwaitObservation.ResumeReleased) resumeReleased.add(1, attributes);
-            else if (observation instanceof AwaitObservation.UnitTerminal value) { unitTerminal.add(1, attributes); if (value.durationMillis() > 0) unitDuration.record(value.durationMillis(), attributes); }
-            else if (observation instanceof AwaitObservation.CompletionDropped) dropped.add(1, attributes);
-            else if (observation instanceof AwaitObservation.ProviderAdmitted || observation instanceof AwaitObservation.ProviderCompletionDispatched) { }
-            else if (observation instanceof AwaitObservation.AdmissionAcquired value) {
-                admissionOutcome.add(1, attributes);
-                if (value.locallyTracked()) admissionPending.add(1, attributes);
-                if (value.reconciled()) admissionOutcome.add(1, attributes.toBuilder()
-                    .put("tpf.await.admission.outcome", "reconciled").build());
-                if (value.waitMillis() > 0) {
-                    admissionOutcome.add(1, attributes.toBuilder().put("tpf.await.admission.outcome", "waited").build());
-                    admissionWait.record(value.waitMillis(), attributes);
-                }
+            AwaitTelemetryDerivation.metrics(observation).forEach(this::record);
+        }
+
+        private void record(AwaitTelemetryDerivation.MetricSignal signal) {
+            Attributes attributes = TelemetrySdkAttributes.from(signal.attributes());
+            switch (signal.metric()) {
+                case DROPPED -> dropped.add((long) signal.value(), attributes);
+                case INTERACTION_CREATED -> interactionCreated.add((long) signal.value(), attributes);
+                case INTERACTION_DISPATCHED -> interactionDispatched.add((long) signal.value(), attributes);
+                case UNIT_DISPATCH_COMPLETED -> unitDispatchComplete.add((long) signal.value(), attributes);
+                case COMPLETION_ADMITTED -> completionAdmitted.add((long) signal.value(), attributes);
+                case COMPLETION_LATENCY -> completionLatency.record(signal.value(), attributes);
+                case ITEM_COMPLETED -> itemCompleted.add((long) signal.value(), attributes);
+                case EARLY_HELD -> earlyHeld.add((long) signal.value(), attributes);
+                case RESUME_RELEASED -> resumeReleased.add((long) signal.value(), attributes);
+                case LIVE_HANDOFF -> liveHandoff.add((long) signal.value(), attributes);
+                case SCALAR_CONTINUATION -> scalarContinuation.add((long) signal.value(), attributes);
+                case UNIT_TERMINAL -> unitTerminal.add((long) signal.value(), attributes);
+                case UNIT_DURATION -> unitDuration.record(signal.value(), attributes);
+                case ADMISSION_OUTCOME -> admissionOutcome.add((long) signal.value(), attributes);
+                case ADMISSION_PENDING -> admissionPending.add((long) signal.value(), attributes);
+                case ADMISSION_WAIT -> admissionWait.record(signal.value(), attributes);
             }
-            else if (observation instanceof AwaitObservation.AdmissionReleased value && value.released()) { admissionOutcome.add(1, attributes); if (value.locallyTracked()) admissionPending.add(-1, attributes); }
         }
     }
 }

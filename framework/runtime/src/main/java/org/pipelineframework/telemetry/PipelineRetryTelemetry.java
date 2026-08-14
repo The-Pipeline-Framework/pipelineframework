@@ -17,7 +17,11 @@
 package org.pipelineframework.telemetry;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
+import org.pipelineframework.telemetry.derivation.RetryTelemetryDerivation;
+import org.pipelineframework.telemetry.observation.RejectObservation;
+import org.pipelineframework.telemetry.observation.RetryObservation;
 
 /**
  * Compatibility bridge for retry and reject facts.
@@ -31,19 +35,22 @@ public final class PipelineRetryTelemetry {
     private final PipelineTracingRecorder tracing;
     private final PipelineReplaySupport replay;
     private final RetryAmplificationGuardRuntime guard;
+    private final PipelineMetricAttributes attributes;
 
     PipelineRetryTelemetry(
         TelemetryPolicy policy,
         PipelineMetricsRecorder metrics,
         PipelineTracingRecorder tracing,
         PipelineReplaySupport replay,
-        RetryAmplificationGuardRuntime guard
+        RetryAmplificationGuardRuntime guard,
+        PipelineMetricAttributes attributes
     ) {
         this.policy = policy;
         this.metrics = metrics;
         this.tracing = tracing;
         this.replay = replay;
         this.guard = guard;
+        this.attributes = attributes;
         RetryObservationCompatibility.add(this);
     }
 
@@ -60,14 +67,18 @@ public final class PipelineRetryTelemetry {
             return;
         }
         String step = PipelineMetricAttributes.resolveStepClassName(stepClass);
-        guard.retryRecorded(step);
-        metrics.retryRecorded(stepClass);
-        replay.recordRetry(stepClass, failure);
+        RetryObservation observation = new RetryObservation(step, failure, Instant.now());
+        RetryTelemetryDerivation.Signals signals = RetryTelemetryDerivation.derive(
+            observation, attributes.step(step));
+        guard.retryRecorded(signals.safety().stepClass());
+        metrics.record(signals.metric());
+        replay.recordRetry(signals.replay());
     }
 
     void reject(Class<?> stepClass, String rejectScope, String errorType, String errorMessage) {
         if (stepClass != null) {
-            replay.recordReject(stepClass, rejectScope, errorType, errorMessage);
+            replay.recordReject(new RejectObservation(PipelineMetricAttributes.resolveStepClassName(stepClass),
+                rejectScope, errorType, errorMessage, Instant.now()));
         }
     }
 

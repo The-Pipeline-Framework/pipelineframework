@@ -32,6 +32,7 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineStepConfig;
+import org.pipelineframework.config.pipeline.PipelineTelemetryResourceLoader;
 import org.pipelineframework.telemetry.PipelineRunContext;
 
 /**
@@ -107,15 +108,21 @@ public class PipelineTelemetryRuntime implements PipelineRunTelemetry, PipelineS
                 "pipeline.telemetry.replay.enabled=true requires pipeline.telemetry.replay.exporter=file, "
                     + "pipeline.telemetry.replay.file.path, tracing, per-item spans, and replay topology metadata.");
         }
-        this.tracing = new PipelineTracingRecorder(telemetryPolicy, telemetryRuntime, replayTopology);
-        this.metrics = new PipelineMetricsRecorder(telemetryPolicy, telemetryRuntime, replayTopology);
+        PipelineMetricAttributes metricAttributes = new PipelineMetricAttributes(
+            replayTopology, PipelineTelemetryResourceLoader.loadItemBoundary());
+        PipelineSpanAttributes spanAttributes = new PipelineSpanAttributes(replayTopology);
+        this.tracing = new PipelineTracingRecorder(telemetryPolicy, telemetryRuntime);
+        this.metrics = new PipelineMetricsRecorder(telemetryPolicy, telemetryRuntime, metricAttributes);
         this.retryAmplificationGuard = new RetryAmplificationGuardRuntime(telemetryPolicy);
         this.replay = new PipelineReplaySupport(
             telemetryPolicy, telemetryRuntime, replayExporter, replayTopology, metrics, stepConfig);
-        this.steps = new PipelineStepInstrumentation(metrics, tracing, replay, retryAmplificationGuard);
-        this.retryTelemetry = new PipelineRetryTelemetry(telemetryPolicy, metrics, tracing, replay, retryAmplificationGuard);
+        this.steps = new PipelineStepInstrumentation(
+            metrics, tracing, replay, retryAmplificationGuard, metricAttributes, spanAttributes);
+        this.retryTelemetry = new PipelineRetryTelemetry(
+            telemetryPolicy, metrics, tracing, replay, retryAmplificationGuard, metricAttributes);
         this.lifecycle = new PipelineRunLifecycle(
-            telemetryPolicy, metrics, tracing, replay, retryAmplificationGuard, retryTelemetry);
+            telemetryPolicy, metrics, tracing, replay, retryAmplificationGuard, retryTelemetry,
+            metricAttributes, spanAttributes);
     }
 
     /**

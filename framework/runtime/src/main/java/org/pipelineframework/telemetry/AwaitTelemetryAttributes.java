@@ -18,6 +18,7 @@ package org.pipelineframework.telemetry;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /** Pure, sink-specific attribute derivation for Await observations. */
 public final class AwaitTelemetryAttributes {
@@ -37,13 +38,12 @@ public final class AwaitTelemetryAttributes {
 
     public static Map<String, String> spanAttributes(AwaitObservation observation) {
         Map<String, String> attributes = lowCardinality(observation);
-        AwaitObservation.Context context = context(observation);
-        if (context != null) {
+        context(observation).ifPresent(context -> {
             putIfPresent(attributes, "tpf.await.execution_id", context.executionId());
             putIfPresent(attributes, "tpf.await.interaction_id", context.interactionId());
             putIfPresent(attributes, "tpf.await.correlation_id", context.correlationId());
             putIfPresent(attributes, "tpf.await.unit_id", context.unitId());
-        }
+        });
         return Map.copyOf(attributes);
     }
 
@@ -57,39 +57,43 @@ public final class AwaitTelemetryAttributes {
             attributes.put("tpf.await.transport", normal(value.transport()));
             return attributes;
         }
-        AwaitObservation.Context context = context(observation);
-        if (context != null) {
+        context(observation).ifPresent(context -> {
             attributes.put("tpf.await.step_id", normal(context.stepId()));
             attributes.put("tpf.await.transport", normal(context.transport()));
             attributes.put("tpf.await.status", normal(context.status()));
-            if (context.cardinality() != null && !context.cardinality().isBlank()) {
-                attributes.put("tpf.await.cardinality", context.cardinality());
-            }
-        }
+            context.cardinality().filter(value -> !value.isBlank())
+                .ifPresent(value -> attributes.put("tpf.await.cardinality", value));
+        });
         return attributes;
     }
 
-    private static AwaitObservation.Context context(AwaitObservation observation) {
-        if (observation instanceof AwaitObservation.CompletionDropped) return null;
-        if (observation instanceof AwaitObservation.InteractionCreated value) return value.context();
-        if (observation instanceof AwaitObservation.InteractionDispatched value) return value.context();
-        if (observation instanceof AwaitObservation.ProviderDispatched value) return value.context();
-        if (observation instanceof AwaitObservation.ProviderAdmitted value) return value.context();
-        if (observation instanceof AwaitObservation.ProviderCompletionDispatched value) return value.context();
-        if (observation instanceof AwaitObservation.CompletionAdmitted value) return value.context();
-        if (observation instanceof AwaitObservation.LiveHandoff value) return value.context();
-        if (observation instanceof AwaitObservation.ScalarContinuationStarted value) return value.context();
-        if (observation instanceof AwaitObservation.UnitDispatchCompleted value) return value.context();
-        if (observation instanceof AwaitObservation.ItemCompleted value) return value.context();
-        if (observation instanceof AwaitObservation.EarlyCompletionHeld value) return value.context();
-        if (observation instanceof AwaitObservation.ResumeReleased value) return value.context();
-        if (observation instanceof AwaitObservation.UnitTerminal value) return value.context();
-        if (observation instanceof AwaitObservation.AdmissionAcquired value) return value.context();
-        return ((AwaitObservation.AdmissionReleased) observation).context();
+    private static Optional<AwaitObservation.Context> context(AwaitObservation observation) {
+        return switch (observation) {
+            case AwaitObservation.CompletionDropped ignored -> Optional.empty();
+            case AwaitObservation.InteractionCreated value -> Optional.of(value.context());
+            case AwaitObservation.InteractionDispatched value -> Optional.of(value.context());
+            case AwaitObservation.ProviderDispatched value -> Optional.of(value.context());
+            case AwaitObservation.ProviderAdmitted value -> Optional.of(value.context());
+            case AwaitObservation.ProviderCompletionDispatched value -> Optional.of(value.context());
+            case AwaitObservation.CompletionAdmitted value -> Optional.of(value.context());
+            case AwaitObservation.LiveHandoff value -> Optional.of(value.context());
+            case AwaitObservation.ScalarContinuationStarted value -> Optional.of(value.context());
+            case AwaitObservation.UnitDispatchCompleted value -> Optional.of(value.context());
+            case AwaitObservation.ItemCompleted value -> Optional.of(value.context());
+            case AwaitObservation.EarlyCompletionHeld value -> Optional.of(value.context());
+            case AwaitObservation.ResumeReleased value -> Optional.of(value.context());
+            case AwaitObservation.UnitTerminal value -> Optional.of(value.context());
+            case AwaitObservation.AdmissionAcquired value -> Optional.of(value.context());
+            case AwaitObservation.AdmissionReleased value -> Optional.of(value.context());
+        };
     }
 
-    private static void putIfPresent(Map<String, String> attributes, String key, String value) {
-        if (value != null && !value.isBlank()) attributes.put(key, value);
+    private static void putIfPresent(Map<String, String> attributes, String key, Optional<String> value) {
+        value.filter(item -> !item.isBlank()).ifPresent(item -> attributes.put(key, item));
+    }
+
+    private static String normal(Optional<String> value) {
+        return value.filter(item -> !item.isBlank()).orElse("unknown");
     }
 
     private static String normal(String value) {

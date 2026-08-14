@@ -2,10 +2,13 @@ package org.pipelineframework.telemetry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 class TelemetryArchitectureTest {
@@ -22,11 +25,22 @@ class TelemetryArchitectureTest {
 
     @Test
     void pureObservationAndAttributeCoreDoesNotUseSdkOrCdi() throws Exception {
-        for (String name : List.of("TelemetryObservation.java", "TelemetryAttributes.java", "TelemetryPolicy.java",
-            "AwaitObservation.java", "AwaitTelemetryAttributes.java")) {
-            String source = Files.readString(Path.of("src", "main", "java", "org", "pipelineframework", "telemetry", name));
-            assertFalse(source.contains("io.opentelemetry"));
-            assertFalse(source.contains("jakarta."));
+        Path telemetry = Path.of("src", "main", "java", "org", "pipelineframework", "telemetry");
+        try (Stream<Path> paths = Stream.concat(Files.walk(telemetry.resolve("observation")),
+            Files.walk(telemetry.resolve("derivation")))) {
+            for (Path path : paths.filter(value -> value.toString().endsWith(".java")).toList()) {
+                String source = Files.readString(path);
+                assertFalse(source.contains("io.opentelemetry"), path.toString());
+                assertFalse(source.contains("jakarta."), path.toString());
+                assertFalse(source.contains("org.pipelineframework.awaitable"), path.toString());
+                assertFalse(source.contains("TelemetryRuntime"), path.toString());
+            }
+        }
+        for (String name : List.of("TelemetryPolicy.java", "AwaitObservation.java", "AwaitTelemetryAttributes.java",
+            "PipelineMetricAttributes.java", "PipelineSpanAttributes.java")) {
+            String source = Files.readString(telemetry.resolve(name));
+            assertFalse(source.contains("io.opentelemetry"), name);
+            assertFalse(source.contains("jakarta."), name);
         }
     }
 
@@ -120,6 +134,65 @@ class TelemetryArchitectureTest {
         for (String executionType : List.of("PipelineRunner.java", "PipelineStepExecutor.java", "ExecutionHooks.java")) {
             String source = Files.readString(Path.of("src", "main", "java", "org", "pipelineframework", executionType));
             assertFalse(source.contains("PipelineTelemetry"));
+        }
+    }
+
+    @Test
+    void terminalStepMeaningIsClassifiedOnlyByPureDerivation() throws Exception {
+        Path sourceRoot = Path.of("src", "main", "java", "org", "pipelineframework");
+        try (var paths = Files.walk(sourceRoot)) {
+            List<Path> classifiers = paths.filter(path -> path.toString().endsWith(".java"))
+                .filter(path -> contains(path, "instanceof StepObservation.Completed")
+                    || contains(path, "instanceof StepObservation.Failed")
+                    || contains(path, "instanceof StepObservation.Cancelled"))
+                .toList();
+            assertEquals(List.of(sourceRoot.resolve(
+                "telemetry/derivation/StepTelemetryDerivation.java")), classifiers);
+        }
+        String instrumentation = Files.readString(sourceRoot.resolve(
+            "telemetry/PipelineStepInstrumentation.java"));
+        assertFalse(instrumentation.contains("metrics.stepFinished("));
+        assertFalse(instrumentation.contains("replay.complete(replayScope, failure"));
+        assertFalse(instrumentation.contains("tracing.finish(span, cancelled"));
+    }
+
+    @Test
+    void focusedAdaptersAcceptDerivedSignalsInsteadOfTerminalParameterBags() {
+        Set<Class<?>> signalTypes = Set.of(
+            org.pipelineframework.telemetry.derivation.StepTelemetryDerivation.MetricStarted.class,
+            org.pipelineframework.telemetry.derivation.StepTelemetryDerivation.MetricFinished.class,
+            org.pipelineframework.telemetry.derivation.RunTelemetryDerivation.MetricStarted.class,
+            org.pipelineframework.telemetry.derivation.RunTelemetryDerivation.MetricFinished.class,
+            org.pipelineframework.telemetry.derivation.PipelineSloDerivation.ThroughputSignal.class,
+            org.pipelineframework.telemetry.derivation.PipelineSloDerivation.SuccessSignal.class,
+            org.pipelineframework.telemetry.derivation.RetryTelemetryDerivation.MetricSignal.class);
+        for (var method : PipelineMetricsRecorder.class.getDeclaredMethods()) {
+            if (method.getName().equals("record") && method.getParameterCount() > 0) {
+                assertTrue(signalTypes.contains(method.getParameterTypes()[0]), method.toString());
+            }
+        }
+    }
+
+    @Test
+    void metricsAdaptersDoNotManipulateSpansAndPureCoreDoesNotManipulateInstruments() throws Exception {
+        for (String name : List.of("PipelineMetricsRecorder.java", "orchestrator/TransitionWorkerMetrics.java")) {
+            Path path = name.startsWith("orchestrator/")
+                ? Path.of("src", "main", "java", "org", "pipelineframework", name)
+                : Path.of("src", "main", "java", "org", "pipelineframework", "telemetry", name);
+            String source = Files.readString(path);
+            assertFalse(source.contains("Span.current()"), name);
+            assertFalse(source.contains("SpanBuilder"), name);
+        }
+        Path pure = Path.of("src", "main", "java", "org", "pipelineframework", "telemetry");
+        for (String directory : List.of("observation", "derivation")) {
+            try (var paths = Files.walk(pure.resolve(directory))) {
+                for (Path path : paths.filter(value -> value.toString().endsWith(".java")).toList()) {
+                    String source = Files.readString(path);
+                    assertFalse(source.contains("LongCounter"), path.toString());
+                    assertFalse(source.contains("DoubleHistogram"), path.toString());
+                    assertFalse(source.contains(".meter("), path.toString());
+                }
+            }
         }
     }
 
